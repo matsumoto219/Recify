@@ -1,0 +1,9 @@
+glob: "**/*.{html,text,js}{+*,}.erb"
+
+linters:
+  FinalNewline:
+    enabled: true
+  TrailingWhitespace:
+    enabled: true
+  SpaceAroundErbTag:
+    enabled: true
