@@ -10,7 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_28_121948) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_30_062337) do
+  create_table "receipts", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "memo"
+    t.string "payment_method"
+    t.datetime "purchased_at"
+    t.string "status"
+    t.string "store_name"
+    t.integer "total_amount"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id"], name: "index_receipts_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", default: "", null: false
@@ -22,4 +35,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_28_121948) do
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
+
+  add_foreign_key "receipts", "users"
 end

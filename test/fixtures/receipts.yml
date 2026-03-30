@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  store_name: MyString
+  purchased_at: 2026-03-30 15:23:37
+  total_amount: 1
+  payment_method: MyString
+  status: MyString
+  memo: MyText
+
+two:
+  user: two
+  store_name: MyString
+  purchased_at: 2026-03-30 15:23:37
+  total_amount: 1
+  payment_method: MyString
+  status: MyString
+  memo: MyText
