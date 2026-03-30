@@ -1,4 +1,3 @@
-
 class ReceiptItem < ApplicationRecord
   CATEGORIES = %w[
     food
@@ -13,6 +12,7 @@ class ReceiptItem < ApplicationRecord
   ].freeze
 
   belongs_to :receipt
+  validates :category, inclusion: { in: CATEGORIES }, allow_blank: true
 
   def self.category_options
     CATEGORIES.map do |key|
@@ -21,6 +21,8 @@ class ReceiptItem < ApplicationRecord
   end
 
   def category_label
-    I18n.t("enums.receipt_item.category.#{category}")
+    return "" if category.blank?
+
+    I18n.t("enums.receipt_item.category.#{category}", default: category)
   end
 end
