@@ -6,10 +6,29 @@
 <p><%= t(".payment_method") %>: <%= @receipt.payment_method %></p>
 <p><%= t(".status") %>: <%= @receipt.status %></p>
 <p><%= t(".memo") %>: <%= @receipt.memo %></p>
+
 <% if @receipt.image.attached? %>
   <p>画像あり</p>
 <% else %>
   <p>画像なし</p>
+<% end %>
+
+<h2>明細</h2>
+
+<% if @receipt.receipt_items.any? %>
+  <ul>
+    <% @receipt.receipt_items.order(:position_index).each do |item| %>
+      <li>
+        <%= item.confirmed_name %>
+        / <%= item.line_total %>円
+        <% if item.needs_review %>
+          （要確認）
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+<% else %>
+  <p>明細はまだありません</p>
 <% end %>
 
 <%= link_to t("common.edit"), edit_receipt_path(@receipt) %>
