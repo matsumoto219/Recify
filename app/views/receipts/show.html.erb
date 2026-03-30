@@ -1,0 +1,12 @@
+<h1><%= t(".title") %></h1>
+
+<p><%= t(".store_name") %>: <%= @receipt.store_name %></p>
+<p><%= t(".purchased_at") %>: <%= @receipt.purchased_at %></p>
+<p><%= t(".total_amount") %>: <%= @receipt.total_amount %>円</p>
+<p><%= t(".payment_method") %>: <%= @receipt.payment_method %></p>
+<p><%= t(".status") %>: <%= @receipt.status %></p>
+<p><%= t(".memo") %>: <%= @receipt.memo %></p>
+
+<%= link_to t("common.edit"), edit_receipt_path(@receipt) %>
+<%= link_to t("common.delete"), receipt_path(@receipt), data: { turbo_method: :delete, turbo_confirm: t("common.confirm_delete") } %>
+<%= link_to t("common.back"), receipts_path %>
