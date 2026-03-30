@@ -1,0 +1,29 @@
+ja:
+  enums:
+    receipt:
+      payment_method:
+        cash: 現金
+        credit_card: クレジットカード
+        e_money: 電子マネー
+        qr_payment: QR決済
+        debit_card: デビットカード
+        other: その他
+
+      status:
+        uploaded: アップロード済み
+        processing: 解析中
+        review_needed: 要確認
+        completed: 完了
+        failed: 失敗
+
+    receipt_item:
+      category:
+        food: 食品
+        drink: 飲料
+        daily_goods: 日用品
+        household: 生活雑貨
+        medical: 医療
+        beauty: 美容
+        transportation: 交通
+        hobby: 趣味
+        other: その他
