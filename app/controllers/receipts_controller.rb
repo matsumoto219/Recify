@@ -52,7 +52,8 @@ class ReceiptsController < ApplicationController
       :total_amount,
       :payment_method,
       :status,
-      :memo
+      :memo,
+      :image
     )
   end
 end

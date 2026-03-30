@@ -6,6 +6,11 @@
 <p><%= t(".payment_method") %>: <%= @receipt.payment_method %></p>
 <p><%= t(".status") %>: <%= @receipt.status %></p>
 <p><%= t(".memo") %>: <%= @receipt.memo %></p>
+<% if @receipt.image.attached? %>
+  <p>画像あり</p>
+<% else %>
+  <p>画像なし</p>
+<% end %>
 
 <%= link_to t("common.edit"), edit_receipt_path(@receipt) %>
 <%= link_to t("common.delete"), receipt_path(@receipt), data: { turbo_method: :delete, turbo_confirm: t("common.confirm_delete") } %>
