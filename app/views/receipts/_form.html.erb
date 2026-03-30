@@ -16,7 +16,9 @@
 
   <div>
     <%= f.label :payment_method %>
-    <%= f.text_field :payment_method %>
+    <%= f.select :payment_method,
+                 options_for_select(Receipt.payment_method_options, f.object.payment_method),
+                 include_blank: "選択してください" %>
   </div>
 
   <div>
@@ -48,7 +50,9 @@
 
       <div>
         <%= item_form.label :category %>
-        <%= item_form.text_field :category %>
+        <%= item_form.select :category,
+                             options_for_select(ReceiptItem.category_options, item_form.object.category),
+                             include_blank: "選択してください" %>
       </div>
 
       <div>
