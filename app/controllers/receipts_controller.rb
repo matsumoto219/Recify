@@ -15,8 +15,10 @@ class ReceiptsController < ApplicationController
 
   def create
     @receipt = current_user.receipts.new(receipt_params)
+    @receipt.status = "uploaded"
 
     if @receipt.save
+      apply_dummy_analysis(@receipt) if @receipt.image.attached?
       redirect_to @receipt, notice: t("flash.receipts.create")
     else
       render :new, status: :unprocessable_entity
@@ -30,7 +32,12 @@ class ReceiptsController < ApplicationController
     image_changed = receipt_params[:image].present?
 
     if @receipt.update(receipt_params)
-      apply_dummy_analysis(@receipt) if image_changed
+      if image_changed
+        apply_dummy_analysis(@receipt)
+      elsif @receipt.receipt_items.exists?
+        @receipt.update!(status: "completed")
+      end
+
       redirect_to @receipt, notice: t("flash.receipts.update")
     else
       render :edit, status: :unprocessable_entity
@@ -54,7 +61,6 @@ class ReceiptsController < ApplicationController
       :purchased_at,
       :total_amount,
       :payment_method,
-      :status,
       :memo,
       :image,
       receipt_items_attributes: [
@@ -73,7 +79,10 @@ class ReceiptsController < ApplicationController
   def apply_dummy_analysis(receipt)
     result = AiReceiptService.call(receipt)
 
-    receipt.update!(analysis_result_params(result))
+    receipt.update!(
+      analysis_result_params(result).merge(status: "review_needed")
+    )
+
     rebuild_receipt_items(receipt, result[:items])
   end
 
@@ -82,8 +91,7 @@ class ReceiptsController < ApplicationController
       store_name: result[:store_name],
       purchased_at: result[:purchased_at],
       total_amount: result[:total_amount],
-      payment_method: result[:payment_method],
-      status: result[:status]
+      payment_method: result[:payment_method]
     }
   end
 
