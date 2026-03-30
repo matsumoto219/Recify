@@ -1,0 +1,27 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  receipt: one
+  raw_text: MyText
+  suggested_name: MyString
+  confirmed_name: MyString
+  category: MyString
+  price: 1
+  quantity: 1
+  line_total: 1
+  needs_review: false
+  position_index: 1
+  confidence: 9.99
+
+two:
+  receipt: two
+  raw_text: MyText
+  suggested_name: MyString
+  confirmed_name: MyString
+  category: MyString
+  price: 1
+  quantity: 1
+  line_total: 1
+  needs_review: false
+  position_index: 1
+  confidence: 9.99
