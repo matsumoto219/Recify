@@ -27,8 +27,10 @@ class ReceiptsController < ApplicationController
   end
 
   def update
+    image_changed = receipt_params[:image].present?
+
     if @receipt.update(receipt_params)
-      apply_dummy_analysis(@receipt) if @receipt.image.attached?
+      apply_dummy_analysis(@receipt) if image_changed
       redirect_to @receipt, notice: t("flash.receipts.update")
     else
       render :edit, status: :unprocessable_entity
@@ -54,24 +56,41 @@ class ReceiptsController < ApplicationController
       :payment_method,
       :status,
       :memo,
-      :image
+      :image,
+      receipt_items_attributes: [
+        :id,
+        :confirmed_name,
+        :category,
+        :price,
+        :quantity,
+        :line_total,
+        :needs_review
+      ]
     )
   end
 
+  # 仮実装: 本実装では OCR → AI補完 → データ反映 のフローに差し替え
   def apply_dummy_analysis(receipt)
     result = AiReceiptService.call(receipt)
 
-    receipt.update!(
+    receipt.update!(analysis_result_params(result))
+    rebuild_receipt_items(receipt, result[:items])
+  end
+
+  def analysis_result_params(result)
+    {
       store_name: result[:store_name],
       purchased_at: result[:purchased_at],
       total_amount: result[:total_amount],
       payment_method: result[:payment_method],
       status: result[:status]
-    )
+    }
+  end
 
+  def rebuild_receipt_items(receipt, items)
     receipt.receipt_items.destroy_all
 
-    result[:items].each do |item|
+    items.each do |item|
       receipt.receipt_items.create!(item)
     end
   end
