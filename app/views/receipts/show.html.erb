@@ -4,7 +4,7 @@
 <p><%= t(".purchased_at") %>: <%= @receipt.purchased_at %></p>
 <p><%= t(".total_amount") %>: <%= @receipt.total_amount %>円</p>
 <p><%= t(".payment_method") %>: <%= @receipt.payment_method_label %></p>
-<p><%= t(".status") %>: <%= @receipt.status %></p>
+<p><%= t(".status") %>: <%= @receipt.status_label %></p>
 <p><%= t(".memo") %>: <%= @receipt.memo %></p>
 
 <% if @receipt.image.attached? %>

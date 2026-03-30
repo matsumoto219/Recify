@@ -14,11 +14,12 @@ class ReceiptsController < ApplicationController
   end
 
   def create
+    image_attached = receipt_params[:image].present?
     @receipt = current_user.receipts.new(receipt_params)
-    @receipt.status = "uploaded"
+    @receipt.status = image_attached ? "processing" : "uploaded"
 
     if @receipt.save
-      apply_dummy_analysis(@receipt) if @receipt.image.attached?
+      apply_dummy_analysis(@receipt) if image_attached
       redirect_to @receipt, notice: t("flash.receipts.create")
     else
       render :new, status: :unprocessable_entity
@@ -33,6 +34,7 @@ class ReceiptsController < ApplicationController
 
     if @receipt.update(receipt_params)
       if image_changed
+        @receipt.update!(status: "processing", processing_error_message: nil)
         apply_dummy_analysis(@receipt)
       elsif @receipt.receipt_items.exists?
         @receipt.update!(status: "completed")
@@ -80,10 +82,16 @@ class ReceiptsController < ApplicationController
     result = AiReceiptService.call(receipt)
 
     receipt.update!(
-      analysis_result_params(result).merge(status: "review_needed")
+      analysis_result_params(result).merge(
+        status: "review_needed",
+        processing_error_message: nil,
+        ocr_completed_at: Time.current
+      )
     )
 
     rebuild_receipt_items(receipt, result[:items])
+  rescue StandardError => e
+    receipt.update!(status: "failed", processing_error_message: e.message)
   end
 
   def analysis_result_params(result)
