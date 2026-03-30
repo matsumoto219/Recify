@@ -10,7 +10,24 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_30_062337) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_30_071942) do
+  create_table "receipt_items", force: :cascade do |t|
+    t.string "category"
+    t.decimal "confidence"
+    t.string "confirmed_name"
+    t.datetime "created_at", null: false
+    t.integer "line_total"
+    t.boolean "needs_review"
+    t.integer "position_index"
+    t.integer "price"
+    t.integer "quantity"
+    t.text "raw_text"
+    t.integer "receipt_id", null: false
+    t.string "suggested_name"
+    t.datetime "updated_at", null: false
+    t.index ["receipt_id"], name: "index_receipt_items_on_receipt_id"
+  end
+
   create_table "receipts", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "memo"
@@ -36,5 +53,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_062337) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "receipt_items", "receipts"
   add_foreign_key "receipts", "users"
 end
