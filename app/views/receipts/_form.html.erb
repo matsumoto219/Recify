@@ -34,6 +34,45 @@
     <%= f.file_field :image %>
   </div>
 
+  <h2>明細</h2>
+
+  <%= f.fields_for :receipt_items do |item_form| %>
+    <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
+      <p>OCR原文: <%= item_form.object.raw_text %></p>
+      <p>AI候補: <%= item_form.object.suggested_name %></p>
+
+      <div>
+        <%= item_form.label :confirmed_name %>
+        <%= item_form.text_field :confirmed_name %>
+      </div>
+
+      <div>
+        <%= item_form.label :category %>
+        <%= item_form.text_field :category %>
+      </div>
+
+      <div>
+        <%= item_form.label :price %>
+        <%= item_form.number_field :price %>
+      </div>
+
+      <div>
+        <%= item_form.label :quantity %>
+        <%= item_form.number_field :quantity %>
+      </div>
+
+      <div>
+        <%= item_form.label :line_total %>
+        <%= item_form.number_field :line_total %>
+      </div>
+
+      <div>
+        <%= item_form.label :needs_review %>
+        <%= item_form.check_box :needs_review %>
+      </div>
+    </div>
+  <% end %>
+
   <div>
     <%= f.submit %>
   </div>
