@@ -1,0 +1,16 @@
+<h1><%= t(".title") %></h1>
+
+<%= link_to t(".new_link"), new_receipt_path %>
+
+<% if @receipts.any? %>
+  <ul>
+    <% @receipts.each do |receipt| %>
+      <li>
+        <%= link_to receipt.store_name.presence || "店舗名なし", receipt_path(receipt) %>
+        <%= receipt.total_amount %>円
+      </li>
+    <% end %>
+  </ul>
+<% else %>
+  <p><%= t(".empty") %></p>
+<% end %>

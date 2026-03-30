@@ -1,1 +1,13 @@
 ja:
+  common:
+    app_name: Recify
+    login: ログイン
+    logout: ログアウト
+    sign_up: 新規登録
+    back: 戻る
+    edit: 編集
+    delete: 削除
+    confirm_delete: 本当に削除しますか？
+    save: 保存
+    create: 登録する
+    update: 更新する

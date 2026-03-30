@@ -1,0 +1,18 @@
+ja:
+  receipts:
+    index:
+      title: レシート一覧
+      empty: レシートがまだありません
+      new_link: レシート登録
+    new:
+      title: レシート登録
+    edit:
+      title: レシート編集
+    show:
+      title: レシート詳細
+      store_name: 店舗名
+      purchased_at: 購入日時
+      total_amount: 合計金額
+      payment_method: 支払い方法
+      status: ステータス
+      memo: メモ

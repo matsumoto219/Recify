@@ -1,1 +1,6 @@
 ja:
+  flash:
+    receipts:
+      create: レシートを登録しました
+      update: レシートを更新しました
+      destroy: レシートを削除しました

@@ -1,0 +1,35 @@
+<%= form_with model: receipt do |f| %>
+  <div>
+    <%= f.label :store_name %>
+    <%= f.text_field :store_name %>
+  </div>
+
+  <div>
+    <%= f.label :purchased_at %>
+    <%= f.datetime_local_field :purchased_at %>
+  </div>
+
+  <div>
+    <%= f.label :total_amount %>
+    <%= f.number_field :total_amount %>
+  </div>
+
+  <div>
+    <%= f.label :payment_method %>
+    <%= f.text_field :payment_method %>
+  </div>
+
+  <div>
+    <%= f.label :status %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div>
+    <%= f.label :memo %>
+    <%= f.text_area :memo %>
+  </div>
+
+  <div>
+    <%= f.submit %>
+  </div>
+<% end %>

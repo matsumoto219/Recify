@@ -1,11 +1,10 @@
 <header>
-  <%= link_to "Recify", root_path %>
+  <%= link_to t("common.app_name"), root_path %>
 
   <% if user_signed_in? %>
-    <span>ログイン中</span>
-    <%= link_to "ログアウト", destroy_user_session_path, data: { turbo_method: :delete } %>
+    <%= link_to t("common.logout"), destroy_user_session_path, data: { turbo_method: :delete } %>
   <% else %>
-    <%= link_to "ログイン", new_user_session_path %>
-    <%= link_to "新規登録", new_user_registration_path %>
+    <%= link_to t("common.login"), new_user_session_path %>
+    <%= link_to t("common.sign_up"), new_user_registration_path %>
   <% end %>
 </header>
