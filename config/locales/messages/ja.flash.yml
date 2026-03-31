@@ -4,3 +4,4 @@ ja:
       create: レシートを登録しました
       update: レシートを更新しました
       destroy: レシートを削除しました
+      analysis_failed: 解析に失敗しました。手動入力で続行してください。
