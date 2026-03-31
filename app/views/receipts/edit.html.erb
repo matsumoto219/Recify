@@ -1,3 +1,5 @@
 <h1><%= t(".title") %></h1>
 
+<%= render "shared/processing_error", receipt: @receipt %>
+
 <%= render "form", receipt: @receipt %>
