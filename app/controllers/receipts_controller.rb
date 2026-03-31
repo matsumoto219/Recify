@@ -19,6 +19,7 @@ class ReceiptsController < ApplicationController
     @receipt.status = image_attached ? "processing" : "uploaded"
 
     if @receipt.save
+      Rails.logger.info("[ReceiptAnalysis] create start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{image_attached}") if image_attached
       analysis_success = image_attached ? apply_dummy_analysis(@receipt) : true
 
       if analysis_success
@@ -47,6 +48,7 @@ class ReceiptsController < ApplicationController
           processing_error_message: nil,
           ocr_completed_at: nil
         )
+        Rails.logger.info("[ReceiptAnalysis] update start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_changed=#{image_changed}")
         analysis_success = apply_dummy_analysis(@receipt)
       elsif @receipt.receipt_items.exists?
         @receipt.update!(status: "completed")
@@ -96,6 +98,7 @@ class ReceiptsController < ApplicationController
   # 仮実装: 本実装では OCR → AI補完 → データ反映 のフローに差し替え
   def apply_dummy_analysis(receipt)
     result = AiReceiptService.call(receipt)
+    Rails.logger.info("[ReceiptAnalysis] processing receipt_id=#{receipt.id} status=#{receipt.status}")
 
     receipt.update!(
       analysis_result_params(result).merge(
@@ -106,12 +109,18 @@ class ReceiptsController < ApplicationController
     )
 
     rebuild_receipt_items(receipt, result[:items])
+    Rails.logger.info(
+      "[ReceiptAnalysis] success receipt_id=#{receipt.id} status=#{receipt.status} items_count=#{result[:items].size} error_code=#{receipt.processing_error_code.inspect}"
+    )
     true
   rescue StandardError => e
     receipt.update!(
       status: "failed",
       processing_error_code: "unexpected_error",
       processing_error_message: e.message
+    )
+    Rails.logger.error(
+      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
     )
     false
   end
