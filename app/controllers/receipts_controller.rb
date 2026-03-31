@@ -19,8 +19,13 @@ class ReceiptsController < ApplicationController
     @receipt.status = image_attached ? "processing" : "uploaded"
 
     if @receipt.save
-      apply_dummy_analysis(@receipt) if image_attached
-      redirect_to @receipt, notice: t("flash.receipts.create")
+      analysis_success = image_attached ? apply_dummy_analysis(@receipt) : true
+
+      if analysis_success
+        redirect_to @receipt, notice: t("flash.receipts.create")
+      else
+        redirect_to @receipt, alert: t("flash.receipts.analysis_failed")
+      end
     else
       render :new, status: :unprocessable_entity
     end
@@ -33,14 +38,25 @@ class ReceiptsController < ApplicationController
     image_changed = receipt_params[:image].present?
 
     if @receipt.update(receipt_params)
+      analysis_success = true
+
       if image_changed
-        @receipt.update!(status: "processing", processing_error_message: nil)
-        apply_dummy_analysis(@receipt)
+        @receipt.update!(
+          status: "processing",
+          processing_error_code: nil,
+          processing_error_message: nil,
+          ocr_completed_at: nil
+        )
+        analysis_success = apply_dummy_analysis(@receipt)
       elsif @receipt.receipt_items.exists?
         @receipt.update!(status: "completed")
       end
 
-      redirect_to @receipt, notice: t("flash.receipts.update")
+      if analysis_success
+        redirect_to @receipt, notice: t("flash.receipts.update")
+      else
+        redirect_to @receipt, alert: t("flash.receipts.analysis_failed")
+      end
     else
       render :edit, status: :unprocessable_entity
     end
@@ -90,8 +106,14 @@ class ReceiptsController < ApplicationController
     )
 
     rebuild_receipt_items(receipt, result[:items])
+    true
   rescue StandardError => e
-    receipt.update!(status: "failed", processing_error_message: e.message)
+    receipt.update!(
+      status: "failed",
+      processing_error_code: "unexpected_error",
+      processing_error_message: e.message
+    )
+    false
   end
 
   def analysis_result_params(result)
