@@ -8,6 +8,19 @@ class Receipt < ApplicationRecord
     other
   ].freeze
 
+  IMAGE_ERROR_CODES = %w[
+    image_missing
+    image_invalid_format
+    image_corrupted
+    input_invalid
+  ].freeze
+
+  OCR_ERROR_CODES = %w[
+    ocr_unreadable
+    ocr_timeout
+    ocr_api_error
+  ].freeze
+
   enum :payment_method, PAYMENT_METHODS.index_with { |v| v }
 
   enum :status, {
@@ -32,8 +45,8 @@ class Receipt < ApplicationRecord
             numericality: { only_integer: true, greater_than_or_equal_to: 0 },
             allow_blank: true
 
-  validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名MAX100文字
-  validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモMAX1000文字
+  validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名(MAX100文字)
+  validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
 
   def self.payment_method_options
     PAYMENT_METHODS.map do |key|
@@ -51,5 +64,22 @@ class Receipt < ApplicationRecord
     return "" if status.blank?
 
     I18n.t("enums.receipt.status.#{status}", default: status)
+  end
+
+  def error_category
+    return "" if processing_error_code.blank?
+
+    case processing_error_code
+    when *IMAGE_ERROR_CODES
+      "image_error"
+    when *OCR_ERROR_CODES
+      "ocr_error"
+    else
+      "ai_error"
+    end
+  end
+
+  def failed_with_error?
+    failed? && processing_error_code.present?
   end
 end
