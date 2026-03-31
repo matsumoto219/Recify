@@ -1,4 +1,6 @@
 <%= form_with model: receipt do |f| %>
+  <%= render "shared/error_messages", obj: receipt %>
+
   <div>
     <%= f.label :store_name %>
     <%= f.text_field :store_name %>
