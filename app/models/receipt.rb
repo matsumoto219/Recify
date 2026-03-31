@@ -27,6 +27,14 @@ class Receipt < ApplicationRecord
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, inclusion: { in: statuses.keys }, allow_blank: true
 
+  # 合計金額数値と最小値指定
+  validates :total_amount,
+            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            allow_blank: true
+
+  validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名MAX100文字
+  validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモMAX1000文字
+
   def self.payment_method_options
     PAYMENT_METHODS.map do |key|
       [ I18n.t("enums.receipt.payment_method.#{key}"), key ]
