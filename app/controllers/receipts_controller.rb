@@ -28,7 +28,7 @@ class ReceiptsController < ApplicationController
 
     if @receipt.save
       Rails.logger.info("[ReceiptAnalysis] create start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{image_attached}") if image_attached
-      analysis_success = image_attached ? apply_dummy_analysis(@receipt) : true
+      analysis_success = image_attached ? apply_analysis(@receipt) : true
 
       if analysis_success
         redirect_to @receipt, notice: t("flash.receipts.create")
@@ -57,7 +57,7 @@ class ReceiptsController < ApplicationController
           ocr_completed_at: nil
         )
         Rails.logger.info("[ReceiptAnalysis] update start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_changed=#{image_changed}")
-        analysis_success = apply_dummy_analysis(@receipt)
+        analysis_success = apply_analysis(@receipt)
       elsif @receipt.receipt_items.exists?
         @receipt.update!(status: "completed")
       end
@@ -103,9 +103,9 @@ class ReceiptsController < ApplicationController
     )
   end
 
-  # 仮実装: 本実装では OCR → AI補完 → データ反映 のフローに差し替え
-  def apply_dummy_analysis(receipt)
-    result = AiReceiptService.call(receipt)
+  # 本実装では ReceiptAnalysisService に処理を集約していく
+  def apply_analysis(receipt)
+    result = ReceiptAnalysisService.call(receipt)
     Rails.logger.info("[ReceiptAnalysis] processing receipt_id=#{receipt.id} status=#{receipt.status}")
 
     receipt.update!(
