@@ -9,10 +9,15 @@ class ReceiptAiEnrichmentService
   end
 
   def self.call(ocr_result)
-    raw_lines = ocr_result[:raw_lines]
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless raw_lines.is_a?(Array)
+    Rails.logger.info("[AIEnrichment] start")
 
-    {
+    raw_lines = ocr_result[:raw_lines]
+    unless raw_lines.is_a?(Array)
+      Rails.logger.error("[AIEnrichment] analysis_missing_keys")
+      raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です")
+    end
+
+    result = {
       store_name: "サンプルストア",
       purchased_at: Time.current,
       total_amount: 1280,
@@ -45,9 +50,15 @@ class ReceiptAiEnrichmentService
         }
       ]
     }
+
+    Rails.logger.info("[AIEnrichment] success items_count=#{result[:items].size}")
+
+    result
   rescue KeyError
+    Rails.logger.error("[AIEnrichment] analysis_missing_keys")
     raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果の必須項目が不足しています")
   rescue NoMethodError, TypeError
+    Rails.logger.error("[AIEnrichment] analysis_items_invalid")
     raise AiEnrichmentError.new("analysis_items_invalid", "OCR結果の形式が不正です")
   end
 end
