@@ -9,16 +9,36 @@ class ReceiptAnalysisService
   end
 
   def self.call(receipt)
+    Rails.logger.info("[ReceiptAnalysis] start receipt_id=#{receipt.id}")
+
     ocr_result = ReceiptOcrService.call(receipt.image)
 
+    Rails.logger.info(
+      "[ReceiptAnalysis] ocr_success receipt_id=#{receipt.id} raw_lines_count=#{ocr_result[:raw_lines]&.size}"
+    )
+
     begin
-      ReceiptAiEnrichmentService.call(ocr_result)
-    rescue ReceiptAiEnrichmentService::AiEnrichmentError
+      result = ReceiptAiEnrichmentService.call(ocr_result)
+
+      Rails.logger.info("[ReceiptAnalysis] ai_success receipt_id=#{receipt.id}")
+
+      result
+    rescue ReceiptAiEnrichmentService::AiEnrichmentError => e
+      Rails.logger.warn(
+        "[ReceiptAnalysis] ai_failed_fallback receipt_id=#{receipt.id} error_code=#{e.error_code} message=#{e.message}"
+      )
+
       build_fallback_result(ocr_result)
     end
   rescue ReceiptOcrService::OcrError => e
+    Rails.logger.error(
+      "[ReceiptAnalysis] ocr_failed receipt_id=#{receipt.id} error_code=#{e.error_code} message=#{e.message}"
+    )
     raise AnalysisError.new(e.error_code, e.message)
   rescue StandardError => e
+    Rails.logger.error(
+      "[ReceiptAnalysis] unexpected_error receipt_id=#{receipt.id} error_class=#{e.class} message=#{e.message}"
+    )
     raise AnalysisError.new("unexpected_error", e.message)
   end
 
