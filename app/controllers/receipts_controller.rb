@@ -9,8 +9,16 @@ class ReceiptsController < ApplicationController
   def show
   end
 
+  def select_input_method
+  end
+
   def new
     @receipt = current_user.receipts.new
+    @mode = params[:mode]
+
+    if @mode == "manual"
+      @receipt.receipt_items.build
+    end
   end
 
   def create

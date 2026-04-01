@@ -1,0 +1,15 @@
+<h1>登録方法を選択</h1>
+
+<div class="input-method-selection">
+  <div class="input-method-card">
+    <h2>画像から登録</h2>
+    <p>レシート画像をアップロードして自動解析します</p>
+    <%= link_to "画像から登録する", new_receipt_path(mode: "image"), class: "btn" %>
+  </div>
+
+  <div class="input-method-card">
+    <h2>手動で登録</h2>
+    <p>画像を使わずに手動で入力します</p>
+    <%= link_to "手動で登録する", new_receipt_path(mode: "manual"), class: "btn" %>
+  </div>
+</div>

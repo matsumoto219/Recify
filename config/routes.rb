@@ -15,5 +15,9 @@ Rails.application.routes.draw do
   root "home#index"
 
   # Receiptsコントローラ
-  resources :receipts
+  resources :receipts do
+    collection do
+      get :select_input_method
+    end
+  end
 end
