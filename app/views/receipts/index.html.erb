@@ -1,6 +1,10 @@
 <h1><%= t(".title") %></h1>
 
-<%= link_to t(".new_link"), new_receipt_path %>
+<%= link_to "レシート登録", select_input_method_receipts_path %>
+
+<!--
+  <%= link_to t(".new_link"), new_receipt_path %>
+-->
 
 <% if @receipts.any? %>
   <ul>

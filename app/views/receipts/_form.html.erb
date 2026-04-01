@@ -28,50 +28,59 @@
     <%= f.text_area :memo %>
   </div>
 
-  <div>
-    <%= f.label :image %>
-    <%= f.file_field :image %>
-  </div>
-
-  <h2>明細</h2>
-
-  <%= f.fields_for :receipt_items do |item_form| %>
-    <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
-      <p>OCR原文: <%= item_form.object.raw_text %></p>
-      <p>AI候補: <%= item_form.object.suggested_name %></p>
-
-      <div>
-        <%= item_form.label :confirmed_name %>
-        <%= item_form.text_field :confirmed_name %>
-      </div>
-
-      <div>
-        <%= item_form.label :category %>
-        <%= item_form.select :category,
-                             options_for_select(ReceiptItem.category_options, item_form.object.category),
-                             include_blank: "選択してください" %>
-      </div>
-
-      <div>
-        <%= item_form.label :price %>
-        <%= item_form.number_field :price %>
-      </div>
-
-      <div>
-        <%= item_form.label :quantity %>
-        <%= item_form.number_field :quantity %>
-      </div>
-
-      <div>
-        <%= item_form.label :line_total %>
-        <%= item_form.number_field :line_total %>
-      </div>
-
-      <div>
-        <%= item_form.label :needs_review %>
-        <%= item_form.check_box :needs_review %>
-      </div>
+  <% if @mode != "manual" %>
+    <div>
+      <%= f.label :image %>
+      <%= f.file_field :image %>
     </div>
+  <% end %>
+
+  <% if receipt.receipt_items.any? %>
+    <h2>明細</h2>
+
+    <%= f.fields_for :receipt_items do |item_form| %>
+      <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
+        <% if item_form.object.raw_text.present? %>
+          <p>OCR原文: <%= item_form.object.raw_text %></p>
+        <% end %>
+
+        <% if item_form.object.suggested_name.present? %>
+          <p>AI候補: <%= item_form.object.suggested_name %></p>
+        <% end %>
+
+        <div>
+          <%= item_form.label :confirmed_name %>
+          <%= item_form.text_field :confirmed_name %>
+        </div>
+
+        <div>
+          <%= item_form.label :category %>
+          <%= item_form.select :category,
+                               options_for_select(ReceiptItem.category_options, item_form.object.category),
+                               include_blank: "選択してください" %>
+        </div>
+
+        <div>
+          <%= item_form.label :price %>
+          <%= item_form.number_field :price %>
+        </div>
+
+        <div>
+          <%= item_form.label :quantity %>
+          <%= item_form.number_field :quantity %>
+        </div>
+
+        <div>
+          <%= item_form.label :line_total %>
+          <%= item_form.number_field :line_total %>
+        </div>
+
+        <div>
+          <%= item_form.label :needs_review %>
+          <%= item_form.check_box :needs_review %>
+        </div>
+      </div>
+    <% end %>
   <% end %>
 
   <div>
