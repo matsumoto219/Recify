@@ -121,6 +121,16 @@ class ReceiptsController < ApplicationController
       "[ReceiptAnalysis] success receipt_id=#{receipt.id} status=#{receipt.status} items_count=#{result[:items].size} error_code=#{receipt.processing_error_code.inspect}"
     )
     true
+  rescue ReceiptAnalysisService::AnalysisError => e
+    receipt.update!(
+      status: "failed",
+      processing_error_code: e.error_code,
+      processing_error_message: e.message
+    )
+    Rails.logger.error(
+      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
+    )
+    false
   rescue StandardError => e
     receipt.update!(
       status: "failed",
