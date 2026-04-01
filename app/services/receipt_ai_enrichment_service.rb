@@ -1,7 +1,16 @@
 class ReceiptAiEnrichmentService
+  class AiEnrichmentError < StandardError
+    attr_reader :error_code
+
+    def initialize(error_code, message)
+      @error_code = error_code
+      super(message)
+    end
+  end
+
   def self.call(ocr_result)
     raw_lines = ocr_result[:raw_lines]
-    raise StandardError, "OCR結果が不正です" unless raw_lines.is_a?(Array)
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless raw_lines.is_a?(Array)
 
     {
       store_name: "サンプルストア",
@@ -36,5 +45,9 @@ class ReceiptAiEnrichmentService
         }
       ]
     }
+  rescue KeyError
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果の必須項目が不足しています")
+  rescue NoMethodError, TypeError
+    raise AiEnrichmentError.new("analysis_items_invalid", "OCR結果の形式が不正です")
   end
 end
