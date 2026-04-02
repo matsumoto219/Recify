@@ -47,7 +47,7 @@ class ReceiptAnalysisService
 
     {
       store_name: raw_lines.first,
-      purchased_at: Time.current, # 仮実装 OCRから日付抽出に置き換え予定
+      purchased_at: extract_purchased_at(raw_lines),
       total_amount: extract_total_amount(raw_lines),
       payment_method: detect_payment_method(raw_lines),
       status: "review_needed",
@@ -60,6 +60,18 @@ class ReceiptAnalysisService
     return nil unless total_line
 
     total_line.scan(/\d+/).join.to_i
+  end
+
+  def self.extract_purchased_at(lines)
+    date_time_line = lines.find { |line| line.match?(%r{\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}}) }
+    return nil unless date_time_line
+
+    match = date_time_line.match(/(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2})/)
+    return nil unless match
+
+    Time.zone.parse("#{match[1]} #{match[2]}")
+  rescue ArgumentError
+    nil
   end
 
   def self.build_fallback_items(lines)
