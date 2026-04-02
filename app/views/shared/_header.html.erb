@@ -6,5 +6,6 @@
   <% else %>
     <%= link_to t("common.login"), new_user_session_path %>
     <%= link_to t("common.sign_up"), new_user_registration_path %>
+    <%= button_to "ゲストでログイン", guest_sign_in_path, method: :post %>
   <% end %>
 </header>
