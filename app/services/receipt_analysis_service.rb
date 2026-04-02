@@ -93,13 +93,14 @@ class ReceiptAnalysisService
     end
   end
 
+  # 明細行かどうかを判定（合計・日時・決済行などを除外し、商品名 + 金額の形だけを対象にする）
   def self.item_line?(line)
     return false if line.blank?
     return false if line.include?("合計")
-    return false if line.match?(/Master|VISA|JCB|現金/i)
     return false if line.match?(%r{\d{4}/\d{2}/\d{2}})
+    return false if line.match?(/Master|VISA|JCB|AMEX|現金|PayPay|楽天ペイ|d払い|au PAY|Suica|PASMO|ICOCA|WAON|nanaco/i)
 
-    line.match?(/\d/)
+    line.match?(/\S+\s+\d+/)
   end
 
   def self.extract_item_name(line)
@@ -131,8 +132,9 @@ class ReceiptAnalysisService
   def self.detect_category(line)
     text = line.downcase
 
-    return "drink" if text.match?(/ｺｰﾋｰ|コーヒー|お茶|tea|coffee/)
-    return "food" if text.match?(/ｻﾝﾄﾞ|サンド|パン|弁当|おにぎり/)
+    ReceiptFallbackPatterns::CATEGORY_PATTERNS.each do |category, pattern|
+      return category if text.match?(pattern)
+    end
 
     "other"
   end
@@ -140,8 +142,9 @@ class ReceiptAnalysisService
   def self.detect_payment_method(lines)
     text = lines.join
 
-    return "credit_card" if text.match?(/Master|VISA|JCB/i)
-    return "cash" if text.match?(/現金/)
+    ReceiptFallbackPatterns::PAYMENT_METHOD_PATTERNS.each do |payment_method, pattern|
+      return payment_method if text.match?(pattern)
+    end
 
     "other"
   end
