@@ -5,4 +5,13 @@ class User < ApplicationRecord
          :recoverable, :rememberable, :validatable
 
   has_many :receipts, dependent: :destroy
+
+  def self.guest!
+    create!(
+      email: "guest_#{SecureRandom.hex(8)}@example.com",
+      password: SecureRandom.urlsafe_base64(12),
+      name: "ゲストユーザー",
+      guest: true
+    )
+  end
 end
