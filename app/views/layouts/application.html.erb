@@ -25,9 +25,20 @@
 
   <body>
     <%= render "shared/header" %>
-
     <%= render "shared/flash" %>
 
-    <%= yield %>
+    <% if user_signed_in? %>
+      <div class="app-shell">
+        <%= render "shared/sidebar" %>
+
+        <main class="app-main">
+          <%= yield %>
+        </main>
+      </div>
+    <% else %>
+      <main class="app-main">
+        <%= yield %>
+      </main>
+    <% end %>
   </body>
 </html>
