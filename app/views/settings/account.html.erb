@@ -8,12 +8,12 @@
 </section>
 
 <section>
-  <h2>今後追加する機能</h2>
-
   <ul>
     <li>名前変更</li>
     <li>メールアドレス変更</li>
-    <li>退会</li>
+    <li>
+      <%= button_to "退会する", registration_path(current_user), method: :delete, data: { confirm: "本当に退会しますか？" } %>
+    </li>
   </ul>
 </section>
 
