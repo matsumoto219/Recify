@@ -20,4 +20,9 @@ Rails.application.routes.draw do
       get :select_input_method
     end
   end
+
+  # アカウント設定
+  get "/settings", to: "settings#index", as: :settings
+  get "/settings/account", to: "settings#account", as: :settings_account
+  get "/settings/security", to: "settings#security", as: :settings_security
 end
