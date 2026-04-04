@@ -1,0 +1,23 @@
+<%
+  arrow ||= :left
+%>
+
+<section class="flex justify-center">
+  <%= link_to path, class: "flex items-center gap-2 text-sm font-medium text-[#C0C1FF] hover:text-white transition-colors group" do %>
+
+    <% if arrow == :left %>
+      <span class="material-symbols-outlined text-[18px] group-hover:-translate-x-1 transition-transform">
+        arrow_back
+      </span>
+    <% end %>
+
+    <%= text %>
+
+    <% if arrow == :right %>
+      <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+        arrow_forward
+      </span>
+    <% end %>
+
+  <% end %>
+</section>
