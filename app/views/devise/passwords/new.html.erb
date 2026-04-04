@@ -1,57 +1,45 @@
-<main class="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
-  <%# TODO: 背景ぼかしは shared/_ambient_background に切り出して共通化する
-      - ログイン / 新規登録 / パスワード再設定で使い回す
-      - このページからは削除予定
-      - render "shared/ambient_background" に置き換える
-  %>
-  <div class="fixed inset-0 z-0 pointer-events-none -z-10">
-    <div class="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] opacity-10 blur-[120px]"></div>
-    <div class="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] opacity-10 blur-[120px]"></div>
-  </div>
+<main class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+  <%= render "shared/ui/ambient_background" %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
-    <section class="text-center space-y-3" aria-labelledby="password-reset-page-title">
-      <div class="flex justify-center mb-6">
-        <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] flex items-center justify-center shadow-lg shadow-[#C0C1FF]/20" aria-hidden="true">
-          <span class="material-symbols-outlined text-black" style="font-size: 32px; font-variation-settings: 'FILL' 1;">receipt_long</span>
-        </div>
-      </div>
-
-      <h1 id="password-reset-page-title" class="text-2xl font-bold tracking-tight text-[#E5E2E1]">パスワード再設定</h1>
-      <p class="text-[#C7C4D8] text-sm leading-relaxed">登録したメールアドレスを入力してください</p>
+    <section aria-labelledby="password-reset-page-title">
+      <%= render "shared/auth/icon" %>
+      <%= render "shared/auth/header",
+            title: "パスワード再設定",
+            subtitle: "登録したメールアドレスを入力してください",
+            title_id: "password-reset-page-title" %>
     </section>
 
-    <section class="w-full bg-[#201F1F] rounded-xl shadow-2xl p-8 md:p-10" aria-labelledby="password-reset-form-title">
+    <%= render "shared/auth/card", title_id: "password-reset-form-title" do %>
       <h2 id="password-reset-form-title" class="sr-only">パスワード再設定フォーム</h2>
 
       <%= form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
         <%= render "devise/shared/error_messages", resource: resource %>
 
-        <div class="space-y-2">
-          <%= f.label :email, "メールアドレス", class: "block text-xs font-bold uppercase tracking-widest text-[#E5E2E1] ml-1" %>
-          <div class="relative group">
-            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#918FA1]">
-              <span class="material-symbols-outlined text-[20px]" aria-hidden="true">mail</span>
-            </div>
-            <%= f.email_field :email,
-                  autofocus: true,
-                  autocomplete: "email",
-                  placeholder: "example@recify.jp",
-                  required: true,
-                  class: "block w-full pl-11 pr-4 py-3 bg-[#0E0E0E] border-none rounded-lg text-[#E5E2E1] placeholder:text-[#393939] focus:ring-2 focus:ring-[#C0C1FF]/40 transition-all duration-200 text-sm" %>
-          </div>
-        </div>
+        <%= render "shared/auth/text_field",
+              f: f,
+              attribute: :email,
+              label: "メールアドレス",
+              icon: "mail",
+              field_type: :email_field,
+              placeholder: "your@email.com",
+              autocomplete: "email",
+              autofocus: true,
+              required: true,
+              input_class: "pl-11 py-3 text-sm placeholder:text-[#393939] focus:ring-[#C0C1FF]/40" %>
 
-        <%= f.submit "再設定メールを送信", class: "w-full h-12 bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-bold rounded-xl flex items-center justify-center hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-[#4B4DD8]/20 cursor-pointer" %>
+        <%= render "shared/auth/primary_button",
+              f: f,
+              label: "再設定メールを送信" %>
       <% end %>
 
-      <section class="mt-8 pt-6 border-t border-white/10 flex justify-center" aria-label="ログイン導線">
-        <%= link_to new_session_path(resource_name), class: "flex items-center gap-2 text-sm font-medium text-[#C0C1FF] hover:text-white transition-colors group" do %>
-          <span class="material-symbols-outlined text-[18px] group-hover:-translate-x-1 transition-transform" aria-hidden="true">arrow_back</span>
-          ログインに戻る
-        <% end %>
-      </section>
-    </section>
+      <%= render "shared/auth/separator" %>
+
+      <%= render "shared/auth/navigation_link",
+            path: new_session_path(resource_name),
+            text: "ログインに戻る",
+            arrow: :left %>
+    <% end %>
 
     <%# TODO: フッターブランディングは必要性を確認して、認証画面共通化時に残すか削除するか決める %>
     <div class="text-center opacity-50">

@@ -1,0 +1,11 @@
+<% if local_assigns[:text].present? %>
+  <div class="relative py-2 flex items-center" aria-hidden="true">
+    <div class="flex-grow border-t border-white/10"></div>
+    <span class="flex-shrink mx-4 text-xs font-bold text-zinc-500 uppercase tracking-widest"><%= text %></span>
+    <div class="flex-grow border-t border-white/10"></div>
+  </div>
+<% else %>
+  <div class="py-4" aria-hidden="true">
+    <div class="border-t border-white/10"></div>
+  </div>
+<% end %>

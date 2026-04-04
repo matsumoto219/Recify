@@ -1,0 +1,45 @@
+<%# 認証画面 共通テキスト入力欄
+    必須locals:
+    - f: form builder
+    - attribute: フィールド名（例: :email, :password）
+    - label: ラベル文言
+    - icon: Material Symbols名
+    任意locals:
+    - field_type: :email_field / :password_field / :text_field（default: :text_field）
+    - placeholder: placeholder文言
+    - autocomplete: autocomplete属性
+    - autofocus: true/false
+    - required: true/false
+    - show_label: true/false（default: true）
+    - input_class: 追加class
+%>
+<%
+  field_type = local_assigns.fetch(:field_type, :text_field)
+  placeholder = local_assigns[:placeholder]
+  autocomplete = local_assigns[:autocomplete]
+  autofocus = local_assigns.fetch(:autofocus, false)
+  required = local_assigns.fetch(:required, false)
+  show_label = local_assigns.fetch(:show_label, true)
+  input_class = local_assigns[:input_class]
+
+  base_input_class = "w-full bg-[#0E0E0E] border-none rounded-lg py-3.5 pl-12 pr-4 text-[#E5E2E1] placeholder:text-zinc-600 focus:ring-2 focus:ring-[#C0C1FF]/50 transition-all outline-none"
+  merged_input_class = [base_input_class, input_class].compact.join(" ")
+
+  field_options = {
+    placeholder: placeholder,
+    autocomplete: autocomplete,
+    autofocus: autofocus,
+    required: required,
+    class: merged_input_class
+  }.compact
+%>
+
+<div class="space-y-2">
+  <% if show_label %>
+    <%= f.label attribute, label, class: "text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1" %>
+  <% end %>
+  <div class="relative group">
+    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#C7C4D8] group-focus-within:text-[#C0C1FF] transition-colors text-xl" aria-hidden="true"><%= icon %></span>
+    <%= f.public_send(field_type, attribute, **field_options) %>
+  </div>
+</div>
