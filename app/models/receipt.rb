@@ -82,4 +82,36 @@ class Receipt < ApplicationRecord
   def failed_with_error?
     failed? && processing_error_code.present?
   end
+
+  def processing_flash_type
+    return nil unless failed_with_error?
+
+    case error_category
+    when "image_error"
+      "image_error"
+    when "ocr_error"
+      "ocr_error"
+    else
+      "ai_error"
+    end
+  end
+
+  def processing_flash_message
+    return nil unless failed_with_error?
+
+    case error_category
+    when "image_error"
+      "画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。"
+    when "ocr_error"
+      "OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。"
+    else
+      "AI補完処理に失敗しました。画像を変更して再試行するか、OCR結果をもとに手動修正してください。"
+    end
+  end
+
+  def processing_flash_messages
+    return [] unless failed_with_error?
+
+    [ processing_flash_message ]
+  end
 end

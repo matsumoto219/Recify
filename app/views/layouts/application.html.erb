@@ -2,7 +2,7 @@
 <html>
   <head>
     <title><%= content_for(:title) || "Recify" %></title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="Recify">
     <meta name="mobile-web-app-capable" content="yes">
@@ -18,28 +18,29 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
-    <%# Includes all stylesheet files in app/assets/stylesheets %>
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
+
+    <!-- フォント -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
   </head>
 
-  <body>
-    <%= render "shared/header" %>
+  <body class="bg-[#131313] text-[#e5e2e1]">
     <%= render "shared/flash" %>
 
-    <% if user_signed_in? %>
-      <div class="app-shell">
-        <%= render "shared/sidebar" %>
+    <% show_dashboard_shell = user_signed_in? && !(controller_name == "home" && action_name == "index") %>
 
-        <main class="app-main">
-          <%= yield %>
-        </main>
-      </div>
+    <% if show_dashboard_shell %>
+      <%= render "layouts/dashboard_shell" do %>
+        <%= yield %>
+      <% end %>
     <% else %>
-      <main class="app-main">
+      <main>
         <%= yield %>
       </main>
+
+      <%= render "shared/footer" %>
     <% end %>
-    <%= render "shared/footer" %>
   </body>
 </html>

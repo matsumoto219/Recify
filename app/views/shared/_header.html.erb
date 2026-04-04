@@ -1,11 +1,56 @@
-<header>
-  <%= link_to t("common.app_name"), root_path %>
+<header id="dashboard-header" data-component="header" class="fixed top-0 right-0 w-full md:w-[calc(100%-16rem)] h-[calc(4rem+env(safe-area-inset-top))] z-40 bg-[#131313]/80 backdrop-blur-md flex justify-between items-center px-4 md:px-8 pt-[env(safe-area-inset-top)]">
+  <div class="flex items-center gap-4 flex-1 min-w-0">
+    <div class="relative max-w-md w-full hidden sm:block">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-lg">search</span>
+      <%# TODO: 検索機能（未実装）現在はダミーUI。将来はクエリ連動・リアルタイム検索を実装 %>
+      <input
+        type="text"
+        placeholder="レシートを検索..."
+        class="w-full bg-[#0E0E0E] border border-white/5 rounded-lg pl-10 pr-4 py-2 text-sm text-[#E5E2E1] focus:outline-none focus:ring-1 focus:ring-[#C0C1FF] placeholder:text-[#C7C4D8]/50"
+      >
+    </div>
+  </div>
 
-  <% if user_signed_in? %>
-    <%= link_to t("common.logout"), destroy_user_session_path, data: { turbo_method: :delete } %>
-  <% else %>
-    <%= link_to t("common.login"), new_user_session_path %>
-    <%= link_to t("common.sign_up"), new_user_registration_path %>
-    <%= button_to "ゲストでログイン", guest_sign_in_path, method: :post %>
-  <% end %>
+  <div class="flex items-center gap-4 md:gap-6 shrink-0">
+    <%# TODO: 通知機能（未実装）
+        想定ユースケース:
+        - OCR処理完了通知
+        - 要確認レシートの発生通知
+        - エラー（読み取り失敗）通知
+        - ストレージ上限に近づいた警告
+        - 未読件数のバッジ表示（赤丸）
+        実装時はNotificationモデル + 既読管理 + バッジ表示を追加 %>
+    <button type="button" class="text-[#C7C4D8] hover:text-white transition-colors" aria-label="通知">
+      <span class="material-symbols-outlined">notifications</span>
+    </button>
+
+    <% if user_signed_in? %>
+      <div class="flex items-center gap-3 border-l border-white/10 pl-4 md:pl-6">
+        <div class="text-right hidden sm:block">
+          <p class="text-xs font-bold text-[#E5E2E1]"><%= current_user.name.presence || current_user.email %></p>
+          <%# TODO: 将来のプラン表示（例: Free / Standard / Pro）。現在は未使用のためコメントアウト %>
+          <%# <p class="text-[10px] text-[#C7C4D8]">スタンダードプラン</p> %>
+        </div>
+
+        <%# TODO: アバター機能（未実装）
+            - 将来は画像アップロード（ActiveStorage）対応
+            - 未登録時はユーザー名1文字 or メール先頭1文字を表示 %>
+        <div class="w-8 h-8 rounded-full border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
+          <% display_name = (current_user.name.presence || current_user.email).to_s %>
+          <%= display_name[0,1]&.upcase || "U" %>
+        </div>
+
+        <%= link_to destroy_user_session_path,
+          data: { turbo_method: :delete },
+          class: "text-[0.75rem] text-[#C7C4D8] hover:text-[#FFB4AB] transition-colors ml-1" do %>
+          ログアウト
+        <% end %>
+      </div>
+    <% else %>
+      <div class="flex items-center gap-3">
+        <%= link_to t("common.login"), new_user_session_path, class: "text-sm text-[#C7C4D8] hover:text-white transition-colors" %>
+        <%= link_to t("common.sign_up"), new_user_registration_path, class: "inline-flex items-center rounded-lg bg-[#C0C1FF] text-black px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity" %>
+      </div>
+    <% end %>
+  </div>
 </header>
