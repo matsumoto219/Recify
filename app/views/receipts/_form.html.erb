@@ -1,89 +1,252 @@
 <%= form_with model: receipt do |f| %>
   <%= render "shared/error_messages", obj: receipt %>
 
-  <div>
-    <%= f.label :store_name %>
-    <%= f.text_field :store_name %>
-  </div>
-
-  <div>
-    <%= f.label :purchased_at %>
-    <%= f.datetime_local_field :purchased_at %>
-  </div>
-
-  <div>
-    <%= f.label :total_amount %>
-    <%= f.number_field :total_amount %>
-  </div>
-
-  <div>
-    <%= f.label :payment_method %>
-    <%= f.select :payment_method,
-                 options_for_select(Receipt.payment_method_options, f.object.payment_method),
-                 include_blank: "選択してください" %>
-  </div>
-
-  <div>
-    <%= f.label :memo %>
-    <%= f.text_area :memo %>
-  </div>
-
-  <% if @mode != "manual" %>
-    <div>
-      <%= f.label :image %>
-      <%= f.file_field :image %>
-    </div>
-  <% end %>
-
-  <% if receipt.receipt_items.any? %>
-    <h2>明細</h2>
-
-    <%= f.fields_for :receipt_items do |item_form| %>
-      <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
-        <% if item_form.object.raw_text.present? %>
-          <p>OCR原文: <%= item_form.object.raw_text %></p>
-        <% end %>
-
-        <% if item_form.object.suggested_name.present? %>
-          <p>AI候補: <%= item_form.object.suggested_name %></p>
-        <% end %>
-
-        <div>
-          <%= item_form.label :confirmed_name %>
-          <%= item_form.text_field :confirmed_name %>
-        </div>
-
-        <div>
-          <%= item_form.label :category %>
-          <%= item_form.select :category,
-                               options_for_select(ReceiptItem.category_options, item_form.object.category),
-                               include_blank: "選択してください" %>
-        </div>
-
-        <div>
-          <%= item_form.label :price %>
-          <%= item_form.number_field :price %>
-        </div>
-
-        <div>
-          <%= item_form.label :quantity %>
-          <%= item_form.number_field :quantity %>
-        </div>
-
-        <div>
-          <%= item_form.label :line_total %>
-          <%= item_form.number_field :line_total %>
-        </div>
-
-        <div>
-          <%= item_form.label :needs_review %>
-          <%= item_form.check_box :needs_review %>
-        </div>
-      </div>
+  <% page_title = receipt.persisted? ? "レシート編集" : "レシート登録" %>
+  <% page_description = receipt.persisted? ? "内容を確認・修正して保存してください" : "内容を入力して保存してください" %>
+  <% cancel_path = receipt.persisted? ? receipt_path(receipt) : receipts_path %>
+  <% total_amount_value = receipt.total_amount.to_i %>
+  <% subtotal_amount_value = receipt.respond_to?(:subtotal_amount) ? receipt.subtotal_amount.to_i : 0 %>
+  <% tax_amount_value = receipt.respond_to?(:tax_amount) ? receipt.tax_amount.to_i : 0 %>
+  <% tax_rate_value = receipt.respond_to?(:tax_rate) && receipt.tax_rate.present? ? "#{receipt.tax_rate}%" : "未設定（ダミー）" %>
+  <% content_for :mobile_bottom_actions do %>
+    <%= f.submit "保存",
+      class: "w-full py-3 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold shadow-lg cursor-pointer" %>
+    <%= link_to cancel_path,
+      class: "block w-full py-3 rounded-xl bg-[#353534] text-[#E5E2E1] border border-white/10 text-center" do %>
+      キャンセル
     <% end %>
   <% end %>
 
-  <div>
-    <%= f.submit %>
-  </div>
+  <section class="max-w-5xl mx-auto px-0 md:px-2 py-2 pb-40 md:pb-2">
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+      <div class="px-4 md:px-0">
+        <h1 class="text-3xl font-bold tracking-tight text-[#E5E2E1]"><%= page_title %></h1>
+        <p class="text-[#C7C4D8] mt-1"><%= page_description %></p>
+      </div>
+
+      <div class="hidden md:flex items-center gap-3">
+        <%= link_to cancel_path,
+          class: "px-6 py-2.5 rounded-xl bg-[#353534] text-[#E5E2E1] hover:bg-[#444] transition-all border border-white/10" do %>
+          キャンセル
+        <% end %>
+
+        <%= f.submit "保存",
+          class: "px-8 py-2.5 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold hover:opacity-90 transition-all shadow-lg shadow-[#4B4DD8]/20 cursor-pointer" %>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div class="lg:col-span-8 space-y-8">
+        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-6">
+            <span class="material-symbols-outlined text-[#C0C1FF]">info</span>
+            <h2 class="text-lg font-semibold text-[#E5E2E1]">基本情報</h2>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+              <%= f.label :store_name, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+              <%= f.text_field :store_name, class: "w-full h-11 px-4 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+            </div>
+
+            <div class="space-y-2">
+              <%= f.label :payment_method, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+              <%= f.select :payment_method,
+                           options_for_select(Receipt.payment_method_options, f.object.payment_method),
+                           { include_blank: "選択してください" },
+                           class: "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" for="receipt_purchased_on">購入日</label>
+              <div class="relative">
+                <%= date_field_tag "receipt[purchased_on]",
+                                   receipt.purchased_at&.in_time_zone&.to_date,
+                                   id: "receipt_purchased_on",
+                                   class: "w-full h-11 py-2.5 rounded-lg pl-10 bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm">calendar_today</span>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" for="receipt_purchased_time">時刻</label>
+              <div class="relative">
+                <%= time_field_tag "receipt[purchased_time]",
+                                   receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
+                                   id: "receipt_purchased_time",
+                                   class: "w-full h-11 py-2.5 rounded-lg pl-10 bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm">schedule</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-[#201F1F] rounded-xl overflow-hidden shadow-sm">
+          <div class="p-6 flex items-center justify-between border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[#C0C1FF]">receipt_long</span>
+              <h2 class="text-lg font-semibold text-[#E5E2E1]">明細一覧</h2>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
+              <div class="col-span-5">品名</div>
+              <div class="col-span-2">数量</div>
+              <div class="col-span-2">単価</div>
+              <div class="col-span-2">小計</div>
+              <div class="col-span-1"></div>
+            </div>
+
+            <% if receipt.receipt_items.any? %>
+              <%= f.fields_for :receipt_items do |item_form| %>
+                <% item = item_form.object %>
+                <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative">
+                  <div class="col-span-5 relative pr-12 md:pr-0">
+                    <% if item.needs_review %>
+                      <%# TODO: 要確認項目は将来的に input を赤枠ハイライトする。低信頼理由の表示も追加する %>
+                      <span class="absolute -top-6 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#FFB4AB]/10 text-[#FFB4AB] flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">error</span>
+                        要確認
+                      </span>
+                    <% end %>
+
+                    <%= item_form.text_field :confirmed_name,
+                                             value: item_name,
+                                             class: "w-full px-3 py-2 rounded-md bg-[#0E0E0E] border #{item.needs_review ? 'border-[#FFB4AB]/40' : 'border-white/10'} text-[#E5E2E1]" %>
+
+                  </div>
+
+                  <div class="col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
+                      <%= item_form.number_field :quantity,
+                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
+                      <%= item_form.number_field :price,
+                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                    </div>
+                  </div>
+
+                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium">
+                    ¥<%= number_with_delimiter(item.line_total.to_i) %>
+                  </div>
+
+                  <div class="col-span-1 flex justify-end md:static absolute top-3 right-3 z-10">
+                    <%# TODO: 本実装時は nested fields + Stimulus で削除制御を追加する %>
+                    <button type="button" class="p-2 hover:text-[#FFB4AB] transition-colors">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </div>
+
+                  <%= item_form.hidden_field :line_total %>
+                  <%= item_form.hidden_field :needs_review %>
+                </div>
+              <% end %>
+            <% else %>
+              <%# TODO: 手動登録時の明細追加UIを改善し、空状態でも追加しやすくする %>
+              <div class="rounded-xl border border-dashed border-white/10 p-8 text-center text-[#C7C4D8]">
+                明細はまだありません
+              </div>
+            <% end %>
+
+            <%# TODO: 本実装時は手動で明細行を追加できる Stimulus UI に置き換える %>
+            <button type="button" class="w-full mt-4 py-3 border-2 border-dashed border-white/20 rounded-xl text-[#C7C4D8] hover:text-[#C0C1FF] hover:border-[#C0C1FF] transition-all flex items-center justify-center gap-2 font-medium">
+              <span class="material-symbols-outlined">add_circle</span>
+              明細追加
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="material-symbols-outlined text-[#C0C1FF]">notes</span>
+            <h2 class="text-lg font-semibold text-[#E5E2E1]">メモ</h2>
+          </div>
+
+          <%= f.text_area :memo,
+                          class: "w-full h-32 px-4 py-3 rounded-xl resize-none bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                          placeholder: "用途や補足があれば入力してください" %>
+        </section>
+      </div>
+
+      <div class="lg:col-span-4 space-y-8">
+        <section class="bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] rounded-xl p-8 text-white shadow-2xl shadow-indigo-900/20 relative overflow-hidden">
+          <div class="absolute -right-4 -top-4 opacity-10">
+            <span class="material-symbols-outlined text-9xl" style="font-size: 120px;">payments</span>
+          </div>
+
+          <div class="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Total Amount</div>
+          <div class="flex items-baseline gap-2 mb-8">
+            <span class="text-sm opacity-70">¥</span>
+            <span class="text-4xl font-black tracking-tight"><%= number_with_delimiter(total_amount_value) %></span>
+          </div>
+
+          <div class="space-y-3 pt-6 border-t border-white/20">
+            <div class="flex justify-between items-center text-sm">
+              <span class="opacity-80">税抜金額</span>
+              <span class="font-medium">¥<%= number_with_delimiter(subtotal_amount_value) %></span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="opacity-80">税額</span>
+              <span class="font-medium">¥<%= number_with_delimiter(tax_amount_value) %></span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="opacity-80">税率</span>
+              <span class="font-medium"><%= tax_rate_value %></span>
+            </div>
+          </div>
+
+          <%# TODO: subtotal_amount / tax_amount / tax_rate は Receipt モデル実装後に本物の値へ接続する %>
+        </section>
+
+
+        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[#C0C1FF]">image</span>
+              <h2 class="text-lg font-semibold text-[#E5E2E1]">画像プレビュー</h2>
+            </div>
+          </div>
+
+          <% if @mode != "manual" %>
+            <% if receipt.image.attached? %>
+              <div class="group relative rounded-xl overflow-hidden aspect-[3/4] bg-[#0E0E0E] border border-white/10">
+                <%= image_tag receipt.image, class: "w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" %>
+                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <div class="bg-[#353534]/90 p-3 rounded-full flex items-center justify-center backdrop-blur-md">
+                    <span class="material-symbols-outlined text-[#E5E2E1]">zoom_in</span>
+                  </div>
+                </div>
+              </div>
+            <% else %>
+              <div class="rounded-xl border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#0E0E0E]">
+                <span class="material-symbols-outlined text-4xl mb-2">image</span>
+                <p>画像を選択してください</p>
+              </div>
+            <% end %>
+
+            <div class="mt-4 space-y-2">
+              <%= f.label :image, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+              <%= f.file_field :image, class: "w-full px-3 py-2 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+            </div>
+          <% else %>
+            <%# TODO: 手動登録時の画像なし状態の説明文は後で文言調整する %>
+            <div class="rounded-xl border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#0E0E0E]">
+              <span class="material-symbols-outlined text-4xl mb-2">image</span>
+              <p>手動登録では画像は不要です</p>
+            </div>
+          <% end %>
+        </section>
+      </div>
+    </div>
+
+  </section>
 <% end %>

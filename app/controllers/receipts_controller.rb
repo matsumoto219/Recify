@@ -33,7 +33,8 @@ class ReceiptsController < ApplicationController
       if analysis_success
         redirect_to @receipt, notice: t("flash.receipts.create")
       else
-        redirect_to @receipt, alert: t("flash.receipts.analysis_failed")
+        flash[@receipt.processing_flash_type] = @receipt.processing_flash_messages
+        redirect_to @receipt
       end
     else
       render :new, status: :unprocessable_entity
@@ -65,7 +66,8 @@ class ReceiptsController < ApplicationController
       if analysis_success
         redirect_to @receipt, notice: t("flash.receipts.update")
       else
-        redirect_to @receipt, alert: t("flash.receipts.analysis_failed")
+        flash[@receipt.processing_flash_type] = @receipt.processing_flash_messages
+        redirect_to @receipt
       end
     else
       render :edit, status: :unprocessable_entity
@@ -105,6 +107,7 @@ class ReceiptsController < ApplicationController
 
   # 本実装では ReceiptAnalysisService に処理を集約していく
   def apply_analysis(receipt)
+    raise ReceiptAnalysisService::AnalysisError.new("テストエラー", "ai_error")
     result = ReceiptAnalysisService.call(receipt)
     Rails.logger.info("[ReceiptAnalysis] processing receipt_id=#{receipt.id} status=#{receipt.status}")
 

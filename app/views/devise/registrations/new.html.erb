@@ -1,29 +1,98 @@
-<h2>Sign up</h2>
-
-<%= form_for(resource, as: resource_name, url: registration_path(resource_name)) do |f| %>
-  <%= render "devise/shared/error_messages", resource: resource %>
-
-  <div class="field">
-    <p><%= f.label :email %></p>
-    <p><%= f.email_field :email, autofocus: true, autocomplete: "email" %></p>
+<main class="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8 relative overflow-hidden">
+  <%# TODO: 背景ぼかしは shared/_ambient_background に切り出して共通化する
+      - ログイン / 新規登録 / パスワード再設定で使い回す
+      - このページからは削除予定
+      - render "shared/ambient_background" に置き換える
+  %>
+  <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+    <div class="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] rounded-full bg-[#C0C1FF]/5 blur-[120px]"></div>
+    <div class="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-[#4B4DD8]/10 blur-[100px]"></div>
   </div>
 
-  <div class="field">
-    <p><%= f.label :password %></p>
-    <% if @minimum_password_length %>
-      <p><em>(<%= @minimum_password_length %> characters minimum)</em></p>
-    <% end %>
-    <p><%= f.password_field :password, autocomplete: "new-password" %></p>
-  </div>
+  <section class="w-full max-w-md text-center mb-8" aria-labelledby="registration-page-title">
+    <div class="flex justify-center mb-6">
+      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] flex items-center justify-center shadow-lg shadow-[#C0C1FF]/20" aria-hidden="true">
+        <span class="material-symbols-outlined text-black" style="font-size: 32px; font-variation-settings: 'FILL' 1;">receipt_long</span>
+      </div>
+    </div>
+    <h1 id="registration-page-title" class="text-3xl font-bold tracking-tight text-[#E5E2E1] mb-2">新規登録</h1>
+    <p class="text-[#C7C4D8] font-medium tracking-wide">Recifyを始めましょう</p>
+  </section>
 
-  <div class="field">
-    <p><%= f.label :password_confirmation %></p>
-    <p><%= f.password_field :password_confirmation, autocomplete: "new-password" %></p>
-  </div>
+  <section class="w-full max-w-md rounded-xl overflow-hidden bg-[rgba(32,31,31,0.8)] backdrop-blur-[20px] shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(229,226,225,0.05)]" aria-labelledby="registration-form-title">
+    <h2 id="registration-form-title" class="sr-only">新規登録フォーム</h2>
+    <div class="px-10 pt-10 pb-10 space-y-6">
+      <%# TODO: devise/shared/error_messages と共通の _error_messages partial の役割を整理する %>
+      <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
+        <%= render "devise/shared/error_messages", resource: resource %>
 
-  <div class="actions">
-    <%= f.submit "Sign up" %>
-  </div>
-<% end %>
+        <div class="space-y-2">
+          <%= f.label :email, "メールアドレス", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
+          <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#918FA1] group-focus-within:text-[#C0C1FF] transition-colors">
+              <span class="material-symbols-outlined text-xl" aria-hidden="true">mail</span>
+            </div>
+            <%= f.email_field :email,
+                  autofocus: true,
+                  autocomplete: "email",
+                  placeholder: "your@email.com",
+                  class: "w-full bg-[#0E0E0E] border-none rounded-xl py-4 pl-12 pr-4 text-[#E5E2E1] placeholder:text-[#918FA1]/50 focus:ring-2 focus:ring-[#C0C1FF]/20 transition-all outline-none" %>
+          </div>
+        </div>
 
-<%= render "devise/shared/links" %>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <%= f.label :password, "パスワード", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
+            <% if @minimum_password_length %>
+              <p class="text-[11px] text-[#C7C4D8]/60 mr-1"><%= @minimum_password_length %>文字以上</p>
+            <% end %>
+          </div>
+          <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#918FA1] group-focus-within:text-[#C0C1FF] transition-colors">
+              <span class="material-symbols-outlined text-xl" aria-hidden="true">lock</span>
+            </div>
+            <%= f.password_field :password,
+                  autocomplete: "new-password",
+                  placeholder: "••••••••",
+                  class: "w-full bg-[#0E0E0E] border-none rounded-xl py-4 pl-12 pr-4 text-[#E5E2E1] placeholder:text-[#918FA1]/50 focus:ring-2 focus:ring-[#C0C1FF]/20 transition-all outline-none" %>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <%= f.label :password_confirmation, "パスワード確認", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
+          <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#918FA1] group-focus-within:text-[#C0C1FF] transition-colors">
+              <span class="material-symbols-outlined text-xl" aria-hidden="true">lock</span>
+            </div>
+            <%= f.password_field :password_confirmation,
+                  autocomplete: "new-password",
+                  placeholder: "••••••••",
+                  class: "w-full bg-[#0E0E0E] border-none rounded-xl py-4 pl-12 pr-4 text-[#E5E2E1] placeholder:text-[#918FA1]/50 focus:ring-2 focus:ring-[#C0C1FF]/20 transition-all outline-none" %>
+          </div>
+        </div>
+
+        <div class="pt-4">
+          <%= f.submit "登録する", class: "w-full bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-bold py-4 rounded-xl shadow-lg shadow-[#4B4DD8]/20 hover:opacity-90 active:scale-[0.98] transition-all duration-200 cursor-pointer" %>
+        </div>
+      <% end %>
+
+      <section class="text-center" aria-label="規約同意案内">
+        <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
+        <p class="text-[10px] text-center text-[#C7C4D8]/60 leading-relaxed">
+          登録することで、Recifyの
+          <span class="underline hover:text-[#C0C1FF] cursor-pointer">利用規約</span>
+          および
+          <span class="underline hover:text-[#C0C1FF] cursor-pointer">プライバシーポリシー</span>
+          に同意したものとみなされます。
+        </p>
+      </section>
+    </div>
+
+    <section class="bg-[#131313]/40 py-6 px-10 text-center border-t border-white/[0.03]" aria-label="ログイン案内">
+      <p class="text-sm text-[#C7C4D8]">
+        すでにアカウントをお持ちですか？
+        <%= link_to "ログイン", new_session_path(resource_name), class: "text-[#C0C1FF] font-semibold ml-1 hover:underline" %>
+      </p>
+    </section>
+  </section>
+</main>
