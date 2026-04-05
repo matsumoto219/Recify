@@ -96,11 +96,14 @@ class Ocr::ResponseParser
   end
 
   def extract_payment_method_text(raw_text, lines)
-    text_candidates = [ raw_text, *lines ].compact
+    payment_method_pattern = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i
 
-    text_candidates.find do |text|
-      text.match?(/現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i)
+    line_match = lines.find do |line|
+      line.match?(payment_method_pattern)
     end
+    return line_match if line_match.present?
+
+    raw_text.match(payment_method_pattern)&.[](0)
   end
 
   def build_error_result(error_code)
