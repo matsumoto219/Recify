@@ -107,7 +107,6 @@ class ReceiptsController < ApplicationController
 
   # 本実装では ReceiptAnalysisService に処理を集約していく
   def apply_analysis(receipt)
-    raise ReceiptAnalysisService::AnalysisError.new("テストエラー", "ai_error")
     result = ReceiptAnalysisService.call(receipt)
     Rails.logger.info("[ReceiptAnalysis] processing receipt_id=#{receipt.id} status=#{receipt.status}")
 
