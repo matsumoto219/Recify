@@ -163,8 +163,12 @@ RSpec.describe ReceiptAnalysisService do
     end
 
     it 'AI失敗時はreview_neededになる' do
-      described_class.call(receipt)
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
 
+      described_class.call(receipt)
       receipt.reload
 
       expect(receipt.status).to eq("review_needed")
