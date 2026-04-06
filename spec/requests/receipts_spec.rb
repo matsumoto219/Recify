@@ -62,7 +62,7 @@ RSpec.describe 'Receipts', type: :request do
         post receipts_path, params: invalid_params
       end.not_to change(Receipt, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity).or have_http_status(:ok)
+      expect(response).to have_http_status(:unprocessable_content).or have_http_status(:ok)
     end
 
     context '未ログイン時' do
@@ -113,9 +113,9 @@ RSpec.describe 'Receipts', type: :request do
         status: 'completed'
       )
 
-      expect do
-        get receipt_path(other_receipt)
-      end.to raise_error(ActiveRecord::RecordNotFound)
+      get receipt_path(other_receipt)
+
+      expect(response).to have_http_status(:not_found)
     end
 
     context '未ログイン時' do
