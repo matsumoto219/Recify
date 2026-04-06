@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_05_231926) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -48,7 +48,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
     t.boolean "needs_review"
     t.integer "position_index"
     t.integer "price"
+    t.string "product_code"
     t.integer "quantity"
+    t.string "quantity_unit"
     t.text "raw_text"
     t.integer "receipt_id", null: false
     t.string "suggested_name"
@@ -56,7 +58,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
     t.index ["receipt_id"], name: "index_receipt_items_on_receipt_id"
   end
 
+  create_table "receipt_payments", force: :cascade do |t|
+    t.integer "amount"
+    t.datetime "created_at", null: false
+    t.string "method"
+    t.integer "receipt_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["receipt_id"], name: "index_receipt_payments_on_receipt_id"
+  end
+
+  create_table "receipt_tax_details", force: :cascade do |t|
+    t.integer "amount"
+    t.datetime "created_at", null: false
+    t.string "description"
+    t.integer "net_amount"
+    t.decimal "rate"
+    t.integer "receipt_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["receipt_id"], name: "index_receipt_tax_details_on_receipt_id"
+  end
+
   create_table "receipts", force: :cascade do |t|
+    t.string "country_region"
     t.datetime "created_at", null: false
     t.text "memo"
     t.datetime "ocr_completed_at"
@@ -64,6 +87,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
     t.string "processing_error_code"
     t.text "processing_error_message"
     t.datetime "purchased_at"
+    t.string "receipt_type"
     t.string "status"
     t.text "store_address"
     t.string "store_name"
@@ -71,6 +95,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
     t.integer "subtotal_amount"
     t.integer "tax_amount"
     t.integer "tax_rate"
+    t.integer "tip_amount"
     t.integer "total_amount"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
@@ -94,5 +119,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_220834) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "receipt_items", "receipts"
+  add_foreign_key "receipt_payments", "receipts"
+  add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "users"
 end
