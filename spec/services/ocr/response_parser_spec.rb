@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Ocr::ResponseParser do
-  describe '.call' do
+  describe '#call' do
     let(:raw_response) do
       {
         'raw_text' => <<~TEXT,
@@ -34,6 +34,9 @@ RSpec.describe Ocr::ResponseParser do
           'MerchantName' => { 'valueString' => 'サンプルストア' },
           'MerchantAddress' => { 'valueString' => '東京都渋谷区1-2-3' },
           'MerchantPhoneNumber' => { 'valueString' => '03-1234-5678' },
+          'TransactionDate' => { 'valueString' => '2026-04-02' },
+          'TransactionTime' => { 'valueString' => '12:34' },
+          'Total' => { 'valueNumber' => 1280 },
           'Subtotal' => { 'valueNumber' => 1180 },
           'TotalTax' => { 'valueNumber' => 80 },
           'Tip' => { 'valueNumber' => 100 },
@@ -92,14 +95,14 @@ RSpec.describe Ocr::ResponseParser do
     end
 
     it 'Azureレスポンスを内部形式へ厳密に変換する' do
-      result = described_class.new(response: raw_response).call
+      result = described_class.new(response: raw_response, provider: 'azure_document_intelligence').call
 
       aggregate_failures do
         expect(result[:success]).to eq(true)
         expect(result[:raw_text]).to include('サンプルストア')
         expect(result[:lines]).to include('コーヒー 180', 'サンド 550 x2')
         expect(result[:error_code]).to be_nil
-        expect(result[:meta]).to be_a(Hash)
+        expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
 
       candidates = result[:candidates]
@@ -112,7 +115,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:store_name]).to eq('サンプルストア')
         expect(candidates[:store_address]).to eq('東京都渋谷区1-2-3')
         expect(candidates[:store_phone_number]).to eq('03-1234-5678')
-        expect(candidates[:purchased_at_text]).to eq('2026/04/02 12:34')
+        expect(candidates[:purchased_at_text]).to eq('2026-04-02 12:34')
         expect(candidates[:total_amount]).to eq(1280)
         expect(candidates[:subtotal_amount]).to eq(1180)
         expect(candidates[:tax_amount]).to eq(80)
@@ -155,36 +158,161 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
-    it 'fieldsが一部欠けていても lines から補助抽出できる' do
+    it 'JSON文字列入力でも内部形式へ変換できる' do
+      json_response = raw_response.to_json
+
+      result = described_class.new(response: json_response, provider: 'azure_document_intelligence').call
+
+      aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(result.dig(:candidates, :store_name)).to eq('サンプルストア')
+        expect(result.dig(:candidates, :total_amount)).to eq(1280)
+        expect(result.dig(:candidates, :items)&.size).to eq(2)
+        expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
+      end
+    end
+
+    it 'fieldsが一部欠けていても lines や text から補助抽出できる' do
       partial_response = raw_response.deep_dup
+      partial_response.delete('raw_text')
+      partial_response.delete('lines')
+      partial_response['text'] = <<~TEXT
+        サンプルストア
+        東京都渋谷区1-2-3
+        TEL 03-1234-5678
+        2026/04/02 12:34
+        コーヒー 180
+        サンド 550 x2
+        小計 1180
+        消費税 80
+        合計 1280
+        Mastercard
+      TEXT
+      partial_response['fields'].delete('MerchantName')
+      partial_response['fields'].delete('TransactionDate')
+      partial_response['fields'].delete('TransactionTime')
+      partial_response['fields'].delete('Total')
       partial_response['fields'].delete('Subtotal')
       partial_response['fields'].delete('TotalTax')
-      partial_response['fields'].delete('MerchantName')
       partial_response['fields'].delete('Items')
 
       result = described_class.new(response: partial_response).call
       candidates = result[:candidates]
 
       aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(result[:raw_text]).to include('サンプルストア')
+        expect(result[:lines]).to include('コーヒー 180', 'サンド 550 x2')
         expect(candidates[:store_name]).to eq('サンプルストア')
+        expect(candidates[:purchased_at_text]).to eq('2026/04/02 12:34')
+        expect(candidates[:total_amount]).to eq(1280)
         expect(candidates[:subtotal_amount]).to eq(1180)
         expect(candidates[:tax_amount]).to eq(80)
+        expect(candidates[:payment_method_text]).to eq('mastercard')
         expect(candidates[:items]).to eq([])
+      end
+    end
+
+    it 'result.text と result.lines 形式でも抽出できる' do
+      nested_response = {
+        'result' => {
+          'text' => "ネスト店舗\n2026-04-03 09:15\n合計 980\nVISA",
+          'lines' => [ 'ネスト店舗', '2026-04-03 09:15', '合計 980', 'VISA' ]
+        },
+        'fields' => {
+          'MerchantName' => { 'valueString' => 'ネスト店舗' },
+          'Total' => { 'valueNumber' => 980 }
+        }
+      }
+
+      result = described_class.new(response: nested_response).call
+      candidates = result[:candidates]
+
+      aggregate_failures do
         expect(result[:success]).to eq(true)
+        expect(result[:raw_text]).to include('ネスト店舗')
+        expect(result[:lines]).to eq([ 'ネスト店舗', '2026-04-03 09:15', '合計 980', 'visa' ])
+        expect(candidates[:store_name]).to eq('ネスト店舗')
+        expect(candidates[:purchased_at_text]).to eq('2026-04-03 09:15')
+        expect(candidates[:total_amount]).to eq(980)
+        expect(candidates[:payment_method_text]).to eq('visa')
+      end
+    end
+
+    it '決済文言は lines を優先し、なければ raw_text 全体から抽出する' do
+      line_priority_response = raw_response.deep_dup
+      line_priority_response['lines'][-1] = 'PayPay'
+      line_priority_response['raw_text'] = <<~TEXT
+        サンプルストア
+        合計 1280
+        VISA
+        PayPay
+      TEXT
+
+      line_priority_result = described_class.new(response: line_priority_response).call
+
+      raw_text_fallback_response = raw_response.deep_dup
+      raw_text_fallback_response.delete('lines')
+      raw_text_fallback_response['raw_text'] = <<~TEXT
+        サンプルストア
+        合計 1280
+        お支払いはJCBです
+      TEXT
+
+      raw_text_fallback_result = described_class.new(response: raw_text_fallback_response).call
+
+      aggregate_failures do
+        expect(line_priority_result.dig(:candidates, :payment_method_text)).to eq('paypay')
+        expect(raw_text_fallback_result.dig(:candidates, :payment_method_text)).to eq('jcb')
+      end
+    end
+
+    it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
+      broken_response = raw_response.deep_dup
+      broken_response['fields']['Payments']['valueArray'] = 'invalid'
+      broken_response['fields']['TaxDetails']['valueArray'] = { 'bad' => 'shape' }
+      broken_response['fields']['Items']['valueArray'] = nil
+
+      result = described_class.new(response: broken_response).call
+      candidates = result[:candidates]
+
+      aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(candidates[:payments]).to eq([])
+        expect(candidates[:tax_details]).to eq([])
+        expect(candidates[:items]).to eq([])
+      end
+    end
+
+    it '壊れたJSON文字列では ocr_api_error を返す' do
+      result = described_class.new(response: '{invalid json}', provider: 'azure_document_intelligence').call
+
+      aggregate_failures do
+        expect(result[:success]).to eq(false)
+        expect(result[:error_code]).to eq('ocr_api_error')
+        expect(result[:raw_text]).to eq('')
+        expect(result[:lines]).to eq([])
+        expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
     end
 
     it '不正な入力では統一されたエラー形式を返す' do
-      result = described_class.new(response: nil).call
+      result = described_class.new(response: nil, provider: 'azure_document_intelligence').call
 
       aggregate_failures do
         expect(result[:success]).to eq(false)
-        expect(result[:error_code]).to be_nil.or be_present
+        expect(result[:error_code]).to eq('unexpected_error')
         expect(result[:raw_text]).to eq('')
         expect(result[:lines]).to eq([])
+        expect(result[:candidates][:store_name]).to be_nil
+        expect(result[:candidates][:store_address]).to be_nil
+        expect(result[:candidates][:store_phone_number]).to be_nil
+        expect(result[:candidates][:purchased_at_text]).to be_nil
+        expect(result[:candidates][:total_amount]).to be_nil
         expect(result[:candidates][:items]).to eq([])
         expect(result[:candidates][:payments]).to eq([])
         expect(result[:candidates][:tax_details]).to eq([])
+        expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
     end
   end

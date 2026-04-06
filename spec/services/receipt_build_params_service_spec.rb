@@ -258,5 +258,305 @@ RSpec.describe ReceiptBuildParamsService do
         end
       end
     end
+
+    context 'payment_method_text が判定不能な場合' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            store_name: 'サンプルストア',
+            total_amount: 1280,
+            payment_method_text: '不明な決済文言',
+            items: [],
+            payments: [],
+            tax_details: []
+          },
+          lines: []
+        }
+      end
+
+      it 'payment_method は nil になる' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to be_nil
+      end
+    end
+
+    context 'line_total が欠けている場合' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            payment_method_text: 'Master',
+            items: [
+              {
+                raw_text: 'サンド',
+                price: 550,
+                quantity: 2,
+                line_total: nil
+              }
+            ],
+            payments: [],
+            tax_details: []
+          },
+          lines: []
+        }
+      end
+
+      it 'price と quantity から line_total を補完する' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:price]).to eq(550)
+          expect(item[:quantity]).to eq(2)
+          expect(item[:line_total]).to eq(1100)
+        end
+      end
+    end
+
+    context 'quantity が空の場合' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            payment_method_text: 'Master',
+            items: [
+              {
+                raw_text: 'コーヒー',
+                price: 180,
+                quantity: nil,
+                line_total: nil
+              }
+            ],
+            payments: [],
+            tax_details: []
+          },
+          lines: []
+        }
+      end
+
+      it 'quantity は 1 として扱われる' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:quantity]).to eq(1)
+          expect(item[:line_total]).to eq(180)
+        end
+      end
+    end
+
+    context 'OCRとAIの明細件数がズレる場合' do
+      context 'OCR 2件 / AI 1件の場合' do
+        let(:ocr_result) do
+          {
+            candidates: {
+              payment_method_text: 'Master',
+              items: [
+                {
+                  raw_text: 'コーヒー',
+                  price: 180,
+                  quantity: 1,
+                  quantity_unit: '杯',
+                  product_code: 'C001',
+                  line_total: 180
+                },
+                {
+                  raw_text: 'サンド',
+                  price: 550,
+                  quantity: 2,
+                  quantity_unit: '個',
+                  product_code: 'S001',
+                  line_total: 1100
+                }
+              ],
+              payments: [],
+              tax_details: []
+            },
+            lines: []
+          }
+        end
+
+        let(:ai_result) do
+          {
+            receipt_items_attributes: [
+              {
+                raw_text: 'コーヒー',
+                suggested_name: 'ブレンドコーヒー',
+                category: 'drink',
+                needs_review: false
+              }
+            ]
+          }
+        end
+
+        it '不足分はOCR側の明細を保持する' do
+          params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+          first_item = params[:receipt_items_attributes].first
+          second_item = params[:receipt_items_attributes].second
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].size).to eq(2)
+            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:quantity_unit]).to eq('杯')
+            expect(second_item[:raw_text]).to eq('サンド')
+            expect(second_item[:quantity_unit]).to eq('個')
+            expect(second_item[:product_code]).to eq('S001')
+          end
+        end
+      end
+
+      context 'OCR 1件 / AI 2件の場合' do
+        let(:ocr_result) do
+          {
+            candidates: {
+              payment_method_text: 'Master',
+              items: [
+                {
+                  raw_text: 'コーヒー',
+                  price: 180,
+                  quantity: 1,
+                  quantity_unit: '杯',
+                  product_code: 'C001',
+                  line_total: 180
+                }
+              ],
+              payments: [],
+              tax_details: []
+            },
+            lines: []
+          }
+        end
+
+        let(:ai_result) do
+          {
+            receipt_items_attributes: [
+              {
+                raw_text: 'コーヒー',
+                suggested_name: 'ブレンドコーヒー',
+                category: 'drink',
+                needs_review: false
+              },
+              {
+                raw_text: 'サンド',
+                suggested_name: 'たまごサンド',
+                category: 'food',
+                needs_review: true
+              }
+            ]
+          }
+        end
+
+        it '余分なAI明細も壊れずに取り込める' do
+          params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+          first_item = params[:receipt_items_attributes].first
+          second_item = params[:receipt_items_attributes].second
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].size).to eq(2)
+            expect(first_item[:raw_text]).to eq('コーヒー')
+            expect(first_item[:quantity_unit]).to eq('杯')
+            expect(first_item[:product_code]).to eq('C001')
+            expect(second_item[:suggested_name]).to eq('たまごサンド')
+            expect(second_item[:category]).to eq('food')
+            expect(second_item[:needs_review]).to eq(true)
+          end
+        end
+      end
+    end
+
+    context 'purchased_at_text が不正な場合' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            store_name: 'サンプルストア',
+            purchased_at_text: 'not-a-date',
+            total_amount: 1280,
+            payment_method_text: 'Master',
+            items: [],
+            payments: [],
+            tax_details: []
+          },
+          lines: []
+        }
+      end
+
+      it '例外を起こさず purchased_at は nil になる' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at]).to be_nil
+      end
+    end
+
+    context 'processing_error 系と ocr_completed_at を引き継ぐ場合' do
+      let(:ai_result) do
+        {
+          receipt_attributes: {
+            processing_error_code: 'analysis_missing_keys',
+            processing_error_message: 'missing required keys',
+            ocr_completed_at: Time.zone.parse('2026-04-02 12:34:56')
+          }
+        }
+      end
+
+      it 'receipt_attributes にそのまま含める' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:processing_error_code]).to eq('analysis_missing_keys')
+          expect(params[:receipt_attributes][:processing_error_message]).to eq('missing required keys')
+          expect(params[:receipt_attributes][:ocr_completed_at]).to eq(Time.zone.parse('2026-04-02 12:34:56'))
+        end
+      end
+    end
+
+    context '文字列キーの入力が混在する場合' do
+      let(:ocr_result) do
+        {
+          'candidates' => {
+            'store_name' => 'サンプルストア',
+            'payment_method_text' => 'Master',
+            'items' => [
+              {
+                'raw_text' => 'コーヒー',
+                'price' => '180円',
+                'quantity' => '1',
+                'quantity_unit' => '杯',
+                'product_code' => 'C001',
+                'line_total' => '180円'
+              }
+            ],
+            'payments' => [
+              { 'method' => 'CreditCard', 'amount' => '1,280円' }
+            ],
+            'tax_details' => [
+              { 'description' => 'Sales Tax', 'amount' => '80円', 'rate' => '10%', 'net_amount' => '800円' }
+            ]
+          },
+          'lines' => []
+        }
+      end
+
+      it 'symbolize しながら保存向けに正しく整形できる' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        first_item = params[:receipt_items_attributes].first
+        first_payment = params[:receipt_payments_attributes].first
+        first_tax_detail = params[:receipt_tax_details_attributes].first
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:store_name]).to eq('サンプルストア')
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+          expect(first_item[:raw_text]).to eq('コーヒー')
+          expect(first_item[:quantity_unit]).to eq('杯')
+          expect(first_item[:product_code]).to eq('C001')
+          expect(first_item[:price]).to eq(180)
+          expect(first_payment[:amount]).to eq(1280)
+          expect(first_tax_detail[:net_amount]).to eq(800)
+        end
+      end
+    end
   end
 end
