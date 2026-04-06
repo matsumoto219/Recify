@@ -149,52 +149,53 @@ class ReceiptAnalysisService
   end
 
   def save_ai_result!(ocr_result, ai_result)
-    base_receipt_attributes = build_receipt_attributes_from_ocr(ocr_result)
-    ai_receipt_attributes = normalize_receipt_attributes(ai_result[:receipt_attributes])
-    receipt_attributes = base_receipt_attributes.merge(ai_receipt_attributes.compact)
-
-    base_items = build_items_from_ocr(ocr_result)
-    ai_items = normalize_items_attributes(ai_result[:receipt_items_attributes])
-    items_attributes = ai_items.presence || base_items
+    params = ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
 
     final_status = determine_final_status(
       ocr_result: ocr_result,
-      receipt_attributes: receipt_attributes,
-      items_attributes: items_attributes,
+      receipt_attributes: params[:receipt_attributes],
+      items_attributes: params[:receipt_items_attributes],
       ai_needs_review: ai_result[:needs_review]
     )
 
-    persist_result!(
-      receipt_attributes: receipt_attributes.merge(
+    persist_result_full!(
+      receipt_attributes: params[:receipt_attributes].merge(
         status: final_status,
         processing_error_code: nil,
         processing_error_message: nil,
         ocr_completed_at: Time.current
       ),
-      items_attributes: items_attributes
+      items_attributes: params[:receipt_items_attributes],
+      payments_attributes: params[:receipt_payments_attributes],
+      tax_details_attributes: params[:receipt_tax_details_attributes]
     )
 
     Rails.logger.info(
-      "[ReceiptAnalysis] completed receipt_id=#{receipt.id} status=#{final_status} items=#{items_attributes.size}"
+      "[ReceiptAnalysis] completed receipt_id=#{receipt.id} status=#{final_status} items=#{params[:receipt_items_attributes].size}"
     )
 
     receipt
   end
 
   def save_fallback_result!(ocr_result, error_code)
-    receipt_attributes = build_receipt_attributes_from_ocr(ocr_result).merge(
+    params = ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+
+    receipt_attributes = params[:receipt_attributes].merge(
       status: "review_needed",
       processing_error_code: error_code,
       processing_error_message: nil,
       ocr_completed_at: Time.current
     )
 
-    items_attributes = build_items_from_ocr(ocr_result)
-
-    persist_result!(receipt_attributes:, items_attributes:)
+    persist_result_full!(
+      receipt_attributes: receipt_attributes,
+      items_attributes: params[:receipt_items_attributes],
+      payments_attributes: params[:receipt_payments_attributes],
+      tax_details_attributes: params[:receipt_tax_details_attributes]
+    )
 
     Rails.logger.warn(
-      "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{error_code} items=#{items_attributes.size}"
+      "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{error_code} items=#{params[:receipt_items_attributes].size}"
     )
 
     receipt
@@ -219,6 +220,24 @@ class ReceiptAnalysisService
     Receipt.transaction do
       receipt.update!(receipt_attributes)
       replace_receipt_items!(items_attributes)
+    end
+  end
+
+  def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:)
+    Receipt.transaction do
+      receipt.update!(receipt_attributes)
+
+      replace_receipt_items!(items_attributes)
+
+      receipt.receipt_payments.destroy_all
+      Array(payments_attributes).each do |attrs|
+        receipt.receipt_payments.create!(attrs)
+      end
+
+      receipt.receipt_tax_details.destroy_all
+      Array(tax_details_attributes).each do |attrs|
+        receipt.receipt_tax_details.create!(attrs)
+      end
     end
   end
 
@@ -338,6 +357,8 @@ class ReceiptAnalysisService
         category: symbolized[:category].presence || detect_category(raw_text),
         price: price,
         quantity: quantity,
+        quantity_unit: symbolized[:quantity_unit],
+        product_code: symbolized[:product_code],
         line_total: normalize_amount(symbolized[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
         needs_review: symbolized.key?(:needs_review) ? symbolized[:needs_review] : true,
         position_index: symbolized[:position_index] || index + 1,

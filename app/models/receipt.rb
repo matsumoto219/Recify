@@ -33,9 +33,13 @@ class Receipt < ApplicationRecord
 
   belongs_to :user
   has_many :receipt_items, dependent: :destroy
+  has_many :receipt_payments, dependent: :destroy
+  has_many :receipt_tax_details, dependent: :destroy
   has_one_attached :image
 
   accepts_nested_attributes_for :receipt_items, allow_destroy: false
+  accepts_nested_attributes_for :receipt_payments, allow_destroy: false
+  accepts_nested_attributes_for :receipt_tax_details, allow_destroy: false
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, inclusion: { in: statuses.keys }, allow_blank: true
