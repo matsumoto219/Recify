@@ -85,39 +85,6 @@ RSpec.describe ReceiptAnalysisService do
     }
   end
 
-  let(:strict_completed_ai_result) do
-    {
-      success: true,
-      needs_review: false,
-      receipt_attributes: {
-        store_name: 'AI補正ストア',
-        payment_method: 'credit_card'
-      },
-      receipt_items_attributes: [
-        {
-          raw_text: 'コーヒー',
-          suggested_name: 'ブレンドコーヒー',
-          category: 'drink',
-          quantity_unit: '杯',
-          product_code: 'C001',
-          line_total: 180,
-          confidence: 0.98,
-          needs_review: false
-        },
-        {
-          raw_text: 'サンド',
-          suggested_name: 'たまごサンド',
-          category: 'food',
-          quantity_unit: '個',
-          product_code: 'S001',
-          line_total: 1100,
-          confidence: 0.97,
-          needs_review: false
-        }
-      ]
-    }
-  end
-
   before do
     # ダミー画像
     receipt.image.attach(
@@ -129,6 +96,10 @@ RSpec.describe ReceiptAnalysisService do
 
   describe '.call' do
     it 'OCR結果からレシート情報を保存する' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
       described_class.call(receipt)
 
       receipt.reload
@@ -141,6 +112,10 @@ RSpec.describe ReceiptAnalysisService do
     end
 
     it '明細が保存される' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
       described_class.call(receipt)
 
       receipt.reload
@@ -153,6 +128,10 @@ RSpec.describe ReceiptAnalysisService do
     end
 
     it '支払い情報が保存される' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
       described_class.call(receipt)
 
       receipt.reload
@@ -165,6 +144,10 @@ RSpec.describe ReceiptAnalysisService do
     end
 
     it '税情報が保存される' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
       described_class.call(receipt)
 
       receipt.reload
@@ -235,7 +218,7 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
-    it 'AI成功かつ要確認なしなら completed になる' do
+    it 'AI成功時に補完結果を保存できる' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
 
@@ -335,7 +318,7 @@ RSpec.describe ReceiptAnalysisService do
           }
         )
       )
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(strict_completed_ai_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
 
       described_class.call(receipt)
       receipt.reload
@@ -360,7 +343,7 @@ RSpec.describe ReceiptAnalysisService do
           }
         )
       )
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(strict_completed_ai_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
 
       described_class.call(receipt)
       receipt.reload
@@ -379,7 +362,7 @@ RSpec.describe ReceiptAnalysisService do
           }
         )
       )
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(strict_completed_ai_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
 
       described_class.call(receipt)
       receipt.reload
@@ -464,6 +447,8 @@ RSpec.describe ReceiptAnalysisService do
       aggregate_failures do
         expect(receipt.store_name).to eq('旧形式AIストア')
         expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.status).to eq('completed')
+        expect(receipt.processing_error_code).to be_nil
         expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include(
           [ '旧形式ブレンドコーヒー', 'drink' ],
           [ '旧形式たまごサンド', 'food' ]
