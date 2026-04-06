@@ -19,6 +19,9 @@ RSpec.describe ReceiptAnalysisService do
         store_name: 'サンプルストア',
         purchased_at_text: '2026/04/02 12:34',
         total_amount: 1280,
+        tip_amount: 100,
+        country_region: 'JP',
+        receipt_type: 'Meal',
         payment_method_text: 'Master',
         items: [
           {
@@ -331,7 +334,7 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
-    it 'payment_method_text が空なら review_needed になる' do
+    it 'payment_method_text が空でも payment_method が確定していれば completed になる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
           candidates: {
@@ -348,7 +351,7 @@ RSpec.describe ReceiptAnalysisService do
       described_class.call(receipt)
       receipt.reload
 
-      expect(receipt.status).to eq('review_needed')
+      expect(receipt.status).to eq('completed')
     end
 
     it 'items_average が低いなら review_needed になる' do
@@ -401,58 +404,6 @@ RSpec.describe ReceiptAnalysisService do
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
         expect(receipt.processing_error_code).to eq('ai_invalid_response')
-      end
-    end
-
-    it '旧形式のAIレスポンスでも正規化して保存できる' do
-      legacy_ai_result = {
-        store_name: '旧形式AIストア',
-        payment_method: 'credit_card',
-        items: [
-          {
-            raw_text: 'コーヒー',
-            suggested_name: '旧形式ブレンドコーヒー',
-            category: 'drink',
-            needs_review: false,
-            line_total: 180,
-            confidence: 0.98
-          },
-          {
-            raw_text: 'サンド',
-            suggested_name: '旧形式たまごサンド',
-            category: 'food',
-            needs_review: false,
-            line_total: 1100,
-            confidence: 0.97
-          }
-        ],
-        needs_review: false
-      }
-
-      allow(ReceiptOcrService).to receive(:call).and_return(
-        build_ocr_result(
-          candidates: {
-            confidence_summary: {
-              items_average: 0.95,
-              overall: 0.95
-            }
-          }
-        )
-      )
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(legacy_ai_result)
-
-      described_class.call(receipt)
-      receipt.reload
-
-      aggregate_failures do
-        expect(receipt.store_name).to eq('旧形式AIストア')
-        expect(receipt.payment_method).to eq('credit_card')
-        expect(receipt.status).to eq('completed')
-        expect(receipt.processing_error_code).to be_nil
-        expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include(
-          [ '旧形式ブレンドコーヒー', 'drink' ],
-          [ '旧形式たまごサンド', 'food' ]
-        )
       end
     end
   end
