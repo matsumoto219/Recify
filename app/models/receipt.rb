@@ -42,15 +42,30 @@ class Receipt < ApplicationRecord
   accepts_nested_attributes_for :receipt_tax_details, allow_destroy: false
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
-  validates :status, inclusion: { in: statuses.keys }, allow_blank: true
+  validates :status, presence: true, inclusion: { in: statuses.keys }
 
   # 合計金額数値と最小値指定
   validates :total_amount,
+            presence: true,
             numericality: { only_integer: true, greater_than_or_equal_to: 0 },
-            allow_blank: true
+            unless: :allow_partial_ocr_data?
 
+  validates :store_name, presence: true, unless: :allow_partial_ocr_data?
   validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名(MAX100文字)
   validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
+
+  private
+
+  def allow_partial_ocr_data?
+    image.attached? && (
+      uploaded? ||
+      processing? ||
+      review_needed? ||
+      failed?
+    )
+  end
+
+  public
 
   def self.payment_method_options
     PAYMENT_METHODS.map do |key|
