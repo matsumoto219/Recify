@@ -86,37 +86,38 @@ class ReceiptAnalysisService
   def normalize_ai_result(result)
     return { success: false, error_code: "ai_invalid_response" } unless result.is_a?(Hash)
 
-    return result.symbolize_keys if result.key?(:receipt_attributes) || result.key?("receipt_attributes")
-
     symbolized = result.symbolize_keys
-    items = Array(symbolized[:items]).map do |item|
-      normalized_item = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
-      {
-        raw_text: normalized_item[:raw_text],
-        suggested_name: normalized_item[:suggested_name],
-        confirmed_name: normalized_item[:confirmed_name],
-        category: normalized_item[:category],
-        price: normalized_item[:price],
-        quantity: normalized_item[:quantity],
-        line_total: normalized_item[:line_total],
-        needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : true,
-        position_index: normalized_item[:position_index],
-        confidence: normalized_item[:confidence]
-      }
+
+    # (receipt_attributesを含む構造)のみ受け付ける
+    unless symbolized[:receipt_attributes].is_a?(Hash)
+      return { success: false, error_code: "ai_invalid_response" }
     end
 
+    # receipt_items_attributes が無い場合は空配列で扱う
+    symbolized[:receipt_items_attributes] ||= []
+
     {
-      success: true,
+      success: symbolized.key?(:success) ? symbolized[:success] : true,
       error_code: symbolized[:error_code],
       needs_review: symbolized[:needs_review],
-      receipt_attributes: {
-        store_name: symbolized[:store_name],
-        purchased_at: symbolized[:purchased_at],
-        total_amount: symbolized[:total_amount],
-        payment_method: symbolized[:payment_method],
-        status: symbolized[:status]
-      }.compact,
-      receipt_items_attributes: items
+      receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
+      receipt_items_attributes: Array(symbolized[:receipt_items_attributes]).map do |item|
+        normalized_item = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
+        {
+          raw_text: normalized_item[:raw_text],
+          suggested_name: normalized_item[:suggested_name],
+          confirmed_name: normalized_item[:confirmed_name],
+          category: normalized_item[:category],
+          price: normalized_item[:price],
+          quantity: normalized_item[:quantity],
+          quantity_unit: normalized_item[:quantity_unit],
+          product_code: normalized_item[:product_code],
+          line_total: normalized_item[:line_total],
+          needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : true,
+          position_index: normalized_item[:position_index],
+          confidence: normalized_item[:confidence]
+        }
+      end
     }
   end
 
@@ -133,7 +134,7 @@ class ReceiptAnalysisService
     false
   end
 
-  def low_quality_ocr?(ocr_result)
+  def low_quality_ocr?(ocr_result, receipt_attributes:)
     candidates = ocr_candidates(ocr_result)
     items = Array(candidates[:items])
     items_average = candidates.dig(:confidence_summary, :items_average)
@@ -141,9 +142,12 @@ class ReceiptAnalysisService
     return true if candidates[:store_name].blank?
     return true if candidates[:total_amount].blank?
     return true if items.blank?
-    return true if candidates[:payment_method_text].blank?
+    # OCRにもAIにも決済情報がない場合のみ review_needed
+    return true if candidates[:payment_method_text].blank? && receipt_attributes[:payment_method].blank?
     return true if items_average.present? && items_average.to_f < REVIEW_NEEDED_CONFIDENCE_THRESHOLD
-    return true if items.any? { |item| item_needs_review?(item) }
+    # OCR品質判定ではAI後のロジックは使わない（rawデータ基準）
+    return true if items.any? { |item| item[:raw_text].blank? }
+    return true if items.any? { |item| item[:confidence].present? && item[:confidence].to_f < REVIEW_NEEDED_CONFIDENCE_THRESHOLD }
 
     false
   end
@@ -202,9 +206,11 @@ class ReceiptAnalysisService
   end
 
   def fail_receipt!(error_code, message = nil)
+    mapped = ReceiptProcessingErrorMapper.map(error_code)
+
     receipt.update!(
       status: "failed",
-      processing_error_code: error_code,
+      processing_error_code: mapped[:error_code],
       processing_error_message: message,
       ocr_completed_at: Time.current
     )
@@ -214,13 +220,6 @@ class ReceiptAnalysisService
     )
 
     receipt
-  end
-
-  def persist_result!(receipt_attributes:, items_attributes:)
-    Receipt.transaction do
-      receipt.update!(receipt_attributes)
-      replace_receipt_items!(items_attributes)
-    end
   end
 
   def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:)
@@ -253,7 +252,7 @@ class ReceiptAnalysisService
 
   def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil)
     return "review_needed" if ai_needs_review
-    return "review_needed" if low_quality_ocr?(ocr_result)
+    return "review_needed" if low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes)
     return "review_needed" if receipt_attributes[:store_name].blank?
     return "review_needed" if receipt_attributes[:total_amount].blank?
     return "review_needed" if receipt_attributes[:payment_method].blank?
@@ -339,6 +338,7 @@ class ReceiptAnalysisService
       total_amount: normalize_amount(symbolized[:total_amount]),
       subtotal_amount: normalize_amount(symbolized[:subtotal_amount]),
       tax_amount: normalize_amount(symbolized[:tax_amount]),
+      tip_amount: normalize_amount(symbolized[:tip_amount]),
       payment_method: symbolized[:payment_method]
     }.compact
   end
