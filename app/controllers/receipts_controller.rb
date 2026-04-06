@@ -59,8 +59,6 @@ class ReceiptsController < ApplicationController
         )
         Rails.logger.info("[ReceiptAnalysis] update start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_changed=#{image_changed}")
         analysis_success = apply_analysis(@receipt)
-      elsif @receipt.receipt_items.exists? && @receipt.processing_error_code.blank?
-        @receipt.update!(status: "completed")
       end
 
       if analysis_success
@@ -115,14 +113,20 @@ class ReceiptsController < ApplicationController
 
     !receipt.failed?
   rescue StandardError => e
-    receipt.update!(
-      status: "failed",
-      processing_error_code: "unexpected_error",
-      processing_error_message: e.message
-    )
+    fail_receipt!(receipt, "unexpected_error", e.message)
     Rails.logger.error(
       "[ReceiptAnalysis] controller_apply_analysis_failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
     )
     false
+  end
+
+  def fail_receipt!(receipt, error_code, message)
+    mapped = ReceiptProcessingErrorMapper.map(error_code)
+
+    receipt.update!(
+      status: "failed",
+      processing_error_code: mapped[:error_code],
+      processing_error_message: message
+    )
   end
 end
