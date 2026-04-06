@@ -1,12 +1,13 @@
 class ReceiptBuildParamsService
   class << self
     def call(ocr_result:, ai_result: nil)
-      candidates = normalize_candidates(ocr_result)
+      normalized_ocr_result = normalize_ocr_result(ocr_result)
+      candidates = normalize_candidates(normalized_ocr_result)
       normalized_ai_result = normalize_ai_result(ai_result)
 
       {
         receipt_attributes: build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes]),
-        receipt_items_attributes: build_receipt_items_attributes(candidates, normalized_lines(ocr_result), normalized_ai_result[:receipt_items_attributes]),
+        receipt_items_attributes: build_receipt_items_attributes(candidates, normalized_lines(normalized_ocr_result), normalized_ai_result[:receipt_items_attributes]),
         receipt_payments_attributes: build_receipt_payments_attributes(candidates),
         receipt_tax_details_attributes: build_receipt_tax_details_attributes(candidates)
       }
@@ -14,8 +15,17 @@ class ReceiptBuildParamsService
 
     private
 
+    def normalize_ocr_result(ocr_result)
+      return {} unless ocr_result.is_a?(Hash)
+
+      ocr_result.deep_symbolize_keys
+    end
+
     def normalize_candidates(ocr_result)
-      (ocr_result[:candidates] || {}).deep_symbolize_keys
+      candidates = ocr_result[:candidates]
+      return {} unless candidates.is_a?(Hash)
+
+      candidates.deep_symbolize_keys
     end
 
     def normalized_lines(ocr_result)
