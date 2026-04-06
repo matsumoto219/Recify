@@ -31,10 +31,10 @@ class ReceiptsController < ApplicationController
       analysis_success = image_attached ? apply_analysis(@receipt) : true
 
       if analysis_success
-        redirect_to @receipt, notice: t("flash.receipts.create")
+        redirect_to receipts_path, notice: t("flash.receipts.create")
       else
         flash[@receipt.processing_flash_type] = @receipt.processing_flash_messages
-        redirect_to @receipt
+        redirect_to receipts_path
       end
     else
       render :new, status: :unprocessable_entity
@@ -59,7 +59,7 @@ class ReceiptsController < ApplicationController
         )
         Rails.logger.info("[ReceiptAnalysis] update start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_changed=#{image_changed}")
         analysis_success = apply_analysis(@receipt)
-      elsif @receipt.receipt_items.exists?
+      elsif @receipt.receipt_items.exists? && @receipt.processing_error_code.blank?
         @receipt.update!(status: "completed")
       end
 
@@ -105,34 +105,15 @@ class ReceiptsController < ApplicationController
     )
   end
 
-  # 本実装では ReceiptAnalysisService に処理を集約していく
   def apply_analysis(receipt)
-    result = ReceiptAnalysisService.call(receipt)
-    Rails.logger.info("[ReceiptAnalysis] processing receipt_id=#{receipt.id} status=#{receipt.status}")
+    ReceiptAnalysisService.call(receipt)
+    receipt.reload
 
-    receipt.update!(
-      analysis_result_params(result).merge(
-        status: "review_needed",
-        processing_error_message: nil,
-        ocr_completed_at: Time.current
-      )
-    )
-
-    rebuild_receipt_items(receipt, result[:items])
     Rails.logger.info(
-      "[ReceiptAnalysis] success receipt_id=#{receipt.id} status=#{receipt.status} items_count=#{result[:items].size} error_code=#{receipt.processing_error_code.inspect}"
+      "[ReceiptAnalysis] controller_apply_analysis receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code.inspect}"
     )
-    true
-  rescue ReceiptAnalysisService::AnalysisError => e
-    receipt.update!(
-      status: "failed",
-      processing_error_code: e.error_code,
-      processing_error_message: e.message
-    )
-    Rails.logger.error(
-      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
-    )
-    false
+
+    !receipt.failed?
   rescue StandardError => e
     receipt.update!(
       status: "failed",
@@ -140,25 +121,8 @@ class ReceiptsController < ApplicationController
       processing_error_message: e.message
     )
     Rails.logger.error(
-      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
+      "[ReceiptAnalysis] controller_apply_analysis_failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
     )
     false
-  end
-
-  def analysis_result_params(result)
-    {
-      store_name: result[:store_name],
-      purchased_at: result[:purchased_at],
-      total_amount: result[:total_amount],
-      payment_method: result[:payment_method]
-    }
-  end
-
-  def rebuild_receipt_items(receipt, items)
-    receipt.receipt_items.destroy_all
-
-    items.each do |item|
-      receipt.receipt_items.create!(item)
-    end
   end
 end
