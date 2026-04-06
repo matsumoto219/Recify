@@ -19,10 +19,19 @@ class ReceiptProcessingErrorMapper
     "ocr_timeout" => "ocr_error",
     "ocr_api_error" => "ocr_error",
 
+    # 画像系
+    "image_missing" => "image_error",
+    "image_invalid_format" => "image_error",
+    "image_corrupted" => "image_error",
+
     # AI系
     "ai_timeout" => "ai_error",
     "ai_invalid_response" => "ai_error",
     "analysis_missing_keys" => "ai_error",
+
+    "ai_api_error" => "ai_error",
+    "analysis_items_invalid" => "ai_error",
+    "analysis_value_invalid" => "ai_error",
 
     # 外部サービス系
     "external_service_unavailable" => "system_error",
