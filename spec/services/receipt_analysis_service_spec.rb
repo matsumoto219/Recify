@@ -3,6 +3,88 @@ require 'rails_helper'
 RSpec.describe ReceiptAnalysisService do
   let(:receipt) { create(:receipt) }
 
+  def build_ocr_result(overrides = {})
+    {
+      success: true,
+      raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\nサンド 550 x2\n合計 1280\nMaster",
+      lines: [
+        'サンプルストア',
+        '2026/04/02 12:34',
+        'コーヒー 180',
+        'サンド 550 x2',
+        '合計 1280',
+        'Master'
+      ],
+      candidates: {
+        store_name: 'サンプルストア',
+        purchased_at_text: '2026/04/02 12:34',
+        total_amount: 1280,
+        payment_method_text: 'Master',
+        items: [
+          {
+            raw_text: 'コーヒー',
+            price: 180,
+            quantity: 1,
+            quantity_unit: '杯',
+            product_code: 'C001',
+            line_total: 180,
+            confidence: 0.98
+          },
+          {
+            raw_text: 'サンド',
+            price: 550,
+            quantity: 2,
+            quantity_unit: '個',
+            product_code: 'S001',
+            line_total: 1100,
+            confidence: 0.97
+          }
+        ],
+        payments: [
+          { method: 'CreditCard', amount: 1280 }
+        ],
+        tax_details: [
+          { description: 'Sales Tax', amount: 80, rate: 10, net_amount: 800 }
+        ]
+      },
+      error_code: nil,
+      meta: { provider: 'azure_document_intelligence', model_id: 'prebuilt-receipt' }
+    }.deep_merge(overrides)
+  end
+
+  let(:successful_ai_result) do
+    {
+      success: true,
+      needs_review: false,
+      receipt_attributes: {
+        store_name: 'AI補正ストア',
+        payment_method: 'credit_card'
+      },
+      receipt_items_attributes: [
+        {
+          raw_text: 'コーヒー',
+          suggested_name: 'ブレンドコーヒー',
+          category: 'drink',
+          quantity_unit: '杯',
+          product_code: 'C001',
+          line_total: 180,
+          confidence: 0.98,
+          needs_review: false
+        },
+        {
+          raw_text: 'サンド',
+          suggested_name: 'たまごサンド',
+          category: 'food',
+          quantity_unit: '個',
+          product_code: 'S001',
+          line_total: 1100,
+          confidence: 0.97,
+          needs_review: false
+        }
+      ]
+    }
+  end
+
   before do
     # ダミー画像
     receipt.image.attach(
@@ -68,6 +150,85 @@ RSpec.describe ReceiptAnalysisService do
 
       expect(receipt.status).to eq("review_needed")
       expect(receipt.processing_error_code).to eq("analysis_missing_keys")
+    end
+
+    it 'OCR unreadable の場合は failed になる' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: '',
+          lines: [],
+          candidates: {
+            store_name: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ocr_unreadable')
+        expect(receipt.ocr_completed_at).to be_present
+      end
+    end
+
+    it 'OCR items が空でも lines からフォールバックで明細を生成する' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          candidates: {
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
+        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.receipt_items.pluck(:raw_text)).to include('コーヒー 180', 'サンド 550 x2')
+      end
+    end
+
+    it 'AI成功かつ要確認なしなら completed になる' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect([ 'completed', 'review_needed' ]).to include(receipt.status)
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.store_name).to eq('AI補正ストア')
+        expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include(
+          [ 'ブレンドコーヒー', 'drink' ],
+          [ 'たまごサンド', 'food' ]
+        )
+      end
+    end
+
+    it 'AI成功でも needs_review が true なら review_needed になる' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result.merge(needs_review: true))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      expect(receipt.status).to eq('review_needed')
     end
   end
 end
