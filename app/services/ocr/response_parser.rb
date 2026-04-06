@@ -29,11 +29,14 @@ class Ocr::ResponseParser
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),
         tax_details: extract_tax_details(parsed_response),
-        items: extract_items(parsed_response)
+        items: extract_items(parsed_response),
+        confidence_summary: extract_confidence_summary(parsed_response)
       },
       error_code: nil,
       meta: {
-        provider: @provider
+        provider: @provider,
+        model_id: nil,
+        raw_response_included: false
       }
     }
   rescue JSON::ParserError
@@ -42,6 +45,33 @@ class Ocr::ResponseParser
     build_error_result("unexpected_error")
   rescue StandardError
     build_error_result("unexpected_error")
+  end
+
+  def extract_confidence_summary(parsed_response)
+    items = parsed_response.dig("fields", "Items", "valueArray")
+    item_confidences = Array(items).filter_map { |item| item["confidence"]&.to_f }
+
+    {
+      merchant_name: parsed_response.dig("fields", "MerchantName", "confidence"),
+      purchased_at: parsed_response.dig("fields", "TransactionDate", "confidence"),
+      total_amount: parsed_response.dig("fields", "Total", "confidence"),
+      subtotal_amount: parsed_response.dig("fields", "Subtotal", "confidence"),
+      tax_amount: parsed_response.dig("fields", "TotalTax", "confidence") || parsed_response.dig("fields", "Tax", "confidence"),
+      tax_rate: Array(parsed_response.dig("fields", "TaxDetails", "valueArray")).filter_map { |detail| detail.dig("valueObject", "Rate", "confidence") }.first,
+      items_average: item_confidences.any? ? (item_confidences.sum / item_confidences.size.to_f).round(4) : nil,
+      overall: nil
+    }
+  rescue
+    {
+      merchant_name: nil,
+      purchased_at: nil,
+      total_amount: nil,
+      subtotal_amount: nil,
+      tax_amount: nil,
+      tax_rate: nil,
+      items_average: nil,
+      overall: nil
+    }
   end
 
   private
@@ -268,11 +298,23 @@ class Ocr::ResponseParser
         receipt_type: nil,
         payments: [],
         tax_details: [],
-        items: []
+        items: [],
+        confidence_summary: {
+          merchant_name: nil,
+          purchased_at: nil,
+          total_amount: nil,
+          subtotal_amount: nil,
+          tax_amount: nil,
+          tax_rate: nil,
+          items_average: nil,
+          overall: nil
+        }
       },
       error_code: error_code,
       meta: {
-        provider: @provider
+        provider: @provider,
+        model_id: nil,
+        raw_response_included: false
       }
     }
   end

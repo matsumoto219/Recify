@@ -8,11 +8,11 @@ class ReceiptOcrService
     end
   end
 
-  def self.call(image, provider: nil)
+  def self.call(image, provider: "azure_document_intelligence")
     new(image: image, provider: provider).call
   end
 
-  def initialize(image:, provider: nil)
+  def initialize(image:, provider: "azure_document_intelligence")
     @image = image
     @provider = provider
   end
@@ -66,13 +66,36 @@ class ReceiptOcrService
       lines: [],
       candidates: {
         store_name: nil,
+        store_address: nil,
+        store_phone_number: nil,
         purchased_at_text: nil,
         total_amount: nil,
-        payment_method_text: nil
+        subtotal_amount: nil,
+        tax_amount: nil,
+        tax_rate: nil,
+        tip_amount: nil,
+        country_region: nil,
+        receipt_type: nil,
+        payments: [],
+        tax_details: [],
+        payment_method_text: nil,
+        items: [],
+        confidence_summary: {
+          merchant_name: nil,
+          purchased_at: nil,
+          total_amount: nil,
+          subtotal_amount: nil,
+          tax_amount: nil,
+          tax_rate: nil,
+          items_average: nil,
+          overall: nil
+        }
       },
       error_code: error_code,
       meta: {
-        provider: provider
+        provider: provider,
+        model_id: nil,
+        raw_response_included: false
       }
     }
   end
