@@ -88,14 +88,7 @@ class Receipt < ApplicationRecord
   def error_category
     return "" if processing_error_code.blank?
 
-    case processing_error_code
-    when *IMAGE_ERROR_CODES
-      "image_error"
-    when *OCR_ERROR_CODES
-      "ocr_error"
-    else
-      "ai_error"
-    end
+    ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]
   end
 
   def failed_with_error?
