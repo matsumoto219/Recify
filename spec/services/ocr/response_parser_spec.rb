@@ -204,7 +204,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(result[:raw_text]).to include('サンプルストア')
         expect(result[:lines]).to include('コーヒー 180', 'サンド 550 x2')
         expect(candidates[:store_name]).to eq('サンプルストア')
-        expect(candidates[:purchased_at_text]).to eq('2026/04/02 12:34')
+        expect(candidates[:purchased_at_text]).to eq('2026-04-02 12:34')
         expect(candidates[:total_amount]).to eq(1280)
         expect(candidates[:subtotal_amount]).to eq(1180)
         expect(candidates[:tax_amount]).to eq(80)
