@@ -18,7 +18,7 @@ class Ocr::ResponseParser
         store_name: extract_store_name(normalized_lines),
         store_address: extract_store_address(parsed_response),
         store_phone_number: extract_store_phone_number(parsed_response),
-        purchased_at_text: extract_purchased_at_text(normalized_lines),
+        purchased_at_text: normalize_purchased_at_text(extract_purchased_at_text(normalized_lines)),
         total_amount: extract_total_amount(normalized_lines),
         subtotal_amount: extract_subtotal_amount(parsed_response, normalized_lines),
         tax_amount: extract_tax_amount(parsed_response, normalized_lines),
@@ -36,8 +36,10 @@ class Ocr::ResponseParser
         provider: @provider
       }
     }
-  rescue JSON::ParserError, TypeError
+  rescue JSON::ParserError
     build_error_result("ocr_api_error")
+  rescue TypeError
+    build_error_result("unexpected_error")
   rescue StandardError
     build_error_result("unexpected_error")
   end
@@ -53,7 +55,7 @@ class Ocr::ResponseParser
     when Hash
       value.deep_stringify_keys
     else
-      {}
+      raise TypeError, "unsupported ocr response"
     end
   end
 
@@ -110,6 +112,12 @@ class Ocr::ResponseParser
     end
   end
 
+  def normalize_purchased_at_text(text)
+    return nil if text.blank?
+
+    text.to_s.gsub("/", "-")
+  end
+
   def extract_total_amount(lines)
     amount_candidates = lines.filter_map do |line|
       next unless line.match?(/合計|total|税込|現計/i)
@@ -161,14 +169,14 @@ class Ocr::ResponseParser
   end
 
   def extract_payment_method_text(raw_text, lines)
-    payment_method_pattern = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i
+    payment_method_pattern = /現金|cash|visa|mastercard|master|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i
 
-    line_match = lines.find do |line|
+    line_match = Array(lines).find do |line|
       line.match?(payment_method_pattern)
     end
-    return line_match if line_match.present?
+    return line_match.match(payment_method_pattern)&.[](0) if line_match.present?
 
-    raw_text.match(payment_method_pattern)&.[](0)
+    raw_text.to_s.match(payment_method_pattern)&.[](0)
   end
 
   def extract_tip_amount(parsed_response)
