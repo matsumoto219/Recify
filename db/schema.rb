@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_05_231926) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_153512) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -94,7 +94,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_05_231926) do
     t.string "store_phone_number"
     t.integer "subtotal_amount"
     t.integer "tax_amount"
-    t.integer "tax_rate"
+    t.decimal "tax_rate", precision: 5, scale: 4
     t.integer "tip_amount"
     t.integer "total_amount"
     t.datetime "updated_at", null: false
