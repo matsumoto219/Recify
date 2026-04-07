@@ -1,6 +1,13 @@
+require "faraday"
+require "json"
+
 module Ocr
   class Client
-    def initialize(image:, provider: nil)
+    DEFAULT_TIMEOUT = 15
+    POLL_INTERVAL = 1.0
+    MAX_POLL = 10
+
+    def initialize(image:, provider: "azure_document_intelligence")
       @image = image
       @provider = provider
     end
@@ -8,112 +15,155 @@ module Ocr
     def call
       Rails.logger.info("[OCR::Client] request start provider=#{provider}")
 
-      # ダミー実装（Azure風レスポンス）
-      response = {
-        "raw_text" => <<~TEXT,
-          サンプルストア
-          東京都渋谷区1-2-3
-          TEL 03-1234-5678
-          2026/04/02 12:34
-          コーヒー 180
-          サンド 550 x2
-          小計 1180
-          消費税 80
-          チップ 100
-          合計 1280
-          Master
-        TEXT
-
-        "lines" => [
-          "サンプルストア",
-          "東京都渋谷区1-2-3",
-          "TEL 03-1234-5678",
-          "2026/04/02 12:34",
-          "コーヒー 180",
-          "サンド 550 x2",
-          "小計 1180",
-          "消費税 80",
-          "チップ 100",
-          "合計 1280",
-          "Master"
-        ],
-
-        # Azure Document Intelligence 風
-        "fields" => {
-          "MerchantName" => { "valueString" => "サンプルストア" },
-          "MerchantAddress" => { "valueString" => "東京都渋谷区1-2-3" },
-          "MerchantPhoneNumber" => { "valueString" => "03-1234-5678" },
-          "TransactionDate" => { "valueString" => "2026-04-02" },
-          "TransactionTime" => { "valueString" => "12:34" },
-          "Total" => { "valueNumber" => 1280 },
-          "Subtotal" => { "valueNumber" => 1180 },
-          "TotalTax" => { "valueNumber" => 80 },
-          "Tip" => { "valueNumber" => 100 },
-          "CountryRegion" => { "valueString" => "JP" },
-          "ReceiptType" => { "valueString" => "Meal" },
-
-          "Payments" => {
-            "valueArray" => [
-              {
-                "valueObject" => {
-                  "Method" => { "valueString" => "CreditCard" },
-                  "Amount" => { "valueNumber" => 1280 }
-                }
-              }
-            ]
-          },
-
-          "TaxDetails" => {
-            "valueArray" => [
-              {
-                "valueObject" => {
-                  "Description" => { "valueString" => "Sales Tax" },
-                  "Amount" => { "valueNumber" => 80 },
-                  "Rate" => { "valueNumber" => 10 },
-                  "NetAmount" => { "valueNumber" => 800 }
-                }
-              }
-            ]
-          },
-
-          "Items" => {
-            "valueArray" => [
-              {
-                "valueObject" => {
-                  "Description" => { "valueString" => "コーヒー" },
-                  "Quantity" => { "valueNumber" => 1 },
-                  "QuantityUnit" => { "valueString" => "杯" },
-                  "Price" => { "valueNumber" => 180 },
-                  "TotalPrice" => { "valueNumber" => 180 },
-                  "ProductCode" => { "valueString" => "C001" }
-                },
-                "confidence" => 0.98
-              },
-              {
-                "valueObject" => {
-                  "Description" => { "valueString" => "サンド" },
-                  "Quantity" => { "valueNumber" => 2 },
-                  "QuantityUnit" => { "valueString" => "個" },
-                  "Price" => { "valueNumber" => 550 },
-                  "TotalPrice" => { "valueNumber" => 1100 },
-                  "ProductCode" => { "valueString" => "S001" }
-                },
-                "confidence" => 0.97
-              }
-            ]
-          }
-        }
-      }
+      op_location = submit_request
+      result = poll_result(op_location)
 
       Rails.logger.info("[OCR::Client] request success provider=#{provider}")
-      response
+      result
+    rescue Faraday::TimeoutError
+      Rails.logger.error("[OCR::Client] timeout")
+      raise OcrTimeoutError, "ocr_timeout"
+    rescue Faraday::ConnectionFailed => e
+      Rails.logger.error("[OCR::Client] connection failed class=#{e.class} message=#{e.message}")
+      raise OcrError, "external_service_unavailable"
+    rescue OcrError, OcrTimeoutError
+      raise
     rescue StandardError => e
       Rails.logger.error("[OCR::Client] request failed class=#{e.class} message=#{e.message}")
-      raise
+      raise OcrError, "unexpected_error"
+    end
+
+    # NOTE:
+    # available? は将来の外部サービス監視ジョブ用の診断メソッド。
+    # 通常のOCR処理前には毎回呼ばない。
+    # UI表示や通常リクエストでは state cache / ExternalServiceStatus を参照する想定。
+    # provider ごとに診断方法が異なるため、必要になった時点で監視専用実装へ切り出す。
+    def available?
+      check_availability
+      true
+    rescue OcrError, OcrTimeoutError
+      false
     end
 
     private
 
     attr_reader :image, :provider
+
+    def connection
+      @connection ||= Faraday.new(url: endpoint) do |f|
+        f.options.timeout = DEFAULT_TIMEOUT
+        f.adapter Faraday.default_adapter
+      end
+    end
+
+    def submit_request
+      res = connection.post do |req|
+        req.url analyze_path
+        req.headers["Ocp-Apim-Subscription-Key"] = api_key
+        req.headers["Content-Type"] = "application/octet-stream"
+        req.body = image.read
+      end
+
+      handle_response_status!(res)
+
+      op_location = res.headers["operation-location"] || res.headers["Operation-Location"]
+      raise OcrError, "ocr_invalid_response" if op_location.blank?
+
+      op_location
+    end
+
+    def poll_result(op_location)
+      MAX_POLL.times do
+        sleep POLL_INTERVAL
+
+        res = Faraday.get(op_location) do |req|
+          req.headers["Ocp-Apim-Subscription-Key"] = api_key
+        end
+
+        handle_response_status!(res)
+
+        body = JSON.parse(res.body)
+        status = body["status"]
+
+        case status
+        when "succeeded"
+          return body
+        when "failed"
+          raise OcrError, "ocr_failed"
+        else
+          next
+        end
+      end
+
+      raise OcrTimeoutError, "ocr_timeout"
+    end
+
+    # TODO:
+    # Azure Document Intelligence の疎通確認は provider 依存が強いため、
+    # 将来は監視専用クラス or job 側へ切り出す。
+    # 現時点では client 内に置いているが、通常処理フローからは直接使わない前提。
+    def check_availability
+      res = connection.get do |req|
+        req.url analyze_path
+        req.headers["Ocp-Apim-Subscription-Key"] = api_key
+      end
+
+      handle_response_status!(res)
+    rescue Faraday::TimeoutError
+      raise OcrTimeoutError, "ocr_timeout"
+    rescue Faraday::ConnectionFailed
+      raise OcrError, "external_service_unavailable"
+    end
+
+    # NOTE:
+    # 外部サービス状態管理では、このメソッドで寄せた error_code を利用して
+    # ok / degraded / down の状態遷移を判定する想定。
+    # input_invalid や ocr_unreadable のような入力起因エラーは
+    # 外部サービス障害カウントに含めない。
+    def handle_response_status!(res)
+      return if res.status.between?(200, 299)
+
+      error_code = case res.status
+      when 401
+        "external_service_auth_error"
+      when 403
+        "external_service_auth_error"
+      when 404
+        "input_invalid"
+      when 408
+        "ocr_timeout"
+      when 429
+        "external_service_unavailable"
+      when 500..599
+        "external_service_unavailable"
+      else
+        "ocr_api_error"
+      end
+
+      Rails.logger.error(
+        "[OCR::Client] bad response status=#{res.status} error_code=#{error_code} body=#{truncate_body(res.body)}"
+      )
+
+      raise(error_code == "ocr_timeout" ? OcrTimeoutError : OcrError, error_code)
+    end
+
+    def truncate_body(body)
+      body.to_s.tr("\n", " ")[0, 500]
+    end
+
+    def endpoint
+      ENV.fetch("AZURE_OCR_ENDPOINT")
+    end
+
+    def analyze_path
+      "/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=2024-11-30"
+    end
+
+    def api_key
+      ENV.fetch("AZURE_OCR_API_KEY")
+    end
   end
+
+  class OcrError < StandardError; end
+  class OcrTimeoutError < StandardError; end
 end
