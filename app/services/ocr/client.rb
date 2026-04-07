@@ -14,6 +14,8 @@ module Ocr
     # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
     # 現時点では保守的な初期値とし、実データを見ながら後で調整する。
     MAX_POLL = 10
+    QUERY_FIELDS_FEATURE = "queryFields"
+    QUERY_FIELDS = [ "PaymentMethod" ].freeze
 
     def initialize(image:, provider: "azure_document_intelligence")
       @image = image
@@ -69,7 +71,7 @@ module Ocr
         req.url analyze_path
         req.headers["Ocp-Apim-Subscription-Key"] = api_key
         req.headers["Content-Type"] = "application/octet-stream"
-        req.body = image.read
+        req.body = request_body
       end
 
       handle_response_status!(res)
@@ -108,6 +110,17 @@ module Ocr
       end
 
       raise OcrTimeoutError, "ocr_timeout"
+    end
+
+    def request_body
+      return image.download if image.respond_to?(:download)
+
+      if image.respond_to?(:read)
+        image.rewind if image.respond_to?(:rewind)
+        return image.read
+      end
+
+      image
     end
 
     # TODO:
@@ -171,7 +184,13 @@ module Ocr
     end
 
     def analyze_path
-      "/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=2024-11-30"
+      query = {
+        "api-version" => "2024-11-30",
+        "features" => QUERY_FIELDS_FEATURE,
+        "queryFields" => QUERY_FIELDS.join(",")
+      }.to_query
+
+      "/documentintelligence/documentModels/prebuilt-receipt:analyze?#{query}"
     end
 
     def api_key
