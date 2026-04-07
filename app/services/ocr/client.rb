@@ -4,7 +4,15 @@ require "json"
 module Ocr
   class Client
     DEFAULT_TIMEOUT = 15
+    # NOTE:
+    # 現時点では単純な固定間隔 polling。
+    # Azure 側の解析完了が遅い場合は、この間隔や回数が先にボトルネックになる。
+    # 将来は backoff や provider ごとの最適値調整を検討する。
     POLL_INTERVAL = 1.0
+    # NOTE:
+    # 受信JSONの行数上限ではなく、まずは polling 上限が実運用上のボトルネックになりやすい。
+    # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
+    # 現時点では保守的な初期値とし、実データを見ながら後で調整する。
     MAX_POLL = 10
 
     def initialize(image:, provider: "azure_document_intelligence")
@@ -82,6 +90,10 @@ module Ocr
 
         handle_response_status!(res)
 
+        # NOTE:
+        # Azure のレスポンス本文は一旦そのまま受け取り、後段 parser で必要部分だけ使う方針。
+        # 現時点ではここで本文を切り詰めない。
+        # 将来ボトルネックになる場合は、受信サイズそのものより parser / 保存方針 / polling を先に見直す。
         body = JSON.parse(res.body)
         status = body["status"]
 
@@ -147,6 +159,9 @@ module Ocr
       raise(error_code == "ocr_timeout" ? OcrTimeoutError : OcrError, error_code)
     end
 
+    # NOTE:
+    # ログ出力だけは肥大化防止のため切り詰める。
+    # これはデバッグログ用であり、OCR本文の受信内容そのものを制限する処理ではない。
     def truncate_body(body)
       body.to_s.tr("\n", " ")[0, 500]
     end
