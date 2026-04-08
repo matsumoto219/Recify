@@ -155,8 +155,7 @@ class ReceiptBuildParamsService
 
       {
         store_name: symbolized[:store_name],
-        # NOTE: AI側から来ても現状UI活用は限定的
-        store_address: symbolized[:store_address],
+        store_address: symbolized[:store_address],               # NOTE: AI側から来ても現状UI活用は限定的
         store_phone_number: symbolized[:store_phone_number],
         purchased_at: symbolized[:purchased_at],
         purchased_at_text: symbolized[:purchased_at_text],
@@ -164,12 +163,9 @@ class ReceiptBuildParamsService
         subtotal_amount: normalize_amount(symbolized[:subtotal_amount]),
         tax_amount: normalize_amount(symbolized[:tax_amount]),
         tax_rate: normalize_rate(symbolized[:tax_rate]),
-        # NOTE: AI側から来ても現状未使用に近い
-        tip_amount: normalize_amount(symbolized[:tip_amount]),
-        # NOTE: AI側から来ても保存優先。現状UIでは未使用
-        country_region: symbolized[:country_region],
-        # NOTE: AI側から来ても保存優先。現状UIでは未使用
-        receipt_type: symbolized[:receipt_type],
+        tip_amount: normalize_amount(symbolized[:tip_amount]),   # NOTE: AI側から来ても現状未使用に近い
+        country_region: symbolized[:country_region],             # NOTE: AI側から来ても保存優先。現状UIでは未使用
+        receipt_type: symbolized[:receipt_type],                 # NOTE: AI側から来ても保存優先。現状UIでは未使用
         payment_method: symbolized[:payment_method],
         processing_error_code: symbolized[:processing_error_code],
         processing_error_message: symbolized[:processing_error_message],

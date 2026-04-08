@@ -34,7 +34,7 @@ class Ocr::ResponseParser
       },
       error_code: nil,
       meta: {
-        provider: @provider,
+        provider: provider,
         model_id: extract_model_id(parsed_response),
         raw_response_included: false
       }
