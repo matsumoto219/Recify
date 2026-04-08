@@ -90,7 +90,7 @@
                 - receipts.store_phone_number カラム追加後は respond_to? ガードを外す
                 - OCR / AI解析結果から電話番号候補を保存
                 - 未取得時のみ「未登録」を表示する %>
-            <p class="font-semibold text-white"><%= @receipt.respond_to?(:store_phone_number) ? (@receipt.store_phone_number.presence || "未登録（ダミー）") : "未登録（ダミー）" %></p>
+            <p class="font-semibold text-white"><%= display_phone_number(@receipt.store_phone_number) %></p>
           </div>
 
           <div>
