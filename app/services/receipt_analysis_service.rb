@@ -315,87 +315,6 @@ class ReceiptAnalysisService
     "completed"
   end
 
-  def build_receipt_attributes_from_ocr(ocr_result)
-    candidates = ocr_candidates(ocr_result)
-
-    {
-      store_name: candidates[:store_name],
-      store_address: candidates[:store_address],
-      store_phone_number: candidates[:store_phone_number],
-      purchased_at: parse_purchased_at(candidates[:purchased_at_text]),
-      total_amount: normalize_amount(candidates[:total_amount]),
-      subtotal_amount: normalize_amount(candidates[:subtotal_amount]),
-      tax_amount: normalize_amount(candidates[:tax_amount]),
-      payment_method: detect_payment_method(candidates[:payment_method_text])
-    }.compact
-  end
-
-  def build_items_from_ocr(ocr_result)
-    candidates = ocr_candidates(ocr_result)
-    candidate_items = Array(candidates[:items])
-
-    items = if candidate_items.present?
-      candidate_items.each_with_index.map do |item, index|
-        normalized_item = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
-        raw_text = normalized_item[:raw_text].to_s
-        {
-          raw_text: raw_text,
-          suggested_name: extract_item_name(raw_text),
-          confirmed_name: nil,
-          category: detect_category(raw_text),
-          price: normalize_amount(normalized_item[:price]),
-          quantity: normalize_quantity(normalized_item[:quantity]),
-          line_total: normalize_amount(normalized_item[:line_total]),
-          needs_review: true,
-          position_index: index + 1,
-          confidence: normalize_confidence(normalized_item[:confidence])
-        }
-      end
-    else
-      build_items_from_lines(ocr_result[:lines])
-    end
-
-    items.presence || build_items_from_lines(ocr_result[:lines])
-  end
-
-  def build_items_from_lines(lines)
-    Array(lines).select { |line| item_line?(line) }.each_with_index.map do |line, index|
-      price = extract_item_price(line)
-      quantity = extract_item_quantity(line)
-
-      {
-        raw_text: line,
-        suggested_name: extract_item_name(line),
-        confirmed_name: nil,
-        category: detect_category(line),
-        price: price,
-        quantity: quantity,
-        line_total: extract_item_line_total(line, price:, quantity:),
-        needs_review: true,
-        position_index: index + 1,
-        confidence: BigDecimal("0.3")
-      }
-    end
-  end
-
-  def normalize_receipt_attributes(attributes)
-    return {} unless attributes.is_a?(Hash)
-
-    symbolized = attributes.symbolize_keys
-
-    {
-      store_name: symbolized[:store_name],
-      store_address: symbolized[:store_address],
-      store_phone_number: symbolized[:store_phone_number],
-      purchased_at: symbolized[:purchased_at].presence || parse_purchased_at(symbolized[:purchased_at_text]),
-      total_amount: normalize_amount(symbolized[:total_amount]),
-      subtotal_amount: normalize_amount(symbolized[:subtotal_amount]),
-      tax_amount: normalize_amount(symbolized[:tax_amount]),
-      tip_amount: normalize_amount(symbolized[:tip_amount]),
-      payment_method: symbolized[:payment_method]
-    }.compact
-  end
-
   def normalize_items_attributes(items)
     Array(items).map.with_index do |item, index|
       symbolized = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
@@ -422,15 +341,6 @@ class ReceiptAnalysisService
 
   def ocr_candidates(ocr_result)
     (ocr_result[:candidates] || {}).deep_symbolize_keys
-  end
-
-  def parse_purchased_at(value)
-    return value if value.is_a?(Time) || value.is_a?(ActiveSupport::TimeWithZone)
-    return nil if value.blank?
-
-    Time.zone.parse(value.to_s)
-  rescue ArgumentError, TypeError
-    nil
   end
 
   def normalize_amount(value)
@@ -468,15 +378,6 @@ class ReceiptAnalysisService
     item_attributes[:needs_review] == true
   end
 
-  def item_line?(line)
-    return false if line.blank?
-    return false if line.include?("合計")
-    return false if line.match?(%r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}})
-    return false if line.match?(/現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i)
-
-    line.match?(/\S+.*\d+/)
-  end
-
   def extract_item_name(line)
     line.to_s.sub(/\s+\d.*$/, "").strip
   end
@@ -505,10 +406,5 @@ class ReceiptAnalysisService
 
   def detect_category(text)
     ReceiptFallbackPatterns.detect_category(text)
-  end
-
-  def detect_payment_method(text)
-    detected = ReceiptFallbackPatterns.detect_payment_method(text)
-    detected == "other" ? nil : detected
   end
 end
