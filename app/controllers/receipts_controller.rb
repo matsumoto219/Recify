@@ -22,8 +22,8 @@ class ReceiptsController < ApplicationController
   end
 
   def create
-    image_attached = receipt_params[:image].present?
-    @receipt = current_user.receipts.new(receipt_params)
+    image_attached = normalized_receipt_params[:image].present?
+    @receipt = current_user.receipts.new(normalized_receipt_params)
     @receipt.status = image_attached ? "processing" : "uploaded"
 
     if @receipt.save
@@ -45,9 +45,9 @@ class ReceiptsController < ApplicationController
   end
 
   def update
-    image_changed = receipt_params[:image].present?
+    image_changed = normalized_receipt_params[:image].present?
 
-    if @receipt.update(receipt_params)
+    if @receipt.update(normalized_receipt_params)
       analysis_success = true
 
       if image_changed
@@ -87,20 +87,75 @@ class ReceiptsController < ApplicationController
     params.require(:receipt).permit(
       :store_name,
       :purchased_at,
+      :purchased_on,
+      :purchased_time,
       :total_amount,
       :payment_method,
       :memo,
       :image,
+      :keep_image,
+      # NOTE: 以下は将来フォームから直接編集する場合の候補
+      # :store_address,
+      # :store_phone_number,
+      # :subtotal_amount,
+      # :tax_amount,
+      # :tax_rate,
+      # :tip_amount,
+      # :country_region,
+      # :receipt_type,
       receipt_items_attributes: [
         :id,
         :confirmed_name,
         :category,
         :price,
         :quantity,
+        :quantity_unit,
+        :product_code,
         :line_total,
-        :needs_review
+        :needs_review,
+        :position_index,
+        :_destroy
       ]
+      # NOTE: 以下は将来 nested attributes で直接編集する場合の候補
+      # , receipt_payments_attributes: [
+      #   :id,
+      #   :method,
+      #   :amount,
+      #   :_destroy
+      # ],
+      # receipt_tax_details_attributes: [
+      #   :id,
+      #   :description,
+      #   :amount,
+      #   :rate,
+      #   :net_amount,
+      #   :_destroy
+      # ]
     )
+  end
+
+  def normalized_receipt_params
+    permitted = receipt_params.to_h.deep_dup
+
+    purchased_on = permitted.delete("purchased_on")
+    purchased_time = permitted.delete("purchased_time")
+
+    built_purchased_at = build_purchased_at(purchased_on, purchased_time)
+    permitted["purchased_at"] = built_purchased_at if built_purchased_at.present?
+
+    ActionController::Parameters.new(permitted).permit!
+  end
+
+  def build_purchased_at(purchased_on, purchased_time)
+    return nil if purchased_on.blank?
+
+    if purchased_time.present?
+      Time.zone.parse("#{purchased_on} #{purchased_time}")
+    else
+      Time.zone.parse(purchased_on.to_s)
+    end
+  rescue ArgumentError, TypeError
+    nil
   end
 
   def apply_analysis(receipt)
