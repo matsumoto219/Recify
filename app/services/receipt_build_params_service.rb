@@ -6,9 +6,13 @@ class ReceiptBuildParamsService
       normalized_ai_result = normalize_ai_result(ai_result)
 
       {
+        # OCR/AI内部形式 -> receipts 保存用attributes
         receipt_attributes: build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes]),
+        # OCR/AI内部形式 -> receipt_items 保存用attributes
         receipt_items_attributes: build_receipt_items_attributes(candidates, normalized_lines(normalized_ocr_result), normalized_ai_result[:receipt_items_attributes]),
+        # NOTE: 現状は Payments[] 自体の取得率が低く、保存されても UI では未使用
         receipt_payments_attributes: build_receipt_payments_attributes(candidates),
+        # NOTE: 税詳細は保存対象だが、現状は主に保持目的で UI では未使用
         receipt_tax_details_attributes: build_receipt_tax_details_attributes(candidates)
       }
     end
@@ -48,16 +52,16 @@ class ReceiptBuildParamsService
 
       {
         store_name: ai_attrs[:store_name].presence || candidates[:store_name],
-        store_address: ai_attrs[:store_address].presence || candidates[:store_address],
+        store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # NOTE: 保存はするが、実レシートで未取得が多く現状UI活用は限定的
         store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
         purchased_at: ai_attrs[:purchased_at].presence || parse_purchased_at(ai_attrs[:purchased_at_text]) || parse_purchased_at(candidates[:purchased_at_text]),
         total_amount: ai_attrs[:total_amount] || normalize_amount(candidates[:total_amount]),
         subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
         tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
         tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
-        tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),
-        country_region: ai_attrs[:country_region].presence || candidates[:country_region],
-        receipt_type: ai_attrs[:receipt_type].presence || candidates[:receipt_type],
+        tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),           # NOTE: 日本レシートではほぼ未取得。保存はするが現状未使用に近い
+        country_region: ai_attrs[:country_region].presence || candidates[:country_region],        # NOTE: 保存優先項目。現状UIでは未使用
+        receipt_type: ai_attrs[:receipt_type].presence || candidates[:receipt_type],              # NOTE: 保存優先項目。現状UIでは未使用
         payment_method: ai_attrs[:payment_method].presence || detect_payment_method(candidates),
         processing_error_code: ai_attrs[:processing_error_code],
         processing_error_message: ai_attrs[:processing_error_message],
@@ -85,6 +89,7 @@ class ReceiptBuildParamsService
         end
       end
 
+      # NOTE: quantity_unit / product_code は保存されるが、現状UI・分析では未活用
       source_items.each_with_index.map do |item, index|
         normalized_item = item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
         raw_text = normalized_item[:raw_text].to_s
@@ -112,6 +117,7 @@ class ReceiptBuildParamsService
     end
 
     def build_receipt_payments_attributes(candidates)
+      # NOTE: Payments[] が取れた場合のみ保存。現状は payment_method への fallback 利用が主で、receipt_payments 自体は未活用
       Array(candidates[:payments]).map do |payment|
         normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
 
@@ -125,6 +131,7 @@ class ReceiptBuildParamsService
     end
 
     def build_receipt_tax_details_attributes(candidates)
+      # NOTE: 税詳細は保存できる場合のみ保存。現状は tax_rate / tax_amount の補助情報で UI では未活用
       Array(candidates[:tax_details]).map do |tax_detail|
         normalized_tax_detail = tax_detail.respond_to?(:deep_symbolize_keys) ? tax_detail.deep_symbolize_keys : {}
 
@@ -148,6 +155,7 @@ class ReceiptBuildParamsService
 
       {
         store_name: symbolized[:store_name],
+        # NOTE: AI側から来ても現状UI活用は限定的
         store_address: symbolized[:store_address],
         store_phone_number: symbolized[:store_phone_number],
         purchased_at: symbolized[:purchased_at],
@@ -156,8 +164,11 @@ class ReceiptBuildParamsService
         subtotal_amount: normalize_amount(symbolized[:subtotal_amount]),
         tax_amount: normalize_amount(symbolized[:tax_amount]),
         tax_rate: normalize_rate(symbolized[:tax_rate]),
+        # NOTE: AI側から来ても現状未使用に近い
         tip_amount: normalize_amount(symbolized[:tip_amount]),
+        # NOTE: AI側から来ても保存優先。現状UIでは未使用
         country_region: symbolized[:country_region],
+        # NOTE: AI側から来ても保存優先。現状UIでは未使用
         receipt_type: symbolized[:receipt_type],
         payment_method: symbolized[:payment_method],
         processing_error_code: symbolized[:processing_error_code],
@@ -179,6 +190,7 @@ class ReceiptBuildParamsService
         candidate_item = candidate_items[index].respond_to?(:deep_symbolize_keys) ? candidate_items[index].deep_symbolize_keys : {}
         ai_item = ai_items[index].respond_to?(:deep_symbolize_keys) ? ai_items[index].deep_symbolize_keys : {}
 
+        # NOTE: quantity_unit / product_code はOCR優先で保持するが、現状は保存のみで未活用
         candidate_item.merge(ai_item.compact).merge(
           quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
           product_code: ai_item[:product_code].presence || candidate_item[:product_code]
@@ -187,6 +199,7 @@ class ReceiptBuildParamsService
     end
 
     def build_items_from_lines(lines)
+      # NOTE: OCR Items[] が取れない場合の最終fallback。現状は review_needed 前提
       Array(lines).select { |line| item_line?(line) }.each_with_index.map do |line, index|
         price = extract_item_price(line)
         quantity = extract_item_quantity(line)
@@ -232,11 +245,13 @@ class ReceiptBuildParamsService
     end
 
     def detect_payment_method(candidates)
+      # NOTE: payment_method_text から enum へ簡易変換。Payments[].Method が弱い/未取得なため現状はこちらが主力
       detected = ReceiptFallbackPatterns.detect_payment_method(candidates[:payment_method_text])
       detected == "other" ? nil : detected
     end
 
     def detect_category(text)
+      # NOTE: 最終カテゴリ精度はAI担当。ここは OCR only / AI失敗時の簡易fallback
       ReceiptFallbackPatterns.detect_category(text)
     end
 
