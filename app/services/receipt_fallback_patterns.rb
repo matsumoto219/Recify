@@ -1,50 +1,198 @@
 module ReceiptFallbackPatterns
   # OCRフォールバック用の簡易ルール（AI失敗時のみ使用）
   # NOTE: 上から順に評価（先にマッチしたものを採用）
-  # NOTE: OCRテキストは normalize 済み前提（全角→半角 / 小文字 / 余分な空白除去）
   # NOTE: このファイルでは「簡易分類ルール」のみを担当する
-  #       - 支払い方法: レシート全体の raw_text / lines から判定
-  #       - カテゴリ: 明細単位の raw_text から判定
   # NOTE: フォールバック保存時も自動確定はせず、needs_review = true 前提で扱う
 
   PAYMENT_METHOD_PATTERNS = {
-    "credit_card" => /master|mastercard|visa|jcb|amex|american\s*express|diners|discover|uc|dc/i,
-    "debit_card" => /デビット|debit/i,
-    "cash" => /現金|cash|お釣り|おつり|釣銭|預り|お預り/i,
-    "e_money" => /suica|pasmo|icoca|waon|nanaco|edy|楽天edy|id|quickpay|quicpay/i,
-    "qr_payment" => /paypay|楽天ペイ|楽天pay|rakuten\s*pay|d払い|d payment|au\s*pay|aupay|メルペイ|line\s*pay/i,
-    "other" => /.*/
+    "debit_card" => [
+      /デビット(?:カード)?/i,
+      /debit(?:\s*card)?/i,
+      /j[-\s]?debit/i,
+      /visa\s*debit/i
+    ],
+    "credit_card" => [
+      /クレジット(?:カード)?/i,
+      /credit(?:\s*card)?/i,
+      /master(?:card)?/i,
+      /visa(?!\s*debit)/i,
+      /jcb/i,
+      /amex/i,
+      /american\s*express/i,
+      /diners/i,
+      /discover/i,
+      /uc/i,
+      /dc/i,
+      /銀聯/i,
+      /union\s*pay/i
+    ],
+    "qr_payment" => [
+      /paypay/i,
+      /楽天(?:ペイ|pay)/i,
+      /rakuten\s*pay/i,
+      /d払い/i,
+      /d\s*payment/i,
+      /au\s*pay/i,
+      /aupay/i,
+      /メルペイ/i,
+      /line\s*pay/i,
+      /linepay/i,
+      /alipay/i,
+      /wechat\s*pay/i
+    ],
+    "e_money" => [
+      /suica/i,
+      /pasmo/i,
+      /icoca/i,
+      /waon(?!\s*point)/i,
+      /nanaco/i,
+      /楽天edy/i,
+      /\bedy\b/i,
+      /\bid\b/i,
+      /quick\s*pay/i,
+      /quic\s*pay/i,
+      /apple\s*pay/i,
+      /google\s*pay/i
+    ],
+    "cash" => [
+      /現金/i,
+      /cash/i,
+      /お釣り/i,
+      /おつり/i,
+      /釣銭/i,
+      /預り/i,
+      /お預り/i,
+      /現計/i
+    ]
   }.freeze
 
   CATEGORY_PATTERNS = {
-    "drink" => /ｺｰﾋｰ|コーヒー|お茶|tea|coffee|ジュース|水/,
-    "food" => /ｻﾝﾄﾞ|サンド|パン|弁当|おにぎり|ラーメン|うどん/,
-    "daily_goods" => /ティッシュ|洗剤|シャンプー/,
-    "household" => /キッチン|ラップ|スポンジ|洗濯|掃除/,
-    "medical" => /薬|ドラッグ|病院|処方/,
-    "beauty" => /化粧|コスメ/,
-    "transportation" => /電車|バス|タクシー/,
-    "hobby" => /雑誌|本|ゲーム|玩具|ホビー/,
-    "other" => /.*/
+    "drink" => [
+      /ｺｰﾋｰ/i,
+      /コーヒー/i,
+      /お茶/i,
+      /tea/i,
+      /coffee/i,
+      /ジュース/i,
+      /水/i,
+      /炭酸/i,
+      /酒/i,
+      /ビール/i
+    ],
+    "food" => [
+      /ｻﾝﾄﾞ/i,
+      /サンド/i,
+      /パン/i,
+      /弁当/i,
+      /おにぎり/i,
+      /ラーメン/i,
+      /うどん/i,
+      /牛丼/i,
+      /惣菜/i,
+      /豆腐/i,
+      /野菜/i,
+      /魚/i,
+      /肉/i
+    ],
+    "daily_goods" => [
+      /ティッシュ/i,
+      /洗剤/i,
+      /シャンプー/i,
+      /歯ブラシ/i,
+      /石鹸/i,
+      /トイレットペーパー/i
+    ],
+    "household" => [
+      /キッチン/i,
+      /ラップ/i,
+      /スポンジ/i,
+      /洗濯/i,
+      /掃除/i,
+      /電球/i,
+      /収納/i
+    ],
+    "medical" => [
+      /薬/i,
+      /ドラッグ/i,
+      /病院/i,
+      /処方/i,
+      /湿布/i,
+      /マスク/i
+    ],
+    "beauty" => [
+      /化粧/i,
+      /コスメ/i,
+      /美容/i,
+      /乳液/i,
+      /化粧水/i
+    ],
+    "transportation" => [
+      /電車/i,
+      /バス/i,
+      /タクシー/i,
+      /駐車/i,
+      /高速/i,
+      /ガソリン/i
+    ],
+    "hobby" => [
+      /雑誌/i,
+      /本/i,
+      /ゲーム/i,
+      /玩具/i,
+      /ホビー/i,
+      /文具/i
+    ]
   }.freeze
+
+  PAYMENT_METHOD_EXCLUSION_PATTERNS = [
+    /ポイント/i,
+    /point/i,
+    /会員/i,
+    /member/i,
+    /waon\s*point/i,
+    /楽天ポイント/i,
+    /tポイント/i,
+    /dポイント/i,
+    /ponta/i
+  ].freeze
 
   module_function
 
   def detect_payment_method(text)
-    detect_by_patterns(text, PAYMENT_METHOD_PATTERNS)
+    normalized_text = normalize_text(text)
+    return nil if normalized_text.blank?
+    return nil if payment_noise_only?(normalized_text)
+
+    detect_by_patterns(normalized_text, PAYMENT_METHOD_PATTERNS) || "other"
   end
 
   def detect_category(text)
-    detect_by_patterns(text, CATEGORY_PATTERNS)
+    normalized_text = normalize_text(text)
+    return nil if normalized_text.blank?
+
+    detect_by_patterns(normalized_text, CATEGORY_PATTERNS) || "other"
   end
 
   def detect_by_patterns(text, patterns)
-    normalized_text = text.to_s
-
-    patterns.each do |key, pattern|
-      return key if normalized_text.match?(pattern)
+    patterns.each do |key, pattern_list|
+      Array(pattern_list).each do |pattern|
+        return key if text.match?(pattern)
+      end
     end
 
     nil
+  end
+
+  def normalize_text(text)
+    return nil if text.blank?
+
+    text.to_s.unicode_normalize(:nfkc).downcase.gsub(/[[:space:]]+/, " ").strip.presence
+  end
+
+  def payment_noise_only?(text)
+    has_exclusion = PAYMENT_METHOD_EXCLUSION_PATTERNS.any? { |pattern| text.match?(pattern) }
+    has_payment_signal = detect_by_patterns(text, PAYMENT_METHOD_PATTERNS).present?
+
+    has_exclusion && !has_payment_signal
   end
 end
