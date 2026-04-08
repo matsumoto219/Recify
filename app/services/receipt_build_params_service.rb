@@ -245,9 +245,35 @@ class ReceiptBuildParamsService
     end
 
     def detect_payment_method(candidates)
-      # NOTE: payment_method_text から enum へ簡易変換。Payments[].Method が弱い/未取得なため現状はこちらが主力
+      # NOTE: 最終方針は Payments[].Method を第一候補、payment_method_text を fallback 補助にする。
+      # NOTE: ただし現在はテスト段階のため、structured payments は常に「未採用」扱いにしている。
+      # NOTE: Payments 側の実レシートサンプルが揃ったら `usable_payment_method_from_payments?` を有効化する。
+      payment_method_from_payments = detect_payment_method_from_payments(candidates[:payments])
+      return payment_method_from_payments if usable_payment_method_from_payments?(payment_method_from_payments)
+
+      # NOTE: 現在はこちらが主力。Payments[].Method が空 / 不正 / 未採用の場合のみ使う fallback。
       detected = ReceiptFallbackPatterns.detect_payment_method(candidates[:payment_method_text])
       detected == "other" ? nil : detected
+    end
+
+    def detect_payment_method_from_payments(payments)
+      Array(payments).each do |payment|
+        normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
+        method_text = normalized_payment[:method]
+        next if method_text.blank?
+
+        detected = ReceiptFallbackPatterns.detect_payment_method(method_text)
+        return nil if detected == "other"
+        return detected if detected.present?
+      end
+
+      nil
+    end
+
+    def usable_payment_method_from_payments?(detected_method)
+      # NOTE: テスト段階のため、Payments[].Method は常に未採用扱いにして fallback の動作を確認する。
+      # NOTE: 本採用時は `detected_method.present?` 等に切り替えて structured payments を優先する。
+      false
     end
 
     def detect_category(text)
