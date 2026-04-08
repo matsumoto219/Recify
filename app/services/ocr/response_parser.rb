@@ -16,20 +16,20 @@ class Ocr::ResponseParser
       lines: normalized_lines,
       candidates: {
         store_name: extract_store_name(parsed_response, normalized_lines),
-        store_address: extract_store_address(parsed_response),
+        store_address: extract_store_address(parsed_response),                                                     # NOTE: MerchantAddress は取得するが、実レシートで未取得が多く保存/表示は限定的
         store_phone_number: extract_store_phone_number(parsed_response),
         purchased_at_text: normalize_purchased_at_text(extract_purchased_at_text(parsed_response, normalized_lines)),
         total_amount: extract_total_amount(parsed_response, normalized_lines),
         subtotal_amount: extract_subtotal_amount(parsed_response, normalized_lines),
         tax_amount: extract_tax_amount(parsed_response, normalized_lines),
         tax_rate: extract_tax_rate(parsed_response),
-        payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),
-        tip_amount: extract_tip_amount(parsed_response),
+        payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),  # NOTE: Payments[].Method が取れない場合の fallback 用。現在はこちらが主力
+        tip_amount: extract_tip_amount(parsed_response),                                                           # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
         country_region: extract_country_region(parsed_response),
         receipt_type: extract_receipt_type(parsed_response),
-        payments: extract_payments(parsed_response),
-        tax_details: extract_tax_details(parsed_response),
-        items: extract_items(parsed_response),
+        payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
+        tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
+        items: extract_items(parsed_response),                                                                     # NOTE: quantity_unit / product_code は取得するが UI・分析では未活用
         confidence_summary: extract_confidence_summary(parsed_response)
       },
       error_code: nil,
@@ -210,6 +210,7 @@ class Ocr::ResponseParser
     noise_patterns.any? { |pattern| normalized.match?(pattern) }
   end
 
+  # NOTE: Azure側で address 型の場合もあり、valueString/content 以外の対応は今後検討
   def extract_store_address(parsed_response)
     fields = extract_fields(parsed_response)
 
@@ -405,6 +406,7 @@ class Ocr::ResponseParser
     nil
   end
 
+  # NOTE: 実レシートでは未取得が多く、現在は payment_method_text fallback を優先使用
   def extract_payments(parsed_response)
     fields = extract_fields(parsed_response)
     payments = fields.dig("Payments", "valueArray")
@@ -422,6 +424,7 @@ class Ocr::ResponseParser
     []
   end
 
+  # NOTE: 税詳細は取得できる場合のみ保存。現状は UI で未使用
   def extract_tax_details(parsed_response)
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
@@ -445,6 +448,7 @@ class Ocr::ResponseParser
     items = fields.dig("Items", "valueArray")
     return [] unless items.is_a?(Array)
 
+    # NOTE: product_code / quantity_unit は保存されるが現状UI・ロジックで未使用
     items.map do |item|
       value_object = item["valueObject"] || {}
 
