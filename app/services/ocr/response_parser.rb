@@ -6,6 +6,7 @@ class Ocr::ResponseParser
 
   def call
     parsed_response = normalize_response(@response)
+    validate_response_shape!(parsed_response)
     raw_text = extract_raw_text(parsed_response)
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = extract_lines(parsed_response).map { |line| normalize_text(line) }.reject(&:empty?)
@@ -41,6 +42,8 @@ class Ocr::ResponseParser
     }
   rescue JSON::ParserError
     build_error_result("ocr_api_error")
+  rescue InvalidOcrResponseError
+    build_error_result("ocr_api_error")
   rescue TypeError
     build_error_result("unexpected_error")
   rescue StandardError
@@ -62,7 +65,7 @@ class Ocr::ResponseParser
       items_average: item_confidences.any? ? (item_confidences.sum / item_confidences.size.to_f).round(4) : nil,
       overall: extract_document(parsed_response)["confidence"]
     }
-  rescue
+  rescue NoMethodError, TypeError
     {
       merchant_name: nil,
       purchased_at: nil,
@@ -79,12 +82,31 @@ class Ocr::ResponseParser
 
   attr_reader :response, :provider
 
+  InvalidOcrResponseError = Class.new(StandardError)
+
   def extract_analyze_result(parsed_response)
     parsed_response["analyzeResult"] || {}
   end
 
   def extract_document(parsed_response)
     Array(extract_analyze_result(parsed_response)["documents"]).first || {}
+  end
+
+  def validate_response_shape!(parsed_response)
+    raise InvalidOcrResponseError, "parsed_response must be a Hash" unless parsed_response.is_a?(Hash)
+
+    analyze_result = parsed_response["analyzeResult"]
+    raise InvalidOcrResponseError, "analyzeResult is missing" unless analyze_result.is_a?(Hash)
+
+    documents = analyze_result&.[]("documents")
+    if documents.present? && !documents.is_a?(Array)
+      raise InvalidOcrResponseError, "documents must be an Array"
+    end
+
+    fields = extract_document(parsed_response)["fields"]
+    if fields.present? && !fields.is_a?(Hash)
+      raise InvalidOcrResponseError, "fields must be a Hash"
+    end
   end
 
   # NOTE: 以下はAzure OCR (Document Intelligence) のレスポンスで取得可能だが、
