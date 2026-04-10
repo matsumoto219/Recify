@@ -177,7 +177,7 @@ class ReceiptAnalysisService
   end
 
   def save_ai_result!(ocr_result, ai_result)
-    params = ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
+    params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
 
     final_status = determine_final_status(
       ocr_result: ocr_result,
@@ -206,7 +206,7 @@ class ReceiptAnalysisService
   end
 
   def save_ocr_only_result!(ocr_result)
-    params = ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+    params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
 
     final_status = determine_final_status(
       ocr_result: ocr_result,
@@ -235,7 +235,7 @@ class ReceiptAnalysisService
   end
 
   def save_fallback_result!(ocr_result, error_code)
-    params = ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+    params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
 
     receipt_attributes = params[:receipt_attributes].merge(
       status: "review_needed",
@@ -259,7 +259,7 @@ class ReceiptAnalysisService
   end
 
   def fail_receipt!(error_code, message = nil)
-    mapped = ReceiptProcessingErrorMapper.map(error_code)
+    mapped = Analysis::ReceiptProcessingErrorMapper.map(error_code)
 
     receipt.update!(
       status: "failed",
@@ -405,6 +405,6 @@ class ReceiptAnalysisService
   end
 
   def detect_category(text)
-    ReceiptFallbackPatterns.detect_category(text)
+    Analysis::ReceiptFallbackPatterns.detect_category(text)
   end
 end
