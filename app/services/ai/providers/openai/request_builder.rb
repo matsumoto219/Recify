@@ -132,6 +132,10 @@ module Ai
             For store:
             - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
             - store_address: prefer OCR store_address. Use address_candidates and filtered_content as supporting evidence.
+            - When multiple address candidates exist, prioritize the address that is clearly supported by filtered_content and store/branch context.
+            - If filtered_content, address_candidates, and branch/store context consistently support a single store-level address, select that address and do NOT mark it as uncertain.
+            - If the primary OCR store_address appears to be a headquarters or customer support address but a store-level address is supported elsewhere, prefer the store-level address.
+            - Only mark store_address_uncertain when multiple plausible store-level addresses remain unresolved.
             - store_phone_number: prefer OCR store_phone_number. Do not invent phone numbers.
             - If OCR store_phone_number is present and plausibly formatted as a phone number, do not return null unless there is strong evidence that it is not a store phone number.
             - If a plausible phone number exists but you are not fully confident it is the correct store phone number, keep the plausible value and treat it as uncertain rather than missing.
