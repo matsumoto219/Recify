@@ -42,6 +42,10 @@ module Analysis
 
         symbolized = ai_result.deep_symbolize_keys
 
+        # NOTE:
+        # 現在の AI item は保存用完全データではなく、index ベースの補完データを受ける前提。
+        # 主に suggested_name / category / needs_review を OCR item にマージするための中間形式として扱う。
+
         {
           receipt_attributes: symbolized[:receipt_attributes] || {},
           receipt_items_attributes: Array(symbolized[:receipt_items_attributes])
@@ -92,7 +96,14 @@ module Analysis
 
         # NOTE: quantity_unit / product_code は保存されるが、現状UI・分析では未活用
         source_items.each_with_index.map do |item, index|
-          normalized_item = item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
+          normalized_item = if item.respond_to?(:with_indifferent_access)
+            item.with_indifferent_access
+          elsif item.respond_to?(:deep_symbolize_keys)
+            item.deep_symbolize_keys.with_indifferent_access
+          else
+            {}.with_indifferent_access
+          end
+
           raw_text = normalized_item[:raw_text].to_s
           price = normalize_amount(normalized_item[:price])
           quantity = normalize_quantity(normalized_item[:quantity])
@@ -101,6 +112,7 @@ module Analysis
             # Azure Items[].Description / Name -> receipt_items.raw_text
             raw_text: raw_text,
             suggested_name: normalized_item[:suggested_name].presence || extract_item_name(raw_text),
+            # NOTE: AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
             confirmed_name: normalized_item[:confirmed_name],
             category: normalized_item[:category].presence || detect_category(raw_text),
             price: price,
@@ -110,8 +122,8 @@ module Analysis
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             line_total: normalize_amount(normalized_item[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
-            needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : true,
-            position_index: normalized_item[:position_index] || index + 1,
+            needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : false,
+            position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence])
           }
         end
@@ -175,24 +187,58 @@ module Analysis
       end
 
       def normalize_items(items)
-        Array(items).map do |item|
-          item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
+        Array(items).filter_map do |item|
+          next unless item.is_a?(Hash) || item.respond_to?(:to_h)
+
+          item_hash = item.is_a?(Hash) ? item : item.to_h
+          item_hash.with_indifferent_access
         end
       end
 
       def merge_items(candidate_items, ai_items)
-        max_size = [ candidate_items.size, ai_items.size ].max
+        normalized_candidate_items = Array(candidate_items).map do |item|
+          item_hash = item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
+          item_hash.with_indifferent_access
+        end
+        normalized_ai_items = normalize_items(ai_items)
 
-        Array.new(max_size) do |index|
-          candidate_item = candidate_items[index].respond_to?(:deep_symbolize_keys) ? candidate_items[index].deep_symbolize_keys : {}
-          ai_item = ai_items[index].respond_to?(:deep_symbolize_keys) ? ai_items[index].deep_symbolize_keys : {}
+        ai_items_by_index = normalized_ai_items.each_with_object({}) do |item, result|
+          ai_index = normalize_item_index(
+            item[:index] || item["index"] || item[:position_index] || item["position_index"]
+          )
+          next if ai_index.nil?
+
+          result[ai_index] = item
+          result[ai_index + 1] ||= item
+        end
+
+        normalized_candidate_items.each_with_index.map do |candidate_item, candidate_index|
+          candidate_position = normalize_item_index(
+            candidate_item[:position_index] || candidate_item["position_index"]
+          )
+          lookup_candidates = [ candidate_position, candidate_index, candidate_index + 1 ].compact.uniq
+          ai_item = lookup_candidates.lazy.map { |idx| ai_items_by_index[idx] }.find(&:present?) || {}.with_indifferent_access
+          merged_item = candidate_item.merge(ai_item.compact)
 
           # NOTE: quantity_unit / product_code はOCR優先で保持するが、現状は保存のみで未活用
-          candidate_item.merge(ai_item.compact).merge(
+          merged_item.merge(
+            suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
+            category: ai_item[:category].presence || candidate_item[:category],
+            needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : false,
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
-            product_code: ai_item[:product_code].presence || candidate_item[:product_code]
+            product_code: ai_item[:product_code].presence || candidate_item[:product_code],
+            position_index: candidate_position || candidate_index
           )
         end
+      end
+
+      def normalize_item_index(value)
+        return nil if value.blank?
+        return value.to_i if value.is_a?(Numeric)
+
+        Integer(value)
+      rescue ArgumentError, TypeError
+        nil
       end
 
       def build_items_from_lines(lines)
@@ -212,7 +258,7 @@ module Analysis
             product_code: nil,
             line_total: extract_item_line_total(line, price:, quantity:),
             needs_review: true,
-            position_index: index + 1,
+            position_index: index,
             confidence: BigDecimal("0.3")
           }
         end
@@ -325,7 +371,7 @@ module Analysis
         line.to_s.sub(/\s+\d.*$/, "").strip
       end
 
-      def extract_item_line_total(line, price:, quantity:)
+      def extract_item_line_total(_line, price:, quantity:)
         return nil unless price
 
         price * quantity.to_i
