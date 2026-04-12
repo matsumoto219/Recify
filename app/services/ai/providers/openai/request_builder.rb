@@ -137,9 +137,15 @@ module Ai
             - Avoid headquarters or customer support addresses when selecting store_address.
 
             For purchase:
-            - purchased_at_text: prefer OCR purchased_at_text.
+            - purchased_at_text: prefer OCR purchased_at_text, but when OCR only has the date and there is a clearly supported time candidate, return a time-inclusive purchased_at_text.
             - Use purchased_at_candidates, purchase_context_lines, and filtered_content as supporting evidence.
-            - Keep competing time candidates in mind, such as order time, payment time, or issued time.
+            - Prefer a full datetime candidate when the same date and time are clearly supported together.
+            - Prefer receipt/transaction/payment context over order/preparation/reference context.
+            - Treat lines mentioning order time, reservation time, or non-payment workflow timestamps as lower priority unless they are the only plausible transaction time.
+            - If there is a single clearly supported transaction time, return purchased_at_text with both date and time.
+            - If only the date is clearly supported and the time is genuinely uncertain, return the date only.
+            - If multiple plausible transaction times conflict and cannot be resolved, return null and include purchased_at_conflicted in review_reasons.
+            - If the purchase date/time cannot be determined at all, return null and include purchased_at_missing or purchased_at_uncertain as appropriate.
             - Do NOT invent timestamps.
 
             For payment:
@@ -176,6 +182,7 @@ module Ai
             - Do NOT use combined or ambiguous codes such as "*_or_*".
             - If multiple reasons apply, include multiple entries (e.g., ["item_name_uncertain", "item_category_uncertain"]).
             - Include reasons only when review is needed.
+            - Use purchased_at_conflicted only when multiple plausible purchase timestamps remain unresolved after applying the purchase rules above.
             - Return [] when no review is needed.
 
             Input JSON:
