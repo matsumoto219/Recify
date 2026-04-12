@@ -94,6 +94,7 @@ module Analysis
           end
         end
 
+        ai_items_present = normalized_ai_items.present?
         # NOTE: quantity_unit / product_code は保存されるが、現状UI・分析では未活用
         source_items.each_with_index.map do |item, index|
           normalized_item = if item.respond_to?(:with_indifferent_access)
@@ -122,7 +123,7 @@ module Analysis
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             line_total: normalize_amount(normalized_item[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
-            needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : false,
+            needs_review: final_item_needs_review(normalized_item, ai_items_present: ai_items_present),
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence])
           }
@@ -224,11 +225,19 @@ module Analysis
           merged_item.merge(
             suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
             category: ai_item[:category].presence || candidate_item[:category],
-            needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : false,
+            needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             position_index: candidate_position || candidate_index
           )
+        end
+      end
+
+      def final_item_needs_review(normalized_item, ai_items_present:)
+        if normalized_item.key?(:needs_review)
+          normalized_item[:needs_review]
+        else
+          ai_items_present ? false : true
         end
       end
 
