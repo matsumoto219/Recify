@@ -100,19 +100,35 @@ class ReceiptAnalysisService
     )
 
     normalized
-  rescue ReceiptAiEnrichmentService::AiEnrichmentError => e
-    Rails.logger.warn(
-      "[ReceiptAnalysis] ai_failed_fallback receipt_id=#{receipt.id} error_code=#{e.error_code} message=#{e.message}"
-    )
-    { success: false, error_code: e.error_code }
+    # rescue ReceiptAiEnrichmentService::AiEnrichmentError => e
+    #   Rails.logger.warn(
+    #     "[ReceiptAnalysis] ai_failed_fallback receipt_id=#{receipt.id} error_code=#{e.error_code} message=#{e.message}"
+    #   )
+    #   { success: false, error_code: e.error_code }
+    # end
+    #
+    # ReceiptAiEnrichmentService は現在、例外をそのまま上げず ResultTemplate.error を返す設計へ寄せている。
+    # そのためこの rescue は現状ほぼ通らないが、直前の挙動との差分確認用に一旦コメントで残す。
   end
 
   def normalize_ai_result(result)
+    # NOTE:
+    # 現在の AI 新仕様では、主に receipt_attributes / receipt_items_attributes / needs_review / error_code を受ける。
+    # normalize_ai_result 側では旧構造もまだ少し吸収しているが、先に AI クライアント層と実レスポンス確認を優先する。
+    # そのため、不要キーの削減や責務の厳密化は後続タスクで整理する。
+
     return { success: false, error_code: "ai_invalid_response" } unless result.is_a?(Hash)
 
     symbolized = result.symbolize_keys
 
-    # (receipt_attributesを含む構造)のみ受け付ける
+    if symbolized[:success] == false
+      return {
+        success: false,
+        error_code: symbolized[:error_code].presence || "ai_invalid_response"
+      }
+    end
+
+    # success系は receipt_attributes を含む構造のみ受け付ける
     unless symbolized[:receipt_attributes].is_a?(Hash)
       return { success: false, error_code: "ai_invalid_response" }
     end
@@ -127,6 +143,7 @@ class ReceiptAnalysisService
       receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
       receipt_items_attributes: Array(symbolized[:receipt_items_attributes]).map do |item|
         normalized_item = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
+
         {
           raw_text: normalized_item[:raw_text],
           suggested_name: normalized_item[:suggested_name],
@@ -137,8 +154,9 @@ class ReceiptAnalysisService
           quantity_unit: normalized_item[:quantity_unit],
           product_code: normalized_item[:product_code],
           line_total: normalized_item[:line_total],
-          needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : true,
-          position_index: normalized_item[:position_index],
+          needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : false,
+          # AI側は item の対応順を index で返す想定。配列順依存を避けるため position_index へ寄せる。
+          position_index: normalized_item[:position_index] || normalized_item[:index],
           confidence: normalized_item[:confidence]
         }
       end
@@ -150,6 +168,9 @@ class ReceiptAnalysisService
     raw_text = ocr_result[:raw_text].to_s
     items = Array(candidates[:items])
     overall_confidence = candidates.dig(:confidence_summary, :overall)
+    # TODO: 実レスポンスで confidence_summary の配置を再確認する。
+    # 現在は candidates 配下を参照しているが、meta 配下に入る可能性もあるため、
+    # API実レスポンス確認後に参照先を一本化する。
 
     return true if raw_text.blank?
     return true if items.blank? && candidates[:store_name].blank? && candidates[:total_amount].blank?
@@ -162,6 +183,8 @@ class ReceiptAnalysisService
     candidates = ocr_candidates(ocr_result)
     items = Array(candidates[:items])
     items_average = candidates.dig(:confidence_summary, :items_average)
+    # TODO: 実レスポンスで confidence_summary の配置を再確認する。
+    # unreadable_ocr? と同様に、candidates / meta のどちらが正なのか確認後に整理する。
 
     return true if candidates[:store_name].blank?
     return true if candidates[:total_amount].blank?
@@ -208,12 +231,9 @@ class ReceiptAnalysisService
   def save_ocr_only_result!(ocr_result)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
 
-    final_status = determine_final_status(
-      ocr_result: ocr_result,
-      receipt_attributes: params[:receipt_attributes],
-      items_attributes: params[:receipt_items_attributes],
-      ai_needs_review: false
-    )
+    # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
+    # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
+    final_status = "review_needed"
 
     persist_result_full!(
       receipt_attributes: params[:receipt_attributes].merge(
@@ -237,6 +257,10 @@ class ReceiptAnalysisService
   def save_fallback_result!(ocr_result, error_code)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
 
+    # NOTE:
+    # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
+    # fail_receipt! は mapper を通しているため扱いが完全一致していないが、
+    # 先に AI 通信と保存フローの安定化を優先し、コード統一は後続で整理する。
     receipt_attributes = params[:receipt_attributes].merge(
       status: "review_needed",
       processing_error_code: error_code,
