@@ -113,9 +113,8 @@ class ReceiptAnalysisService
 
   def normalize_ai_result(result)
     # NOTE:
-    # 現在の AI 新仕様では、主に receipt_attributes / receipt_items_attributes / needs_review / error_code を受ける。
-    # normalize_ai_result 側では旧構造もまだ少し吸収しているが、先に AI クライアント層と実レスポンス確認を優先する。
-    # そのため、不要キーの削減や責務の厳密化は後続タスクで整理する。
+    # AI 共通の item 正規化は Analysis::ReceiptItemNormalizer に寄せ、
+    # ReceiptAnalysisService では success / error の判定と全体フロー制御を主責務とする。
 
     return { success: false, error_code: "ai_invalid_response" } unless result.is_a?(Hash)
 
@@ -141,26 +140,9 @@ class ReceiptAnalysisService
       error_code: symbolized[:error_code],
       needs_review: symbolized[:needs_review],
       receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
-      receipt_items_attributes: Array(symbolized[:receipt_items_attributes]).map do |item|
-        normalized_item = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
-
-        {
-          raw_text: normalized_item[:raw_text],
-          suggested_name: normalized_item[:suggested_name],
-          confirmed_name: normalized_item[:confirmed_name],
-          category: normalized_item[:category],
-          price: normalized_item[:price],
-          quantity: normalized_item[:quantity],
-          quantity_unit: normalized_item[:quantity_unit],
-          product_code: normalized_item[:product_code],
-          line_total: normalized_item[:line_total],
-          # item-level needs_review の最終決定は BuildParams 側で行うため、ここでは値をそのまま運ぶ。
-          needs_review: normalized_item[:needs_review],
-          # AI側は item の対応順を index で返す想定。配列順依存を避けるため position_index へ寄せる。
-          position_index: normalized_item[:position_index] || normalized_item[:index],
-          confidence: normalized_item[:confidence]
-        }
-      end
+      receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(
+        symbolized[:receipt_items_attributes]
+      )
     }
   end
 
@@ -343,23 +325,28 @@ class ReceiptAnalysisService
     "completed"
   end
 
+  # ReceiptBuildParamsService が save-ready な item 値を返す前提で、
+  # この層では型の最小調整と position_index 補完のみ行う。
   def normalize_items_attributes(items)
     Array(items).map.with_index do |item, index|
-      symbolized = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : {}
-      raw_text = symbolized[:raw_text].to_s
-      price = normalize_amount(symbolized[:price])
-      quantity = normalize_quantity(symbolized[:quantity])
+      symbolized = if item.respond_to?(:with_indifferent_access)
+        item.with_indifferent_access
+      elsif item.respond_to?(:symbolize_keys)
+        item.symbolize_keys.with_indifferent_access
+      else
+        {}.with_indifferent_access
+      end
 
       {
-        raw_text: raw_text,
-        suggested_name: symbolized[:suggested_name].presence || extract_item_name(raw_text),
-        confirmed_name: symbolized[:confirmed_name],
-        category: symbolized[:category].presence || detect_category(raw_text),
-        price: price,
-        quantity: quantity,
-        quantity_unit: symbolized[:quantity_unit],
-        product_code: symbolized[:product_code],
-        line_total: normalize_amount(symbolized[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
+        raw_text: symbolized[:raw_text].to_s,
+        suggested_name: symbolized[:suggested_name].presence,
+        confirmed_name: symbolized[:confirmed_name].presence,
+        category: symbolized[:category].presence,
+        price: normalize_amount(symbolized[:price]),
+        quantity: normalize_quantity(symbolized[:quantity]),
+        quantity_unit: symbolized[:quantity_unit].presence,
+        product_code: symbolized[:product_code].presence,
+        line_total: normalize_amount(symbolized[:line_total]),
         # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
         needs_review: symbolized[:needs_review],
         position_index: symbolized[:position_index] || index + 1,
