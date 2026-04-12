@@ -8,60 +8,70 @@ class ReceiptAiEnrichmentService
     end
   end
 
-  def self.call(ocr_result)
+  class << self
+    def call(ocr_result)
+      new(ocr_result).call
+    end
+  end
+
+  def initialize(ocr_result, client: Ai::Client.new)
+    @ocr_result = ocr_result || {}
+    @client = client
+  end
+
+  def call
     Rails.logger.info("[AIEnrichment] start")
 
-    lines = ocr_result[:lines]
-    unless lines.is_a?(Array)
-      Rails.logger.error("[AIEnrichment] analysis_missing_keys")
-      raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です")
-    end
+    validate_ocr_result!
 
-    result = {
-      success: true,
-      needs_review: true,
-      receipt_attributes: {
-        store_name: "サンプルストア",
-        purchased_at: Time.current,
-        total_amount: 1280,
-        payment_method: "credit_card"
-      },
-      receipt_items_attributes: [
-        {
-          raw_text: "ｺｰﾋｰ",
-          suggested_name: "コーヒー",
-          confirmed_name: "コーヒー",
-          category: "drink",
-          price: 180,
-          quantity: 1,
-          line_total: 180,
-          needs_review: false,
-          position_index: 1,
-          confidence: 0.95
-        },
-        {
-          raw_text: "ｻﾝﾄﾞ",
-          suggested_name: "サンドイッチ",
-          confirmed_name: "サンドイッチ",
-          category: "food",
-          price: 550,
-          quantity: 2,
-          line_total: 1100,
-          needs_review: true,
-          position_index: 2,
-          confidence: 0.72
-        }
-      ]
-    }
+    input = Ai::PromptBuilder.build(ocr_result)
+    result = client.call(input)
 
-    Rails.logger.info("[AIEnrichment] success items_count=#{result[:receipt_items_attributes].size}")
-
+    log_result(result)
     result
-  rescue KeyError
-    Rails.logger.error("[AIEnrichment] analysis_missing_keys")
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果の必須項目が不足しています")
-  rescue NoMethodError, TypeError
-    Rails.logger.error("[AIEnrichment] analysis_items_invalid")
-    raise AiEnrichmentError.new("analysis_items_invalid", "OCR結果の形式が不正です")
+  rescue AiEnrichmentError => e
+    Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
+    Ai::ResultTemplate.error(
+      error_code: e.error_code,
+      review_reasons: [ e.error_code ],
+      meta: { message: e.message }
+    )
+  rescue StandardError => e
+    Rails.logger.error("[AIEnrichment] unexpected_error #{e.class}: #{e.message}")
+    Ai::ResultTemplate.error(
+      error_code: "ai_api_error",
+      review_reasons: [ "unexpected_error" ],
+      meta: {
+        error_class: e.class.name,
+        error_message: e.message
+      }
+    )
+  end
+
+  private
+
+  attr_reader :ocr_result, :client
+
+  def validate_ocr_result!
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless ocr_result.is_a?(Hash)
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCRが失敗しています") unless ocr_result[:success] == true || ocr_result["success"] == true
+
+    lines = ocr_result[:lines] || ocr_result["lines"]
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果のlinesが不足しています") unless lines.is_a?(Array)
+
+    candidates = ocr_result[:candidates] || ocr_result["candidates"]
+    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果のcandidatesが不足しています") unless candidates.is_a?(Hash)
+  end
+
+  def log_result(result)
+    if result[:success]
+      Rails.logger.info(
+        "[AIEnrichment] success needs_review=#{result[:needs_review]} items_count=#{Array(result[:receipt_items_attributes]).size}"
+      )
+    else
+      Rails.logger.warn(
+        "[AIEnrichment] failed error_code=#{result[:error_code]} needs_review=#{result[:needs_review]}"
+      )
+    end
   end
 end

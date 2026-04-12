@@ -1,0 +1,206 @@
+require "json"
+
+module Ai
+  module Providers
+    module Openai
+      class ResponseParser
+        class << self
+          def parse(response)
+            new(response).parse
+          end
+        end
+
+        def initialize(response)
+          @response = response || {}
+        end
+
+        def parse
+          parsed_body = normalized_response_body
+          payload = extract_json_payload(parsed_body)
+
+          validate_payload!(payload)
+
+          Ai::ResultTemplate.success(
+            receipt_attributes: normalize_receipt_attributes(payload),
+            receipt_items_attributes: normalize_receipt_items_attributes(payload["items"]),
+            needs_review: payload["needs_review"] == true,
+            review_reasons: Array(payload["review_reasons"]),
+            meta: build_meta(parsed_body)
+          )
+        rescue JSON::ParserError => e
+          Ai::ResultTemplate.error(
+            error_code: "ai_invalid_response",
+            review_reasons: [ "json_parse_failed" ],
+            meta: error_meta(e)
+          )
+        rescue Ai::Errors::ProviderError
+          raise
+        rescue StandardError => e
+          Ai::ResultTemplate.error(
+            error_code: "ai_invalid_response",
+            review_reasons: [ "response_parse_failed" ],
+            meta: error_meta(e)
+          )
+        end
+
+        private
+
+        attr_reader :response
+
+        def normalized_response_body
+          return response if response.is_a?(Hash)
+          return JSON.parse(response) if response.is_a?(String)
+
+          raise Ai::Errors::ProviderError.new(
+            message: "OpenAI response must be a Hash or JSON string",
+            error_code: "ai_invalid_response",
+            provider: "openai"
+          )
+        end
+
+        def extract_json_payload(body)
+          output_text = direct_output_text(body)
+          return JSON.parse(output_text) if output_text.present?
+
+          output_text = nested_output_text(body)
+          return JSON.parse(output_text) if output_text.present?
+
+          if body["store"].is_a?(Hash) || body[:store].is_a?(Hash)
+            return stringify_keys(body)
+          end
+
+          raise Ai::Errors::ProviderError.new(
+            message: "OpenAI response did not contain a JSON payload",
+            error_code: "ai_invalid_response",
+            provider: "openai"
+          )
+        end
+
+        def direct_output_text(body)
+          body["output_text"] || body[:output_text]
+        end
+
+        def nested_output_text(body)
+          Array(body["output"] || body[:output]).each do |item|
+            Array(item["content"] || item[:content]).each do |content|
+              text = content["text"] || content[:text]
+              return text if text.present?
+            end
+          end
+
+          nil
+        end
+
+        def validate_payload!(payload)
+          unless payload.is_a?(Hash)
+            raise Ai::Errors::ProviderError.new(
+              message: "OpenAI payload must be a JSON object",
+              error_code: "analysis_value_invalid",
+              provider: "openai"
+            )
+          end
+
+          missing_keys = required_keys.reject { |key| payload.key?(key) }
+          return if missing_keys.empty?
+
+          raise Ai::Errors::ProviderError.new(
+            message: "Missing required keys: #{missing_keys.join(', ')}",
+            error_code: "analysis_missing_keys",
+            provider: "openai"
+          )
+        end
+
+        def required_keys
+          %w[
+            store
+            purchase
+            payment
+            items
+            needs_review
+            review_reasons
+          ]
+        end
+
+        def normalize_receipt_attributes(payload)
+          store = stringify_keys(payload["store"] || {})
+          purchase = stringify_keys(payload["purchase"] || {})
+          payment = stringify_keys(payload["payment"] || {})
+
+          {
+            "store_name" => store["store_name"],
+            "store_address" => store["store_address"],
+            "store_phone_number" => store["store_phone_number"],
+            "purchased_at_text" => purchase["purchased_at_text"],
+            "payment_method" => payment["payment_method"]
+          }.compact_blank
+        end
+
+        def normalize_receipt_items_attributes(items)
+          return [] unless items.is_a?(Array)
+
+          items.map do |item|
+            normalize_item(item)
+          end
+        rescue StandardError => e
+          raise Ai::Errors::ProviderError.new(
+            message: e.message,
+            error_code: "analysis_items_invalid",
+            provider: "openai",
+            cause: e
+          )
+        end
+
+        def normalize_item(item)
+          unless item.is_a?(Hash)
+            raise Ai::Errors::ProviderError.new(
+              message: "Each item must be an object",
+              error_code: "analysis_items_invalid",
+              provider: "openai"
+            )
+          end
+
+          normalized = stringify_keys(item).slice("index", "suggested_name", "category", "needs_review")
+          normalized["index"] = normalize_integer(normalized["index"])
+          normalized["needs_review"] = normalized["needs_review"] == true
+
+          normalized.compact
+        end
+
+        def normalize_integer(value)
+          return nil if value.nil?
+          return value if value.is_a?(Integer)
+
+          Integer(value)
+        rescue ArgumentError, TypeError
+          raise Ai::Errors::ProviderError.new(
+            message: "Item index must be an integer",
+            error_code: "analysis_value_invalid",
+            provider: "openai"
+          )
+        end
+
+        def build_meta(body)
+          {
+            provider: "openai",
+            response_id: body["id"] || body[:id],
+            model: body["model"] || body[:model]
+          }.compact
+        end
+
+        def error_meta(error)
+          {
+            provider: "openai",
+            error_class: error.class.name,
+            error_message: error.message
+          }
+        end
+
+        def stringify_keys(object)
+          return object unless object.is_a?(Hash)
+
+          object.deep_stringify_keys
+        end
+      end
+    end
+  end
+end
