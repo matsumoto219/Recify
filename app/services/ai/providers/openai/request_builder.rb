@@ -133,6 +133,9 @@ module Ai
             - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
             - store_address: prefer OCR store_address. Use address_candidates and filtered_content as supporting evidence.
             - store_phone_number: prefer OCR store_phone_number. Do not invent phone numbers.
+            - If OCR store_phone_number is present and plausibly formatted as a phone number, do not return null unless there is strong evidence that it is not a store phone number.
+            - If a plausible phone number exists but you are not fully confident it is the correct store phone number, keep the plausible value and treat it as uncertain rather than missing.
+            - Treat customer support or headquarters phone numbers as lower priority than numbers clearly tied to the store/branch context, but do not mark the phone number as missing when a plausible receipt phone number is present.
             - branch_name_candidates are supporting clues only. Do not return branch_name_candidates in the output.
             - Avoid headquarters or customer support addresses when selecting store_address.
 
@@ -180,9 +183,12 @@ module Ai
               item_category_uncertain
             - Do NOT invent new codes.
             - Do NOT use combined or ambiguous codes such as "*_or_*".
+            - Use store_phone_number_missing only when no plausible store phone number is supported by OCR candidates or filtered_content.
+            - If a plausible store phone number exists but confidence is limited, use store_phone_number_uncertain instead of store_phone_number_missing.
             - If multiple reasons apply, include multiple entries (e.g., ["item_name_uncertain", "item_category_uncertain"]).
             - Include reasons only when review is needed.
             - Use purchased_at_conflicted only when multiple plausible purchase timestamps remain unresolved after applying the purchase rules above.
+            - Do NOT return store_phone_number_missing when store.store_phone_number is non-null.
             - Return [] when no review is needed.
 
             Input JSON:
