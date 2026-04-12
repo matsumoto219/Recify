@@ -70,7 +70,12 @@ class ReceiptAnalysisService
   attr_reader :receipt
 
   def mark_processing!
-    receipt.update!(status: "processing", processing_error_code: nil, processing_error_message: nil)
+    receipt.update!(
+      status: "processing",
+      processing_error_code: nil,
+      processing_error_message: nil,
+      review_reasons: []
+    )
   end
 
   def log_ocr_result(ocr_result)
@@ -139,6 +144,7 @@ class ReceiptAnalysisService
       success: symbolized.key?(:success) ? symbolized[:success] : true,
       error_code: symbolized[:error_code],
       needs_review: symbolized[:needs_review],
+      review_reasons: Array(symbolized[:review_reasons]),
       receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
       receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(
         symbolized[:receipt_items_attributes]
@@ -197,6 +203,7 @@ class ReceiptAnalysisService
         status: final_status,
         processing_error_code: nil,
         processing_error_message: nil,
+        review_reasons: Array(ai_result[:review_reasons]),
         ocr_completed_at: Time.current
       ),
       items_attributes: params[:receipt_items_attributes],
@@ -223,6 +230,7 @@ class ReceiptAnalysisService
         status: final_status,
         processing_error_code: nil,
         processing_error_message: nil,
+        review_reasons: [],
         ocr_completed_at: Time.current
       ),
       items_attributes: params[:receipt_items_attributes],
@@ -248,6 +256,7 @@ class ReceiptAnalysisService
       status: "review_needed",
       processing_error_code: error_code,
       processing_error_message: nil,
+      review_reasons: [],
       ocr_completed_at: Time.current
     )
 
@@ -272,6 +281,7 @@ class ReceiptAnalysisService
       status: "failed",
       processing_error_code: mapped[:error_code],
       processing_error_message: message,
+      review_reasons: [],
       ocr_completed_at: Time.current
     )
 
