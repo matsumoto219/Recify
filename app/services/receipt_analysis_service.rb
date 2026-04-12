@@ -154,7 +154,8 @@ class ReceiptAnalysisService
           quantity_unit: normalized_item[:quantity_unit],
           product_code: normalized_item[:product_code],
           line_total: normalized_item[:line_total],
-          needs_review: normalized_item.key?(:needs_review) ? normalized_item[:needs_review] : false,
+          # item-level needs_review の最終決定は BuildParams 側で行うため、ここでは値をそのまま運ぶ。
+          needs_review: normalized_item[:needs_review],
           # AI側は item の対応順を index で返す想定。配列順依存を避けるため position_index へ寄せる。
           position_index: normalized_item[:position_index] || normalized_item[:index],
           confidence: normalized_item[:confidence]
@@ -320,6 +321,8 @@ class ReceiptAnalysisService
   def replace_receipt_items!(items_attributes)
     receipt.receipt_items.destroy_all
 
+    # item-level needs_review は ReceiptBuildParamsService で最終決定済みの前提。
+    # ReceiptAnalysisService では保存用の整形に留め、true/false の再判定は行わない。
     normalize_items_attributes(items_attributes).each_with_index do |item_attributes, index|
       receipt.receipt_items.create!(
         item_attributes.merge(position_index: item_attributes[:position_index] || index + 1)
@@ -334,6 +337,7 @@ class ReceiptAnalysisService
     return "review_needed" if receipt_attributes[:total_amount].blank?
     return "review_needed" if receipt_attributes[:payment_method].blank?
     return "review_needed" if items_attributes.blank?
+    # receipt 全体の status 判定はこのサービスで行うが、item-level needs_review 自体は前段の値を参照する。
     return "review_needed" if items_attributes.any? { |item| item_needs_review?(item) }
 
     "completed"
@@ -356,7 +360,8 @@ class ReceiptAnalysisService
         quantity_unit: symbolized[:quantity_unit],
         product_code: symbolized[:product_code],
         line_total: normalize_amount(symbolized[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
-        needs_review: symbolized.key?(:needs_review) ? symbolized[:needs_review] : true,
+        # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
+        needs_review: symbolized[:needs_review],
         position_index: symbolized[:position_index] || index + 1,
         confidence: normalize_confidence(symbolized[:confidence])
       }
