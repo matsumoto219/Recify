@@ -9,6 +9,23 @@ module Ai
       review_reasons
     ].freeze
 
+    ALLOWED_REVIEW_REASONS = %w[
+      store_name_missing
+      store_name_uncertain
+      store_address_missing
+      store_address_uncertain
+      store_phone_number_missing
+      store_phone_number_uncertain
+      purchased_at_missing
+      purchased_at_uncertain
+      purchased_at_conflicted
+      payment_method_missing
+      payment_method_uncertain
+      items_missing
+      item_name_uncertain
+      item_category_uncertain
+    ].freeze
+
     class << self
       def parse(payload, provider:, meta: {})
         new(payload, provider:, meta:).parse
@@ -29,7 +46,7 @@ module Ai
         receipt_attributes: normalize_receipt_attributes(normalized_payload),
         receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(normalized_payload["items"]),
         needs_review: normalized_payload["needs_review"] == true,
-        review_reasons: Array(normalized_payload["review_reasons"]),
+        review_reasons: normalize_review_reasons(normalized_payload["review_reasons"]),
         meta: build_meta
       )
     rescue Ai::Errors::ProviderError
@@ -99,6 +116,14 @@ module Ai
         error_class: error.class.name,
         error_message: error.message
       }.merge(meta.deep_symbolize_keys).compact
+    end
+
+    def normalize_review_reasons(reasons)
+      Array(reasons)
+        .map(&:to_s)
+        .map(&:strip)
+        .select { |r| ALLOWED_REVIEW_REASONS.include?(r) }
+        .uniq
     end
   end
 end
