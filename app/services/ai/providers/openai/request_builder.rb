@@ -156,8 +156,25 @@ module Ai
             - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
 
             review_reasons rules:
-            - Return an array.
-            - Use short snake_case strings.
+            - Return an array of codes.
+            - Use ONLY the following allowed codes (snake_case):
+              store_name_missing,
+              store_name_uncertain,
+              store_address_missing,
+              store_address_uncertain,
+              store_phone_number_missing,
+              store_phone_number_uncertain,
+              purchased_at_missing,
+              purchased_at_uncertain,
+              purchased_at_conflicted,
+              payment_method_missing,
+              payment_method_uncertain,
+              items_missing,
+              item_name_uncertain,
+              item_category_uncertain
+            - Do NOT invent new codes.
+            - Do NOT use combined or ambiguous codes such as "*_or_*".
+            - If multiple reasons apply, include multiple entries (e.g., ["item_name_uncertain", "item_category_uncertain"]).
             - Include reasons only when review is needed.
             - Return [] when no review is needed.
 
