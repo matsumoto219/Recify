@@ -18,13 +18,9 @@ module Ai
           parsed_body = normalized_response_body
           payload = extract_json_payload(parsed_body)
 
-          validate_payload!(payload)
-
-          Ai::ResultTemplate.success(
-            receipt_attributes: normalize_receipt_attributes(payload),
-            receipt_items_attributes: normalize_receipt_items_attributes(payload["items"]),
-            needs_review: payload["needs_review"] == true,
-            review_reasons: Array(payload["review_reasons"]),
+          Ai::ResponseParser.parse(
+            payload,
+            provider: "openai",
             meta: build_meta(parsed_body)
           )
         rescue JSON::ParserError => e
@@ -91,94 +87,6 @@ module Ai
           nil
         end
 
-        def validate_payload!(payload)
-          unless payload.is_a?(Hash)
-            raise Ai::Errors::ProviderError.new(
-              message: "OpenAI payload must be a JSON object",
-              error_code: "analysis_value_invalid",
-              provider: "openai"
-            )
-          end
-
-          missing_keys = required_keys.reject { |key| payload.key?(key) }
-          return if missing_keys.empty?
-
-          raise Ai::Errors::ProviderError.new(
-            message: "Missing required keys: #{missing_keys.join(', ')}",
-            error_code: "analysis_missing_keys",
-            provider: "openai"
-          )
-        end
-
-        def required_keys
-          %w[
-            store
-            purchase
-            payment
-            items
-            needs_review
-            review_reasons
-          ]
-        end
-
-        def normalize_receipt_attributes(payload)
-          store = stringify_keys(payload["store"] || {})
-          purchase = stringify_keys(payload["purchase"] || {})
-          payment = stringify_keys(payload["payment"] || {})
-
-          {
-            "store_name" => store["store_name"],
-            "store_address" => store["store_address"],
-            "store_phone_number" => store["store_phone_number"],
-            "purchased_at_text" => purchase["purchased_at_text"],
-            "payment_method" => payment["payment_method"]
-          }.compact_blank
-        end
-
-        def normalize_receipt_items_attributes(items)
-          return [] unless items.is_a?(Array)
-
-          items.map do |item|
-            normalize_item(item)
-          end
-        rescue StandardError => e
-          raise Ai::Errors::ProviderError.new(
-            message: e.message,
-            error_code: "analysis_items_invalid",
-            provider: "openai",
-            cause: e
-          )
-        end
-
-        def normalize_item(item)
-          unless item.is_a?(Hash)
-            raise Ai::Errors::ProviderError.new(
-              message: "Each item must be an object",
-              error_code: "analysis_items_invalid",
-              provider: "openai"
-            )
-          end
-
-          normalized = stringify_keys(item).slice("index", "suggested_name", "category", "needs_review")
-          normalized["index"] = normalize_integer(normalized["index"])
-          normalized["needs_review"] = normalized["needs_review"] == true
-
-          normalized.compact
-        end
-
-        def normalize_integer(value)
-          return nil if value.nil?
-          return value if value.is_a?(Integer)
-
-          Integer(value)
-        rescue ArgumentError, TypeError
-          raise Ai::Errors::ProviderError.new(
-            message: "Item index must be an integer",
-            error_code: "analysis_value_invalid",
-            provider: "openai"
-          )
-        end
-
         def build_meta(body)
           {
             provider: "openai",
@@ -192,7 +100,7 @@ module Ai
             provider: "openai",
             error_class: error.class.name,
             error_message: error.message
-          }
+          }.merge(build_meta(response.is_a?(Hash) ? response : {})).compact
         end
 
         def stringify_keys(object)
