@@ -1,0 +1,74 @@
+module Analysis
+  class ReceiptItemNormalizer
+    AI_ALLOWED_KEYS = %i[
+      index
+      position_index
+      suggested_name
+      category
+      needs_review
+    ].freeze
+
+    class << self
+      def normalize_ai_item(item)
+        new.normalize_ai_item(item)
+      end
+
+      def normalize_ai_items(items)
+        new.normalize_ai_items(items)
+      end
+    end
+
+    def normalize_ai_items(items)
+      Array(items).filter_map do |item|
+        normalize_ai_item(item)
+      end
+    end
+
+    def normalize_ai_item(item)
+      return nil unless item.is_a?(Hash) || item.respond_to?(:to_h)
+
+      raw_item = item.is_a?(Hash) ? item : item.to_h
+      normalized = raw_item.with_indifferent_access.slice(*AI_ALLOWED_KEYS)
+
+      {
+        index: normalize_index(normalized[:index] || normalized[:position_index]),
+        suggested_name: normalize_string(normalized[:suggested_name]),
+        category: normalize_string(normalized[:category]),
+        needs_review: normalize_boolean(normalized[:needs_review])
+      }.compact
+    rescue StandardError
+      nil
+    end
+
+    private
+
+    def normalize_index(value)
+      return nil if value.blank?
+      return value.to_i if value.is_a?(Numeric)
+
+      Integer(value)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def normalize_string(value)
+      text = value.to_s.strip
+      text.presence
+    end
+
+    def normalize_boolean(value)
+      return true if value == true
+      return false if value == false
+      return nil if value.nil?
+
+      case value.to_s.strip.downcase
+      when "true"
+        true
+      when "false"
+        false
+      else
+        nil
+      end
+    end
+  end
+end
