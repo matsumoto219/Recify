@@ -2,8 +2,6 @@ module Ai
   module Providers
     module Openai
       class RequestBuilder
-        DEFAULT_MODEL = "gpt-5.4-mini".freeze
-
         class << self
           def build(input)
             new(input).build
@@ -60,7 +58,7 @@ module Ai
         attr_reader :input
 
         def model_name
-          ENV.fetch("OPENAI_AI_MODEL", DEFAULT_MODEL)
+          ENV.fetch("OPENAI_AI_MODEL")
         end
 
         def ai_name_completion_enabled?
