@@ -30,22 +30,28 @@ class ReceiptOcrService
 
     if parsed[:success]
       Rails.logger.info("[OCR] success lines=#{parsed[:lines].size}")
+      ExternalServiceStatus.mark_success!(:ocr)
       parsed
     else
       Rails.logger.warn("[OCR] failed code=#{parsed[:error_code]}")
+      ExternalServiceStatus.mark_failure!(:ocr, error_code: parsed[:error_code])
       parsed
     end
   rescue OcrError => e
     Rails.logger.error("[OCR] ocr_error code=#{e.error_code}")
+    ExternalServiceStatus.mark_failure!(:ocr, error_code: e.error_code)
     build_error_result(e.error_code)
   rescue Timeout::Error
     Rails.logger.error("[OCR] timeout")
+    ExternalServiceStatus.mark_failure!(:ocr, error_code: "ocr_timeout")
     build_error_result("ocr_timeout")
   rescue ActiveStorage::FileNotFoundError
     Rails.logger.error("[OCR] image_corrupted")
+    ExternalServiceStatus.mark_failure!(:ocr, error_code: "image_corrupted")
     build_error_result("image_corrupted")
   rescue StandardError => e
     Rails.logger.error("[OCR] unexpected_error class=#{e.class} message=#{e.message}")
+    ExternalServiceStatus.mark_failure!(:ocr, error_code: "unexpected_error")
     build_error_result("unexpected_error")
   end
 
