@@ -41,6 +41,8 @@ module Ai
     def parse
       normalized_payload = normalize_payload(payload)
       validate_payload!(normalized_payload)
+      validate_items!(normalized_payload)
+      validate_values!(normalized_payload)
 
       Ai::ResultTemplate.success(
         receipt_attributes: normalize_receipt_attributes(normalized_payload),
@@ -82,6 +84,79 @@ module Ai
         error_code: "analysis_missing_keys",
         provider: provider
       )
+    end
+
+    def validate_items!(normalized_payload)
+      items = normalized_payload["items"]
+
+      unless items.is_a?(Array)
+        raise Ai::Errors::ProviderError.new(
+          message: "Items must be an Array",
+          error_code: "analysis_items_invalid",
+          provider: provider
+        )
+      end
+
+      return if items.all? { |item| item.is_a?(Hash) }
+
+      raise Ai::Errors::ProviderError.new(
+        message: "Each item must be a Hash",
+        error_code: "analysis_items_invalid",
+        provider: provider
+      )
+    end
+
+    def validate_values!(normalized_payload)
+      validate_needs_review!(normalized_payload["needs_review"])
+      validate_review_reasons!(normalized_payload["review_reasons"])
+      validate_section_values!(normalized_payload["store"], %w[store_name store_address store_phone_number])
+      validate_section_values!(normalized_payload["purchase"], %w[purchased_at_text])
+      validate_section_values!(normalized_payload["payment"], %w[payment_method])
+    end
+
+    def validate_needs_review!(value)
+      return if value == true || value == false
+
+      raise Ai::Errors::ProviderError.new(
+        message: "needs_review must be a boolean",
+        error_code: "analysis_value_invalid",
+        provider: provider
+      )
+    end
+
+    def validate_review_reasons!(value)
+      return if value.is_a?(Array)
+
+      raise Ai::Errors::ProviderError.new(
+        message: "review_reasons must be an Array",
+        error_code: "analysis_value_invalid",
+        provider: provider
+      )
+    end
+
+    def validate_section_values!(section, allowed_keys)
+      return if section.nil?
+
+      unless section.is_a?(Hash)
+        raise Ai::Errors::ProviderError.new(
+          message: "Section must be a Hash",
+          error_code: "analysis_value_invalid",
+          provider: provider
+        )
+      end
+
+      normalized_section = section.deep_stringify_keys
+
+      normalized_section.each do |key, value|
+        next unless allowed_keys.include?(key)
+        next if value.nil? || value.is_a?(String)
+
+        raise Ai::Errors::ProviderError.new(
+          message: "#{key} must be a String or nil",
+          error_code: "analysis_value_invalid",
+          provider: provider
+        )
+      end
     end
 
     def normalize_receipt_attributes(normalized_payload)

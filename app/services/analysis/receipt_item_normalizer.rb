@@ -19,9 +19,9 @@ module Analysis
     end
 
     def normalize_ai_items(items)
-      Array(items).filter_map do |item|
+      Array(items).map do |item|
         normalize_ai_item(item)
-      end
+      end.compact
     end
 
     def normalize_ai_item(item)
@@ -30,14 +30,16 @@ module Analysis
       raw_item = item.is_a?(Hash) ? item : item.to_h
       normalized = raw_item.with_indifferent_access.slice(*AI_ALLOWED_KEYS)
 
-      {
+      result = {
         index: normalize_index(normalized[:index] || normalized[:position_index]),
         suggested_name: normalize_string(normalized[:suggested_name]),
         category: normalize_string(normalized[:category]),
         needs_review: normalize_boolean(normalized[:needs_review])
       }.compact
-    rescue StandardError
-      nil
+
+      return nil if result.empty?
+
+      result
     end
 
     private

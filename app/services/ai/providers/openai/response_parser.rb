@@ -24,18 +24,20 @@ module Ai
             meta: build_meta(parsed_body)
           )
         rescue JSON::ParserError => e
-          Ai::ResultTemplate.error(
+          raise Ai::Errors::InvalidResponseError.new(
+            message: "Failed to parse OpenAI JSON payload",
             error_code: "ai_invalid_response",
-            review_reasons: [ "json_parse_failed" ],
-            meta: error_meta(e)
+            provider: "openai",
+            cause: e
           )
-        rescue Ai::Errors::ProviderError
+        rescue Ai::Errors::InvalidResponseError, Ai::Errors::ProviderError
           raise
         rescue StandardError => e
-          Ai::ResultTemplate.error(
+          raise Ai::Errors::InvalidResponseError.new(
+            message: "Failed to parse OpenAI response",
             error_code: "ai_invalid_response",
-            review_reasons: [ "response_parse_failed" ],
-            meta: error_meta(e)
+            provider: "openai",
+            cause: e
           )
         end
 
@@ -47,7 +49,7 @@ module Ai
           return response if response.is_a?(Hash)
           return JSON.parse(response) if response.is_a?(String)
 
-          raise Ai::Errors::ProviderError.new(
+          raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response must be a Hash or JSON string",
             error_code: "ai_invalid_response",
             provider: "openai"
@@ -65,7 +67,7 @@ module Ai
             return stringify_keys(body)
           end
 
-          raise Ai::Errors::ProviderError.new(
+          raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response did not contain a JSON payload",
             error_code: "ai_invalid_response",
             provider: "openai"
