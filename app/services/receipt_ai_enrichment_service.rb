@@ -27,10 +27,17 @@ class ReceiptAiEnrichmentService
     input = Ai::PromptBuilder.build(ocr_result)
     result = client.call(input)
 
+    if result[:success]
+      ExternalServiceStatus.mark_success!(:ai)
+    else
+      ExternalServiceStatus.mark_failure!(:ai, error_code: result[:error_code])
+    end
+
     log_result(result)
     result
   rescue AiEnrichmentError => e
     Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
+    ExternalServiceStatus.mark_failure!(:ai, error_code: e.error_code)
     Ai::ResultTemplate.error(
       error_code: e.error_code,
       review_reasons: [ e.error_code ],
@@ -38,6 +45,7 @@ class ReceiptAiEnrichmentService
     )
   rescue StandardError => e
     Rails.logger.error("[AIEnrichment] unexpected_error #{e.class}: #{e.message}")
+    ExternalServiceStatus.mark_failure!(:ai, error_code: "ai_api_error")
     Ai::ResultTemplate.error(
       error_code: "ai_api_error",
       review_reasons: [ "unexpected_error" ],
