@@ -97,7 +97,7 @@ module Ai
         line_count: lines.length,
         item_count: build_items_payload.length,
         confidence_summary: build_confidence_summary,
-        ai_name_completion_enabled: ocr_result.dig(:meta, :ai_name_completion_enabled) == true
+        ai_name_completion_enabled: ocr_result.dig(:meta, :ai_name_completion_enabled) == true  # 仮実装
       }.compact
     end
 

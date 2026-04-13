@@ -48,6 +48,10 @@ module Ai
         - return null
         - set needs_review = true
 
+        When correcting values:
+        - prioritize correctness over completeness
+        - if a field cannot be determined with high confidence, return null or keep the original OCR text instead of guessing
+
         Follow the schema strictly.
         Any deviation is considered a failure.
       PROMPT
@@ -89,6 +93,9 @@ module Ai
         For store:
         - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
         - store_address: prefer OCR store_address. Use address_candidates and filtered_content as supporting evidence.
+        - store_address must be a physical address (for example, location/address text such as prefecture, city, street, or place information).
+        - Do NOT use phone numbers, fax numbers, or other contact information as store_address.
+        - If no clear physical address is supported, return null instead of filling store_address with contact text.
         - When multiple address candidates exist, prioritize the address that is clearly supported by filtered_content and store/branch context.
         - If filtered_content, address_candidates, and branch/store context consistently support a single store-level address, select that address and do NOT mark it as uncertain.
         - If the primary OCR store_address appears to be a headquarters or customer support address but a store-level address is supported elsewhere, prefer the store-level address.
@@ -116,6 +123,13 @@ module Ai
         - payment_method: prefer OCR payment_method.
         - If OCR payment_method is blank, use payment_method_text, payment_candidates, payment_context_lines, and filtered_content.
         - Choose only from the allowed payment methods.
+        - Use the following mapping examples as strong reference clues:
+          - cash: 現金
+          - credit_card: VISA, MasterCard, JCB, AMEX
+          - e_money: QUICPay, iD, WAON, nanaco, 楽天Edy, 交通系IC (Suica, PASMO, ICOCA)
+          - qr_payment: PayPay, 楽天ペイ, d払い, au PAY, メルペイ
+          - debit_card: デビットカード
+        - If a known payment brand appears, prioritize the correct category mapping over broad guessing from words like "Pay".
         - Do not confuse point/member/loyalty text with payment methods.
 
         For items:
@@ -160,10 +174,14 @@ module Ai
     def user_item_name_rules
       if ai_name_completion_enabled?
         <<~RULES.chomp
-          - suggested_name: improve truncated, noisy, unnatural, or suspicious OCR item names when a plausible completion is suggested by raw_text, matched_content_lines, matched_filtered_content_lines, filtered_content, or common product naming patterns of the receipt language/locale.
-          - If a product name appears partially valid but unnaturally truncated, you MAY complete it to the most plausible common retail product name as long as it remains semantically close to the original raw_text.
-          - Prefer realistic completions that preserve the original raw_text semantics rather than copying unnatural fragments unchanged.
-          - If you infer a completion that is not overwhelmingly certain, keep needs_review = true.
+          - suggested_name: infer and improve item names that appear truncated or contain noise.
+          - When correcting or completing item names, preserve and follow the original writing style (e.g., katakana, kanji, casing).
+          - If an item name appears unusual, branded, or creatively styled, keep it as-is.
+          - Do NOT correct or complete item names that are unusual, branded, or non-standard (e.g., unique or creative naming).
+          - Only correct or complete item names when truncation or typographical errors are obvious and the completion is highly likely based on contextual or linguistic patterns.
+          - If a completion is strongly suggested (even if not fully certain), you MAY complete it to a natural and commonly used product name while remaining semantically close to the original text.
+          - If multiple possible completions exist, do not guess and keep the original OCR text.
+          - Even when completion confidence is not high, keep needs_review = true.
         RULES
       else
         <<~RULES.chomp
