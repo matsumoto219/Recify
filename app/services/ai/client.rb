@@ -11,6 +11,8 @@ module Ai
     def call(input)
       run_primary(input)
     rescue Ai::Errors::ProviderError => primary_error
+      raise primary_error unless fallback_needed?(primary_error)
+
       run_fallback(input, primary_error)
     end
 
@@ -21,6 +23,7 @@ module Ai
     def run_primary(input)
       provider_client(primary_provider).call(input)
     rescue Ai::Errors::TimeoutError => error
+      Rails.logger.error("[AI] primary timeout: #{error.message}")
       raise Ai::Errors::ProviderError.new(
         message: error.message,
         error_code: "ai_primary_failed",
@@ -28,6 +31,7 @@ module Ai
         cause: error
       )
     rescue Ai::Errors::ProviderError => error
+      Rails.logger.error("[AI] primary provider error: #{error.message}")
       raise error if error.error_code.present?
 
       raise Ai::Errors::ProviderError.new(
@@ -41,7 +45,16 @@ module Ai
     def run_fallback(input, primary_error)
       return failure_result(primary_error, nil) unless fallback_available?
 
-      provider_client(fallback_provider).call(input)
+      Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
+
+      result = provider_client(fallback_provider).call(input)
+
+      if result.is_a?(Hash)
+        result[:meta] ||= {}
+        result[:meta][:fallback_used] = true
+      end
+
+      result
     rescue Ai::Errors::TimeoutError => fallback_error
       failure_result(primary_error, build_fallback_error(fallback_error))
     rescue Ai::Errors::ProviderError => fallback_error
@@ -59,6 +72,13 @@ module Ai
       fallback_provider.present? && fallback_provider != primary_provider
     end
 
+    def fallback_needed?(error)
+      %w[
+        ai_primary_failed
+        ai_api_error
+      ].include?(error.error_code)
+    end
+
     def build_fallback_error(error)
       Ai::Errors::ProviderError.new(
         message: error.message,
@@ -74,6 +94,7 @@ module Ai
         meta: {
           primary_provider: primary_provider,
           fallback_provider: fallback_provider,
+          fallback_used: fallback_error.present?,
           primary_error_code: primary_error&.error_code,
           primary_error_message: primary_error&.message,
           fallback_error_code: fallback_error&.error_code,
