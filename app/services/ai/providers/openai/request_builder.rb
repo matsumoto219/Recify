@@ -68,8 +68,8 @@ module Ai
             Use OCR candidates as the first reference and filtered_content as the supporting reference.
 
             You MUST NOT:
-            - invent values that are not present in the OCR input
-            - invent store names, addresses, phone numbers, timestamps, payment methods, or item names
+            - invent store names, addresses, phone numbers, timestamps, or payment methods
+            #{system_item_name_rule}
             - guess totals, taxes, quantities, or prices
             - add fields not explicitly allowed
             - change numeric values
@@ -163,7 +163,7 @@ module Ai
             For items:
             - Each returned item MUST correspond to an input item by index.
             - Do not add or remove item indexes.
-            - suggested_name: improve truncated or noisy OCR item names only when clearly supported by raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content.
+            #{user_item_name_rules}
             - category: choose only from the allowed categories.
             - needs_review: set true when the item name or category remains uncertain.
             - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
@@ -223,6 +223,39 @@ module Ai
             debit_card
             other
           ]
+        end
+
+        def ai_name_completion_enabled?
+          value = if input.respond_to?(:with_indifferent_access)
+            input.with_indifferent_access.dig(:meta, :ai_name_completion_enabled)
+          else
+            nil
+          end
+
+          value == true
+        end
+
+        def system_item_name_rule
+          if ai_name_completion_enabled?
+            "- invent unrelated item names that are not semantically close to the OCR item text"
+          else
+            "- invent item names"
+          end
+        end
+
+        def user_item_name_rules
+          if ai_name_completion_enabled?
+            <<~RULES.chomp
+              - suggested_name: improve truncated, noisy, unnatural, or suspicious OCR item names when a plausible completion is suggested by raw_text, matched_content_lines, matched_filtered_content_lines, filtered_content, or common product naming patterns of the receipt language/locale.
+              - If a product name appears partially valid but unnaturally truncated, you MAY complete it to the most plausible common retail product name as long as it remains semantically close to the original raw_text.
+              - Prefer realistic completions that preserve the original raw_text semantics rather than copying unnatural fragments unchanged.
+              - If you infer a completion that is not overwhelmingly certain, keep needs_review = true.
+            RULES
+          else
+            <<~RULES.chomp
+              - suggested_name: improve truncated or noisy OCR item names only when clearly supported by raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content.
+            RULES
+          end
         end
       end
     end
