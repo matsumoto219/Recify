@@ -25,7 +25,8 @@ module Ai
             provider: PROVIDER_NAME,
             cause: e
           )
-        rescue Ai::Errors::ProviderError
+        rescue Ai::Errors::AuthError, Ai::Errors::RateLimitError,
+               Ai::Errors::InvalidResponseError, Ai::Errors::ProviderError
           raise
         rescue StandardError => e
           raise Ai::Errors::ProviderError.new(
@@ -50,9 +51,25 @@ module Ai
 
           response = http.request(request)
 
-          if retryable_response?(response)
+          if auth_error_response?(response)
+            raise Ai::Errors::AuthError.new(
+              message: "OpenAI API auth error: #{response.code} #{response.body}",
+              error_code: "ai_api_error",
+              provider: PROVIDER_NAME
+            )
+          end
+
+          if rate_limit_response?(response)
+            raise Ai::Errors::RateLimitError.new(
+              message: "OpenAI API rate limit error: #{response.code} #{response.body}",
+              error_code: "ai_api_error",
+              provider: PROVIDER_NAME
+            )
+          end
+
+          if server_error_response?(response)
             raise Ai::Errors::ProviderError.new(
-              message: "OpenAI API retryable error: #{response.code} #{response.body}",
+              message: "OpenAI API retryable server error: #{response.code} #{response.body}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
             )
@@ -88,6 +105,8 @@ module Ai
           case error
           when Net::OpenTimeout, Net::ReadTimeout
             true
+          when Ai::Errors::RateLimitError
+            true
           when Ai::Errors::ProviderError
             error.error_code == "ai_api_error"
           else
@@ -95,8 +114,15 @@ module Ai
           end
         end
 
-        def retryable_response?(response)
-          return true if response.code.to_i == 429
+        def auth_error_response?(response)
+          [ 401, 403 ].include?(response.code.to_i)
+        end
+
+        def rate_limit_response?(response)
+          response.code.to_i == 429
+        end
+
+        def server_error_response?(response)
           response.code.to_i >= 500
         end
 
@@ -113,7 +139,7 @@ module Ai
 
         def api_key
           ENV.fetch("OPENAI_API_KEY") do
-            raise Ai::Errors::ProviderError.new(
+            raise Ai::Errors::AuthError.new(
               message: "OPENAI_API_KEY is not set",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
@@ -136,7 +162,7 @@ module Ai
         def parse_response_body(body)
           JSON.parse(body)
         rescue JSON::ParserError => e
-          raise Ai::Errors::ProviderError.new(
+          raise Ai::Errors::InvalidResponseError.new(
             message: "Invalid JSON response from OpenAI",
             error_code: "ai_invalid_response",
             provider: PROVIDER_NAME,

@@ -73,10 +73,19 @@ module Ai
     end
 
     def fallback_needed?(error)
-      %w[
-        ai_primary_failed
-        ai_api_error
-      ].include?(error.error_code)
+      case error
+      when Ai::Errors::AuthError, Ai::Errors::InvalidResponseError
+        false
+      when Ai::Errors::TimeoutError, Ai::Errors::RateLimitError
+        true
+      when Ai::Errors::ProviderError
+        %w[
+          ai_primary_failed
+          ai_api_error
+        ].include?(error.error_code)
+      else
+        false
+      end
     end
 
     def build_fallback_error(error)
