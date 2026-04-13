@@ -53,7 +53,7 @@ module Ai
 
           if auth_error_response?(response)
             raise Ai::Errors::AuthError.new(
-              message: "OpenAI API auth error: #{response.code} #{response.body}",
+              message: "OpenAI API auth error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
             )
@@ -61,7 +61,7 @@ module Ai
 
           if rate_limit_response?(response)
             raise Ai::Errors::RateLimitError.new(
-              message: "OpenAI API rate limit error: #{response.code} #{response.body}",
+              message: "OpenAI API rate limit error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
             )
@@ -69,7 +69,7 @@ module Ai
 
           if server_error_response?(response)
             raise Ai::Errors::ProviderError.new(
-              message: "OpenAI API retryable server error: #{response.code} #{response.body}",
+              message: "OpenAI API retryable server error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
             )
@@ -77,7 +77,7 @@ module Ai
 
           unless response.is_a?(Net::HTTPSuccess)
             raise Ai::Errors::ProviderError.new(
-              message: "OpenAI API error: #{response.code} #{response.body}",
+              message: "OpenAI API error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME
             )

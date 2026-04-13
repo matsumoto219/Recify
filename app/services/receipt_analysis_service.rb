@@ -59,7 +59,7 @@ class ReceiptAnalysisService
     raise
   rescue StandardError => e
     Rails.logger.error(
-      "[ReceiptAnalysis] unexpected_error receipt_id=#{receipt.id} error_class=#{e.class} message=#{e.message}"
+      "[ReceiptAnalysis] unexpected_error receipt_id=#{receipt.id} error_class=#{e.class} error_code=unexpected_error"
     )
     fail_receipt!("unexpected_error", e.message)
     raise AnalysisError.new("unexpected_error", e.message)
@@ -286,7 +286,7 @@ class ReceiptAnalysisService
     )
 
     Rails.logger.error(
-      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} error_code=#{error_code} message=#{message}"
+      "[ReceiptAnalysis] failed receipt_id=#{receipt.id} error_code=#{error_code}"
     )
 
     receipt

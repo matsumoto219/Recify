@@ -34,12 +34,12 @@ module Ocr
       Rails.logger.error("[OCR::Client] timeout")
       raise OcrTimeoutError, "ocr_timeout"
     rescue Faraday::ConnectionFailed => e
-      Rails.logger.error("[OCR::Client] connection failed class=#{e.class} message=#{e.message}")
+      Rails.logger.error("[OCR::Client] connection failed class=#{e.class} error_code=external_service_unavailable")
       raise OcrError, "external_service_unavailable"
     rescue OcrError, OcrTimeoutError
       raise
     rescue StandardError => e
-      Rails.logger.error("[OCR::Client] request failed class=#{e.class} message=#{e.message}")
+      Rails.logger.error("[OCR::Client] request failed class=#{e.class} error_code=unexpected_error")
       raise OcrError, "unexpected_error"
     end
 
@@ -166,17 +166,10 @@ module Ocr
       end
 
       Rails.logger.error(
-        "[OCR::Client] bad response status=#{res.status} error_code=#{error_code} body=#{truncate_body(res.body)}"
+        "[OCR::Client] bad response status=#{res.status} error_code=#{error_code}"
       )
 
       raise(error_code == "ocr_timeout" ? OcrTimeoutError : OcrError, error_code)
-    end
-
-    # NOTE:
-    # ログ出力だけは肥大化防止のため切り詰める。
-    # これはデバッグログ用であり、OCR本文の受信内容そのものを制限する処理ではない。
-    def truncate_body(body)
-      body.to_s.tr("\n", " ")[0, 500]
     end
 
     def endpoint

@@ -40,13 +40,17 @@ class Ocr::ResponseParser
         raw_response_included: false
       }
     }
-  rescue JSON::ParserError
+  rescue JSON::ParserError => e
+    Rails.logger.error("[OCR::ResponseParser] json_parse_failed class=#{e.class}")
     build_error_result("ocr_api_error")
-  rescue InvalidOcrResponseError
+  rescue InvalidOcrResponseError => e
+    Rails.logger.error("[OCR::ResponseParser] invalid_response class=#{e.class} message=#{e.message}")
     build_error_result("ocr_api_error")
-  rescue TypeError
+  rescue TypeError => e
+    Rails.logger.error("[OCR::ResponseParser] type_error class=#{e.class}")
     build_error_result("unexpected_error")
-  rescue StandardError
+  rescue StandardError => e
+    Rails.logger.error("[OCR::ResponseParser] unexpected_error class=#{e.class}")
     build_error_result("unexpected_error")
   end
 
@@ -238,7 +242,7 @@ class Ocr::ResponseParser
 
     fields.dig("MerchantAddress", "valueString") ||
       fields.dig("MerchantAddress", "content")
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -248,7 +252,7 @@ class Ocr::ResponseParser
     fields.dig("MerchantPhoneNumber", "valuePhoneNumber") ||
       fields.dig("MerchantPhoneNumber", "content") ||
       fields.dig("MerchantPhoneNumber", "valueString")
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -292,7 +296,7 @@ class Ocr::ResponseParser
     fields.dig("Subtotal", "valueCurrency", "amount") ||
       fields.dig("Subtotal", "valueNumber") ||
       extract_amount_from_lines(lines, /小計|subtotal|税抜/i)
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -304,7 +308,7 @@ class Ocr::ResponseParser
       fields.dig("Tax", "valueCurrency", "amount") ||
       fields.dig("Tax", "valueNumber") ||
       extract_amount_from_lines(lines, /消費税|税額|tax/i)
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -316,7 +320,7 @@ class Ocr::ResponseParser
     details.filter_map do |detail|
       detail.dig("valueObject", "Rate", "valueNumber")
     end.first
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -407,7 +411,7 @@ class Ocr::ResponseParser
 
     fields.dig("Tip", "valueCurrency", "amount") ||
       fields.dig("Tip", "valueNumber")
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -416,7 +420,7 @@ class Ocr::ResponseParser
 
     fields.dig("CountryRegion", "valueCountryRegion") ||
       fields.dig("CountryRegion", "valueString")
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -424,7 +428,7 @@ class Ocr::ResponseParser
     fields = extract_fields(parsed_response)
 
     fields.dig("ReceiptType", "valueString")
-  rescue
+  rescue NoMethodError, TypeError
     nil
   end
 
@@ -442,7 +446,7 @@ class Ocr::ResponseParser
         amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber")
       }
     end
-  rescue
+  rescue NoMethodError, TypeError
     []
   end
 
@@ -461,7 +465,7 @@ class Ocr::ResponseParser
         net_amount: value_object.dig("NetAmount", "valueCurrency", "amount") || value_object.dig("NetAmount", "valueNumber")
       }
     end
-  rescue
+  rescue NoMethodError, TypeError
     []
   end
 
@@ -486,7 +490,7 @@ class Ocr::ResponseParser
         confidence: item["confidence"]
       }
     end
-  rescue
+  rescue NoMethodError, TypeError
     []
   end
 
