@@ -15,6 +15,19 @@ class Receipt < ApplicationRecord
     input_invalid
   ].freeze
 
+  ALLOWED_IMAGE_CONTENT_TYPES = %w[
+    image/jpeg
+    image/png
+    image/bmp
+    image/tiff
+    image/heif
+    image/heic
+  ].freeze
+
+  MAX_FILE_SIZE = 20.megabytes
+  MIN_IMAGE_DIMENSION = 100
+  MAX_IMAGE_DIMENSION = 10_000
+
   OCR_ERROR_CODES = %w[
     ocr_unreadable
     ocr_timeout
@@ -54,7 +67,45 @@ class Receipt < ApplicationRecord
   validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名(MAX100文字)
   validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
 
+  validate :validate_image_content_type
+  validate :validate_image_file_size
+  validate :validate_image_dimensions
+
   private
+
+  def validate_image_content_type
+    return unless image.attached?
+
+    content_type = image.blob.content_type
+    return if ALLOWED_IMAGE_CONTENT_TYPES.include?(content_type)
+
+    errors.add(:image, :invalid_content_type)
+  end
+
+  def validate_image_file_size
+    return unless image.attached?
+    return if image.blob.byte_size <= MAX_FILE_SIZE
+
+    errors.add(:image, :file_too_large)
+  end
+
+  def validate_image_dimensions
+    return unless image.attached?
+
+    metadata = image.blob.metadata || {}
+    width = metadata["width"]
+    height = metadata["height"]
+    return if width.blank? || height.blank?
+
+    if width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION
+      errors.add(:image, :image_too_small)
+      return
+    end
+
+    return if width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION
+
+    errors.add(:image, :image_too_large)
+  end
 
   def allow_partial_ocr_data?
     image.attached? && (

@@ -1,1 +1,15 @@
 ja:
+  activerecord:
+    attributes:
+      receipt:
+        image: "画像"
+
+    errors:
+      models:
+        receipt:
+          attributes:
+            image:
+              invalid_content_type: "対応していないファイル形式です"
+              file_too_large: "ファイルサイズは20MB以下にしてください"
+              image_too_small: "画像サイズが小さすぎます（100px以上にしてください）"
+              image_too_large: "画像サイズが大きすぎます（10000px以下にしてください）"
