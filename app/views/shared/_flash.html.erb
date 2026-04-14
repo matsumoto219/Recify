@@ -1,5 +1,3 @@
-<% Rails.logger.debug "FLASH DEBUG: #{flash.to_hash.inspect}" %>
-
 <% messages = flash.to_hash.flat_map { |type, v| Array(v).map { |m| [type.to_s, m] } }.reject { |_, m| m.blank? } %>
 
 <% if messages.any? %>
