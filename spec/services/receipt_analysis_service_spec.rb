@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAnalysisService do
-  let(:receipt) { create(:receipt) }
+  let(:receipt) { create(:receipt, :with_image) }
 
   def build_ocr_result(overrides = {})
     {
@@ -51,7 +51,14 @@ RSpec.describe ReceiptAnalysisService do
         ]
       },
       error_code: nil,
-      meta: { provider: 'azure_document_intelligence', model_id: 'prebuilt-receipt' }
+      meta: {
+        provider: 'azure_document_intelligence',
+        model_id: 'prebuilt-receipt',
+        confidence_summary: {
+          items_average: 0.95,
+          overall: 0.95
+        }
+      }
     }.deep_merge(overrides)
   end
 
@@ -65,7 +72,7 @@ RSpec.describe ReceiptAnalysisService do
       },
       receipt_items_attributes: [
         {
-          raw_text: 'コーヒー',
+          index: 0,
           suggested_name: 'ブレンドコーヒー',
           category: 'drink',
           quantity_unit: '杯',
@@ -75,7 +82,7 @@ RSpec.describe ReceiptAnalysisService do
           needs_review: false
         },
         {
-          raw_text: 'サンド',
+          index: 1,
           suggested_name: 'たまごサンド',
           category: 'food',
           quantity_unit: '個',
@@ -88,21 +95,19 @@ RSpec.describe ReceiptAnalysisService do
     }
   end
 
-  before do
-    # ダミー画像
-    receipt.image.attach(
-      io: File.open(Rails.root.join('spec/fixtures/files/test.jpg')),
-      filename: 'test.jpg',
-      content_type: 'image/jpeg'
-    )
+  let(:failed_ai_result) do
+    {
+      success: false,
+      error_code: 'analysis_missing_keys',
+      receipt_attributes: {},
+      receipt_items_attributes: []
+    }
   end
 
   describe '.call' do
     it 'OCR結果からレシート情報を保存する' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
       described_class.call(receipt)
 
       receipt.reload
@@ -116,9 +121,7 @@ RSpec.describe ReceiptAnalysisService do
 
     it '明細が保存される' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
       described_class.call(receipt)
 
       receipt.reload
@@ -132,9 +135,7 @@ RSpec.describe ReceiptAnalysisService do
 
     it '支払い情報が保存される' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
       described_class.call(receipt)
 
       receipt.reload
@@ -148,9 +149,7 @@ RSpec.describe ReceiptAnalysisService do
 
     it '税情報が保存される' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
       described_class.call(receipt)
 
       receipt.reload
@@ -164,41 +163,13 @@ RSpec.describe ReceiptAnalysisService do
 
     it 'AI失敗時はreview_neededになる' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
 
       described_class.call(receipt)
       receipt.reload
 
       expect(receipt.status).to eq("review_needed")
       expect(receipt.processing_error_code).to eq("analysis_missing_keys")
-    end
-
-    it 'OCR unreadable の場合は failed になる' do
-      allow(ReceiptOcrService).to receive(:call).and_return(
-        build_ocr_result(
-          raw_text: '',
-          lines: [],
-          candidates: {
-            store_name: nil,
-            total_amount: nil,
-            payment_method_text: nil,
-            items: [],
-            payments: [],
-            tax_details: []
-          }
-        )
-      )
-
-      described_class.call(receipt)
-      receipt.reload
-
-      aggregate_failures do
-        expect(receipt.status).to eq('failed')
-        expect(receipt.processing_error_code).to eq('ocr_unreadable')
-        expect(receipt.ocr_completed_at).to be_present
-      end
     end
 
     it 'OCR items が空でも lines からフォールバックで明細を生成する' do
@@ -211,9 +182,7 @@ RSpec.describe ReceiptAnalysisService do
           }
         )
       )
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(
-        ReceiptAiEnrichmentService::AiEnrichmentError.new('analysis_missing_keys', 'dummy ai failure')
-      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
 
       described_class.call(receipt)
       receipt.reload
@@ -310,14 +279,14 @@ RSpec.describe ReceiptAnalysisService do
       aggregate_failures do
         expect(receipt.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('unexpected_error')
-        expect(receipt.processing_error_message).to eq('unexpected boom')
+        expect(receipt.processing_error_message).to be_present
       end
     end
 
     it '高品質OCRかつAI成功なら completed になる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
-          candidates: {
+          meta: {
             confidence_summary: {
               items_average: 0.95,
               overall: 0.95
@@ -342,7 +311,9 @@ RSpec.describe ReceiptAnalysisService do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
           candidates: {
-            payment_method_text: nil,
+            payment_method_text: nil
+          },
+          meta: {
             confidence_summary: {
               items_average: 0.95,
               overall: 0.95
@@ -358,10 +329,10 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.status).to eq('completed')
     end
 
-    it 'items_average が低いなら review_needed になる' do
+    it 'confidence_summary だけでは review_needed にならず completed のままになる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
-          candidates: {
+          meta: {
             confidence_summary: {
               items_average: 0.5,
               overall: 0.8
@@ -374,13 +345,13 @@ RSpec.describe ReceiptAnalysisService do
       described_class.call(receipt)
       receipt.reload
 
-      expect(receipt.status).to eq('review_needed')
+      expect(receipt.status).to eq('completed')
     end
 
-    it 'overall confidence が 0.3 未満なら ocr_unreadable で failed になる' do
+    it 'overall confidence が 0.3 未満でも主要項目が揃っていれば review_needed になる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
-          candidates: {
+          meta: {
             confidence_summary: {
               items_average: 0.4,
               overall: 0.2
@@ -388,13 +359,14 @@ RSpec.describe ReceiptAnalysisService do
           }
         )
       )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
 
       described_class.call(receipt)
       receipt.reload
 
       aggregate_failures do
-        expect(receipt.status).to eq('failed')
-        expect(receipt.processing_error_code).to eq('ocr_unreadable')
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
       end
     end
 

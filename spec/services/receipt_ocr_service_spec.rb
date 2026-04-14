@@ -11,6 +11,8 @@ RSpec.describe ReceiptOcrService do
     before do
       allow(Ocr::Client).to receive(:new).and_return(client)
       allow(Ocr::ResponseParser).to receive(:new).and_return(parser)
+      allow(ExternalServiceStatus).to receive(:mark_success!)
+      allow(ExternalServiceStatus).to receive(:mark_failure!)
     end
 
     context '正常系' do
@@ -46,6 +48,7 @@ RSpec.describe ReceiptOcrService do
           expect(parser).to have_received(:call)
           expect(result).to eq(parsed_response)
           expect(result[:success]).to eq(true)
+          expect(ExternalServiceStatus).to have_received(:mark_success!).with(:ocr)
         end
       end
     end
@@ -79,6 +82,7 @@ RSpec.describe ReceiptOcrService do
           expect(result).to eq(parsed_response)
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('ocr_api_error')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_api_error')
         end
       end
     end
@@ -101,6 +105,8 @@ RSpec.describe ReceiptOcrService do
             payment_method_text: nil
           )
           expect(result.dig(:meta, :provider)).to eq(provider)
+          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'image_missing')
         end
       end
     end
@@ -115,6 +121,7 @@ RSpec.describe ReceiptOcrService do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('ocr_api_error')
           expect(result.dig(:meta, :provider)).to eq(provider)
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_api_error')
         end
       end
     end
@@ -125,7 +132,10 @@ RSpec.describe ReceiptOcrService do
 
         result = described_class.call(image, provider: provider)
 
-        expect(result[:error_code]).to eq('ocr_timeout')
+        aggregate_failures do
+          expect(result[:error_code]).to eq('ocr_timeout')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_timeout')
+        end
       end
     end
 
@@ -135,7 +145,10 @@ RSpec.describe ReceiptOcrService do
 
         result = described_class.call(image, provider: provider)
 
-        expect(result[:error_code]).to eq('image_corrupted')
+        aggregate_failures do
+          expect(result[:error_code]).to eq('image_corrupted')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'image_corrupted')
+        end
       end
     end
 
@@ -150,6 +163,7 @@ RSpec.describe ReceiptOcrService do
           expect(result[:error_code]).to eq('unexpected_error')
           expect(result[:raw_text]).to eq('')
           expect(result[:lines]).to eq([])
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'unexpected_error')
         end
       end
     end
