@@ -4,92 +4,86 @@ RSpec.describe Ocr::ResponseParser do
   describe '#call' do
     let(:raw_response) do
       {
-        'raw_text' => <<~TEXT,
-          サンプルストア
-          東京都渋谷区1-2-3
-          TEL 03-1234-5678
-          2026/04/02 12:34
-          コーヒー 180
-          サンド 550 x2
-          小計 1180
-          消費税 80
-          チップ 100
-          合計 1280
-          Master
-        TEXT
-        'lines' => [
-          'サンプルストア',
-          '東京都渋谷区1-2-3',
-          'TEL 03-1234-5678',
-          '2026/04/02 12:34',
-          'コーヒー 180',
-          'サンド 550 x2',
-          '小計 1180',
-          '消費税 80',
-          'チップ 100',
-          '合計 1280',
-          'Master'
-        ],
-        'fields' => {
-          'MerchantName' => { 'valueString' => 'サンプルストア' },
-          'MerchantAddress' => { 'valueString' => '東京都渋谷区1-2-3' },
-          'MerchantPhoneNumber' => { 'valueString' => '03-1234-5678' },
-          'TransactionDate' => { 'valueString' => '2026-04-02' },
-          'TransactionTime' => { 'valueString' => '12:34' },
-          'Total' => { 'valueNumber' => 1280 },
-          'Subtotal' => { 'valueNumber' => 1180 },
-          'TotalTax' => { 'valueNumber' => 80 },
-          'Tip' => { 'valueNumber' => 100 },
-          'CountryRegion' => { 'valueString' => 'JP' },
-          'ReceiptType' => { 'valueString' => 'Meal' },
-          'Payments' => {
-            'valueArray' => [
-              {
-                'valueObject' => {
-                  'Method' => { 'valueString' => 'CreditCard' },
-                  'Amount' => { 'valueNumber' => 1280 }
+        'status' => 'succeeded',
+        'analyzeResult' => {
+          'content' => <<~TEXT,
+            サンプルストア
+            東京都渋谷区1-2-3
+            TEL 03-1234-5678
+            2026/04/02 12:34
+            コーヒー 180
+            サンド 550 x2
+            小計 1180
+            消費税 80
+            チップ 100
+            合計 1280
+            Master
+          TEXT
+          'documents' => [
+            {
+              'fields' => {
+                'MerchantName' => { 'valueString' => 'サンプルストア' },
+                'MerchantAddress' => { 'valueString' => '東京都渋谷区1-2-3' },
+                'MerchantPhoneNumber' => { 'valueString' => '03-1234-5678' },
+                'TransactionDate' => { 'valueDate' => '2026-04-02' },
+                'TransactionTime' => { 'valueTime' => '12:34' },
+                'Total' => { 'valueCurrency' => { 'amount' => 1280 } },
+                'Subtotal' => { 'valueCurrency' => { 'amount' => 1180 } },
+                'TotalTax' => { 'valueCurrency' => { 'amount' => 80 } },
+                'Tip' => { 'valueCurrency' => { 'amount' => 100 } },
+                'CountryRegion' => { 'valueCountryRegion' => 'JP' },
+                'ReceiptType' => { 'valueString' => 'Meal' },
+                'Payments' => {
+                  'valueArray' => [
+                    {
+                      'valueObject' => {
+                        'Method' => { 'valueString' => 'CreditCard' },
+                        'Amount' => { 'valueCurrency' => { 'amount' => 1280 } }
+                      }
+                    }
+                  ]
+                },
+                'TaxDetails' => {
+                  'valueArray' => [
+                    {
+                      'valueObject' => {
+                        'Description' => { 'valueString' => 'Sales Tax' },
+                        'Amount' => { 'valueCurrency' => { 'amount' => 80 } },
+                        'Rate' => { 'valueNumber' => 10 },
+                        'NetAmount' => { 'valueCurrency' => { 'amount' => 800 } }
+                      }
+                    }
+                  ]
+                },
+                'Items' => {
+                  'valueArray' => [
+                    {
+                      'valueObject' => {
+                        'Description' => { 'valueString' => 'コーヒー' },
+                        'Quantity' => { 'valueNumber' => 1 },
+                        'QuantityUnit' => { 'valueString' => '杯' },
+                        'Price' => { 'valueCurrency' => { 'amount' => 180 } },
+                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 180 } },
+                        'ProductCode' => { 'valueString' => 'C001' }
+                      },
+                      'confidence' => 0.98
+                    },
+                    {
+                      'valueObject' => {
+                        'Description' => { 'valueString' => 'サンド' },
+                        'Quantity' => { 'valueNumber' => 2 },
+                        'QuantityUnit' => { 'valueString' => '個' },
+                        'Price' => { 'valueCurrency' => { 'amount' => 550 } },
+                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 1100 } },
+                        'ProductCode' => { 'valueString' => 'S001' }
+                      },
+                      'confidence' => 0.97
+                    }
+                  ]
                 }
               }
-            ]
-          },
-          'TaxDetails' => {
-            'valueArray' => [
-              {
-                'valueObject' => {
-                  'Description' => { 'valueString' => 'Sales Tax' },
-                  'Amount' => { 'valueNumber' => 80 },
-                  'Rate' => { 'valueNumber' => 10 },
-                  'NetAmount' => { 'valueNumber' => 800 }
-                }
-              }
-            ]
-          },
-          'Items' => {
-            'valueArray' => [
-              {
-                'valueObject' => {
-                  'Description' => { 'valueString' => 'コーヒー' },
-                  'Quantity' => { 'valueNumber' => 1 },
-                  'QuantityUnit' => { 'valueString' => '杯' },
-                  'Price' => { 'valueNumber' => 180 },
-                  'TotalPrice' => { 'valueNumber' => 180 },
-                  'ProductCode' => { 'valueString' => 'C001' }
-                },
-                'confidence' => 0.98
-              },
-              {
-                'valueObject' => {
-                  'Description' => { 'valueString' => 'サンド' },
-                  'Quantity' => { 'valueNumber' => 2 },
-                  'QuantityUnit' => { 'valueString' => '個' },
-                  'Price' => { 'valueNumber' => 550 },
-                  'TotalPrice' => { 'valueNumber' => 1100 },
-                  'ProductCode' => { 'valueString' => 'S001' }
-                },
-                'confidence' => 0.97
-              }
-            ]
-          }
+            }
+          ]
         }
       }
     end
@@ -174,9 +168,7 @@ RSpec.describe Ocr::ResponseParser do
 
     it 'fieldsが一部欠けていても lines や text から補助抽出できる' do
       partial_response = raw_response.deep_dup
-      partial_response.delete('raw_text')
-      partial_response.delete('lines')
-      partial_response['text'] = <<~TEXT
+      partial_response['analyzeResult']['content'] = <<~TEXT
         サンプルストア
         東京都渋谷区1-2-3
         TEL 03-1234-5678
@@ -188,13 +180,14 @@ RSpec.describe Ocr::ResponseParser do
         合計 1280
         Mastercard
       TEXT
-      partial_response['fields'].delete('MerchantName')
-      partial_response['fields'].delete('TransactionDate')
-      partial_response['fields'].delete('TransactionTime')
-      partial_response['fields'].delete('Total')
-      partial_response['fields'].delete('Subtotal')
-      partial_response['fields'].delete('TotalTax')
-      partial_response['fields'].delete('Items')
+      fields = partial_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields.delete('MerchantName')
+      fields.delete('TransactionDate')
+      fields.delete('TransactionTime')
+      fields.delete('Total')
+      fields.delete('Subtotal')
+      fields.delete('TotalTax')
+      fields.delete('Items')
 
       result = described_class.new(response: partial_response).call
       candidates = result[:candidates]
@@ -215,13 +208,17 @@ RSpec.describe Ocr::ResponseParser do
 
     it 'result.text と result.lines 形式でも抽出できる' do
       nested_response = {
-        'result' => {
-          'text' => "ネスト店舗\n2026-04-03 09:15\n合計 980\nVISA",
-          'lines' => [ 'ネスト店舗', '2026-04-03 09:15', '合計 980', 'VISA' ]
-        },
-        'fields' => {
-          'MerchantName' => { 'valueString' => 'ネスト店舗' },
-          'Total' => { 'valueNumber' => 980 }
+        'status' => 'succeeded',
+        'analyzeResult' => {
+          'content' => "ネスト店舗\n2026-04-03 09:15\n合計 980\nVISA",
+          'documents' => [
+            {
+              'fields' => {
+                'MerchantName' => { 'valueString' => 'ネスト店舗' },
+                'Total' => { 'valueCurrency' => { 'amount' => 980 } }
+              }
+            }
+          ]
         }
       }
 
@@ -241,8 +238,7 @@ RSpec.describe Ocr::ResponseParser do
 
     it '決済文言は lines を優先し、なければ raw_text 全体から抽出する' do
       line_priority_response = raw_response.deep_dup
-      line_priority_response['lines'][-1] = 'PayPay'
-      line_priority_response['raw_text'] = <<~TEXT
+      line_priority_response['analyzeResult']['content'] = <<~TEXT
         サンプルストア
         合計 1280
         VISA
@@ -252,8 +248,7 @@ RSpec.describe Ocr::ResponseParser do
       line_priority_result = described_class.new(response: line_priority_response).call
 
       raw_text_fallback_response = raw_response.deep_dup
-      raw_text_fallback_response.delete('lines')
-      raw_text_fallback_response['raw_text'] = <<~TEXT
+      raw_text_fallback_response['analyzeResult']['content'] = <<~TEXT
         サンプルストア
         合計 1280
         お支払いはJCBです
@@ -262,16 +257,17 @@ RSpec.describe Ocr::ResponseParser do
       raw_text_fallback_result = described_class.new(response: raw_text_fallback_response).call
 
       aggregate_failures do
-        expect(line_priority_result.dig(:candidates, :payment_method_text)).to eq('paypay')
+        expect(line_priority_result.dig(:candidates, :payment_method_text)).to eq('visa')
         expect(raw_text_fallback_result.dig(:candidates, :payment_method_text)).to eq('jcb')
       end
     end
 
     it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
       broken_response = raw_response.deep_dup
-      broken_response['fields']['Payments']['valueArray'] = 'invalid'
-      broken_response['fields']['TaxDetails']['valueArray'] = { 'bad' => 'shape' }
-      broken_response['fields']['Items']['valueArray'] = nil
+      fields = broken_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['Payments']['valueArray'] = 'invalid'
+      fields['TaxDetails']['valueArray'] = { 'bad' => 'shape' }
+      fields['Items']['valueArray'] = nil
 
       result = described_class.new(response: broken_response).call
       candidates = result[:candidates]

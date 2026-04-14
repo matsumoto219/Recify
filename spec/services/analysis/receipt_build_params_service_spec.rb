@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptBuildParamsService do
+RSpec.describe Analysis::ReceiptBuildParamsService do
   describe '.call' do
     let(:ocr_result) do
       {
@@ -124,13 +124,13 @@ RSpec.describe ReceiptBuildParamsService do
           },
           receipt_items_attributes: [
             {
-              raw_text: 'コーヒー',
+              index: 0,
               suggested_name: 'ブレンドコーヒー',
               category: 'drink',
               needs_review: false
             },
             {
-              raw_text: 'サンド',
+              index: 1,
               suggested_name: 'たまごサンド',
               category: 'food',
               needs_review: true
@@ -381,7 +381,7 @@ RSpec.describe ReceiptBuildParamsService do
           {
             receipt_items_attributes: [
               {
-                raw_text: 'コーヒー',
+                index: 0,
                 suggested_name: 'ブレンドコーヒー',
                 category: 'drink',
                 needs_review: false
@@ -433,13 +433,13 @@ RSpec.describe ReceiptBuildParamsService do
           {
             receipt_items_attributes: [
               {
-                raw_text: 'コーヒー',
+                index: 0,
                 suggested_name: 'ブレンドコーヒー',
                 category: 'drink',
                 needs_review: false
               },
               {
-                raw_text: 'サンド',
+                index: 1,
                 suggested_name: 'たまごサンド',
                 category: 'food',
                 needs_review: true
@@ -448,20 +448,21 @@ RSpec.describe ReceiptBuildParamsService do
           }
         end
 
-        it '余分なAI明細も壊れずに取り込める' do
+        it '余分なAI明細は追加されず OCR側の明細だけを保持する' do
           params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
           first_item = params[:receipt_items_attributes].first
           second_item = params[:receipt_items_attributes].second
 
           aggregate_failures do
-            expect(params[:receipt_items_attributes].size).to eq(2)
+            expect(params[:receipt_items_attributes].size).to eq(1)
             expect(first_item[:raw_text]).to eq('コーヒー')
             expect(first_item[:quantity_unit]).to eq('杯')
             expect(first_item[:product_code]).to eq('C001')
-            expect(second_item[:suggested_name]).to eq('たまごサンド')
-            expect(second_item[:category]).to eq('food')
-            expect(second_item[:needs_review]).to eq(true)
+            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:category]).to eq('drink')
+            expect(first_item[:needs_review]).to eq(false)
+            expect(second_item).to be_nil
           end
         end
       end
