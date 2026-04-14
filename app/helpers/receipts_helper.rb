@@ -13,4 +13,9 @@ module ReceiptsHelper
 
     normalized
   end
+
+  # アップロード可能な画像形式（file_field の accept 用）
+  def receipt_image_accept
+    "image/jpeg,image/png,image/bmp,image/tiff,image/heif,image/heic,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.heif,.heic"
+  end
 end

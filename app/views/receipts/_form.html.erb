@@ -235,7 +235,12 @@
 
             <div class="mt-4 space-y-2">
               <%= f.label :image, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.file_field :image, class: "w-full px-3 py-2 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+              <%= f.file_field :image,
+                               accept: receipt_image_accept,
+                               class: "w-full px-3 py-2 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+              <p class="text-xs text-[#C7C4D8]">
+                JPG / PNG / BMP / TIFF / HEIF / HEIC に対応しています
+              </p>
             </div>
           <% else %>
             <%# TODO: 手動登録時の画像なし状態の説明文は後で文言調整する %>
