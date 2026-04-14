@@ -139,7 +139,7 @@ class Receipt < ApplicationRecord
   def error_category
     return "" if processing_error_code.blank?
 
-    ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]
+    Analysis::ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]
   end
 
   def failed_with_error?
