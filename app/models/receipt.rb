@@ -137,9 +137,9 @@ class Receipt < ApplicationRecord
   end
 
   def error_category
-    return "" if processing_error_code.blank?
+    return nil if processing_error_code.blank?
 
-    Analysis::ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]
+    Analysis::ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]&.to_sym
   end
 
   def failed_with_error?
@@ -150,12 +150,16 @@ class Receipt < ApplicationRecord
     return nil unless failed_with_error?
 
     case error_category
-    when "image_error"
-      "image_error"
-    when "ocr_error"
-      "ocr_error"
+    when :image_error
+      :image_error
+    when :ocr_error
+      :ocr_error
+    when :ai_error
+      :ai_error
+    when :system_error
+      :error
     else
-      "ai_error"
+      :error
     end
   end
 
@@ -163,12 +167,16 @@ class Receipt < ApplicationRecord
     return nil unless failed_with_error?
 
     case error_category
-    when "image_error"
+    when :image_error
       "画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。"
-    when "ocr_error"
+    when :ocr_error
       "OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。"
-    else
+    when :ai_error
       "AI補完処理に失敗しました。画像を変更して再試行するか、OCR結果をもとに手動修正してください。"
+    when :system_error
+      "処理に失敗しました。時間をおいて再試行するか、手動で修正してください。"
+    else
+      "処理に失敗しました。時間をおいて再試行するか、手動で修正してください。"
     end
   end
 
