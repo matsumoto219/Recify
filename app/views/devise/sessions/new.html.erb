@@ -72,17 +72,12 @@
       <section class="space-y-4" aria-labelledby="guest-login-title">
         <h3 id="guest-login-title" class="sr-only">ゲストログイン</h3>
 
-        <%# TODO: ゲストログイン機能の本実装
-            - 実際のルート（例: guest_sign_in_path）にlink_toで接続する
-            - buttonではなくlink_toへ変更
-            - 認証処理（Devise or 独自controller）と連携
-            - 成功時はレシート一覧へリダイレクト
-            - 失敗時はflashエラー表示
-        %>
-        <button type="button" class="w-full py-3.5 bg-[#353534] text-[#E5E2E1] font-medium rounded-lg hover:bg-[#393939] active:scale-[0.98] transition-all border border-white/10 flex items-center justify-center gap-2 opacity-70 cursor-not-allowed">
+        <%= button_to guest_sign_in_path,
+                      method: :post,
+                      class: "w-full py-3.5 bg-[#353534] text-[#E5E2E1] font-medium rounded-lg hover:bg-[#393939] active:scale-[0.98] transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer" do %>
           <span class="material-symbols-outlined text-xl" aria-hidden="true">person_search</span>
           <span>ゲストとして試す</span>
-        </button>
+        <% end %>
 
         <%# TODO: ゲストユーザー仕様の最終文言調整
             - 7日間未使用で削除など、正確な仕様に合わせる
