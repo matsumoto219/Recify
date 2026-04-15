@@ -58,7 +58,7 @@
     when "alert", "error", "ai_error", "ocr_error", "image_error", "error_box", "alert_box"
       7000
     else
-      4500
+      4000
     end
 
   resolved_auto_dismiss_delay = auto_dismiss_delay || default_auto_dismiss_delay
@@ -67,7 +67,7 @@
     if animated
       case animation_name
       when "slide_right"
-        "opacity-0 translate-x-6 transition-all duration-300 ease-out"
+        "opacity-0 translate-x-full transition-all duration-300 ease-out"
       when "slide_down"
         "opacity-0 -translate-y-4 transition-all duration-300 ease-out"
       else
@@ -120,7 +120,7 @@
       type="button"
       class="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100"
       aria-label="閉じる"
-      onclick="(function(){const el=this.closest('[data-notice-surface]'); if(!el) return; const animation=el.dataset.noticeAnimation; el.classList.add('opacity-0'); if(animation==='slide_right'){el.classList.add('translate-x-6');} else {el.classList.add('-translate-y-2');} setTimeout(()=>el.remove(),250);}).call(this)"
+      onclick="(function(){const el=this.closest('[data-notice-surface]'); if(!el) return; const animation=el.dataset.noticeAnimation; el.classList.add('opacity-0'); if(animation==='slide_right'){el.classList.add('translate-x-full');} else {el.classList.add('-translate-y-2');} setTimeout(()=>el.remove(),250);}).call(this)"
     >close</button>
   <% end %>
 </div>
@@ -162,7 +162,7 @@
 
         requestAnimationFrame(() => {
           if (animation === "slide_right") {
-            el.classList.remove("opacity-0", "translate-x-6");
+            el.classList.remove("opacity-0", "translate-x-full");
           } else if (animation === "slide_down") {
             el.classList.remove("opacity-0", "-translate-y-4");
           } else {
@@ -171,7 +171,7 @@
         });
 
         if (autoDismiss) {
-          const timeout = autoDismissDelay > 0 ? autoDismissDelay : 4500;
+          const timeout = autoDismissDelay > 0 ? autoDismissDelay : 4000;
 
           setTimeout(() => {
             if (!el.isConnected) return;
