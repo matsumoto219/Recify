@@ -3,67 +3,17 @@
 <% if messages.any? %>
   <!-- Toast Container -->
   <div class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm">
-
     <% messages.each_with_index do |(type, message), i| %>
-      <% tone = case type
-         when "notice", "success", "ai_notice", "ocr_notice"
-           { border: "border-[#4ade80]/20", bg: "bg-[#1C1B1B]/90", icon_bg: "bg-[#4ade80]/10", icon_color: "text-[#4ade80]", icon: "check_circle", title: "成功" }
-         when "warning", "ai_warning", "ocr_warning"
-           { border: "border-[#ffb695]/20", bg: "bg-[#1C1B1B]/90", icon_bg: "bg-[#ffb695]/10", icon_color: "text-[#ffb695]", icon: "warning", title: "警告" }
-         when "alert", "error", "ai_error", "ocr_error", "image_error"
-           { border: "border-[#ffb4ab]/20", bg: "bg-[#1C1B1B]/90", icon_bg: "bg-[#ffb4ab]/10", icon_color: "text-[#ffb4ab]", icon: "error", title: "エラー" }
-         else
-           { border: "border-white/10", bg: "bg-[#1C1B1B]/90", icon_bg: "bg-white/10", icon_color: "text-[#C7C4D8]", icon: "info", title: "通知" }
-         end %>
-
-      <div id="toast-<%= i %>" class="pointer-events-auto <%= tone[:bg] %> <%= tone[:border] %> border rounded-xl p-4 shadow-2xl flex items-center gap-3 opacity-0 translate-x-6 transition-all duration-300">
-        <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_bg] %> flex items-center justify-center <%= tone[:icon_color] %>">
-          <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;"><%= tone[:icon] %></span>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-base font-bold text-[#E5E2E1] leading-tight mb-1"><%= tone[:title] %></p>
-          <p class="text-xs text-[#c7c4d8] leading-relaxed"><%= message %></p>
-        </div>
-        <button type="button" class="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100" onclick="(function(){const el=document.getElementById('toast-<%= i %>'); if(el){el.classList.add('opacity-0','translate-y-[-6px]'); setTimeout(()=>el.remove(), 250);}})()">close</button>
-      </div>
+      <%= render "shared/ui/notice_surface",
+                 notice_type: type,
+                 message: message,
+                 dismissible: true,
+                 animated: true,
+                 animation_name: "slide_right",
+                 auto_dismiss: true,
+                 max_visible: 3,
+                 surface_id: "toast-#{i}",
+                 class: "flex items-center gap-3" %>
     <% end %>
   </div>
-
-  <%# TODO: このscriptは将来 app/javascript/controllers/toast_controller.js へ移動する
-      - Stimulus化して view から JS を分離する
-      - トーストの出現 / 自動削除 / 上限管理 / 手動クローズを controller 側で管理する
-      - inline script は暫定実装 %>
-
-  <%# TODO: リアルタイム通知対応（将来）
-      - Turbo Stream / ActionCable / polling で非同期処理完了を即時反映する
-      - OCR完了 / AI補完完了 / OCR失敗 / AI失敗 / 画像エラー通知をその場で追加表示する
-      - 通知boxとは役割を分け、一時通知のみ toast で扱う %>
-
-  <script>
-    document.addEventListener("turbo:load", () => {
-      const max = 3;
-      const nodes = Array.from(document.querySelectorAll("[id^='toast-']"));
-
-      nodes.forEach((el, idx) => {
-        // enter
-        requestAnimationFrame(() => {
-          el.classList.remove("opacity-0", "translate-x-6");
-        });
-
-        // limit
-        if (nodes.length > max && idx === 0) {
-          el.remove();
-          return;
-        }
-
-        // auto dismiss
-        const timeout = el.className.includes('border-[#ffb4ab]') ? 7000 : 4500;
-        setTimeout(() => {
-          if (!el.isConnected) return;
-          el.classList.add("opacity-0", "translate-y-[-6px]");
-          setTimeout(() => el.remove(), 250);
-        }, timeout);
-      });
-    });
-  </script>
 <% end %>
