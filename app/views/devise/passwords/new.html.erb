@@ -29,7 +29,8 @@
 
         <%= render "shared/auth/primary_button",
               f: f,
-              label: "再設定メールを送信" %>
+              label: "再設定メールを送信",
+              disable_with: "送信中..." %>
       <% end %>
 
       <%= render "shared/auth/separator" %>
