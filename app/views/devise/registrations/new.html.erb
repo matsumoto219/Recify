@@ -13,10 +13,7 @@
     <%= render "shared/auth/card", title_id: "registration-form-title" do %>
       <h2 id="registration-form-title" class="sr-only">新規登録フォーム</h2>
 
-      <%# TODO: devise/shared/error_messages と共通の _error_messages partial の役割を整理する %>
       <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-        <%= render "devise/shared/error_messages", resource: resource %>
-
         <%= render "shared/auth/text_field",
               f: f,
               attribute: :email,
