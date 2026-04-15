@@ -7,9 +7,11 @@ class Users::PasswordsController < Devise::PasswordsController
   # end
 
   # POST /resource/password
-  # def create
-  #   super
-  # end
+  def create
+    super do |resource|
+      set_flash_from_resource_errors(resource) if resource.errors.any?
+    end
+  end
 
   # GET /resource/password/edit?reset_password_token=abcdef
   # def edit
@@ -21,7 +23,11 @@ class Users::PasswordsController < Devise::PasswordsController
   #   super
   # end
 
-  # protected
+  protected
+
+  def set_flash_from_resource_errors(resource)
+    flash.now[:alert] = resource.errors.full_messages
+  end
 
   # def after_resetting_password_path_for(resource)
   #   super(resource)

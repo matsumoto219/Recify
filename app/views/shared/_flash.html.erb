@@ -1,12 +1,33 @@
-<% messages = flash.to_hash.flat_map { |type, v| Array(v).map { |m| [type.to_s, m] } }.reject { |_, m| m.blank? } %>
+<%
+  grouped_messages = flash.to_hash.each_with_object([]) do |(type, value), result|
+    messages = Array(value).reject(&:blank?)
+    next if messages.empty?
 
-<% if messages.any? %>
+    result << [type.to_s, messages]
+  end
+%>
+
+<% if grouped_messages.any? %>
   <!-- Toast Container -->
   <div class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm">
-    <% messages.each_with_index do |(type, message), i| %>
+    <% grouped_messages.each_with_index do |(type, messages), i| %>
+      <% body_content = if messages.many? %>
+        <% capture do %>
+          <ul class="space-y-2 text-xs text-[#C7C4D8] leading-relaxed">
+            <% messages.each do |message| %>
+              <li class="flex items-start gap-2">
+                <span class="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true"></span>
+                <span><%= message %></span>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+      <% end %>
+
       <%= render "shared/ui/notice_surface",
                  notice_type: type,
-                 message: message,
+                 message: (messages.first if messages.one?),
+                 body: body_content,
                  dismissible: true,
                  animated: true,
                  animation_name: "slide_right",
