@@ -14,8 +14,6 @@
       <%= render "shared/auth/card", title_id: "edit-registration-title" do %>
         <h2 class="sr-only">アカウント情報変更フォーム</h2>
 
-        <%= render "devise/shared/error_messages", resource: resource %>
-
         <%= form_for(resource,
                      as: resource_name,
                      url: registration_path(resource_name),
