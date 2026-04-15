@@ -10,9 +10,11 @@ class Users::RegistrationsController < Devise::RegistrationsController
   # end
 
   # POST /resource
-  # def create
-  #   super
-  # end
+  def create
+    super do |resource|
+      set_flash_from_resource_errors(resource) if resource.errors.any?
+    end
+  end
 
   # GET /resource/edit
   # def edit
@@ -20,9 +22,11 @@ class Users::RegistrationsController < Devise::RegistrationsController
   # end
 
   # PUT /resource
-  # def update
-  #   super
-  # end
+  def update
+    super do |resource|
+      set_flash_from_resource_errors(resource) if resource.errors.any?
+    end
+  end
 
   # DELETE /resource
   # def destroy
@@ -38,7 +42,11 @@ class Users::RegistrationsController < Devise::RegistrationsController
   #   super
   # end
 
-  # protected
+  protected
+
+  def set_flash_from_resource_errors(resource)
+    flash.now[:alert] = resource.errors.full_messages
+  end
 
   # If you have extra params to permit, append them to the sanitizer.
   # def configure_sign_up_params
