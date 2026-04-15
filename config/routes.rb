@@ -1,5 +1,9 @@
 Rails.application.routes.draw do
-  devise_for :users
+  devise_for :users, controllers: {
+    sessions: "users/sessions",
+    registrations: "users/registrations",
+    passwords: "users/passwords"
+  }
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
