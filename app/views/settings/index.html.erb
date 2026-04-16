@@ -1,18 +1,20 @@
 <section class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2">
-  <header class="space-y-2 px-4 md:px-0">
-    <h1 class="text-3xl font-bold tracking-tight text-[#E5E2E1]">設定</h1>
-    <p class="text-[#C7C4D8] text-base">アカウント情報やセキュリティ設定を管理できます</p>
-  </header>
+  <%= render "shared/ui/section_header",
+        title: "設定",
+        subtitle: "アカウント情報やセキュリティ設定を管理できます",
+        title_size: "text-3xl",
+        subtitle_size: "text-base",
+        class: "px-4 md:px-0" %>
 
   <div class="space-y-6">
-    <section class="bg-[#201F1F] rounded-xl p-6 transition-all hover:bg-[#2A2A2A]">
+    <%= render "shared/ui/surface_card", hoverable: true, class: "p-6" do %>
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div class="flex items-center gap-5">
           <div class="relative">
             <%# TODO: アバター画像アップロード機能を実装し、未設定時は fallback 表示に置き換える %>
             <div class="w-20 h-20 rounded-full overflow-hidden border-2 border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xl font-bold">
               <% display_name = (current_user.name.presence || current_user.email).to_s %>
-              <%= display_name[0,2]&.upcase || "U" %>
+              <%= display_name[0,1]&.upcase || "U" %>
             </div>
           </div>
 
@@ -27,31 +29,66 @@
           </div>
         </div>
 
-        <%= link_to settings_account_path,
-              class: "bg-[#353534] text-[#C0C1FF] border border-white/10 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-[#C0C1FF]/10 transition-all active:scale-95 inline-flex items-center justify-center" do %>
-          プロフィールを編集
-        <% end %>
+        <%= render "shared/ui/button",
+              as: :link,
+              href: settings_account_path,
+              label: "プロフィールを編集",
+              variant: :secondary,
+              size: :md,
+              text_color: "text-[#C0C1FF]",
+              class: "py-2.5 hover:bg-[#C0C1FF]/10" %>
       </div>
-    </section>
+    <% end %>
 
-    <section class="bg-[#201F1F] rounded-xl p-6">
-      <div class="flex items-center gap-2 mb-6">
-        <span class="material-symbols-outlined text-[#C0C1FF]">shield</span>
-        <h2 class="text-lg font-semibold text-white">セキュリティ</h2>
+    <%= render "shared/ui/surface_card", class: "p-6" do %>
+      <%= render "shared/ui/section_header",
+            icon: "monitoring",
+            title: "システム状態",
+            class: "mb-6" %>
+
+      <div class="space-y-3">
+        <%# TODO: 本実装では ExternalServiceStatus から状態を取得し、リアルタイム更新（Turbo Streams or polling）に対応する %>
+        <%# 例: state: @ocr_service_status.state.to_sym, text: service_status_label(@ocr_service_status) %>
+        <%= render "shared/ui/status_badge",
+              label: "OCR Status",
+              state: :ok,
+              text: "OCR 利用可能" %>
+
+        <%# TODO: AI側も同様に動的状態へ置き換える %>
+        <%= render "shared/ui/status_badge",
+              label: "AI Status",
+              state: :degraded,
+              text: "AI 不安定" %>
       </div>
+    <% end %>
+
+    <%= render "shared/ui/surface_card", class: "p-6" do %>
+      <%= render "shared/ui/section_header",
+            icon: "shield",
+            title: "セキュリティ",
+            class: "mb-6" %>
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-3">
           <%# TODO: メールアドレス変更機能を実装する %>
-          <button type="button"
-            class="flex-1 bg-[#353534] text-[#918FA1] border border-white/10 px-4 py-3 rounded-lg text-sm text-left flex items-center justify-between opacity-50 cursor-not-allowed">
-            <span>メールアドレス変更（未対応）</span>
-          </button>
+          <%= render "shared/ui/button",
+                label: "メールアドレス変更（未対応）",
+                variant: :secondary,
+                full_width: true,
+                disabled: true,
+                text_color: "text-[#918FA1]",
+                class: "px-4 text-left justify-between" %>
 
-          <%= link_to settings_security_path, class: "flex-1 bg-[#353534] text-[#E5E2E1] border border-white/10 px-4 py-3 rounded-lg text-sm text-left flex items-center justify-between group hover:border-[#C0C1FF]/40 transition-all" do %>
-            <span>パスワード変更</span>
-            <span class="material-symbols-outlined text-[#C7C4D8] group-hover:translate-x-1 transition-transform">chevron_right</span>
-          <% end %>
+          <%= render "shared/ui/button",
+                as: :link,
+                href: settings_security_path,
+                label: "パスワード変更",
+                variant: :secondary,
+                full_width: true,
+                class: "px-4 text-left",
+                trailing_icon: "chevron_right",
+                trailing_icon_animated: true,
+                border_hover: true %>
         </div>
 
         <div class="pt-4 border-t border-white/10 space-y-3">
@@ -78,52 +115,47 @@
           </p>
         </div>
       </div>
-    </section>
+    <% end %>
 
-    <section class="bg-[#201F1F] rounded-xl p-6">
-      <div class="flex items-center gap-2 mb-6">
-        <span class="material-symbols-outlined text-[#C0C1FF]">settings</span>
-        <h2 class="text-lg font-semibold text-white">利用設定</h2>
-      </div>
+    <%= render "shared/ui/surface_card", class: "p-6" do %>
+      <%= render "shared/ui/section_header",
+            icon: "settings",
+            title: "利用設定",
+            class: "mb-6" %>
 
       <div class="space-y-6">
         <%# TODO: 通知機能を実装し、トグル状態を user 設定と連動させる。現状はOFF固定のダミー %>
-        <div class="flex items-center justify-between gap-4">
-          <div class="space-y-0.5">
-            <p class="text-sm font-medium text-white">プッシュ通知</p>
-            <p class="text-xs text-[#C7C4D8]">レシート処理の完了や要確認項目を通知します</p>
-          </div>
-          <button type="button" class="w-11 h-6 bg-[#353534] rounded-full relative transition-colors duration-200 border border-white/10 shrink-0">
-            <div class="absolute left-1 top-1 bg-[#918FA1] w-4 h-4 rounded-full"></div>
-          </button>
-        </div>
+        <%= render "shared/ui/toggle_switch",
+              label: "プッシュ通知",
+              description: "レシート処理の完了や要確認項目を通知します",
+              checked: false %>
 
         <%# TODO: レシート画像最適化機能を実装し、ユーザー設定と連動させる。現状はOFF固定のダミー %>
-        <div class="flex items-center justify-between gap-4">
-          <div class="space-y-0.5">
-            <p class="text-sm font-medium text-white">レシート画像の最適化</p>
-            <p class="text-xs text-[#C7C4D8]">自動でトリミング・リサイズしてストレージ使用量を節約します</p>
-          </div>
-          <button type="button" class="w-11 h-6 bg-[#353534] rounded-full relative transition-colors duration-200 border border-white/10 shrink-0">
-            <div class="absolute left-1 top-1 bg-[#918FA1] w-4 h-4 rounded-full"></div>
-          </button>
-        </div>
+        <%= render "shared/ui/toggle_switch",
+              label: "レシート画像の最適化",
+              description: "自動でトリミング・リサイズしてストレージ使用量を節約します",
+              checked: false %>
       </div>
-    </section>
+    <% end %>
 
-    <section class="bg-[#93000A]/10 border border-[#FFB4AB]/10 rounded-xl p-6">
-      <div class="flex items-center gap-2 mb-6">
-        <span class="material-symbols-outlined text-[#FFB4AB]">delete</span>
-        <h2 class="text-lg font-semibold text-[#FFB4AB]">アカウント操作</h2>
-      </div>
+    <%= render "shared/ui/surface_card", variant: :danger, class: "p-6" do %>
+      <%= render "shared/ui/section_header",
+            icon: "delete",
+            title: "アカウント操作",
+            variant: :danger,
+            class: "mb-6" %>
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-4">
           <%= button_to user_registration_path,
                         method: :delete,
                         data: { turbo_confirm: "退会するとアカウントに紐づくデータが削除されます。よろしいですか？" },
-                        class: "px-6 py-2.5 rounded-lg text-sm font-medium bg-[#FFB4AB] text-[#690005] hover:opacity-90 transition-all shadow-lg shadow-[#FFB4AB]/20" do %>
-            退会
+                        class: "contents" do %>
+            <%= render "shared/ui/button",
+                  as: :content,
+                  label: "退会",
+                  variant: :danger,
+                  class: "py-2.5" %>
           <% end %>
         </div>
 
@@ -134,6 +166,6 @@
           </p>
         </div>
       </div>
-    </section>
+    <% end %>
   </div>
 </section>

@@ -1,9 +1,11 @@
 <section class="max-w-3xl mx-auto px-4 md:px-2 py-6 pb-28 md:pb-6 space-y-8">
   <!-- START: settings/security page header -->
-  <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-[#E5E2E1] mb-2">セキュリティ</h1>
-    <p class="text-[#C7C4D8]">アカウントの安全性を管理します</p>
-  </header>
+  <%= render "shared/ui/section_header",
+        title: "セキュリティ",
+        subtitle: "アカウントの安全性を管理します",
+        title_size: "text-3xl",
+        subtitle_size: "text-base",
+        class: "mb-6" %>
   <!-- END: settings/security page header -->
 
   <%# TODO: フラッシュメッセージ表示（成功/失敗）
@@ -12,13 +14,14 @@
       - エラー時: エラーメッセージ一覧 %>
 
   <!-- START: settings/security email card -->
-  <section class="bg-[#201F1F] rounded-xl p-6 lg:p-8 shadow-sm">
-    <div class="flex items-center gap-3 mb-4">
-      <span class="material-symbols-outlined text-[#C0C1FF]">mail</span>
-      <h3 class="text-xl font-semibold text-white">メールアドレス</h3>
-    </div>
+  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+    <%= render "shared/ui/section_header",
+          icon: "mail",
+          title: "メールアドレス",
+          title_size: "text-xl",
+          class: "mb-4" %>
 
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#1C1B1B] p-4 rounded-lg">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg">
       <div>
         <p class="text-xs text-[#C7C4D8] mb-1">現在のメールアドレス</p>
         <p class="text-white font-medium"><%= current_user.email %></p>
@@ -28,48 +31,80 @@
           - Deviseのconfirmableを利用
           - 再認証（current_password）を必須化
           - 変更確認メール送信 %>
-      <button type="button" class="bg-[#353534] text-[#918FA1] border border-white/10 px-5 py-2 rounded-lg text-sm font-semibold opacity-50 cursor-not-allowed">
-        変更する（未対応）
-      </button>
+      <%= render "shared/ui/button",
+            label: "変更する（未対応）",
+            variant: :secondary,
+            size: :md,
+            disabled: true,
+            text_color: "text-[#918FA1]",
+            class: "px-5 py-2" %>
     </div>
 
     <p class="mt-4 text-sm text-[#C7C4D8]/80">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
-  </section>
+  <% end %>
   <!-- END: settings/security email card -->
 
   <!-- START: settings/security password card -->
-  <section class="bg-[#201F1F] rounded-xl p-6 lg:p-8 shadow-sm">
-    <div class="flex items-center gap-3 mb-6">
-      <span class="material-symbols-outlined text-[#C0C1FF]">lock</span>
-      <h3 class="text-xl font-semibold text-white">パスワード変更</h3>
-    </div>
+  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+    <%= render "shared/ui/section_header",
+          icon: "lock",
+          title: "パスワード変更",
+          title_size: "text-xl",
+          class: "mb-6" %>
 
     <%= form_with model: current_user, url: user_registration_path, method: :patch, local: true do |f| %>
       <%# TODO: 入力クリア
           - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
           - パスワードが画面に残らないようにする %>
       <div class="space-y-6">
-        <div class="space-y-2">
-          <%= f.label :current_password, "現在のパスワード", class: "text-sm font-medium text-[#C7C4D8] block" %>
-          <%= f.password_field :current_password,
-                placeholder: "••••••••",
-                class: "w-full bg-[#0E0E0E] border-none ring-1 ring-white/10 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#C0C1FF] transition-all text-[#E5E2E1]" %>
-        </div>
+        <%= render "shared/ui/text_field",
+              f: f,
+              attribute: :current_password,
+              label: "現在のパスワード",
+              icon: "lock",
+              field_type: :password_field,
+              placeholder: "••••••••",
+              autocomplete: "current-password",
+              with_icon: true,
+              highlight_variant: :default,
+              show_error_message: true,
+              input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+              label_class: "text-sm font-medium normal-case tracking-normal px-0",
+              error_message_class: "px-0",
+              input_wrapper_class: "" %>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-2">
-            <%= f.label :password, "新しいパスワード", class: "text-sm font-medium text-[#C7C4D8] block" %>
-            <%= f.password_field :password,
-                  placeholder: "••••••••",
-                  class: "w-full bg-[#0E0E0E] border-none ring-1 ring-white/10 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#C0C1FF] transition-all text-[#E5E2E1]" %>
-          </div>
+          <%= render "shared/ui/text_field",
+                f: f,
+                attribute: :password,
+                label: "新しいパスワード",
+                icon: "password",
+                field_type: :password_field,
+                placeholder: "••••••••",
+                autocomplete: "new-password",
+                with_icon: true,
+                highlight_variant: :default,
+                show_error_message: true,
+                input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+                label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
 
-          <div class="space-y-2">
-            <%= f.label :password_confirmation, "確認用パスワード", class: "text-sm font-medium text-[#C7C4D8] block" %>
-            <%= f.password_field :password_confirmation,
-                  placeholder: "••••••••",
-                  class: "w-full bg-[#0E0E0E] border-none ring-1 ring-white/10 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#C0C1FF] transition-all text-[#E5E2E1]" %>
-          </div>
+          <%= render "shared/ui/text_field",
+                f: f,
+                attribute: :password_confirmation,
+                label: "確認用パスワード",
+                icon: "password",
+                field_type: :password_field,
+                placeholder: "••••••••",
+                autocomplete: "new-password",
+                with_icon: true,
+                highlight_variant: :default,
+                show_error_message: true,
+                input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+                label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
         </div>
 
         <%# TODO: エラーメッセージ表示
@@ -81,19 +116,24 @@
             - 最低文字数や記号チェック %>
 
         <div class="pt-2">
-          <%= f.submit "パスワードを保存", class: "bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-bold px-6 py-2.5 rounded-lg hover:brightness-110 transition-all active:scale-95 cursor-pointer" %>
+          <%= render "shared/ui/button",
+                label: "パスワードを保存",
+                variant: :primary,
+                type: "submit",
+                disable_with: "保存中...",
+                class: "px-6 py-2.5 font-bold" %>
         </div>
       </div>
     <% end %>
 
     <p class="mt-4 text-sm text-[#C7C4D8]/80">安全のため、定期的にパスワードを変更してください。</p>
-  </section>
+  <% end %>
   <!-- END: settings/security password card -->
 
   <!-- START: settings/security auth options grid -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <!-- START: settings/security 2fa card -->
-    <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm flex flex-col justify-between border border-white/5">
+    <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
       <div>
         <div class="flex items-center justify-between mb-4">
           <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
@@ -107,14 +147,18 @@
           - QRコード生成
           - シークレット保存
           - 有効/無効切り替え %>
-      <button type="button" class="w-full bg-[#353534] text-[#C0C1FF] font-semibold py-2.5 rounded-lg border border-[#C0C1FF]/20 opacity-50 cursor-not-allowed">
-        有効化する（未対応）
-      </button>
-    </section>
+      <%= render "shared/ui/button",
+            label: "有効化する（未対応）",
+            variant: :secondary,
+            full_width: true,
+            disabled: true,
+            text_color: "text-[#C0C1FF]",
+            class: "py-2.5 border-[#C0C1FF]/20" %>
+    <% end %>
     <!-- END: settings/security 2fa card -->
 
     <!-- START: settings/security passkey card -->
-    <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm flex flex-col justify-between border border-white/5">
+    <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
       <div>
         <div class="flex items-center justify-between mb-4">
           <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
@@ -128,10 +172,14 @@
           - credential登録
           - デバイス管理
           - ログイン連携 %>
-      <button type="button" class="w-full bg-[#353534] text-[#C0C1FF] font-semibold py-2.5 rounded-lg border border-[#C0C1FF]/20 opacity-50 cursor-not-allowed">
-        登録する（未対応）
-      </button>
-    </section>
+      <%= render "shared/ui/button",
+            label: "登録する（未対応）",
+            variant: :secondary,
+            full_width: true,
+            disabled: true,
+            text_color: "text-[#C0C1FF]",
+            class: "py-2.5 border-[#C0C1FF]/20" %>
+    <% end %>
     <!-- END: settings/security passkey card -->
   </div>
   <!-- END: settings/security auth options grid -->
