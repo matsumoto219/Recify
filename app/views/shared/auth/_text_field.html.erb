@@ -46,7 +46,7 @@
     <%= f.label attribute, label, class: "text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1" %>
   <% end %>
   <div class="relative group">
-    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#C7C4D8] group-focus-within:text-[#C0C1FF] transition-colors text-xl" aria-hidden="true"><%= icon %></span>
+    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 transition-colors text-xl <%= has_error ? 'text-[#FFB4AB] group-focus-within:text-[#FFB4AB]' : 'text-[#C7C4D8] group-focus-within:text-[#C0C1FF]' %>" aria-hidden="true"><%= icon %></span>
     <%= f.public_send(field_type, attribute, **field_options) %>
   </div>
 
