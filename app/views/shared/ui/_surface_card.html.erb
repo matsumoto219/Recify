@@ -1,0 +1,31 @@
+<!-- 共通カードパーツ -->
+<%
+  variant = local_assigns.fetch(:variant, :default).to_sym
+  hoverable = local_assigns.fetch(:hoverable, false)
+  extra_classes = local_assigns[:class]
+  title_id = local_assigns[:title_id]
+
+  base_classes = "w-full rounded-xl overflow-hidden backdrop-blur-[20px] shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(229,226,225,0.05)] transition-all"
+
+  variant_classes = case variant
+                    when :danger
+                      "bg-[rgba(147,0,10,0.12)] border border-[#FFB4AB]/10"
+                    else
+                      "bg-[rgba(32,31,31,0.8)]"
+                    end
+
+  hover_classes = if hoverable
+                    case variant
+                    when :danger
+                      "hover:bg-[rgba(147,0,10,0.18)]"
+                    else
+                      "hover:bg-[rgba(42,42,42,0.92)]"
+                    end
+                  end
+
+  surface_classes = [base_classes, variant_classes, hover_classes, extra_classes].compact.join(" ")
+%>
+
+<section class="<%= surface_classes %>"<%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
+  <%= yield %>
+</section>
