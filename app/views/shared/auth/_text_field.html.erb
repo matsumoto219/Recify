@@ -24,6 +24,7 @@
 
   attribute_errors = Array(f.object&.errors&.[](attribute))
   has_error = attribute_errors.any?
+  attribute_full_messages = Array(f.object&.errors&.full_messages_for(attribute))
 
   base_input_class = "w-full bg-[#0E0E0E] rounded-lg py-3.5 pl-12 pr-4 text-[#E5E2E1] placeholder:text-zinc-600 transition-all outline-none"
   normal_input_class = "border border-transparent focus:ring-2 focus:ring-[#C0C1FF]/50"
@@ -38,10 +39,6 @@
     required: required,
     class: merged_input_class
   }.compact
-
-  attribute_errors = Array(f.object&.errors&.[](attribute))
-  attribute_full_messages = Array(f.object&.errors&.full_messages_for(attribute))
-  has_error = attribute_errors.any?
 %>
 
 <div class="space-y-2">
