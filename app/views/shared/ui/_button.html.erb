@@ -1,0 +1,92 @@
+<%
+  label = local_assigns.fetch(:label)
+  variant = local_assigns.fetch(:variant, :primary).to_sym
+  size = local_assigns.fetch(:size, :md).to_sym
+  type = local_assigns.fetch(:type, "button")
+  as = local_assigns.fetch(:as, :button).to_sym
+  content_only = (as == :content)
+  href = local_assigns[:href]
+  data_attributes = local_assigns[:data] || {}
+  full_width = local_assigns.fetch(:full_width, false)
+  disabled = local_assigns.fetch(:disabled, false)
+  loading = local_assigns.fetch(:loading, false)
+  icon = local_assigns[:icon]
+  icon_position = local_assigns.fetch(:icon_position, :left).to_sym
+  trailing_icon = local_assigns[:trailing_icon]
+  trailing_icon_animated = local_assigns.fetch(:trailing_icon_animated, false)
+  extra_classes = local_assigns[:class]
+  disable_with = local_assigns[:disable_with]
+  text_color = local_assigns[:text_color]
+  border_hover = local_assigns.fetch(:border_hover, false)
+
+  variant_classes = case variant
+                    when :secondary
+                      "bg-[#353534] text-[#E5E2E1] border border-white/10 hover:bg-[#393939]"
+                    when :ghost
+                      "bg-transparent text-[#E5E2E1] border border-white/10 hover:bg-white/5"
+                    when :danger
+                      "bg-[#FFB4AB] text-[#690005] border border-transparent hover:opacity-90 shadow-lg shadow-[#FFB4AB]/20"
+                    else
+                      "bg-gradient-to-r from-[#C0C1FF] to-[#4B4DD8] text-black border-none hover:brightness-110 shadow-lg shadow-[#C0C1FF]/10 overflow-hidden"
+                    end
+
+  border_hover_class = if border_hover
+    "hover:border-[#C0C1FF]/40"
+  end
+
+  size_classes = case size
+                 when :sm
+                   "px-4 py-2 text-sm rounded-lg"
+                 when :lg
+                   "px-6 py-4 text-base rounded-xl"
+                 else
+                   "px-6 py-3 text-sm rounded-lg"
+                 end
+
+  text_color_class = text_color.present? ? text_color : nil
+
+  justify_classes = trailing_icon.present? ? "justify-between" : "justify-center"
+  width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
+  state_classes = "group items-center gap-2 font-medium transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+  button_classes = [width_classes, state_classes, variant_classes, size_classes, text_color_class, border_hover_class, extra_classes].compact.join(" ")
+
+  current_label = loading ? (disable_with.presence || label) : label
+  trailing_icon_class = [
+    "material-symbols-outlined text-[18px] shrink-0 transition-transform",
+    (trailing_icon_animated ? "group-hover:translate-x-1" : nil)
+  ].compact.join(" ")
+%>
+
+<% content = capture do %>
+  <% if icon.present? && icon_position == :left %>
+    <span class="material-symbols-outlined text-[18px]" aria-hidden="true"><%= icon %></span>
+  <% end %>
+
+  <span><%= current_label %></span>
+
+  <% if trailing_icon.present? %>
+    <span class="<%= trailing_icon_class %>" aria-hidden="true"><%= trailing_icon %></span>
+  <% elsif icon.present? && icon_position == :right %>
+    <span class="material-symbols-outlined text-[18px]" aria-hidden="true"><%= icon %></span>
+  <% end %>
+<% end %>
+
+<% if content_only %>
+  <span class="<%= button_classes %>">
+    <%= content %>
+  </span>
+<% elsif as == :link %>
+  <%= link_to href, class: button_classes, data: data_attributes do %>
+    <%= content %>
+  <% end %>
+<% else %>
+  <button
+    type="<%= type %>"
+    class="<%= button_classes %>"
+    <%= "disabled" if disabled || loading %>
+    <% if disable_with.present? %>data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
+    <% data_attributes.each do |key, value| %>data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>
+  >
+    <%= content %>
+  </button>
+<% end %>

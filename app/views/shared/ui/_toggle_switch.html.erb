@@ -1,0 +1,50 @@
+<%
+  label = local_assigns.fetch(:label)
+  description = local_assigns[:description]
+  checked = local_assigns.fetch(:checked, false)
+  disabled = local_assigns.fetch(:disabled, false)
+  input_name = local_assigns[:name]
+  input_id = local_assigns[:id] || input_name
+  wrapper_class = local_assigns[:class]
+  label_class = local_assigns[:label_class]
+  description_class = local_assigns[:description_class]
+
+  resolved_label_class = ["text-sm font-medium text-white", label_class].compact.join(" ")
+  resolved_description_class = ["text-xs text-[#C7C4D8]", description_class].compact.join(" ")
+  wrapper_classes = ["flex items-center justify-between gap-4", wrapper_class].compact.join(" ")
+
+  track_classes = [
+    "w-11 h-6 rounded-full relative transition-colors duration-200 border shrink-0",
+    checked ? "bg-[#C0C1FF]/20 border-[#C0C1FF]/40" : "bg-[#353534] border-white/10",
+    disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+  ].join(" ")
+
+  thumb_classes = [
+    "absolute top-1 w-4 h-4 rounded-full transition-all duration-200",
+    checked ? "left-6 bg-[#C0C1FF]" : "left-1 bg-[#918FA1]"
+  ].join(" ")
+%>
+
+<div class="<%= wrapper_classes %>">
+  <div class="space-y-0.5 min-w-0">
+    <p class="<%= resolved_label_class %>"><%= label %></p>
+    <% if description.present? %>
+      <p class="<%= resolved_description_class %>"><%= description %></p>
+    <% end %>
+  </div>
+
+  <button
+    type="button"
+    class="<%= track_classes %>"
+    role="switch"
+    aria-checked="<%= checked %>"
+    <% if input_id.present? %>aria-controls="<%= input_id %>"<% end %>
+    <%= "disabled" if disabled %>
+  >
+    <span class="<%= thumb_classes %>" aria-hidden="true"></span>
+  </button>
+
+  <% if input_name.present? %>
+    <input type="hidden" name="<%= input_name %>" id="<%= input_id %>" value="<%= checked ? 1 : 0 %>">
+  <% end %>
+</div>

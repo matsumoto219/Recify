@@ -1,0 +1,44 @@
+<%
+  title = local_assigns.fetch(:title)
+  subtitle = local_assigns[:subtitle]
+  icon = local_assigns[:icon]
+  variant = local_assigns.fetch(:variant, :default).to_sym
+  wrapper_class = local_assigns[:class]
+  icon_class = local_assigns[:icon_class]
+  title_size = local_assigns.fetch(:title_size, "text-lg")
+  subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
+
+  tone = case variant
+         when :danger
+           {
+             title: "text-[#FFB4AB]",
+             subtitle: "text-[#FFB4AB]/80",
+             icon: "text-[#FFB4AB]"
+           }
+         else
+           {
+             title: "text-white",
+             subtitle: "text-[#C7C4D8]",
+             icon: "text-[#C0C1FF]"
+           }
+         end
+
+  resolved_icon_class = [tone[:icon], icon_class].compact.join(" ")
+  title_class = [title_size, "font-semibold", "leading-tight", tone[:title]].join(" ")
+  subtitle_class = [subtitle_size, "leading-relaxed", tone[:subtitle]].join(" ")
+  header_classes = ["space-y-1", wrapper_class].compact.join(" ")
+%>
+
+<div class="<%= header_classes %>">
+  <div class="flex items-center gap-2">
+    <% if icon.present? %>
+      <span class="material-symbols-outlined <%= resolved_icon_class %>" aria-hidden="true"><%= icon %></span>
+    <% end %>
+
+    <h2 class="<%= title_class %>"><%= title %></h2>
+  </div>
+
+  <% if subtitle.present? %>
+    <p class="<%= subtitle_class %>"><%= subtitle %></p>
+  <% end %>
+</div>

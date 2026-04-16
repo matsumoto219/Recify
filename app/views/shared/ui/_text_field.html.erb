@@ -1,0 +1,89 @@
+<%# 共通テキスト入力欄
+    必須locals:
+    - f: form builder
+    - attribute: フィールド名（例: :email, :password）
+    - label: ラベル文言
+    - icon: Material Symbols名
+    任意locals:
+    - field_type: :email_field / :password_field / :text_field（default: :text_field）
+    - placeholder: placeholder文言
+    - autocomplete: autocomplete属性
+    - autofocus: true/false
+    - required: true/false
+    - show_label: true/false（default: true）
+    - with_icon: true/false（default: true）
+    - highlight_variant: :default / :error / :none（default: :default）
+    - show_error_message: true/false（default: true）
+    - input_class: 追加class
+    - input_wrapper_class: 入力欄ラッパー用class
+    - label_class: ラベル用追加class
+    - error_message_class: エラーメッセージ用追加class
+%>
+<%
+  field_type = local_assigns.fetch(:field_type, :text_field)
+  placeholder = local_assigns[:placeholder]
+  autocomplete = local_assigns[:autocomplete]
+  autofocus = local_assigns.fetch(:autofocus, false)
+  required = local_assigns.fetch(:required, false)
+  show_label = local_assigns.fetch(:show_label, true)
+  input_class = local_assigns[:input_class]
+
+  with_icon = local_assigns.fetch(:with_icon, true)
+  highlight_variant = local_assigns.fetch(:highlight_variant, :default).to_sym
+  show_error_message = local_assigns.fetch(:show_error_message, true)
+  input_wrapper_class = local_assigns[:input_wrapper_class]
+  label_class = local_assigns[:label_class]
+  error_message_class = local_assigns[:error_message_class]
+
+  attribute_errors = Array(f.object&.errors&.[](attribute))
+  has_error = attribute_errors.any?
+  attribute_full_messages = Array(f.object&.errors&.full_messages_for(attribute))
+
+  base_input_class = "w-full bg-[#0E0E0E] rounded-lg text-[#E5E2E1] placeholder:text-zinc-600 transition-all outline-none"
+
+  highlight_classes = case highlight_variant
+                      when :none
+                        "border border-transparent focus:ring-0"
+                      when :error
+                        has_error ? "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30" : "border border-transparent focus:ring-2 focus:ring-[#FFB4AB]/30"
+                      else
+                        has_error ? "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30" : "border border-transparent focus:ring-2 focus:ring-[#C0C1FF]/50"
+                      end
+
+  label_classes = ["text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1", label_class].compact.join(" ")
+  wrapper_classes = ["relative group", input_wrapper_class].compact.join(" ")
+  icon_classes = [
+    "material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 transition-colors text-xl",
+    has_error ? "text-[#FFB4AB]" : "text-[#C7C4D8]",
+    (with_icon && !has_error ? "group-focus-within:text-[#C0C1FF]" : nil),
+    (with_icon && has_error ? "group-focus-within:text-[#FFB4AB]" : nil)
+  ].compact.join(" ")
+  error_classes = ["px-1 text-xs text-[#FFB4AB] leading-relaxed", error_message_class].compact.join(" ")
+
+  merged_input_class = [base_input_class, highlight_classes, input_class].compact.join(" ")
+  field_options = {
+    placeholder: placeholder,
+    autocomplete: autocomplete,
+    autofocus: autofocus,
+    required: required,
+    class: merged_input_class
+  }.compact
+%>
+
+<div class="space-y-2">
+  <% if show_label %>
+    <%= f.label attribute, label, class: label_classes %>
+  <% end %>
+  <div class="<%= wrapper_classes %>">
+    <% if with_icon %>
+      <span class="<%= icon_classes %>" aria-hidden="true"><%= icon %></span>
+    <% end %>
+    <%= f.public_send(field_type, attribute, **field_options) %>
+  </div>
+
+  <% if has_error && show_error_message %>
+    <p class="<%= error_classes %>">
+      <%= attribute_full_messages.first %>
+    </p>
+  <% end %>
+</div>
