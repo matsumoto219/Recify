@@ -52,7 +52,11 @@
           title_size: "text-xl",
           class: "mb-6" %>
 
-    <%= form_with model: current_user, url: user_registration_path, method: :patch, local: true do |f| %>
+    <%
+      form_resource = defined?(resource) && resource.present? ? resource : current_user
+      form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
+    %>
+    <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
       <%# TODO: 入力クリア
           - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
           - パスワードが画面に残らないようにする %>
@@ -68,7 +72,7 @@
               with_icon: true,
               highlight_variant: :default,
               show_error_message: true,
-              input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+              input_class: "px-4 py-3 pl-12",
               label_class: "text-sm font-medium normal-case tracking-normal px-0",
               error_message_class: "px-0",
               input_wrapper_class: "" %>
@@ -85,7 +89,7 @@
                 with_icon: true,
                 highlight_variant: :default,
                 show_error_message: true,
-                input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+                input_class: "px-4 py-3 pl-12",
                 label_class: "text-sm font-medium normal-case tracking-normal px-0",
                 error_message_class: "px-0",
                 input_wrapper_class: "" %>
@@ -101,7 +105,7 @@
                 with_icon: true,
                 highlight_variant: :default,
                 show_error_message: true,
-                input_class: "border-none ring-1 ring-white/10 px-4 py-3 pl-12",
+                input_class: "px-4 py-3 pl-12",
                 label_class: "text-sm font-medium normal-case tracking-normal px-0",
                 error_message_class: "px-0",
                 input_wrapper_class: "" %>
