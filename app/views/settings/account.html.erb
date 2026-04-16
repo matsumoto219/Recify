@@ -1,63 +1,82 @@
 <section class="max-w-2xl mx-auto px-0 md:px-2 py-2 pb-28 md:pb-2">
-  <div class="mb-10 text-center md:text-left px-4 md:px-0">
-    <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-[#E5E2E1] mb-2">プロフィール</h1>
-    <p class="text-[#C7C4D8] font-medium">ユーザー情報を編集できます</p>
-  </div>
+  <%= render "shared/ui/section_header",
+        title: "プロフィール",
+        subtitle: "ユーザー情報を編集できます",
+        title_size: "text-3xl md:text-4xl",
+        subtitle_size: "text-base",
+        class: "mb-10 text-center md:text-left px-4 md:px-0" %>
 
-  <%= form_with model: current_user, url: user_registration_path, method: :patch, html: { multipart: true }, class: "bg-[#201F1F] rounded-xl overflow-hidden shadow-2xl border border-white/5" do |f| %>
-    <div class="p-8 border-b border-white/10">
-      <div class="flex flex-col md:flex-row items-center gap-6">
-        <div class="relative group">
-          <div class="w-24 h-24 rounded-full bg-[#353534] flex items-center justify-center text-3xl font-bold text-[#C0C1FF] border-2 border-[#C0C1FF]/20 shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
-            <%# TODO: アバター表示は ActiveStorage 実装後に正式対応（現状はダミー表示含む） %>
-            <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? %>
-              <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
-            <% else %>
-              <% display_name = (current_user.name.presence || current_user.email).to_s %>
-              <%= display_name[0,2]&.upcase || "U" %>
-            <% end %>
+  <%= render "shared/ui/surface_card" do %>
+    <%= form_with model: current_user, url: user_registration_path, method: :patch, html: { multipart: true } do |f| %>
+      <div class="p-8 border-b border-white/10">
+        <div class="flex flex-col md:flex-row items-center gap-6">
+          <div class="relative group">
+            <div class="w-24 h-24 rounded-full bg-[#353534] flex items-center justify-center text-3xl font-bold text-[#C0C1FF] border-2 border-[#C0C1FF]/20 shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
+              <%# TODO: アバター表示は ActiveStorage 実装後に正式対応（現状はダミー表示含む） %>
+              <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? %>
+                <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
+              <% else %>
+                <% display_name = (current_user.name.presence || current_user.email).to_s %>
+                <%= display_name[0,1]&.upcase || "U" %>
+              <% end %>
+            </div>
+          </div>
+
+          <div class="text-center md:text-left w-full">
+            <h2 class="text-lg font-semibold text-[#E5E2E1] mb-1">プロフィール写真</h2>
+            <p class="text-xs text-[#C7C4D8] mb-4">PNG / JPG / GIF を設定できます</p>
+
+            <%# TODO: avatarアップロード機能（ActiveStorage）を実装
+                - Userモデルに has_one_attached :avatar を追加
+                - deviseのstrong paramsに :avatar を許可
+                - 画像サイズ制限・バリデーション追加（任意） %>
+            <%= f.file_field :avatar,
+                  class: "block w-full text-sm text-[#C7C4D8] file:mr-4 file:rounded-lg file:border-0 file:bg-[#353534] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[#C0C1FF] hover:file:bg-[#393939]" %>
           </div>
         </div>
+      </div>
 
-        <div class="text-center md:text-left w-full">
-          <h2 class="text-lg font-semibold text-[#E5E2E1] mb-1">プロフィール写真</h2>
-          <p class="text-xs text-[#C7C4D8] mb-4">PNG / JPG / GIF を設定できます</p>
-
-          <%# TODO: avatarアップロード機能（ActiveStorage）を実装
-              - Userモデルに has_one_attached :avatar を追加
-              - deviseのstrong paramsに :avatar を許可
-              - 画像サイズ制限・バリデーション追加（任意） %>
-          <%= f.file_field :avatar,
-                class: "block w-full text-sm text-[#C7C4D8] file:mr-4 file:rounded-lg file:border-0 file:bg-[#353534] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[#C0C1FF] hover:file:bg-[#393939]" %>
+      <div class="p-8 space-y-8">
+        <div class="space-y-2">
+          <%# TODO: ユーザー名更新を有効化
+              - devise_parameter_sanitizerで :name を許可
+              - バリデーション（任意：文字数制限など）を追加 %>
+          <%= render "shared/ui/text_field",
+                f: f,
+                attribute: :name,
+                label: "ユーザー名",
+                icon: "person",
+                field_type: :text_field,
+                placeholder: "例: recify_user_01",
+                autocomplete: "name",
+                with_icon: true,
+                highlight_variant: :default,
+                show_error_message: true,
+                input_class: "border border-white/10 px-4 py-3 pl-12 placeholder:text-[#C7C4D8]/40 focus:ring-4 focus:ring-[#C0C1FF]/10 focus:border-[#C0C1FF]",
+                label_class: "text-sm font-bold tracking-wider uppercase px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
         </div>
       </div>
-    </div>
 
-    <div class="p-8 space-y-8">
-      <div class="space-y-2">
-        <%# TODO: ユーザー名更新を有効化
-            - devise_parameter_sanitizerで :name を許可
-            - バリデーション（任意：文字数制限など）を追加 %>
-        <%= f.label :name, "ユーザー名", class: "block text-sm font-bold text-[#C7C4D8] tracking-wider uppercase" %>
-        <div class="relative">
-          <%= f.text_field :name,
-                class: "w-full bg-[#0E0E0E] border border-white/10 rounded-lg px-4 py-3 text-[#E5E2E1] placeholder:text-[#C7C4D8]/40 focus:ring-4 focus:ring-[#C0C1FF]/10 focus:border-[#C0C1FF] transition-all outline-none",
-                placeholder: "例: recify_user_01" %>
-        </div>
+      <div class="bg-[#2A2A2A]/50 p-6 flex flex-col-reverse md:flex-row justify-end gap-3">
+        <%= render "shared/ui/button",
+              as: :link,
+              href: settings_path,
+              label: "キャンセル",
+              variant: :secondary,
+              class: "px-8 py-3" %>
+
+        <%# TODO: 更新後の挙動
+            - 更新成功時：settingsページへリダイレクト
+            - 更新失敗時：エラーメッセージ表示 %>
+        <%= render "shared/ui/button",
+              label: "変更を保存",
+              variant: :primary,
+              type: "submit",
+              disable_with: "保存中...",
+              class: "px-10 py-3 font-bold" %>
       </div>
-    </div>
-
-    <div class="bg-[#2A2A2A]/50 p-6 flex flex-col-reverse md:flex-row justify-end gap-3">
-      <%= link_to settings_path,
-            class: "inline-flex items-center justify-center bg-[#353534] text-[#E5E2E1] font-semibold px-8 py-3 rounded-lg border border-white/10 hover:bg-[#393939] transition-all active:scale-95" do %>
-        キャンセル
-      <% end %>
-
-      <%# TODO: 更新後の挙動
-          - 更新成功時：settingsページへリダイレクト
-          - 更新失敗時：エラーメッセージ表示 %>
-      <%= f.submit "変更を保存",
-            class: "bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-bold px-10 py-3 rounded-lg shadow-xl shadow-[#C0C1FF]/10 hover:opacity-90 transition-all active:scale-95 cursor-pointer" %>
-    </div>
+    <% end %>
   <% end %>
 </section>
