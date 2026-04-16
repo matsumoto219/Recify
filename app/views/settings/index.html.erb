@@ -47,18 +47,17 @@
             class: "mb-6" %>
 
       <div class="space-y-3">
-        <%# TODO: 本実装では ExternalServiceStatus から状態を取得し、リアルタイム更新（Turbo Streams or polling）に対応する %>
-        <%# 例: state: @ocr_service_status.state.to_sym, text: service_status_label(@ocr_service_status) %>
+        <%# TODO: 本実装では ExternalServiceStatus から状態を取得する %>
+        <%# v0.5: 監視ジョブ（ExternalServiceStatus + 定期APIチェック）と連携し、状態を自動更新する %>
+        <%# 表示更新は Turbo Streams または polling でリアルタイム反映する想定 %>
+        <%# 例: state: @ocr_service_status.state.to_sym %>
         <%= render "shared/ui/status_badge",
-              label: "OCR Status",
-              state: :ok,
-              text: "OCR 利用可能" %>
+              label: "OCRサービス",
+              state: @ocr_state %>
 
-        <%# TODO: AI側も同様に動的状態へ置き換える %>
         <%= render "shared/ui/status_badge",
-              label: "AI Status",
-              state: :degraded,
-              text: "AI 不安定" %>
+              label: "AIサービス",
+              state: @ai_state %>
       </div>
     <% end %>
 
