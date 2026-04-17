@@ -115,7 +115,7 @@
           </div>
 
           <p class="text-[11px] text-[#C7C4D8]/60 leading-relaxed">
-            ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨しています。
+            ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨します。
           </p>
         </div>
       </div>
@@ -138,8 +138,8 @@
               remote: true %>
 
         <%= render "shared/ui/toggle_switch",
-              label: "商品名AI補完",
-              description: "商品名をAIが補完します。商品名によっては補完されない場合があります。<br>補完内容は正確でない可能性があるため、内容を確認してください。".html_safe,
+              label: "AI補完機能",
+              description: "商品名をAIが補完します。名称によっては補完されない場合があります。<br>補完内容は正確でない可能性があるため、内容を確認してください。".html_safe,
               checked: current_user.product_name_ai_completion_enabled,
               name: "product_name_ai_completion_enabled",
               url: settings_path,

@@ -1,11 +1,19 @@
-<section class="max-w-3xl mx-auto px-4 md:px-2 py-6 pb-28 md:pb-6 space-y-8">
+<%
+  form_resource_for_error_state = defined?(resource) && resource.present? ? resource : current_user
+  security_form_error = params[:update_context] == "security" && form_resource_for_error_state.errors.any?
+%>
+<section
+  class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
+  data-controller="security-scroll"
+  data-security-scroll-scroll-to-password-value="<%= security_form_error %>"
+>
   <!-- START: settings/security page header -->
   <%= render "shared/ui/section_header",
         title: "セキュリティ",
         subtitle: "アカウントの安全性を管理します",
         title_size: "text-3xl",
         subtitle_size: "text-base",
-        class: "mb-6" %>
+        class: "px-4 md:px-0" %>
   <!-- END: settings/security page header -->
 
   <%# TODO: フラッシュメッセージ表示（成功/失敗）
@@ -14,182 +22,185 @@
       - エラー時: エラーメッセージ一覧 %>
 
   <!-- START: settings/security email card -->
-  <div id="email" class="scroll-mt-24">
-    <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
-    <%= render "shared/ui/section_header",
-          icon: "mail",
-          title: "メールアドレス",
-          title_size: "text-xl",
-          class: "mb-4" %>
+  <div class="space-y-6">
+    <div id="email" class="scroll-mt-24">
+      <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+        <%= render "shared/ui/section_header",
+              icon: "mail",
+              title: "メールアドレス",
+              title_size: "text-xl",
+              class: "mb-4" %>
 
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg">
-      <div>
-        <p class="text-xs text-[#C7C4D8] mb-1">現在のメールアドレス</p>
-        <p class="text-white font-medium"><%= current_user.email %></p>
-      </div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg">
+          <div>
+            <p class="text-xs text-[#C7C4D8] mb-1">現在のメールアドレス</p>
+            <p class="text-white font-medium"><%= current_user.email %></p>
+          </div>
 
-      <%# TODO: メールアドレス変更機能を実装
-          - Deviseのconfirmableを利用
-          - 再認証（current_password）を必須化
-          - 変更確認メール送信 %>
-      <%= render "shared/ui/button",
-            label: "変更する（未対応）",
-            variant: :secondary,
-            size: :md,
-            disabled: true,
-            text_color: "text-[#918FA1]",
-            class: "px-5 py-2" %>
-    </div>
-
-    <p class="mt-4 text-sm text-[#C7C4D8]/80">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
-    <% end %>
-  </div>
-  <!-- END: settings/security email card -->
-
-  <!-- START: settings/security password card -->
-  <div id="password" class="scroll-mt-24">
-    <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
-    <%= render "shared/ui/section_header",
-          icon: "lock",
-          title: "パスワード変更",
-          title_size: "text-xl",
-          class: "mb-6" %>
-
-    <%
-      form_resource = defined?(resource) && resource.present? ? resource : current_user
-      form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
-    %>
-    <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
-      <%= hidden_field_tag :update_context, "security" %>
-      <%# TODO: 入力クリア
-          - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
-          - パスワードが画面に残らないようにする %>
-      <div class="space-y-6">
-        <%= render "shared/ui/text_field",
-              f: f,
-              attribute: :current_password,
-              label: "現在のパスワード",
-              icon: "lock",
-              field_type: :password_field,
-              placeholder: "••••••••",
-              autocomplete: "current-password",
-              with_icon: true,
-              highlight_variant: :default,
-              show_error_message: true,
-              input_class: "px-4 py-3 pl-12",
-              label_class: "text-sm font-medium normal-case tracking-normal px-0",
-              error_message_class: "px-0",
-              input_wrapper_class: "" %>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <%= render "shared/ui/text_field",
-                f: f,
-                attribute: :password,
-                label: "新しいパスワード",
-                icon: "password",
-                field_type: :password_field,
-                placeholder: "••••••••",
-                autocomplete: "new-password",
-                with_icon: true,
-                highlight_variant: :default,
-                show_error_message: true,
-                input_class: "px-4 py-3 pl-12",
-                label_class: "text-sm font-medium normal-case tracking-normal px-0",
-                error_message_class: "px-0",
-                input_wrapper_class: "" %>
-
-          <%= render "shared/ui/text_field",
-                f: f,
-                attribute: :password_confirmation,
-                label: "確認用パスワード",
-                icon: "password",
-                field_type: :password_field,
-                placeholder: "••••••••",
-                autocomplete: "new-password",
-                with_icon: true,
-                highlight_variant: :default,
-                show_error_message: true,
-                input_class: "px-4 py-3 pl-12",
-                label_class: "text-sm font-medium normal-case tracking-normal px-0",
-                error_message_class: "px-0",
-                input_wrapper_class: "" %>
-        </div>
-
-        <%# TODO: エラーメッセージ表示
-            - resource.errors.full_messages を表示
-            - current_password不一致やバリデーションエラーを表示 %>
-
-        <%# TODO: パスワード強度表示（後で実装）
-            - 強度バー（弱/中/強）
-            - 最低文字数や記号チェック %>
-
-        <div class="pt-2">
+          <%# TODO: メールアドレス変更機能を実装
+              - Deviseのconfirmableを利用
+              - 再認証（current_password）を必須化
+              - 変更確認メール送信 %>
           <%= render "shared/ui/button",
-                label: "パスワードを保存",
-                variant: :primary,
-                type: "submit",
-                disable_with: "保存中...",
-                class: "px-6 py-2.5 font-bold" %>
+                label: "変更する（未対応）",
+                variant: :secondary,
+                size: :md,
+                disabled: true,
+                text_color: "text-[#918FA1]",
+                class: "px-5 py-2" %>
         </div>
-      </div>
-    <% end %>
 
-    <p class="mt-4 text-sm text-[#C7C4D8]/80">安全のため、定期的にパスワードを変更してください。</p>
-    <% end %>
-  </div>
-  <!-- END: settings/security password card -->
+        <p class="mt-4 text-sm text-[#C7C4D8]/80">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
+      <% end %>
+    </div>
+    <!-- END: settings/security email card -->
 
-  <!-- START: settings/security auth options grid -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <!-- START: settings/security 2fa card -->
-    <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
-      <div>
-        <div class="flex items-center justify-between mb-4">
-          <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
-          <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+    <!-- START: settings/security password card -->
+    <div id="password" class="scroll-mt-24">
+      <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+        <%= render "shared/ui/section_header",
+              icon: "lock",
+              title: "パスワード変更",
+              title_size: "text-xl",
+              class: "mb-6" %>
+
+        <%
+          form_resource = defined?(resource) && resource.present? ? resource : current_user
+          form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
+        %>
+        <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
+          <%= hidden_field_tag :update_context, "security" %>
+          <%# TODO: 入力クリア
+              - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
+              - パスワードが画面に残らないようにする %>
+          <div class="space-y-6">
+            <%= render "shared/ui/text_field",
+                  f: f,
+                  attribute: :current_password,
+                  label: "現在のパスワード",
+                  icon: "lock",
+                  field_type: :password_field,
+                  placeholder: "••••••••",
+                  autocomplete: "current-password",
+                  autofocus: security_form_error,
+                  with_icon: true,
+                  highlight_variant: :default,
+                  show_error_message: true,
+                  input_class: "px-4 py-3 pl-12",
+                  label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                  error_message_class: "px-0",
+                  input_wrapper_class: "" %>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <%= render "shared/ui/text_field",
+                    f: f,
+                    attribute: :password,
+                    label: "新しいパスワード",
+                    icon: "password",
+                    field_type: :password_field,
+                    placeholder: "••••••••",
+                    autocomplete: "new-password",
+                    with_icon: true,
+                    highlight_variant: :default,
+                    show_error_message: true,
+                    input_class: "px-4 py-3 pl-12",
+                    label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                    error_message_class: "px-0",
+                    input_wrapper_class: "" %>
+
+              <%= render "shared/ui/text_field",
+                    f: f,
+                    attribute: :password_confirmation,
+                    label: "確認用パスワード",
+                    icon: "password",
+                    field_type: :password_field,
+                    placeholder: "••••••••",
+                    autocomplete: "new-password",
+                    with_icon: true,
+                    highlight_variant: :default,
+                    show_error_message: true,
+                    input_class: "px-4 py-3 pl-12",
+                    label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                    error_message_class: "px-0",
+                    input_wrapper_class: "" %>
+            </div>
+
+            <%# TODO: エラーメッセージ表示
+                - resource.errors.full_messages を表示
+                - current_password不一致やバリデーションエラーを表示 %>
+
+            <%# TODO: パスワード強度表示（後で実装）
+                - 強度バー（弱/中/強）
+                - 最低文字数や記号チェック %>
+
+            <div class="pt-2">
+              <%= render "shared/ui/button",
+                    label: "パスワードを保存",
+                    variant: :primary,
+                    type: "submit",
+                    disable_with: "保存中...",
+                    class: "px-6 py-2.5 font-bold" %>
+            </div>
+          </div>
+        <% end %>
+
+        <p class="mt-4 text-sm text-[#C7C4D8]/80">安全のため、定期的にパスワードを変更してください。</p>
+      <% end %>
+    </div>
+    <!-- END: settings/security password card -->
+
+    <!-- START: settings/security auth options grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- START: settings/security 2fa card -->
+      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
+            <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+          </div>
+          <h3 class="text-lg font-semibold text-white mb-2">2要素認証 (2FA)</h3>
+          <p class="text-sm text-[#C7C4D8] mb-6">認証アプリを使用して、セキュリティを強化します。</p>
         </div>
-        <h3 class="text-lg font-semibold text-white mb-2">2要素認証 (2FA)</h3>
-        <p class="text-sm text-[#C7C4D8] mb-6">認証アプリを使用して、セキュリティを強化します。</p>
-      </div>
 
-      <%# TODO: 2FA実装（TOTP）
-          - QRコード生成
-          - シークレット保存
-          - 有効/無効切り替え %>
-      <%= render "shared/ui/button",
-            label: "有効化する（未対応）",
-            variant: :secondary,
-            full_width: true,
-            disabled: true,
-            text_color: "text-[#C0C1FF]",
-            class: "py-2.5 border-[#C0C1FF]/20" %>
-    <% end %>
-    <!-- END: settings/security 2fa card -->
+        <%# TODO: 2FA実装（TOTP）
+            - QRコード生成
+            - シークレット保存
+            - 有効/無効切り替え %>
+        <%= render "shared/ui/button",
+              label: "有効化する（未対応）",
+              variant: :secondary,
+              full_width: true,
+              disabled: true,
+              text_color: "text-[#C0C1FF]",
+              class: "py-2.5 border-[#C0C1FF]/20" %>
+      <% end %>
+      <!-- END: settings/security 2fa card -->
 
-    <!-- START: settings/security passkey card -->
-    <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
-      <div>
-        <div class="flex items-center justify-between mb-4">
-          <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
-          <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+      <!-- START: settings/security passkey card -->
+      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
+            <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+          </div>
+          <h3 class="text-lg font-semibold text-white mb-2">パスキー</h3>
+          <p class="text-sm text-[#C7C4D8] mb-6">指紋や顔認証で安全にログインできます。</p>
         </div>
-        <h3 class="text-lg font-semibold text-white mb-2">パスキー</h3>
-        <p class="text-sm text-[#C7C4D8] mb-6">指紋や顔認証で安全にログインできます。</p>
-      </div>
 
-      <%# TODO: Passkey実装（WebAuthn）
-          - credential登録
-          - デバイス管理
-          - ログイン連携 %>
-      <%= render "shared/ui/button",
-            label: "登録する（未対応）",
-            variant: :secondary,
-            full_width: true,
-            disabled: true,
-            text_color: "text-[#C0C1FF]",
-            class: "py-2.5 border-[#C0C1FF]/20" %>
-    <% end %>
-    <!-- END: settings/security passkey card -->
+        <%# TODO: Passkey実装（WebAuthn）
+            - credential登録
+            - デバイス管理
+            - ログイン連携 %>
+        <%= render "shared/ui/button",
+              label: "登録する（未対応）",
+              variant: :secondary,
+              full_width: true,
+              disabled: true,
+              text_color: "text-[#C0C1FF]",
+              class: "py-2.5 border-[#C0C1FF]/20" %>
+      <% end %>
+      <!-- END: settings/security passkey card -->
+    </div>
   </div>
   <!-- END: settings/security auth options grid -->
 

@@ -10,13 +10,16 @@ export default class extends Controller {
   }
 
   connect() {
+    this.isLoading = false
     this.syncFromValue()
   }
 
   toggle() {
+    if (this.isLoading) return
     const nextChecked = !this.checkedValue
     this.checkedValue = nextChecked
     this.syncFromValue()
+    this.startLoading()
     this.save()
   }
 
@@ -47,29 +50,49 @@ export default class extends Controller {
   async save() {
     const token = document.querySelector('meta[name="csrf-token"]')?.content
 
-    const response = await fetch(this.urlValue, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": token,
-        "Accept": "text/vnd.turbo-stream.html"
-      },
-      body: JSON.stringify({
-        user: {
-          [this.nameValue]: this.checkedValue
-        }
+    try {
+      const response = await fetch(this.urlValue, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": token,
+          "Accept": "text/vnd.turbo-stream.html"
+        },
+        body: JSON.stringify({
+          user: {
+            [this.nameValue]: this.checkedValue
+          }
+        })
       })
-    })
 
-    const responseBody = await response.text()
+      const responseBody = await response.text()
 
-    if (responseBody.length > 0) {
-      Turbo.renderStreamMessage(responseBody)
-    }
+      if (responseBody.length > 0) {
+        Turbo.renderStreamMessage(responseBody)
+      }
 
-    if (!response.ok) {
+      if (!response.ok) {
+        this.checkedValue = !this.checkedValue
+        this.syncFromValue()
+      }
+    } catch (_error) {
       this.checkedValue = !this.checkedValue
       this.syncFromValue()
+    } finally {
+      this.stopLoading()
+    }
+  }
+  startLoading() {
+    this.isLoading = true
+    if (this.hasTrackTarget) {
+      this.trackTarget.classList.add("opacity-60", "pointer-events-none")
+    }
+  }
+
+  stopLoading() {
+    this.isLoading = false
+    if (this.hasTrackTarget) {
+      this.trackTarget.classList.remove("opacity-60", "pointer-events-none")
     }
   }
 }

@@ -47,21 +47,25 @@
 
   <button
     type="button"
-    class="<%= track_classes %>"
+    class="inline-flex items-center justify-center p-2 -m-2 shrink-0"
     role="switch"
     aria-checked="<%= checked %>"
     <% if input_id.present? %>aria-controls="<%= input_id %>"<% end %>
     <%= "disabled" if disabled %>
     <% if controller_data_enabled && !disabled %>
       data-action="click->settings-toggle#toggle"
-      data-settings-toggle-target="track"
     <% end %>
   >
     <span
-      class="<%= thumb_classes %>"
-      aria-hidden="true"
-      <% if controller_data_enabled %>data-settings-toggle-target="thumb"<% end %>
-    ></span>
+      class="<%= track_classes %>"
+      <% if controller_data_enabled %>data-settings-toggle-target="track"<% end %>
+    >
+      <span
+        class="<%= thumb_classes %>"
+        aria-hidden="true"
+        <% if controller_data_enabled %>data-settings-toggle-target="thumb"<% end %>
+      ></span>
+    </span>
   </button>
 
   <% if input_name.present? %>
