@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_17_053017) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_17_064823) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -109,6 +109,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_17_053017) do
     t.string "encrypted_password", default: "", null: false
     t.boolean "guest"
     t.string "name"
+    t.boolean "product_name_ai_completion_enabled", default: false, null: false
     t.boolean "push_notification_enabled", default: false, null: false
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"

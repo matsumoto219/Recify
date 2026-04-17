@@ -97,7 +97,10 @@ class ReceiptAnalysisService
   end
 
   def run_ai_enrichment(ocr_result)
-    ai_result = ReceiptAiEnrichmentService.call(ocr_result)
+    ai_result = ReceiptAiEnrichmentService.call(
+      ocr_result,
+      ai_name_completion_enabled: ai_name_completion_enabled?
+    )
     normalized = normalize_ai_result(ai_result)
 
     Rails.logger.info(
@@ -114,6 +117,11 @@ class ReceiptAnalysisService
     #
     # ReceiptAiEnrichmentService は現在、例外をそのまま上げず ResultTemplate.error を返す設計へ寄せている。
     # そのためこの rescue は現状ほぼ通らないが、直前の挙動との差分確認用に一旦コメントで残す。
+  end
+
+  # 商品名AI補完
+  def ai_name_completion_enabled?
+    receipt.user&.product_name_ai_completion_enabled == true
   end
 
   def normalize_ai_result(result)

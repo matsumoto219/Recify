@@ -5,13 +5,14 @@ module Ai
     MAX_PURCHASE_CANDIDATES = 5
 
     class << self
-      def build(ocr_result)
-        new(ocr_result).build
+      def build(ocr_result, ai_name_completion_enabled: false)
+        new(ocr_result, ai_name_completion_enabled: ai_name_completion_enabled).build
       end
     end
 
-    def initialize(ocr_result)
+    def initialize(ocr_result, ai_name_completion_enabled: false)
       @ocr_result = ocr_result || {}
+      @ai_name_completion_enabled = ai_name_completion_enabled == true
     end
 
     def build
@@ -29,7 +30,7 @@ module Ai
 
     private
 
-    attr_reader :ocr_result
+    attr_reader :ocr_result, :ai_name_completion_enabled
 
     def success?
       fetch(ocr_result, :success) == true
@@ -97,7 +98,7 @@ module Ai
         line_count: lines.length,
         item_count: build_items_payload.length,
         confidence_summary: build_confidence_summary,
-        ai_name_completion_enabled: ocr_result.dig(:meta, :ai_name_completion_enabled) == true  # 仮実装
+        ai_name_completion_enabled: ai_name_completion_enabled
       }.compact
     end
 
