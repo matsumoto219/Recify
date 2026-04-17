@@ -90,12 +90,11 @@
   class="<%= surface_classes %>"
   role="alert"
   aria-live="polite"
-  data-notice-surface
-  data-notice-animation="<%= animation_name %>"
-  data-notice-auto-dismiss="<%= auto_dismiss %>"
-  data-notice-type="<%= notice_type %>"
-  data-notice-auto-dismiss-delay="<%= resolved_auto_dismiss_delay %>"
-  data-notice-max-visible="<%= max_visible %>"
+  data-controller="notice-surface"
+  data-notice-surface-animation-value="<%= animation_name %>"
+  data-notice-surface-auto-dismiss-value="<%= auto_dismiss %>"
+  data-notice-surface-auto-dismiss-delay-value="<%= resolved_auto_dismiss_delay %>"
+  data-notice-surface-max-visible-value="<%= max_visible %>"
 >
   <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_bg] %> flex items-center justify-center <%= tone[:icon_color] %>">
     <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= tone[:icon] %></span>
@@ -120,70 +119,12 @@
       type="button"
       class="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100"
       aria-label="閉じる"
-      onclick="(function(){const el=this.closest('[data-notice-surface]'); if(!el) return; const animation=el.dataset.noticeAnimation; el.classList.add('opacity-0'); if(animation==='slide_right'){el.classList.add('translate-x-full');} else {el.classList.add('-translate-y-2');} setTimeout(()=>el.remove(),250);}).call(this)"
+      data-action="click->notice-surface#close"
     >close</button>
   <% end %>
 </div>
 
-<%# TODO: このscriptは将来 app/javascript/controllers/notice_surface_controller.js へ移動する %>
-<%# TODO: notice_surface の出現 / 自動削除 / 上限制御 / 手動クローズを controller 側で管理する %>
-<%# TODO: inline script は暫定実装。将来はこのパーツ専用の Stimulus からのみ呼び出す %>
 <%# TODO: リアルタイム通知対応（将来） %>
 <%# TODO: Turbo Stream / ActionCable / polling で非同期処理完了を即時反映する %>
 <%# TODO: OCR完了 / AI補完完了 / OCR失敗 / AI失敗 / 画像エラー通知をその場で追加表示する %>
 <%# TODO: 通知boxとは役割を分け、一時通知のみ toast で扱う %>
-
-<script>
-  (() => {
-    const runNoticeSurface = () => {
-      const nodes = Array.from(document.querySelectorAll("[data-notice-surface]"));
-
-      nodes.forEach((el) => {
-        if (el.dataset.noticeInitialized === "true") return;
-        el.dataset.noticeInitialized = "true";
-
-        const animation = el.dataset.noticeAnimation;
-        const autoDismiss = el.dataset.noticeAutoDismiss === "true";
-        const autoDismissDelay = Number(el.dataset.noticeAutoDismissDelay || 0);
-        const maxVisible = Number(el.dataset.noticeMaxVisible || 0);
-
-        if (maxVisible > 0) {
-          const sameGroup = Array.from(
-            document.querySelectorAll(
-              `[data-notice-surface][data-notice-max-visible='${maxVisible}']`
-            )
-          );
-
-          if (sameGroup.length > maxVisible && sameGroup[0] === el) {
-            el.remove();
-            return;
-          }
-        }
-
-        requestAnimationFrame(() => {
-          if (animation === "slide_right") {
-            el.classList.remove("opacity-0", "translate-x-full");
-          } else if (animation === "slide_down") {
-            el.classList.remove("opacity-0", "-translate-y-4");
-          } else {
-            el.classList.remove("opacity-0");
-          }
-        });
-
-        if (autoDismiss) {
-          const timeout = autoDismissDelay > 0 ? autoDismissDelay : 4000;
-
-          setTimeout(() => {
-            if (!el.isConnected) return;
-            el.classList.add("opacity-0", "-translate-y-2");
-            setTimeout(() => el.remove(), 250);
-          }, timeout);
-        }
-      });
-    };
-
-    document.addEventListener("turbo:load", runNoticeSurface);
-    document.addEventListener("turbo:render", runNoticeSurface);
-    document.addEventListener("DOMContentLoaded", runNoticeSurface);
-  })();
-</script>
