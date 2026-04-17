@@ -160,7 +160,7 @@
         <div class="flex flex-col sm:flex-row gap-4">
           <%= button_to user_registration_path,
                         method: :delete,
-                        data: { turbo_confirm: "退会するとアカウントに紐づくデータが削除されます。よろしいですか？" },
+                        data: { turbo_confirm: "退会すると、アカウントに紐づくすべてのデータが削除されます。\nこの操作は取り消すことができませんのでご注意ください。\n必要なレシートは事前にダウンロードすることをおすすめします。\n\n本当にアカウントを削除してもよろしいですか？" },
                         class: "contents" do %>
             <%= render "shared/ui/button",
                   as: :content,
