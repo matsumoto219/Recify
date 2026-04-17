@@ -1,19 +1,19 @@
-<section class="max-w-2xl mx-auto px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "shared/ui/section_header",
         title: "プロフィール",
         subtitle: "ユーザー情報を編集できます",
-        title_size: "text-3xl md:text-4xl",
+        title_size: "text-3xl",
         subtitle_size: "text-base",
-        class: "mb-10 text-center md:text-left px-4 md:px-0" %>
+        class: "px-4 md:px-0" %>
 
-  <%= render "shared/ui/surface_card" do %>
+  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
     <%
       form_resource = defined?(resource) && resource.present? ? resource : current_user
       form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
     %>
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, html: { multipart: true } do |f| %>
       <%= hidden_field_tag :update_context, "account" %>
-      <div class="p-8 border-b border-white/10">
+      <div class="space-y-6 p-8 border-b border-white/10">
         <div class="flex flex-col md:flex-row items-center gap-6" data-controller="avatar-preview">
           <div class="relative group">
             <% display_name = (form_resource.name.presence || form_resource.email).to_s %>
@@ -75,30 +75,28 @@
         </div>
       </div>
 
-      <div class="p-8 space-y-8">
-        <div class="space-y-2">
-          <%# TODO: ユーザー名更新を有効化
-              - devise_parameter_sanitizerで :name を許可
-              - バリデーション（任意：文字数制限など）を追加 %>
-          <%= render "shared/ui/text_field",
-                f: f,
-                attribute: :name,
-                label: "ユーザー名",
-                icon: "person",
-                field_type: :text_field,
-                placeholder: "任意のユーザー名を入力",
-                autocomplete: "name",
-                with_icon: true,
-                highlight_variant: :default,
-                show_error_message: true,
-                input_class: "px-4 py-3 pl-12 placeholder:text-[#C7C4D8]/40",
-                label_class: "text-sm font-bold tracking-wider uppercase px-0",
-                error_message_class: "px-0",
-                input_wrapper_class: "" %>
-        </div>
+      <div class="space-y-6 -mx-8 px-8 py-8">
+        <%# TODO: ユーザー名更新を有効化
+            - devise_parameter_sanitizerで :name を許可
+            - バリデーション（任意：文字数制限など）を追加 %>
+        <%= render "shared/ui/text_field",
+              f: f,
+              attribute: :name,
+              label: "ユーザー名",
+              icon: "person",
+              field_type: :text_field,
+              placeholder: "任意のユーザー名を入力",
+              autocomplete: "name",
+              with_icon: true,
+              highlight_variant: :default,
+              show_error_message: true,
+              input_class: "px-4 py-3 pl-12",
+              label_class: "text-sm font-medium normal-case tracking-normal px-0",
+              error_message_class: "px-0",
+              input_wrapper_class: "" %>
       </div>
 
-      <div class="bg-[#2A2A2A]/50 p-6 flex flex-col-reverse md:flex-row justify-end gap-3">
+      <div class="bg-[#2A2A2A]/50 -mx-8 -mb-8 px-8 py-6 flex flex-col-reverse md:flex-row justify-end gap-3">
         <%= render "shared/ui/button",
               as: :link,
               href: settings_path,
