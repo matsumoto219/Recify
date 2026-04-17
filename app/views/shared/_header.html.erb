@@ -32,12 +32,13 @@
           <%# <p class="text-[10px] text-[#C7C4D8]">スタンダードプラン</p> %>
         </div>
 
-        <%# TODO: アバター機能（未実装）
-            - 将来は画像アップロード（ActiveStorage）対応
-            - 未登録時はユーザー名1文字 or メール先頭1文字を表示 %>
-        <div class="w-8 h-8 rounded-full border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
-          <% display_name = (current_user.name.presence || current_user.email).to_s %>
-          <%= display_name[0,1]&.upcase || "U" %>
+        <div class="w-8 h-8 rounded-full overflow-hidden border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
+          <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
+            <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
+          <% else %>
+            <% display_name = (current_user.name.presence || current_user.email).to_s %>
+            <%= display_name[0,1]&.upcase || "U" %>
+          <% end %>
         </div>
 
         <%= link_to destroy_user_session_path,

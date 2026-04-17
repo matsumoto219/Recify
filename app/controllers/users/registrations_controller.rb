@@ -45,7 +45,10 @@ class Users::RegistrationsController < Devise::RegistrationsController
       if security_update
         update_resource(resource, account_update_params)
       else
-        resource.update_without_password(account_update_params.except(:current_password, :password, :password_confirmation))
+        profile_params = account_update_params.except(:current_password, :password, :password_confirmation)
+        resource_updated = resource.update_without_password(profile_params)
+        resource.avatar.purge if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present? && resource.avatar.attached?
+        resource_updated
       end
     )
 
@@ -94,6 +97,10 @@ class Users::RegistrationsController < Devise::RegistrationsController
   def password_update_request?
     account_update_params[:password].present? ||
       account_update_params[:password_confirmation].present?
+  end
+
+  def remove_avatar_requested?
+    params[:remove_avatar] == "1"
   end
 
   # If you have extra params to permit, append them to the sanitizer.
