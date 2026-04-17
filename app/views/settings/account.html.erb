@@ -7,7 +7,12 @@
         class: "mb-10 text-center md:text-left px-4 md:px-0" %>
 
   <%= render "shared/ui/surface_card" do %>
-    <%= form_with model: current_user, url: user_registration_path, method: :patch, html: { multipart: true } do |f| %>
+    <%
+      form_resource = defined?(resource) && resource.present? ? resource : current_user
+      form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
+    %>
+    <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, html: { multipart: true } do |f| %>
+      <%= hidden_field_tag :update_context, "account" %>
       <div class="p-8 border-b border-white/10">
         <div class="flex flex-col md:flex-row items-center gap-6">
           <div class="relative group">
@@ -47,12 +52,12 @@
                 label: "ユーザー名",
                 icon: "person",
                 field_type: :text_field,
-                placeholder: "例: recify_user_01",
+                placeholder: "任意のユーザー名を入力",
                 autocomplete: "name",
                 with_icon: true,
                 highlight_variant: :default,
                 show_error_message: true,
-                input_class: "border border-white/10 px-4 py-3 pl-12 placeholder:text-[#C7C4D8]/40 focus:ring-4 focus:ring-[#C0C1FF]/10 focus:border-[#C0C1FF]",
+                input_class: "px-4 py-3 pl-12 placeholder:text-[#C7C4D8]/40",
                 label_class: "text-sm font-bold tracking-wider uppercase px-0",
                 error_message_class: "px-0",
                 input_wrapper_class: "" %>

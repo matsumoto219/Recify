@@ -6,6 +6,8 @@ class User < ApplicationRecord
 
   has_many :receipts, dependent: :destroy
 
+  validates :name, length: { maximum: 30 }, allow_blank: true
+
   def self.guest!
     create!(
       email: "guest_#{SecureRandom.hex(8)}@example.com",

@@ -57,6 +57,7 @@
       form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
     %>
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
+      <%= hidden_field_tag :update_context, "security" %>
       <%# TODO: 入力クリア
           - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
           - パスワードが画面に残らないようにする %>
