@@ -28,8 +28,6 @@
       <div class="flex items-center gap-3 border-l border-white/10 pl-4 md:pl-6">
         <div class="text-right hidden sm:block">
           <p class="text-xs font-bold text-[#E5E2E1]"><%= current_user.name.presence || current_user.email %></p>
-          <%# TODO: 将来のプラン表示（例: Free / Standard / Pro）。現在は未使用のためコメントアウト %>
-          <%# <p class="text-[10px] text-[#C7C4D8]">スタンダードプラン</p> %>
         </div>
 
         <div class="w-8 h-8 rounded-full overflow-hidden border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
@@ -42,8 +40,12 @@
         </div>
 
         <%= link_to destroy_user_session_path,
-          data: { turbo_method: :delete },
-          class: "text-[0.75rem] text-[#C7C4D8] hover:text-[#FFB4AB] transition-colors ml-1" do %>
+          data: {
+            turbo_method: :delete,
+            turbo_confirm: "ログアウトしますか？"
+          },
+          class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] text-[#C7C4D8] hover:text-[#FFB4AB] transition-colors ml-1 rounded-md" do %>
+          <span class="material-symbols-outlined text-[16px]">logout</span>
           ログアウト
         <% end %>
       </div>
