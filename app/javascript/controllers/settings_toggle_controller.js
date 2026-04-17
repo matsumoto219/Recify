@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { Turbo } from "@hotwired/turbo-rails"
 
 export default class extends Controller {
   static targets = ["checkbox", "hidden", "track", "thumb"]
@@ -51,7 +52,7 @@ export default class extends Controller {
       headers: {
         "Content-Type": "application/json",
         "X-CSRF-Token": token,
-        "Accept": "application/json"
+        "Accept": "text/vnd.turbo-stream.html"
       },
       body: JSON.stringify({
         user: {
@@ -59,6 +60,12 @@ export default class extends Controller {
         }
       })
     })
+
+    const responseBody = await response.text()
+
+    if (responseBody.length > 0) {
+      Turbo.renderStreamMessage(responseBody)
+    }
 
     if (!response.ok) {
       this.checkedValue = !this.checkedValue

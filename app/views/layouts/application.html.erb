@@ -27,7 +27,9 @@
   </head>
 
   <body class="bg-[#131313] text-[#e5e2e1]">
-    <%= render "shared/flash" %>
+    <div id="flash">
+      <%= render "shared/flash" %>
+    </div>
 
     <% show_dashboard_shell = user_signed_in? && !(controller_name == "home" && action_name == "index") %>
 
