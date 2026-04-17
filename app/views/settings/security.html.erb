@@ -14,7 +14,8 @@
       - エラー時: エラーメッセージ一覧 %>
 
   <!-- START: settings/security email card -->
-  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+  <div id="email" class="scroll-mt-24">
+    <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
     <%= render "shared/ui/section_header",
           icon: "mail",
           title: "メールアドレス",
@@ -41,11 +42,13 @@
     </div>
 
     <p class="mt-4 text-sm text-[#C7C4D8]/80">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
-  <% end %>
+    <% end %>
+  </div>
   <!-- END: settings/security email card -->
 
   <!-- START: settings/security password card -->
-  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+  <div id="password" class="scroll-mt-24">
+    <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
     <%= render "shared/ui/section_header",
           icon: "lock",
           title: "パスワード変更",
@@ -132,7 +135,8 @@
     <% end %>
 
     <p class="mt-4 text-sm text-[#C7C4D8]/80">安全のため、定期的にパスワードを変更してください。</p>
-  <% end %>
+    <% end %>
+  </div>
   <!-- END: settings/security password card -->
 
   <!-- START: settings/security auth options grid -->

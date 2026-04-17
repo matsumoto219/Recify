@@ -72,18 +72,20 @@
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-3">
-          <%# TODO: メールアドレス変更機能を実装する %>
           <%= render "shared/ui/button",
-                label: "メールアドレス変更（未対応）",
+                as: :link,
+                href: settings_security_path(anchor: "email"),
+                label: "メールアドレス変更",
                 variant: :secondary,
                 full_width: true,
-                disabled: true,
-                text_color: "text-[#918FA1]",
-                class: "px-4 text-left justify-between" %>
+                class: "px-4 text-left",
+                trailing_icon: "chevron_right",
+                trailing_icon_animated: true,
+                border_hover: true %>
 
           <%= render "shared/ui/button",
                 as: :link,
-                href: settings_security_path,
+                href: settings_security_path(anchor: "password"),
                 label: "パスワード変更",
                 variant: :secondary,
                 full_width: true,
