@@ -30,6 +30,9 @@ class SettingsController < ApplicationController
   private
 
   def settings_params
-    params.require(:user).permit(:push_notification_enabled)
+    params.require(:user).permit(
+      :push_notification_enabled,
+      :product_name_ai_completion_enabled
+    )
   end
 end

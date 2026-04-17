@@ -9,13 +9,14 @@ class ReceiptAiEnrichmentService
   end
 
   class << self
-    def call(ocr_result)
-      new(ocr_result).call
+    def call(ocr_result, ai_name_completion_enabled: false)
+      new(ocr_result, ai_name_completion_enabled: ai_name_completion_enabled).call
     end
   end
 
-  def initialize(ocr_result, client: Ai::Client.new)
+  def initialize(ocr_result, ai_name_completion_enabled: false, client: Ai::Client.new)
     @ocr_result = ocr_result || {}
+    @ai_name_completion_enabled = ai_name_completion_enabled == true
     @client = client
   end
 
@@ -24,7 +25,10 @@ class ReceiptAiEnrichmentService
 
     validate_ocr_result!
 
-    input = Ai::PromptBuilder.build(ocr_result)
+    input = Ai::PromptBuilder.build(
+      ocr_result,
+      ai_name_completion_enabled: ai_name_completion_enabled
+    )
     result = client.call(input)
 
     if result[:success]
@@ -58,7 +62,7 @@ class ReceiptAiEnrichmentService
 
   private
 
-  attr_reader :ocr_result, :client
+  attr_reader :ocr_result, :ai_name_completion_enabled, :client
 
   def validate_ocr_result!
     raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless ocr_result.is_a?(Hash)

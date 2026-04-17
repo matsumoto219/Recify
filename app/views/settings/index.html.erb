@@ -137,6 +137,14 @@
               url: settings_path,
               remote: true %>
 
+        <%= render "shared/ui/toggle_switch",
+              label: "商品名AI補完",
+              description: "商品名をAIが補完します。商品名によっては補完されない場合があります。<br>補完内容は正確でない可能性があるため、内容を確認してください。".html_safe,
+              checked: current_user.product_name_ai_completion_enabled,
+              name: "product_name_ai_completion_enabled",
+              url: settings_path,
+              remote: true %>
+
         <%# TODO: レシート画像最適化設定は v1.0以降で再検討する %>
       </div>
     <% end %>
