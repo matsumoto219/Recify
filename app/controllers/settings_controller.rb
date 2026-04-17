@@ -15,15 +15,36 @@ class SettingsController < ApplicationController
 
   def update
     if current_user.update(settings_params)
-      render json: {
-        ok: true,
-        push_notification_enabled: current_user.push_notification_enabled
-      }
+      respond_to do |format|
+        format.json do
+          render json: {
+            ok: true,
+            message: "設定を更新しました",
+            push_notification_enabled: current_user.push_notification_enabled,
+            product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled
+          }
+        end
+
+        format.turbo_stream do
+          flash.now[:notice] = "設定を更新しました"
+          render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
+        end
+      end
     else
-      render json: {
-        ok: false,
-        errors: current_user.errors.full_messages
-      }, status: :unprocessable_entity
+      respond_to do |format|
+        format.json do
+          render json: {
+            ok: false,
+            message: "設定の保存に失敗しました",
+            errors: current_user.errors.full_messages
+          }, status: :unprocessable_entity
+        end
+
+        format.turbo_stream do
+          flash.now[:alert] = "設定の保存に失敗しました"
+          render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
+        end
+      end
     end
   end
 
