@@ -11,10 +11,13 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div class="flex items-center gap-5">
           <div class="relative">
-            <%# TODO: アバター画像アップロード機能を実装し、未設定時は fallback 表示に置き換える %>
             <div class="w-20 h-20 rounded-full overflow-hidden border-2 border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xl font-bold">
-              <% display_name = (current_user.name.presence || current_user.email).to_s %>
-              <%= display_name[0,1]&.upcase || "U" %>
+              <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
+                <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
+              <% else %>
+                <% display_name = (current_user.name.presence || current_user.email).to_s %>
+                <%= display_name[0,1]&.upcase || "U" %>
+              <% end %>
             </div>
           </div>
 

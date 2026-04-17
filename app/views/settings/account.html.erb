@@ -14,29 +14,63 @@
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, html: { multipart: true } do |f| %>
       <%= hidden_field_tag :update_context, "account" %>
       <div class="p-8 border-b border-white/10">
-        <div class="flex flex-col md:flex-row items-center gap-6">
+        <div class="flex flex-col md:flex-row items-center gap-6" data-controller="avatar-preview">
           <div class="relative group">
+            <% display_name = (form_resource.name.presence || form_resource.email).to_s %>
+            <% fallback_text = display_name[0,1]&.upcase || "U" %>
+            <% persisted_avatar_url = if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted?
+                                        url_for(form_resource.avatar)
+                                      end %>
             <div class="w-24 h-24 rounded-full bg-[#353534] flex items-center justify-center text-3xl font-bold text-[#C0C1FF] border-2 border-[#C0C1FF]/20 shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
-              <%# TODO: アバター表示は ActiveStorage 実装後に正式対応（現状はダミー表示含む） %>
-              <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? %>
-                <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
-              <% else %>
-                <% display_name = (current_user.name.presence || current_user.email).to_s %>
-                <%= display_name[0,1]&.upcase || "U" %>
-              <% end %>
+              <img
+                src="<%= persisted_avatar_url %>"
+                alt="プロフィール画像プレビュー"
+                class="w-full h-full object-cover <%= persisted_avatar_url.present? ? '' : 'hidden' %>"
+                data-avatar-preview-target="image"
+                data-persisted-url="<%= persisted_avatar_url %>"
+              >
+              <span
+                class="<%= persisted_avatar_url.present? ? 'hidden' : '' %>"
+                data-avatar-preview-target="fallback"
+                data-default-text="<%= fallback_text %>"
+              ><%= fallback_text %></span>
             </div>
           </div>
 
           <div class="text-center md:text-left w-full">
             <h2 class="text-lg font-semibold text-[#E5E2E1] mb-1">プロフィール写真</h2>
-            <p class="text-xs text-[#C7C4D8] mb-4">PNG / JPG / GIF を設定できます</p>
-
-            <%# TODO: avatarアップロード機能（ActiveStorage）を実装
-                - Userモデルに has_one_attached :avatar を追加
-                - deviseのstrong paramsに :avatar を許可
-                - 画像サイズ制限・バリデーション追加（任意） %>
+            <p class="text-xs text-[#C7C4D8] mb-4">PNG / JPG / WebP（5MB以下）を設定できます</p>
             <%= f.file_field :avatar,
-                  class: "block w-full text-sm text-[#C7C4D8] file:mr-4 file:rounded-lg file:border-0 file:bg-[#353534] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[#C0C1FF] hover:file:bg-[#393939]" %>
+                  class: "block w-full text-sm text-[#C7C4D8] file:mr-4 file:rounded-lg file:border-0 file:bg-[#353534] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[#C0C1FF] hover:file:bg-[#393939]",
+                  accept: "image/png,image/jpeg,image/webp",
+                  data: {
+                    avatar_preview_target: "input",
+                    action: "change->avatar-preview#preview"
+                  } %>
+            <p class="mt-2 hidden text-xs text-[#FFB4AB] leading-relaxed" data-avatar-preview-target="error">
+              <span data-avatar-preview-target="errorText"></span>
+            </p>
+
+            <% if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted? %>
+              <label class="mt-4 flex items-start gap-3 text-left cursor-pointer select-none">
+                <%= check_box_tag :remove_avatar, "1", false,
+                      class: "mt-0.5 h-4 w-4 rounded border border-white/20 bg-[#0E0E0E] text-[#C0C1FF] focus:ring-2 focus:ring-[#C0C1FF]/40",
+                      data: {
+                        avatar_preview_target: "removeCheckbox",
+                        action: "change->avatar-preview#toggleRemove"
+                      } %>
+                <span class="space-y-1">
+                  <span class="block text-sm font-medium text-[#E5E2E1]">現在のプロフィール画像を削除する</span>
+                  <span class="block text-xs text-[#C7C4D8] leading-relaxed">保存すると画像は削除され、初期アイコン表示に戻ります。</span>
+                </span>
+              </label>
+            <% end %>
+
+            <% if form_resource.errors[:avatar].any? %>
+              <p class="mt-2 text-xs text-[#FFB4AB] leading-relaxed">
+                <%= form_resource.errors.full_messages_for(:avatar).first %>
+              </p>
+            <% end %>
           </div>
         </div>
       </div>
