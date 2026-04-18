@@ -85,6 +85,12 @@
                               rows: 1,
                               class: "w-full px-4 py-3 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1] resize-none" %>
             </div>
+            <div class="space-y-2 md:col-span-2">
+              <%= f.label :store_phone_number, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+              <%= f.telephone_field :store_phone_number,
+                                    class: "w-full h-11 px-4 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                    placeholder: "例: 03-1234-5678" %>
+            </div>
           </div>
         </section>
 
