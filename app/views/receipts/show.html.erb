@@ -1,48 +1,36 @@
 <section class="max-w-7xl mx-auto px-0 md:px-2 py-2">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-    <div>
-      <nav class="flex items-center text-sm text-[#C7C4D8] mb-2 space-x-2">
-        <%= link_to receipts_path, class: "hover:text-[#C0C1FF] transition-colors" do %>
-          レシート一覧
-        <% end %>
-        <span class="material-symbols-outlined text-xs">chevron_right</span>
-        <span class="text-[#C0C1FF] font-medium"><%= t(".title") %></span>
-      </nav>
-      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white"><%= t(".title") %></h1>
-    </div>
+    <%= render "shared/ui/section_header",
+          title: t(".title"),
+          title_size: "text-3xl md:text-4xl",
+          breadcrumb_label: "レシート一覧",
+          breadcrumb_path: receipts_path %>
 
     <div class="flex items-center gap-3">
-      <%= link_to receipt_path(@receipt),
-        data: { turbo_method: :delete, turbo_confirm: t("common.confirm_delete") },
-        class: "px-6 py-2.5 rounded-lg bg-[#353534] text-[#E5E2E1] font-semibold hover:bg-[#393939] transition-all active:scale-95 flex items-center border border-white/10" do %>
-        <span class="material-symbols-outlined mr-2 text-sm">delete</span>
-        <span><%= t("common.delete") %></span>
-      <% end %>
+      <%= render "shared/ui/button",
+            as: :link,
+            href: receipt_path(@receipt),
+            variant: :secondary,
+            label: t("common.delete"),
+            icon: "delete",
+            data: {
+              turbo_method: :delete,
+              turbo_confirm: t("common.confirm_delete")
+            },
+            class: "px-6 py-2.5" %>
 
-      <%= link_to edit_receipt_path(@receipt),
-        class: "px-6 py-2.5 rounded-lg bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold shadow-lg shadow-[#C0C1FF]/10 hover:opacity-90 transition-all active:scale-95 flex items-center" do %>
-        <span class="material-symbols-outlined mr-2 text-sm">edit</span>
-        <span><%= t("common.edit") %></span>
-      <% end %>
+      <%= render "shared/ui/button",
+            as: :link,
+            href: edit_receipt_path(@receipt),
+            label: t("common.edit"),
+            icon: "edit",
+            class: "px-6 py-2.5" %>
     </div>
   </div>
 
-  <% status_classes = case @receipt.status.to_s
-     when "completed"
-       "bg-[#22C55E]/10 text-[#4ADE80]"
-     when "processing"
-       "bg-[#C0C1FF]/10 text-[#C0C1FF]"
-     when "review_needed"
-       "bg-[#FFB695]/10 text-[#FFB695]"
-     when "failed"
-       "bg-[#FFB4AB]/10 text-[#FFB4AB]"
-     else
-       "bg-white/5 text-[#C7C4D8]"
-     end %>
-
   <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-    <div class="xl:col-span-8 space-y-6">
-      <div class="bg-[#201F1F] rounded-xl p-8 shadow-2xl border border-white/5">
+    <div class="order-2 xl:order-none xl:col-span-8 space-y-6">
+      <%= render "shared/ui/surface_card", class: "p-8 shadow-2xl" do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
             <div class="h-14 w-14 bg-[#4B4DD8] rounded-xl flex items-center justify-center mr-4 shrink-0">
@@ -56,7 +44,10 @@
           </div>
 
           <div class="text-right shrink-0">
-            <span class="px-3 py-1 rounded-full text-xs font-bold <%= status_classes %>"><%= @receipt.status_label %></span>
+            <%= render "shared/ui/receipt_status_badge",
+                  status: @receipt.status,
+                  label: @receipt.status_label,
+                  size: :md %>
             <p class="text-sm text-[#C7C4D8] mt-2">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
           </div>
         </div>
@@ -144,9 +135,9 @@
             </div>
           <% end %>
         </div>
-      </div>
+      <% end %>
 
-      <div class="bg-[#201F1F] rounded-xl p-8 border border-white/5">
+      <%= render "shared/ui/surface_card", class: "p-8" do %>
         <div class="flex items-center mb-4">
           <span class="material-symbols-outlined text-[#C0C1FF] mr-2">notes</span>
           <h3 class="text-sm font-bold text-white uppercase tracking-wider"><%= t(".memo") %></h3>
@@ -157,90 +148,34 @@
         <p class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12">
           <%= @receipt.memo.presence || "メモはありません（ダミー表示）" %>
         </p>
-      </div>
+      <% end %>
     </div>
 
-    <div class="xl:col-span-4 space-y-6">
-      <div class="bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] rounded-xl p-8 text-white shadow-2xl shadow-indigo-900/20 relative overflow-hidden">
-        <div class="absolute -right-4 -top-4 opacity-10">
-          <span class="material-symbols-outlined text-9xl" style="font-size: 120px;">payments</span>
-        </div>
-        <p class="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Total Amount</p>
-        <h2 class="text-4xl font-black mb-6 truncate" title="<%= number_with_delimiter(@receipt.total_amount.to_i) %>">¥<%= number_with_delimiter(@receipt.total_amount.to_i) %></h2>
-        <div class="space-y-3 pt-6 border-t border-white/20">
-          <div class="flex justify-between text-sm">
-            <span class="opacity-70">税抜金額</span>
-            <%# TODO: 税抜金額の本実装
-                - receipts.subtotal_amount カラム追加後は respond_to? ガードを外す
-                - OCR / AI解析結果または合計・税額から算出して保存
-                - 未取得時は 0 ではなく未設定表示も検討する %>
-            <span class="font-medium">¥<%= number_with_delimiter(@receipt.respond_to?(:subtotal_amount) ? @receipt.subtotal_amount.to_i : 0) %></span>
-          </div>
-          <div class="flex justify-between text-sm">
-            <span class="opacity-70">税額</span>
-            <%# TODO: 税額の本実装
-                - receipts.tax_amount カラム追加後は respond_to? ガードを外す
-                - OCR / AI解析結果または税率計算で保存
-                - 未取得時は 0 ではなく未設定表示も検討する %>
-            <span class="font-medium">¥<%= number_with_delimiter(@receipt.respond_to?(:tax_amount) ? @receipt.tax_amount.to_i : 0) %></span>
-          </div>
-          <div class="flex justify-between text-sm">
-            <span class="opacity-70">税率</span>
-            <%# TODO: 税率の本実装
-                - receipts.tax_rate カラム追加後は respond_to? ガードを外す
-                - OCR / AI解析結果または税額計算から確定
-                - 未取得時のみ未設定表示にする %>
-            <span class="font-medium"><%= @receipt.respond_to?(:tax_rate) && @receipt.tax_rate.present? ? "#{@receipt.tax_rate}%" : "未設定（ダミー）" %></span>
-          </div>
-        </div>
+    <div class="order-1 xl:order-none xl:col-span-4 flex flex-col gap-6">
+      <%# TODO: 税抜金額の本実装
+          - receipts.subtotal_amount カラム追加後は respond_to? ガードを外す
+          - OCR / AI解析結果または合計・税額から算出して保存
+          - 未取得時は 0 ではなく未設定表示も検討する %>
+      <%# TODO: 税額の本実装
+          - receipts.tax_amount カラム追加後は respond_to? ガードを外す
+          - OCR / AI解析結果または税率計算で保存
+          - 未取得時は 0 ではなく未設定表示も検討する %>
+      <%# TODO: 税率の本実装
+          - receipts.tax_rate カラム追加後は respond_to? ガードを外す
+          - OCR / AI解析結果または税額計算から確定
+          - 未取得時のみ未設定表示にする %>
+      <div class="order-first xl:order-none">
+        <%= render "shared/ui/amount_summary_card",
+              title: "Total Amount",
+              amount: @receipt.total_amount,
+              icon: "payments",
+              class: "shadow-indigo-900/20",
+              subtotal: "¥#{number_with_delimiter(@receipt.respond_to?(:subtotal_amount) ? @receipt.subtotal_amount.to_i : 0)}",
+              tax_amount: "¥#{number_with_delimiter(@receipt.respond_to?(:tax_amount) ? @receipt.tax_amount.to_i : 0)}",
+              tax_rate: (@receipt.respond_to?(:tax_rate) && @receipt.tax_rate.present? ? "#{@receipt.tax_rate}%" : "未設定（ダミー）") %>
       </div>
 
-      <div class="bg-[#201F1F] rounded-xl p-4 shadow-sm border border-white/5">
-        <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-widest mb-3 px-2">Original Scan</p>
-        <% if @receipt.image.attached? %>
-          <%# TODO: 本実装時はStimulusで開閉制御し、モーダルのズーム表示も追加 %>
-          <details class="group" open="false">
-            <summary class="list-none cursor-pointer select-none">
-              <div class="rounded-lg border border-white/10 bg-[#1C1B1B] px-4 py-3 flex items-center justify-between hover:bg-[#2A2A2A] transition-colors">
-                <div>
-                  <p class="text-sm font-semibold text-white">画像を表示</p>
-                  <p class="text-xs text-[#C7C4D8] mt-1">コンパクト表示で確認できます</p>
-                </div>
-                <span class="material-symbols-outlined text-[#C0C1FF] transition-transform group-open:rotate-180">expand_more</span>
-              </div>
-            </summary>
-
-            <div class="mt-4 relative group rounded-lg overflow-hidden bg-black/30 h-48 w-full flex items-center justify-center">
-              <%= image_tag @receipt.image, class: "max-w-full max-h-full object-contain grayscale brightness-90 contrast-125 opacity-80 group-hover:opacity-100 transition-opacity" %>
-              <div class="absolute inset-0 bg-indigo-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                <span class="material-symbols-outlined text-white text-3xl">zoom_in</span>
-              </div>
-            </div>
-          </details>
-
-          <%# TODO: 本実装時は画像モーダル表示 / ダウンロード制御を追加 %>
-          <button type="button" class="w-full mt-4 py-2 text-sm font-bold text-[#C0C1FF] hover:bg-[#1C1B1B] rounded-lg transition-colors flex items-center justify-center">
-            <span class="material-symbols-outlined text-sm mr-2">open_in_full</span>
-            フル画像表示（ダミー）
-          </button>
-        <% else %>
-          <%# TODO: 画像なし状態の本実装
-              - keep_image 設定に応じた表示へ変更
-              - 再アップロード導線や「画像を保存しない」説明を追加する %>
-          <div class="rounded-lg border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#1C1B1B]">
-            <span class="material-symbols-outlined text-4xl mb-2">image</span>
-            <p>画像なし</p>
-          </div>
-        <% end %>
-      </div>
-
+      <%= render "shared/ui/receipt_image_card", receipt: @receipt %>
     </div>
-  </div>
-
-  <div class="mt-8 flex justify-start">
-    <%= link_to receipts_path, class: "text-[#C7C4D8] hover:text-white transition-colors inline-flex items-center" do %>
-      <span class="material-symbols-outlined mr-1 text-base">arrow_back</span>
-      <span><%= t("common.back") %></span>
-    <% end %>
   </div>
 </section>
