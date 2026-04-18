@@ -94,8 +94,8 @@ class ReceiptsController < ApplicationController
       :memo,
       :image,
       :keep_image,
+      :store_address,
       # NOTE: 以下は将来フォームから直接編集する場合の候補
-      # :store_address,
       # :store_phone_number,
       # :subtotal_amount,
       # :tax_amount,

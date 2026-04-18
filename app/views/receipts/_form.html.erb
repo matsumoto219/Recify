@@ -78,6 +78,13 @@
                 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm">schedule</span>
               </div>
             </div>
+
+            <div class="space-y-2 md:col-span-2">
+              <%= f.label :store_address, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+              <%= f.text_area :store_address,
+                              rows: 1,
+                              class: "w-full px-4 py-3 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1] resize-none" %>
+            </div>
           </div>
         </section>
 
