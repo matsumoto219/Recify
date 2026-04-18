@@ -1,0 +1,44 @@
+<%# =========================
+   locals:
+   - status: 必須
+   - label: 任意（なければstatusから生成）
+   - size: :sm / :md / :lg（default: :md）
+   - class: 追加クラス
+   ========================= %>
+
+<%
+status = local_assigns[:status].to_s
+label  = local_assigns[:label] || status.humanize
+size   = (local_assigns[:size] || :md).to_sym
+extra_class = local_assigns[:class]
+
+# --- ステータスカラー ---
+status_classes =
+  case status
+  when "completed"
+    "bg-[#22C55E]/10 text-[#4ADE80]"
+  when "processing"
+    "bg-[#C0C1FF]/10 text-[#C0C1FF]"
+  when "review_needed"
+    "bg-[#FFB695]/10 text-[#FFB695]"
+  when "failed"
+    "bg-[#FFB4AB]/10 text-[#FFB4AB]"
+  else
+    "bg-white/5 text-[#C7C4D8]"
+  end
+
+# --- サイズ ---
+size_classes =
+  case size
+  when :sm
+    "px-2 py-0.5 text-[10px]"
+  when :lg
+    "px-4 py-1.5 text-sm"
+  else # :md
+    "px-3 py-1 text-xs"
+  end
+%>
+
+<span class="inline-flex items-center rounded-full font-bold <%= status_classes %> <%= size_classes %> <%= extra_class %>">
+  <%= label %>
+</span>
