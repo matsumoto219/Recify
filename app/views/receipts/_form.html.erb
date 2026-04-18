@@ -5,7 +5,7 @@
   <% page_description = receipt.persisted? ? "内容を確認・修正して保存してください" : "内容を入力して保存してください" %>
   <% cancel_path = receipt.persisted? ? receipt_path(receipt) : receipts_path %>
   <% total_amount_value = receipt.total_amount.to_i %>
-  <% subtotal_amount_value = receipt.respond_to?(:subtotal_amount) ? receipt.subtotal_amount.to_i : 0 %>
+  <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.respond_to?(:tax_amount) ? receipt.tax_amount.to_i : 0 %>
   <% tax_rate_value = receipt.respond_to?(:tax_rate) && receipt.tax_rate.present? ? "#{receipt.tax_rate}%" : "未設定（ダミー）" %>
   <% content_for :mobile_bottom_actions do %>
@@ -205,7 +205,7 @@
           <div class="space-y-3 pt-6 border-t border-white/20">
             <div class="flex justify-between items-center text-sm">
               <span class="opacity-80">税抜金額</span>
-              <span class="font-medium">¥<%= number_with_delimiter(subtotal_amount_value) %></span>
+              <span class="font-medium"><%= subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定" %></span>
             </div>
             <div class="flex justify-between items-center text-sm">
               <span class="opacity-80">税額</span>
