@@ -51,11 +51,7 @@
             <div class="min-w-0">
               <p class="text-xs font-bold text-[#C0C1FF] uppercase tracking-widest mb-1">Store Information</p>
               <h2 class="text-2xl font-bold text-white truncate"><%= @receipt.store_name.presence || "店舗名なし" %></h2>
-              <%# TODO: 店舗住所の本実装
-                  - receipts.store_address カラム追加後は respond_to? ガードを外す
-                  - OCR / AI解析結果から住所候補を保存
-                  - 未取得時のみ「未登録」を表示する %>
-              <p class="text-sm text-[#C7C4D8] mt-1"><%= @receipt.respond_to?(:store_address) ? (@receipt.store_address.presence || "住所未登録（ダミー）") : "住所未登録（ダミー）" %></p>
+              <p class="text-sm text-[#C7C4D8] mt-1"><%= @receipt.store_address.presence || "住所未登録" %></p>
             </div>
           </div>
 
