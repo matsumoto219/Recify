@@ -148,10 +148,6 @@
     </div>
 
     <div class="order-1 xl:order-none xl:col-span-4 flex flex-col gap-6">
-      <%# TODO: 税額の本実装
-          - receipts.tax_amount カラム追加後は respond_to? ガードを外す
-          - OCR / AI解析結果または税率計算で保存
-          - 未取得時は 0 ではなく未設定表示も検討する %>
       <%# TODO: 税率の本実装
           - receipts.tax_rate カラム追加後は respond_to? ガードを外す
           - OCR / AI解析結果または税額計算から確定
@@ -164,7 +160,7 @@
               icon: "payments",
               class: "shadow-indigo-900/20",
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
-              tax_amount: "¥#{number_with_delimiter(@receipt.respond_to?(:tax_amount) ? @receipt.tax_amount.to_i : 0)}",
+              tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
               tax_rate: (@receipt.respond_to?(:tax_rate) && @receipt.tax_rate.present? ? "#{@receipt.tax_rate}%" : "未設定（ダミー）") %>
       </div>
 
