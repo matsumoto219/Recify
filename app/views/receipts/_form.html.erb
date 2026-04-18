@@ -7,7 +7,7 @@
   <% total_amount_value = receipt.total_amount.to_i %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
-  <% tax_rate_value = receipt.respond_to?(:tax_rate) && receipt.tax_rate.present? ? "#{receipt.tax_rate}%" : "未設定（ダミー）" %>
+  <% tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : "未設定" %>
   <% content_for :mobile_bottom_actions do %>
     <%= f.submit "保存",
       class: "w-full py-3 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold shadow-lg cursor-pointer" %>
@@ -221,7 +221,7 @@
             </div>
           </div>
 
-          <%# TODO: subtotal_amount / tax_amount / tax_rate は Receipt モデル実装後に本物の値へ接続する %>
+          <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
         </section>
 
 

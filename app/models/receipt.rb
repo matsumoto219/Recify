@@ -136,6 +136,22 @@ class Receipt < ApplicationRecord
     I18n.t("enums.receipt.status.#{status}", default: status)
   end
 
+  def tax_rate_percentage_input
+    return nil if tax_rate.blank?
+
+    value = tax_rate.to_d * 100
+    value.frac.zero? ? value.to_i.to_s : value.to_s("F")
+  end
+
+  def tax_rate_percentage_input=(value)
+    self.tax_rate =
+      if value.present?
+        BigDecimal(value.to_s) / 100
+      else
+        nil
+      end
+  end
+
   def error_category
     return nil if processing_error_code.blank?
 
