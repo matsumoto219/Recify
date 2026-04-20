@@ -224,49 +224,18 @@
           <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
         </section>
 
-
-        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm overflow-hidden">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[#C0C1FF]">image</span>
-              <h2 class="text-lg font-semibold text-[#E5E2E1]">画像プレビュー</h2>
-            </div>
-          </div>
-
-          <% if @mode != "manual" %>
-            <% if receipt.image.attached? %>
-              <div class="group relative rounded-xl overflow-hidden aspect-[3/4] bg-[#0E0E0E] border border-white/10">
-                <%= image_tag receipt.image, class: "w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" %>
-                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                  <div class="bg-[#353534]/90 p-3 rounded-full flex items-center justify-center backdrop-blur-md">
-                    <span class="material-symbols-outlined text-[#E5E2E1]">zoom_in</span>
-                  </div>
-                </div>
-              </div>
-            <% else %>
-              <div class="rounded-xl border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#0E0E0E]">
-                <span class="material-symbols-outlined text-4xl mb-2">image</span>
-                <p>画像を選択してください</p>
-              </div>
-            <% end %>
-
-            <div class="mt-4 space-y-2">
-              <%= f.label :image, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.file_field :image,
-                               accept: receipt_image_accept,
-                               class: "w-full px-3 py-2 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
-              <p class="text-xs text-[#C7C4D8]">
-                JPG / PNG / BMP / TIFF / HEIF / HEIC に対応しています
-              </p>
-            </div>
-          <% else %>
-            <%# TODO: 手動登録時の画像なし状態の説明文は後で文言調整する %>
-            <div class="rounded-xl border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#0E0E0E]">
-              <span class="material-symbols-outlined text-4xl mb-2">image</span>
-              <p>手動登録では画像は不要です</p>
-            </div>
-          <% end %>
-        </section>
+        <%= render "shared/ui/receipt_image_card",
+              receipt: receipt,
+              title: "画像プレビュー",
+              form_builder: f,
+              show_toggle: true,
+              show_upload: true,
+              show_modal: true,
+              initially_open: true,
+              manual_mode: (@mode == "manual"),
+              empty_message: "画像を選択してください",
+              helper_text: "対応フォーマット:\nJPG / PNG / BMP / TIFF / HEIF / HEIC",
+              accept: receipt_image_accept %>
       </div>
     </div>
 
