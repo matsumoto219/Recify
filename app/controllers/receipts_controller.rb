@@ -66,7 +66,6 @@ class ReceiptsController < ApplicationController
   def receipt_params
     params.require(:receipt).permit(
       :store_name,
-      :purchased_at,
       :purchased_on,
       :purchased_time,
       :total_amount,
@@ -77,6 +76,7 @@ class ReceiptsController < ApplicationController
       :store_address,
       :store_phone_number,
       # NOTE: 以下は将来フォームから直接編集する場合の候補
+      # :purchased_at,
       # :subtotal_amount,
       # :tax_amount,
       # :tax_rate,
@@ -120,8 +120,7 @@ class ReceiptsController < ApplicationController
     purchased_on = permitted.delete("purchased_on")
     purchased_time = permitted.delete("purchased_time")
 
-    built_purchased_at = build_purchased_at(purchased_on, purchased_time)
-    permitted["purchased_at"] = built_purchased_at if built_purchased_at.present?
+    permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
 
     ActionController::Parameters.new(permitted).permit!
   end
@@ -129,11 +128,8 @@ class ReceiptsController < ApplicationController
   def build_purchased_at(purchased_on, purchased_time)
     return nil if purchased_on.blank?
 
-    if purchased_time.present?
-      Time.zone.parse("#{purchased_on} #{purchased_time}")
-    else
-      Time.zone.parse(purchased_on.to_s)
-    end
+    datetime_text = [ purchased_on, purchased_time.presence ].compact.join(" ")
+    Time.zone.parse(datetime_text)
   rescue ArgumentError, TypeError
     nil
   end
