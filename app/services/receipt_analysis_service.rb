@@ -199,11 +199,27 @@ class ReceiptAnalysisService
   def save_ai_result!(ocr_result, ai_result)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
 
+    # === AmountService integration ===
+    amount_result = ReceiptAmountService.call(
+      receipt: params[:receipt_attributes],
+      receipt_items: params[:receipt_items_attributes],
+      receipt_tax_details: params[:receipt_tax_details_attributes],
+      context: :analysis
+    )
+
+    # 金額を補正（resolvedを採用）
+    params[:receipt_attributes].merge!(
+      total_amount: amount_result[:resolved][:total],
+      subtotal_amount: amount_result[:resolved][:subtotal],
+      tax_amount: amount_result[:resolved][:tax]
+    )
+
     final_status = determine_final_status(
       ocr_result: ocr_result,
       receipt_attributes: params[:receipt_attributes],
       items_attributes: params[:receipt_items_attributes],
-      ai_needs_review: ai_result[:needs_review]
+      ai_needs_review: ai_result[:needs_review],
+      amount_needs_review: amount_result[:needs_review]
     )
 
     persist_result_full!(
@@ -228,6 +244,20 @@ class ReceiptAnalysisService
 
   def save_ocr_only_result!(ocr_result)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+
+    # === AmountService integration point (OCR only) ===
+    amount_result = ReceiptAmountService.call(
+      receipt: params[:receipt_attributes],
+      receipt_items: params[:receipt_items_attributes],
+      receipt_tax_details: params[:receipt_tax_details_attributes],
+      context: :analysis
+    )
+
+    params[:receipt_attributes].merge!(
+      total_amount: amount_result[:resolved][:total],
+      subtotal_amount: amount_result[:resolved][:subtotal],
+      tax_amount: amount_result[:resolved][:tax]
+    )
 
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
     # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -255,6 +285,20 @@ class ReceiptAnalysisService
 
   def save_fallback_result!(ocr_result, error_code)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+
+    # === AmountService integration point (fallback) ===
+    amount_result = ReceiptAmountService.call(
+      receipt: params[:receipt_attributes],
+      receipt_items: params[:receipt_items_attributes],
+      receipt_tax_details: params[:receipt_tax_details_attributes],
+      context: :analysis
+    )
+
+    params[:receipt_attributes].merge!(
+      total_amount: amount_result[:resolved][:total],
+      subtotal_amount: amount_result[:resolved][:subtotal],
+      tax_amount: amount_result[:resolved][:tax]
+    )
 
     # NOTE:
     # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
@@ -330,7 +374,12 @@ class ReceiptAnalysisService
     end
   end
 
-  def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil)
+  def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil)
+    # TODO:
+    # amount_result[:needs_review] をここに統合する
+    # 例:
+    # return "review_needed" if amount_needs_review
+    return "review_needed" if amount_needs_review
     return "review_needed" if ai_needs_review
     return "review_needed" if low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes)
     return "review_needed" if receipt_attributes[:store_name].blank?
