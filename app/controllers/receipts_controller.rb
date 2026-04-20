@@ -45,28 +45,8 @@ class ReceiptsController < ApplicationController
   end
 
   def update
-    image_changed = normalized_receipt_params[:image].present?
-
     if @receipt.update(normalized_receipt_params)
-      analysis_success = true
-
-      if image_changed
-        @receipt.update!(
-          status: "processing",
-          processing_error_code: nil,
-          processing_error_message: nil,
-          ocr_completed_at: nil
-        )
-        Rails.logger.info("[ReceiptAnalysis] update start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_changed=#{image_changed}")
-        analysis_success = apply_analysis(@receipt)
-      end
-
-      if analysis_success
-        redirect_to @receipt, notice: t("flash.receipts.update")
-      else
-        flash[@receipt.processing_flash_type] = @receipt.processing_flash_messages
-        redirect_to @receipt
-      end
+      redirect_to @receipt, notice: t("flash.receipts.update")
     else
       render :edit, status: :unprocessable_entity
     end

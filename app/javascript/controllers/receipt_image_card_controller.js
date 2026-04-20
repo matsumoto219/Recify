@@ -2,10 +2,12 @@ import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
-  static targets = ["content", "chevron", "toggleButton", "modal"]
+  static targets = ["content", "chevron", "toggleButton", "modal", "fileInput", "previewImage", "modalImage"]
+  static values = { initiallyOpen: Boolean }
 
   connect() {
-    this.isOpen = false
+    this.isOpen = this.initiallyOpenValue
+    this.objectUrl = null
     this.sync()
 
     this.handleKeydown = this.handleKeydown.bind(this)
@@ -14,7 +16,31 @@ export default class extends Controller {
 
   disconnect() {
     this.unlockBodyScroll()
+    this.revokeObjectUrl()
     document.removeEventListener("keydown", this.handleKeydown)
+  }
+
+  previewSelectedImage(event) {
+    const file = event.target.files?.[0]
+    if (!file || !file.type.startsWith("image/")) return
+
+    this.revokeObjectUrl()
+    this.objectUrl = URL.createObjectURL(file)
+
+    if (this.hasPreviewImageTarget) {
+      this.previewImageTarget.src = this.objectUrl
+    }
+
+    if (this.hasModalImageTarget) {
+      this.modalImageTarget.src = this.objectUrl
+    }
+  }
+
+  revokeObjectUrl() {
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl)
+      this.objectUrl = null
+    }
   }
 
   toggle() {

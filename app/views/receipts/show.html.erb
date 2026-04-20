@@ -160,7 +160,15 @@
               tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : "未設定") %>
       </div>
 
-      <%= render "shared/ui/receipt_image_card", receipt: @receipt %>
+      <%# TODO: keep_image 設定連動（user設定 or receiptカラム） %>
+      <%= render "shared/ui/receipt_image_card",
+            receipt: @receipt,
+            title: "画像プレビュー",
+            show_toggle: true,
+            show_modal: true,
+            show_download: true,
+            keep_image_enabled: true,
+            empty_message: "画像なし" %>
     </div>
   </div>
 </section>
