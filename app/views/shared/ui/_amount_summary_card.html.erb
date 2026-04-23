@@ -10,7 +10,8 @@
 %>
 
 <%= render "shared/ui/surface_card",
-      class: ["p-8 shadow-2xl relative overflow-hidden bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] text-white", wrapper_class].compact.join(" ") do %>
+      shadow_variant: :indigo,
+      class: ["p-8 relative overflow-hidden bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] text-white", wrapper_class].compact.join(" ") do %>
   <div class="absolute -right-4 -top-4 opacity-10 pointer-events-none">
     <span class="material-symbols-outlined text-9xl" style="font-size: 120px;"><%= icon %></span>
   </div>

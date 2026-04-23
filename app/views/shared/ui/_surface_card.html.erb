@@ -1,11 +1,22 @@
 <!-- 共通カードパーツ -->
 <%
   variant = local_assigns.fetch(:variant, :default).to_sym
+  shadow_variant = local_assigns.fetch(:shadow_variant, :default).to_sym
   hoverable = local_assigns.fetch(:hoverable, false)
   extra_classes = local_assigns[:class]
   title_id = local_assigns[:title_id]
 
-  base_classes = "w-full rounded-xl overflow-hidden backdrop-blur-[20px] shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(229,226,225,0.05)] transition-all"
+  shadow_classes = case shadow_variant
+                   when :indigo
+                     "shadow-[0_20px_40px_rgba(49,46,129,0.35),0_0_0_1px_rgba(229,226,225,0.05)]"
+                   else
+                     "shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(229,226,225,0.05)]"
+                   end
+
+  base_classes = [
+    "w-full rounded-xl overflow-hidden backdrop-blur-[20px] transition-all",
+    shadow_classes
+  ].join(" ")
 
   variant_classes = case variant
                     when :danger

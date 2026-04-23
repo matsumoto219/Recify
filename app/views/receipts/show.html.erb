@@ -30,7 +30,7 @@
 
   <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
     <div class="order-2 xl:order-none xl:col-span-8 space-y-6">
-      <%= render "shared/ui/surface_card", class: "p-8 shadow-2xl" do %>
+      <%= render "shared/ui/surface_card", class: "p-8" do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
             <div class="h-14 w-14 bg-[#4B4DD8] rounded-xl flex items-center justify-center mr-4 shrink-0">
@@ -154,7 +154,6 @@
               title: "Total Amount",
               amount: @receipt.total_amount,
               icon: "payments",
-              class: "shadow-indigo-900/20",
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
               tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
               tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : "未設定") %>
