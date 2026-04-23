@@ -18,6 +18,7 @@
   disable_with = local_assigns[:disable_with]
   text_color = local_assigns[:text_color]
   border_hover = local_assigns.fetch(:border_hover, false)
+  form = local_assigns[:form]
 
   variant_classes = case variant
                     when :secondary
@@ -83,6 +84,9 @@
   <button
     type="<%= type %>"
     class="<%= button_classes %>"
+    <% if form.present? %>
+      form="<%= form %>"
+    <% end %>
     <%= "disabled" if disabled || loading %>
     <% if disable_with.present? %>data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
     <% data_attributes.each do |key, value| %>data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>
