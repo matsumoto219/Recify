@@ -1,4 +1,5 @@
-<%= form_with model: receipt do |f| %>
+<% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.id}" : "new_receipt_form" %>
+<%= form_with model: receipt, html: { id: form_dom_id } do |f| %>
   <%= render "shared/error_messages", obj: receipt %>
 
   <% page_title = receipt.persisted? ? "レシート編集" : "レシート登録" %>
@@ -9,39 +10,50 @@
   <% tax_amount_value = receipt.tax_amount %>
   <% tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : "未設定" %>
   <% content_for :mobile_bottom_actions do %>
-    <%= f.submit "保存",
-      class: "w-full py-3 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold shadow-lg cursor-pointer" %>
-    <%= link_to cancel_path,
-      class: "block w-full py-3 rounded-xl bg-[#353534] text-[#E5E2E1] border border-white/10 text-center" do %>
-      キャンセル
-    <% end %>
+    <%= render "shared/ui/button",
+          label: "保存",
+          type: "submit",
+          form: form_dom_id,
+          full_width: true,
+          class: "py-3 rounded-xl shadow-lg cursor-pointer" %>
+    <%= render "shared/ui/button",
+          as: :link,
+          href: cancel_path,
+          label: "キャンセル",
+          variant: :secondary,
+          full_width: true,
+          class: "py-3 rounded-xl text-center" %>
   <% end %>
 
   <section class="max-w-5xl mx-auto px-0 md:px-2 py-2 pb-40 md:pb-2">
-    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-      <div class="px-4 md:px-0">
-        <h1 class="text-3xl font-bold tracking-tight text-[#E5E2E1]"><%= page_title %></h1>
-        <p class="text-[#C7C4D8] mt-1"><%= page_description %></p>
-      </div>
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+      <%= render "shared/ui/section_header",
+            title: page_title,
+            subtitle: page_description,
+            title_size: "text-3xl md:text-4xl" %>
 
       <div class="hidden md:flex items-center gap-3">
-        <%= link_to cancel_path,
-          class: "px-6 py-2.5 rounded-xl bg-[#353534] text-[#E5E2E1] hover:bg-[#444] transition-all border border-white/10" do %>
-          キャンセル
-        <% end %>
+        <%= render "shared/ui/button",
+              as: :link,
+              href: cancel_path,
+              label: "キャンセル",
+              variant: :secondary,
+              class: "px-6 py-2.5 rounded-xl hover:bg-[#444]" %>
 
-        <%= f.submit "保存",
-          class: "px-8 py-2.5 rounded-xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black font-semibold hover:opacity-90 transition-all shadow-lg shadow-[#4B4DD8]/20 cursor-pointer" %>
+        <%= render "shared/ui/button",
+              label: "保存",
+              type: "submit",
+              class: "px-8 py-2.5 rounded-xl hover:opacity-90 shadow-lg shadow-[#4B4DD8]/20 cursor-pointer" %>
       </div>
-    </header>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div class="lg:col-span-8 space-y-8">
-        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 mb-6">
-            <span class="material-symbols-outlined text-[#C0C1FF]">info</span>
-            <h2 class="text-lg font-semibold text-[#E5E2E1]">基本情報</h2>
-          </div>
+        <%= render "shared/ui/surface_card", class: "p-6" do %>
+          <%= render "shared/ui/section_header",
+                title: "基本情報",
+                icon: "info",
+                class: "mb-6" %>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-2">
@@ -92,14 +104,13 @@
                                     placeholder: "例: 03-1234-5678" %>
             </div>
           </div>
-        </section>
+        <% end %>
 
-        <section class="bg-[#201F1F] rounded-xl overflow-hidden shadow-sm">
-          <div class="p-6 flex items-center justify-between border-b border-white/10">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[#C0C1FF]">receipt_long</span>
-              <h2 class="text-lg font-semibold text-[#E5E2E1]">明細一覧</h2>
-            </div>
+        <%= render "shared/ui/surface_card", class: "overflow-hidden" do %>
+          <div class="p-6 border-b border-white/10">
+            <%= render "shared/ui/section_header",
+                  title: "明細一覧",
+                  icon: "receipt_long" %>
           </div>
 
           <div class="p-6 space-y-4">
@@ -176,53 +187,30 @@
               明細追加
             </button>
           </div>
-        </section>
+        <% end %>
 
-        <section class="bg-[#201F1F] rounded-xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 mb-4">
-            <span class="material-symbols-outlined text-[#C0C1FF]">notes</span>
-            <h2 class="text-lg font-semibold text-[#E5E2E1]">メモ</h2>
-          </div>
+        <%= render "shared/ui/surface_card", class: "p-6" do %>
+          <%= render "shared/ui/section_header",
+                title: "メモ",
+                icon: "notes",
+                class: "mb-4" %>
 
           <%= f.text_area :memo,
                           class: "w-full h-32 px-4 py-3 rounded-xl resize-none bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
                           placeholder: "用途や補足があれば入力してください" %>
-        </section>
+        <% end %>
       </div>
 
       <div class="lg:col-span-4 space-y-8">
-        <section class="bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] rounded-xl p-8 text-white shadow-2xl shadow-indigo-900/20 relative overflow-hidden">
-          <div class="absolute -right-4 -top-4 opacity-10">
-            <span class="material-symbols-outlined text-9xl" style="font-size: 120px;">payments</span>
-          </div>
+        <%= render "shared/ui/amount_summary_card",
+              title: "Total Amount",
+              amount: total_amount_value,
+              icon: "payments",
+              subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定"),
+              tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : "未設定"),
+              tax_rate: tax_rate_value %>
 
-          <div class="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Total Amount</div>
-          <div class="flex items-baseline gap-2 mb-8">
-            <span class="text-sm opacity-70">¥</span>
-            <span class="text-4xl font-black tracking-tight"><%= number_with_delimiter(total_amount_value) %></span>
-          </div>
-
-          <div class="space-y-3 pt-6 border-t border-white/20">
-            <div class="flex justify-between items-center text-sm">
-              <span class="opacity-80">税抜金額</span>
-              <span class="font-medium">
-                <%= subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定" %>
-              </span>
-            </div>
-            <div class="flex justify-between items-center text-sm">
-              <span class="opacity-80">税額</span>
-              <span class="font-medium">
-                <%= tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : "未設定" %>
-              </span>
-            </div>
-            <div class="flex justify-between items-center text-sm">
-              <span class="opacity-80">税率</span>
-              <span class="font-medium"><%= tax_rate_value %></span>
-            </div>
-          </div>
-
-          <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
-        </section>
+        <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
 
         <%= render "shared/ui/receipt_image_card",
               receipt: receipt,

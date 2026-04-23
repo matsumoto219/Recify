@@ -1,6 +1,10 @@
 <nav id="mobile-bottom-nav" data-component="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full z-50">
   <% if content_for?(:mobile_bottom_actions) %>
-    <div class="bg-[#131313]/95 backdrop-blur-md border-t border-white/10 px-4 pt-4 pb-3">
+    <div
+      data-controller="mobile-actions"
+      data-mobile-actions-target="bar"
+      class="glass-panel backdrop-blur-md border-t border-white/10 px-4 pt-4 pb-3 transition-transform duration-300 translate-y-0"
+    >
       <div class="space-y-3">
         <%= yield :mobile_bottom_actions %>
       </div>
