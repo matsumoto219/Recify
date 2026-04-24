@@ -142,7 +142,7 @@
                 <% item = item_form.object %>
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
 
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
                   <div class="col-span-5 relative pr-12 md:pr-0">
                     <% if item.needs_review %>
                       <%# TODO: 要確認項目は将来的に input を赤枠ハイライトする。低信頼理由の表示も追加する %>
@@ -188,14 +188,17 @@
                   </div>
 
                   <div class="col-span-1 flex justify-end md:static absolute top-3 right-3 z-10">
-                    <%# TODO: 本実装時は nested fields + Stimulus で削除制御を追加する %>
-                    <button type="button" class="p-2 hover:text-[#FFB4AB] transition-colors">
+                    <button type="button"
+                            class="p-2 hover:text-[#FFB4AB] transition-colors"
+                            data-action="click->receipt-form#removeItem">
                       <span class="material-symbols-outlined">delete</span>
                     </button>
                   </div>
 
+                  <%= item_form.hidden_field :id %>
                   <%= item_form.hidden_field :line_total %>
                   <%= item_form.hidden_field :needs_review %>
+                  <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
                 </div>
               <% end %>
             <% else %>
@@ -215,7 +218,7 @@
 
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
                   <div class="col-span-5 relative pr-12 md:pr-0">
                     <%= render "shared/ui/text_field",
                                f: item_form,
@@ -251,7 +254,9 @@
                   </div>
 
                   <div class="col-span-1 flex justify-end md:static absolute top-3 right-3 z-10">
-                    <button type="button" class="p-2 hover:text-[#FFB4AB] transition-colors">
+                    <button type="button"
+                            class="p-2 hover:text-[#FFB4AB] transition-colors"
+                            data-action="click->receipt-form#removeItem">
                       <span class="material-symbols-outlined">delete</span>
                     </button>
                   </div>
