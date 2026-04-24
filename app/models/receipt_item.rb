@@ -29,6 +29,11 @@ class ReceiptItem < ApplicationRecord
             inclusion: { in: [ true, false ] },
             allow_nil: true
 
+  # 税率（0.0〜1.0で保存）
+  validates :tax_rate,
+            numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
+            allow_nil: true
+
   # 文字列項目の最大文字数
   validates :raw_text, length: { maximum: 1000 }, allow_blank: true       # OCR原文テキスト(MAX1000文字)
   validates :suggested_name, length: { maximum: 500 }, allow_blank: true  # AI補完候補名(MAX500文字)

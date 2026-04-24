@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_17_064823) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_24_085454) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -54,6 +54,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_17_064823) do
     t.text "raw_text"
     t.integer "receipt_id", null: false
     t.string "suggested_name"
+    t.decimal "tax_rate", precision: 5, scale: 4
     t.datetime "updated_at", null: false
     t.index ["receipt_id"], name: "index_receipt_items_on_receipt_id"
   end

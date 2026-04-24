@@ -6,6 +6,9 @@
   subtotal = local_assigns[:subtotal]
   tax_amount = local_assigns[:tax_amount]
   tax_rate = local_assigns[:tax_rate]
+  subtotal_target = local_assigns[:subtotal_target]
+  tax_amount_target = local_assigns[:tax_amount_target]
+  tax_rate_target = local_assigns[:tax_rate_target]
   wrapper_class = local_assigns[:class]
 %>
 
@@ -26,15 +29,15 @@
   <div class="space-y-3 pt-6 border-t border-white/20">
     <div class="flex justify-between text-sm gap-4">
       <span class="opacity-70">税抜金額</span>
-      <span class="font-medium text-right"><%= subtotal.present? ? subtotal : "未設定" %></span>
+      <span class="font-medium text-right" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal.present? ? subtotal : "未設定" %></span>
     </div>
     <div class="flex justify-between text-sm gap-4">
       <span class="opacity-70">税額</span>
-      <span class="font-medium text-right"><%= tax_amount.present? ? tax_amount : "未設定" %></span>
+      <span class="font-medium text-right" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount.present? ? tax_amount : "未設定" %></span>
     </div>
     <div class="flex justify-between text-sm gap-4">
       <span class="opacity-70">税率</span>
-      <span class="font-medium text-right"><%= tax_rate.present? ? tax_rate : "未設定" %></span>
+      <span class="font-medium text-right" <%= %(data-receipt-form-target="#{tax_rate_target}").html_safe if tax_rate_target.present? %>><%= tax_rate.present? ? tax_rate : "未設定" %></span>
     </div>
   </div>
 <% end %>

@@ -91,6 +91,7 @@ class ReceiptsController < ApplicationController
         :quantity,
         :quantity_unit,
         :product_code,
+        :tax_rate,
         :line_total,
         :needs_review,
         :position_index,
@@ -121,6 +122,7 @@ class ReceiptsController < ApplicationController
     purchased_time = permitted.delete("purchased_time")
 
     permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
+    normalize_receipt_item_tax_rates!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
   end
@@ -131,6 +133,25 @@ class ReceiptsController < ApplicationController
     datetime_text = [ purchased_on, purchased_time.presence ].compact.join(" ")
     Time.zone.parse(datetime_text)
   rescue ArgumentError, TypeError
+    nil
+  end
+
+  def normalize_receipt_item_tax_rates!(permitted)
+    items_attributes = permitted["receipt_items_attributes"]
+    return if items_attributes.blank?
+
+    items_attributes.each_value do |item_attributes|
+      raw_tax_rate = item_attributes["tax_rate"]
+      item_attributes["tax_rate"] = normalize_tax_rate(raw_tax_rate)
+    end
+  end
+
+  def normalize_tax_rate(raw_tax_rate)
+    return nil if raw_tax_rate.blank?
+
+    tax_rate = BigDecimal(raw_tax_rate.to_s)
+    tax_rate > 1 ? tax_rate / 100 : tax_rate
+  rescue ArgumentError
     nil
   end
 

@@ -32,7 +32,7 @@
           class: "py-3 rounded-xl text-center" %>
   <% end %>
 
-  <section class="max-w-5xl mx-auto px-0 md:px-2 py-2 pb-40 md:pb-2">
+  <section class="max-w-7xl mx-auto px-0 md:px-4 py-2 pb-40 md:pb-2">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
       <%= render "shared/ui/section_header",
             title: page_title,
@@ -130,10 +130,11 @@
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
-              <div class="col-span-5">品名</div>
+              <div class="col-span-4">品名</div>
               <div class="col-span-2">数量</div>
               <div class="col-span-2">単価</div>
-              <div class="col-span-2">小計</div>
+              <div class="col-span-2">税率</div>
+              <div class="col-span-1">小計</div>
               <div class="col-span-1"></div>
             </div>
 
@@ -143,7 +144,7 @@
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
-                  <div class="col-span-5 relative pr-12 md:pr-0">
+                  <div class="col-span-4 relative pr-12 md:pr-0">
                     <% if item.needs_review %>
                       <%# TODO: 要確認項目は将来的に input を赤枠ハイライトする。低信頼理由の表示も追加する %>
                       <span class="absolute -top-6 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#FFB4AB]/10 text-[#FFB4AB] flex items-center gap-1">
@@ -191,7 +192,26 @@
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
+                  <div class="col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
+                      <div class="relative">
+                        <%= item_form.number_field :tax_rate,
+                                                   value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
+                                                   step: 0.1,
+                                                   min: 0,
+                                                   max: 100,
+                                                   class: "w-full px-3 py-2 pr-7 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                   data: {
+                                                     action: "input->receipt-form#recalculate",
+                                                     receipt_form_target: "taxRateInput"
+                                                   } %>
+                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="hidden md:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥<%= number_with_delimiter(item.line_total.to_i) %>
                   </div>
 
@@ -227,7 +247,7 @@
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
-                  <div class="col-span-5 relative pr-12 md:pr-0">
+                  <div class="col-span-4 relative pr-12 md:pr-0">
                     <%= render "shared/ui/text_field",
                                f: item_form,
                                attribute: :confirmed_name,
@@ -265,7 +285,25 @@
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
+                  <div class="col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
+                      <div class="relative">
+                        <%= item_form.number_field :tax_rate,
+                                                   step: 0.1,
+                                                   min: 0,
+                                                   max: 100,
+                                                   class: "w-full px-3 py-2 pr-7 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                   data: {
+                                                     action: "input->receipt-form#recalculate",
+                                                     receipt_form_target: "taxRateInput"
+                                                   } %>
+                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="hidden md:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥0
                   </div>
 
@@ -309,7 +347,10 @@
               icon: "payments",
               subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定"),
               tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : "未設定"),
-              tax_rate: tax_rate_value %>
+              tax_rate: tax_rate_value,
+              subtotal_target: "subtotalAmount",
+              tax_amount_target: "taxAmount",
+              tax_rate_target: "taxRateSummary" %>
 
         <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
 
