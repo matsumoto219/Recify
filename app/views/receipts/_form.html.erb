@@ -63,52 +63,60 @@
                 class: "mb-6" %>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <%= f.label :store_name, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.text_field :store_name, class: "w-full h-11 px-4 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
-            </div>
+            <%= render "shared/ui/text_field",
+                       f: f,
+                       attribute: :store_name,
+                       label: "店舗名",
+                       icon: "storefront",
+                       placeholder: "店舗名を入力",
+                       input_class: "h-11" %>
 
-            <div class="space-y-2">
-              <%= f.label :payment_method, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.select :payment_method,
-                           options_for_select(Receipt.payment_method_options, f.object.payment_method),
-                           { include_blank: "選択してください" },
-                           class: "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
-            </div>
+            <%= render "shared/ui/select_field",
+                       f: f,
+                       attribute: :payment_method,
+                       label: "支払い方法",
+                       options: Receipt.payment_method_options,
+                       selected: f.object.payment_method,
+                       include_blank: "選択してください" %>
 
-            <div class="space-y-2">
-              <label class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" for="receipt_purchased_on">購入日</label>
-              <div class="relative">
-                <%= date_field_tag "receipt[purchased_on]",
-                                   receipt.purchased_at&.in_time_zone&.to_date,
-                                   id: "receipt_purchased_on",
-                                   class: "w-full h-11 py-2.5 rounded-lg pl-10 bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm">calendar_today</span>
-              </div>
-            </div>
+            <%= render "shared/ui/datetime_field",
+                       name: "receipt[purchased_on]",
+                       id: "receipt_purchased_on",
+                       label: "購入日",
+                       type: :date,
+                       value: receipt.purchased_at&.in_time_zone&.to_date,
+                       icon: "calendar_today" %>
 
-            <div class="space-y-2">
-              <label class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" for="receipt_purchased_time">時刻</label>
-              <div class="relative">
-                <%= time_field_tag "receipt[purchased_time]",
-                                   receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
-                                   id: "receipt_purchased_time",
-                                   class: "w-full h-11 py-2.5 rounded-lg pl-10 bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm">schedule</span>
-              </div>
-            </div>
+            <%= render "shared/ui/datetime_field",
+                       name: "receipt[purchased_time]",
+                       id: "receipt_purchased_time",
+                       label: "時刻",
+                       type: :time,
+                       value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
+                       icon: "schedule" %>
 
-            <div class="space-y-2 md:col-span-2">
-              <%= f.label :store_address, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.text_area :store_address,
-                              rows: 1,
-                              class: "w-full px-4 py-3 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1] resize-none" %>
+            <div class="md:col-span-2">
+              <%= render "shared/ui/text_field",
+                         f: f,
+                         attribute: :store_address,
+                         label: "店舗住所",
+                         icon: "location_on",
+                         placeholder: "店舗住所を入力",
+                         input_class: "h-11" %>
             </div>
-            <div class="space-y-2 md:col-span-2">
-              <%= f.label :store_phone_number, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
-              <%= f.telephone_field :store_phone_number,
-                                    class: "w-full h-11 px-4 py-2.5 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                    placeholder: "例: 03-1234-5678" %>
+            <div class="md:col-span-2">
+              <%= render "shared/ui/text_field",
+                         f: f,
+                         attribute: :store_phone_number,
+                         label: "電話番号",
+                         icon: "call",
+                         field_type: :telephone_field,
+                         placeholder: "例: 03-1234-5678",
+                         input_class: "h-11",
+                         html_options: {
+                           inputmode: "tel",
+                           pattern: "[0-9\\-]*"
+                         } %>
             </div>
           </div>
         <% end %>
@@ -143,16 +151,23 @@
                         要確認
                       </span>
                     <% end %>
-
-                    <%= item_form.text_field :confirmed_name,
-                                             value: item_name,
-                                             class: "w-full px-3 py-2 rounded-md bg-[#0E0E0E] border #{item.needs_review ? 'border-[#FFB4AB]/40' : 'border-white/10'} text-[#E5E2E1]",
-                                             placeholder: "品名を入力" %>
+                    <%= render "shared/ui/text_field",
+                               f: item_form,
+                               attribute: :confirmed_name,
+                               label: "品名",
+                               value: item_name,
+                               icon: nil,
+                               with_icon: false,
+                               placeholder: "品名を入力",
+                               show_label: false,
+                               highlight_variant: (item.needs_review ? :error : nil),
+                               input_class: "h-10 px-3 py-2 rounded-md" %>
 
                   </div>
 
                   <div class="col-span-2">
                     <div class="flex items-center gap-2 md:block">
+                      <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
                       <%= item_form.number_field :quantity,
                                                  class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
@@ -161,6 +176,7 @@
 
                   <div class="col-span-2">
                     <div class="flex items-center gap-2 md:block">
+                      <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
                       <%= item_form.number_field :price,
                                                  class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
@@ -201,13 +217,20 @@
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative">
                   <div class="col-span-5 relative pr-12 md:pr-0">
-                    <%= item_form.text_field :confirmed_name,
-                                             class: "w-full px-3 py-2 rounded-md bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                             placeholder: "品名を入力" %>
+                    <%= render "shared/ui/text_field",
+                               f: item_form,
+                               attribute: :confirmed_name,
+                               label: "品名",
+                               icon: nil,
+                               with_icon: false,
+                               placeholder: "品名を入力",
+                               show_label: false,
+                               input_class: "h-10 px-3 py-2 rounded-md" %>
                   </div>
 
                   <div class="col-span-2">
                     <div class="flex items-center gap-2 md:block">
+                      <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
                       <%= item_form.number_field :quantity,
                                                  class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
@@ -216,6 +239,7 @@
 
                   <div class="col-span-2">
                     <div class="flex items-center gap-2 md:block">
+                      <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
                       <%= item_form.number_field :price,
                                                  class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
@@ -246,9 +270,14 @@
                 icon: "notes",
                 class: "mb-4" %>
 
-          <%= f.text_area :memo,
-                          class: "w-full h-32 px-4 py-3 rounded-xl resize-none bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                          placeholder: "用途や補足があれば入力してください" %>
+          <%= render "shared/ui/textarea_field",
+                     f: f,
+                     attribute: :memo,
+                     label: "メモ",
+                     placeholder: "用途や補足があれば入力してください",
+                     show_label: false,
+                     rows: 4,
+                     textarea_class: "h-32" %>
         <% end %>
       </div>
 
