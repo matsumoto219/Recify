@@ -171,7 +171,8 @@
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
               tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
               tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : nil),
-              tax_rate_summary: tax_rate_summary %>
+              tax_rate_summary: tax_rate_summary,
+              tax_details: @receipt.receipt_tax_details.order(:rate) %>
       </div>
 
       <%# TODO: keep_image 設定連動（user設定 or receiptカラム） %>
