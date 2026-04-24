@@ -45,7 +45,10 @@ class ReceiptsController < ApplicationController
   end
 
   def update
-    if @receipt.update(normalized_receipt_params)
+    update_params = normalized_receipt_params.to_h
+    apply_amount_calculation!(update_params)
+
+    if @receipt.update(update_params)
       redirect_to @receipt, notice: t("flash.receipts.update")
     else
       render :edit, status: :unprocessable_entity
@@ -69,6 +72,9 @@ class ReceiptsController < ApplicationController
       :purchased_on,
       :purchased_time,
       :total_amount,
+      :subtotal_amount,
+      :tax_amount,
+      :tax_rate,
       :payment_method,
       :memo,
       :image,
@@ -77,9 +83,6 @@ class ReceiptsController < ApplicationController
       :store_phone_number,
       # NOTE: 以下は将来フォームから直接編集する場合の候補
       # :purchased_at,
-      # :subtotal_amount,
-      # :tax_amount,
-      # :tax_rate,
       # :tip_amount,
       # :country_region,
       # :receipt_type,
@@ -153,6 +156,30 @@ class ReceiptsController < ApplicationController
     tax_rate > 1 ? tax_rate / 100 : tax_rate
   rescue ArgumentError
     nil
+  end
+
+  def apply_amount_calculation!(permitted)
+    result = ReceiptAmountService.call(
+      receipt: permitted,
+      receipt_items: amount_receipt_items(permitted),
+      receipt_tax_details: [],
+      context: :edit_save
+    )
+
+    resolved = result[:resolved]
+    permitted["subtotal_amount"] = resolved[:subtotal]
+    permitted["tax_amount"] = resolved[:tax]
+    permitted["total_amount"] = resolved[:total]
+    permitted["tax_rate"] = resolved[:tax_rate]
+  end
+
+  def amount_receipt_items(permitted)
+    items_attributes = permitted["receipt_items_attributes"]
+    return [] if items_attributes.blank?
+
+    items_attributes.values.reject do |item_attributes|
+      ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+    end
   end
 
   def apply_analysis(receipt)

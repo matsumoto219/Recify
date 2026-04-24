@@ -1,4 +1,14 @@
 <section class="max-w-7xl mx-auto px-0 md:px-2 py-2">
+  <%
+    item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
+    tax_rate_summary = if item_tax_rates.empty?
+                         nil
+                       elsif item_tax_rates.one?
+                         "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
+                       else
+                         "複数税率"
+                       end
+  %>
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
     <%= render "shared/ui/section_header",
           title: t(".title"),
@@ -160,7 +170,8 @@
               icon: "payments",
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
               tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
-              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : "未設定") %>
+              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : nil),
+              tax_rate_summary: tax_rate_summary %>
       </div>
 
       <%# TODO: keep_image 設定連動（user設定 or receiptカラム） %>
