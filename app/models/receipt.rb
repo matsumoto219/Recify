@@ -50,7 +50,7 @@ class Receipt < ApplicationRecord
   has_many :receipt_tax_details, dependent: :destroy
   has_one_attached :image
 
-  accepts_nested_attributes_for :receipt_items, allow_destroy: false
+  accepts_nested_attributes_for :receipt_items, allow_destroy: true
   accepts_nested_attributes_for :receipt_payments, allow_destroy: false
   accepts_nested_attributes_for :receipt_tax_details, allow_destroy: false
 
