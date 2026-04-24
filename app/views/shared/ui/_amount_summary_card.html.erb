@@ -17,7 +17,9 @@
   </div>
 
   <p class="text-xs font-bold uppercase tracking-widest opacity-80 mb-2"><%= title %></p>
-  <h2 class="text-4xl font-black mb-6 truncate" title="<%= number_with_delimiter(amount.to_i) %>">
+  <h2 class="text-4xl font-black mb-6 truncate"
+      data-receipt-form-target="totalAmount"
+      title="<%= number_with_delimiter(amount.to_i) %>">
     <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>
   </h2>
 
