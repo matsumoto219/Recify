@@ -52,7 +52,7 @@ class Receipt < ApplicationRecord
 
   accepts_nested_attributes_for :receipt_items, allow_destroy: true
   accepts_nested_attributes_for :receipt_payments, allow_destroy: false
-  accepts_nested_attributes_for :receipt_tax_details, allow_destroy: false
+  accepts_nested_attributes_for :receipt_tax_details, allow_destroy: true
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }

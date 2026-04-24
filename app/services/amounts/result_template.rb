@@ -2,10 +2,11 @@
 
 module Amounts
   class ResultTemplate
-    def self.build(computed:, resolved:, inconsistencies:)
+    def self.build(computed:, resolved:, inconsistencies:, tax_details: [])
       {
         computed: computed,
         resolved: resolved,
+        tax_details: tax_details,
         inconsistencies: inconsistencies,
         needs_review: inconsistencies.any?
       }
