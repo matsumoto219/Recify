@@ -1,0 +1,80 @@
+<%#
+  Shared UI textarea field
+
+  Required locals:
+  - f
+  - attribute
+  - label
+
+  Optional locals:
+  - placeholder
+  - rows
+  - required
+  - show_label
+  - with_icon
+  - icon
+  - highlight_variant
+  - show_error_message
+  - textarea_class
+  - textarea_wrapper_class
+  - label_class
+  - error_message_class
+  - html_options: textareaへ渡す追加HTML属性（例: data, aria, maxlength）
+%>
+
+<%
+  placeholder = local_assigns[:placeholder]
+  rows = local_assigns.fetch(:rows, 4)
+  required = local_assigns.fetch(:required, false)
+  show_label = local_assigns.fetch(:show_label, true)
+  with_icon = local_assigns.fetch(:with_icon, local_assigns[:icon].present?)
+  icon = local_assigns.fetch(:icon, nil)
+  highlight_variant = local_assigns.fetch(:highlight_variant, nil)
+  show_error_message = local_assigns.fetch(:show_error_message, true)
+  textarea_class = local_assigns[:textarea_class]
+  textarea_wrapper_class = local_assigns[:textarea_wrapper_class]
+  label_class = local_assigns[:label_class]
+  error_message_class = local_assigns[:error_message_class]
+  html_options = local_assigns.fetch(:html_options, {})
+
+  has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
+
+  base_wrapper_class = "space-y-2"
+  base_label_class = "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]"
+  base_textarea_class = "w-full rounded-xl bg-[#0E0E0E] text-[#E5E2E1] border border-transparent outline-none transition-all resize-none"
+  highlight_classes = if has_error || highlight_variant == :error
+                        "border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
+                      else
+                        "focus:ring-2 focus:ring-[#C0C1FF]/50"
+                      end
+  textarea_spacing_class = with_icon ? "pl-11 pr-4 py-3" : "px-4 py-3"
+  merged_wrapper_class = [base_wrapper_class, textarea_wrapper_class].compact.join(" ")
+  merged_label_class = [base_label_class, label_class].compact.join(" ")
+  merged_textarea_class = [base_textarea_class, highlight_classes, textarea_spacing_class, textarea_class].compact.join(" ")
+  merged_error_class = ["text-xs text-[#FFB4AB]", error_message_class].compact.join(" ")
+
+  field_options = {
+    placeholder: placeholder,
+    rows: rows,
+    required: required,
+    class: merged_textarea_class
+  }.compact.merge(html_options)
+%>
+
+<div class="<%= merged_wrapper_class %>">
+  <% if show_label %>
+    <%= f.label attribute, label, class: merged_label_class %>
+  <% end %>
+
+  <div class="relative">
+    <% if with_icon && icon.present? %>
+      <span class="material-symbols-outlined absolute left-3 top-3 text-[#C7C4D8] text-sm pointer-events-none"><%= icon %></span>
+    <% end %>
+
+    <%= f.text_area attribute, **field_options %>
+  </div>
+
+  <% if show_error_message && has_error %>
+    <p class="<%= merged_error_class %>"><%= f.object.errors[attribute].first %></p>
+  <% end %>
+</div>
