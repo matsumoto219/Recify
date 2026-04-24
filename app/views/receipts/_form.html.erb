@@ -170,7 +170,11 @@
                       <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
                       <%= item_form.number_field :quantity,
-                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                 data: {
+                                                   action: "input->receipt-form#recalculate",
+                                                   receipt_form_target: "quantityInput"
+                                                 } %>
                     </div>
                   </div>
 
@@ -179,11 +183,15 @@
                       <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
                       <%= item_form.number_field :price,
-                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                 data: {
+                                                   action: "input->receipt-form#recalculate",
+                                                   receipt_form_target: "priceInput"
+                                                 } %>
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium">
+                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥<%= number_with_delimiter(item.line_total.to_i) %>
                   </div>
 
@@ -196,7 +204,7 @@
                   </div>
 
                   <%= item_form.hidden_field :id %>
-                  <%= item_form.hidden_field :line_total %>
+                  <%= item_form.hidden_field :line_total, data: { receipt_form_target: "lineTotalInput" } %>
                   <%= item_form.hidden_field :needs_review %>
                   <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
                 </div>
@@ -236,7 +244,11 @@
                       <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
                       <%= item_form.number_field :quantity,
-                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                 data: {
+                                                   action: "input->receipt-form#recalculate",
+                                                   receipt_form_target: "quantityInput"
+                                                 } %>
                     </div>
                   </div>
 
@@ -245,11 +257,15 @@
                       <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
                       <%= item_form.number_field :price,
-                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]" %>
+                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+                                                 data: {
+                                                   action: "input->receipt-form#recalculate",
+                                                   receipt_form_target: "priceInput"
+                                                 } %>
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium">
+                  <div class="hidden md:block col-span-2 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥0
                   </div>
 
@@ -261,7 +277,7 @@
                     </button>
                   </div>
 
-                  <%= item_form.hidden_field :line_total, value: 0 %>
+                  <%= item_form.hidden_field :line_total, value: 0, data: { receipt_form_target: "lineTotalInput" } %>
                   <%= item_form.hidden_field :needs_review, value: false %>
                 </div>
               <% end %>
