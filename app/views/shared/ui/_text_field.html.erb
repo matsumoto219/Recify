@@ -7,6 +7,7 @@
     任意locals:
     - field_type: :email_field / :password_field / :text_field（default: :text_field）
     - placeholder: placeholder文言
+    - value: inputの表示値を明示指定する場合に使用
     - autocomplete: autocomplete属性
     - autofocus: true/false
     - required: true/false
@@ -18,10 +19,12 @@
     - input_wrapper_class: 入力欄ラッパー用class
     - label_class: ラベル用追加class
     - error_message_class: エラーメッセージ用追加class
+    - html_options: inputへ渡す追加HTML属性（例: inputmode, pattern, data, aria）
 %>
 <%
   field_type = local_assigns.fetch(:field_type, :text_field)
   placeholder = local_assigns[:placeholder]
+  value = local_assigns[:value]
   autocomplete = local_assigns[:autocomplete]
   autofocus = local_assigns.fetch(:autofocus, false)
   required = local_assigns.fetch(:required, false)
@@ -29,11 +32,12 @@
   input_class = local_assigns[:input_class]
 
   with_icon = local_assigns.fetch(:with_icon, true)
-  highlight_variant = local_assigns.fetch(:highlight_variant, :default).to_sym
+  highlight_variant = (local_assigns[:highlight_variant].presence || :default).to_sym
   show_error_message = local_assigns.fetch(:show_error_message, true)
   input_wrapper_class = local_assigns[:input_wrapper_class]
   label_class = local_assigns[:label_class]
   error_message_class = local_assigns[:error_message_class]
+  html_options = local_assigns.fetch(:html_options, {})
 
   attribute_errors = Array(f.object&.errors&.[](attribute))
   has_error = attribute_errors.any?
@@ -60,14 +64,16 @@
   ].compact.join(" ")
   error_classes = ["px-1 text-xs text-[#FFB4AB] leading-relaxed", error_message_class].compact.join(" ")
 
-  merged_input_class = [base_input_class, highlight_classes, input_class].compact.join(" ")
+  input_spacing_class = with_icon ? "pl-11 pr-4" : "px-4"
+  merged_input_class = [base_input_class, highlight_classes, input_spacing_class, input_class].compact.join(" ")
   field_options = {
     placeholder: placeholder,
+    value: value,
     autocomplete: autocomplete,
     autofocus: autofocus,
     required: required,
     class: merged_input_class
-  }.compact
+  }.compact.merge(html_options)
 %>
 
 <div class="space-y-2">
