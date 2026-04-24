@@ -171,6 +171,31 @@ class ReceiptsController < ApplicationController
     permitted["tax_amount"] = resolved[:tax]
     permitted["total_amount"] = resolved[:total]
     permitted["tax_rate"] = resolved[:tax_rate]
+    permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+  end
+
+  def receipt_tax_detail_attributes(tax_details)
+    destroy_existing_receipt_tax_details + build_receipt_tax_detail_attributes(tax_details)
+  end
+
+  def destroy_existing_receipt_tax_details
+    @receipt.receipt_tax_details.map do |tax_detail|
+      {
+        "id" => tax_detail.id,
+        "_destroy" => "1"
+      }
+    end
+  end
+
+  def build_receipt_tax_detail_attributes(tax_details)
+    Array(tax_details).map do |tax_detail|
+      {
+        "description" => tax_detail[:description],
+        "amount" => tax_detail[:amount],
+        "rate" => tax_detail[:rate],
+        "net_amount" => tax_detail[:net_amount]
+      }
+    end
   end
 
   def amount_receipt_items(permitted)

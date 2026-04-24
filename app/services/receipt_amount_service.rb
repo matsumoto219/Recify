@@ -15,7 +15,8 @@
 # Output:
 # {
 #   computed: { subtotal:, tax:, total: },
-#   resolved: { subtotal:, tax:, total: },
+#   resolved: { subtotal:, tax:, total:, tax_rate: },
+#   tax_details: Array<Hash>,
 #   inconsistencies: Array<Symbol>,
 #   needs_review: Boolean
 # }
@@ -62,7 +63,12 @@ class ReceiptAmountService
       context: @context
     ).call
 
-    # --- 4) ResultTemplate（出力整形）
+    # --- 4) TaxDetailAggregator（税率別集計）
+    tax_details = Amounts::TaxDetailAggregator.new(
+      items: @items
+    ).call
+
+    # --- 5) ResultTemplate（出力整形）
     Amounts::ResultTemplate.build(
       computed: {
         subtotal: calc[:subtotal],
@@ -70,6 +76,7 @@ class ReceiptAmountService
         total: calc[:total]
       },
       resolved: resolved,
+      tax_details: tax_details,
       inconsistencies: inconsistencies
     )
   end
