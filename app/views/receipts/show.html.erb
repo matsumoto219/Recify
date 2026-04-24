@@ -141,9 +141,13 @@
         <%# TODO: メモ表示の本実装調整
             - 現在は空メモ時のダミー文言を表示
             - 本実装時は文言を I18n 化し、空状態デザインも統一する %>
-        <p class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12">
-          <%= @receipt.memo.presence || "メモはありません（ダミー表示）" %>
-        </p>
+        <div class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12">
+          <% if @receipt.memo.present? %>
+            <%= simple_format(@receipt.memo) %>
+          <% else %>
+            メモはありません（ダミー表示）
+          <% end %>
+        </div>
       <% end %>
     </div>
 
