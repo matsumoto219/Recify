@@ -11,6 +11,7 @@
   subtotal_target = local_assigns[:subtotal_target]
   tax_amount_target = local_assigns[:tax_amount_target]
   tax_rate_target = local_assigns[:tax_rate_target]
+  tax_details = Array(local_assigns[:tax_details])
   wrapper_class = local_assigns[:class]
 %>
 
@@ -41,5 +42,28 @@
       <span class="opacity-70">税率</span>
       <span class="font-medium text-right" <%= %(data-receipt-form-target="#{tax_rate_target}").html_safe if tax_rate_target.present? %>><%= tax_rate_display %></span>
     </div>
+
+    <% if tax_details.size > 1 %>
+      <div class="pt-3 mt-3 border-t border-white/15 space-y-2">
+        <p class="text-xs font-bold uppercase tracking-widest opacity-70">税率別内訳</p>
+        <% tax_details.each do |tax_detail| %>
+          <% rate = tax_detail.respond_to?(:rate) ? tax_detail.rate : tax_detail[:rate] || tax_detail["rate"] %>
+          <% net_amount = tax_detail.respond_to?(:net_amount) ? tax_detail.net_amount : tax_detail[:net_amount] || tax_detail["net_amount"] %>
+          <% amount = tax_detail.respond_to?(:amount) ? tax_detail.amount : tax_detail[:amount] || tax_detail["amount"] %>
+          <% rate_label = rate.present? ? "#{number_with_precision(rate.to_d * 100, precision: 1, strip_insignificant_zeros: true)}%" : "税率未設定" %>
+
+          <div class="rounded-lg bg-white/10 px-3 py-2 text-xs space-y-1">
+            <div class="flex justify-between gap-4 font-medium">
+              <span><%= rate_label %>対象</span>
+              <span>税額 <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %></span>
+            </div>
+            <div class="flex justify-between gap-4 opacity-70">
+              <span>税抜 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %></span>
+              <span>税込 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %></span>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   </div>
 <% end %>
