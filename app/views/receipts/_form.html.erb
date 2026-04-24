@@ -15,7 +15,17 @@
   <% total_amount_value = receipt.total_amount.to_i %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
-  <% tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : "未設定" %>
+  <%
+    item_tax_rates = receipt.receipt_items.filter_map(&:tax_rate).uniq
+    tax_rate_summary = if item_tax_rates.empty?
+                         nil
+                       elsif item_tax_rates.one?
+                         "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
+                       else
+                         "複数税率"
+                       end
+    tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : nil
+  %>
   <% content_for :mobile_bottom_actions do %>
     <%= render "shared/ui/button",
           label: "保存",
@@ -348,6 +358,7 @@
               subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定"),
               tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : "未設定"),
               tax_rate: tax_rate_value,
+              tax_rate_summary: tax_rate_summary,
               subtotal_target: "subtotalAmount",
               tax_amount_target: "taxAmount",
               tax_rate_target: "taxRateSummary" %>

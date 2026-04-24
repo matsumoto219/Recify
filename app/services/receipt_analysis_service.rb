@@ -413,6 +413,7 @@ class ReceiptAnalysisService
         quantity: normalize_quantity(symbolized[:quantity]),
         quantity_unit: symbolized[:quantity_unit].presence,
         product_code: symbolized[:product_code].presence,
+        tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
         line_total: normalize_amount(symbolized[:line_total]),
         # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
         needs_review: symbolized[:needs_review],

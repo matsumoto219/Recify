@@ -8,7 +8,7 @@
 # - receipt: ActiveRecord object or Hash-like with:
 #     :total_amount, :subtotal_amount, :tax_amount
 # - receipt_items: Array<Hash> with:
-#     :price, :quantity, :line_total (optional)
+#     :price, :quantity, :line_total (optional), :tax_rate (optional)
 # - receipt_tax_details: Array<Hash> with:
 #     :amount, :rate, :net_amount (optional)
 #
@@ -91,7 +91,8 @@ class ReceiptAmountService
     {
       price: to_i(fetch_value(i, :price)),
       quantity: to_i(fetch_value(i, :quantity, 1)),
-      line_total: to_i(fetch_value(i, :line_total))
+      line_total: to_i(fetch_value(i, :line_total)),
+      tax_rate: fetch_value(i, :tax_rate)
     }
   end
 

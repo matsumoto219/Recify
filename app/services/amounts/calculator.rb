@@ -10,18 +10,22 @@ module Amounts
 
     def call
       item_total = calculate_item_total
-      tax_total  = calculate_tax_total
+      item_subtotal = calculate_item_subtotal
+      item_tax_total = item_total - item_subtotal
+      tax_detail_total = calculate_tax_detail_total
 
-      subtotal = resolve_subtotal(item_total)
-      tax      = resolve_tax(tax_total, subtotal)
-      total    = resolve_total(subtotal, tax)
+      tax_total = resolve_tax_total(item_tax_total, tax_detail_total)
+      subtotal = resolve_subtotal(item_total, item_subtotal, tax_total)
+      total = resolve_total(item_total, subtotal, tax_total)
+      tax_rate = resolve_tax_rate
 
       {
         item_total: item_total,
         tax_total: tax_total,
         subtotal: subtotal,
-        tax: tax,
-        total: total
+        tax: tax_total,
+        total: total,
+        tax_rate: tax_rate
       }
     end
 
@@ -30,55 +34,108 @@ module Amounts
     # -----------------------------
     # Item calculations
     # -----------------------------
+    # price / line_total は税込金額として扱う。
     def calculate_item_total
+      @items.sum { |item| item_line_total(item) }
+    end
+
+    # 明細ごとの税込金額から税抜金額を逆算する。
+    # tax_rate は 0.08 / 0.1 形式で保存されている前提。
+    def calculate_item_subtotal
       @items.sum do |item|
-        if item[:line_total].to_i > 0
-          item[:line_total].to_i
-        else
-          price = item[:price].to_i
-          quantity = item[:quantity].to_i
-          quantity = 1 if quantity <= 0
-          price * quantity
-        end
+        line_total = item_line_total(item)
+        tax_rate = normalize_tax_rate(item[:tax_rate])
+
+        next line_total if tax_rate <= 0
+
+        (BigDecimal(line_total.to_s) / (BigDecimal("1") + tax_rate)).floor
       end
+    end
+
+    def item_line_total(item)
+      line_total = to_i(item[:line_total])
+      return line_total if line_total.positive?
+
+      price = to_i(item[:price])
+      quantity = to_i(item[:quantity])
+      quantity = 1 if quantity <= 0
+
+      price * quantity
     end
 
     # -----------------------------
     # Tax calculations
     # -----------------------------
-    def calculate_tax_total
-      @tax_details.sum { |t| t[:amount].to_i }
+    def calculate_tax_detail_total
+      @tax_details.sum { |t| to_i(t[:amount]) }
     end
 
     # -----------------------------
     # Resolve helpers
     # -----------------------------
-    def resolve_subtotal(item_total)
-      @receipt[:subtotal_amount] || item_total
+    def resolve_tax_total(item_tax_total, tax_detail_total)
+      return item_tax_total if item_tax_total.positive?
+      return tax_detail_total if tax_detail_total.positive?
+
+      receipt_tax_amount = to_i(@receipt[:tax_amount])
+      receipt_tax_amount.positive? ? receipt_tax_amount : 0
     end
 
-    def resolve_tax(tax_total, subtotal)
-      return @receipt[:tax_amount] if present?(@receipt[:tax_amount])
+    def resolve_subtotal(item_total, item_subtotal, tax_total)
+      return item_subtotal if item_subtotal.positive? && item_subtotal <= item_total
 
-      return tax_total if tax_total > 0
+      receipt_subtotal = to_i(@receipt[:subtotal_amount])
+      return receipt_subtotal if receipt_subtotal.positive?
 
-      if present?(@receipt[:total_amount]) && present?(subtotal)
-        tax = @receipt[:total_amount].to_i - subtotal.to_i
-        tax = 0 if tax < 0
-        tax
-      else
-        0
-      end
+      subtotal = item_total - tax_total
+      subtotal.positive? ? subtotal : item_total
     end
 
-    def resolve_total(subtotal, tax)
-      return @receipt[:total_amount] if present?(@receipt[:total_amount])
+    def resolve_total(item_total, subtotal, tax_total)
+      return item_total if item_total.positive?
 
-      subtotal.to_i + tax.to_i
+      receipt_total = to_i(@receipt[:total_amount])
+      return receipt_total if receipt_total.positive?
+
+      subtotal.to_i + tax_total.to_i
     end
 
-    def present?(v)
-      !v.nil? && v != ""
+    def resolve_tax_rate
+      item_tax_rates = @items.filter_map do |item|
+        tax_rate = normalize_tax_rate(item[:tax_rate])
+        tax_rate.positive? ? tax_rate : nil
+      end.uniq
+
+      return item_tax_rates.first if item_tax_rates.one?
+      return nil if item_tax_rates.many?
+
+      tax_detail_rates = @tax_details.filter_map do |tax_detail|
+        tax_rate = normalize_tax_rate(tax_detail[:rate])
+        tax_rate.positive? ? tax_rate : nil
+      end.uniq
+
+      return tax_detail_rates.first if tax_detail_rates.one?
+
+      nil
+    end
+
+    def normalize_tax_rate(value)
+      return BigDecimal("0") if blank?(value)
+
+      tax_rate = BigDecimal(value.to_s)
+      tax_rate > 1 ? tax_rate / 100 : tax_rate
+    rescue ArgumentError
+      BigDecimal("0")
+    end
+
+    def to_i(value)
+      return 0 if blank?(value)
+
+      value.to_i
+    end
+
+    def blank?(value)
+      value.nil? || value == ""
     end
   end
 end

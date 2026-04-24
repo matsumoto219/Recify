@@ -122,6 +122,8 @@ module Analysis
             quantity_unit: normalized_item[:quantity_unit],
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
+            # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
+            tax_rate: normalize_rate(normalized_item[:tax_rate]),
             line_total: normalize_amount(normalized_item[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
             needs_review: final_item_needs_review(normalized_item, ai_items_present: ai_items_present),
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
@@ -228,6 +230,7 @@ module Analysis
             needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
+            tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
             position_index: candidate_position || candidate_index
           )
         end
@@ -265,6 +268,7 @@ module Analysis
             quantity: quantity,
             quantity_unit: nil,
             product_code: nil,
+            tax_rate: nil,
             line_total: extract_item_line_total(line, price:, quantity:),
             needs_review: true,
             position_index: index,
@@ -352,10 +356,9 @@ module Analysis
 
       def normalize_rate(value)
         return nil if value.blank?
-        return value.to_d if value.is_a?(Numeric)
 
-        cleaned = value.to_s.delete("%")
-        cleaned.present? ? cleaned.to_d : nil
+        rate = value.is_a?(Numeric) ? value.to_d : value.to_s.delete("%").to_d
+        rate > 1 ? rate / 100 : rate
       rescue ArgumentError
         nil
       end

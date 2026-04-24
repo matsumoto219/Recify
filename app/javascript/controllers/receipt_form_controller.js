@@ -77,8 +77,9 @@ export default class extends Controller {
       }
 
       // 税込単価前提の計算
+      // サーバー側（Amounts::Calculator）と同じく、明細ごとに税抜金額を切り捨てる
       const lineTotal = quantity * price
-      const subtotal = taxRate > 0 ? lineTotal / (1 + taxRate) : lineTotal
+      const subtotal = taxRate > 0 ? Math.floor(lineTotal / (1 + taxRate)) : lineTotal
       const tax = lineTotal - subtotal
 
       subtotalSum += subtotal

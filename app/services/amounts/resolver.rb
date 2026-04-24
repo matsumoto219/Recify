@@ -27,7 +27,8 @@ module Amounts
       {
         subtotal: @receipt[:subtotal_amount] || @computed[:subtotal],
         tax: @receipt[:tax_amount] || @computed[:tax],
-        total: @receipt[:total_amount] || @computed[:total]
+        total: @receipt[:total_amount] || @computed[:total],
+        tax_rate: @receipt[:tax_rate] || @computed[:tax_rate]
       }
     end
 
@@ -35,7 +36,8 @@ module Amounts
       {
         subtotal: @computed[:subtotal],
         tax: @computed[:tax],
-        total: @computed[:total]
+        total: @computed[:total],
+        tax_rate: @computed[:tax_rate]
       }
     end
 
