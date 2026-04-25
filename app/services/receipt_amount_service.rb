@@ -58,7 +58,9 @@ class ReceiptAmountService
     # --- 3) TaxDetailAggregator（税率別集計）
     tax_details = Amounts::TaxDetailAggregator.new(
       items: @items,
-      fallback_tax_rate: calc[:tax_rate]
+      fallback_tax_rate: calc[:tax_rate],
+      fallback_net_amount: resolved[:subtotal],
+      fallback_tax_amount: resolved[:tax]
     ).call
 
     # --- 4) ConsistencyChecker（整合性チェック）
@@ -113,7 +115,8 @@ class ReceiptAmountService
     {
       total_amount: fetch_value(r, :total_amount),
       subtotal_amount: fetch_value(r, :subtotal_amount),
-      tax_amount: fetch_value(r, :tax_amount)
+      tax_amount: fetch_value(r, :tax_amount),
+      tax_rate: fetch_value(r, :tax_rate)
     }
   end
 

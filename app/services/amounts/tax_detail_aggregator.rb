@@ -2,13 +2,18 @@
 
 module Amounts
   class TaxDetailAggregator
-    def initialize(items:, fallback_tax_rate: nil)
+    def initialize(items:, fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil)
       @items = Array(items)
       @fallback_tax_rate = normalize_tax_rate(fallback_tax_rate)
+      @fallback_net_amount = to_i(fallback_net_amount)
+      @fallback_tax_amount = to_i(fallback_tax_amount)
     end
 
     def call
-      grouped_tax_details.map do |rate, amounts|
+      groups = grouped_tax_details
+      groups = fallback_tax_details if groups.blank?
+
+      groups.map do |rate, amounts|
         {
           description: description_for(rate),
           rate: rate,
@@ -39,6 +44,19 @@ module Amounts
         grouped[tax_rate][:net_amount] += net_amount
         grouped[tax_rate][:amount] += tax_amount
       end
+    end
+
+    def fallback_tax_details
+      return {} if @fallback_tax_rate <= 0
+      return {} if @fallback_net_amount <= 0
+      return {} if @fallback_tax_amount < 0
+
+      {
+        @fallback_tax_rate => {
+          net_amount: @fallback_net_amount,
+          amount: @fallback_tax_amount
+        }
+      }
     end
 
     def item_line_total(item)

@@ -2,13 +2,14 @@
 
 module Amounts
   class ConsistencyChecker
-    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, source_tax_details: [], generated_tax_details: [])
+    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, item_count: 0, source_tax_details: [], generated_tax_details: [])
       @computed = computed
       @resolved = resolved
       @item_total = item_total
       @tax_total = tax_total
       @receipt = receipt
       @context = context
+      @item_count = item_count.to_i
       @source_tax_details = Array(source_tax_details)
       @generated_tax_details = Array(generated_tax_details)
     end
@@ -20,7 +21,7 @@ module Amounts
         errors << :total_mismatch
       end
 
-      if @item_total.to_i != @resolved[:total].to_i
+      if item_data_present? && @item_total.to_i != @resolved[:total].to_i
         errors << :item_total_mismatch
       end
 
@@ -56,6 +57,10 @@ module Amounts
     end
 
     private
+
+    def item_data_present?
+      @item_count.positive?
+    end
 
     def item_tax_total
       @computed[:item_tax_total].to_i

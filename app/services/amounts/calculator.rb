@@ -11,12 +11,14 @@ module Amounts
     def call
       item_total = calculate_item_total
       tax_detail_total = calculate_tax_detail_total
+      tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
       item_subtotal = calculate_item_subtotal(fallback_tax_rate)
       item_tax_total = item_total - item_subtotal
 
-      tax_total = resolve_tax_total(item_tax_total, tax_detail_total)
-      subtotal = resolve_subtotal(item_total, item_subtotal, tax_total)
+      total = resolve_total(item_total, nil, nil)
+      subtotal = resolve_subtotal(item_total, item_subtotal, nil, total:, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
+      tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total:, subtotal: subtotal)
       total = resolve_total(item_total, subtotal, tax_total)
       tax_rate = resolve_tax_rate(fallback_tax_rate)
 
@@ -43,7 +45,7 @@ module Amounts
     end
 
     # 明細ごとの税込金額から税抜金額を逆算する。
-    # tax_rate は 0.08 / 0.1 形式で保存されている前提。
+    # tax_rate は 0.08 / 0.1 などの小数形式で扱う。
     def calculate_item_subtotal(fallback_tax_rate = BigDecimal("0"))
       @items.sum do |item|
         line_total = item_line_total(item)
@@ -74,24 +76,47 @@ module Amounts
       @tax_details.sum { |t| to_i(t[:amount]) }
     end
 
+    def calculate_tax_detail_subtotal
+      @tax_details.sum { |t| to_i(t[:net_amount]) }
+    end
+
     # -----------------------------
     # Resolve helpers
     # -----------------------------
-    def resolve_tax_total(item_tax_total, tax_detail_total)
+    def resolve_tax_total(item_tax_total, tax_detail_total, total: nil, subtotal: nil)
       return item_tax_total if item_tax_total.positive?
       return tax_detail_total if tax_detail_total.positive?
 
       receipt_tax_amount = to_i(@receipt[:tax_amount])
-      receipt_tax_amount.positive? ? receipt_tax_amount : 0
+      return receipt_tax_amount if receipt_tax_amount.positive?
+
+      # subtotal + tax_rate → tax を補完
+      tax_rate = normalize_tax_rate(@receipt[:tax_rate])
+      if subtotal.to_i.positive? && tax_rate.positive?
+        return (BigDecimal(subtotal.to_s) * tax_rate).round
+      end
+
+      # total fallback時に subtotal が無い（0）の場合は税額補完しない
+      return 0 if subtotal.to_i <= 0
+
+      calculated_tax = total.to_i - subtotal.to_i
+      calculated_tax.positive? ? calculated_tax : 0
     end
 
-    def resolve_subtotal(item_total, item_subtotal, tax_total)
+    def resolve_subtotal(item_total, item_subtotal, tax_total, total: nil, tax_rate: BigDecimal("0"), tax_detail_subtotal: 0)
       return item_subtotal if item_subtotal.positive? && item_subtotal <= item_total
 
       receipt_subtotal = to_i(@receipt[:subtotal_amount])
       return receipt_subtotal if receipt_subtotal.positive?
 
-      subtotal = item_total - tax_total
+      return tax_detail_subtotal if tax_detail_subtotal.to_i.positive?
+
+      resolved_total = total.to_i
+      if resolved_total.positive? && tax_rate.positive?
+        return (BigDecimal(resolved_total.to_s) / (BigDecimal("1") + tax_rate)).floor
+      end
+
+      subtotal = item_total - tax_total.to_i
       subtotal.positive? ? subtotal : item_total
     end
 
@@ -141,6 +166,9 @@ module Amounts
       return tax_detail_rates.first if tax_detail_rates.one?
       return BigDecimal("0") if tax_detail_rates.many?
 
+      receipt_tax_rate = normalize_tax_rate(@receipt[:tax_rate])
+      return receipt_tax_rate if receipt_tax_rate.positive?
+
       infer_tax_rate_from_amounts(item_total, tax_detail_total)
     end
 
@@ -163,7 +191,7 @@ module Amounts
 
       # config想定（将来外出し）
       step = BigDecimal("0.5")
-      tolerance = BigDecimal("0.02")
+      tolerance = BigDecimal("0.03")
 
       # 0.5刻みに丸め
       rounded = (percentage / step).round * step
