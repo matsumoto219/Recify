@@ -41,6 +41,11 @@ module Amounts
         errors << :price_tax_inclusion_uncertain
       end
 
+      # 算出不能データ検知
+      if insufficient_data?
+        errors << :insufficient_data
+      end
+
       errors.uniq
     end
 
@@ -70,6 +75,18 @@ module Amounts
 
       # どちらかでも起きていれば「混在の可能性」とみなす
       mismatch && tax_mismatch
+    end
+
+    def insufficient_data?
+      # itemsが1件でもあればOK
+      has_items = @item_total.to_i > 0
+
+      # tax_detailsやtotalなどの最低限データ
+      has_tax_details = @computed[:tax_detail_total].to_i > 0
+      has_total = @resolved[:total].to_i > 0
+
+      # itemsが無く、かつ他の情報も弱い場合
+      !has_items && !has_tax_details && !has_total
     end
 
     def present?(v)
