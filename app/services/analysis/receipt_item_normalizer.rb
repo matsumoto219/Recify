@@ -6,6 +6,7 @@ module Analysis
       suggested_name
       category
       needs_review
+      tax_rate
     ].freeze
 
     class << self
@@ -34,7 +35,8 @@ module Analysis
         index: normalize_index(normalized[:index] || normalized[:position_index]),
         suggested_name: normalize_string(normalized[:suggested_name]),
         category: normalize_string(normalized[:category]),
-        needs_review: normalize_boolean(normalized[:needs_review])
+        needs_review: normalize_boolean(normalized[:needs_review]),
+        tax_rate: normalize_tax_rate(normalized[:tax_rate])
       }.compact
 
       return nil if result.empty?
@@ -71,6 +73,15 @@ module Analysis
       else
         nil
       end
+    end
+
+    def normalize_tax_rate(value)
+      return nil if value.blank?
+
+      rate = BigDecimal(value.to_s.delete("%"))
+      rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      nil
     end
   end
 end
