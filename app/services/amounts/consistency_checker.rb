@@ -36,6 +36,11 @@ module Amounts
         end
       end
 
+      # 税抜/税込混在の可能性検知
+      if mixed_tax_inclusion_suspected?
+        errors << :price_tax_inclusion_uncertain
+      end
+
       errors.uniq
     end
 
@@ -47,6 +52,24 @@ module Amounts
 
     def tax_detail_total
       @computed[:tax_detail_total].to_i
+    end
+
+    def mixed_tax_inclusion_suspected?
+      return false unless @context == :analysis
+
+      ocr_total = @receipt[:total_amount].to_i
+      resolved_total = @resolved[:total].to_i
+
+      return false if ocr_total == 0 || resolved_total == 0
+
+      # OCRとitems合計がズレている
+      mismatch = ocr_total != resolved_total
+
+      # tax mismatchが発生している（内訳もズレている）
+      tax_mismatch = (@computed[:tax_detail_total].to_i != @computed[:item_tax_total].to_i)
+
+      # どちらかでも起きていれば「混在の可能性」とみなす
+      mismatch && tax_mismatch
     end
 
     def present?(v)

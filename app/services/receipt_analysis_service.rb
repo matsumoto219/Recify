@@ -215,6 +215,11 @@ class ReceiptAnalysisService
       tax_rate: amount_result[:resolved][:tax_rate]
     )
 
+    review_reasons = merge_review_reasons(
+      ai_result[:review_reasons],
+      amount_result[:inconsistencies]
+    )
+
     final_status = determine_final_status(
       ocr_result: ocr_result,
       receipt_attributes: params[:receipt_attributes],
@@ -228,7 +233,7 @@ class ReceiptAnalysisService
         status: final_status,
         processing_error_code: nil,
         processing_error_message: nil,
-        review_reasons: Array(ai_result[:review_reasons]),
+        review_reasons: review_reasons,
         ocr_completed_at: Time.current
       ),
       items_attributes: params[:receipt_items_attributes],
@@ -266,6 +271,8 @@ class ReceiptAnalysisService
       amount_result
     )
 
+    review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
+
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
     # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
     final_status = "review_needed"
@@ -275,7 +282,7 @@ class ReceiptAnalysisService
         status: final_status,
         processing_error_code: nil,
         processing_error_message: nil,
-        review_reasons: [],
+        review_reasons: review_reasons,
         ocr_completed_at: Time.current
       ),
       items_attributes: items_attributes,
@@ -313,6 +320,8 @@ class ReceiptAnalysisService
       amount_result
     )
 
+    review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
+
     # NOTE:
     # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
     # fail_receipt! は mapper を通しているため扱いが完全一致していないが、
@@ -321,7 +330,7 @@ class ReceiptAnalysisService
       status: "review_needed",
       processing_error_code: error_code,
       processing_error_message: nil,
-      review_reasons: [],
+      review_reasons: review_reasons,
       ocr_completed_at: Time.current
     )
 
@@ -388,10 +397,6 @@ class ReceiptAnalysisService
   end
 
   def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil)
-    # TODO:
-    # amount_result[:needs_review] をここに統合する
-    # 例:
-    # return "review_needed" if amount_needs_review
     return "review_needed" if amount_needs_review
     return "review_needed" if ai_needs_review
     return "review_needed" if low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes)
@@ -403,6 +408,15 @@ class ReceiptAnalysisService
     return "review_needed" if items_attributes.any? { |item| item_needs_review?(item) }
 
     "completed"
+  end
+
+  def merge_review_reasons(*reason_groups)
+    reason_groups
+      .flatten
+      .compact
+      .map(&:to_s)
+      .reject(&:blank?)
+      .uniq
   end
 
   # ReceiptBuildParamsService が save-ready な item 値を返す前提で、
