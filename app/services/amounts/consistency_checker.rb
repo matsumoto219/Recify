@@ -26,6 +26,10 @@ module Amounts
         errors << :tax_amount_mismatch
       end
 
+      if tax_detail_total.positive? && item_tax_total.positive? && tax_detail_total != item_tax_total
+        errors << :tax_detail_mismatch
+      end
+
       if @context == :analysis
         if present?(@receipt[:total_amount]) && @receipt[:total_amount].to_i != @resolved[:total].to_i
           errors << :ocr_total_mismatch
@@ -36,6 +40,14 @@ module Amounts
     end
 
     private
+
+    def item_tax_total
+      @computed[:item_tax_total].to_i
+    end
+
+    def tax_detail_total
+      @computed[:tax_detail_total].to_i
+    end
 
     def present?(v)
       !v.nil? && v != ""
