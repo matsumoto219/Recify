@@ -2,8 +2,9 @@
 
 module Amounts
   class TaxDetailAggregator
-    def initialize(items:)
+    def initialize(items:, fallback_tax_rate: nil)
       @items = Array(items)
+      @fallback_tax_rate = normalize_tax_rate(fallback_tax_rate)
     end
 
     def call
@@ -20,10 +21,12 @@ module Amounts
     private
 
     # receipt_items は税込単価前提。
+    # item.tax_rate が無い場合のみ fallback_tax_rate を使う。
     # 税率ごとに税抜金額・税額を集計して receipt_tax_details 用Hashへ変換する。
     def grouped_tax_details
       @items.each_with_object({}) do |item, grouped|
         tax_rate = normalize_tax_rate(fetch_value(item, :tax_rate))
+        tax_rate = @fallback_tax_rate if tax_rate <= 0
         next if tax_rate <= 0
 
         line_total = item_line_total(item)

@@ -211,7 +211,8 @@ class ReceiptAnalysisService
     params[:receipt_attributes].merge!(
       total_amount: amount_result[:resolved][:total],
       subtotal_amount: amount_result[:resolved][:subtotal],
-      tax_amount: amount_result[:resolved][:tax]
+      tax_amount: amount_result[:resolved][:tax],
+      tax_rate: amount_result[:resolved][:tax_rate]
     )
 
     final_status = determine_final_status(
@@ -232,7 +233,7 @@ class ReceiptAnalysisService
       ),
       items_attributes: params[:receipt_items_attributes],
       payments_attributes: params[:receipt_payments_attributes],
-      tax_details_attributes: params[:receipt_tax_details_attributes]
+      tax_details_attributes: amount_result[:tax_details]
     )
 
     Rails.logger.info(
@@ -256,7 +257,13 @@ class ReceiptAnalysisService
     params[:receipt_attributes].merge!(
       total_amount: amount_result[:resolved][:total],
       subtotal_amount: amount_result[:resolved][:subtotal],
-      tax_amount: amount_result[:resolved][:tax]
+      tax_amount: amount_result[:resolved][:tax],
+      tax_rate: amount_result[:resolved][:tax_rate]
+    )
+
+    items_attributes = apply_ocr_only_tax_rate_policy(
+      params[:receipt_items_attributes],
+      amount_result
     )
 
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
@@ -271,13 +278,13 @@ class ReceiptAnalysisService
         review_reasons: [],
         ocr_completed_at: Time.current
       ),
-      items_attributes: params[:receipt_items_attributes],
+      items_attributes: items_attributes,
       payments_attributes: params[:receipt_payments_attributes],
-      tax_details_attributes: params[:receipt_tax_details_attributes]
+      tax_details_attributes: amount_result[:tax_details]
     )
 
     Rails.logger.info(
-      "[ReceiptAnalysis] ocr_only_completed receipt_id=#{receipt.id} status=#{final_status} items=#{params[:receipt_items_attributes].size}"
+      "[ReceiptAnalysis] ocr_only_completed receipt_id=#{receipt.id} status=#{final_status} items=#{items_attributes.size}"
     )
 
     receipt
@@ -297,7 +304,13 @@ class ReceiptAnalysisService
     params[:receipt_attributes].merge!(
       total_amount: amount_result[:resolved][:total],
       subtotal_amount: amount_result[:resolved][:subtotal],
-      tax_amount: amount_result[:resolved][:tax]
+      tax_amount: amount_result[:resolved][:tax],
+      tax_rate: amount_result[:resolved][:tax_rate]
+    )
+
+    items_attributes = apply_ocr_only_tax_rate_policy(
+      params[:receipt_items_attributes],
+      amount_result
     )
 
     # NOTE:
@@ -314,13 +327,13 @@ class ReceiptAnalysisService
 
     persist_result_full!(
       receipt_attributes: receipt_attributes,
-      items_attributes: params[:receipt_items_attributes],
+      items_attributes: items_attributes,
       payments_attributes: params[:receipt_payments_attributes],
-      tax_details_attributes: params[:receipt_tax_details_attributes]
+      tax_details_attributes: amount_result[:tax_details]
     )
 
     Rails.logger.warn(
-      "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{error_code} items=#{params[:receipt_items_attributes].size}"
+      "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{error_code} items=#{items_attributes.size}"
     )
 
     receipt
@@ -443,6 +456,15 @@ class ReceiptAnalysisService
     quantity.present? ? quantity.to_i : 1
   end
 
+  def normalize_tax_rate(value)
+    return nil if value.blank?
+
+    tax_rate = BigDecimal(value.to_s.delete("%"))
+    tax_rate > 1 ? tax_rate / 100 : tax_rate
+  rescue ArgumentError
+    nil
+  end
+
   def normalize_confidence(value)
     return nil if value.blank?
 
@@ -486,6 +508,25 @@ class ReceiptAnalysisService
     return nil unless normalized_price
 
     normalized_price * normalized_quantity
+  end
+
+  def apply_ocr_only_tax_rate_policy(items_attributes, amount_result)
+    resolved_tax_rate = amount_result.dig(:resolved, :tax_rate)
+
+    Array(items_attributes).map do |item_attributes|
+      normalized_item = if item_attributes.respond_to?(:with_indifferent_access)
+        item_attributes.with_indifferent_access
+      elsif item_attributes.respond_to?(:symbolize_keys)
+        item_attributes.symbolize_keys.with_indifferent_access
+      else
+        {}.with_indifferent_access
+      end
+
+      # AIを使えないルートでは、複数税率の明細別割り当ては行わない。
+      # 単一税率のみ、OCR値またはAmountService推定値を全明細へ反映する。
+      normalized_item[:tax_rate] = resolved_tax_rate.present? ? resolved_tax_rate : nil
+      normalized_item.to_h.symbolize_keys
+    end
   end
 
   def detect_category(text)

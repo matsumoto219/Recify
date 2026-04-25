@@ -65,7 +65,8 @@ class ReceiptAmountService
 
     # --- 4) TaxDetailAggregator（税率別集計）
     tax_details = Amounts::TaxDetailAggregator.new(
-      items: @items
+      items: @items,
+      fallback_tax_rate: calc[:tax_rate]
     ).call
 
     # --- 5) ResultTemplate（出力整形）
