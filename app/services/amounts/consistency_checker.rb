@@ -2,13 +2,15 @@
 
 module Amounts
   class ConsistencyChecker
-    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:)
+    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, source_tax_details: [], generated_tax_details: [])
       @computed = computed
       @resolved = resolved
       @item_total = item_total
       @tax_total = tax_total
       @receipt = receipt
       @context = context
+      @source_tax_details = Array(source_tax_details)
+      @generated_tax_details = Array(generated_tax_details)
     end
 
     def call
@@ -28,6 +30,10 @@ module Amounts
 
       if tax_detail_total.positive? && item_tax_total.positive? && tax_detail_total != item_tax_total
         errors << :tax_detail_mismatch
+      end
+
+      if tax_detail_rate_mismatch?
+        errors << :tax_detail_rate_mismatch
       end
 
       if @context == :analysis
@@ -57,6 +63,49 @@ module Amounts
 
     def tax_detail_total
       @computed[:tax_detail_total].to_i
+    end
+
+    def tax_detail_rate_mismatch?
+      source_groups = tax_details_by_rate(@source_tax_details)
+      generated_groups = tax_details_by_rate(@generated_tax_details)
+
+      return false if source_groups.blank? || generated_groups.blank?
+
+      source_groups.any? do |rate, source_amounts|
+        generated_amounts = generated_groups[rate]
+        next true if generated_amounts.blank?
+
+        source_amounts[:amount] != generated_amounts[:amount] ||
+          source_amounts[:net_amount] != generated_amounts[:net_amount]
+      end
+    end
+
+    def tax_details_by_rate(tax_details)
+      tax_details.each_with_object({}) do |tax_detail, groups|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        next if rate <= 0
+
+        groups[rate] ||= { amount: 0, net_amount: 0 }
+        groups[rate][:amount] += fetch_value(tax_detail, :amount).to_i
+        groups[rate][:net_amount] += fetch_value(tax_detail, :net_amount).to_i
+      end
+    end
+
+    def normalize_rate(value)
+      return BigDecimal("0") if value.nil? || value == ""
+
+      rate = BigDecimal(value.to_s)
+      rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      BigDecimal("0")
+    end
+
+    def fetch_value(object, key)
+      if object.respond_to?(:[])
+        object[key] || object[key.to_s]
+      elsif object.respond_to?(key)
+        object.public_send(key)
+      end
     end
 
     def mixed_tax_inclusion_suspected?

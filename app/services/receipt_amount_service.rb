@@ -14,7 +14,7 @@
 #
 # Output:
 # {
-#   computed: { subtotal:, tax:, total: },
+#   computed: { subtotal:, tax:, total:, tax_rate: },
 #   resolved: { subtotal:, tax:, total:, tax_rate: },
 #   tax_details: Array<Hash>,
 #   inconsistencies: Array<Symbol>,
@@ -53,20 +53,22 @@ class ReceiptAmountService
       context: @context
     ).call
 
-    # --- 3) ConsistencyChecker（整合性チェック）
+    # --- 3) TaxDetailAggregator（税率別集計）
+    tax_details = Amounts::TaxDetailAggregator.new(
+      items: @items,
+      fallback_tax_rate: calc[:tax_rate]
+    ).call
+
+    # --- 4) ConsistencyChecker（整合性チェック）
     inconsistencies = Amounts::ConsistencyChecker.new(
       computed: calc,
       resolved: resolved,
       item_total: calc[:item_total],
       tax_total: calc[:tax_total],
       receipt: @receipt,
-      context: @context
-    ).call
-
-    # --- 4) TaxDetailAggregator（税率別集計）
-    tax_details = Amounts::TaxDetailAggregator.new(
-      items: @items,
-      fallback_tax_rate: calc[:tax_rate]
+      context: @context,
+      source_tax_details: @tax_details,
+      generated_tax_details: tax_details
     ).call
 
     # --- 5) ResultTemplate（出力整形）
@@ -74,7 +76,8 @@ class ReceiptAmountService
       computed: {
         subtotal: calc[:subtotal],
         tax: calc[:tax],
-        total: calc[:total]
+        total: calc[:total],
+        tax_rate: calc[:tax_rate]
       },
       resolved: resolved,
       tax_details: tax_details,
