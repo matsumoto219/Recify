@@ -21,6 +21,8 @@ module Amounts
 
       {
         item_total: item_total,
+        item_tax_total: item_tax_total,
+        tax_detail_total: tax_detail_total,
         tax_total: tax_total,
         subtotal: subtotal,
         tax: tax_total,
