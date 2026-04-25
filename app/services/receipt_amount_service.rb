@@ -18,6 +18,8 @@
 #   resolved: { subtotal:, tax:, total:, tax_rate: },
 #   tax_details: Array<Hash>,
 #   inconsistencies: Array<Symbol>,
+#   mismatch_codes: Array<String>,
+#   mismatch_messages: Array<String>,
 #   needs_review: Boolean
 # }
 #
@@ -71,6 +73,9 @@ class ReceiptAmountService
       generated_tax_details: tax_details
     ).call
 
+    mismatch_codes = build_mismatch_codes(inconsistencies)
+    mismatch_messages = build_mismatch_messages(inconsistencies)
+
     # --- 5) ResultTemplate（出力整形）
     Amounts::ResultTemplate.build(
       computed: {
@@ -81,11 +86,25 @@ class ReceiptAmountService
       },
       resolved: resolved,
       tax_details: tax_details,
-      inconsistencies: inconsistencies
+      inconsistencies: inconsistencies,
+      mismatch_codes: mismatch_codes,
+      mismatch_messages: mismatch_messages
     )
   end
 
   private
+
+  def build_mismatch_codes(inconsistencies)
+    Array(inconsistencies).filter_map do |inconsistency|
+      Amounts::MismatchCodes.code(inconsistency.to_sym)
+    end
+  end
+
+  def build_mismatch_messages(inconsistencies)
+    Array(inconsistencies).filter_map do |inconsistency|
+      Amounts::MismatchCodes.message(inconsistency.to_sym)
+    end
+  end
 
   # -----------------------------
   # Normalizers (accept Hash/AR)
