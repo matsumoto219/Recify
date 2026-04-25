@@ -82,6 +82,7 @@ module Ai
         - index
         - suggested_name
         - category
+        - tax_rate
         - needs_review
 
         Allowed categories:
@@ -137,7 +138,12 @@ module Ai
         - Do not add or remove item indexes.
         #{user_item_name_rules}
         - category: choose only from the allowed categories.
-        - needs_review: set true when the item name or category remains uncertain.
+        - tax_rate: return the item's consumption tax rate only when it can be determined from tax.tax_details, tax.tax_context_lines, item raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content.
+        - tax_rate MUST be a decimal rate such as 0.01 or 0.1. Do NOT return percentage strings such as "1%" or "10%".
+        - When the receipt has multiple tax rates, assign tax_rate to each item whenever supported by the receipt context.
+        - When the receipt has a single clear tax rate, return that same tax_rate for each item.
+        - When an item's tax rate cannot be determined, return null for tax_rate and set needs_review = true.
+        - needs_review: set true when the item name, category, or tax_rate remains uncertain.
         - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
 
         review_reasons rules:
@@ -150,6 +156,7 @@ module Ai
         - Do NOT use combined or ambiguous codes such as "*_or_*".
         - If multiple reasons apply, include multiple entries (e.g., ["item_name_uncertain", "item_category_uncertain"]).
         - Include reasons only when review is needed.
+        - Use item_tax_rate_uncertain when one or more item tax rates cannot be determined with confidence.
         - Use purchased_at_conflicted only when multiple plausible purchase timestamps remain unresolved after applying the purchase rules above.
         - Do NOT return store_phone_number_missing when store.store_phone_number is non-null.
         - Return [] when no review is needed.
@@ -231,6 +238,7 @@ module Ai
         items_missing
         item_name_uncertain
         item_category_uncertain
+        item_tax_rate_uncertain
       ]
     end
   end

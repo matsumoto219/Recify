@@ -23,6 +23,7 @@ module Ai
         store: build_store_payload,
         purchase: build_purchase_payload,
         payment: build_payment_payload,
+        tax: build_tax_payload,
         items: build_items_payload,
         meta: build_meta
       }
@@ -63,6 +64,16 @@ module Ai
       }.compact
     end
 
+    def build_tax_payload
+      {
+        tax_rate: normalize_tax_rate(candidate_value(:tax_rate)),
+        tax_amount: normalize_number(candidate_value(:tax_amount)),
+        total_amount: normalize_number(candidate_value(:total_amount)),
+        tax_details: normalize_tax_details,
+        tax_context_lines: tax_context_lines
+      }.compact
+    end
+
     def build_items_payload
       # items は OCR構造化結果を基準にしつつ、matched_content_lines / matched_filtered_content_lines で
       # filtered_content 側の文脈も AI に渡す。商品名補完時は raw_text 単独ではなく content 文脈も参照させる。
@@ -83,6 +94,7 @@ module Ai
         quantity: normalize_number(fetch(item, :quantity)),
         quantity_unit: fetch(item, :quantity_unit),
         line_total: normalize_number(fetch(item, :line_total) || fetch(item, :total_price)),
+        tax_rate: normalize_tax_rate(fetch(item, :tax_rate)),
         product_code: fetch(item, :product_code),
         confidence: normalize_decimal(fetch(item, :confidence)),
         matched_content_lines: item_content_lines(raw_text),
@@ -150,6 +162,16 @@ module Ai
       lines.select { |line| payment_context_line?(line) }.uniq.first(8)
     end
 
+    def tax_context_lines
+      candidates = filtered_reference_lines.select do |line|
+        tax_context_line?(line)
+      end
+
+      return candidates.first(8) if candidates.present?
+
+      lines.select { |line| tax_context_line?(line) }.uniq.first(8)
+    end
+
     def branch_name_candidates
       candidates = filtered_reference_lines.select do |line|
         branch_name_candidate?(line)
@@ -183,6 +205,13 @@ module Ai
       return false if text.empty?
 
       text.match?(/現金|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/)
+    end
+
+    def tax_context_line?(line)
+      text = line.to_s.strip
+      return false if text.empty?
+
+      text.match?(/税率|税額|内税|外税|消費税|軽減税率|標準税率|対象|\d+％|\d+%/)
     end
 
     def item_content_lines(raw_text)
@@ -316,6 +345,19 @@ module Ai
       end
     end
 
+    def normalize_tax_details
+      Array(candidate_value(:tax_details)).filter_map do |tax_detail|
+        next unless tax_detail.is_a?(Hash)
+
+        {
+          description: fetch(tax_detail, :description),
+          rate: normalize_tax_rate(fetch(tax_detail, :rate)),
+          amount: normalize_number(fetch(tax_detail, :amount)),
+          net_amount: normalize_number(fetch(tax_detail, :net_amount))
+        }.compact
+      end
+    end
+
     def items_average_confidence
       values = build_items_payload.filter_map { |item| item[:confidence] }
       return nil if values.empty?
@@ -398,6 +440,18 @@ module Ai
       return nil if stripped.empty?
 
       stripped.to_f.round(3)
+    end
+
+    def normalize_tax_rate(value)
+      return nil if value.nil?
+
+      stripped = value.to_s.delete("%").delete("％").gsub(/[^\d\-.]/, "")
+      return nil if stripped.empty?
+
+      rate = BigDecimal(stripped)
+      rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      nil
     end
 
     def fetch(object, key)
