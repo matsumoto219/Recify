@@ -225,7 +225,7 @@ class ReceiptsController < ApplicationController
   end
 
   def fail_receipt!(receipt, error_code, message)
-    mapped = ReceiptProcessingErrorMapper.map(error_code)
+    mapped = ::Analysis::ReceiptProcessingErrorMapper.map(error_code)
 
     receipt.update!(
       status: "failed",
