@@ -56,12 +56,23 @@ class ReceiptAmountService
     ).call
 
     # --- 3) TaxDetailAggregator（税率別集計）
-    tax_details = Amounts::TaxDetailAggregator.new(
-      items: @items,
-      fallback_tax_rate: calc[:tax_rate],
-      fallback_net_amount: resolved[:subtotal],
-      fallback_tax_amount: resolved[:tax]
-    ).call
+    tax_details = if calc[:external_tax]
+      @tax_details.map do |t|
+        {
+          description: "#{(t[:rate].to_f * 100).to_i}%対象",
+          rate: t[:rate],
+          net_amount: t[:net_amount],
+          amount: t[:amount]
+        }
+      end
+    else
+      Amounts::TaxDetailAggregator.new(
+        items: calc[:items] || @items,
+        fallback_tax_rate: calc[:tax_rate],
+        fallback_net_amount: resolved[:subtotal],
+        fallback_tax_amount: resolved[:tax]
+      ).call
+    end
 
     # --- 4) ConsistencyChecker（整合性チェック）
     inconsistencies = Amounts::ConsistencyChecker.new(
@@ -125,6 +136,7 @@ class ReceiptAmountService
       price: to_i(fetch_value(i, :price)),
       quantity: to_i(fetch_value(i, :quantity, 1)),
       line_total: to_i(fetch_value(i, :line_total)),
+      discount_amount: to_i(fetch_value(i, :discount_amount)),
       tax_rate: fetch_value(i, :tax_rate)
     }
   end

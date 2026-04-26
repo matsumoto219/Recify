@@ -21,6 +21,7 @@ class ReceiptItem < ApplicationRecord
   validates :price,
             :quantity,
             :line_total,
+            :discount_amount,
             :position_index,
             numericality: { only_integer: true, greater_than_or_equal_to: 0 },
             allow_blank: true

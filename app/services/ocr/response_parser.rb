@@ -30,7 +30,7 @@ class Ocr::ResponseParser
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
-        items: extract_items(parsed_response),                                                                     # NOTE: quantity_unit / product_code は取得するが UI・分析では未活用
+        items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit / product_code は取得するが UI・分析では未活用
         confidence_summary: extract_confidence_summary(parsed_response)
       },
       error_code: nil,
@@ -123,7 +123,7 @@ class Ocr::ResponseParser
   # - Loyalty / Membership系 → ポイントカード誤認のため未採用
   # - ReceiptId / TransactionId → 今回のスコープ外
   # - CurrencyCode → JPY固定前提のため未使用
-  # - Discounts / Offers → item.contentに含まれるが未分離
+  # - Discounts / Offers → MVPでは lines から割引額のみ直前itemへ紐付ける
   # - ProductCode → レシートによっては存在するが未活用
   # - AdditionalFields (query fields拡張分) → PaymentMethod以外は未使用
   #
@@ -469,13 +469,15 @@ class Ocr::ResponseParser
     []
   end
 
-  def extract_items(parsed_response)
+  def extract_items(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     items = fields.dig("Items", "valueArray")
     return [] unless items.is_a?(Array)
 
+    discount_amounts_by_index = extract_discount_amounts_by_item_index(items, lines)
+
     # NOTE: product_code / quantity_unit は保存されるが現状UI・ロジックで未使用
-    items.map do |item|
+    items.map.with_index do |item, index|
       value_object = item["valueObject"] || {}
 
       {
@@ -487,12 +489,83 @@ class Ocr::ResponseParser
         quantity_unit: value_object.dig("QuantityUnit", "valueString"),
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber"),
+        discount_amount: discount_amounts_by_index[index],
         confidence: item["confidence"]
       }
     end
   rescue NoMethodError, TypeError
     []
   end
+
+# NOTE: MVP割引検出。
+# lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
+# 割引額のみを直前itemへ紐付ける。
+def extract_discount_amounts_by_item_index(items, lines)
+  normalized_lines = Array(lines).map { |line| normalize_text(line) }
+  return {} if normalized_lines.blank?
+
+  item_labels = items.map do |item|
+    value_object = item["valueObject"] || {}
+    normalize_text(
+      value_object.dig("Description", "valueString") ||
+        value_object.dig("Description", "content") ||
+        item["content"]
+    )
+  end
+
+  current_item_index = nil
+  next_item_index = 0
+  waiting_discount = false
+  discount_amounts_by_index = Hash.new(0)
+
+  normalized_lines.each do |line|
+    matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
+    if matched_item_index
+      current_item_index = matched_item_index
+      next_item_index = matched_item_index + 1
+      waiting_discount = false
+      next
+    end
+
+    if discount_keyword_line?(line)
+      waiting_discount = current_item_index.present?
+      next
+    end
+
+    next unless waiting_discount
+    next if discount_rate_line?(line)
+
+    discount_amount = extract_discount_amount_from_line(line)
+    next unless discount_amount.positive?
+
+    discount_amounts_by_index[current_item_index] += discount_amount
+    waiting_discount = false
+  end
+
+  discount_amounts_by_index
+end
+
+def match_item_index_from_line(line, item_labels, start_index)
+  item_labels.each_with_index.drop(start_index).find do |label, _index|
+    next false if label.blank?
+
+    line.include?(label) || label.include?(line)
+  end&.last
+end
+
+def discount_keyword_line?(line)
+  line.match?(/割引|値引|discount|off/i)
+end
+
+def discount_rate_line?(line)
+  line.match?(/\d+(\.\d+)?\s*%/) && !line.match?(/[-−▲]/)
+end
+
+def extract_discount_amount_from_line(line)
+  return 0 unless line.match?(/[-−▲]/)
+
+  line.scan(/\d[\d,]*/).map { |value| value.delete(",").to_i }.max.to_i
+end
 
   def build_error_result(error_code)
     Ocr::ResultTemplate.error_result(
