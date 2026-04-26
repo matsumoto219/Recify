@@ -215,6 +215,8 @@ class ReceiptAnalysisService
       tax_rate: amount_result[:resolved][:tax_rate]
     )
 
+    # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
+    # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
     review_reasons = merge_review_reasons(
       ai_result[:review_reasons],
       amount_result[:inconsistencies]
@@ -271,6 +273,8 @@ class ReceiptAnalysisService
       amount_result
     )
 
+    # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
+    # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
     review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
 
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
@@ -320,6 +324,8 @@ class ReceiptAnalysisService
       amount_result
     )
 
+    # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
+    # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
     review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
 
     # NOTE:

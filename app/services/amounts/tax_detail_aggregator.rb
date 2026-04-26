@@ -27,9 +27,10 @@ module Amounts
 
     # receipt_items は税込単価前提。
     # item.tax_rate が無い場合のみ fallback_tax_rate を使う。
-    # 税率ごとに税抜金額・税額を集計して receipt_tax_details 用Hashへ変換する。
+    # 税率ごとに税込金額を集計してから税抜金額・税額を逆算する。
+    # 明細ごとに端数処理すると内税額がズレるため、税率単位で一括計算する。
     def grouped_tax_details
-      @items.each_with_object({}) do |item, grouped|
+      gross_totals = @items.each_with_object({}) do |item, grouped|
         tax_rate = normalize_tax_rate(fetch_value(item, :tax_rate))
         tax_rate = @fallback_tax_rate if tax_rate <= 0
         next if tax_rate <= 0
@@ -37,12 +38,18 @@ module Amounts
         line_total = item_line_total(item)
         next if line_total <= 0
 
-        net_amount = (BigDecimal(line_total.to_s) / (BigDecimal("1") + tax_rate)).floor
-        tax_amount = line_total - net_amount
+        grouped[tax_rate] ||= 0
+        grouped[tax_rate] += line_total
+      end
 
-        grouped[tax_rate] ||= { net_amount: 0, amount: 0 }
-        grouped[tax_rate][:net_amount] += net_amount
-        grouped[tax_rate][:amount] += tax_amount
+      gross_totals.each_with_object({}) do |(tax_rate, gross_total), grouped|
+        tax_amount = (BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)).floor
+        net_amount = gross_total - tax_amount
+
+        grouped[tax_rate] = {
+          net_amount: net_amount,
+          amount: tax_amount
+        }
       end
     end
 

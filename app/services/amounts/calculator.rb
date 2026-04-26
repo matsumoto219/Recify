@@ -47,14 +47,24 @@ module Amounts
     # 明細ごとの税込金額から税抜金額を逆算する。
     # tax_rate は 0.08 / 0.1 などの小数形式で扱う。
     def calculate_item_subtotal(fallback_tax_rate = BigDecimal("0"))
+      total = calculate_item_total
+
+      # 単一税率の場合は全体から逆算（端数ズレ防止）
+      tax_rate = resolve_tax_rate(fallback_tax_rate)
+      if tax_rate&.positive?
+        tax = (BigDecimal(total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)).floor
+        return total - tax
+      end
+
+      # 複数税率 or 不明な場合は従来ロジック
       @items.sum do |item|
         line_total = item_line_total(item)
-        tax_rate = normalize_tax_rate(item[:tax_rate])
-        tax_rate = fallback_tax_rate if tax_rate <= 0
+        rate = normalize_tax_rate(item[:tax_rate])
+        rate = fallback_tax_rate if rate <= 0
 
-        next line_total if tax_rate <= 0
+        next line_total if rate <= 0
 
-        (BigDecimal(line_total.to_s) / (BigDecimal("1") + tax_rate)).floor
+        (BigDecimal(line_total.to_s) / (BigDecimal("1") + rate)).floor
       end
     end
 
