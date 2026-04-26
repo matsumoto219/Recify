@@ -18,9 +18,9 @@ module Amounts
       external_tax = external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
 
       if external_tax
-        item_subtotal = item_total
+        item_subtotal = tax_detail_subtotal
         item_tax_total = tax_detail_total
-        subtotal = item_total
+        subtotal = tax_detail_subtotal
         tax_total = tax_detail_total
         total = subtotal + tax_total
       else
@@ -98,19 +98,40 @@ module Amounts
     # Tax calculations
     # -----------------------------
     def calculate_tax_detail_total
-      @tax_details.sum { |t| to_i(t[:amount]) }
+      usable_tax_details.sum { |t| to_i(t[:amount]) }
     end
 
     def calculate_tax_detail_subtotal
-      @tax_details.sum { |t| to_i(t[:net_amount]) }
+      usable_tax_details.sum { |t| to_i(t[:net_amount]) }
+    end
+
+    def usable_tax_details
+      details_with_net_amount = @tax_details.select { |tax_detail| to_i(tax_detail[:net_amount]).positive? }
+      return details_with_net_amount if details_with_net_amount.present?
+
+      @tax_details
     end
 
     def external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
-      return false if item_total <= 0
       return false if tax_detail_subtotal <= 0
       return false if tax_detail_total <= 0
 
-      item_total == tax_detail_subtotal
+      return true if item_total.positive? && item_total == tax_detail_subtotal
+
+      receipt_subtotal = to_i(@receipt[:subtotal_amount])
+      return true if receipt_subtotal.positive? && receipt_subtotal == tax_detail_subtotal
+
+      receipt_total = to_i(@receipt[:total_amount])
+      return true if receipt_total.positive? && receipt_total == tax_detail_subtotal + tax_detail_total
+
+      external_tax_description?
+    end
+
+    def external_tax_description?
+      @tax_details.any? do |tax_detail|
+        description = tax_detail[:description].to_s
+        description.include?("外税")
+      end
     end
 
     # -----------------------------

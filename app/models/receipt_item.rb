@@ -21,6 +21,7 @@ class ReceiptItem < ApplicationRecord
   validates :price,
             :quantity,
             :line_total,
+            :original_line_total,
             :discount_amount,
             :position_index,
             numericality: { only_integer: true, greater_than_or_equal_to: 0 },
@@ -32,6 +33,10 @@ class ReceiptItem < ApplicationRecord
 
   # 税率（0.0〜1.0で保存）
   validates :tax_rate,
+            numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
+            allow_nil: true
+
+  validates :discount_rate,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
             allow_nil: true
 

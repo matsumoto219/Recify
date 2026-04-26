@@ -447,8 +447,10 @@ class ReceiptAnalysisService
         quantity_unit: symbolized[:quantity_unit].presence,
         product_code: symbolized[:product_code].presence,
         tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
+        original_line_total: normalize_amount(symbolized[:original_line_total]),
         line_total: normalize_amount(symbolized[:line_total]),
         discount_amount: normalize_amount(symbolized[:discount_amount]),
+        discount_rate: normalize_tax_rate(symbolized[:discount_rate]),
         # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
         needs_review: symbolized[:needs_review],
         position_index: symbolized[:position_index] || index + 1,
