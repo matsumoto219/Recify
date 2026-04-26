@@ -57,7 +57,7 @@ class ReceiptAmountService
 
     # --- 3) TaxDetailAggregator（税率別集計）
     tax_details = if calc[:external_tax]
-      @tax_details.map do |t|
+      source_tax_details_for_external_tax.map do |t|
         {
           description: "#{(t[:rate].to_f * 100).to_i}%対象",
           rate: t[:rate],
@@ -82,6 +82,9 @@ class ReceiptAmountService
       tax_total: calc[:tax_total],
       receipt: @receipt,
       context: @context,
+      items: calc[:items] || @items,
+      item_count: @items.size,
+      external_tax: calc[:external_tax],
       source_tax_details: @tax_details,
       generated_tax_details: tax_details
     ).call
@@ -135,10 +138,19 @@ class ReceiptAmountService
     {
       price: to_i(fetch_value(i, :price)),
       quantity: to_i(fetch_value(i, :quantity, 1)),
+      original_line_total: to_i(fetch_value(i, :original_line_total)),
       line_total: to_i(fetch_value(i, :line_total)),
       discount_amount: to_i(fetch_value(i, :discount_amount)),
+      discount_rate: fetch_value(i, :discount_rate),
       tax_rate: fetch_value(i, :tax_rate)
     }
+  end
+
+  def source_tax_details_for_external_tax
+    details_with_net_amount = @tax_details.select { |tax_detail| tax_detail[:net_amount].to_i.positive? }
+    return details_with_net_amount if details_with_net_amount.present?
+
+    @tax_details
   end
 
   def normalize_tax_detail(t)

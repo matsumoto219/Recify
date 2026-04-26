@@ -9,7 +9,8 @@ module Amounts
       tax_detail_rate_mismatch: "TAX_DETAIL_RATE_MISMATCH",
       ocr_total_mismatch: "OCR_TOTAL_MISMATCH",
       price_tax_inclusion_uncertain: "PRICE_TAX_INCLUSION_UNCERTAIN",
-      insufficient_data: "INSUFFICIENT_DATA"
+      insufficient_data: "INSUFFICIENT_DATA",
+      discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE"
     }.freeze
 
     # 表示用メッセージ（UI用）
@@ -21,7 +22,8 @@ module Amounts
       tax_detail_rate_mismatch: "税率ごとの内訳に問題があります",
       ocr_total_mismatch: "OCRの合計金額と計算結果が一致しません",
       price_tax_inclusion_uncertain: "税抜価格と税込価格が混在している可能性があります",
-      insufficient_data: "計算に必要なデータが不足しています"
+      insufficient_data: "計算に必要なデータが不足しています",
+      discount_data_incomplete: "割引情報が不完全です"
     }.freeze
 
     def self.code(symbol)

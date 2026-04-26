@@ -2,14 +2,16 @@
 
 module Amounts
   class ConsistencyChecker
-    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, item_count: 0, source_tax_details: [], generated_tax_details: [])
+    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, items: [], item_count: 0, external_tax: false, source_tax_details: [], generated_tax_details: [])
       @computed = computed
       @resolved = resolved
       @item_total = item_total
       @tax_total = tax_total
       @receipt = receipt
       @context = context
+      @items = Array(items)
       @item_count = item_count.to_i
+      @external_tax = external_tax
       @source_tax_details = Array(source_tax_details)
       @generated_tax_details = Array(generated_tax_details)
     end
@@ -21,7 +23,7 @@ module Amounts
         errors << :total_mismatch
       end
 
-      if item_data_present? && @item_total.to_i != @resolved[:total].to_i
+      if item_total_mismatch?
         errors << :item_total_mismatch
       end
 
@@ -35,6 +37,10 @@ module Amounts
 
       if tax_detail_rate_mismatch?
         errors << :tax_detail_rate_mismatch
+      end
+
+      if discount_data_incomplete?
+        errors << :discount_data_incomplete
       end
 
       if @context == :analysis
@@ -62,6 +68,22 @@ module Amounts
       @item_count.positive?
     end
 
+    def item_total_mismatch?
+      return false unless item_data_present?
+
+      expected_total = @external_tax ? @resolved[:subtotal] : @resolved[:total]
+      @item_total.to_i != expected_total.to_i
+    end
+
+    def discount_data_incomplete?
+      @items.any? do |item|
+        discount_rate = normalize_rate(fetch_value(item, :discount_rate))
+        discount_amount = fetch_value(item, :discount_amount).to_i
+
+        discount_rate.positive? && discount_amount <= 0
+      end
+    end
+
     def item_tax_total
       @computed[:item_tax_total].to_i
     end
@@ -71,7 +93,7 @@ module Amounts
     end
 
     def tax_detail_rate_mismatch?
-      source_groups = tax_details_by_rate(@source_tax_details)
+      source_groups = tax_details_by_rate(comparable_source_tax_details)
       generated_groups = tax_details_by_rate(@generated_tax_details)
 
       return false if source_groups.blank? || generated_groups.blank?
@@ -83,6 +105,16 @@ module Amounts
         source_amounts[:amount] != generated_amounts[:amount] ||
           source_amounts[:net_amount] != generated_amounts[:net_amount]
       end
+    end
+
+    def comparable_source_tax_details
+      return @source_tax_details unless @external_tax
+
+      details_with_net_amount = @source_tax_details.select do |tax_detail|
+        fetch_value(tax_detail, :net_amount).to_i.positive?
+      end
+
+      details_with_net_amount.presence || @source_tax_details
     end
 
     def tax_details_by_rate(tax_details)

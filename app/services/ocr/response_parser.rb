@@ -474,7 +474,7 @@ class Ocr::ResponseParser
     items = fields.dig("Items", "valueArray")
     return [] unless items.is_a?(Array)
 
-    discount_amounts_by_index = extract_discount_amounts_by_item_index(items, lines)
+    discount_details_by_index = extract_discount_details_by_item_index(items, lines)
 
     # NOTE: product_code / quantity_unit は保存されるが現状UI・ロジックで未使用
     items.map.with_index do |item, index|
@@ -489,7 +489,9 @@ class Ocr::ResponseParser
         quantity_unit: value_object.dig("QuantityUnit", "valueString"),
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber"),
-        discount_amount: discount_amounts_by_index[index],
+        original_line_total: value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber"),
+        discount_amount: discount_details_by_index.dig(index, :amount),
+        discount_rate: discount_details_by_index.dig(index, :rate),
         confidence: item["confidence"]
       }
     end
@@ -497,10 +499,10 @@ class Ocr::ResponseParser
     []
   end
 
-# NOTE: MVP割引検出。
+# NOTE: 割引検出。
 # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
-# 割引額のみを直前itemへ紐付ける。
-def extract_discount_amounts_by_item_index(items, lines)
+# 割引額・割引率・割引前金額を直前itemへ紐付ける。
+def extract_discount_details_by_item_index(items, lines)
   normalized_lines = Array(lines).map { |line| normalize_text(line) }
   return {} if normalized_lines.blank?
 
@@ -513,10 +515,16 @@ def extract_discount_amounts_by_item_index(items, lines)
     )
   end
 
+  item_original_totals = items.map do |item|
+    value_object = item["valueObject"] || {}
+    value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+  end
+
   current_item_index = nil
   next_item_index = 0
   waiting_discount = false
-  discount_amounts_by_index = Hash.new(0)
+  current_discount_rate = nil
+  discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
 
   normalized_lines.each do |line|
     matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
@@ -524,25 +532,38 @@ def extract_discount_amounts_by_item_index(items, lines)
       current_item_index = matched_item_index
       next_item_index = matched_item_index + 1
       waiting_discount = false
+      current_discount_rate = nil
       next
     end
 
     if discount_keyword_line?(line)
       waiting_discount = current_item_index.present?
+      current_discount_rate = nil
       next
     end
 
     next unless waiting_discount
-    next if discount_rate_line?(line)
+
+    extracted_rate = extract_discount_rate_from_line(line)
+    if extracted_rate
+      current_discount_rate = extracted_rate
+      next
+    end
 
     discount_amount = extract_discount_amount_from_line(line)
     next unless discount_amount.positive?
 
-    discount_amounts_by_index[current_item_index] += discount_amount
+    original_line_total = normalize_amount_for_discount(item_original_totals[current_item_index])
+    detail = discount_details_by_index[current_item_index]
+    detail[:amount] += discount_amount
+    detail[:rate] ||= current_discount_rate
+    detail[:original_line_total] ||= original_line_total if original_line_total.positive?
+
     waiting_discount = false
+    current_discount_rate = nil
   end
 
-  discount_amounts_by_index
+  discount_details_by_index
 end
 
 def match_item_index_from_line(line, item_labels, start_index)
@@ -557,14 +578,23 @@ def discount_keyword_line?(line)
   line.match?(/割引|値引|discount|off/i)
 end
 
-def discount_rate_line?(line)
-  line.match?(/\d+(\.\d+)?\s*%/) && !line.match?(/[-−▲]/)
+def extract_discount_rate_from_line(line)
+  return nil if line.match?(/[-−▲]/)
+
+  matched = line.match(/(\d+(?:\.\d+)?)\s*%/)
+  return nil unless matched
+
+  BigDecimal(matched[1]) / 100
 end
 
 def extract_discount_amount_from_line(line)
   return 0 unless line.match?(/[-−▲]/)
 
   line.scan(/\d[\d,]*/).map { |value| value.delete(",").to_i }.max.to_i
+end
+
+def normalize_amount_for_discount(value)
+  value.to_s.delete(",").to_i
 end
 
   def build_error_result(error_code)

@@ -118,7 +118,9 @@ module Analysis
             category: normalized_item[:category].presence || detect_category(raw_text),
             price: price,
             quantity: quantity,
+            original_line_total: normalize_amount(normalized_item[:original_line_total]),
             discount_amount: normalize_amount(normalized_item[:discount_amount]),
+            discount_rate: normalize_rate(normalized_item[:discount_rate]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit
             quantity_unit: normalized_item[:quantity_unit],
             # Azure Items[].ProductCode -> receipt_items.product_code
@@ -232,6 +234,9 @@ module Analysis
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
+            original_line_total: candidate_item[:original_line_total],
+            discount_amount: candidate_item[:discount_amount],
+            discount_rate: candidate_item[:discount_rate],
             position_index: candidate_position || candidate_index
           )
         end
@@ -270,6 +275,9 @@ module Analysis
             quantity_unit: nil,
             product_code: nil,
             tax_rate: nil,
+            original_line_total: extract_item_line_total(line, price:, quantity:),
+            discount_amount: nil,
+            discount_rate: nil,
             line_total: extract_item_line_total(line, price:, quantity:),
             needs_review: true,
             position_index: index,
