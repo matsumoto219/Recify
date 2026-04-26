@@ -9,17 +9,30 @@ module Amounts
     end
 
     def call
-      item_total = calculate_item_total
+      item_result = Amounts::ItemTotalAggregator.new(items: @items).call
+      @items = item_result[:items]
+      item_total = item_result[:total]
       tax_detail_total = calculate_tax_detail_total
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
-      item_subtotal = calculate_item_subtotal(fallback_tax_rate)
-      item_tax_total = item_total - item_subtotal
+      external_tax = external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
 
-      total = resolve_total(item_total, nil, nil)
-      subtotal = resolve_subtotal(item_total, item_subtotal, nil, total:, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
-      tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total:, subtotal: subtotal)
-      total = resolve_total(item_total, subtotal, tax_total)
+      if external_tax
+        item_subtotal = item_total
+        item_tax_total = tax_detail_total
+        subtotal = item_total
+        tax_total = tax_detail_total
+        total = subtotal + tax_total
+      else
+        item_subtotal = calculate_item_subtotal(fallback_tax_rate)
+        item_tax_total = item_total - item_subtotal
+
+        total = resolve_total(item_total, nil, nil)
+        subtotal = resolve_subtotal(item_total, item_subtotal, nil, total:, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
+        tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total:, subtotal: subtotal)
+        total = resolve_total(item_total, subtotal, tax_total)
+      end
+
       tax_rate = resolve_tax_rate(fallback_tax_rate)
 
       {
@@ -30,7 +43,9 @@ module Amounts
         subtotal: subtotal,
         tax: tax_total,
         total: total,
-        tax_rate: tax_rate
+        tax_rate: tax_rate,
+        external_tax: external_tax,
+        items: @items
       }
     end
 
@@ -88,6 +103,14 @@ module Amounts
 
     def calculate_tax_detail_subtotal
       @tax_details.sum { |t| to_i(t[:net_amount]) }
+    end
+
+    def external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
+      return false if item_total <= 0
+      return false if tax_detail_subtotal <= 0
+      return false if tax_detail_total <= 0
+
+      item_total == tax_detail_subtotal
     end
 
     # -----------------------------

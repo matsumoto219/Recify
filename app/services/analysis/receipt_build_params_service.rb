@@ -118,6 +118,7 @@ module Analysis
             category: normalized_item[:category].presence || detect_category(raw_text),
             price: price,
             quantity: quantity,
+            discount_amount: normalize_amount(normalized_item[:discount_amount]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit
             quantity_unit: normalized_item[:quantity_unit],
             # Azure Items[].ProductCode -> receipt_items.product_code
