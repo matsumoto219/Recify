@@ -31,6 +31,14 @@ module Ai
 
         You MUST follow all rules exactly.
 
+        All datetime values MUST be returned in a parser-friendly format.
+
+        - Use ISO-like format: YYYY-MM-DD HH:MM
+        - Time MUST be in 24-hour format (HH:MM)
+        - Do NOT include locale-specific words, characters, or formatting styles
+        - Do NOT include month names, AM/PM markers, or localized time suffixes
+        - Use only numeric date and time with standard separators ("-" for date, ":" for time)
+
         Output MUST be a valid JSON object.
         Do NOT output anything except JSON.
         Do NOT include markdown fences or explanations.
@@ -54,12 +62,10 @@ module Ai
 
         Follow the schema strictly.
         Any deviation is considered a failure.
-      PROMPT
-    end
 
-    def user_prompt
-      <<~PROMPT
-        Return a JSON object with exactly these top-level keys:
+        Output schema constraints (STRICT):
+
+        Top-level keys (exactly these):
         - store
         - purchase
         - payment
@@ -85,14 +91,35 @@ module Ai
         - tax_rate
         - needs_review
 
-        Allowed categories:
+        Allowed enum values:
+
+        categories:
         #{allowed_categories.join(", ")}
 
-        Allowed payment methods:
+        payment_methods:
         #{allowed_payment_methods.join(", ")}
 
+        review_reasons:
+        #{allowed_review_reasons.join(", ")}
+
+        You MUST NOT output keys or enum values outside of the above definitions.
+      PROMPT
+    end
+
+    def user_prompt
+      <<~PROMPT
         For store:
         - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
+        - If store_candidates are present, choose the most appropriate store_name from store_candidates and supporting filtered_content.
+        - Prefer the store brand name as the core store_name.
+        - If a branch name, shopping facility name, or regional/location name clearly appears to be connected to the store, you SHOULD combine it with the brand name when doing so results in a more complete and natural store_name.
+        - Prefer a store_name that uniquely identifies the specific store location over a generic brand-only name when both are supported.
+        - Do NOT choose descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, timestamps, receipt labels, or payment text as store_name.
+        - Use country_region in meta only as a reference for natural store-name notation in that country or region.
+        - When a store brand is written in a notation that is clearly unnatural for the country_region but clearly maps to a common local notation, you MAY normalize it to that common local notation.
+        - When spacing, casing, punctuation, or separators are unnatural or unnecessary for the country_region, you MAY normalize them only if the brand remains clearly identifiable.
+        - Do NOT normalize names when the mapping is uncertain, when multiple brands could match, or when the normalized name is not directly supported by store_candidates, OCR candidates, or filtered_content.
+        - Do NOT invent a different store brand that is not supported by store_candidates, OCR candidates, or filtered_content.
         - store_address: prefer OCR store_address. Use address_candidates and filtered_content as supporting evidence.
         - store_address must be a physical address (for example, location/address text such as prefecture, city, street, or place information).
         - Do NOT use phone numbers, fax numbers, or other contact information as store_address.
@@ -105,7 +132,7 @@ module Ai
         - If OCR store_phone_number is present and plausibly formatted as a phone number, do not return null unless there is strong evidence that it is not a store phone number.
         - If a plausible phone number exists but you are not fully confident it is the correct store phone number, keep the plausible value and treat it as uncertain rather than missing.
         - Treat customer support or headquarters phone numbers as lower priority than numbers clearly tied to the store/branch context, but do not mark the phone number as missing when a plausible receipt phone number is present.
-        - branch_name_candidates are supporting clues only. Do not return branch_name_candidates in the output.
+        - store_candidates and branch_name_candidates are supporting clues only. Do not return store_candidates or branch_name_candidates in the output.
         - Avoid headquarters or customer support addresses when selecting store_address.
 
         For purchase:
@@ -115,6 +142,11 @@ module Ai
         - Prefer receipt/transaction/payment context over order/preparation/reference context.
         - Treat lines mentioning order time, reservation time, or non-payment workflow timestamps as lower priority unless they are the only plausible transaction time.
         - If there is a single clearly supported transaction time, return purchased_at_text with both date and time.
+        - Use country_region in meta as a reference for recognizing natural date and time notation in that country or region.
+        - If purchased_at_text contains only a date and purchased_at_candidates or purchase_context_lines contain a recognizable local time expression, combine the date with that time.
+        - A time expression may appear after unrelated leading numbers such as register numbers, receipt numbers, order numbers, staff numbers, or reference numbers.
+        - Ignore unrelated leading numbers before the recognizable time expression.
+        - Extract only the transaction time expression; do not treat unrelated leading numbers as part of the time.
         - If only the date is clearly supported and the time is genuinely uncertain, return the date only.
         - If multiple plausible transaction times conflict and cannot be resolved, return null and include purchased_at_conflicted in review_reasons.
         - If the purchase date/time cannot be determined at all, return null and include purchased_at_missing or purchased_at_uncertain as appropriate.
@@ -124,14 +156,18 @@ module Ai
         - payment_method: prefer OCR payment_method.
         - If OCR payment_method is blank, use payment_method_text, payment_candidates, payment_context_lines, and filtered_content.
         - Choose only from the allowed payment methods.
-        - Use the following mapping examples as strong reference clues:
-          - cash: 現金
-          - credit_card: VISA, MasterCard, JCB, AMEX
-          - e_money: QUICPay, iD, WAON, nanaco, 楽天Edy, 交通系IC (Suica, PASMO, ICOCA)
-          - qr_payment: PayPay, 楽天ペイ, d払い, au PAY, メルペイ
-          - debit_card: デビットカード
-        - If a known payment brand appears, prioritize the correct category mapping over broad guessing from words like "Pay".
-        - Do not confuse point/member/loyalty text with payment methods.
+        - Use country_region in meta as a reference for interpreting local payment terminology and locally common payment brands.
+        - Map the detected payment evidence to one of the allowed payment methods by category, not by literal wording alone.
+        - cash: physical cash payment, local words or abbreviations meaning cash, cash total, amount received, or change.
+        - credit_card: international or local credit card brands, credit card transaction slips, or card payment text indicating credit.
+        - e_money: stored-value electronic money, transit/transport IC cards, prepaid contactless cards, or local electronic wallet systems that are not primarily QR/code payments.
+        - qr_payment: QR code, barcode, mobile code, or app-based scan payment services common in the country_region.
+        - debit_card: debit card brands or card payment text clearly indicating debit.
+        - other: supported payment evidence exists but does not fit the categories above.
+        - International card brands such as VISA, MasterCard, American Express, and similar globally recognized card networks are strong clues for credit_card unless the receipt clearly indicates debit.
+        - If a known local payment brand appears, use country_region and payment_context_lines to classify it into the correct allowed category.
+        - Do not classify as a payment method from brand names alone when the surrounding context indicates points, membership, coupons, loyalty programs, rewards, or advertisements rather than payment.
+        - Do not infer a payment method solely from generic words such as "Pay", "Card", "Point", or "Member" without payment context.
 
         For items:
         - Each returned item MUST correspond to an input item by index.
@@ -148,8 +184,7 @@ module Ai
 
         review_reasons rules:
         - Return an array of codes.
-        - Use ONLY the following allowed codes (snake_case):
-          #{allowed_review_reasons.join(",\n          ")}
+        - Use ONLY allowed codes defined in the system constraints.
         - Do NOT invent new codes.
         - Use store_phone_number_missing only when no plausible store phone number is supported by OCR candidates or filtered_content.
         - If a plausible store phone number exists but confidence is limited, use store_phone_number_uncertain instead of store_phone_number_missing.

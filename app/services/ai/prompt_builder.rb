@@ -42,6 +42,7 @@ module Ai
         store_name: candidate_value(:store_name),
         store_address: candidate_value(:store_address),
         store_phone_number: candidate_value(:store_phone_number),
+        store_candidates: store_name_candidates,
         branch_name_candidates: branch_name_candidates,
         address_candidates: address_candidates
       }.compact
@@ -56,11 +57,23 @@ module Ai
     end
 
     def build_payment_payload
+      method_text = candidate_value(:payment_method_text)
+
+      candidates = normalize_payment_candidates
+      if method_text.present?
+        candidates = [ { method: method_text } ] + candidates
+      end
+
+      context_lines = payment_context_lines
+      if method_text.present?
+        context_lines = ([ method_text ] + context_lines).uniq
+      end
+
       {
         payment_method: candidate_value(:payment_method),
-        payment_method_text: candidate_value(:payment_method_text),
-        payment_candidates: normalize_payment_candidates,
-        payment_context_lines: payment_context_lines
+        payment_method_text: method_text,
+        payment_candidates: candidates,
+        payment_context_lines: context_lines
       }.compact
     end
 
@@ -106,6 +119,7 @@ module Ai
       {
         ocr_provider: fetch(meta_hash, :provider),
         ocr_model: fetch(meta_hash, :model),
+        country_region: candidate_value(:country_region),
         raw_text_length: raw_text.length,
         line_count: lines.length,
         item_count: build_items_payload.length,
@@ -192,6 +206,31 @@ module Ai
       lines.select { |line| address_candidate?(line) }.uniq.first(5)
     end
 
+    def store_name_candidates
+      candidates = []
+
+      # OCRのstore_nameも候補に含める
+      candidates << candidate_value(:store_name)
+
+      # 先頭行から候補抽出（ブランド＋支店を拾うため）
+      candidates.concat(lines.first(10))
+
+      # ノイズ除去
+      cleaned = candidates.filter_map do |line|
+        text = line.to_s.strip
+        next if text.empty?
+        next if address_candidate?(text)
+        next if payment_context_line?(text)
+        next if purchase_context_line?(text)
+        next if text.match?(/tel|電話|レジ|伝票|領収|日時|合計|小計/i)
+        next if text.match?(/^\d+[\d\s\-\/:]*$/)
+
+        text
+      end
+
+      cleaned.uniq.first(10)
+    end
+
     def purchase_context_line?(line)
       text = line.to_s.strip
       return false if text.empty?
@@ -204,7 +243,7 @@ module Ai
       text = line.to_s.strip
       return false if text.empty?
 
-      text.match?(/現金|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/)
+      text.match?(/現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/)
     end
 
     def tax_context_line?(line)

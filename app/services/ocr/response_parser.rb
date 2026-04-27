@@ -187,9 +187,60 @@ class Ocr::ResponseParser
   def extract_store_name(parsed_response, lines)
     fields = extract_fields(parsed_response)
     merchant_name = fields.dig("MerchantName", "valueString") || fields.dig("MerchantName", "content")
-    branch_name = extract_branch_like_store_name(lines, merchant_name)
+    candidates = extract_store_name_candidates(lines, merchant_name)
 
-    branch_name || merchant_name || lines.find(&:present?)
+    candidates.first || merchant_name || lines.find(&:present?)
+  end
+
+  def extract_store_name_candidates(lines, merchant_name)
+    normalized_lines = Array(lines).filter_map { |line| normalize_store_name_candidate(line) }
+    branch_name = extract_branch_like_store_name(normalized_lines, merchant_name)
+    brand_name = extract_brand_like_store_name(normalized_lines, branch_name)
+
+    candidates = []
+    candidates << combine_brand_and_branch_name(brand_name, branch_name)
+    candidates << brand_name
+    candidates << branch_name
+    candidates << normalize_store_name_candidate(merchant_name)
+
+    candidates.compact_blank.uniq
+  end
+
+  def extract_brand_like_store_name(lines, branch_name)
+    focused_lines = Array(lines).first(8)
+    branch_index = focused_lines.find_index { |line| normalize_store_name_candidate(line) == normalize_store_name_candidate(branch_name) }
+    candidate_lines = branch_index ? focused_lines.first(branch_index) : focused_lines
+
+    candidate_lines.find do |line|
+      normalized_line = normalize_store_name_candidate(line)
+      next false if normalized_line.blank?
+      next false if normalized_line == normalize_store_name_candidate(branch_name)
+      next false if store_name_noise_line?(normalized_line)
+      next false if branch_like_store_name?(normalized_line)
+
+      brand_like_store_name?(normalized_line)
+    end
+  end
+
+  def brand_like_store_name?(text)
+    normalized = normalize_store_name_candidate(text)
+    return false if normalized.blank?
+    return false if normalized.length < 2
+    return false if normalized.length > 40
+    return false if normalized.match?(/住所|東京都|道府県|市|区|町|丁目|番地|電話|tel|fax/i)
+    return false if normalized.match?(/^[-\d\s.,:;()]+$/)
+
+    normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
+  end
+
+  def combine_brand_and_branch_name(brand_name, branch_name)
+    normalized_brand_name = normalize_store_name_candidate(brand_name)
+    normalized_branch_name = normalize_store_name_candidate(branch_name)
+    return nil if normalized_brand_name.blank? || normalized_branch_name.blank?
+    return normalized_brand_name if normalized_brand_name.include?(normalized_branch_name)
+    return normalized_branch_name if normalized_branch_name.include?(normalized_brand_name)
+
+    "#{normalized_brand_name} #{normalized_branch_name}"
   end
 
   def extract_branch_like_store_name(lines, merchant_name)
@@ -199,7 +250,7 @@ class Ocr::ResponseParser
       normalized_line = normalize_store_name_candidate(line)
       next false if normalized_line.blank?
       next false if normalized_merchant_name.present? && normalized_line == normalized_merchant_name
-      next false if store_name_noise_line?(normalized_line)
+      next false if store_name_noise_line?(normalized_line, allow_branch_like: true)
 
       branch_like_store_name?(normalized_line)
     end
@@ -221,19 +272,18 @@ class Ocr::ResponseParser
     false
   end
 
-  def store_name_noise_line?(text)
+  def store_name_noise_line?(text, allow_branch_like: false)
     normalized = normalize_store_name_candidate(text)
     return true if normalized.blank?
 
-    noise_patterns = [
-      /tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i,
-      /^\d+[\d\s\/:\-()]*$/,
-      /〒/,
-      /株式会社/,
-      /[0-9]{2,}/
-    ]
+    return true if normalized.match?(/tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i)
+    return true if normalized.match?(/^\d+[\d\s\/:\-()]*$/)
+    return true if normalized.match?(/〒/)
+    return true if normalized.match?(/株式会社/)
 
-    noise_patterns.any? { |pattern| normalized.match?(pattern) }
+    return false if allow_branch_like && branch_like_store_name?(normalized)
+
+    normalized.match?(/[0-9]{2,}/)
   end
 
   # NOTE: Azure側で address 型の場合もあり、valueString/content 以外の対応は今後検討
@@ -357,6 +407,9 @@ class Ocr::ResponseParser
   def extract_payment_method_from_lines(lines)
     normalized_lines = Array(lines).map { |line| normalize_payment_text(line) }.compact
 
+    return "現金" if normalized_lines.any? { |line| cash_total_line?(line) }
+    return "商品券" if normalized_lines.any? { |line| voucher_payment_line?(line) }
+
     card_slip_index = normalized_lines.find_index do |line|
       line.match?(/クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i)
     end
@@ -386,6 +439,20 @@ class Ocr::ResponseParser
     general_match.match(payment_method_pattern)&.[](0) if general_match.present?
   end
 
+  def cash_total_line?(line)
+    normalized = normalize_payment_text(line)
+    return false if normalized.blank?
+
+    normalized.match?(/現計|現金計|現金合計/)
+  end
+
+  def voucher_payment_line?(line)
+    normalized = normalize_payment_text(line)
+    return false if normalized.blank?
+
+    normalized.match?(/商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i)
+  end
+
   def normalize_payment_text(text)
     return nil if text.blank?
 
@@ -403,7 +470,7 @@ class Ocr::ResponseParser
   end
 
   def payment_method_pattern
-    /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|american\s*express|suica|pasmo|icoca|waon|nanaco|edy|\bid\b|quickpay|quicpay|paypay|楽天ペイ|rakuten\s*pay|d払い|au\s*pay|メルペイ|line\s*pay|デビット|debit/i
+    /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|master|jcb|amex|american\s*express|suica|pasmo|icoca|waon|nanaco|edy|\bid\b|quickpay|quicpay|paypay|楽天ペイ|rakuten\s*pay|d払い|au\s*pay|メルペイ|line\s*pay|デビット|debit/i
   end
 
   def extract_tip_amount(parsed_response)
@@ -499,103 +566,103 @@ class Ocr::ResponseParser
     []
   end
 
-# NOTE: 割引検出。
-# lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
-# 割引額・割引率・割引前金額を直前itemへ紐付ける。
-def extract_discount_details_by_item_index(items, lines)
-  normalized_lines = Array(lines).map { |line| normalize_text(line) }
-  return {} if normalized_lines.blank?
+  # NOTE: 割引検出。
+  # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
+  # 割引額・割引率・割引前金額を直前itemへ紐付ける。
+  def extract_discount_details_by_item_index(items, lines)
+    normalized_lines = Array(lines).map { |line| normalize_text(line) }
+    return {} if normalized_lines.blank?
 
-  item_labels = items.map do |item|
-    value_object = item["valueObject"] || {}
-    normalize_text(
-      value_object.dig("Description", "valueString") ||
-        value_object.dig("Description", "content") ||
-        item["content"]
-    )
-  end
-
-  item_original_totals = items.map do |item|
-    value_object = item["valueObject"] || {}
-    value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
-  end
-
-  current_item_index = nil
-  next_item_index = 0
-  waiting_discount = false
-  current_discount_rate = nil
-  discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
-
-  normalized_lines.each do |line|
-    matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
-    if matched_item_index
-      current_item_index = matched_item_index
-      next_item_index = matched_item_index + 1
-      waiting_discount = false
-      current_discount_rate = nil
-      next
+    item_labels = items.map do |item|
+      value_object = item["valueObject"] || {}
+      normalize_text(
+        value_object.dig("Description", "valueString") ||
+          value_object.dig("Description", "content") ||
+          item["content"]
+      )
     end
 
-    if discount_keyword_line?(line)
-      waiting_discount = current_item_index.present?
-      current_discount_rate = nil
-      next
+    item_original_totals = items.map do |item|
+      value_object = item["valueObject"] || {}
+      value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
     end
 
-    next unless waiting_discount
-
-    extracted_rate = extract_discount_rate_from_line(line)
-    if extracted_rate
-      current_discount_rate = extracted_rate
-      next
-    end
-
-    discount_amount = extract_discount_amount_from_line(line)
-    next unless discount_amount.positive?
-
-    original_line_total = normalize_amount_for_discount(item_original_totals[current_item_index])
-    detail = discount_details_by_index[current_item_index]
-    detail[:amount] += discount_amount
-    detail[:rate] ||= current_discount_rate
-    detail[:original_line_total] ||= original_line_total if original_line_total.positive?
-
+    current_item_index = nil
+    next_item_index = 0
     waiting_discount = false
     current_discount_rate = nil
+    discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
+
+    normalized_lines.each do |line|
+      matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
+      if matched_item_index
+        current_item_index = matched_item_index
+        next_item_index = matched_item_index + 1
+        waiting_discount = false
+        current_discount_rate = nil
+        next
+      end
+
+      if discount_keyword_line?(line)
+        waiting_discount = current_item_index.present?
+        current_discount_rate = nil
+        next
+      end
+
+      next unless waiting_discount
+
+      extracted_rate = extract_discount_rate_from_line(line)
+      if extracted_rate
+        current_discount_rate = extracted_rate
+        next
+      end
+
+      discount_amount = extract_discount_amount_from_line(line)
+      next unless discount_amount.positive?
+
+      original_line_total = normalize_amount_for_discount(item_original_totals[current_item_index])
+      detail = discount_details_by_index[current_item_index]
+      detail[:amount] += discount_amount
+      detail[:rate] ||= current_discount_rate
+      detail[:original_line_total] ||= original_line_total if original_line_total.positive?
+
+      waiting_discount = false
+      current_discount_rate = nil
+    end
+
+    discount_details_by_index
   end
 
-  discount_details_by_index
-end
+  def match_item_index_from_line(line, item_labels, start_index)
+    item_labels.each_with_index.drop(start_index).find do |label, _index|
+      next false if label.blank?
 
-def match_item_index_from_line(line, item_labels, start_index)
-  item_labels.each_with_index.drop(start_index).find do |label, _index|
-    next false if label.blank?
+      line.include?(label) || label.include?(line)
+    end&.last
+  end
 
-    line.include?(label) || label.include?(line)
-  end&.last
-end
+  def discount_keyword_line?(line)
+    line.match?(/割引|値引|discount|off/i)
+  end
 
-def discount_keyword_line?(line)
-  line.match?(/割引|値引|discount|off/i)
-end
+  def extract_discount_rate_from_line(line)
+    return nil if line.match?(/[-−▲]/)
 
-def extract_discount_rate_from_line(line)
-  return nil if line.match?(/[-−▲]/)
+    matched = line.match(/(\d+(?:\.\d+)?)\s*%/)
+    return nil unless matched
 
-  matched = line.match(/(\d+(?:\.\d+)?)\s*%/)
-  return nil unless matched
+    BigDecimal(matched[1]) / 100
+  end
 
-  BigDecimal(matched[1]) / 100
-end
+  def extract_discount_amount_from_line(line)
+    return 0 unless line.match?(/[-−▲]/)
 
-def extract_discount_amount_from_line(line)
-  return 0 unless line.match?(/[-−▲]/)
+    line.scan(/\d[\d,]*/).map { |value| value.delete(",").to_i }.max.to_i
+  end
 
-  line.scan(/\d[\d,]*/).map { |value| value.delete(",").to_i }.max.to_i
-end
-
-def normalize_amount_for_discount(value)
-  value.to_s.delete(",").to_i
-end
+  def normalize_amount_for_discount(value)
+    value.to_s.delete(",").to_i
+  end
 
   def build_error_result(error_code)
     Ocr::ResultTemplate.error_result(
