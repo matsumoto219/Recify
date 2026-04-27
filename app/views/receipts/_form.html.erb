@@ -139,12 +139,13 @@
           </div>
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
-            <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
-              <div class="col-span-4">品名</div>
+            <div class="hidden md:grid grid-cols-13 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
+              <div class="col-span-3">品名</div>
+              <div class="col-span-2">カテゴリ</div>
               <div class="col-span-2">数量</div>
               <div class="col-span-2">単価</div>
               <div class="col-span-2">税率</div>
-              <div class="col-span-1">小計</div>
+              <div class="col-span-1 hidden lg:block">小計</div>
               <div class="col-span-1"></div>
             </div>
 
@@ -153,8 +154,11 @@
                 <% item = item_form.object %>
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
 
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
-                  <div class="col-span-4 relative pr-12 md:pr-0">
+                <div class="grid grid-cols-2 md:grid-cols-13 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
+                  <div class="col-span-2 md:col-span-3 relative">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
+                      <div class="w-full">
                     <% if item.needs_review %>
                       <%# TODO: 要確認項目は将来的に input を赤枠ハイライトする。低信頼理由の表示も追加する %>
                       <span class="absolute -top-6 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#FFB4AB]/10 text-[#FFB4AB] flex items-center gap-1">
@@ -173,10 +177,27 @@
                                show_label: false,
                                highlight_variant: (item.needs_review ? :error : nil),
                                input_class: "h-10 px-3 py-2 rounded-md" %>
-
+                      </div>
+                    </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
+                      <%= render "shared/ui/select_field",
+                                 f: item_form,
+                                 attribute: :category,
+                                 label: "カテゴリ",
+                                 options: ReceiptItem.category_options,
+                                 selected: item.category,
+                                 include_blank: "未分類",
+                                 show_label: false,
+                                 select_wrapper_class: "w-full",
+                                 select_class: "h-auto px-3 py-2 rounded-md border-white/10" %>
+                    </div>
+                  </div>
+
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
@@ -189,7 +210,7 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
@@ -202,10 +223,10 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="relative">
+                      <div class="relative flex-1">
                         <%= item_form.number_field :tax_rate,
                                                    value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
                                                    step: 0.1,
@@ -218,14 +239,20 @@
                                                    } %>
                         <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
                       </div>
+
+                      <button type="button"
+                              class="md:hidden p-2 hover:text-[#FFB4AB] transition-colors shrink-0"
+                              data-action="click->receipt-form#removeItem">
+                        <span class="material-symbols-outlined">delete</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
+                  <div class="hidden lg:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥<%= number_with_delimiter(item.line_total.to_i) %>
                   </div>
 
-                  <div class="col-span-1 flex justify-end md:static absolute top-3 right-3 z-10">
+                  <div class="hidden md:flex col-span-1 justify-end">
                     <button type="button"
                             class="p-2 hover:text-[#FFB4AB] transition-colors"
                             data-action="click->receipt-form#removeItem">
@@ -256,8 +283,11 @@
 
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
-                  <div class="col-span-4 relative pr-12 md:pr-0">
+                <div class="grid grid-cols-2 md:grid-cols-13 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
+                  <div class="col-span-2 md:col-span-3 relative">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
+                      <div class="w-full">
                     <%= render "shared/ui/text_field",
                                f: item_form,
                                attribute: :confirmed_name,
@@ -267,9 +297,27 @@
                                placeholder: "品名を入力",
                                show_label: false,
                                input_class: "h-10 px-3 py-2 rounded-md" %>
+                      </div>
+                    </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
+                      <%= render "shared/ui/select_field",
+                                 f: item_form,
+                                 attribute: :category,
+                                 label: "カテゴリ",
+                                 options: ReceiptItem.category_options,
+                                 selected: nil,
+                                 include_blank: "未分類",
+                                 show_label: false,
+                                 select_wrapper_class: "w-full",
+                                 select_class: "h-auto px-3 py-2 rounded-md border-white/10" %>
+                    </div>
+                  </div>
+
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
@@ -282,7 +330,7 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
@@ -295,10 +343,10 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2">
+                  <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="relative">
+                      <div class="relative flex-1">
                         <%= item_form.number_field :tax_rate,
                                                    step: 0.1,
                                                    min: 0,
@@ -310,14 +358,20 @@
                                                    } %>
                         <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
                       </div>
+
+                      <button type="button"
+                              class="md:hidden p-2 hover:text-[#FFB4AB] transition-colors shrink-0"
+                              data-action="click->receipt-form#removeItem">
+                        <span class="material-symbols-outlined">delete</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div class="hidden md:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
+                  <div class="hidden lg:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
                     ¥0
                   </div>
 
-                  <div class="col-span-1 flex justify-end md:static absolute top-3 right-3 z-10">
+                  <div class="hidden md:flex col-span-1 justify-end">
                     <button type="button"
                             class="p-2 hover:text-[#FFB4AB] transition-colors"
                             data-action="click->receipt-form#removeItem">
