@@ -199,45 +199,65 @@
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
-                      <%= item_form.number_field :quantity,
-                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                 data: {
-                                                   action: "input->receipt-form#recalculate",
-                                                   receipt_form_target: "quantityInput"
-                                                 } %>
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :quantity,
+                                 label: "数量",
+                                 show_label: false,
+                                 text_align: :center,
+                                 hide_spinner: false,
+                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "quantityInput"
+                                   }
+                                 } %>
                     </div>
                   </div>
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
-                      <%= item_form.number_field :price,
-                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                 data: {
-                                                   action: "input->receipt-form#recalculate",
-                                                   receipt_form_target: "priceInput"
-                                                 } %>
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :price,
+                                 label: "単価",
+                                 show_label: false,
+                                 text_align: :right,
+                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "priceInput"
+                                   }
+                                 } %>
                     </div>
                   </div>
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="relative flex-1">
-                        <%= item_form.number_field :tax_rate,
-                                                   value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
-                                                   step: 0.1,
-                                                   min: 0,
-                                                   max: 100,
-                                                   class: "w-full px-3 py-2 pr-7 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                   data: {
-                                                     action: "input->receipt-form#recalculate",
-                                                     receipt_form_target: "taxRateInput"
-                                                   } %>
-                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
+                      <div class="flex-1">
+                        <%= render "shared/ui/number_field",
+                                   f: item_form,
+                                   attribute: :tax_rate,
+                                   label: "税率",
+                                   value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
+                                   step: 0.1,
+                                   min: 0,
+                                   max: 100,
+                                   suffix: "%",
+                                   show_label: false,
+                                   text_align: :right,
+                                   input_class: "h-auto px-3 py-2 rounded-md",
+                                   html_options: {
+                                     data: {
+                                       action: "input->receipt-form#recalculate",
+                                       receipt_form_target: "taxRateInput"
+                                     }
+                                   } %>
                       </div>
 
                       <button type="button"
@@ -319,44 +339,64 @@
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <%# NOTE: quantity は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
-                      <%= item_form.number_field :quantity,
-                                                 class: "w-full px-3 py-2 rounded-md text-center bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                 data: {
-                                                   action: "input->receipt-form#recalculate",
-                                                   receipt_form_target: "quantityInput"
-                                                 } %>
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :quantity,
+                                 label: "数量",
+                                 show_label: false,
+                                 text_align: :center,
+                                 hide_spinner: false,
+                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "quantityInput"
+                                   }
+                                 } %>
                     </div>
                   </div>
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <%# NOTE: price は number_field かつ今後Stimulus再計算対象のため、text_field パーシャルでは置き換えない %>
                       <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
-                      <%= item_form.number_field :price,
-                                                 class: "w-full px-3 py-2 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                 data: {
-                                                   action: "input->receipt-form#recalculate",
-                                                   receipt_form_target: "priceInput"
-                                                 } %>
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :price,
+                                 label: "単価",
+                                 show_label: false,
+                                 text_align: :right,
+                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "priceInput"
+                                   }
+                                 } %>
                     </div>
                   </div>
 
                   <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="relative flex-1">
-                        <%= item_form.number_field :tax_rate,
-                                                   step: 0.1,
-                                                   min: 0,
-                                                   max: 100,
-                                                   class: "w-full px-3 py-2 pr-7 rounded-md text-right bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
-                                                   data: {
-                                                     action: "input->receipt-form#recalculate",
-                                                     receipt_form_target: "taxRateInput"
-                                                   } %>
-                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none">%</span>
+                      <div class="flex-1">
+                        <%= render "shared/ui/number_field",
+                                   f: item_form,
+                                   attribute: :tax_rate,
+                                   label: "税率",
+                                   step: 0.1,
+                                   min: 0,
+                                   max: 100,
+                                   suffix: "%",
+                                   show_label: false,
+                                   text_align: :right,
+                                   input_class: "h-auto px-3 py-2 rounded-md",
+                                   html_options: {
+                                     data: {
+                                       action: "input->receipt-form#recalculate",
+                                       receipt_form_target: "taxRateInput"
+                                     }
+                                   } %>
                       </div>
 
                       <button type="button"
