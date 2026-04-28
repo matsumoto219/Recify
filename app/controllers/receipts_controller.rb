@@ -46,6 +46,7 @@ class ReceiptsController < ApplicationController
 
   def update
     update_params = normalized_receipt_params.to_h
+    clear_review_flags_for_edited_items!(update_params)
     apply_amount_calculation!(update_params)
 
     if @receipt.update(update_params)
@@ -98,7 +99,8 @@ class ReceiptsController < ApplicationController
         :line_total,
         :needs_review,
         :position_index,
-        :_destroy
+        :_destroy,
+        { review_reasons: [] }
       ]
       # NOTE: 以下は将来 nested attributes で直接編集する場合の候補
       # , receipt_payments_attributes: [
@@ -205,6 +207,59 @@ class ReceiptsController < ApplicationController
     items_attributes.values.reject do |item_attributes|
       ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
     end
+  end
+
+  def clear_review_flags_for_edited_items!(permitted)
+    items_attributes = permitted["receipt_items_attributes"]
+    return if items_attributes.blank?
+
+    existing_items = @receipt.receipt_items.index_by { |item| item.id.to_s }
+
+    items_attributes.each_value do |item_attributes|
+      next if ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+
+      item = existing_items[item_attributes["id"].to_s]
+      next if item.blank?
+      next unless review_clear_target_changed?(item, item_attributes)
+
+      item_attributes["needs_review"] = false
+      item_attributes["review_reasons"] = []
+    end
+  end
+
+  def review_clear_target_changed?(item, item_attributes)
+    review_clear_target_fields.any? do |field|
+      item_value = normalize_review_compare_value(item.public_send(field), field)
+      param_value = normalize_review_compare_value(item_attributes[field.to_s], field)
+
+      item_value != param_value
+    end
+  end
+
+  def review_clear_target_fields
+    %i[
+      confirmed_name
+      category
+      price
+      quantity
+      quantity_unit
+      product_code
+      tax_rate
+      line_total
+    ]
+  end
+
+  def normalize_review_compare_value(value, field)
+    return nil if value.blank?
+
+    case field
+    when :price, :quantity, :tax_rate, :line_total
+      BigDecimal(value.to_s)
+    else
+      value.to_s
+    end
+  rescue ArgumentError
+    nil
   end
 
   def apply_analysis(receipt)
