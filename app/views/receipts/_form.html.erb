@@ -25,6 +25,14 @@
                          "複数税率"
                        end
     tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : nil
+
+    receipt_review_reason_codes = Array(receipt.review_reasons).map(&:to_s)
+    receipt_review_reason_labels = receipt_review_reason_codes.map do |code|
+      I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
+    end
+    receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }
+    review_items = receipt.receipt_items.select(&:needs_review)
+    has_review_notes = receipt_review_reason_labels.any? || review_items.any?
   %>
   <% content_for :mobile_bottom_actions do %>
     <%= render "shared/ui/button",
@@ -55,17 +63,67 @@
               href: cancel_path,
               label: "キャンセル",
               variant: :secondary,
-              class: "px-6 py-2.5 rounded-xl hover:bg-[#444]" %>
+              class: "px-6 py-2.5 rounded-xl" %>
 
         <%= render "shared/ui/button",
               label: "保存",
               type: "submit",
-              class: "px-8 py-2.5 rounded-xl hover:opacity-90 shadow-lg shadow-[#4B4DD8]/20 cursor-pointer" %>
+              class: "px-10 py-2.5 rounded-xl shadow-lg cursor-pointer" %>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div class="lg:col-span-8 space-y-8">
+        <% if has_review_notes %>
+          <%= render "shared/ui/surface_card", variant: :warning, class: "p-6" do %>
+            <div class="flex items-start gap-3">
+              <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFB4AB]/10 text-[#FFB4AB]">
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">error</span>
+              </div>
+
+              <div class="min-w-0 flex-1 space-y-4">
+                <div>
+                  <h3 class="text-base font-bold text-[#FFB4AB]">要確認内容</h3>
+                  <p class="mt-1 text-sm text-[#E5E2E1]/80">保存前に以下の内容を確認してください。</p>
+                </div>
+
+                <% if receipt_review_reason_labels.any? %>
+                  <div class="rounded-lg border border-[#FFB4AB]/20 bg-[#FFB4AB]/5 px-3 py-2">
+                    <div class="mb-1 text-xs font-bold text-[#FFB4AB]">レシート全体</div>
+                    <ul class="space-y-1 pl-5 text-sm text-[#E5E2E1] list-disc">
+                      <% receipt_review_reason_labels.each do |reason| %>
+                        <li><%= reason %></li>
+                      <% end %>
+                    </ul>
+                  </div>
+                <% end %>
+
+                <% if review_items.any? %>
+                  <div class="rounded-lg border border-[#FFB4AB]/20 bg-[#FFB4AB]/5 px-3 py-2">
+                    <div class="mb-1 text-xs font-bold text-[#FFB4AB]">明細</div>
+                    <ul class="space-y-2 text-sm text-[#E5E2E1]">
+                      <% review_items.each do |review_item| %>
+                        <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || "名称未設定" %>
+                        <li>
+                          <div class="font-semibold"><%= review_item_name %></div>
+                          <% if review_item.review_reason_labels.any? %>
+                            <ul class="mt-1 space-y-1 pl-5 text-xs text-[#E5E2E1]/85 list-disc">
+                              <% review_item.review_reason_labels.each do |reason| %>
+                                <li><%= reason %></li>
+                              <% end %>
+                            </ul>
+                          <% else %>
+                            <p class="mt-1 text-xs text-[#E5E2E1]/70">明細内容を確認してください。</p>
+                          <% end %>
+                        </li>
+                      <% end %>
+                    </ul>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        <% end %>
         <%= render "shared/ui/surface_card", class: "p-6" do %>
           <%= render "shared/ui/section_header",
                 title: "基本情報",
@@ -79,6 +137,7 @@
                        label: "店舗名",
                        icon: "storefront",
                        placeholder: "店舗名を入力",
+                       highlight_variant: (receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain") ? :error : nil),
                        input_class: "h-11" %>
 
             <%= render "shared/ui/select_field",
@@ -87,7 +146,8 @@
                        label: "支払い方法",
                        options: Receipt.payment_method_options,
                        selected: f.object.payment_method,
-                       include_blank: "選択してください" %>
+                       include_blank: "選択してください",
+                       highlight_variant: (receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain") ? :error : nil) %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_on]",
@@ -95,7 +155,8 @@
                        label: "購入日",
                        type: :date,
                        value: receipt.purchased_at&.in_time_zone&.to_date,
-                       icon: "calendar_today" %>
+                       icon: "calendar_today",
+                       highlight_variant: (receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") ? :error : nil) %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_time]",
@@ -103,7 +164,8 @@
                        label: "時刻",
                        type: :time,
                        value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
-                       icon: "schedule" %>
+                       icon: "schedule",
+                       highlight_variant: (receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") ? :error : nil) %>
 
             <div class="md:col-span-2">
               <%= render "shared/ui/text_field",
@@ -112,6 +174,7 @@
                          label: "店舗住所",
                          icon: "location_on",
                          placeholder: "店舗住所を入力",
+                         highlight_variant: (receipt_review_reason_includes.call("store_address_missing", "store_address_uncertain") ? :error : nil),
                          input_class: "h-11" %>
             </div>
             <div class="md:col-span-2">
@@ -122,6 +185,7 @@
                          icon: "call",
                          field_type: :telephone_field,
                          placeholder: "例: 03-1234-5678",
+                         highlight_variant: (receipt_review_reason_includes.call("store_phone_number_missing", "store_phone_number_uncertain") ? :error : nil),
                          input_class: "h-11",
                          html_options: {
                            inputmode: "tel",
@@ -152,21 +216,16 @@
               <%= f.fields_for :receipt_items do |item_form| %>
                 <% item = item_form.object %>
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
+                <% item_review_reason_codes = Array(item.review_reasons).map(&:to_s) %>
+                <% item_review_reason_includes = ->(*codes) { (item_review_reason_codes & codes.map(&:to_s)).any? } %>
 
-                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg transition-colors relative <%= item.needs_review ? 'border border-[#FFB4AB]/40 bg-[#2A1719]/70 hover:bg-[#3A2024]/80' : 'bg-[#1C1B1B] hover:bg-[#2A2A2A]' %>"
                      data-receipt-form-target="itemRow"
                      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
                       <div class="w-full">
-                    <% if item.needs_review %>
-                      <%# TODO: 要確認項目は将来的に input を赤枠ハイライトする。低信頼理由の表示も追加する %>
-                      <span class="absolute -top-6 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#FFB4AB]/10 text-[#FFB4AB] flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">error</span>
-                        要確認
-                      </span>
-                    <% end %>
                     <%= render "shared/ui/text_field",
                                f: item_form,
                                attribute: :confirmed_name,
@@ -176,7 +235,7 @@
                                with_icon: false,
                                placeholder: "品名を入力",
                                show_label: false,
-                               highlight_variant: (item.needs_review ? :error : nil),
+                               highlight_variant: (item.needs_review && item_review_reason_includes.call("item_name_uncertain") ? :error : nil),
                                input_class: "h-10 px-3 py-2 rounded-md" %>
                       </div>
                     </div>
@@ -194,7 +253,8 @@
                                  include_blank: "未分類",
                                  show_label: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-10 px-3 py-2 rounded-md border-white/10" %>
+                                 select_class: "h-10 px-3 py-2 rounded-md",
+                                 highlight_variant: (item.needs_review && item_review_reason_includes.call("item_category_uncertain") ? :error : nil) %>
                     </div>
                   </div>
 
@@ -261,7 +321,8 @@
                                        action: "input->receipt-form#recalculate",
                                        receipt_form_target: "taxRateInput"
                                      }
-                                   } %>
+                                   },
+                                   highlight_variant: (item.needs_review && item_review_reason_includes.call("item_tax_rate_uncertain") ? :error : nil) %>
                       </div>
 
                       <button type="button"
@@ -339,7 +400,7 @@
                                  include_blank: "未分類",
                                  show_label: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-10 px-3 py-2 rounded-md border-white/10" %>
+                                 select_class: "h-10 px-3 py-2 rounded-md" %>
                     </div>
                   </div>
 
@@ -476,7 +537,6 @@
               show_upload: true,
               show_modal: true,
               initially_open: true,
-              manual_mode: (@mode == "manual"),
               empty_message: "画像を選択してください",
               helper_text: "対応フォーマット:\nJPG / PNG / BMP / TIFF / HEIF / HEIC",
               accept: receipt_image_accept %>
