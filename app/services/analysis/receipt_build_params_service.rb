@@ -129,6 +129,7 @@ module Analysis
             tax_rate: normalize_rate(normalized_item[:tax_rate]),
             line_total: normalize_amount(normalized_item[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
             needs_review: final_item_needs_review(normalized_item, ai_items_present: ai_items_present),
+            review_reasons: normalize_review_reasons(normalized_item[:review_reasons]),
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence])
           }
@@ -231,6 +232,7 @@ module Analysis
             suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
             category: ai_item[:category].presence || candidate_item[:category],
             needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
+            review_reasons: ai_item[:review_reasons].presence || candidate_item[:review_reasons],
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
@@ -248,6 +250,13 @@ module Analysis
         else
           ai_items_present ? false : true
         end
+      end
+
+      def normalize_review_reasons(value)
+        Array(value).filter_map do |reason|
+          normalized = reason.to_s.strip
+          normalized.presence
+        end.uniq
       end
 
       def normalize_item_index(value)
@@ -280,6 +289,7 @@ module Analysis
             discount_rate: nil,
             line_total: extract_item_line_total(line, price:, quantity:),
             needs_review: true,
+            review_reasons: [ "item_name_uncertain" ],
             position_index: index,
             confidence: BigDecimal("0.3")
           }
