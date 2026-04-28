@@ -118,7 +118,7 @@ class ReceiptAmountService
 
   def build_mismatch_messages(inconsistencies)
     Array(inconsistencies).filter_map do |inconsistency|
-      Amounts::MismatchCodes.message(inconsistency.to_sym)
+      I18n.t("enums.receipt_item.review_reason.#{inconsistency}", default: nil)
     end
   end
 
