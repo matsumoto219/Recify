@@ -18,6 +18,14 @@ export default class extends Controller {
   ]
   static values = { nextIndex: Number }
 
+  connect() {
+    this.lineTotalTooltipDelay = 500
+  }
+
+  disconnect() {
+    this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
+  }
+
   addItem(event) {
     event.preventDefault()
 
@@ -51,6 +59,67 @@ export default class extends Controller {
     this.recalculate()
   }
 
+  scheduleLineTotalTooltip(event) {
+    // lg未満は表示しない
+    if (window.innerWidth < 1024) return
+
+    const row = event.currentTarget
+    const tooltip = this.lineTotalTooltipFor(row)
+
+    if (!tooltip) return
+
+    this.hideLineTotalTooltipFor(row)
+    this.clearLineTotalTooltipTimer(row)
+
+    row.lineTotalTooltipTimer = window.setTimeout(() => {
+      this.showLineTotalTooltipFor(row)
+    }, this.lineTotalTooltipDelay)
+  }
+
+  hideLineTotalTooltip(event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]') || event.currentTarget
+    this.hideLineTotalTooltipFor(row)
+  }
+
+  hideLineTotalTooltipOnFocus(event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]') || event.currentTarget
+    this.hideLineTotalTooltipFor(row)
+  }
+
+  showLineTotalTooltipFor(row) {
+    // lg未満は表示しない
+    if (window.innerWidth < 1024) return
+
+    const tooltip = this.lineTotalTooltipFor(row)
+
+    if (!tooltip) return
+
+    tooltip.classList.remove("hidden", "opacity-0")
+    tooltip.classList.add("opacity-100")
+  }
+
+  hideLineTotalTooltipFor(row) {
+    const tooltip = this.lineTotalTooltipFor(row)
+
+    this.clearLineTotalTooltipTimer(row)
+
+    if (!tooltip) return
+
+    tooltip.classList.add("hidden", "opacity-0")
+    tooltip.classList.remove("opacity-100")
+  }
+
+  clearLineTotalTooltipTimer(row) {
+    if (!row?.lineTotalTooltipTimer) return
+
+    window.clearTimeout(row.lineTotalTooltipTimer)
+    row.lineTotalTooltipTimer = null
+  }
+
+  lineTotalTooltipFor(row) {
+    return row?.querySelector('[data-receipt-form-target="lineTotalDisplay"]')
+  }
+
   recalculate() {
     let subtotalSum = 0
     let taxSum = 0
@@ -76,10 +145,11 @@ export default class extends Controller {
         taxRates.add(taxRatePercent)
       }
 
-      // 税込単価前提の計算
-      // サーバー側（Amounts::Calculator）と同じく、明細ごとに税抜金額を切り捨てる
+      // 税込単価前提（浮動小数点誤差回避のため整数計算）
       const lineTotal = quantity * price
-      const subtotal = taxRate > 0 ? Math.floor(lineTotal / (1 + taxRate)) : lineTotal
+      const subtotal = taxRatePercent > 0
+        ? Math.floor((lineTotal * 100) / (100 + taxRatePercent))
+        : lineTotal
       const tax = lineTotal - subtotal
 
       subtotalSum += subtotal
