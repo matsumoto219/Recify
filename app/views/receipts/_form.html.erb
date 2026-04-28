@@ -139,13 +139,12 @@
           </div>
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
-            <div class="hidden md:grid grid-cols-13 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
+            <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
               <div class="col-span-3">品名</div>
               <div class="col-span-2">カテゴリ</div>
               <div class="col-span-2">数量</div>
               <div class="col-span-2">単価</div>
               <div class="col-span-2">税率</div>
-              <div class="col-span-1 hidden lg:block">小計</div>
               <div class="col-span-1"></div>
             </div>
 
@@ -154,7 +153,9 @@
                 <% item = item_form.object %>
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
 
-                <div class="grid grid-cols-2 md:grid-cols-13 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
+                <div class="group grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                     data-receipt-form-target="itemRow"
+                     data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
@@ -193,7 +194,7 @@
                                  include_blank: "未分類",
                                  show_label: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-auto px-3 py-2 rounded-md border-white/10" %>
+                                 select_class: "h-10 px-3 py-2 rounded-md border-white/10" %>
                     </div>
                   </div>
 
@@ -206,8 +207,11 @@
                                  label: "数量",
                                  show_label: false,
                                  text_align: :center,
-                                 hide_spinner: false,
-                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 min: 0,
+                                 step: 1,
+                                 input_class: "h-10 px-3 py-2",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
@@ -226,7 +230,7 @@
                                  label: "単価",
                                  show_label: false,
                                  text_align: :right,
-                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 input_class: "h-10 px-3 py-2 rounded-md",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
@@ -251,7 +255,7 @@
                                    suffix: "%",
                                    show_label: false,
                                    text_align: :right,
-                                   input_class: "h-auto px-3 py-2 rounded-md",
+                                   input_class: "h-10 px-3 py-2 rounded-md",
                                    html_options: {
                                      data: {
                                        action: "input->receipt-form#recalculate",
@@ -268,8 +272,8 @@
                     </div>
                   </div>
 
-                  <div class="hidden lg:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
-                    ¥<%= number_with_delimiter(item.line_total.to_i) %>
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalDisplay">
+                    小計 ¥<%= number_with_delimiter(item.line_total.to_i) %>
                   </div>
 
                   <div class="hidden md:flex col-span-1 justify-end">
@@ -303,7 +307,9 @@
 
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
-                <div class="grid grid-cols-2 md:grid-cols-13 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative" data-receipt-form-target="itemRow">
+                <div class="group grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                     data-receipt-form-target="itemRow"
+                     data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
                     <div class="flex items-center gap-2 md:block">
                       <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
@@ -333,7 +339,7 @@
                                  include_blank: "未分類",
                                  show_label: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-auto px-3 py-2 rounded-md border-white/10" %>
+                                 select_class: "h-10 px-3 py-2 rounded-md border-white/10" %>
                     </div>
                   </div>
 
@@ -346,8 +352,11 @@
                                  label: "数量",
                                  show_label: false,
                                  text_align: :center,
-                                 hide_spinner: false,
-                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 min: 0,
+                                 step: 1,
+                                 input_class: "h-10 px-3 py-2",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
@@ -366,7 +375,7 @@
                                  label: "単価",
                                  show_label: false,
                                  text_align: :right,
-                                 input_class: "h-auto px-3 py-2 rounded-md",
+                                 input_class: "h-10 px-3 py-2 rounded-md",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
@@ -390,7 +399,7 @@
                                    suffix: "%",
                                    show_label: false,
                                    text_align: :right,
-                                   input_class: "h-auto px-3 py-2 rounded-md",
+                                   input_class: "h-10 px-3 py-2 rounded-md",
                                    html_options: {
                                      data: {
                                        action: "input->receipt-form#recalculate",
@@ -407,8 +416,8 @@
                     </div>
                   </div>
 
-                  <div class="hidden lg:block col-span-1 text-right text-[#E5E2E1] font-medium" data-receipt-form-target="lineTotalDisplay">
-                    ¥0
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalDisplay">
+                    小計 ¥0
                   </div>
 
                   <div class="hidden md:flex col-span-1 justify-end">
@@ -444,7 +453,7 @@
         <% end %>
       </div>
 
-      <div class="lg:col-span-4 space-y-8">
+      <div class="lg:col-span-4 space-y-8 lg:sticky lg:top-24 self-start">
         <%= render "shared/ui/amount_summary_card",
               title: "Total Amount",
               amount: total_amount_value,
