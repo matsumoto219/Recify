@@ -7,7 +7,6 @@
   show_download = local_assigns.fetch(:show_download, false)
   show_upload = local_assigns.fetch(:show_upload, false)
   initially_open = local_assigns.fetch(:initially_open, false)
-  manual_mode = local_assigns.fetch(:manual_mode, false)
   keep_image_enabled = local_assigns.fetch(:keep_image_enabled, true)
   empty_message = local_assigns.fetch(:empty_message, "画像なし")
   helper_text = local_assigns[:helper_text]
@@ -15,22 +14,16 @@
   preview_width_class = local_assigns.fetch(:preview_width_class, "w-[220px]")
   preview_height_class = local_assigns.fetch(:preview_height_class, "h-[320px]")
   has_image = receipt.image.attached?
-  enable_controller = show_toggle || show_modal
+  enable_controller = show_toggle || show_modal || show_upload
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}").html_safe : "" %>>
+<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-action="dragenter->receipt-image-card#handleDragEnter dragover->receipt-image-card#handleDragOver dragleave->receipt-image-card#handleDragLeave drop->receipt-image-card#handleDrop").html_safe : "" %>>
   <%= render "shared/ui/surface_card", class: "p-4" do %>
     <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-widest mb-3 px-2">
       <%= title %>
     </p>
 
-    <% if manual_mode %>
-      <%# TODO: 手動登録時の画像なし状態の説明文は後で文言調整する %>
-      <div class="rounded-lg border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#1C1B1B]">
-        <span class="material-symbols-outlined text-4xl mb-2">image</span>
-        <p>手動登録では画像は不要です</p>
-      </div>
-    <% elsif has_image %>
+    <% if has_image %>
       <% if show_toggle %>
         <button
           type="button"
@@ -91,10 +84,13 @@
       </div>
     <% else %>
       <% if keep_image_enabled %>
-        <%# TODO: 画像なし状態の本実装 (未確認) %>
-        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#1C1B1B]">
+        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center text-[#C7C4D8] bg-[#1C1B1B] relative overflow-hidden">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p><%= empty_message %></p>
+
+          <%= image_tag "",
+                class: "hidden absolute inset-0 w-full h-full object-contain bg-[#0E0E0E]",
+                data: { receipt_image_card_target: "previewImage" } %>
         </div>
       <% else %>
         <%# TODO: keep_image 設定に応じた画像なしUIは専用カメラUI仕様確定後に再調整する %>
@@ -107,15 +103,48 @@
     <% end %>
 
     <% if show_upload && form_builder.present? %>
-      <div class="mt-4 space-y-2">
-        <%= form_builder.label :image, class: "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]" %>
+      <div class="mt-4 space-y-3">
         <%= form_builder.file_field :image,
               accept: accept,
-              class: "w-full px-3 py-2 rounded-lg bg-[#0E0E0E] border border-white/10 text-[#E5E2E1]",
+              class: "sr-only",
               data: {
                 receipt_image_card_target: "fileInput",
                 action: "change->receipt-image-card#previewSelectedImage"
               } %>
+
+        <div class="relative overflow-hidden rounded-xl border border-dashed border-white/10 bg-[#0E0E0E] p-4 transition-colors hover:border-[#C0C1FF]/50 hover:bg-[#1C1B1B]">
+          <div class="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center bg-[#0E0E0E]/85 backdrop-blur-sm"
+               data-receipt-image-card-target="dropOverlay">
+            <div class="rounded-full border border-[#C0C1FF]/40 bg-[#1C1B1B]/95 px-4 py-2 text-sm font-semibold text-[#E5E2E1] shadow-lg">
+              ドロップして画像をアップロード
+            </div>
+          </div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[#E5E2E1]">レシートをアップロード</p>
+              <p class="mt-1 text-xs text-[#C7C4D8]">画像を選択するか、このカードにドラッグ&ドロップ</p>
+              <p class="mt-2 truncate text-xs text-[#C7C4D8]"
+                 data-receipt-image-card-target="fileName"
+                 data-initial-label="<%= has_image ? "現在の画像" : "ファイル未選択" %>">
+                <%= has_image ? "現在の画像" : "ファイル未選択" %>
+              </p>
+            </div>
+
+            <%= form_builder.label :image, class: "shrink-0 cursor-pointer" do %>
+              <%= render "shared/ui/button",
+                         as: :content,
+                         label: "画像を選択",
+                         icon: "upload_file",
+                         size: :sm %>
+            <% end %>
+          </div>
+        </div>
+
+        <p class="hidden text-xs text-[#FFB4AB]"
+           data-receipt-image-card-target="uploadError">
+          画像ファイルを選択してください
+        </p>
+
         <% if helper_text.present? %>
           <p class="text-xs text-[#C7C4D8] whitespace-pre-line">
             <%= helper_text %>
