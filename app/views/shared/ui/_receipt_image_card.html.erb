@@ -129,27 +129,27 @@
     <div
       class="fixed inset-0 z-50 hidden"
       data-receipt-image-card-target="modal"
-      data-action="click->receipt-image-card#closeModal"
       aria-hidden="true"
+      tabindex="-1"
     >
       <div
         class="absolute inset-0 bg-black/80 backdrop-blur-sm"
         data-action="click->receipt-image-card#closeModal"
       ></div>
 
-      <div class="relative z-10 flex min-h-full items-center justify-center p-4 md:p-8">
+      <div class="relative z-10 flex min-h-full items-center justify-center p-4 md:p-8"
+           data-action="click->receipt-image-card#closeModal">
         <div class="relative w-full max-w-5xl"
              data-action="click->receipt-image-card#stopPropagation">
-          <button
-            type="button"
-            class="absolute right-0 top-0 -translate-y-12 md:-translate-y-14 inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#353534]/90 text-white hover:bg-[#4A4A4A] transition-colors"
-            data-action="click->receipt-image-card#closeModal"
-            aria-label="全体プレビューを閉じる"
-          >
-            <span class="material-symbols-outlined">close</span>
-          </button>
-
-          <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#0E0E0E] shadow-2xl">
+          <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#0E0E0E] shadow-2xl relative">
+            <button
+              type="button"
+              class="absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#353534]/90 text-white hover:bg-[#4A4A4A] transition-colors"
+              data-action="click->receipt-image-card#closeModal"
+              aria-label="全体プレビューを閉じる"
+            >
+              <span class="material-symbols-outlined">close</span>
+            </button>
             <%= image_tag receipt.image,
                   class: "block w-full max-h-[85vh] object-contain bg-[#0E0E0E]",
                   data: { receipt_image_card_target: "modalImage" } %>
