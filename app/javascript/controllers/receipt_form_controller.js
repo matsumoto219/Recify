@@ -158,7 +158,7 @@ export default class extends Controller {
 
       // 表示更新
       if (lineTotalDisplay) {
-        lineTotalDisplay.textContent = `¥${this.formatNumber(lineTotal)}`
+        lineTotalDisplay.textContent = `小計 ¥${this.formatNumber(lineTotal)}`
       }
 
       // hidden更新

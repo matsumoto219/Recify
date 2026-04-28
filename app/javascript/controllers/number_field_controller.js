@@ -15,14 +15,6 @@ export default class extends Controller {
     this.stopChanging()
   }
 
-  increment() {
-    this.changeValue(1)
-  }
-
-  decrement() {
-    this.changeValue(-1)
-  }
-
   startIncrementing(event) {
     this.startChanging(event, 1)
   }
@@ -39,18 +31,28 @@ export default class extends Controller {
     this.changeValue(delta)
 
     this.repeatTimeoutId = window.setTimeout(() => {
+      // 1段目
       this.startRepeat(delta, 120)
 
+      // 2段目
       this.accelerationTimeoutIds.push(
         window.setTimeout(() => {
           this.startRepeat(delta, 60)
         }, 1500)
       )
 
+      // 3段目
+      this.accelerationTimeoutIds.push(
+        window.setTimeout(() => {
+          this.startRepeat(delta, 35)
+        }, 3000)
+      )
+
+      // 4段目（かなり長押し時のみ）
       this.accelerationTimeoutIds.push(
         window.setTimeout(() => {
           this.startRepeat(delta, 10)
-        }, 3000)
+        }, 5000)
       )
     }, 350)
   }

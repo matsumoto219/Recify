@@ -153,7 +153,7 @@
                 <% item = item_form.object %>
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
 
-                <div class="group grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
                      data-receipt-form-target="itemRow"
                      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
@@ -307,7 +307,7 @@
 
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
-                <div class="group grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
                      data-receipt-form-target="itemRow"
                      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
