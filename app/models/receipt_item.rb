@@ -67,4 +67,10 @@ class ReceiptItem < ApplicationRecord
 
     I18n.t("enums.receipt_item.category.#{category}", default: category)
   end
+
+  def review_reason_labels
+    Array(review_reasons).map do |code|
+      I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
+    end
+  end
 end
