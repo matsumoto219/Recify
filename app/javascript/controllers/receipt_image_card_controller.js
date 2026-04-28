@@ -49,11 +49,13 @@ export default class extends Controller {
   }
 
   openModal() {
-    if (!this.hasModalTarget) return
+    if (!this.hasModalTarget || !this.hasModalImageTarget) return
+    if (!this.modalTarget.classList.contains("hidden")) return
 
     this.modalTarget.classList.remove("hidden")
     this.modalTarget.setAttribute("aria-hidden", "false")
     this.lockBodyScroll()
+    this.modalTarget.focus()
   }
 
   closeModal() {
@@ -65,9 +67,10 @@ export default class extends Controller {
   }
 
   handleKeydown(e) {
-    if (e.key === "Escape") {
-      this.closeModal()
-    }
+    if (e.key !== "Escape") return
+    if (!this.hasModalTarget || this.modalTarget.classList.contains("hidden")) return
+
+    this.closeModal()
   }
 
   stopPropagation(e) {
