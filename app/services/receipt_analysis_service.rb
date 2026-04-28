@@ -217,9 +217,15 @@ class ReceiptAnalysisService
 
     # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
     # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
+    ocr_review_reasons = []
+    if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
+      ocr_review_reasons << "ocr_low_confidence"
+    end
+
     review_reasons = merge_review_reasons(
       ai_result[:review_reasons],
-      amount_result[:inconsistencies]
+      amount_result[:inconsistencies],
+      ocr_review_reasons
     )
 
     final_status = determine_final_status(
@@ -275,7 +281,12 @@ class ReceiptAnalysisService
 
     # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
     # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
-    review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
+    ocr_review_reasons = []
+    if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
+      ocr_review_reasons << "ocr_low_confidence"
+    end
+
+    review_reasons = merge_review_reasons([], amount_result[:inconsistencies], ocr_review_reasons)
 
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
     # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -326,7 +337,12 @@ class ReceiptAnalysisService
 
     # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
     # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
-    review_reasons = merge_review_reasons([], amount_result[:inconsistencies])
+    ocr_review_reasons = []
+    if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
+      ocr_review_reasons << "ocr_low_confidence"
+    end
+
+    review_reasons = merge_review_reasons([], amount_result[:inconsistencies], ocr_review_reasons)
 
     # NOTE:
     # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
@@ -453,10 +469,18 @@ class ReceiptAnalysisService
         discount_rate: normalize_tax_rate(symbolized[:discount_rate]),
         # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
         needs_review: symbolized[:needs_review],
+        review_reasons: normalize_review_reasons(symbolized[:review_reasons]),
         position_index: symbolized[:position_index] || index + 1,
         confidence: normalize_confidence(symbolized[:confidence])
       }
     end
+  end
+
+  def normalize_review_reasons(value)
+    Array(value).filter_map do |reason|
+      normalized = reason.to_s.strip
+      normalized.presence
+    end.uniq
   end
 
   def ocr_candidates(ocr_result)
