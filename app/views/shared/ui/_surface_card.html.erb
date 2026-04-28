@@ -21,6 +21,8 @@
   variant_classes = case variant
                     when :danger
                       "bg-[rgba(147,0,10,0.12)] border border-[#FFB4AB]/10"
+                    when :warning
+                      "bg-[rgba(32,31,31,0.8)] border border-[#FFB4AB]/30"
                     else
                       "bg-[rgba(32,31,31,0.8)]"
                     end
@@ -29,6 +31,8 @@
                     case variant
                     when :danger
                       "hover:bg-[rgba(147,0,10,0.18)]"
+                    when :warning
+                      "hover:bg-[rgba(42,42,42,0.92)]"
                     else
                       "hover:bg-[rgba(42,42,42,0.92)]"
                     end
