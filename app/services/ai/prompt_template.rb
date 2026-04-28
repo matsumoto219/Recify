@@ -193,6 +193,8 @@ module Ai
         - Include reasons only when review is needed.
         - Use item_tax_rate_uncertain when one or more item tax rates cannot be determined with confidence.
         - Use purchased_at_conflicted only when multiple plausible purchase timestamps remain unresolved after applying the purchase rules above.
+        - Use ocr_unreadable when OCR content is too sparse, broken, or unreadable to support reliable receipt analysis.
+        - Use ocr_low_confidence when OCR content is present but confidence or text quality appears too low to trust without user confirmation.
         - Do NOT return store_phone_number_missing when store.store_phone_number is non-null.
         - Return [] when no review is needed.
 
@@ -274,6 +276,8 @@ module Ai
         item_name_uncertain
         item_category_uncertain
         item_tax_rate_uncertain
+        ocr_unreadable
+        ocr_low_confidence
       ]
     end
   end
