@@ -20,6 +20,8 @@
     - suffix: 入力欄内の右側表示（例: "%"）
     - text_align: :left / :center / :right（default: :right）
     - hide_spinner: true/false（default: true）
+    - show_stepper_buttons: true/false（default: false）
+    - stepper_button_class: +/-ボタン用追加class（例: "md:hidden"）
     - input_class: 追加class
     - input_wrapper_class: 入力欄ラッパー用class
     - label_class: ラベル用追加class
@@ -43,7 +45,9 @@
   prefix = local_assigns[:prefix]
   suffix = local_assigns[:suffix]
   text_align = (local_assigns[:text_align].presence || :right).to_sym
-  hide_spinner = local_assigns.fetch(:hide_spinner, true)
+  show_stepper_buttons = local_assigns.fetch(:show_stepper_buttons, false)
+  stepper_button_class = local_assigns[:stepper_button_class]
+  hide_spinner = show_stepper_buttons ? true : local_assigns.fetch(:hide_spinner, true)
   input_wrapper_class = local_assigns[:input_wrapper_class]
   label_class = local_assigns[:label_class]
   error_message_class = local_assigns[:error_message_class]
@@ -74,19 +78,30 @@
                      end
 
   prefix_spacing_class = prefix.present? ? "pl-8" : "pl-4"
+  prefix_spacing_class = "px-1" if show_stepper_buttons
   suffix_spacing_class = suffix.present? ? "pr-8" : "pr-4"
+  suffix_spacing_class = "px-1" if show_stepper_buttons
   spinner_class = hide_spinner ? "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" : nil
 
   label_classes = ["text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1", label_class].compact.join(" ")
-  wrapper_classes = ["relative group", input_wrapper_class].compact.join(" ")
+  wrapper_classes = [
+    "relative group",
+    (show_stepper_buttons ? "flex items-center overflow-hidden rounded-lg bg-[#0E0E0E] border border-white/10 focus-within:ring-2 focus-within:ring-[#C0C1FF]/50" : nil),
+    input_wrapper_class
+  ].compact.join(" ")
   affix_base_class = "absolute top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none transition-colors group-focus-within:text-[#C0C1FF]"
   prefix_classes = [affix_base_class, "left-3"].join(" ")
   suffix_classes = [affix_base_class, "right-3"].join(" ")
   error_classes = ["px-1 text-xs text-[#FFB4AB] leading-relaxed", error_message_class].compact.join(" ")
 
+  stepper_button_classes = [
+    "flex h-10 w-8 shrink-0 items-center justify-center text-[#E5E2E1] hover:bg-[#2A2A2A] focus:outline-none focus:bg-[#2A2A2A] transition-colors",
+    stepper_button_class
+  ].compact.join(" ")
+
   merged_input_class = [
     base_input_class,
-    highlight_classes,
+    (show_stepper_buttons ? "border-0 focus:ring-0 rounded-none bg-transparent" : highlight_classes),
     text_align_class,
     prefix_spacing_class,
     suffix_spacing_class,
@@ -112,15 +127,36 @@
     <%= f.label attribute, label, class: label_classes %>
   <% end %>
 
-  <div class="<%= wrapper_classes %>">
-    <% if prefix.present? %>
-      <span class="<%= prefix_classes %>" aria-hidden="true"><%= prefix %></span>
+  <div class="<%= wrapper_classes %>" <%= "data-controller=number-field" if show_stepper_buttons %>>
+    <% if show_stepper_buttons %>
+      <button type="button"
+              class="<%= stepper_button_classes %>"
+              aria-label="<%= label %>を減らす"
+              data-action="pointerdown->number-field#startDecrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">remove</span>
+      </button>
     <% end %>
 
-    <%= f.number_field attribute, **field_options %>
+    <div class="relative <%= show_stepper_buttons ? 'flex-1 min-w-[2.5rem]' : nil %>">
+      <% if prefix.present? %>
+        <span class="<%= prefix_classes %>" aria-hidden="true"><%= prefix %></span>
+      <% end %>
 
-    <% if suffix.present? %>
-      <span class="<%= suffix_classes %>" aria-hidden="true"><%= suffix %></span>
+      <%= f.number_field attribute,
+                         **field_options.deep_merge(show_stepper_buttons ? { data: { number_field_target: "input" } } : {}) %>
+
+      <% if suffix.present? %>
+        <span class="<%= suffix_classes %>" aria-hidden="true"><%= suffix %></span>
+      <% end %>
+    </div>
+
+    <% if show_stepper_buttons %>
+      <button type="button"
+              class="<%= stepper_button_classes %>"
+              aria-label="<%= label %>を増やす"
+              data-action="pointerdown->number-field#startIncrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">add</span>
+      </button>
     <% end %>
   </div>
 
