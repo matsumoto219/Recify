@@ -49,18 +49,20 @@
                       when :none
                         "border border-transparent focus:ring-0"
                       when :error
-                        has_error ? "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30" : "border border-transparent focus:ring-2 focus:ring-[#FFB4AB]/30"
+                        "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
                       else
                         has_error ? "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30" : "border border-transparent focus:ring-2 focus:ring-[#C0C1FF]/50"
                       end
+
+  error_active = has_error || highlight_variant == :error
 
   label_classes = ["text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1", label_class].compact.join(" ")
   wrapper_classes = ["relative group", input_wrapper_class].compact.join(" ")
   icon_classes = [
     "material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 transition-colors text-xl",
-    has_error ? "text-[#FFB4AB]" : "text-[#C7C4D8]",
-    (with_icon && !has_error ? "group-focus-within:text-[#C0C1FF]" : nil),
-    (with_icon && has_error ? "group-focus-within:text-[#FFB4AB]" : nil)
+    error_active ? "text-[#FFB4AB]" : "text-[#C7C4D8]",
+    (with_icon && !error_active ? "group-focus-within:text-[#C0C1FF]" : nil),
+    (with_icon && error_active ? "group-focus-within:text-[#FFB4AB]" : nil)
   ].compact.join(" ")
   error_classes = ["px-1 text-xs text-[#FFB4AB] leading-relaxed", error_message_class].compact.join(" ")
 
