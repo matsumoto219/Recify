@@ -27,11 +27,18 @@
   field_class = local_assigns.fetch(:field_class, nil)
   field_wrapper_class = local_assigns.fetch(:field_wrapper_class, nil)
   label_class = local_assigns.fetch(:label_class, nil)
+  highlight_variant = local_assigns.fetch(:highlight_variant, nil)
 
   input_type = type.to_s
   base_wrapper_class = "space-y-2"
   base_label_class = "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]"
-  base_field_class = "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] text-[#E5E2E1] border border-transparent outline-none transition-all focus:ring-2 focus:ring-[#C0C1FF]/50"
+  highlight_classes = if highlight_variant == :error
+                        "border border-[#FFB4AB] focus:border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
+                      else
+                        "border border-transparent focus:border-[#C0C1FF] focus:ring-2 focus:ring-[#C0C1FF]/50"
+                      end
+
+  base_field_class = "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] text-[#E5E2E1] outline-none transition-all #{highlight_classes}"
   field_spacing_class = with_icon ? "pl-10 pr-4" : "px-4"
 
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")
@@ -53,7 +60,7 @@
                   class: merged_field_class %>
 
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm pointer-events-none"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none <%= highlight_variant == :error ? 'text-[#FFB4AB]' : 'text-[#C7C4D8]' %>"><%= icon %></span>
     <% end %>
   </div>
 </div>
