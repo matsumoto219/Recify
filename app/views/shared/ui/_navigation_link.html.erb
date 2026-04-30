@@ -1,8 +1,9 @@
 <%
   arrow ||= :left
+  align = local_assigns.fetch(:align, :center)
 %>
 
-<section class="flex justify-center">
+<section class="<%= align == :center ? 'flex justify-center' : '' %>">
   <%= link_to path, class: "flex items-center gap-2 text-sm font-medium text-[#C0C1FF] hover:text-white transition-colors group" do %>
 
     <% if arrow == :left %>
