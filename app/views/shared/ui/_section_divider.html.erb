@@ -1,0 +1,24 @@
+<%
+  label = local_assigns[:label]
+  extra_class = local_assigns[:class]
+
+  wrapper_class = [
+    "flex items-center gap-4",
+    extra_class
+  ].compact.join(" ")
+
+  line_class = "h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+  label_class = "text-[0.6875rem] text-[#C7C4D8]/40 tracking-[0.5em] uppercase font-bold whitespace-nowrap"
+%>
+
+<% if label.present? %>
+  <div class="<%= wrapper_class %>">
+    <div class="<%= line_class %>"></div>
+    <p class="<%= label_class %>"><%= label %></p>
+    <div class="<%= line_class %>"></div>
+  </div>
+<% else %>
+  <div class="<%= wrapper_class %>">
+    <div class="<%= line_class %>"></div>
+  </div>
+<% end %>
