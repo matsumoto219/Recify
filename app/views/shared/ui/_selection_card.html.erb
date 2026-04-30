@@ -1,0 +1,65 @@
+<%
+  path = local_assigns.fetch(:path)
+  title = local_assigns.fetch(:title)
+  description = local_assigns.fetch(:description)
+  icon = local_assigns.fetch(:icon)
+  variant = local_assigns.fetch(:variant, :secondary).to_sym
+  mobile_badge = local_assigns[:mobile_badge]
+  desktop_badge = local_assigns[:desktop_badge]
+
+  title_size = local_assigns.fetch(:title_size, "text-[1.6rem] md:text-2xl")
+  description_size = local_assigns.fetch(:description_size, "text-sm md:text-base")
+
+  primary = variant == :primary
+
+  card_classes = [
+    "group relative flex items-center p-5 md:p-10 bg-[#201F1F] rounded-xl transition-all duration-300 hover:bg-[#2A2A2A] overflow-hidden text-left md:flex-col md:items-center md:text-center",
+    primary ? "ring-1 ring-[#C0C1FF]/20 hover:ring-[#C0C1FF]/60" : "border border-white/10 hover:border-white/20"
+  ].join(" ")
+
+  icon_wrapper_classes = [
+    "relative z-10 w-16 h-16 md:w-24 md:h-24 flex items-center justify-center rounded-2xl shrink-0 md:mb-8",
+    primary ? "bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black shadow-lg shadow-[#C0C1FF]/20" : "bg-[#353534] text-[#C0C1FF]"
+  ].join(" ")
+
+  desktop_badge_classes = [
+    "relative z-10 mt-8 px-6 py-2 rounded-full text-xs font-bold tracking-widest uppercase hidden md:block",
+    primary ? "bg-[#C0C1FF]/10 text-[#C0C1FF]" : "border border-white/10 text-[#C7C4D8] opacity-0 group-hover:opacity-100 transition-opacity"
+  ].join(" ")
+%>
+
+<%= link_to path, class: card_classes do %>
+  <% if primary %>
+    <div class="absolute inset-0 bg-gradient-to-br from-[#C0C1FF]/10 via-transparent to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"></div>
+  <% end %>
+
+  <div class="<%= icon_wrapper_classes %>">
+    <span class="material-symbols-outlined text-[34px] md:text-5xl" style="font-size: 34px;"><%= icon %></span>
+  </div>
+
+  <div class="relative z-10 ml-4 md:ml-0 flex-1 min-w-0 md:flex-none">
+    <% if mobile_badge.present? %>
+      <div class="mb-1 md:hidden">
+        <span class="inline-block px-2 py-0.5 rounded-full bg-[#C0C1FF]/10 border border-[#C0C1FF]/20 text-[#C0C1FF] text-[10px] font-bold tracking-widest uppercase">
+          <%= mobile_badge %>
+        </span>
+      </div>
+    <% end %>
+
+    <div class="flex items-center gap-2 mb-1 md:mb-3 md:justify-center">
+      <h2 class="<%= [title_size, 'font-bold text-[#E5E2E1] leading-none md:leading-tight'].join(' ') %>"><%= title %></h2>
+    </div>
+
+    <p class="<%= [description_size, 'text-[#C7C4D8] leading-relaxed'].join(' ') %>"><%= description %></p>
+  </div>
+
+  <span class="relative z-10 ml-3 shrink-0 block md:hidden">
+    <span class="material-symbols-outlined text-[#C7C4D8]/70 text-lg">chevron_right</span>
+  </span>
+
+  <% if desktop_badge.present? %>
+    <div class="<%= desktop_badge_classes %>">
+      <%= desktop_badge %>
+    </div>
+  <% end %>
+<% end %>
