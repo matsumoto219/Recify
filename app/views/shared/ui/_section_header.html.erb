@@ -5,14 +5,54 @@
   breadcrumb_path = local_assigns[:breadcrumb_path]
   icon = local_assigns[:icon]
   variant = local_assigns.fetch(:variant, :default).to_sym
+  align = local_assigns.fetch(:align, :left).to_sym
+  responsive_align = local_assigns[:responsive_align]&.to_sym
+  center_breadcrumb = local_assigns.fetch(:center_breadcrumb, false) && (align == :center || responsive_align == :center)
   wrapper_class = local_assigns[:class]
   icon_class = local_assigns[:icon_class]
   title_size = local_assigns.fetch(:title_size, "text-lg")
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
-  breadcrumb_wrapper_class = "flex flex-wrap items-center text-sm text-[#C7C4D8] mb-2 space-x-2"
+  breadcrumb_wrapper_class = [
+    "flex flex-wrap items-center text-sm text-[#C7C4D8] mb-2 space-x-2",
+    center_breadcrumb && align == :center ? "justify-center" : nil,
+    center_breadcrumb && responsive_align == :center ? "md:justify-center" : nil,
+    center_breadcrumb && responsive_align == :left ? "md:justify-start" : nil
+  ].compact.join(" ")
   breadcrumb_link_class = "text-[#C7C4D8] hover:text-[#C0C1FF] transition-colors"
   breadcrumb_current_class = "text-[#C0C1FF] font-medium"
   breadcrumb_separator_class = "text-xs text-[#C7C4D8]"
+
+  align_class = case align
+                when :center
+                  "text-center"
+                else
+                  nil
+                end
+
+  responsive_align_class = case responsive_align
+                           when :center
+                             "md:text-center"
+                           when :left
+                             "md:text-left"
+                           else
+                             nil
+                           end
+
+  title_row_align_class = case align
+                          when :center
+                            "justify-center"
+                          else
+                            nil
+                          end
+
+  responsive_title_row_align_class = case responsive_align
+                                     when :center
+                                       "md:justify-center"
+                                     when :left
+                                       "md:justify-start"
+                                     else
+                                       nil
+                                     end
 
   tone = case variant
          when :danger
@@ -32,7 +72,8 @@
   resolved_icon_class = [tone[:icon], icon_class].compact.join(" ")
   title_class = [title_size, "font-extrabold", "tracking-tight", "leading-tight", tone[:title]].join(" ")
   subtitle_class = [subtitle_size, "leading-relaxed", tone[:subtitle]].join(" ")
-  header_classes = ["space-y-1", wrapper_class].compact.join(" ")
+  header_classes = ["space-y-1", align_class, responsive_align_class, wrapper_class].compact.join(" ")
+  title_row_class = ["flex items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
 %>
 
 <div class="<%= header_classes %>">
@@ -49,7 +90,7 @@
     </nav>
   <% end %>
 
-  <div class="flex items-center gap-2">
+  <div class="<%= title_row_class %>">
     <% if icon.present? %>
       <span class="material-symbols-outlined <%= resolved_icon_class %>" aria-hidden="true"><%= icon %></span>
     <% end %>

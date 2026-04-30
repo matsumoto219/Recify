@@ -1,60 +1,34 @@
 <section class="relative w-full max-w-4xl mx-auto space-y-10 md:space-y-12 px-4 md:px-0">
-  <div class="text-left md:text-center space-y-3 md:space-y-4 pt-2 md:pt-0">
-    <h1 class="text-[2rem] leading-tight md:text-4xl font-bold tracking-tight text-[#E5E2E1]">
-      登録方法を選択してください
-    </h1>
-    <p class="text-[#C7C4D8] text-[15px] md:text-lg font-light leading-relaxed">
-      新しいレシートをどの方法で登録しますか？
-    </p>
-  </div>
+  <%= render "shared/ui/section_header",
+    title: "登録方法を選択してください",
+    subtitle: "新しいレシートをどの方法で登録しますか？",
+    title_size: "text-[2rem] md:text-4xl",
+    subtitle_size: "text-[15px] md:text-lg",
+    align: :left,
+    responsive_align: :center,
+    wrapper_class: "space-y-3 md:space-y-4 pt-2 md:pt-0" %>
 
   <div class="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-8 px-0 md:px-4">
-    <%= link_to new_receipt_path(mode: "image"),
-      class: "group relative flex items-center p-5 md:p-10 bg-[#201F1F] rounded-xl transition-all duration-300 hover:bg-[#2A2A2A] ring-1 ring-[#C0C1FF]/20 hover:ring-[#C0C1FF]/60 overflow-hidden text-left md:flex-col md:items-center md:text-center" do %>
-      <div class="absolute inset-0 bg-gradient-to-br from-[#C0C1FF]/10 via-transparent to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"></div>
+    <%= render "shared/ui/selection_card",
+      path: new_upload_receipts_path,
+      title: "画像から登録",
+      description: "AIがレシートを自動解析します",
+      icon: "photo_camera",
+      variant: :primary,
+      mobile_badge: "Recommended",
+      desktop_badge: "Recommended",
+      title_size: "text-[1.6rem] md:text-2xl",
+      description_size: "text-sm md:text-base" %>
 
-      <div class="relative z-10 w-16 h-16 md:w-24 md:h-24 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black shadow-lg shadow-[#C0C1FF]/20 shrink-0 md:mb-8">
-        <span class="material-symbols-outlined text-[34px] md:text-5xl" style="font-size: 34px;">photo_camera</span>
-      </div>
-
-      <div class="relative z-10 ml-4 md:ml-0 flex-1 min-w-0 md:flex-none">
-        <div class="flex items-center gap-2 mb-1 md:mb-3 md:justify-center">
-          <h2 class="text-[1.6rem] md:text-2xl font-bold text-[#E5E2E1] leading-none md:leading-tight">画像から登録</h2>
-          <div class="px-1.5 py-0.5 rounded-full bg-[#C0C1FF]/10 border border-[#C0C1FF]/20 text-[#C0C1FF] text-[9px] font-bold tracking-widest uppercase leading-none md:mt-1 md:hidden">
-            Recommended
-          </div>
-        </div>
-        <p class="text-[#C7C4D8] text-sm md:text-base leading-relaxed">AIがレシートを自動解析します</p>
-      </div>
-
-      <span class="relative z-10 ml-3 shrink-0 block md:hidden">
-        <span class="material-symbols-outlined text-[#C7C4D8]/70 text-lg">chevron_right</span>
-      </span>
-
-      <div class="relative z-10 mt-8 px-6 py-2 rounded-full bg-[#C0C1FF]/10 text-[#C0C1FF] text-xs font-bold tracking-widest uppercase hidden md:block">
-        Recommended
-      </div>
-    <% end %>
-
-    <%= link_to new_receipt_path(mode: "manual"),
-      class: "group relative flex items-center p-5 md:p-10 bg-[#201F1F] rounded-xl transition-all duration-300 hover:bg-[#2A2A2A] border border-white/10 hover:border-white/20 overflow-hidden text-left md:flex-col md:items-center md:text-center" do %>
-      <div class="relative z-10 w-16 h-16 md:w-24 md:h-24 flex items-center justify-center rounded-2xl bg-[#353534] text-[#C0C1FF] shrink-0 md:mb-8">
-        <span class="material-symbols-outlined text-[34px] md:text-5xl" style="font-size: 34px;">edit_note</span>
-      </div>
-
-      <div class="relative z-10 ml-4 md:ml-0 flex-1 min-w-0 md:flex-none">
-        <h2 class="text-[1.6rem] md:text-2xl font-bold text-[#E5E2E1] mb-1 md:mb-3 leading-none md:leading-tight">手動で入力</h2>
-        <p class="text-[#C7C4D8] text-sm md:text-base leading-relaxed">詳細を自分で入力します</p>
-      </div>
-
-      <span class="relative z-10 ml-3 shrink-0 block md:hidden">
-        <span class="material-symbols-outlined text-[#C7C4D8]/70 text-lg">chevron_right</span>
-      </span>
-
-      <div class="relative z-10 mt-8 px-6 py-2 rounded-full border border-white/10 text-[#C7C4D8] text-xs font-bold tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">
-        Custom Entry
-      </div>
-    <% end %>
+    <%= render "shared/ui/selection_card",
+      path: new_receipt_path,
+      title: "手動で入力",
+      description: "詳細を自分で入力します",
+      icon: "edit_note",
+      variant: :secondary,
+      desktop_badge: "Custom Entry",
+      title_size: "text-[1.6rem] md:text-2xl",
+      description_size: "text-sm md:text-base" %>
   </div>
 
   <div class="flex flex-col items-center pt-8 border-t border-white/10 text-center">
