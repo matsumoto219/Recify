@@ -23,6 +23,8 @@ Rails.application.routes.draw do
   resources :receipts do
     collection do
       get :select_input_method
+      get :new_upload
+      post :upload
     end
   end
 
