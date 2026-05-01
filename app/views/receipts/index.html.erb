@@ -1,144 +1,70 @@
 <section class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight text-[#E5E2E1] flex items-center gap-2">
-      <%= t(".title") %>
-      <span class="text-xs font-normal bg-[#C0C1FF]/10 text-[#C0C1FF] px-2 py-0.5 rounded-full">
-        <%= @receipts.count %>件
-      </span>
-    </h1>
-    <p class="text-[#C7C4D8] text-sm mt-1">最新のレシートを一覧で確認できます。</p>
-  </div>
+  <%= render "shared/ui/section_header",
+    title: t(".title"),
+    title_suffix: "#{@receipts.count}件",
+    title_suffix_class: "bg-[#C0C1FF]/10 text-[#C0C1FF] font-normal",
+    subtitle: "最新のレシートを一覧で確認できます。",
+    title_size: "text-2xl",
+    subtitle_size: "text-sm",
+    wrapper_class: "mt-1" %>
 
-  <%= link_to select_input_method_receipts_path,
-    class: "flex items-center gap-2 px-6 py-3 bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] text-black rounded-lg font-bold transition-transform active:scale-95 shadow-lg shadow-[#C0C1FF]/20" do %>
-    <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_circle</span>
-    <span>レシート登録</span>
-  <% end %>
+  <%= render "shared/ui/button",
+    label: "レシート登録",
+    as: :link,
+    href: select_input_method_receipts_path,
+    variant: :primary,
+    size: :md,
+    icon: "add_circle" %>
 </section>
 
-<section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-  <!-- 総件数 -->
-  <div class="bg-[#201F1F] rounded-xl p-5 border-l-2 border-[#C0C1FF]">
-    <p class="text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold">総件数</p>
-    <p class="text-2xl font-bold mt-2 text-[#E5E2E1]"><%= @receipts.count %>件</p>
-    <p class="text-[0.6875rem] text-[#C7C4D8] mt-1">保存済みレシート</p>
-  </div>
-
-  <!-- 合計 / 今月切り替え -->
+<section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10" data-controller="receipt-amount-toggle">
   <%# TODO: Stimulusに移行し、集計値はcontrollerまたはhelperで事前計算する %>
   <% current_month_total = @receipts.select { |receipt| receipt.purchased_at&.in_time_zone&.to_date&.between?(Time.current.beginning_of_month.to_date, Time.current.end_of_month.to_date) }.sum { |receipt| receipt.total_amount.to_i } %>
   <% overall_total = @receipts.sum(:total_amount) %>
-  <div class="bg-[#201F1F] rounded-xl p-5 border-l-2 border-[#FFB695]">
-    <div class="flex items-center justify-between gap-3">
-      <p id="amount-label" class="text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold">今月の合計</p>
-      <button type="button" onclick="toggleAmount()" class="text-[10px] text-[#C0C1FF] hover:underline shrink-0">切替</button>
-    </div>
+  <% processing_count = @receipts.count { |receipt| receipt.status.to_s == "processing" } %>
+  <% review_needed_count = @receipts.count { |receipt| receipt.status.to_s == "review_needed" } %>
 
-    <p id="amount-value" class="text-2xl font-bold mt-2 text-[#E5E2E1]"
-       data-current-month-total="<%= number_with_delimiter(current_month_total) %>"
-       data-overall-total="<%= number_with_delimiter(overall_total) %>">
-      ¥<%= number_with_delimiter(current_month_total) %>
-    </p>
+  <%= render "shared/receipts/summary_card",
+    title: "総件数",
+    value: "#{@receipts.count}件",
+    subtext: "保存済みレシート",
+    accent_color: "#C0C1FF" %>
 
-    <p id="amount-subtext"
-       class="text-[0.6875rem] text-[#C7C4D8] mt-1"
-       data-monthly-text="先月比 +12%"
-       data-overall-text="累計の合計金額">
-      先月比 +12%
-    </p>
-  </div>
+  <%= render "shared/receipts/summary_card",
+    title: "今月の合計",
+    value: "¥#{number_with_delimiter(current_month_total)}",
+    subtext: "先月比 +12%",
+    title_data: { receipt_amount_toggle_target: "label" },
+    value_data: {
+      receipt_amount_toggle_target: "value",
+      current_month_total: number_with_delimiter(current_month_total),
+      overall_total: number_with_delimiter(overall_total)
+    },
+    subtext_data: {
+      receipt_amount_toggle_target: "subtext",
+      monthly_text: "先月比 +12%",
+      overall_text: "累計の合計金額"
+    },
+    action_label: "切替",
+    action_data: { action: "receipt-amount-toggle#toggle" } %>
 
-  <!-- 処理中（ダミー） -->
-  <!-- 本実装ではリアルタイムで下のコメントが切り替わる OCR処理中 AI処理中 (なしの場合、非表示) -->
-  <div class="bg-[#201F1F] rounded-xl p-5 border-l-2 border-[#C0C1FF]">
-    <p class="text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold">処理中</p>
-    <p class="text-2xl font-bold mt-2 text-[#E5E2E1]">8件</p>
-    <p class="text-[0.6875rem] text-[#C7C4D8] mt-1">OCR処理中</p>
-  </div>
+  <%= render "shared/receipts/summary_card",
+    title: "処理中",
+    value: "#{processing_count}件",
+    subtext: processing_count.positive? ? "解析キュー処理中" : "処理中のレシートはありません",
+    accent_color: "#C0C1FF" %>
 
-  <!-- 要確認（ダミー） -->
-  <div class="bg-[#201F1F] rounded-xl p-5 border-l-2 border-[#FFB4AB]">
-    <p class="text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold">要確認</p>
-    <p class="text-2xl font-bold mt-2 text-[#E5E2E1]">3件</p>
-    <p class="text-[0.6875rem] text-[#C7C4D8] mt-1">手動確認待ち</p>
-  </div>
+  <%= render "shared/receipts/summary_card",
+    title: "要確認",
+    value: "#{review_needed_count}件",
+    subtext: review_needed_count.positive? ? "手動確認待ち" : "確認待ちはありません",
+    accent_color: "#FFB4AB" %>
 </section>
 
-<script>
-  // TODO: 本実装時はStimulus controllerへ移動し、先月比も実データで置き換える
-  let isMonthly = true;
-
-  function toggleAmount() {
-    const label = document.getElementById('amount-label');
-    const value = document.getElementById('amount-value');
-    const subtext = document.getElementById('amount-subtext');
-
-    if (!label || !value || !subtext) return;
-
-    if (isMonthly) {
-      label.innerText = '合計金額';
-      value.innerText = '¥' + value.dataset.overallTotal;
-      subtext.innerText = subtext.dataset.overallText;
-    } else {
-      label.innerText = '今月の合計';
-      value.innerText = '¥' + value.dataset.currentMonthTotal;
-      subtext.innerText = subtext.dataset.monthlyText;
-    }
-
-    isMonthly = !isMonthly;
-  }
-</script>
-
 <% if @receipts.any? %>
-  <section class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+  <section class="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
     <% @receipts.each do |receipt| %>
-      <% status_label = receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status %>
-      <% status_classes = case receipt.status.to_s
-         when "completed"
-           "bg-[#22C55E]/10 text-[#4ADE80]"
-         when "processing"
-           "bg-[#C0C1FF]/10 text-[#C0C1FF]"
-         when "review_needed"
-           "bg-[#FFB695]/10 text-[#FFB695]"
-         when "failed"
-           "bg-[#FFB4AB]/10 text-[#FFB4AB]"
-         else
-           "bg-white/5 text-[#C7C4D8]"
-         end %>
-
-      <div class="group bg-[#2A2A2A] hover:bg-[#393939] transition-all duration-300 rounded-xl p-5 flex flex-col gap-4 border border-white/5">
-        <div class="flex justify-between items-start gap-4">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="w-10 h-10 rounded-lg bg-[#131313] flex items-center justify-center text-[#C0C1FF] shrink-0">
-              <span class="material-symbols-outlined">receipt_long</span>
-            </div>
-            <div class="min-w-0">
-              <h2 class="font-bold text-[#E5E2E1] group-hover:text-[#C0C1FF] transition-colors truncate">
-                <%= link_to(receipt.store_name.presence || "店舗名なし", receipt_path(receipt), class: "hover:underline") %>
-              </h2>
-              <p class="text-[0.75rem] text-[#C7C4D8]">
-                <%= receipt.purchased_at ? l(receipt.purchased_at, format: :short) : "日時未設定" %>
-              </p>
-            </div>
-          </div>
-
-          <span class="px-2.5 py-1 rounded-full text-[10px] font-bold <%= status_classes %>">
-            <%= status_label.presence || receipt.status.to_s %>
-          </span>
-        </div>
-
-        <div class="flex justify-between items-end mt-2 gap-4">
-          <div>
-            <p class="text-[0.6875rem] text-[#C7C4D8] mb-1">合計金額</p>
-            <p class="text-xl font-bold text-[#E5E2E1]">¥<%= number_with_delimiter(receipt.total_amount.to_i) %></p>
-          </div>
-
-          <div class="flex items-center gap-3 text-sm">
-            <%= link_to "詳細", receipt_path(receipt), class: "text-[#C7C4D8] hover:text-white transition-colors" %>
-            <%= link_to "編集", edit_receipt_path(receipt), class: "text-[#C0C1FF] hover:opacity-80 transition-opacity" %>
-          </div>
-        </div>
-      </div>
+      <%= render "shared/receipts/receipt_card", receipt: receipt %>
     <% end %>
   </section>
 <% else %>
@@ -148,13 +74,13 @@
     </div>
     <h2 class="text-lg font-bold text-[#E5E2E1] mb-2"><%= t(".empty") %></h2>
     <p class="text-[#C7C4D8] text-sm mb-8">最初のレシートを登録しましょう。</p>
-    <%= link_to "今すぐ登録する", select_input_method_receipts_path,
-      class: "px-8 py-3 bg-[#2A2A2A] border border-white/10 rounded-lg font-bold text-[#C0C1FF] hover:bg-[#393939] transition-colors" %>
+    <%= render "shared/ui/button",
+      label: "今すぐ登録する",
+      as: :link,
+      href: select_input_method_receipts_path,
+      variant: :secondary,
+      size: :md %>
   </section>
 <% end %>
 
-<div class="mt-20 mb-8 flex items-center gap-4">
-  <div class="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-  <p class="text-[0.6875rem] text-[#C7C4D8]/40 tracking-[0.5em] uppercase font-bold">End of Archive</p>
-  <div class="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-</div>
+<%= render "shared/ui/section_divider", label: "End of Archive", class: "mt-20 mb-8" %>
