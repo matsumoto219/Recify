@@ -1,5 +1,7 @@
 <%
-  grouped_messages = flash.to_hash.each_with_object([]) do |(type, value), result|
+  flash_source = local_assigns.fetch(:flash_messages, flash.to_hash)
+
+  grouped_messages = flash_source.each_with_object([]) do |(type, value), result|
     messages = Array(value).reject(&:blank?)
     next if messages.empty?
 
