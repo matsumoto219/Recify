@@ -72,6 +72,18 @@ class Receipt < ApplicationRecord
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
 
+  # 簡易検索（店舗名・メモ）
+  scope :search, ->(query) {
+    return all if query.blank?
+
+    q = "%#{sanitize_sql_like(query)}%"
+
+    where(
+      "store_name ILIKE :q OR memo ILIKE :q",
+      q: q
+    )
+  }
+
   private
 
   def validate_image_content_type
@@ -126,8 +138,8 @@ class Receipt < ApplicationRecord
 
   public
 
-  def self.summary_for(user)
-    receipts = user.receipts
+  def self.summary_for(user, scope: nil)
+    receipts = scope || user.receipts
     current_month_range = Time.current.beginning_of_month..Time.current.end_of_month
     previous_month = 1.month.ago
     previous_month_range = previous_month.beginning_of_month..previous_month.end_of_month

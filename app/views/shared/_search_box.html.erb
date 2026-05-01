@@ -27,6 +27,7 @@
     data-<%= key.to_s.dasherize %>="<%= value %>"
   <% end %>>
   <%# TODO: 検索機能本実装時にquery parameter / Turbo検索 / 絞り込み処理へ接続する %>
+  <%= form_with url: receipts_path, method: :get, local: true, class: "contents" do %>
   <div class="relative overflow-hidden rounded-lg">
     <span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[20px] text-[#C7C4D8]/70">
       search
@@ -34,6 +35,8 @@
 
     <input
       type="text"
+      name="q"
+      value="<%= params[:q] %>"
       <% if input_id.present? %>id="<%= input_id %>"<% end %>
       <% if input_name.present? %>name="<%= input_name %>"<% end %>
       placeholder="<%= placeholder %>"
@@ -53,4 +56,5 @@
 
     <span class="pointer-events-none absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-gradient-to-r from-[#C0C1FF] to-[#4B4DD8] transition-all duration-300 ease-in peer-focus:w-full"></span>
   </div>
+  <% end %>
 </div>
