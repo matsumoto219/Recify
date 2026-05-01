@@ -70,6 +70,7 @@ class Receipt < ApplicationRecord
   validate :validate_image_content_type
   validate :validate_image_file_size
   validate :validate_image_dimensions
+  validate :validate_image_presence_for_processing
 
   private
 
@@ -107,6 +108,13 @@ class Receipt < ApplicationRecord
     errors.add(:image, :image_too_large)
   end
 
+  def validate_image_presence_for_processing
+    return unless processing?
+    return if image.attached?
+
+    errors.add(:image, :blank)
+  end
+
   def allow_partial_ocr_data?
     image.attached? && (
       uploaded? ||
@@ -117,6 +125,62 @@ class Receipt < ApplicationRecord
   end
 
   public
+
+  def self.summary_for(user)
+    receipts = user.receipts
+    current_month_range = Time.current.beginning_of_month..Time.current.end_of_month
+    previous_month = 1.month.ago
+    previous_month_range = previous_month.beginning_of_month..previous_month.end_of_month
+
+    current_month_total = receipts.where(purchased_at: current_month_range).sum(:total_amount)
+    previous_month_total = receipts.where(purchased_at: previous_month_range).sum(:total_amount)
+    monthly_change = monthly_change_summary(current_month_total, previous_month_total)
+
+    {
+      receipts_count: receipts.count,
+      current_month_total: current_month_total,
+      previous_month_total: previous_month_total,
+      overall_total: receipts.sum(:total_amount),
+      processing_count: receipts.where(status: "processing").count,
+      review_needed_count: receipts.where(status: "review_needed").count,
+      monthly_change_label: monthly_change[:label],
+      monthly_change_icon: monthly_change[:icon],
+      monthly_change_icon_class: monthly_change[:icon_class]
+    }
+  end
+
+  def self.monthly_change_summary(current_month_total, previous_month_total)
+    current_total = current_month_total.to_i
+    previous_total = previous_month_total.to_i
+
+    return {
+      label: "先月データなし",
+      icon: "trending_flat",
+      icon_class: "text-[#C7C4D8]"
+    } if previous_total.zero?
+
+    change_rate = ((current_total - previous_total).to_d / previous_total * 100).round
+
+    if change_rate.positive?
+      {
+        label: "先月比 +#{change_rate}%",
+        icon: "trending_up",
+        icon_class: "text-[#FFB4AB]"
+      }
+    elsif change_rate.negative?
+      {
+        label: "先月比 #{change_rate}%",
+        icon: "trending_down",
+        icon_class: "text-[#4ADE80]"
+      }
+    else
+      {
+        label: "先月比 ±0%",
+        icon: "trending_flat",
+        icon_class: "text-[#C7C4D8]"
+      }
+    end
+  end
 
   def self.payment_method_options
     PAYMENT_METHODS.map do |key|
@@ -192,5 +256,55 @@ class Receipt < ApplicationRecord
     return [] unless failed_with_error?
 
     [ processing_flash_message ]
+  end
+
+  after_update_commit :broadcast_receipt_card_update, if: :saved_change_to_status?
+  after_update_commit :broadcast_summary_cards_update, if: :saved_change_to_status?
+  after_update_commit :broadcast_processing_flash, if: :saved_change_to_status?
+
+  private
+
+  def broadcast_receipt_card_update
+    broadcast_replace_later_to(
+      [ user, :receipts ],
+      target: "receipt_#{id}",
+      partial: "shared/receipts/receipt_card",
+      locals: { receipt: self }
+    )
+  end
+
+  def broadcast_summary_cards_update
+    summary = self.class.summary_for(user)
+
+    broadcast_replace_later_to(
+      [ user, :receipts ],
+      target: "receipts_summary",
+      partial: "shared/receipts/summary_cards",
+      locals: summary
+    )
+  end
+
+  def broadcast_processing_flash
+    flash_type, message = case status
+    when "completed"
+                            [ :notice, "レシート解析が完了しました" ]
+    when "review_needed"
+                            [ :caution, "レシート解析が完了しました。内容を確認してください" ]
+    when "failed"
+                            [ :alert, processing_flash_message || "レシート解析に失敗しました" ]
+    else
+                            return
+    end
+
+    broadcast_replace_later_to(
+      [ user, :receipts ],
+      target: "flash",
+      partial: "shared/flash",
+      locals: {
+        flash_messages: {
+          flash_type => [ message ]
+        }
+      }
+    )
   end
 end

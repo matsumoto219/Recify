@@ -1,9 +1,20 @@
 class ReceiptsController < ApplicationController
   before_action :authenticate_user!
   before_action :set_receipt, only: [ :show, :edit, :update, :destroy ]
+  before_action :block_processing_receipt, only: [ :show, :edit, :update ]
 
   def index
     @receipts = current_user.receipts.order(created_at: :desc)
+    summary = Receipt.summary_for(current_user)
+
+    @receipts_count = summary[:receipts_count]
+    @current_month_total = summary[:current_month_total]
+    @overall_total = summary[:overall_total]
+    @processing_count = summary[:processing_count]
+    @review_needed_count = summary[:review_needed_count]
+    @monthly_change_label = summary[:monthly_change_label]
+    @monthly_change_icon = summary[:monthly_change_icon]
+    @monthly_change_icon_class = summary[:monthly_change_icon_class]
   end
 
   def show
@@ -14,28 +25,36 @@ class ReceiptsController < ApplicationController
 
   def new
     @receipt = current_user.receipts.new
-    @mode = params[:mode]
+    @receipt.receipt_items.build
+  end
 
-    if @mode == "manual"
-      @receipt.receipt_items.build
+  def new_upload
+    @receipt = current_user.receipts.new
+  end
+
+  def upload
+    @receipt = current_user.receipts.new(upload_receipt_params)
+    @receipt.status = "processing"
+
+    if @receipt.save
+      Rails.logger.info("[ReceiptAnalysis] enqueue receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{@receipt.image.attached?}")
+      ReceiptAnalysisJob.perform_later(@receipt.id)
+
+      redirect_to receipts_path, notice: t("flash.receipts.enqueued")
+    else
+      Rails.logger.warn(
+        "[ReceiptUpload] failed user_id=#{current_user.id} errors=#{@receipt.errors.full_messages.join(', ')}"
+      )
+      render :new_upload, status: :unprocessable_entity
     end
   end
 
   def create
-    image_attached = normalized_receipt_params[:image].present?
     @receipt = current_user.receipts.new(normalized_receipt_params)
-    @receipt.status = image_attached ? "processing" : "uploaded"
+    @receipt.status = "uploaded"
 
     if @receipt.save
-      Rails.logger.info("[ReceiptAnalysis] create start receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{image_attached}") if image_attached
-      analysis_success = image_attached ? apply_analysis(@receipt) : true
-
-      if analysis_success
-        redirect_to receipts_path, notice: t("flash.receipts.create")
-      else
-        flash[@receipt.processing_flash_type] = @receipt.processing_flash_messages
-        redirect_to receipts_path
-      end
+      redirect_to receipts_path, notice: t("flash.receipts.create")
     else
       render :new, status: :unprocessable_entity
     end
@@ -65,6 +84,16 @@ class ReceiptsController < ApplicationController
 
   def set_receipt
     @receipt = current_user.receipts.find(params[:id])
+  end
+
+  def block_processing_receipt
+    return unless @receipt.processing?
+
+    redirect_to receipts_path, alert: t("flash.receipts.processing")
+  end
+
+  def upload_receipt_params
+    params.require(:receipt).permit(:image)
   end
 
   def receipt_params
@@ -260,32 +289,5 @@ class ReceiptsController < ApplicationController
     end
   rescue ArgumentError
     nil
-  end
-
-  def apply_analysis(receipt)
-    ReceiptAnalysisService.call(receipt)
-    receipt.reload
-
-    Rails.logger.info(
-      "[ReceiptAnalysis] controller_apply_analysis receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code.inspect}"
-    )
-
-    !receipt.failed?
-  rescue StandardError => e
-    fail_receipt!(receipt, "unexpected_error", e.message)
-    Rails.logger.error(
-      "[ReceiptAnalysis] controller_apply_analysis_failed receipt_id=#{receipt.id} status=#{receipt.status} error_code=#{receipt.processing_error_code} error_class=#{e.class} message=#{e.message}"
-    )
-    false
-  end
-
-  def fail_receipt!(receipt, error_code, message)
-    mapped = ::Analysis::ReceiptProcessingErrorMapper.map(error_code)
-
-    receipt.update!(
-      status: "failed",
-      processing_error_code: mapped[:error_code],
-      processing_error_message: message
-    )
   end
 end
