@@ -1,13 +1,24 @@
 <%= turbo_stream_from [current_user, :receipts] %>
-<section class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-  <%= render "shared/ui/section_header",
-    title: t(".title"),
-    title_suffix: "#{@receipts_count}件",
-    title_suffix_class: "bg-[#C0C1FF]/10 text-[#C0C1FF] font-normal",
-    subtitle: "最新のレシートを一覧で確認できます。",
-    title_size: "text-2xl",
-    subtitle_size: "text-sm",
-    wrapper_class: "mt-1" %>
+<section id="receipts-page-header" class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+  <% if @query.present? %>
+    <%= render "shared/ui/section_header",
+      title: "検索結果",
+      title_suffix: "#{@receipts_count}件",
+      title_suffix_class: "bg-[#C0C1FF]/10 text-[#C0C1FF] font-normal",
+      subtitle: "「#{@query}」の検索結果です。",
+      title_size: "text-2xl",
+      subtitle_size: "text-sm",
+      wrapper_class: "mt-1" %>
+  <% else %>
+    <%= render "shared/ui/section_header",
+      title: t(".title"),
+      title_suffix: "#{@receipts_count}件",
+      title_suffix_class: "bg-[#C0C1FF]/10 text-[#C0C1FF] font-normal",
+      subtitle: "最新のレシートを一覧で確認できます。",
+      title_size: "text-2xl",
+      subtitle_size: "text-sm",
+      wrapper_class: "mt-1" %>
+  <% end %>
 
   <%= render "shared/ui/button",
     label: "レシート登録",
@@ -18,36 +29,22 @@
     icon: "add_circle" %>
 </section>
 
-<%= render "shared/receipts/summary_cards",
-  receipts_count: @receipts_count,
-  current_month_total: @current_month_total,
-  overall_total: @overall_total,
-  processing_count: @processing_count,
-  review_needed_count: @review_needed_count,
-  monthly_change_label: @monthly_change_label,
-  monthly_change_icon: @monthly_change_icon,
-  monthly_change_icon_class: @monthly_change_icon_class %>
+<div id="receipts-summary">
+  <%= render "shared/receipts/summary_cards",
+    receipts_count: @receipts_count,
+    current_month_total: @current_month_total,
+    overall_total: @overall_total,
+    processing_count: @processing_count,
+    review_needed_count: @review_needed_count,
+    monthly_change_label: @monthly_change_label,
+    monthly_change_icon: @monthly_change_icon,
+    monthly_change_icon_class: @monthly_change_icon_class %>
+</div>
 
-<% if @receipts.any? %>
-  <section class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5">
-    <% @receipts.each do |receipt| %>
-      <%= render "shared/receipts/receipt_card", receipt: receipt %>
-    <% end %>
-  </section>
-<% else %>
-  <section class="flex flex-col items-center justify-center py-24 text-center">
-    <div class="w-24 h-24 mb-6 rounded-full bg-[#2A2A2A] flex items-center justify-center">
-      <span class="material-symbols-outlined text-4xl text-[#C7C4D8]/30">receipt_long</span>
-    </div>
-    <h2 class="text-lg font-bold text-[#E5E2E1] mb-2"><%= t(".empty") %></h2>
-    <p class="text-[#C7C4D8] text-sm mb-8">最初のレシートを登録しましょう。</p>
-    <%= render "shared/ui/button",
-      label: "今すぐ登録する",
-      as: :link,
-      href: select_input_method_receipts_path,
-      variant: :secondary,
-      size: :md %>
-  </section>
-<% end %>
+<div id="receipts-list">
+  <%= render "receipts/receipts_list",
+    receipts: @receipts,
+    query: @query %>
+</div>
 
 <%= render "shared/ui/section_divider", label: "End of Archive", class: "mt-20 mb-8" %>
