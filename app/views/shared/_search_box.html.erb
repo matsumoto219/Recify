@@ -29,14 +29,17 @@
   <%# TODO: 検索機能本実装時にquery parameter / Turbo検索 / 絞り込み処理へ接続する %>
   <%= form_with url: receipts_path, method: :get, local: true, class: "contents" do %>
   <div class="relative overflow-hidden rounded-lg">
-    <span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[20px] text-[#C7C4D8]/70">
-      search
-    </span>
+    <button type="submit"
+      class="absolute left-3 top-0 z-10 flex h-10 items-center text-[#C7C4D8]/70 hover:text-white transition-colors"
+      aria-label="検索">
+      <span class="material-symbols-outlined text-[20px] leading-none">search</span>
+    </button>
 
     <input
       type="text"
       name="q"
       value="<%= params[:q] %>"
+      data-action="input->search#handleInput"
       <% if input_id.present? %>id="<%= input_id %>"<% end %>
       <% if input_name.present? %>name="<%= input_name %>"<% end %>
       placeholder="<%= placeholder %>"

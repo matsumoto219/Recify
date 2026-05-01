@@ -6,11 +6,13 @@ export default class extends Controller {
   connect() {
     this.handleOutsideTap = this.handleOutsideTap.bind(this)
     this.close()
+    this.debounceTimer = null
     document.addEventListener("pointerdown", this.handleOutsideTap)
   }
 
   disconnect() {
     document.removeEventListener("pointerdown", this.handleOutsideTap)
+    clearTimeout(this.debounceTimer)
   }
 
   open() {
@@ -46,5 +48,62 @@ export default class extends Controller {
     if (event.target.closest("[data-action~='search#toggle']")) return
 
     this.close()
+  }
+
+  handleInput(event) {
+    const input = event.currentTarget
+
+    clearTimeout(this.debounceTimer)
+
+    this.debounceTimer = setTimeout(() => {
+      this.performSearch(input)
+    }, 300)
+  }
+
+  async performSearch(input) {
+    const list = document.getElementById("receipts-list")
+    const pageHeader = document.getElementById("receipts-page-header")
+    const summary = document.getElementById("receipts-summary")
+    if (!input || !list) return
+
+    const query = input.value.trim()
+
+    const url = new URL(window.location.href)
+    if (query) {
+      url.searchParams.set("q", query)
+    } else {
+      url.searchParams.delete("q")
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "Accept": "text/html"
+        }
+      })
+
+      if (!response.ok) return
+
+      const html = await response.text()
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(html, "text/html")
+      const newList = doc.querySelector("#receipts-list")
+      const newPageHeader = doc.querySelector("#receipts-page-header")
+      const newSummary = doc.querySelector("#receipts-summary")
+
+      if (newList) {
+        list.innerHTML = newList.innerHTML
+      }
+
+      if (pageHeader && newPageHeader) {
+        pageHeader.innerHTML = newPageHeader.innerHTML
+      }
+
+      if (summary && newSummary) {
+        summary.innerHTML = newSummary.innerHTML
+      }
+    } catch (error) {
+      console.error("Search failed:", error)
+    }
   }
 }
