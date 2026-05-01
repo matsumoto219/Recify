@@ -1,0 +1,63 @@
+<section id="receipts_summary"
+  class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10"
+  data-controller="receipt-summary"
+  data-receipt-summary-storage-key-value="receiptAmountMode">
+  <%= render "shared/receipts/summary_card",
+    title: "総件数",
+    value: "#{receipts_count}件",
+    subtext: "保存済みレシート",
+    value_data: {
+      receipt_summary_target: "summaryValue",
+      summary_key: "receipts_count",
+      raw_value: receipts_count,
+      suffix: "件"
+    } %>
+
+  <%= render "shared/receipts/summary_card",
+    title: "今月の合計",
+    value: "¥#{number_with_delimiter(current_month_total)}",
+    subtext: monthly_change_label,
+    title_data: { receipt_summary_target: "label" },
+    value_data: {
+      receipt_summary_target: "value summaryValue",
+      current_month_total: number_with_delimiter(current_month_total),
+      overall_total: number_with_delimiter(overall_total),
+      current_month_raw_value: current_month_total,
+      overall_raw_value: overall_total,
+      prefix: "¥"
+    },
+    subtext_data: {
+      receipt_summary_target: "subtext",
+      monthly_text: monthly_change_label,
+      overall_text: "累計の合計金額",
+      monthly_icon: monthly_change_icon,
+      monthly_icon_class: local_assigns.fetch(:monthly_change_icon_class, "text-[#C7C4D8]"),
+      overall_icon: "",
+      overall_icon_class: "text-[#C7C4D8]"
+    },
+    action_label: "切替",
+    action_data: { action: "receipt-summary#toggle" } %>
+
+  <%= render "shared/receipts/summary_card",
+    title: "処理中",
+    value: "#{processing_count}件",
+    subtext: processing_count.positive? ? "解析キュー処理中" : "処理中のレシートはありません",
+    value_data: {
+      receipt_summary_target: "summaryValue",
+      summary_key: "processing_count",
+      raw_value: processing_count,
+      suffix: "件"
+    } %>
+
+  <%= render "shared/receipts/summary_card",
+    title: "要確認",
+    value: "#{review_needed_count}件",
+    subtext: review_needed_count.positive? ? "手動確認待ち" : "確認待ちはありません",
+    accent_color: "#FFB4AB",
+    value_data: {
+      receipt_summary_target: "summaryValue",
+      summary_key: "review_needed_count",
+      raw_value: review_needed_count,
+      suffix: "件"
+    } %>
+</section>

@@ -2,6 +2,8 @@
   title = local_assigns.fetch(:title)
   value = local_assigns.fetch(:value)
   subtext = local_assigns[:subtext]
+  subtext_icon = local_assigns[:subtext_icon]
+  subtext_icon_class = local_assigns.fetch(:subtext_icon_class, "text-[#C7C4D8]")
   accent_color = local_assigns.fetch(:accent_color, "#C0C1FF")
   title_id = local_assigns[:title_id]
   value_id = local_assigns[:value_id]
@@ -54,11 +56,14 @@
 
   <% if subtext.present? %>
     <p id="<%= subtext_id %>"
-      class="text-[0.6875rem] text-[#C7C4D8] mt-1"
+      class="inline-flex items-center gap-1 text-[0.6875rem] leading-none text-[#C7C4D8] mt-1"
       <% subtext_data.each do |key, data_value| %>
         data-<%= key.to_s.dasherize %>="<%= data_value %>"
       <% end %>>
-      <%= subtext %>
+      <% if subtext_icon.present? %>
+        <span class="material-symbols-outlined <%= subtext_icon_class %>" style="font-size: 14px; line-height: 1;"><%= subtext_icon %></span>
+      <% end %>
+      <span><%= subtext %></span>
     </p>
   <% end %>
 </div>

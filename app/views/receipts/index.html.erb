@@ -1,7 +1,8 @@
+<%= turbo_stream_from [current_user, :receipts] %>
 <section class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
   <%= render "shared/ui/section_header",
     title: t(".title"),
-    title_suffix: "#{@receipts.count}件",
+    title_suffix: "#{@receipts_count}件",
     title_suffix_class: "bg-[#C0C1FF]/10 text-[#C0C1FF] font-normal",
     subtitle: "最新のレシートを一覧で確認できます。",
     title_size: "text-2xl",
@@ -17,52 +18,18 @@
     icon: "add_circle" %>
 </section>
 
-<section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10" data-controller="receipt-amount-toggle">
-  <%# TODO: Stimulusに移行し、集計値はcontrollerまたはhelperで事前計算する %>
-  <% current_month_total = @receipts.select { |receipt| receipt.purchased_at&.in_time_zone&.to_date&.between?(Time.current.beginning_of_month.to_date, Time.current.end_of_month.to_date) }.sum { |receipt| receipt.total_amount.to_i } %>
-  <% overall_total = @receipts.sum(:total_amount) %>
-  <% processing_count = @receipts.count { |receipt| receipt.status.to_s == "processing" } %>
-  <% review_needed_count = @receipts.count { |receipt| receipt.status.to_s == "review_needed" } %>
-
-  <%= render "shared/receipts/summary_card",
-    title: "総件数",
-    value: "#{@receipts.count}件",
-    subtext: "保存済みレシート",
-    accent_color: "#C0C1FF" %>
-
-  <%= render "shared/receipts/summary_card",
-    title: "今月の合計",
-    value: "¥#{number_with_delimiter(current_month_total)}",
-    subtext: "先月比 +12%",
-    title_data: { receipt_amount_toggle_target: "label" },
-    value_data: {
-      receipt_amount_toggle_target: "value",
-      current_month_total: number_with_delimiter(current_month_total),
-      overall_total: number_with_delimiter(overall_total)
-    },
-    subtext_data: {
-      receipt_amount_toggle_target: "subtext",
-      monthly_text: "先月比 +12%",
-      overall_text: "累計の合計金額"
-    },
-    action_label: "切替",
-    action_data: { action: "receipt-amount-toggle#toggle" } %>
-
-  <%= render "shared/receipts/summary_card",
-    title: "処理中",
-    value: "#{processing_count}件",
-    subtext: processing_count.positive? ? "解析キュー処理中" : "処理中のレシートはありません",
-    accent_color: "#C0C1FF" %>
-
-  <%= render "shared/receipts/summary_card",
-    title: "要確認",
-    value: "#{review_needed_count}件",
-    subtext: review_needed_count.positive? ? "手動確認待ち" : "確認待ちはありません",
-    accent_color: "#FFB4AB" %>
-</section>
+<%= render "shared/receipts/summary_cards",
+  receipts_count: @receipts_count,
+  current_month_total: @current_month_total,
+  overall_total: @overall_total,
+  processing_count: @processing_count,
+  review_needed_count: @review_needed_count,
+  monthly_change_label: @monthly_change_label,
+  monthly_change_icon: @monthly_change_icon,
+  monthly_change_icon_class: @monthly_change_icon_class %>
 
 <% if @receipts.any? %>
-  <section class="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+  <section class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5">
     <% @receipts.each do |receipt| %>
       <%= render "shared/receipts/receipt_card", receipt: receipt %>
     <% end %>
