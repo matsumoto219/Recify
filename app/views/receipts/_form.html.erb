@@ -351,14 +351,8 @@
                   <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
                 </div>
               <% end %>
-            <% else %>
-              <%# TODO: 手動登録時の明細追加UIを改善し、空状態でも追加しやすくする %>
-              <div class="rounded-xl border border-dashed border-white/10 p-8 text-center text-[#C7C4D8]" data-receipt-form-target="emptyState">
-                明細はまだありません
-              </div>
             <% end %>
 
-            <%# TODO: 本実装時は手動で明細行を追加できる Stimulus UI に置き換える %>
             <button type="button"
                     data-action="click->receipt-form#addItem"
                     class="w-full mt-4 py-3 border-2 border-dashed border-white/20 rounded-xl text-[#C7C4D8] hover:text-[#C0C1FF] hover:border-[#C0C1FF] transition-all flex items-center justify-center gap-2 font-medium">
@@ -526,8 +520,6 @@
               subtotal_target: "subtotalAmount",
               tax_amount_target: "taxAmount",
               tax_rate_target: "taxRateSummary" %>
-
-        <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
 
         <%= render "shared/ui/receipt_image_card",
               receipt: receipt,
