@@ -1,0 +1,56 @@
+<%
+  placeholder = local_assigns.fetch(:placeholder, "レシートを検索")
+  wrapper_class = local_assigns[:wrapper_class]
+  input_class = local_assigns[:input_class]
+  input_data = local_assigns.fetch(:input_data, {})
+  input_name = local_assigns.fetch(:name, nil)
+  input_id = local_assigns.fetch(:id, nil)
+  variant = local_assigns.fetch(:variant, :desktop).to_sym
+  close_action = local_assigns[:close_action]
+  panel_data = local_assigns.fetch(:panel_data, {})
+  mobile = variant == :mobile
+
+  resolved_wrapper_class = [
+    mobile ? "relative w-full rounded-2xl border border-white/10 bg-[#1C1B1B]/95 p-3 shadow-xl shadow-black/30 backdrop-blur" : "relative w-full",
+    wrapper_class
+  ].compact.join(" ")
+
+  resolved_input_class = [
+    "peer h-10 w-full rounded-lg border border-white/10 bg-[#201F1F] py-2.5 text-sm text-[#E5E2E1] placeholder:text-[#C7C4D8]/60 shadow-[#00000033_0px_5px_15px] outline-none transition-shadow duration-300 focus:border-transparent focus:shadow-none",
+    mobile ? "px-10 pr-12" : "px-10",
+    input_class
+  ].compact.join(" ")
+%>
+
+<div class="<%= resolved_wrapper_class %>"
+  <% panel_data.each do |key, value| %>
+    data-<%= key.to_s.dasherize %>="<%= value %>"
+  <% end %>>
+  <%# TODO: 検索機能本実装時にquery parameter / Turbo検索 / 絞り込み処理へ接続する %>
+  <div class="relative overflow-hidden rounded-lg">
+    <span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[20px] text-[#C7C4D8]/70">
+      search
+    </span>
+
+    <input
+      type="text"
+      <% if input_id.present? %>id="<%= input_id %>"<% end %>
+      <% if input_name.present? %>name="<%= input_name %>"<% end %>
+      placeholder="<%= placeholder %>"
+      class="<%= resolved_input_class %>"
+      <% input_data.each do |key, value| %>
+        data-<%= key.to_s.dasherize %>="<%= value %>"
+      <% end %>
+    >
+    <% if mobile && close_action.present? %>
+      <button type="button"
+        class="absolute right-5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#C7C4D8] transition-colors hover:bg-white/10 hover:text-white"
+        data-action="<%= close_action %>"
+        aria-label="検索を閉じる">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    <% end %>
+
+    <span class="pointer-events-none absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-gradient-to-r from-[#C0C1FF] to-[#4B4DD8] transition-all duration-300 ease-in peer-focus:w-full"></span>
+  </div>
+</div>
