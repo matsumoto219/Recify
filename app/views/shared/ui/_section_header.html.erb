@@ -1,6 +1,7 @@
 <%
   title = local_assigns.fetch(:title)
   subtitle = local_assigns[:subtitle]
+  title_suffix = local_assigns[:title_suffix]
   breadcrumb_label = local_assigns[:breadcrumb_label]
   breadcrumb_path = local_assigns[:breadcrumb_path]
   icon = local_assigns[:icon]
@@ -10,6 +11,7 @@
   center_breadcrumb = local_assigns.fetch(:center_breadcrumb, false) && (align == :center || responsive_align == :center)
   wrapper_class = local_assigns[:class]
   icon_class = local_assigns[:icon_class]
+  title_suffix_class = local_assigns[:title_suffix_class]
   title_size = local_assigns.fetch(:title_size, "text-lg")
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
   breadcrumb_wrapper_class = [
@@ -71,6 +73,10 @@
 
   resolved_icon_class = [tone[:icon], icon_class].compact.join(" ")
   title_class = [title_size, "font-extrabold", "tracking-tight", "leading-tight", tone[:title]].join(" ")
+  resolved_title_suffix_class = [
+    "inline-flex items-center rounded-full bg-[#353534] px-2.5 py-1 text-xs font-bold text-[#C7C4D8]",
+    title_suffix_class
+  ].compact.join(" ")
   subtitle_class = [subtitle_size, "leading-relaxed", tone[:subtitle]].join(" ")
   header_classes = ["space-y-1", align_class, responsive_align_class, wrapper_class].compact.join(" ")
   title_row_class = ["flex items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
@@ -96,6 +102,10 @@
     <% end %>
 
     <h2 class="<%= title_class %>"><%= title %></h2>
+
+    <% if title_suffix.present? %>
+      <span class="<%= resolved_title_suffix_class %>"><%= title_suffix %></span>
+    <% end %>
   </div>
 
   <% if subtitle.present? %>
