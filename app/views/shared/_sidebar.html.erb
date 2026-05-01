@@ -1,39 +1,46 @@
-<aside id="desktop-sidebar" data-component="sidebar" class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-[#1C1B1B] py-6 z-50">
+<aside id="desktop-sidebar" data-component="sidebar" class="hidden md:flex flex-col h-screen md:w-20 xl:w-64 fixed left-0 top-0 bg-[#1C1B1B] py-6 z-50">
   <div class="px-6 mb-10">
     <%= link_to root_path, class: "inline-block" do %>
-      <h1 class="text-xl font-bold bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] bg-clip-text text-transparent">Recify</h1>
-      <p class="text-[0.6875rem] text-[#C7C4D8] tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
+      <%# TODO: ロゴは仮。タブレット用（md表示時）の簡易ロゴやアイコンロゴを別途用意する可能性あり %>
+      <h1 class="hidden xl:block text-xl font-bold bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] bg-clip-text text-transparent">Recify</h1>
+      <p class="hidden xl:block text-[0.6875rem] text-[#C7C4D8] tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
     <% end %>
   </div>
 
   <nav class="flex-1 space-y-1 px-0">
-    <%= link_to receipts_path,
-      class: "flex items-center gap-3 px-4 py-3 font-medium transition-colors #{current_page?(receipts_path) ? 'bg-[#4B4DD8]/20 text-[#C0C1FF] border-l-4 border-[#C0C1FF] rounded-none' : 'text-[#C7C4D8] hover:bg-[#2A2A2A] hover:text-white'}" do %>
-      <span class="material-symbols-outlined">receipt_long</span>
-      <span class="tracking-wide">レシート一覧</span>
-    <% end %>
+    <%= render "shared/sidebar_nav_item",
+      path: receipts_path,
+      icon: "receipt_long",
+      label: "レシート一覧",
+      active: current_page?(receipts_path) %>
 
-    <%= link_to select_input_method_receipts_path,
-      class: "flex items-center gap-3 px-4 py-3 font-medium transition-colors #{current_page?(select_input_method_receipts_path) ? 'bg-[#4B4DD8]/20 text-[#C0C1FF] border-l-4 border-[#C0C1FF] rounded-none' : 'text-[#C7C4D8] hover:bg-[#2A2A2A] hover:text-white'}" do %>
-      <span class="material-symbols-outlined">add_circle</span>
-      <span class="tracking-wide">レシート登録</span>
-    <% end %>
-
-    <%= link_to settings_path,
-      class: "flex items-center gap-3 px-4 py-3 font-medium transition-colors #{current_page?(settings_path) ? 'bg-[#4B4DD8]/20 text-[#C0C1FF] border-l-4 border-[#C0C1FF] rounded-none' : 'text-[#C7C4D8] hover:bg-[#2A2A2A] hover:text-white'}" do %>
-      <span class="material-symbols-outlined">settings</span>
-      <span class="tracking-wide">設定</span>
-    <% end %>
+    <%= render "shared/sidebar_nav_item",
+      path: select_input_method_receipts_path,
+      icon: "add_circle",
+      label: "レシート登録",
+      active: current_page?(select_input_method_receipts_path) %>
   </nav>
 
   <!-- ダミー　本実装予定 -->
-  <div class="px-4 mt-auto">
-    <div class="bg-[#2A2A2A] rounded-xl p-4 border border-white/5">
-      <p class="text-[0.75rem] text-[#C7C4D8] mb-2">ストレージ使用量</p>
-      <div class="h-1.5 w-full bg-[#131313] rounded-full overflow-hidden">
-        <div class="h-full bg-[#C0C1FF] w-[65%]"></div>
+  <div class="mt-auto">
+    <div class="flex flex-col gap-1 mb-4">
+      <%= render "shared/sidebar_nav_item",
+        path: settings_path,
+        icon: "settings",
+        label: "設定",
+        active: current_page?(settings_path) %>
+
+      <%# TODO: 問い合わせ導線をここに追加（設定と同グループに配置） %>
+    </div>
+
+    <div class="px-4">
+      <div class="hidden xl:block bg-[#2A2A2A] rounded-xl p-4 border border-white/5">
+        <p class="text-[0.75rem] text-[#C7C4D8] mb-2">ストレージ使用量</p>
+        <div class="h-1.5 w-full bg-[#131313] rounded-full overflow-hidden">
+          <div class="h-full bg-[#C0C1FF] w-[65%]"></div>
+        </div>
+        <p class="text-right text-[0.6875rem] mt-2 text-[#C0C1FF]">6.5GB / 10GB</p>
       </div>
-      <p class="text-right text-[0.6875rem] mt-2 text-[#C0C1FF]">6.5GB / 10GB</p>
     </div>
   </div>
 </aside>

@@ -1,0 +1,25 @@
+<%
+  path = local_assigns.fetch(:path)
+  icon = local_assigns.fetch(:icon)
+  label = local_assigns.fetch(:label)
+  active = local_assigns.fetch(:active, false)
+  show_label = local_assigns.fetch(:show_label, true)
+  extra_classes = local_assigns[:class]
+
+  active_classes = "bg-[#4B4DD8]/20 text-[#C0C1FF] border-l-4 border-[#C0C1FF] rounded-none"
+  inactive_classes = "text-[#C7C4D8] hover:bg-[#2A2A2A] hover:text-white"
+
+  link_class = [
+    "flex items-center justify-center xl:justify-start gap-0 xl:gap-3 px-2 xl:px-4 py-3 font-medium transition-colors",
+    active ? active_classes : inactive_classes,
+    extra_classes
+  ].compact.join(" ")
+%>
+
+<%= link_to path, class: link_class do %>
+  <span class="material-symbols-outlined"><%= icon %></span>
+
+  <% if show_label %>
+    <span class="hidden xl:inline tracking-wide"><%= label %></span>
+  <% end %>
+<% end %>
