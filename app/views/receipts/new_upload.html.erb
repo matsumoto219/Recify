@@ -1,0 +1,90 @@
+<section class="max-w-3xl mx-auto space-y-8">
+  <%= render "shared/ui/section_header",
+    title: "レシート画像をアップロード",
+    subtitle: "アップロード後は解析キューに追加され、一覧画面で処理状況を確認できます",
+    title_size: "text-2xl",
+    align: :center,
+    wrapper_class: "space-y-3" %>
+
+  <%= render "shared/ui/surface_card", class: "p-6 group" do %>
+    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit" } } do |form| %>
+      <div class="space-y-6">
+        <div>
+          <p class="block text-sm font-medium text-[#E5E2E1]">レシート画像</p>
+
+          <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-white/10 bg-black/20 px-6 py-10 text-center group-hover:bg-[#2A2A2A] transition-colors">
+            <div class="flex flex-col items-center gap-4" data-receipt-upload-target="emptyState">
+              <span class="material-symbols-outlined text-5xl text-[#C0C1FF] opacity-80">photo_camera</span>
+              <p class="text-base font-medium text-[#E5E2E1]">レシートを撮影または選択</p>
+              <p class="text-xs text-[#C7C4D8]">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
+            </div>
+
+            <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
+              <img src="" alt="選択したレシート画像のプレビュー" class="h-full w-full object-contain" data-receipt-upload-target="preview">
+            </div>
+          </div>
+        </div>
+
+        <section class="flex flex-col gap-4">
+          <div class="grid grid-cols-2 gap-4">
+            <%= render "shared/ui/button",
+              label: "カメラを起動",
+              variant: :secondary,
+              size: :md,
+              icon: "camera_alt",
+              full_width: true,
+              type: "button",
+              data: { action: "receipt-upload#openCamera" } %>
+
+            <%= render "shared/ui/button",
+              label: "ファイルを選択",
+              variant: :secondary,
+              size: :md,
+              icon: "folder_open",
+              full_width: true,
+              type: "button",
+              data: { action: "receipt-upload#openLibrary" } %>
+          </div>
+
+          <p class="text-xs text-center text-[#C7C4D8]" data-receipt-upload-target="fileName">
+            画像はまだ選択されていません
+          </p>
+
+          <%= render "shared/ui/button",
+            label: "アップロードして登録",
+            variant: :primary,
+            size: :lg,
+            type: "submit",
+            full_width: true,
+            disabled: true,
+            disable_with: "アップロード中...",
+            icon: "cloud_upload",
+            data: { receipt_upload_target: "submitButton" } %>
+        </section>
+
+        <%= form.file_field :image,
+          accept: "image/*",
+          capture: "environment",
+          class: "hidden",
+          data: { receipt_upload_target: "cameraInput", action: "change->receipt-upload#previewCamera" } %>
+
+        <%= form.file_field :image,
+          accept: "image/*",
+          class: "hidden",
+          data: { receipt_upload_target: "libraryInput", action: "change->receipt-upload#previewLibrary" } %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <footer class="text-center space-y-6">
+    <div class="flex items-center justify-center gap-2 text-sm text-[#C7C4D8] bg-[#1C1B1B] py-2 px-4 rounded-full w-fit mx-auto">
+      <span class="material-symbols-outlined text-sm text-[#C0C1FF]">info</span>
+      アップロード後は解析キューに追加されます
+    </div>
+
+    <%= render "shared/ui/navigation_link",
+      path: select_input_method_receipts_path,
+      text: "戻る",
+      arrow: :left %>
+  </footer>
+</section>
