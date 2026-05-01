@@ -3,8 +3,12 @@ class ReceiptsController < ApplicationController
   before_action :set_receipt, only: [ :show, :edit, :update, :destroy ]
   before_action :block_processing_receipt, only: [ :show, :edit, :update ]
 
+  MAX_SEARCH_QUERY_LENGTH = 100
+  SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i
+
   def index
-    @query = params[:q].to_s.strip
+    @query = normalize_search_query(params[:q])
+    log_suspicious_search_query(@query) if suspicious_search_query?(@query)
     @receipts = current_user.receipts.order(created_at: :desc)
     @receipts = @receipts.search(@query) if @query.present?
     summary = Receipt.summary_for(current_user, scope: @receipts)
@@ -291,5 +295,19 @@ class ReceiptsController < ApplicationController
     end
   rescue ArgumentError
     nil
+  end
+
+  def normalize_search_query(value)
+    value.to_s.strip.first(MAX_SEARCH_QUERY_LENGTH)
+  end
+
+  def suspicious_search_query?(query)
+    query.present? && query.match?(SUSPICIOUS_SEARCH_PATTERN)
+  end
+
+  def log_suspicious_search_query(query)
+    Rails.logger.warn(
+      "[ReceiptSearch] suspicious_query user_id=#{current_user.id} query=#{query.inspect}"
+    )
   end
 end

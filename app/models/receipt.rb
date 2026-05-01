@@ -72,16 +72,99 @@ class Receipt < ApplicationRecord
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
 
-  # 簡易検索（店舗名・メモ）
+  # 拡張検索（AND検索対応）
+  # --------------------------------------------------
+  # スペース区切りでAND検索
+  # 例:
+  #   セブン 1000
+  #   → 店舗名に「セブン」 AND 金額1000円
+  #
+  #   牛乳 <=300
+  #   → 明細名「牛乳」 AND 300円以下
+  #
+  #   date>=2026-01-01 セブン
+  #   → 2026/01/01以降 AND 店舗名「セブン」
+  #
+  #   セブン <=1000 date>=2026-01-01
+  #   → 店舗名 AND 金額条件 AND 期間条件（複合検索）
+  #
+  # 各トークン内はOR検索、トークン間はAND検索
+  # --------------------------------------------------
   scope :search, ->(query) {
     return all if query.blank?
 
-    q = "%#{sanitize_sql_like(query)}%"
+    tokens = query.to_s.strip.split(/\s+/)
 
-    where(
-      "store_name ILIKE :q OR memo ILIKE :q",
-      q: q
-    )
+    scope = all
+
+    tokens.each do |token|
+      q = "%#{sanitize_sql_like(token)}%"
+
+      matching_ids = left_joins(:receipt_items).where(
+        "receipts.store_name ILIKE :q OR receipts.memo ILIKE :q OR receipt_items.confirmed_name ILIKE :q OR receipt_items.suggested_name ILIKE :q OR receipt_items.raw_text ILIKE :q",
+        q: q
+      ).select(:id)
+
+      token_scope = where(id: matching_ids)
+
+      # 日付検索（YYYY-MM-DD / YYYY/MM/DD など）
+      begin
+        date = Date.parse(token)
+        token_scope = token_scope.or(where(purchased_at: date.beginning_of_day..date.end_of_day))
+      rescue ArgumentError
+        # 無効な日付は無視
+      end
+
+      # 期間検索
+      # 例:
+      # - date:2026-01-01..2026-12-31
+      # - date:2026/01/01..2026/12/31
+      # - date>=2026-01-01
+      # - date>=2026/01/01
+      # - date<=2026-12-31
+      # - date<=2026/12/31
+      normalized_date_query = token.strip
+
+      # 範囲指定
+      if normalized_date_query =~ /date:(\d{4}[\/-]\d{2}[\/-]\d{2})\.\.(\d{4}[\/-]\d{2}[\/-]\d{2})/
+        from = Date.parse($1)
+        to = Date.parse($2)
+        token_scope = token_scope.or(where(purchased_at: from.beginning_of_day..to.end_of_day))
+      end
+
+      # 片側指定
+      if normalized_date_query =~ /date>=?(\d{4}[\/-]\d{2}[\/-]\d{2})/
+        from = Date.parse($1)
+        token_scope = token_scope.or(where("purchased_at >= ?", from.beginning_of_day))
+      end
+
+      if normalized_date_query =~ /date<=?(\d{4}[\/-]\d{2}[\/-]\d{2})/
+        to = Date.parse($1)
+        token_scope = token_scope.or(where("purchased_at <= ?", to.end_of_day))
+      end
+
+      # 金額検索
+      # 例:
+      # - 1000        => 1000円ちょうど
+      # - <=1000      => 1000円以下
+      # - <1000       => 1000円未満
+      # - >=1000      => 1000円以上
+      # - >1000       => 1000円超
+      # - amount<=1000 / total>=1000 なども許可
+      normalized_amount_query = token.delete(",").downcase
+      amount_condition = normalized_amount_query.match(/\A(?:amount|total)?\s*(<=|>=|<|>|=)?\s*(\d+)\z/)
+
+      if amount_condition
+        operator = amount_condition[1].presence || "="
+        amount = amount_condition[2].to_i
+
+        token_scope = token_scope.or(where("total_amount #{operator} ?", amount))
+      end
+
+      scope = scope.merge(token_scope)
+    end
+
+    scope
   }
 
   private
