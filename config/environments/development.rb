@@ -59,6 +59,10 @@ Rails.application.configure do
   # Highlight code that enqueued background job in logs.
   config.active_job.verbose_enqueue_logs = true
 
+  # NOTE: 開発環境では非同期ジョブを即時実行するため :async を明示指定
+  # 本番環境では Sidekiq 等のキューに差し替える前提
+  config.active_job.queue_adapter = :async
+
   # Highlight code that triggered redirect in logs.
   config.action_dispatch.verbose_redirect_logs = true
 
