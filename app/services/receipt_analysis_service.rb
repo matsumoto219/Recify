@@ -62,6 +62,8 @@ class ReceiptAnalysisService
       "[ReceiptAnalysis] unexpected_error receipt_id=#{receipt.id} error_class=#{e.class} error_code=unexpected_error"
     )
     fail_receipt!("unexpected_error", e.message)
+    # NOTE: 想定外エラーはReceipt側にfailed保存したうえでAnalysisErrorを再raiseする。
+    # Job retryは行わず、再解析や手動修正はユーザー操作に委ねる方針。
     raise AnalysisError.new("unexpected_error", e.message)
   end
 
