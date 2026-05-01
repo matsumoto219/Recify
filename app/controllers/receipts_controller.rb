@@ -4,8 +4,10 @@ class ReceiptsController < ApplicationController
   before_action :block_processing_receipt, only: [ :show, :edit, :update ]
 
   def index
+    @query = params[:q].to_s.strip
     @receipts = current_user.receipts.order(created_at: :desc)
-    summary = Receipt.summary_for(current_user)
+    @receipts = @receipts.search(@query) if @query.present?
+    summary = Receipt.summary_for(current_user, scope: @receipts)
 
     @receipts_count = summary[:receipts_count]
     @current_month_total = summary[:current_month_total]
