@@ -1,0 +1,57 @@
+<%
+  receipt = local_assigns.fetch(:receipt)
+  status_label = local_assigns[:status_label] || (receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status)
+  processing = receipt.status.to_s == "processing"
+  display_store_name = if processing
+                         receipt.store_name.presence || "解析中のレシート"
+                       else
+                         receipt.store_name.presence || "店舗名なし"
+                       end
+%>
+
+<div class="group bg-[#2A2A2A] rounded-xl p-5 hover:bg-[#353534] transition-colors">
+  <div class="flex items-start justify-between gap-4">
+    <div class="flex items-start gap-3 min-w-0">
+      <div class="w-10 h-10 rounded-lg bg-[#131313] flex items-center justify-center text-[#C0C1FF] shrink-0">
+        <span class="material-symbols-outlined">receipt_long</span>
+      </div>
+
+      <div class="min-w-0">
+        <h2 class="font-bold text-[#E5E2E1] group-hover:text-[#C0C1FF] transition-colors truncate">
+          <% if processing %>
+            <span><%= display_store_name %></span>
+          <% else %>
+            <%= link_to display_store_name, receipt_path(receipt), class: "hover:underline" %>
+          <% end %>
+        </h2>
+
+        <p class="text-[0.75rem] text-[#C7C4D8]">
+          <%= processing ? "解析完了後に表示されます" : (receipt.purchased_at ? l(receipt.purchased_at, format: :short) : "日時未設定") %>
+        </p>
+      </div>
+    </div>
+
+    <%= render "shared/ui/receipt_status_badge",
+      status: receipt.status,
+      label: status_label %>
+  </div>
+
+  <div class="flex justify-between items-end mt-2 gap-4">
+    <div>
+      <p class="text-[0.6875rem] text-[#C7C4D8] mb-1">合計金額</p>
+      <p class="text-xl font-bold text-[#E5E2E1]">
+        <%= processing ? "解析中" : "¥#{number_with_delimiter(receipt.total_amount.to_i)}" %>
+      </p>
+    </div>
+
+    <div class="flex items-center gap-3 text-sm">
+      <% if processing %>
+        <span class="text-[#C7C4D8]/60 cursor-not-allowed">詳細</span>
+        <span class="text-[#C0C1FF]/50 cursor-not-allowed">編集</span>
+      <% else %>
+        <%= link_to "詳細", receipt_path(receipt), class: "text-[#C7C4D8] hover:text-white transition-colors" %>
+        <%= link_to "編集", edit_receipt_path(receipt), class: "text-[#C0C1FF] hover:opacity-80 transition-opacity" %>
+      <% end %>
+    </div>
+  </div>
+</div>
