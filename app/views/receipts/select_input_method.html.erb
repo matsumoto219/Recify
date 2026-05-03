@@ -2,7 +2,7 @@
   <%= render "shared/ui/section_header",
     title: "登録方法を選択してください",
     subtitle: "新しいレシートをどの方法で登録しますか？",
-    title_size: "text-[1.6rem] md:text-4xl",
+    title_size: "text-[1.6rem] md:text-3xl",
     subtitle_size: "text-[15px] md:text-lg",
     align: :left,
     responsive_align: :center,
@@ -31,7 +31,8 @@
       description_size: "text-sm md:text-base" %>
   </div>
 
-  <div class="flex flex-col items-center pt-8 border-t border-white/10 text-center">
+  <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-8 mb-6" %>
+  <div class="flex flex-col items-center text-center">
     <p class="text-sm text-[#C7C4D8] mb-2 leading-relaxed">
       画像の解析に失敗した場合は、手動入力に切り替えられます。
     </p>

@@ -62,13 +62,13 @@
       <% end %>
 
       <section class="text-center pt-2" aria-label="新規登録案内">
-        <p class="text-sm text-[#C7C4D8]">
-          アカウントをお持ちではありませんか？
-          <%= link_to "新規登録", new_registration_path(resource_name), class: "text-[#C0C1FF] font-medium hover:underline underline-offset-4 ml-1" %>
+        <p class="flex flex-col items-center gap-1 text-sm text-[#C7C4D8] sm:block">
+          <span>アカウントをお持ちではありませんか？</span>
+          <%= link_to "新規登録", new_registration_path(resource_name), class: "text-[#C0C1FF] font-medium hover:underline underline-offset-4 sm:ml-1" %>
         </p>
       </section>
 
-      <%= render "shared/ui/section_divider", label: "または", class: "mt-8 mb-8" %>
+      <%= render "shared/ui/section_divider", variant: :gradient, label: "または", class: "mt-8 mb-8" %>
 
       <section class="space-y-4" aria-labelledby="guest-login-title">
         <h3 id="guest-login-title" class="sr-only">ゲストログイン</h3>
