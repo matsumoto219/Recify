@@ -57,20 +57,25 @@ class Receipt < ApplicationRecord
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }
 
-  # 合計金額数値と最小値指定
+  # 合計金額数値と範囲指定
   validates :total_amount,
             presence: true,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 },
             unless: :allow_partial_ocr_data?
 
   validates :store_name, presence: true, unless: :allow_partial_ocr_data?
   validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名(MAX100文字)
   validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
+  validates :store_address, length: { maximum: 255 }, allow_blank: true   # 住所(MAX255文字)
+  validates :store_phone_number, length: { maximum: 20 }, allow_blank: true # 電話番号(MAX20文字)
 
   validate :validate_image_content_type
   validate :validate_image_file_size
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
+
+  before_validation :set_default_country_region
+  before_validation :normalize_store_phone_number
 
   # 拡張検索（AND検索対応）
   # --------------------------------------------------
@@ -93,7 +98,8 @@ class Receipt < ApplicationRecord
   scope :search, ->(query) {
     return all if query.blank?
 
-    tokens = query.to_s.strip.split(/\s+/)
+    tokens = query.to_s.strip.split(/\s+/).first(5) # 最大5トークンに制限（過負荷防止）
+    return none if tokens.empty?
 
     scope = all
 
@@ -167,7 +173,64 @@ class Receipt < ApplicationRecord
     scope
   }
 
+  # UI表示用電話番号
+  # 日本の場合:
+  #   DB内部形式: +818012345678
+  #   表示形式: 08012345678
+  # 日本以外の場合:
+  #   国別整形は未対応のため、正規化済みの内部形式をそのまま表示
+  def display_store_phone_number
+    return "" if store_phone_number.blank?
+
+    normalized = normalize_phone_number_text(store_phone_number)
+
+    return normalized unless japanese_country_region?
+
+    if normalized.start_with?("+81")
+      "0#{normalized[3..]}"
+    else
+      normalized
+    end
+  end
+
   private
+
+  # TODO: v1.0で libphonenumber 等を導入予定
+  # 手動登録など country_region が空のレシートを日本扱いにする
+  def set_default_country_region
+    self.country_region = "JPN" if country_region.blank?
+  end
+
+  def normalize_store_phone_number
+    return if store_phone_number.blank?
+
+    normalized = normalize_phone_number_text(store_phone_number)
+
+    self.store_phone_number =
+      if japanese_country_region?
+        normalize_japanese_phone_number(normalized)
+      else
+        normalized
+      end
+  end
+
+  def japanese_country_region?
+    country_region.blank? || %w[JPN JP].include?(country_region.to_s.upcase)
+  end
+
+  def normalize_phone_number_text(value)
+    value.to_s.gsub(/[^\d+]/, "")
+  end
+
+  def normalize_japanese_phone_number(normalized)
+    if normalized.start_with?("+81")
+      normalized
+    elsif normalized.start_with?("0")
+      "+81#{normalized[1..]}"
+    else
+      normalized
+    end
+  end
 
   def validate_image_content_type
     return unless image.attached?

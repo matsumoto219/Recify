@@ -19,12 +19,15 @@ class ReceiptItem < ApplicationRecord
 
   # 数値の最低値を0以上に
   validates :price,
-            :quantity,
             :line_total,
             :original_line_total,
             :discount_amount,
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 },
+            allow_blank: true
+
+  validates :quantity,
             :position_index,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999 },
             allow_blank: true
 
   validates :needs_review,
