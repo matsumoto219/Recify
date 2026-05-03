@@ -7,7 +7,6 @@
                   "receipt-form-next-index-value": receipt.receipt_items.size
                 }
               } do |f| %>
-  <%= render "shared/error_messages", obj: receipt %>
 
   <% page_title = receipt.persisted? ? "レシート編集" : "レシート登録" %>
   <% page_description = receipt.persisted? ? "内容を確認・修正して保存してください" : "内容を入力して保存してください" %>
@@ -15,6 +14,10 @@
   <% total_amount_value = receipt.total_amount.to_i %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
+
+  <!-- TODO: error_flags生成ロジックはViewからロジックを排除するため将来的に model または presenter（例 receipt.error_flags）へ移動する -->
+  <!-- TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する -->
+
   <%
     item_tax_rates = receipt.receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
@@ -33,6 +36,13 @@
     receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }
     review_items = receipt.receipt_items.select(&:needs_review)
     has_review_notes = receipt_review_reason_labels.any? || review_items.any?
+    error_flags = {
+      store_name: receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain"),
+      payment_method: receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain"),
+      purchased_at: receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted"),
+      store_address: receipt_review_reason_includes.call("store_address_missing", "store_address_uncertain"),
+      store_phone_number: receipt_review_reason_includes.call("store_phone_number_missing", "store_phone_number_uncertain")
+    }
   %>
   <% content_for :mobile_bottom_actions do %>
     <%= render "shared/ui/button",
@@ -41,13 +51,6 @@
           form: form_dom_id,
           full_width: true,
           class: "py-3 rounded-xl shadow-lg cursor-pointer" %>
-    <%= render "shared/ui/button",
-          as: :link,
-          href: cancel_path,
-          label: "キャンセル",
-          variant: :secondary,
-          full_width: true,
-          class: "py-3 rounded-xl text-center" %>
   <% end %>
 
   <section class="max-w-7xl mx-auto px-0 md:px-4 py-2 md:pb-2">
@@ -73,7 +76,7 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      <div class="lg:col-span-8 space-y-8">
+      <div class="lg:col-span-8 space-y-8 min-w-0">
         <% if has_review_notes %>
           <%= render "shared/ui/surface_card", variant: :warning, class: "p-6" do %>
             <div class="flex items-start gap-3">
@@ -90,7 +93,7 @@
                 <% if receipt_review_reason_labels.any? %>
                   <div class="rounded-lg border border-[#FFB4AB]/20 bg-[#FFB4AB]/5 px-3 py-2">
                     <div class="mb-1 text-xs font-bold text-[#FFB4AB]">レシート全体</div>
-                    <ul class="space-y-1 pl-5 text-sm text-[#E5E2E1] list-disc">
+                    <ul class="space-y-1 pl-5 text-sm text-[#E5E2E1] list-disc break-words">
                       <% receipt_review_reason_labels.each do |reason| %>
                         <li><%= reason %></li>
                       <% end %>
@@ -101,13 +104,13 @@
                 <% if review_items.any? %>
                   <div class="rounded-lg border border-[#FFB4AB]/20 bg-[#FFB4AB]/5 px-3 py-2">
                     <div class="mb-1 text-xs font-bold text-[#FFB4AB]">明細</div>
-                    <ul class="space-y-2 text-sm text-[#E5E2E1]">
+                    <ul class="space-y-2 text-sm text-[#E5E2E1] break-words">
                       <% review_items.each do |review_item| %>
                         <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || "名称未設定" %>
                         <li>
-                          <div class="font-semibold"><%= review_item_name %></div>
+                          <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
                           <% if review_item.review_reason_labels.any? %>
-                            <ul class="mt-1 space-y-1 pl-5 text-xs text-[#E5E2E1]/85 list-disc">
+                            <ul class="mt-1 space-y-1 pl-5 text-xs text-[#E5E2E1]/85 list-disc break-words">
                               <% review_item.review_reason_labels.each do |reason| %>
                                 <li><%= reason %></li>
                               <% end %>
@@ -137,8 +140,9 @@
                        label: "店舗名",
                        icon: "storefront",
                        placeholder: "店舗名を入力",
-                       highlight_variant: (receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain") ? :error : nil),
-                       input_class: "h-11" %>
+                       highlight_variant: (error_flags[:store_name] ? :error : nil),
+                       input_class: "h-11",
+                       html_options: { maxlength: 100, autocomplete: "organization" } %>
 
             <%= render "shared/ui/select_field",
                        f: f,
@@ -147,7 +151,8 @@
                        options: Receipt.payment_method_options,
                        selected: f.object.payment_method,
                        include_blank: "選択してください",
-                       highlight_variant: (receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain") ? :error : nil) %>
+                       highlight_variant: (error_flags[:payment_method] ? :error : nil),
+                       select_class: "h-11 px-3 py-2.5" %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_on]",
@@ -156,7 +161,8 @@
                        type: :date,
                        value: receipt.purchased_at&.in_time_zone&.to_date,
                        icon: "calendar_today",
-                       highlight_variant: (receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") ? :error : nil) %>
+                       highlight_variant: (error_flags[:purchased_at] ? :error : nil),
+                       field_class: "h-11 min-h-11 py-2.5" %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_time]",
@@ -165,7 +171,36 @@
                        type: :time,
                        value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
                        icon: "schedule",
-                       highlight_variant: (receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") ? :error : nil) %>
+                       highlight_variant: (error_flags[:purchased_at] ? :error : nil),
+                       field_class: "h-11 min-h-11 py-2.5" %>
+
+            <%= render "shared/ui/text_field",
+                       f: f,
+                       attribute: :store_phone_number,
+                       label: "電話番号",
+                       value: receipt.display_store_phone_number,
+                       icon: "call",
+                       field_type: :telephone_field,
+                       placeholder: "例: 03-1234-5678",
+                       highlight_variant: (error_flags[:store_phone_number] ? :error : nil),
+                       input_class: "h-11",
+                       html_options: {
+                         inputmode: "tel",
+                         pattern: "[0-9\\-]*",
+                         maxlength: 20,
+                         autocomplete: "tel"
+                       } %>
+
+            <!-- TODO: AIにレシート種別判定ロジックを追加する -->
+            <%= render "shared/ui/select_field",
+                       f: f,
+                       attribute: :receipt_type,
+                       label: "レシート種別",
+                       options: [["未定義", ""]],
+                       selected: nil,
+                       include_blank: "未対応",
+                       select_class: "h-11 px-3 py-2.5 opacity-60 cursor-not-allowed",
+                       html_options: { disabled: true } %>
 
             <div class="md:col-span-2">
               <%= render "shared/ui/text_field",
@@ -174,23 +209,9 @@
                          label: "店舗住所",
                          icon: "location_on",
                          placeholder: "店舗住所を入力",
-                         highlight_variant: (receipt_review_reason_includes.call("store_address_missing", "store_address_uncertain") ? :error : nil),
-                         input_class: "h-11" %>
-            </div>
-            <div class="md:col-span-2">
-              <%= render "shared/ui/text_field",
-                         f: f,
-                         attribute: :store_phone_number,
-                         label: "電話番号",
-                         icon: "call",
-                         field_type: :telephone_field,
-                         placeholder: "例: 03-1234-5678",
-                         highlight_variant: (receipt_review_reason_includes.call("store_phone_number_missing", "store_phone_number_uncertain") ? :error : nil),
+                         highlight_variant: (error_flags[:store_address] ? :error : nil),
                          input_class: "h-11",
-                         html_options: {
-                           inputmode: "tel",
-                           pattern: "[0-9\\-]*"
-                         } %>
+                         html_options: { maxlength: 255, autocomplete: "street-address" } %>
             </div>
           </div>
         <% end %>
@@ -204,11 +225,12 @@
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider text-[#C7C4D8]">
+              <!-- NOTE: labels are short, no change needed but reserved for future -->
               <div class="col-span-3">品名</div>
-              <div class="col-span-2">カテゴリ</div>
               <div class="col-span-2">数量</div>
               <div class="col-span-2">単価</div>
               <div class="col-span-2">税率</div>
+              <div class="col-span-2">カテゴリ</div>
               <div class="col-span-1"></div>
             </div>
 
@@ -218,14 +240,24 @@
                 <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "" %>
                 <% item_review_reason_codes = Array(item.review_reasons).map(&:to_s) %>
                 <% item_review_reason_includes = ->(*codes) { (item_review_reason_codes & codes.map(&:to_s)).any? } %>
+                <%# TODO: 明細のエラーフラグも model 側（例: item.error_flags）へ移動することを検討
+                    現状はView内で完結しているが、将来的な責務分離のため
+                %>
+                <%
+                  item_error_flags = {
+                    name: item_review_reason_includes.call("item_name_uncertain"),
+                    category: item_review_reason_includes.call("item_category_uncertain"),
+                    tax_rate: item_review_reason_includes.call("item_tax_rate_uncertain")
+                  }
+                %>
 
-                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg transition-colors relative <%= item.needs_review ? 'border border-[#FFB4AB]/40 bg-[#2A1719]/70 hover:bg-[#3A2024]/80' : 'bg-[#1C1B1B] hover:bg-[#2A2A2A]' %>"
+                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg transition-colors relative min-w-0 <%= item.needs_review ? 'border border-[#FFB4AB]/40 bg-[#2A1719]/70 hover:bg-[#3A2024]/80' : 'bg-[#1C1B1B] hover:bg-[#2A2A2A]' %>"
                      data-receipt-form-target="itemRow"
                      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
-                      <div class="w-full">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
+                      <div class="w-full min-w-0">
                     <%= render "shared/ui/text_field",
                                f: item_form,
                                attribute: :confirmed_name,
@@ -235,15 +267,105 @@
                                with_icon: false,
                                placeholder: "品名を入力",
                                show_label: false,
-                               highlight_variant: (item.needs_review && item_review_reason_includes.call("item_name_uncertain") ? :error : nil),
-                               input_class: "h-10 px-3 py-2 rounded-md" %>
+                               highlight_variant: (item.needs_review && item_error_flags[:name] ? :error : nil),
+                               show_error_message: false,
+                               input_class: "h-10 px-3 py-2 rounded-md",
+                               html_options: { maxlength: 500, autocomplete: "off" } %>
                       </div>
                     </div>
                   </div>
 
-                  <div class="col-span-1 md:col-span-2">
+                  <div class="col-span-2 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">数量</span>
+                      <div class="flex-1 min-w-0 md:block">
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :quantity,
+                                 label: "数量",
+                                 show_label: false,
+                                 text_align: :center,
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 min: 0,
+                                 max: 9999,
+                                 step: 1,
+                                 input_class: "h-10 px-3 py-2",
+                                 highlight_variant: (item.errors[:quantity].any? ? :error : nil),
+                                 show_error_message: false,
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "quantityInput"
+                                   }
+                                 } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">金額</span>
+                      <div class="flex-1 min-w-0 md:block">
+                      <%= render "shared/ui/number_field",
+                                 f: item_form,
+                                 attribute: :price,
+                                 label: "単価",
+                                 show_label: false,
+                                 text_align: :center,
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 min: 0,
+                                 max: 999999999,
+                                 step: 1,
+                                 input_class: "h-10 px-3 py-2 rounded-md",
+                                 highlight_variant: (item.errors[:price].any? ? :error : nil),
+                                 show_error_message: false,
+                                 html_options: {
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "priceInput"
+                                   }
+                                 } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
+                      <div class="flex-1 min-w-0 md:block">
+                        <%= render "shared/ui/number_field",
+                                   f: item_form,
+                                   attribute: :tax_rate,
+                                   label: "税率",
+                                   value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
+                                   step: 0.1,
+                                   decimal_precision: 1,
+                                   min: 0,
+                                   max: 100,
+                                   suffix: "%",
+                                   show_label: false,
+                                   text_align: :center,
+                                   show_stepper_buttons: true,
+                                   stepper_button_class: "md:hidden",
+                                   input_class: "h-10 px-3 py-2 rounded-md",
+                                   html_options: {
+                                     data: {
+                                       action: "input->receipt-form#recalculate",
+                                       receipt_form_target: "taxRateInput"
+                                     }
+                                   },
+                                   highlight_variant: ((item.errors[:tax_rate].any? || (item.needs_review && item_error_flags[:tax_rate])) ? :error : nil),
+                                   show_error_message: false %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
+                      <div class="flex-1 min-w-0 md:block">
                       <%= render "shared/ui/select_field",
                                  f: item_form,
                                  attribute: :category,
@@ -254,87 +376,29 @@
                                  show_label: false,
                                  select_wrapper_class: "w-full",
                                  select_class: "h-10 px-3 py-2 rounded-md",
-                                 highlight_variant: (item.needs_review && item_review_reason_includes.call("item_category_uncertain") ? :error : nil) %>
-                    </div>
-                  </div>
-
-                  <div class="col-span-1 md:col-span-2">
-                    <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
-                      <%= render "shared/ui/number_field",
-                                 f: item_form,
-                                 attribute: :quantity,
-                                 label: "数量",
-                                 show_label: false,
-                                 text_align: :center,
-                                 show_stepper_buttons: true,
-                                 stepper_button_class: "md:hidden",
-                                 min: 0,
-                                 step: 1,
-                                 input_class: "h-10 px-3 py-2",
-                                 html_options: {
-                                   data: {
-                                     action: "input->receipt-form#recalculate",
-                                     receipt_form_target: "quantityInput"
-                                   }
-                                 } %>
-                    </div>
-                  </div>
-
-                  <div class="col-span-1 md:col-span-2">
-                    <div class="flex items-center gap-2 md:block">
-                      <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
-                      <%= render "shared/ui/number_field",
-                                 f: item_form,
-                                 attribute: :price,
-                                 label: "単価",
-                                 show_label: false,
-                                 text_align: :right,
-                                 input_class: "h-10 px-3 py-2 rounded-md",
-                                 html_options: {
-                                   data: {
-                                     action: "input->receipt-form#recalculate",
-                                     receipt_form_target: "priceInput"
-                                   }
-                                 } %>
-                    </div>
-                  </div>
-
-                  <div class="col-span-1 md:col-span-2">
-                    <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="flex-1">
-                        <%= render "shared/ui/number_field",
-                                   f: item_form,
-                                   attribute: :tax_rate,
-                                   label: "税率",
-                                   value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
-                                   step: 0.1,
-                                   min: 0,
-                                   max: 100,
-                                   suffix: "%",
-                                   show_label: false,
-                                   text_align: :right,
-                                   input_class: "h-10 px-3 py-2 rounded-md",
-                                   html_options: {
-                                     data: {
-                                       action: "input->receipt-form#recalculate",
-                                       receipt_form_target: "taxRateInput"
-                                     }
-                                   },
-                                   highlight_variant: (item.needs_review && item_review_reason_includes.call("item_tax_rate_uncertain") ? :error : nil) %>
+                                 highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
+                                 show_error_message: false %>
                       </div>
-
-                      <button type="button"
-                              class="md:hidden p-2 hover:text-[#FFB4AB] transition-colors shrink-0"
-                              data-action="click->receipt-form#removeItem">
-                        <span class="material-symbols-outlined">delete</span>
-                      </button>
                     </div>
                   </div>
 
-                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalDisplay">
-                    小計 ¥<%= number_with_delimiter(item.line_total.to_i) %>
+                  <%= render "shared/ui/section_divider", class: "col-span-2 mt-4 mb-3 md:hidden" %>
+                  <div class="md:hidden col-span-2 flex items-center justify-between gap-4">
+                    <div class="min-w-0">
+                      <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider">小計</p>
+                      <p class="mt-1 text-lg font-bold text-[#E5E2E1] truncate" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
+                    </div>
+
+                    <button type="button"
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#2A2A2A] text-[#C7C4D8] hover:text-[#FFB4AB] hover:bg-[#3A2024]/80 transition-colors"
+                            data-action="click->receipt-form#removeItem"
+                            aria-label="明細を削除">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </div>
+
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
+                    <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="小計 ¥<%= number_with_delimiter(item.line_total.to_i) %>">小計 ¥<%= number_with_delimiter(item.line_total.to_i) %></span>
                   </div>
 
                   <div class="hidden md:flex col-span-1 justify-end">
@@ -362,13 +426,13 @@
 
             <template data-receipt-form-target="template">
               <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
-                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative"
+                <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg bg-[#1C1B1B] hover:bg-[#2A2A2A] transition-colors relative min-w-0"
                      data-receipt-form-target="itemRow"
                      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
                   <div class="col-span-2 md:col-span-3 relative">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
-                      <div class="w-full">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">品名</span>
+                      <div class="w-full min-w-0">
                     <%= render "shared/ui/text_field",
                                f: item_form,
                                attribute: :confirmed_name,
@@ -377,30 +441,17 @@
                                with_icon: false,
                                placeholder: "品名を入力",
                                show_label: false,
-                               input_class: "h-10 px-3 py-2 rounded-md" %>
+                               show_error_message: false,
+                               input_class: "h-10 px-3 py-2 rounded-md",
+                               html_options: { maxlength: 500, autocomplete: "off" } %>
                       </div>
                     </div>
                   </div>
 
-                  <div class="col-span-1 md:col-span-2">
+                  <div class="col-span-2 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
-                      <%= render "shared/ui/select_field",
-                                 f: item_form,
-                                 attribute: :category,
-                                 label: "カテゴリ",
-                                 options: ReceiptItem.category_options,
-                                 selected: nil,
-                                 include_blank: "未分類",
-                                 show_label: false,
-                                 select_wrapper_class: "w-full",
-                                 select_class: "h-10 px-3 py-2 rounded-md" %>
-                    </div>
-                  </div>
-
-                  <div class="col-span-1 md:col-span-2">
-                    <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">QTY</span>
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">数量</span>
+                      <div class="flex-1 min-w-0 md:block">
                       <%= render "shared/ui/number_field",
                                  f: item_form,
                                  attribute: :quantity,
@@ -410,51 +461,66 @@
                                  show_stepper_buttons: true,
                                  stepper_button_class: "md:hidden",
                                  min: 0,
+                                 max: 9999,
                                  step: 1,
                                  input_class: "h-10 px-3 py-2",
+                                 show_error_message: false,
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
                                      receipt_form_target: "quantityInput"
                                    }
                                  } %>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="col-span-1 md:col-span-2">
+                  <div class="col-span-2 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-sm font-bold text-[#C7C4D8] md:hidden shrink-0">¥</span>
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">金額</span>
+                      <div class="flex-1 min-w-0 md:block">
                       <%= render "shared/ui/number_field",
                                  f: item_form,
                                  attribute: :price,
                                  label: "単価",
                                  show_label: false,
-                                 text_align: :right,
+                                 text_align: :center,
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 min: 0,
+                                 max: 999999999,
+                                 step: 1,
                                  input_class: "h-10 px-3 py-2 rounded-md",
+                                 show_error_message: false,
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
                                      receipt_form_target: "priceInput"
                                    }
                                  } %>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="col-span-1 md:col-span-2">
+                  <div class="col-span-2 md:col-span-2">
                     <div class="flex items-center gap-2 md:block">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
-                      <div class="flex-1">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">税率</span>
+                      <div class="flex-1 min-w-0 md:block">
                         <%= render "shared/ui/number_field",
                                    f: item_form,
                                    attribute: :tax_rate,
                                    label: "税率",
                                    step: 0.1,
+                                   decimal_precision: 1,
                                    min: 0,
                                    max: 100,
                                    suffix: "%",
                                    show_label: false,
-                                   text_align: :right,
+                                   text_align: :center,
+                                   show_stepper_buttons: true,
+                                   stepper_button_class: "md:hidden",
                                    input_class: "h-10 px-3 py-2 rounded-md",
+                                   show_error_message: false,
                                    html_options: {
                                      data: {
                                        action: "input->receipt-form#recalculate",
@@ -462,17 +528,45 @@
                                      }
                                    } %>
                       </div>
-
-                      <button type="button"
-                              class="md:hidden p-2 hover:text-[#FFB4AB] transition-colors shrink-0"
-                              data-action="click->receipt-form#removeItem">
-                        <span class="material-symbols-outlined">delete</span>
-                      </button>
                     </div>
                   </div>
 
-                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalDisplay">
-                    小計 ¥0
+                  <div class="col-span-2 md:col-span-2">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-[#C7C4D8] md:hidden shrink-0">カテゴリ</span>
+                      <div class="flex-1 min-w-0 md:block">
+                      <%= render "shared/ui/select_field",
+                                 f: item_form,
+                                 attribute: :category,
+                                 label: "カテゴリ",
+                                 options: ReceiptItem.category_options,
+                                 selected: nil,
+                                 include_blank: "未分類",
+                                 show_label: false,
+                                 show_error_message: false,
+                                 select_wrapper_class: "w-full",
+                                 select_class: "h-10 px-3 py-2 rounded-md" %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <%= render "shared/ui/section_divider", class: "col-span-2 mt-4 mb-3 md:hidden" %>
+                  <div class="md:hidden col-span-2 flex items-center justify-between gap-4">
+                    <div class="min-w-0">
+                      <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider">小計</p>
+                      <p class="mt-1 text-lg font-bold text-[#E5E2E1] truncate" data-receipt-form-target="lineTotalDisplay">¥0</p>
+                    </div>
+
+                    <button type="button"
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#2A2A2A] text-[#C7C4D8] hover:text-[#FFB4AB] hover:bg-[#3A2024]/80 transition-colors"
+                            data-action="click->receipt-form#removeItem"
+                            aria-label="明細を削除">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </div>
+
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border border-white/10 bg-[#0E0E0E] px-3 py-1.5 text-sm font-medium text-[#E5E2E1] shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
+                    <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="小計 ¥0">小計 ¥0</span>
                   </div>
 
                   <div class="hidden md:flex col-span-1 justify-end">
@@ -504,7 +598,8 @@
                      placeholder: "用途や補足があれば入力してください",
                      show_label: false,
                      rows: 4,
-                     textarea_class: "h-32" %>
+                     textarea_class: "h-32 px-3 py-2",
+                     html_options: { maxlength: 1000 } %>
         <% end %>
       </div>
 

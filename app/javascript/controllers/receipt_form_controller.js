@@ -10,6 +10,7 @@ export default class extends Controller {
     "priceInput",
     "taxRateInput",
     "lineTotalDisplay",
+    "lineTotalTooltip",
     "lineTotalInput",
     "totalAmount",
     "subtotalAmount",
@@ -117,7 +118,7 @@ export default class extends Controller {
   }
 
   lineTotalTooltipFor(row) {
-    return row?.querySelector('[data-receipt-form-target="lineTotalDisplay"]')
+    return row?.querySelector('[data-receipt-form-target="lineTotalTooltip"]')
   }
 
   recalculate() {
@@ -133,39 +134,47 @@ export default class extends Controller {
       const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
-      const lineTotalDisplay = row.querySelector('[data-receipt-form-target="lineTotalDisplay"]')
+      const lineTotalDisplays = row.querySelectorAll('[data-receipt-form-target="lineTotalDisplay"]')
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
 
-      const quantity = parseFloat(quantityInput?.value) || 0
-      const price = parseFloat(priceInput?.value) || 0
-      const taxRatePercent = parseFloat(taxRateInput?.value) || 0
-      const taxRate = taxRatePercent / 100
+      const quantity = this.clampNumber(parseFloat(quantityInput?.value) || 0, 0, 9999)
+      const price = this.clampNumber(parseFloat(priceInput?.value) || 0, 0, 999999999)
+      const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
 
       if (taxRatePercent > 0) {
         taxRates.add(taxRatePercent)
       }
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      const lineTotal = quantity * price
-      const subtotal = taxRatePercent > 0
+      let lineTotal = quantity * price
+      let subtotal = taxRatePercent > 0
         ? Math.floor((lineTotal * 100) / (100 + taxRatePercent))
         : lineTotal
-      const tax = lineTotal - subtotal
+      let tax = lineTotal - subtotal
+
+      lineTotal = this.clampNumber(lineTotal, 0, 999999999)
+      subtotal = this.clampNumber(subtotal, 0, 999999999)
+      tax = this.clampNumber(tax, 0, 999999999)
 
       subtotalSum += subtotal
       taxSum += tax
       total += lineTotal
 
-      // 表示更新
-      if (lineTotalDisplay) {
-        lineTotalDisplay.textContent = `小計 ¥${this.formatNumber(lineTotal)}`
-      }
+      // 表示更新（PCツールチップ / スマホ小計など、同一行内の複数表示に対応）
+      lineTotalDisplays.forEach((lineTotalDisplay) => {
+        const withLabel = Boolean(lineTotalDisplay.closest('[data-receipt-form-target="lineTotalTooltip"]'))
+        this.animateLineTotal(lineTotalDisplay, lineTotal, { withLabel })
+      })
 
       // hidden更新
       if (lineTotalInput) {
         lineTotalInput.value = lineTotal
       }
     })
+
+    total = this.clampNumber(total, 0, 999999999)
+    subtotalSum = this.clampNumber(subtotalSum, 0, 999999999)
+    taxSum = this.clampNumber(taxSum, 0, 999999999)
 
     // 合計更新（存在する場合のみ）
     if (this.hasTotalAmountTarget) {
@@ -185,8 +194,57 @@ export default class extends Controller {
     }
   }
 
+  animateLineTotal(target, nextValue, { withLabel = false } = {}) {
+    const duration = 250
+    const startValue = this.currentAmountValue(target)
+    const endValue = Math.floor(nextValue)
+
+    if (target.amountAnimationFrame) {
+      cancelAnimationFrame(target.amountAnimationFrame)
+    }
+
+    const render = (value) => {
+      const amountText = `¥${this.formatNumber(value)}`
+      const text = withLabel ? `小計 ${amountText}` : amountText
+
+      target.textContent = text
+      target.title = text
+    }
+
+    if (startValue === endValue) {
+      render(endValue)
+      target.dataset.amountValue = String(endValue)
+      return
+    }
+
+    const startedAt = performance.now()
+
+    const tick = (currentTime) => {
+      const progress = Math.min((currentTime - startedAt) / duration, 1)
+      const easedProgress = this.easeOutCubic(progress)
+      const currentValue = startValue + (endValue - startValue) * easedProgress
+
+      render(currentValue)
+
+      if (progress < 1) {
+        target.amountAnimationFrame = requestAnimationFrame(tick)
+      } else {
+        render(endValue)
+        target.dataset.amountValue = String(endValue)
+        target.amountAnimationFrame = null
+      }
+    }
+
+    target.amountAnimationFrame = requestAnimationFrame(tick)
+  }
+
   formatNumber(num) {
     return Math.floor(num).toLocaleString()
+  }
+
+  clampNumber(value, min, max) {
+    if (Number.isNaN(value)) return min
+    return Math.min(Math.max(value, min), max)
   }
 
   animateAmount(target, nextValue) {
@@ -200,6 +258,7 @@ export default class extends Controller {
 
     if (startValue === endValue) {
       target.textContent = `¥${this.formatNumber(endValue)}`
+      target.title = target.textContent.trim()
       target.dataset.amountValue = String(endValue)
       return
     }
@@ -212,11 +271,13 @@ export default class extends Controller {
       const currentValue = startValue + (endValue - startValue) * easedProgress
 
       target.textContent = `¥${this.formatNumber(currentValue)}`
+      target.title = target.textContent.trim()
 
       if (progress < 1) {
         target.amountAnimationFrame = requestAnimationFrame(tick)
       } else {
         target.textContent = `¥${this.formatNumber(endValue)}`
+        target.title = target.textContent.trim()
         target.dataset.amountValue = String(endValue)
         target.amountAnimationFrame = null
       }
