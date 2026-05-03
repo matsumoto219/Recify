@@ -3,12 +3,16 @@ import { Controller } from "@hotwired/stimulus"
 // Connects to data-controller="number-field"
 export default class extends Controller {
   static targets = ["input"]
+  static values = {
+    decimalPrecision: Number
+  }
 
   connect() {
     this.repeatTimeoutId = null
     this.repeatIntervalId = null
     this.accelerationTimeoutIds = []
     this.currentDelta = null
+    this.isComposing = false
   }
 
   disconnect() {
@@ -92,24 +96,88 @@ export default class extends Controller {
 
     const input = this.inputTarget
     const step = Number.parseFloat(input.step || "1") || 1
-    const min = input.min === "" ? null : Number.parseFloat(input.min)
-    const max = input.max === "" ? null : Number.parseFloat(input.max)
     const currentValue = Number.parseFloat(input.value || "0") || 0
-    let nextValue = currentValue + (step * delta)
-
-    if (min !== null && nextValue < min) nextValue = min
-    if (max !== null && nextValue > max) nextValue = max
+    const nextValue = this.clampValue(currentValue + (step * delta), input)
 
     input.value = this.formatValue(nextValue, step)
     input.dispatchEvent(new Event("input", { bubbles: true }))
     input.dispatchEvent(new Event("change", { bubbles: true }))
   }
+  clampValue(value, input) {
+    const min = input.min === "" ? null : Number.parseFloat(input.min)
+    const max = input.max === "" ? null : Number.parseFloat(input.max)
+
+    if (min !== null && !Number.isNaN(min) && value < min) return min
+    if (max !== null && !Number.isNaN(max) && value > max) return max
+
+    return value
+  }
 
   formatValue(value, step) {
-    if (Number.isInteger(step)) {
+    if (Number.isInteger(step) && !this.hasDecimalPrecisionValue) {
       return String(Math.round(value))
     }
 
-    return String(value)
+    const precision = this.hasDecimalPrecisionValue ? this.decimalPrecisionValue : this.decimalPrecision(step)
+    const multiplier = 10 ** precision
+    const roundedValue = Math.round((value + Number.EPSILON) * multiplier) / multiplier
+
+    return roundedValue.toFixed(precision)
+  }
+
+  decimalPrecision(value) {
+    const valueText = String(value)
+    const decimalPart = valueText.split(".")[1]
+
+    return decimalPart ? decimalPart.length : 0
+  }
+
+  startComposition() {
+    this.isComposing = true
+  }
+
+  finishComposition(event) {
+    this.isComposing = false
+    this.normalize(event)
+  }
+
+  normalize(event) {
+    const input = event.target
+    if (this.isComposing || event.isComposing) return
+    const originalValue = input.value
+
+    // 全角数字 → 半角
+    let value = input.value.replace(/[０-９]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+    )
+
+    // 全角小数点・マイナス対応
+    value = value
+      .replace(/．/g, ".")
+      .replace(/－/g, "-")
+
+    // 数字・小数点・マイナス以外を除去
+    value = value.replace(/[^0-9.\-]/g, "")
+
+    // マイナスは先頭のみ許可
+    value = value.replace(/(?!^)-/g, "")
+
+    // 小数点は1つだけ許可
+    const parts = value.split('.')
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('')
+    }
+
+    if (value !== "" && value !== "-" && value !== "." && value !== "-.") {
+      const numericValue = Number.parseFloat(value)
+      if (!Number.isNaN(numericValue)) {
+        value = this.formatValue(this.clampValue(numericValue, input), Number.parseFloat(input.step || "1") || 1)
+      }
+    }
+
+    if (value !== originalValue) {
+      input.value = value
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    }
   }
 }
