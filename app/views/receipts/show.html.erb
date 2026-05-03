@@ -2,7 +2,7 @@
   <%
     item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
-                         nil
+                         "未設定"
                        elsif item_tax_rates.one?
                          "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
                        else
@@ -49,16 +49,25 @@
             <div class="min-w-0">
               <p class="text-xs font-bold text-[#C0C1FF] uppercase tracking-widest mb-1">Store Information</p>
               <h2 class="text-2xl font-bold text-white truncate"><%= @receipt.store_name.presence || "店舗名なし" %></h2>
-              <p class="text-sm text-[#C7C4D8] mt-1"><%= @receipt.store_address.presence || "住所未登録" %></p>
+              <p class="truncate text-sm text-[#C7C4D8] mt-1" title="<%= @receipt.store_address.presence || "住所未登録" %>"><%= @receipt.store_address.presence || "住所未登録" %></p>
+
+              <!-- mobile only: ID + status -->
+              <div class="flex items-center justify-between mt-2 md:hidden gap-3">
+                <p class="text-xs text-[#C7C4D8] truncate" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+                <%= render "shared/ui/receipt_status_badge",
+                      status: @receipt.status,
+                      label: @receipt.status_label,
+                      size: :md %>
+              </div>
             </div>
           </div>
 
-          <div class="text-right shrink-0">
+          <div class="hidden md:block text-right shrink-0">
             <%= render "shared/ui/receipt_status_badge",
                   status: @receipt.status,
                   label: @receipt.status_label,
                   size: :md %>
-            <p class="text-sm text-[#C7C4D8] mt-2">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+            <p class="truncate text-sm text-[#C7C4D8] mt-2" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
           </div>
         </div>
 
@@ -75,15 +84,16 @@
 
           <div>
             <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1"><%= t(".payment_method") %></p>
-            <p class="font-semibold text-white flex items-center">
+            <p class="font-semibold text-white flex items-center min-w-0">
               <span class="material-symbols-outlined text-sm mr-1">payments</span>
-              <%= @receipt.payment_method_label %>
+              <% payment_method_text = @receipt.payment_method_label.presence || "未設定" %>
+              <span class="min-w-0 truncate" title="<%= payment_method_text %>"><%= payment_method_text %></span>
             </p>
           </div>
 
           <div>
             <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">電話番号</p>
-            <p class="font-semibold text-white"><%= @receipt.store_phone_number.present? ? display_phone_number(@receipt.store_phone_number) : "未登録" %></p>
+            <p class="truncate font-semibold text-white" title="<%= display_phone_number(@receipt.display_store_phone_number) %>"><%= display_phone_number(@receipt.display_store_phone_number) %></p>
           </div>
 
           <div>
@@ -93,11 +103,7 @@
 
           <div>
             <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">OCR完了</p>
-            <%# TODO: OCR完了日時の本実装
-                - receipts.ocr_completed_at を実際の解析完了時に保存
-                - 非同期解析完了後に show / index の両方へ反映
-                - 未解析時のみ「未完了」を表示する %>
-            <p class="font-semibold text-white"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : "未完了（ダミー）" %></p>
+            <p class="font-semibold text-white"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : "未完了" %></p>
           </div>
         </div>
 
@@ -118,8 +124,8 @@
                         <span class="px-2 py-0.5 rounded-full bg-[#FFB695]/10 text-[#FFB695] text-[10px] font-bold">要確認</span>
                       <% end %>
                     </div>
-                    <p class="text-xs text-[#C7C4D8] mt-1">
-                      <span>カテゴリ: <%= item.category_label %></span>
+                    <p class="text-xs text-[#C7C4D8] mt-1 break-words">
+                      <span>カテゴリ: <%= item.category_label.presence || "未分類" %></span>
                       <span class="mx-2">/</span>
                       <span>数量: <%= item.quantity.presence || 1 %></span>
                       <% if item.price.present? %>
@@ -128,7 +134,7 @@
                       <% end %>
                     </p>
                   </div>
-                  <p class="font-bold text-white shrink-0">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
+                  <p class="font-bold text-white shrink-0 truncate" title="¥<%= number_with_delimiter(item.line_total.to_i) %>">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
                 </div>
               <% end %>
             </div>
@@ -137,7 +143,7 @@
                 - 空状態文言を I18n 化
                 - 手動登録導線や編集導線を追加する %>
             <div class="rounded-xl border border-dashed border-white/10 p-8 text-center text-[#C7C4D8]">
-              明細はまだありません
+              明細はありません
             </div>
           <% end %>
         </div>
@@ -149,15 +155,8 @@
           <h3 class="text-sm font-bold text-white uppercase tracking-wider"><%= t(".memo") %></h3>
         </div>
         <%# TODO: メモ表示の本実装調整
-            - 現在は空メモ時のダミー文言を表示
             - 本実装時は文言を I18n 化し、空状態デザインも統一する %>
-        <div class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12">
-          <% if @receipt.memo.present? %>
-            <%= simple_format(@receipt.memo) %>
-          <% else %>
-            メモはありません（ダミー表示）
-          <% end %>
-        </div>
+        <div class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12 break-words whitespace-pre-wrap"><%= @receipt.memo.presence || "メモはありません" %></div>
       <% end %>
     </div>
 
@@ -170,7 +169,7 @@
               icon: "payments",
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
               tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
-              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : nil),
+              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : "未設定"),
               tax_rate_summary: tax_rate_summary,
               tax_details: @receipt.receipt_tax_details.order(:rate) %>
       </div>
