@@ -24,9 +24,9 @@
 
 <div class="<%= card_class %>" style="border-left-color: <%= accent_color %>;">
   <div class="flex items-start justify-between gap-3">
-    <div class="min-w-0">
+    <div class="min-w-0 flex-1">
       <p id="<%= title_id %>"
-        class="text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold"
+        class="truncate text-[0.6875rem] uppercase tracking-widest text-[#C7C4D8] font-bold"
         <% title_data.each do |key, data_value| %>
           data-<%= key.to_s.dasherize %>="<%= data_value %>"
         <% end %>>
@@ -47,7 +47,8 @@
   </div>
 
   <p id="<%= value_id %>"
-    class="text-2xl font-bold mt-2 text-[#E5E2E1]"
+    class="truncate text-2xl font-bold mt-2 text-[#E5E2E1]"
+    title="<%= value %>"
     <% value_data.each do |key, data_value| %>
       data-<%= key.to_s.dasherize %>="<%= data_value %>"
     <% end %>>
@@ -56,14 +57,14 @@
 
   <% if subtext.present? %>
     <p id="<%= subtext_id %>"
-      class="inline-flex items-center gap-1 text-[0.6875rem] leading-none text-[#C7C4D8] mt-1"
+      class="flex min-w-0 items-center gap-1 text-[0.6875rem] leading-none text-[#C7C4D8] mt-1"
       <% subtext_data.each do |key, data_value| %>
         data-<%= key.to_s.dasherize %>="<%= data_value %>"
       <% end %>>
       <% if subtext_icon.present? %>
-        <span class="material-symbols-outlined <%= subtext_icon_class %>" style="font-size: 14px; line-height: 1;"><%= subtext_icon %></span>
+        <span class="material-symbols-outlined <%= subtext_icon_class %>" style="font-size: 11px; line-height: 1;"><%= subtext_icon %></span>
       <% end %>
-      <span><%= subtext %></span>
+      <span class="min-w-0 truncate" title="<%= subtext %>"><%= subtext %></span>
     </p>
   <% end %>
 </div>

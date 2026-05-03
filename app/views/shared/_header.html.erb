@@ -6,7 +6,7 @@
     </div>
   </div>
 
-  <div class="flex items-center gap-4 md:gap-6 shrink-0">
+  <div class="flex items-center gap-3 md:gap-5 lg:gap-6 shrink-0 ml-2 md:ml-4">
     <button type="button"
       class="sm:hidden text-[#C7C4D8] hover:text-white transition-colors"
       data-action="search#toggle"
@@ -27,8 +27,10 @@
 
     <% if user_signed_in? %>
       <div class="flex items-center gap-3 border-l border-white/10 pl-4 md:pl-6">
-        <div class="text-right hidden sm:block">
-          <p class="text-xs font-bold text-[#E5E2E1]"><%= current_user.name.presence || current_user.email %></p>
+        <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
+          <p class="truncate text-xs font-bold text-[#E5E2E1]" title="<%= current_user.name.presence || current_user.email %>">
+            <%= current_user.name.presence || current_user.email %>
+          </p>
         </div>
 
         <div class="w-8 h-8 rounded-full overflow-hidden border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
@@ -47,7 +49,7 @@
           },
           class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] text-[#C7C4D8] hover:text-[#FFB4AB] transition-colors ml-1 rounded-md" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
-          ログアウト
+          <span class="hidden sm:inline">ログアウト</span>
         <% end %>
       </div>
     <% else %>
