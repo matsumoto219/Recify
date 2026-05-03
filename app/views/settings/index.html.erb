@@ -3,14 +3,13 @@
         title: "設定",
         subtitle: "アカウント情報やセキュリティ設定を管理できます",
         title_size: "text-3xl",
-        subtitle_size: "text-base",
-        class: "px-4 md:px-0" %>
+        subtitle_size: "text-base" %>
 
   <div class="space-y-6">
     <%= render "shared/ui/surface_card", hoverable: true, class: "p-6" do %>
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div class="flex items-center gap-5">
-          <div class="relative">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
+        <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
+          <div class="relative flex shrink-0 flex-col items-center gap-2">
             <div class="w-20 h-20 rounded-full overflow-hidden border-2 border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xl font-bold">
               <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
                 <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
@@ -19,27 +18,34 @@
                 <%= display_name[0,1]&.upcase || "U" %>
               <% end %>
             </div>
+            <span class="inline-flex w-fit shrink-0 bg-[#C0C1FF]/10 text-[#C0C1FF] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C0C1FF]/20 md:hidden">
+              <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
+            </span>
           </div>
 
-          <div class="space-y-1 min-w-0">
-            <div class="flex items-center gap-3 flex-wrap">
-              <h2 class="text-lg font-semibold text-white"><%= current_user.name.presence || "ユーザー名未設定" %></h2>
-              <span class="bg-[#C0C1FF]/10 text-[#C0C1FF] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C0C1FF]/20">
+          <div class="min-w-0 w-0 flex-1 overflow-hidden space-y-1">
+            <div class="grid min-w-0 max-w-full grid-cols-1 gap-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-3">
+              <div class="min-w-0 flex-1 overflow-hidden">
+                <h2 class="block max-w-full truncate text-lg font-semibold text-white" title="<%= current_user.name.presence || "ユーザー名未設定" %>"><%= current_user.name.presence || "ユーザー名未設定" %></h2>
+              </div>
+              <span class="hidden w-fit self-start shrink-0 bg-[#C0C1FF]/10 text-[#C0C1FF] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C0C1FF]/20 md:inline-flex md:self-auto">
                 <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
               </span>
             </div>
-            <p class="text-sm text-[#C7C4D8] break-all"><%= current_user.email %></p>
+            <p class="text-sm text-[#C7C4D8] truncate min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14) %></p>
           </div>
         </div>
 
-        <%= render "shared/ui/button",
-              as: :link,
-              href: settings_account_path,
-              label: "プロフィールを編集",
-              variant: :secondary,
-              size: :md,
-              text_color: "text-[#C0C1FF]",
-              class: "py-2.5 hover:bg-[#C0C1FF]/10" %>
+        <div class="w-full flex justify-end mt-2 md:mt-0 md:w-auto md:block shrink-0">
+          <%= render "shared/ui/button",
+                as: :link,
+                href: settings_account_path,
+                label: "プロフィールを編集",
+                variant: :secondary,
+                size: :md,
+                text_color: "text-[#C0C1FF]",
+                class: "py-2.5 hover:bg-[#C0C1FF]/10" %>
+        </div>
       </div>
     <% end %>
 
@@ -95,7 +101,8 @@
                 border_hover: true %>
         </div>
 
-        <div class="pt-4 border-t border-white/10 space-y-3">
+        <%= render "shared/ui/section_divider" %>
+        <div class="space-y-3">
           <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">

@@ -31,26 +31,28 @@
               title_size: "text-xl",
               class: "mb-4" %>
 
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg">
-          <div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg min-w-0">
+          <div class="min-w-0">
             <p class="text-xs text-[#C7C4D8] mb-1">現在のメールアドレス</p>
-            <p class="text-white font-medium"><%= current_user.email %></p>
+            <p class="truncate text-white font-medium min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 12, local_max_length_mobile: 7, domain_max_length_mobile: 16) %></p>
           </div>
 
           <%# TODO: メールアドレス変更機能を実装
               - Deviseのconfirmableを利用
               - 再認証（current_password）を必須化
               - 変更確認メール送信 %>
-          <%= render "shared/ui/button",
-                label: "変更する（未対応）",
-                variant: :secondary,
-                size: :md,
-                disabled: true,
-                text_color: "text-[#918FA1]",
-                class: "px-5 py-2" %>
+          <div class="shrink-0">
+            <%= render "shared/ui/button",
+                  label: "変更する（未対応）",
+                  variant: :secondary,
+                  size: :md,
+                  disabled: true,
+                  text_color: "text-[#918FA1]",
+                  class: "px-5 py-2" %>
+          </div>
         </div>
 
-        <p class="mt-4 text-sm text-[#C7C4D8]/80">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
+        <p class="mt-4 text-sm text-[#C7C4D8]/80 break-words">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
       <% end %>
     </div>
     <!-- END: settings/security email card -->
@@ -159,7 +161,7 @@
             <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
           </div>
           <h3 class="text-lg font-semibold text-white mb-2">2要素認証 (2FA)</h3>
-          <p class="text-sm text-[#C7C4D8] mb-6">認証アプリを使用して、セキュリティを強化します。</p>
+          <p class="text-sm text-[#C7C4D8] mb-6 break-words">認証アプリを使用して、セキュリティを強化します。</p>
         </div>
 
         <%# TODO: 2FA実装（TOTP）
@@ -184,7 +186,7 @@
             <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
           </div>
           <h3 class="text-lg font-semibold text-white mb-2">パスキー</h3>
-          <p class="text-sm text-[#C7C4D8] mb-6">指紋や顔認証で安全にログインできます。</p>
+          <p class="text-sm text-[#C7C4D8] mb-6 break-words">指紋や顔認証で安全にログインできます。</p>
         </div>
 
         <%# TODO: Passkey実装（WebAuthn）
@@ -205,10 +207,11 @@
   <!-- END: settings/security auth options grid -->
 
   <!-- START: settings/security notice -->
-  <footer class="pt-4 border-t border-white/10">
+  <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-6 mb-4" %>
+  <footer>
     <div class="flex items-start gap-3 text-[#C7C4D8]/60 text-xs">
       <span class="material-symbols-outlined text-sm mt-0.5">info</span>
-      <p>
+      <p class="break-words">
         セキュリティ設定を変更した際、確認メールが送信される場合があります。不審な操作があれば速やかにパスワードを変更してください。
       </p>
     </div>
