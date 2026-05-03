@@ -33,12 +33,15 @@
   base_wrapper_class = "space-y-2"
   base_label_class = "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]"
   highlight_classes = if highlight_variant == :error
-                        "border border-[#FFB4AB] focus:border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
+                        "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
                       else
-                        "border border-transparent focus:border-[#C0C1FF] focus:ring-2 focus:ring-[#C0C1FF]/50"
+                        "border border-transparent focus:ring-2 focus:ring-[#C0C1FF]/50"
                       end
 
-  base_field_class = "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] text-[#E5E2E1] outline-none transition-all #{highlight_classes}"
+  # TODO: 将来的にフォーム入力欄の高さ・余白・WebKit向け補正はCSS側へ寄せる
+  # iOS Safari の input[type="date/time"] は h-11 を無視して高さが崩れるため、
+  # 暫定的に ::-webkit-date-and-time-value へ min-height / line-height を指定している
+  base_field_class = "w-full rounded-lg bg-[#0E0E0E] text-[#E5E2E1] leading-none appearance-none outline-none transition-all [&::-webkit-date-and-time-value]:min-h-[1.5rem] [&::-webkit-date-and-time-value]:leading-[1.5rem] #{highlight_classes}"
   field_spacing_class = with_icon ? "pl-10 pr-4" : "px-4"
 
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")
@@ -51,7 +54,7 @@
     <label class="<%= merged_label_class %>" for="<%= id %>"><%= label %></label>
   <% end %>
 
-  <div class="relative">
+  <div class="group relative">
     <%= tag.input type: input_type,
                   name: name,
                   id: id,
@@ -60,7 +63,7 @@
                   class: merged_field_class %>
 
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none <%= highlight_variant == :error ? 'text-[#FFB4AB]' : 'text-[#C7C4D8]' %>"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= highlight_variant == :error ? 'text-[#FFB4AB] group-focus-within:text-[#FFB4AB]' : 'text-[#C7C4D8] group-focus-within:text-[#C0C1FF]' %>"><%= icon %></span>
     <% end %>
   </div>
 </div>

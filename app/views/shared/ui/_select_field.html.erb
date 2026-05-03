@@ -40,7 +40,7 @@
 
   base_wrapper_class = "space-y-2"
   base_label_class = "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]"
-  base_select_class = "w-full h-11 py-2.5 rounded-lg bg-[#0E0E0E] text-[#E5E2E1] appearance-none outline-none transition-all"
+  base_select_class = "w-full rounded-lg bg-[#0E0E0E] text-[#E5E2E1] appearance-none outline-none transition-all"
   highlight_classes = if has_error || highlight_variant == :error
                         "border border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
                       else
@@ -58,9 +58,9 @@
     <%= f.label attribute, label, class: merged_label_class %>
   <% end %>
 
-  <div class="relative">
+  <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-sm pointer-events-none"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'text-[#FFB4AB] group-focus-within:text-[#FFB4AB]' : 'text-[#C7C4D8] group-focus-within:text-[#C0C1FF]' %>"><%= icon %></span>
     <% end %>
 
     <%= f.select attribute,
@@ -69,7 +69,7 @@
                  class: merged_select_class,
                  required: required %>
 
-    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[#C7C4D8] text-base pointer-events-none">expand_more</span>
+    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'text-[#FFB4AB] group-focus-within:text-[#FFB4AB]' : 'text-[#C7C4D8] group-focus-within:text-[#C0C1FF]' %>">expand_more</span>
   </div>
 
   <% if show_error_message && has_error %>
