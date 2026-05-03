@@ -13,3 +13,8 @@ ja:
               file_too_large: "ファイルサイズは20MB以下にしてください"
               image_too_small: "画像サイズが小さすぎます（100px以上にしてください）"
               image_too_large: "画像サイズが大きすぎます（10000px以下にしてください）"
+        receipt_item:
+          attributes:
+            tax_rate:
+              less_than_or_equal_to: "は100%以下で入力してください"
+              greater_than_or_equal_to: "は0%以上で入力してください"
