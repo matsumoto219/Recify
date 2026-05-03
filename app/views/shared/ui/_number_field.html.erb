@@ -10,6 +10,7 @@
     - min: min属性
     - max: max属性
     - step: step属性
+    - decimal_precision: ステッパー操作時の小数表示桁数（例: 1）
     - inputmode: inputmode属性（default: :decimal）
     - autofocus: true/false
     - required: true/false
@@ -34,6 +35,7 @@
   min = local_assigns[:min]
   max = local_assigns[:max]
   step = local_assigns[:step]
+  decimal_precision = local_assigns[:decimal_precision]
   inputmode = local_assigns.fetch(:inputmode, :decimal)
   autofocus = local_assigns.fetch(:autofocus, false)
   required = local_assigns.fetch(:required, false)
@@ -47,6 +49,7 @@
   text_align = (local_assigns[:text_align].presence || :right).to_sym
   show_stepper_buttons = local_assigns.fetch(:show_stepper_buttons, false)
   stepper_button_class = local_assigns[:stepper_button_class]
+  stepper_button_size_class = local_assigns[:stepper_button_size_class]
   hide_spinner = show_stepper_buttons ? true : local_assigns.fetch(:hide_spinner, true)
   input_wrapper_class = local_assigns[:input_wrapper_class]
   label_class = local_assigns[:label_class]
@@ -78,15 +81,15 @@
                      end
 
   prefix_spacing_class = prefix.present? ? "pl-8" : "pl-4"
-  prefix_spacing_class = "px-1" if show_stepper_buttons
+  # when steppers are enabled, do not override spacing; let caller decide via input_class
   suffix_spacing_class = suffix.present? ? "pr-8" : "pr-4"
-  suffix_spacing_class = "px-1" if show_stepper_buttons
+  # when steppers are enabled, do not override spacing; let caller decide via input_class
   spinner_class = hide_spinner ? "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" : nil
 
   label_classes = ["text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block px-1", label_class].compact.join(" ")
   wrapper_classes = [
     "relative group",
-    (show_stepper_buttons ? "flex items-center overflow-hidden rounded-lg bg-[#0E0E0E] #{highlight_variant == :error || has_error ? 'border border-[#FFB4AB]' : 'border border-white/10'} focus-within:ring-2 focus-within:ring-[#C0C1FF]/50" : nil),
+    (show_stepper_buttons ? "flex items-center overflow-hidden rounded-lg bg-[#0E0E0E] #{highlight_variant == :error || has_error ? 'border border-[#FFB4AB]' : 'border border-transparent'} focus-within:ring-2 focus-within:ring-[#C0C1FF]/50" : nil),
     input_wrapper_class
   ].compact.join(" ")
   affix_base_class = "absolute top-1/2 -translate-y-1/2 text-xs text-[#C7C4D8] pointer-events-none transition-colors group-focus-within:text-[#C0C1FF]"
@@ -94,8 +97,10 @@
   suffix_classes = [affix_base_class, "right-3"].join(" ")
   error_classes = ["px-1 text-xs text-[#FFB4AB] leading-relaxed", error_message_class].compact.join(" ")
 
+  base_stepper_button_size = stepper_button_size_class.presence || "h-full w-8"
   stepper_button_classes = [
-    "flex h-10 w-8 shrink-0 items-center justify-center text-[#E5E2E1] hover:bg-[#2A2A2A] focus:outline-none focus:bg-[#2A2A2A] transition-colors",
+    "flex shrink-0 items-center justify-center text-[#E5E2E1] hover:bg-[#2A2A2A] focus:outline-none focus:bg-[#2A2A2A] transition-colors",
+    base_stepper_button_size,
     stepper_button_class
   ].compact.join(" ")
 
@@ -127,7 +132,7 @@
     <%= f.label attribute, label, class: label_classes %>
   <% end %>
 
-  <%= tag.div class: wrapper_classes, data: (show_stepper_buttons ? { controller: "number-field" } : {}) do %>
+  <%= tag.div class: wrapper_classes, data: { controller: "number-field", number_field_decimal_precision_value: decimal_precision }.compact do %>
     <% if show_stepper_buttons %>
       <button type="button"
               class="<%= stepper_button_classes %>"
@@ -137,13 +142,27 @@
       </button>
     <% end %>
 
-    <div class="relative <%= show_stepper_buttons ? 'flex-1 min-w-[2.5rem]' : nil %>">
+    <div class="relative <%= show_stepper_buttons ? 'flex-1 min-w-0' : nil %>">
       <% if prefix.present? %>
         <span class="<%= prefix_classes %>" aria-hidden="true"><%= prefix %></span>
       <% end %>
 
-      <%= f.number_field attribute,
-                         **field_options.deep_merge(show_stepper_buttons ? { data: { number_field_target: "input" } } : {}) %>
+      <%
+        existing_data = field_options[:data] || {}
+        existing_action = existing_data[:action].presence
+        normalized_action = [
+          "compositionstart->number-field#startComposition",
+          "compositionend->number-field#finishComposition",
+          "input->number-field#normalize",
+          existing_action,
+          "blur->number-field#finishComposition"
+        ].compact.join(" ")
+        merged_data = existing_data.merge(action: normalized_action)
+        merged_data = merged_data.merge(number_field_target: "input") if show_stepper_buttons
+        merged_field_options = field_options.merge(data: merged_data)
+      %>
+
+      <%= f.text_field attribute, **merged_field_options %>
 
       <% if suffix.present? %>
         <span class="<%= suffix_classes %>" aria-hidden="true"><%= suffix %></span>
