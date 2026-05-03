@@ -30,16 +30,16 @@
         <% end %>
       </div>
 
-      <div class="min-w-0">
-        <h2 class="font-bold text-[#E5E2E1] group-hover:text-[#C0C1FF] transition-colors truncate">
+      <div class="min-w-0 flex-1">
+        <h2 class="max-w-full font-bold text-[#E5E2E1] group-hover:text-[#C0C1FF] transition-colors truncate">
           <% if processing %>
-            <span><%= display_store_name %></span>
+            <span class="block truncate"><%= display_store_name %></span>
           <% else %>
-            <%= link_to display_store_name, receipt_path(receipt), class: "hover:underline" %>
+            <%= link_to display_store_name, receipt_path(receipt), class: "block truncate hover:underline" %>
           <% end %>
         </h2>
 
-        <p class="text-[0.75rem] text-[#C7C4D8]">
+        <p class="truncate text-[0.75rem] text-[#C7C4D8]">
           <%= processing ? "解析完了後に表示されます" : (receipt.purchased_at ? l(receipt.purchased_at, format: :short) : "日時未設定") %>
         </p>
       </div>
@@ -51,18 +51,18 @@
   </div>
 
   <div class="flex justify-between items-end mt-2 gap-4">
-    <div>
+    <div class="min-w-0 flex-1">
       <p class="text-[0.6875rem] text-[#C7C4D8] mb-1">合計金額</p>
       <% if processing %>
         <div class="mt-2 h-7 w-24 rounded bg-[#3A3938]"></div>
       <% else %>
-        <p class="text-xl font-bold text-[#E5E2E1]">
+        <p class="truncate text-xl font-bold text-[#E5E2E1]" title="¥<%= number_with_delimiter(receipt.total_amount.to_i) %>">
           ¥<%= number_with_delimiter(receipt.total_amount.to_i) %>
         </p>
       <% end %>
     </div>
 
-    <div class="flex items-center gap-3 text-sm">
+    <div class="flex shrink-0 items-center gap-3 text-sm">
       <% if processing %>
         <span class="text-[#C7C4D8]/60 cursor-not-allowed">詳細</span>
         <span class="text-[#C0C1FF]/50 cursor-not-allowed">編集</span>

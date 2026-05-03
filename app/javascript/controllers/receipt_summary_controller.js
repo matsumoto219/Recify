@@ -55,7 +55,7 @@ export default class extends Controller {
       if (!iconElement) {
         iconElement = document.createElement("span")
         iconElement.classList.add("material-symbols-outlined")
-        iconElement.style.fontSize = "14px"
+        iconElement.style.fontSize = "11px"
         iconElement.style.lineHeight = "1"
         this.subtextTarget.prepend(iconElement)
       }
