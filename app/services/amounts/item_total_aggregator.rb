@@ -24,6 +24,7 @@ module Amounts
         adjusted_line_total = [ original_line_total - discount_amount, 0 ].max
 
         item_to_hash(item).merge(
+          quantity: normalized_quantity_for(item),
           original_line_total: original_line_total,
           discount_amount: discount_amount,
           discount_rate: discount_rate,
@@ -54,10 +55,12 @@ module Amounts
       return line_total if line_total.positive?
 
       price = to_i(fetch_value(item, :price))
-      quantity = to_i(fetch_value(item, :quantity))
-      quantity = 1 if quantity <= 0
+      price * normalized_quantity_for(item)
+    end
 
-      price * quantity
+    def normalized_quantity_for(item)
+      quantity = to_i(fetch_value(item, :quantity))
+      quantity.positive? ? quantity : 1
     end
 
     def fetch_value(item, key)

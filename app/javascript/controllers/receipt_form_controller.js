@@ -137,7 +137,8 @@ export default class extends Controller {
       const lineTotalDisplays = row.querySelectorAll('[data-receipt-form-target="lineTotalDisplay"]')
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
 
-      const quantity = this.clampNumber(parseFloat(quantityInput?.value) || 0, 0, 9999)
+      let quantity = this.clampNumber(parseFloat(quantityInput?.value) || 0, 0, 9999)
+      if (quantity <= 0) quantity = 1
       const price = this.clampNumber(parseFloat(priceInput?.value) || 0, 0, 999999999)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
 

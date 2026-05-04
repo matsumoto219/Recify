@@ -98,7 +98,8 @@ class ReceiptAmountService
         subtotal: calc[:subtotal],
         tax: calc[:tax],
         total: calc[:total],
-        tax_rate: calc[:tax_rate]
+        tax_rate: calc[:tax_rate],
+        items: calc[:items]
       },
       resolved: resolved,
       tax_details: tax_details,
