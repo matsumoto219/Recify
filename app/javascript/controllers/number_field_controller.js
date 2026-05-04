@@ -122,7 +122,11 @@ export default class extends Controller {
     const multiplier = 10 ** precision
     const roundedValue = Math.round((value + Number.EPSILON) * multiplier) / multiplier
 
-    return roundedValue.toFixed(precision)
+    if (precision > 0) {
+      return String(roundedValue).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+    }
+
+    return String(Math.round(roundedValue))
   }
 
   decimalPrecision(value) {
@@ -139,6 +143,15 @@ export default class extends Controller {
   finishComposition(event) {
     this.isComposing = false
     this.normalize(event)
+
+    const input = event.target
+    const numericValue = Number.parseFloat(input.value)
+    if (!Number.isNaN(numericValue)) {
+      input.value = this.formatValue(
+        this.clampValue(numericValue, input),
+        Number.parseFloat(input.step || "1") || 1
+      )
+    }
   }
 
   normalize(event) {
@@ -169,9 +182,13 @@ export default class extends Controller {
     }
 
     if (value !== "" && value !== "-" && value !== "." && value !== "-.") {
-      const numericValue = Number.parseFloat(value)
-      if (!Number.isNaN(numericValue)) {
-        value = this.formatValue(this.clampValue(numericValue, input), Number.parseFloat(input.step || "1") || 1)
+      const isEditingDecimal = value.endsWith(".") || value === "-."
+
+      if (!isEditingDecimal) {
+        const numericValue = Number.parseFloat(value)
+        if (!Number.isNaN(numericValue)) {
+          value = String(this.clampValue(numericValue, input))
+        }
       }
     }
 
