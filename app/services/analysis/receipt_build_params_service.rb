@@ -383,11 +383,16 @@ module Analysis
       end
 
       def normalize_quantity(value)
-        return 1 if value.blank?
-        return value.to_i if value.is_a?(Numeric)
+        quantity = if value.blank?
+          1
+        elsif value.is_a?(Numeric)
+          value.to_i
+        else
+          extracted_quantity = value.to_s.scan(/\d+/).join
+          extracted_quantity.present? ? extracted_quantity.to_i : 1
+        end
 
-        quantity = value.to_s.scan(/\d+/).join
-        quantity.present? ? quantity.to_i : 1
+        quantity.positive? ? quantity : 1
       end
 
       def normalize_confidence(value)
@@ -405,7 +410,7 @@ module Analysis
       def extract_item_line_total(_line, price:, quantity:)
         return nil unless price
 
-        price * quantity.to_i
+        price * normalize_quantity(quantity)
       end
     end
   end

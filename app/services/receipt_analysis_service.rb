@@ -498,11 +498,16 @@ class ReceiptAnalysisService
   end
 
   def normalize_quantity(value)
-    return 1 if value.blank?
-    return value.to_i if value.is_a?(Numeric)
+    quantity = if value.blank?
+      1
+    elsif value.is_a?(Numeric)
+      value.to_i
+    else
+      extracted_quantity = value.to_s.scan(/\d+/).join
+      extracted_quantity.present? ? extracted_quantity.to_i : 1
+    end
 
-    quantity = value.to_s.scan(/\d+/).join
-    quantity.present? ? quantity.to_i : 1
+    quantity.positive? ? quantity : 1
   end
 
   def normalize_tax_rate(value)
@@ -553,7 +558,7 @@ class ReceiptAnalysisService
 
   def extract_item_line_total(line, price: nil, quantity: nil)
     normalized_price = price || extract_item_price(line)
-    normalized_quantity = quantity || extract_item_quantity(line)
+    normalized_quantity = quantity.nil? ? extract_item_quantity(line) : normalize_quantity(quantity)
     return nil unless normalized_price
 
     normalized_price * normalized_quantity

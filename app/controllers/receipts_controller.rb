@@ -57,7 +57,12 @@ class ReceiptsController < ApplicationController
   end
 
   def create
-    @receipt = current_user.receipts.new(normalized_receipt_params)
+    create_params = normalized_receipt_params.to_h
+    @receipt = current_user.receipts.new
+
+    apply_amount_calculation!(create_params, context: :manual)
+
+    @receipt.assign_attributes(create_params)
     @receipt.status = "completed"
 
     if @receipt.save
@@ -74,7 +79,7 @@ class ReceiptsController < ApplicationController
   def update
     update_params = normalized_receipt_params.to_h
     clear_review_flags_for_edited_items!(update_params)
-    apply_amount_calculation!(update_params)
+    apply_amount_calculation!(update_params, context: :edit_save)
 
     if @receipt.update(update_params)
       redirect_to @receipt, notice: t("flash.receipts.update")
@@ -198,12 +203,12 @@ class ReceiptsController < ApplicationController
     nil
   end
 
-  def apply_amount_calculation!(permitted)
+  def apply_amount_calculation!(permitted, context:)
     result = ReceiptAmountService.call(
       receipt: permitted,
       receipt_items: amount_receipt_items(permitted),
       receipt_tax_details: [],
-      context: :edit_save
+      context: context
     )
 
     resolved = result[:resolved]
@@ -211,7 +216,33 @@ class ReceiptsController < ApplicationController
     permitted["tax_amount"] = resolved[:tax]
     permitted["total_amount"] = resolved[:total]
     permitted["tax_rate"] = resolved[:tax_rate]
+    # 明細の quantity / line_total を計算結果で上書き（複数行対応）
+    apply_item_totals!(permitted, result.dig(:computed, :items))
     permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+  end
+
+  def apply_item_totals!(permitted, calculated_items)
+    items_attributes = permitted["receipt_items_attributes"]
+    return if items_attributes.blank?
+
+    calculated_items = Array(calculated_items)
+    return if calculated_items.empty?
+
+    # 有効な明細（_destroy でないもの）のみ対象に順序対応
+    valid_item_attrs = items_attributes.values.reject do |item_attr|
+      item_attr.blank? || ActiveModel::Type::Boolean.new.cast(item_attr["_destroy"])
+    end
+
+    valid_item_attrs.each_with_index do |item_attr, index|
+      calc = calculated_items[index]
+      next if calc.blank?
+
+      quantity = calc[:quantity] || calc["quantity"]
+      line_total = calc[:line_total] || calc["line_total"]
+
+      item_attr["quantity"] = quantity unless quantity.nil?
+      item_attr["line_total"] = line_total unless line_total.nil?
+    end
   end
 
   def receipt_tax_detail_attributes(tax_details)
