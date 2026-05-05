@@ -197,8 +197,7 @@ class ReceiptsController < ApplicationController
   def normalize_tax_rate(raw_tax_rate)
     return nil if raw_tax_rate.blank?
 
-    tax_rate = BigDecimal(raw_tax_rate.to_s)
-    tax_rate > 1 ? tax_rate / 100 : tax_rate
+    BigDecimal(raw_tax_rate.to_s) / 100
   rescue ArgumentError
     nil
   end
