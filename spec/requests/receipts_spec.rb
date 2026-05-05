@@ -104,7 +104,7 @@ RSpec.describe 'Receipts', type: :request do
       end.to change(Receipt, :count).by(1)
 
       expect(response).to have_http_status(:redirect)
-      expect(Receipt.order(:id).last.status).to eq('uploaded')
+      expect(Receipt.order(:id).last.status).to eq('completed')
     end
 
     it 'ログインユーザーに紐づいて作成される' do
@@ -123,10 +123,10 @@ RSpec.describe 'Receipts', type: :request do
       post receipts_path, params: valid_params
 
       receipt = Receipt.order(:id).last
-      expect(receipt.status).to eq('uploaded')
+      expect(receipt.status).to eq('completed')
     end
 
-    it '画像あり作成時はprocessingで保存される' do
+    it '画像あり手動登録時もcompletedで保存され、解析は実行しない' do
       allow(ReceiptAnalysisService).to receive(:call)
 
       expect do
@@ -143,24 +143,18 @@ RSpec.describe 'Receipts', type: :request do
       receipt = Receipt.order(:id).last
 
       aggregate_failures do
-        expect(receipt.status).to eq('processing')
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt)
+        expect(receipt.status).to eq('completed')
+        expect(ReceiptAnalysisService).not_to have_received(:call)
         expect(response).to redirect_to(receipts_path)
       end
     end
 
-    it '画像ありで解析失敗時は一覧へ戻る' do
-      allow(ReceiptAnalysisService).to receive(:call) do |receipt|
-        receipt.update!(
-          status: 'failed',
-          processing_error_code: 'ocr_unreadable',
-          processing_error_message: 'dummy error'
-        )
-      end
+    it '画像あり手動登録時は解析失敗処理も実行しない' do
+      allow(ReceiptAnalysisService).to receive(:call)
 
       post receipts_path, params: {
         receipt: {
-          store_name: '解析失敗レシート',
+          store_name: '解析しない画像付きレシート',
           total_amount: 1800,
           payment_method: 'cash',
           image: uploaded_image
@@ -171,9 +165,9 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
-        expect(receipt.status).to eq('failed')
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt)
-        expect(receipt.processing_error_code).to eq('ocr_unreadable')
+        expect(receipt.status).to eq('completed')
+        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(receipt.processing_error_code).to be_nil
       end
     end
 
@@ -374,7 +368,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '画像差し替え時はprocessingにして再解析へ進む' do
+    it '画像差し替え時も再解析は実行せず編集保存する' do
       allow(ReceiptAnalysisService).to receive(:call)
 
       patch receipt_path(receipt), params: {
@@ -389,23 +383,17 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
-        expect(receipt.status).to eq('processing')
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt)
+        expect(receipt.status).to eq('review_needed')
+        expect(ReceiptAnalysisService).not_to have_received(:call)
       end
     end
 
-    it '画像差し替えで解析失敗時は詳細へ戻る' do
-      allow(ReceiptAnalysisService).to receive(:call) do |target_receipt|
-        target_receipt.update!(
-          status: 'failed',
-          processing_error_code: 'ocr_unreadable',
-          processing_error_message: 'dummy error'
-        )
-      end
+    it '画像差し替え時は解析失敗処理も実行しない' do
+      allow(ReceiptAnalysisService).to receive(:call)
 
       patch receipt_path(receipt), params: {
         receipt: {
-          store_name: '画像差し替え失敗',
+          store_name: '画像差し替え失敗なし',
           total_amount: 2200,
           payment_method: 'cash',
           image: uploaded_image
@@ -415,9 +403,9 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
-        expect(receipt.status).to eq('failed')
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt)
-        expect(receipt.processing_error_code).to eq('ocr_unreadable')
+        expect(receipt.status).to eq('review_needed')
+        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(receipt.processing_error_code).to be_nil
       end
     end
 
