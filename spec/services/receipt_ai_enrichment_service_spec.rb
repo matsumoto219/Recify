@@ -50,13 +50,13 @@ RSpec.describe ReceiptAiEnrichmentService do
   describe '.call' do
     context '正常系' do
       it 'AI成功時は結果をそのまま返し success を記録する' do
-        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result).and_return({ filtered_content: 'test' })
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
         allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(successful_ai_result)
 
         result = described_class.call(valid_ocr_result)
 
         aggregate_failures do
-          expect(Ai::PromptBuilder).to have_received(:build).with(valid_ocr_result)
+          expect(Ai::PromptBuilder).to have_received(:build).with(valid_ocr_result, ai_name_completion_enabled: false)
           expect(client).to have_received(:call).with({ filtered_content: 'test' })
           expect(result).to eq(successful_ai_result)
           expect(ExternalServiceStatus).to have_received(:mark_success!).with(:ai)
@@ -73,7 +73,7 @@ RSpec.describe ReceiptAiEnrichmentService do
           receipt_items_attributes: []
         }
 
-        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result).and_return({ filtered_content: 'test' })
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
         allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(failed_result)
 
         result = described_class.call(valid_ocr_result)
@@ -159,7 +159,7 @@ RSpec.describe ReceiptAiEnrichmentService do
       end
 
       it 'Ai::Client が例外を出した場合は ai_api_error を返す' do
-        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result).and_return({ filtered_content: 'test' })
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
         allow(client).to receive(:call).with({ filtered_content: 'test' }).and_raise(StandardError.new('boom'))
 
         result = described_class.call(valid_ocr_result)

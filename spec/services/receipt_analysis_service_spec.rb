@@ -31,6 +31,7 @@ RSpec.describe ReceiptAnalysisService do
             quantity_unit: '杯',
             product_code: 'C001',
             line_total: 180,
+            tax_rate: 10,
             confidence: 0.98
           },
           {
@@ -40,6 +41,7 @@ RSpec.describe ReceiptAnalysisService do
             quantity_unit: '個',
             product_code: 'S001',
             line_total: 1100,
+            tax_rate: 10,
             confidence: 0.97
           }
         ],
@@ -47,7 +49,7 @@ RSpec.describe ReceiptAnalysisService do
           { method: 'CreditCard', amount: 1280 }
         ],
         tax_details: [
-          { description: 'Sales Tax', amount: 80, rate: 10, net_amount: 800 }
+          { description: 'Sales Tax', amount: 116, rate: 10, net_amount: 1164 }
         ]
       },
       error_code: nil,
@@ -78,6 +80,7 @@ RSpec.describe ReceiptAnalysisService do
           quantity_unit: '杯',
           product_code: 'C001',
           line_total: 180,
+          tax_rate: BigDecimal("0.1"),
           confidence: 0.98,
           needs_review: false
         },
@@ -88,6 +91,7 @@ RSpec.describe ReceiptAnalysisService do
           quantity_unit: '個',
           product_code: 'S001',
           line_total: 1100,
+          tax_rate: BigDecimal("0.1"),
           confidence: 0.97,
           needs_review: false
         }
@@ -157,8 +161,8 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.receipt_tax_details.count).to eq(1)
 
       tax = receipt.receipt_tax_details.first
-      expect(tax.amount).to eq(80)
-      expect(tax.rate.to_i).to eq(10)
+      expect(tax.amount).to eq(116)
+      expect(tax.rate).to eq(BigDecimal("0.1"))
     end
 
     it 'AI失敗時はreview_neededになる' do
@@ -286,6 +290,10 @@ RSpec.describe ReceiptAnalysisService do
     it '高品質OCRかつAI成功なら completed になる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
+          candidates: {
+            tip_amount: nil,
+            tax_details: []
+          },
           meta: {
             confidence_summary: {
               items_average: 0.95,
@@ -311,7 +319,9 @@ RSpec.describe ReceiptAnalysisService do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
           candidates: {
-            payment_method_text: nil
+            payment_method_text: nil,
+            tip_amount: nil,
+            tax_details: []
           },
           meta: {
             confidence_summary: {
@@ -332,6 +342,10 @@ RSpec.describe ReceiptAnalysisService do
     it 'confidence_summary だけでは review_needed にならず completed のままになる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
+          candidates: {
+            tip_amount: nil,
+            tax_details: []
+          },
           meta: {
             confidence_summary: {
               items_average: 0.5,

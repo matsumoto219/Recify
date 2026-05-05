@@ -59,7 +59,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:total_amount]).to eq(1280)
           expect(params[:receipt_attributes][:subtotal_amount]).to eq(1180)
           expect(params[:receipt_attributes][:tax_amount]).to eq(80)
-          expect(params[:receipt_attributes][:tax_rate].to_i).to eq(10)
+          expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal("0.1"))
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
           expect(params[:receipt_attributes][:country_region]).to eq('JP')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
@@ -109,7 +109,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_tax_details_attributes].size).to eq(1)
           expect(tax[:description]).to eq('Sales Tax')
           expect(tax[:amount]).to eq(80)
-          expect(tax[:rate].to_i).to eq(10)
+          expect(tax[:rate]).to eq(BigDecimal("0.1"))
           expect(tax[:net_amount]).to eq(800)
         end
       end
@@ -250,7 +250,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:total_amount]).to eq(1280)
           expect(params[:receipt_attributes][:subtotal_amount]).to eq(1180)
           expect(params[:receipt_attributes][:tax_amount]).to eq(80)
-          expect(params[:receipt_attributes][:tax_rate].to_i).to eq(10)
+          expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal("0.1"))
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
           expect(params[:receipt_items_attributes].first[:price]).to eq(180)
           expect(params[:receipt_payments_attributes].first[:amount]).to eq(1280)
