@@ -38,8 +38,8 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-    <div class="order-2 xl:order-none xl:col-span-8 space-y-6">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="order-2 lg:order-none lg:col-span-8 space-y-6">
       <%= render "shared/ui/surface_card", class: "p-8" do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
@@ -160,9 +160,9 @@
       <% end %>
     </div>
 
-    <div class="order-1 xl:order-none xl:col-span-4 flex flex-col gap-6">
+    <div class="order-1 lg:order-none lg:col-span-4 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
       <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
-      <div class="order-first xl:order-none">
+      <div class="order-first lg:order-none">
         <%= render "shared/ui/amount_summary_card",
               title: "Total Amount",
               amount: @receipt.total_amount,
