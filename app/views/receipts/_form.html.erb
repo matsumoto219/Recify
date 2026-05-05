@@ -75,8 +75,8 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      <div class="lg:col-span-8 space-y-8 min-w-0">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-8 space-y-6 min-w-0">
         <% if has_review_notes %>
           <%= render "shared/ui/surface_card", variant: :warning, class: "p-6" do %>
             <div class="flex items-start gap-3">
@@ -603,7 +603,7 @@
         <% end %>
       </div>
 
-      <div class="lg:col-span-4 space-y-8 lg:sticky lg:top-24 self-start">
+      <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start">
         <%= render "shared/ui/amount_summary_card",
               title: "Total Amount",
               amount: total_amount_value,
