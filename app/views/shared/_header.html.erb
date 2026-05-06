@@ -1,4 +1,4 @@
-<header id="dashboard-header" data-component="header" data-controller="search" class="fixed top-0 right-0 w-full md:w-[calc(100%-5rem)] xl:w-[calc(100%-16rem)] h-[calc(4rem+env(safe-area-inset-top))] z-40 bg-[#131313]/80 backdrop-blur-md flex justify-between items-center px-4 md:px-8 pt-[env(safe-area-inset-top)]">
+<header id="dashboard-header" data-component="header" data-controller="search" class="fixed top-0 right-0 w-full md:w-[calc(100%-5rem)] xl:w-[calc(100%-16rem)] h-[calc(4rem+env(safe-area-inset-top))] z-40 header-glass header-glass-blur flex justify-between items-center px-4 md:px-8 pt-[env(safe-area-inset-top)]">
   <div class="flex items-center gap-4 flex-1 min-w-0">
     <div class="hidden sm:block max-w-md w-full">
       <%= render "shared/search_box",
@@ -8,7 +8,7 @@
 
   <div class="flex items-center gap-3 md:gap-5 lg:gap-6 shrink-0 ml-2 md:ml-4">
     <button type="button"
-      class="sm:hidden text-[#C7C4D8] hover:text-white transition-colors"
+      class="sm:hidden header-text-muted header-text-hover transition-colors"
       data-action="search#toggle"
       aria-label="検索">
       <span class="material-symbols-outlined">search</span>
@@ -21,19 +21,19 @@
         - ストレージ上限に近づいた警告
         - 未読件数のバッジ表示（赤丸）
         実装時はNotificationモデル + 既読管理 + バッジ表示を追加 %>
-    <button type="button" class="text-[#C7C4D8] hover:text-white transition-colors" aria-label="通知">
+    <button type="button" class="header-text-muted header-text-hover transition-colors" aria-label="通知">
       <span class="material-symbols-outlined">notifications</span>
     </button>
 
     <% if user_signed_in? %>
-      <div class="flex items-center gap-3 border-l border-white/10 pl-4 md:pl-6">
+      <div class="flex items-center gap-3 border-l header-border pl-4 md:pl-6">
         <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
-          <p class="truncate text-xs font-bold text-[#E5E2E1]" title="<%= current_user.name.presence || current_user.email %>">
+          <p class="truncate text-xs font-bold header-text" title="<%= current_user.name.presence || current_user.email %>">
             <%= current_user.name.presence || current_user.email %>
           </p>
         </div>
 
-        <div class="w-8 h-8 rounded-full overflow-hidden border border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xs font-bold">
+        <div class="w-8 h-8 rounded-full overflow-hidden border header-brand-border header-bg-elevated flex items-center justify-center header-text-link text-xs font-bold">
           <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
             <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
           <% else %>
@@ -47,16 +47,23 @@
             turbo_method: :delete,
             turbo_confirm: "ログアウトしますか？"
           },
-          class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] text-[#C7C4D8] hover:text-[#FFB4AB] transition-colors ml-1 rounded-md" do %>
+          class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] header-text-muted header-text-error-hover transition-colors ml-1 rounded-md" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
           <span class="hidden sm:inline">ログアウト</span>
         <% end %>
       </div>
     <% else %>
+      <%# TODO: public_header 分離時に移行予定
+          現在の header は dashboard 専用のため、
+          未ログイン用ヘッダーは home/index 用の
+          public_header へ移行する %>
+      <%#
       <div class="flex items-center gap-3">
-        <%= link_to t("common.login"), new_user_session_path, class: "text-sm text-[#C7C4D8] hover:text-white transition-colors" %>
-        <%= link_to t("common.sign_up"), new_user_registration_path, class: "inline-flex items-center rounded-lg bg-[#C0C1FF] text-black px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity" %>
+        <%= link_to t("common.login"), new_user_session_path, class: "text-sm header-text-muted header-text-hover transition-colors"
+      %>
+        <%= link_to t("common.sign_up"), new_user_registration_path, class: "inline-flex items-center rounded-lg header-brand-bg text-black px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity" %>
       </div>
+      %>
     <% end %>
   </div>
 
