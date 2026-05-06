@@ -15,7 +15,7 @@
 
       <%= form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
 
-        <%= render "shared/auth/text_field",
+        <%= render "shared/ui/text_field",
               f: f,
               attribute: :email,
               label: "メールアドレス",
@@ -25,7 +25,9 @@
               autocomplete: "email",
               autofocus: true,
               required: true,
-              input_class: "pl-11 py-3 text-sm placeholder:text-[#393939] focus:ring-[#C0C1FF]/40" %>
+              input_class: "py-3.5 pl-12 pr-4 text-sm placeholder:text-[#393939] focus:ring-[#C0C1FF]/40",
+              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+              error_message_class: "px-1 text-xs leading-relaxed" %>
 
         <%= render "shared/auth/primary_button",
               f: f,

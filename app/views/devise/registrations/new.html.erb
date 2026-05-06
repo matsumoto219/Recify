@@ -14,7 +14,7 @@
       <h2 id="registration-form-title" class="sr-only">新規登録フォーム</h2>
 
       <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-        <%= render "shared/auth/text_field",
+        <%= render "shared/ui/text_field",
               f: f,
               attribute: :email,
               label: "メールアドレス",
@@ -23,7 +23,9 @@
               placeholder: "example@email.com",
               autocomplete: "email",
               autofocus: true,
-              input_class: "rounded-xl py-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20" %>
+              input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+              error_message_class: "px-1 text-xs leading-relaxed" %>
 
         <div class="space-y-2">
           <div class="flex items-center justify-between gap-3">
@@ -32,7 +34,7 @@
               <p class="text-[11px] text-[#C7C4D8]/60 mr-1"><%= @minimum_password_length %>文字以上</p>
             <% end %>
           </div>
-          <%= render "shared/auth/text_field",
+          <%= render "shared/ui/text_field",
                 f: f,
                 attribute: :password,
                 label: "パスワード",
@@ -41,10 +43,11 @@
                 placeholder: "••••••••",
                 autocomplete: "new-password",
                 show_label: false,
-                input_class: "rounded-xl py-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20" %>
+                input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                error_message_class: "px-1 text-xs leading-relaxed" %>
         </div>
 
-        <%= render "shared/auth/text_field",
+        <%= render "shared/ui/text_field",
               f: f,
               attribute: :password_confirmation,
               label: "パスワード確認",
@@ -52,7 +55,9 @@
               field_type: :password_field,
               placeholder: "••••••••",
               autocomplete: "new-password",
-              input_class: "rounded-xl py-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20" %>
+              input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+              error_message_class: "px-1 text-xs leading-relaxed" %>
 
         <div class="pt-4">
           <%= render "shared/auth/primary_button",
