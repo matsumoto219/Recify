@@ -11,105 +11,107 @@
                    title_id: "edit-registration-title" %>
       </div>
 
-      <%= render "shared/auth/card", title_id: "edit-registration-title" do %>
-        <h2 class="sr-only">アカウント情報変更フォーム</h2>
+      <%= render "shared/ui/surface_card", title_id: "edit-registration-title" do %>
+        <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+          <h2 class="sr-only">アカウント情報変更フォーム</h2>
 
-        <%= form_for(resource,
-                     as: resource_name,
-                     url: registration_path(resource_name),
-                     html: { method: :put, class: "space-y-5" }) do |f| %>
-          <%= render "shared/ui/text_field",
-                     f: f,
-                     attribute: :email,
-                     label: "メールアドレス",
-                     icon: "mail",
-                     field_type: :email_field,
-                     placeholder: "your@email.com",
-                     autocomplete: "email",
-                     autofocus: true,
-                     show_label: true,
-                     input_class: "py-3.5 pl-12 pr-4",
-                     label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-                     error_message_class: "px-1 text-xs leading-relaxed" %>
+          <%= form_for(resource,
+                      as: resource_name,
+                      url: registration_path(resource_name),
+                      html: { method: :put, class: "space-y-5" }) do |f| %>
+            <%= render "shared/ui/text_field",
+                      f: f,
+                      attribute: :email,
+                      label: "メールアドレス",
+                      icon: "mail",
+                      field_type: :email_field,
+                      placeholder: "your@email.com",
+                      autocomplete: "email",
+                      autofocus: true,
+                      show_label: true,
+                      input_class: "py-3.5 pl-12 pr-4",
+                      label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                      error_message_class: "px-1 text-xs leading-relaxed" %>
 
-          <% if devise_mapping.confirmable? && resource.pending_reconfirmation? %>
-            <div class="rounded-2xl border border-[#FFB695]/30 bg-[#FFB695]/10 px-4 py-3 text-sm text-[#FFB695]">
-              確認待ちメールアドレス: <%= resource.unconfirmed_email %>
+            <% if devise_mapping.confirmable? && resource.pending_reconfirmation? %>
+              <div class="rounded-2xl border border-[#FFB695]/30 bg-[#FFB695]/10 px-4 py-3 text-sm text-[#FFB695]">
+                確認待ちメールアドレス: <%= resource.unconfirmed_email %>
+              </div>
+            <% end %>
+
+            <%= render "shared/ui/section_divider", variant: :gradient, label: "パスワード変更", class: "mt-8 mb-8" %>
+
+            <%= render "shared/ui/text_field",
+                      f: f,
+                      attribute: :password,
+                      label: "新しいパスワード",
+                      icon: "lock",
+                      field_type: :password_field,
+                      placeholder: "変更しない場合は空欄",
+                      autocomplete: "new-password",
+                      show_label: true,
+                      input_class: "py-3.5 pl-12 pr-4",
+                      label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                      error_message_class: "px-1 text-xs leading-relaxed" %>
+
+            <% if @minimum_password_length %>
+              <p class="px-1 text-xs text-[#C7C4D8]">
+                <%= @minimum_password_length %>文字以上
+              </p>
+            <% end %>
+
+            <%= render "shared/ui/text_field",
+                      f: f,
+                      attribute: :password_confirmation,
+                      label: "新しいパスワード（確認用）",
+                      icon: "verified_user",
+                      field_type: :password_field,
+                      placeholder: "確認用にもう一度入力",
+                      autocomplete: "new-password",
+                      show_label: true,
+                      input_class: "py-3.5 pl-12 pr-4",
+                      label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                      error_message_class: "px-1 text-xs leading-relaxed" %>
+
+            <%= render "shared/ui/text_field",
+                      f: f,
+                      attribute: :current_password,
+                      label: "現在のパスワード",
+                      icon: "password",
+                      field_type: :password_field,
+                      placeholder: "現在のパスワードを入力",
+                      autocomplete: "current-password",
+                      show_label: true,
+                      input_class: "py-3.5 pl-12 pr-4",
+                      label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                      error_message_class: "px-1 text-xs leading-relaxed" %>
+
+            <p class="px-1 text-xs text-[#C7C4D8]">変更内容を保存するには現在のパスワードが必要です</p>
+
+            <%= render "shared/ui/button",
+                      label: "変更を保存",
+                      type: "submit",
+                      variant: :primary,
+                      size: :lg,
+                      full_width: true,
+                      disable_with: "保存中...",
+                      class: "font-bold rounded-lg" %>
+          <% end %>
+
+          <div class="space-y-5 pt-2">
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-sm text-[#C7C4D8]">
+              詳細な設定やセキュリティ管理は設定画面からも行えます。
             </div>
-          <% end %>
 
-          <%= render "shared/ui/section_divider", variant: :gradient, label: "パスワード変更", class: "mt-8 mb-8" %>
+            <div class="space-y-3">
+              <%= link_to "セキュリティ設定へ",
+                          settings_security_path,
+                          class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-[#353534] px-4 text-sm font-medium text-[#E5E2E1] transition hover:border-white/20 hover:bg-[#3F3F3E]" %>
 
-          <%= render "shared/ui/text_field",
-                     f: f,
-                     attribute: :password,
-                     label: "新しいパスワード",
-                     icon: "lock",
-                     field_type: :password_field,
-                     placeholder: "変更しない場合は空欄",
-                     autocomplete: "new-password",
-                     show_label: true,
-                     input_class: "py-3.5 pl-12 pr-4",
-                     label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-                     error_message_class: "px-1 text-xs leading-relaxed" %>
-
-          <% if @minimum_password_length %>
-            <p class="px-1 text-xs text-[#C7C4D8]">
-              <%= @minimum_password_length %>文字以上
-            </p>
-          <% end %>
-
-          <%= render "shared/ui/text_field",
-                     f: f,
-                     attribute: :password_confirmation,
-                     label: "新しいパスワード（確認用）",
-                     icon: "verified_user",
-                     field_type: :password_field,
-                     placeholder: "確認用にもう一度入力",
-                     autocomplete: "new-password",
-                     show_label: true,
-                     input_class: "py-3.5 pl-12 pr-4",
-                     label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-                     error_message_class: "px-1 text-xs leading-relaxed" %>
-
-          <%= render "shared/ui/text_field",
-                     f: f,
-                     attribute: :current_password,
-                     label: "現在のパスワード",
-                     icon: "password",
-                     field_type: :password_field,
-                     placeholder: "現在のパスワードを入力",
-                     autocomplete: "current-password",
-                     show_label: true,
-                     input_class: "py-3.5 pl-12 pr-4",
-                     label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-                     error_message_class: "px-1 text-xs leading-relaxed" %>
-
-          <p class="px-1 text-xs text-[#C7C4D8]">変更内容を保存するには現在のパスワードが必要です</p>
-
-          <%= render "shared/ui/button",
-                     label: "変更を保存",
-                     type: "submit",
-                     variant: :primary,
-                     size: :lg,
-                     full_width: true,
-                     disable_with: "保存中...",
-                     class: "font-bold rounded-lg" %>
-        <% end %>
-
-        <div class="space-y-5 pt-2">
-          <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-sm text-[#C7C4D8]">
-            詳細な設定やセキュリティ管理は設定画面からも行えます。
-          </div>
-
-          <div class="space-y-3">
-            <%= link_to "セキュリティ設定へ",
-                        settings_security_path,
-                        class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-[#353534] px-4 text-sm font-medium text-[#E5E2E1] transition hover:border-white/20 hover:bg-[#3F3F3E]" %>
-
-            <%= link_to "設定トップへ",
-                        settings_path,
-                        class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-transparent px-4 text-sm font-medium text-[#C7C4D8] transition hover:border-white/20 hover:bg-white/5 hover:text-[#E5E2E1]" %>
+              <%= link_to "設定トップへ",
+                          settings_path,
+                          class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-transparent px-4 text-sm font-medium text-[#C7C4D8] transition hover:border-white/20 hover:bg-white/5 hover:text-[#E5E2E1]" %>
+            </div>
           </div>
         </div>
       <% end %>

@@ -10,93 +10,95 @@
             title_id: "login-page-title" %>
     </section>
 
-    <%= render "shared/auth/card", title_id: "login-form-title" do %>
-      <h2 id="login-form-title" class="sr-only">ログインフォーム</h2>
+    <%= render "shared/ui/surface_card", title_id: "login-form-title" do %>
+      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+        <h2 id="login-form-title" class="sr-only">ログインフォーム</h2>
 
-      <%# TODO: バリデーションエラー表示の追加
-          - deviseのresource.errorsを表示
-          - _error_messages partialと統合
-          - flashとの役割分離を整理%>
+        <%# TODO: バリデーションエラー表示の追加
+            - deviseのresource.errorsを表示
+            - _error_messages partialと統合
+            - flashとの役割分離を整理%>
 
-      <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-        <%= render "shared/ui/text_field",
-              f: f,
-              attribute: :email,
-              label: "メールアドレス",
-              icon: "mail",
-              field_type: :email_field,
-              placeholder: "メールアドレスを入力",
-              autocomplete: "email",
-              autofocus: true,
-              input_class: "py-3.5 pl-12 pr-4",
-              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-              error_message_class: "px-1 text-xs leading-relaxed" %>
-
-        <div class="space-y-2">
-          <div class="flex justify-between items-center px-1 gap-3">
-            <%= f.label :password, "パスワード", class: "text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block" %>
-            <%= link_to "パスワードをお忘れですか？", new_password_path(resource_name), class: "text-xs text-[#C0C1FF] hover:text-white transition-colors whitespace-nowrap" %>
-          </div>
-
+        <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "space-y-6" }) do |f| %>
           <%= render "shared/ui/text_field",
                 f: f,
-                attribute: :password,
-                label: "パスワード",
-                icon: "lock",
-                field_type: :password_field,
-                placeholder: "パスワードを入力",
-                autocomplete: "current-password",
-                show_label: false,
+                attribute: :email,
+                label: "メールアドレス",
+                icon: "mail",
+                field_type: :email_field,
+                placeholder: "メールアドレスを入力",
+                autocomplete: "email",
+                autofocus: true,
                 input_class: "py-3.5 pl-12 pr-4",
+                label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
-        </div>
 
-        <% if devise_mapping.rememberable? %>
-          <div class="flex items-center gap-3 px-1">
-            <%= f.check_box :remember_me, class: "rounded border-white/20 bg-[#0E0E0E] text-[#4B4DD8] focus:ring-[#C0C1FF]/50" %>
-            <%= f.label :remember_me, "ログイン状態を保持する", class: "text-sm text-[#C7C4D8]" %>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center px-1 gap-3">
+              <%= f.label :password, "パスワード", class: "text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block" %>
+              <%= link_to "パスワードをお忘れですか？", new_password_path(resource_name), class: "text-xs text-[#C0C1FF] hover:text-white transition-colors whitespace-nowrap" %>
+            </div>
+
+            <%= render "shared/ui/text_field",
+                  f: f,
+                  attribute: :password,
+                  label: "パスワード",
+                  icon: "lock",
+                  field_type: :password_field,
+                  placeholder: "パスワードを入力",
+                  autocomplete: "current-password",
+                  show_label: false,
+                  input_class: "py-3.5 pl-12 pr-4",
+                  error_message_class: "px-1 text-xs leading-relaxed" %>
+          </div>
+
+          <% if devise_mapping.rememberable? %>
+            <div class="flex items-center gap-3 px-1">
+              <%= f.check_box :remember_me, class: "rounded border-white/20 bg-[#0E0E0E] text-[#4B4DD8] focus:ring-[#C0C1FF]/50" %>
+              <%= f.label :remember_me, "ログイン状態を保持する", class: "text-sm text-[#C7C4D8]" %>
+            </div>
+          <% end %>
+
+          <div class="space-y-4">
+            <%= render "shared/ui/button",
+                  label: "ログイン",
+                  type: "submit",
+                  variant: :primary,
+                  size: :lg,
+                  full_width: true,
+                  disable_with: "ログイン中...",
+                  class: "font-bold rounded-lg" %>
           </div>
         <% end %>
 
-        <div class="space-y-4">
-          <%= render "shared/ui/button",
-                label: "ログイン",
-                type: "submit",
-                variant: :primary,
-                size: :lg,
-                full_width: true,
-                disable_with: "ログイン中...",
-                class: "font-bold rounded-lg" %>
-        </div>
-      <% end %>
+        <section class="text-center pt-2" aria-label="新規登録案内">
+          <p class="flex flex-col items-center gap-1 text-sm text-[#C7C4D8] sm:block">
+            <span>アカウントをお持ちではありませんか？</span>
+            <%= link_to "新規登録", new_registration_path(resource_name), class: "text-[#C0C1FF] font-medium hover:underline underline-offset-4 sm:ml-1" %>
+          </p>
+        </section>
 
-      <section class="text-center pt-2" aria-label="新規登録案内">
-        <p class="flex flex-col items-center gap-1 text-sm text-[#C7C4D8] sm:block">
-          <span>アカウントをお持ちではありませんか？</span>
-          <%= link_to "新規登録", new_registration_path(resource_name), class: "text-[#C0C1FF] font-medium hover:underline underline-offset-4 sm:ml-1" %>
-        </p>
-      </section>
+        <%= render "shared/ui/section_divider", variant: :gradient, label: "または", class: "mt-8 mb-8" %>
 
-      <%= render "shared/ui/section_divider", variant: :gradient, label: "または", class: "mt-8 mb-8" %>
+        <section class="space-y-4" aria-labelledby="guest-login-title">
+          <h3 id="guest-login-title" class="sr-only">ゲストログイン</h3>
 
-      <section class="space-y-4" aria-labelledby="guest-login-title">
-        <h3 id="guest-login-title" class="sr-only">ゲストログイン</h3>
+          <%= button_to guest_sign_in_path,
+                        method: :post,
+                        class: "w-full py-3.5 bg-[#353534] text-[#E5E2E1] font-medium rounded-lg hover:bg-[#393939] active:scale-[0.98] transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer" do %>
+            <span class="material-symbols-outlined text-xl" aria-hidden="true">person_search</span>
+            <span>ゲストとして試す</span>
+          <% end %>
 
-        <%= button_to guest_sign_in_path,
-                      method: :post,
-                      class: "w-full py-3.5 bg-[#353534] text-[#E5E2E1] font-medium rounded-lg hover:bg-[#393939] active:scale-[0.98] transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer" do %>
-          <span class="material-symbols-outlined text-xl" aria-hidden="true">person_search</span>
-          <span>ゲストとして試す</span>
-        <% end %>
-
-        <%# TODO: ゲストユーザー仕様の最終文言調整
-            - 7日間未使用で削除など、正確な仕様に合わせる
-            - 将来の仕様変更に対応できるようI18n化する %>
-        <p class="text-center text-[11px] text-zinc-500 leading-relaxed">
-          一部機能をすぐに体験できます。<br>
-          一定期間利用がない場合、データは自動的に削除されます。
-        </p>
-      </section>
+          <%# TODO: ゲストユーザー仕様の最終文言調整
+              - 7日間未使用で削除など、正確な仕様に合わせる
+              - 将来の仕様変更に対応できるようI18n化する %>
+          <p class="text-center text-[11px] text-zinc-500 leading-relaxed">
+            一部機能をすぐに体験できます。<br>
+            一定期間利用がない場合、データは自動的に削除されます。
+          </p>
+        </section>
+      </div>
     <% end %>
   </div>
 </main>
