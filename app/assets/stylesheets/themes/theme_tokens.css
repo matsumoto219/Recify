@@ -9,6 +9,7 @@
   --bg-card-subtle: #f6f3f2;
   --bg-input: #ffffff;
   --bg-elevated: #ebe7e7;
+  --bg-floating: #dedada;
   --bg-overlay: rgba(252, 249, 248, 0.8);
 
   /* =========================
@@ -25,7 +26,7 @@
    * Border
    * ========================= */
   --border-soft: rgba(0, 0, 0, 0.05);
-  --border-default: #c7c4d8;
+  --border-default: rgba(121, 117, 129, 0.35);
   --border-strong: rgba(0, 0, 0, 0.14);
   --border-focus: #3130c0;
 
@@ -101,10 +102,15 @@
    * ========================= */
   --surface-card-hover-bg: rgba(255, 255, 255, 0.88);
 
+  /* Indigo surface card */
+  --surface-card-indigo-shadow:
+    0 20px 40px rgba(49, 48, 192, 0.08),
+    0 0 0 1px rgba(49, 48, 192, 0.06);
+
   /* Danger surface card */
-  --surface-card-danger-bg: rgba(186, 26, 26, 0.08);
-  --surface-card-danger-hover-bg: rgba(186, 26, 26, 0.12);
-  --surface-card-danger-border: rgba(186, 26, 26, 0.14);
+  --surface-card-danger-bg: rgba(255, 218, 214, 0.72);
+  --surface-card-danger-hover-bg: rgba(255, 218, 214, 0.88);
+  --surface-card-danger-border: rgba(186, 26, 26, 0.18);
 
   /* Warning surface card */
   --surface-card-warning-bg: rgba(255, 255, 255, 0.72);
@@ -122,7 +128,8 @@
   --bg-card: #201f1f;
   --bg-card-subtle: #1c1b1b;
   --bg-input: #0e0e0e;
-  --bg-elevated: #353534;
+  --bg-elevated: #2a2a2a;
+  --bg-floating: #353534;
   --bg-overlay: rgba(19, 19, 19, 0.8);
 
   /* =========================
@@ -139,7 +146,7 @@
    * Border
    * ========================= */
   --border-soft: rgba(255, 255, 255, 0.05);
-  --border-default: rgba(255, 255, 255, 0.1);
+  --border-default: rgba(70, 69, 85, 0.4);
   --border-strong: rgba(255, 255, 255, 0.2);
   --border-focus: #c0c1ff;
 
@@ -180,7 +187,7 @@
   /* Secondary button */
   --btn-secondary-bg: #353534;
   --btn-secondary-text: #e5e2e1;
-  --btn-secondary-border: rgba(255, 255, 255, 0.1);
+  --btn-secondary-border: rgba(192, 193, 255, 0.2);
 
   /* =========================
    * Effect
@@ -214,6 +221,11 @@
    * Surface Card
    * ========================= */
   --surface-card-hover-bg: rgba(42, 42, 42, 0.92);
+
+  /* Indigo surface card */
+  --surface-card-indigo-shadow:
+    0 20px 40px rgba(49, 46, 129, 0.35),
+    0 0 0 1px rgba(229, 226, 225, 0.05);
 
   /* Danger surface card */
   --surface-card-danger-bg: rgba(147, 0, 10, 0.12);

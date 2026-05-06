@@ -28,6 +28,86 @@ body {
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+/* ===== Notice Glass ===== */
+.notice-glass {
+  background: var(--glass-bg);
+
+  /* Notice border */
+  border: 1px solid var(--glass-border);
+
+  /* Notice radius */
+  border-radius: 0.75rem;
+
+  /* Floating shadow */
+  box-shadow: var(--glass-shadow);
+
+  /* Notice blur */
+  backdrop-filter: var(--glass-blur);
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* ===== Input Field ===== */
+.input-field {
+  background-color: var(--bg-input);
+  color: var(--text-base);
+
+  /* Ghost border */
+  border: 1px solid var(--border-default);
+
+  /* Input radius */
+  border-radius: 0.75rem;
+
+  /* Input transition */
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.input-field::placeholder {
+  color: var(--text-subtle);
+}
+
+.input-field:focus {
+  outline: none;
+
+  /* Focus border */
+  border-color: var(--border-focus);
+
+  /* Focus glow */
+  box-shadow: var(--shadow-primary);
+}
+
+.input-field-error {
+  border-color: var(--state-error);
+}
+
+/* ===== Notice Surface ===== */
+.notice-surface {
+  color: var(--text-base);
+}
+
+/* Success notice */
+.notice-surface-success {
+  border-color: color-mix(in srgb, var(--state-success) 20%, transparent);
+}
+
+/* Warning notice */
+.notice-surface-warning {
+  border-color: color-mix(in srgb, var(--state-warning) 20%, transparent);
+}
+
+/* Error notice */
+.notice-surface-error {
+  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
+}
+
+/* Info notice */
+.notice-surface-info {
+  border-color: var(--border-default);
+}
+
 /* ===== Material Icons Adjustment ===== */
 .material-symbols-outlined {
   font-variation-settings:

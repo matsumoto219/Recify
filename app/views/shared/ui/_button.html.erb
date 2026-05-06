@@ -20,19 +20,24 @@
   border_hover = local_assigns.fetch(:border_hover, false)
   form = local_assigns[:form]
 
+  # Theme token based button variants
   variant_classes = case variant
+                    # Elevated surface button
                     when :secondary
-                      "bg-[#353534] text-[#E5E2E1] border border-white/10 hover:bg-[#393939]"
+                      "bg-[var(--btn-secondary-bg)] text-[var(--btn-secondary-text)] border border-[var(--btn-secondary-border)] hover:bg-[var(--bg-floating)]"
+                    # Transparent ghost button
                     when :ghost
-                      "bg-transparent text-[#E5E2E1] border border-white/10 hover:bg-white/5"
+                      "bg-transparent text-[var(--text-base)] border border-[var(--border-default)] hover:bg-[var(--bg-elevated)]"
+                    # Error state button
                     when :danger
-                      "bg-[#FFB4AB] text-[#690005] border border-transparent hover:opacity-90 shadow-lg shadow-[#FFB4AB]/20"
+                      "bg-[var(--state-error)] text-[var(--text-on-danger)] border border-transparent hover:opacity-90 shadow-lg"
+                    # Primary CTA button
                     else
-                      "bg-gradient-to-r from-[#C0C1FF] to-[#4B4DD8] text-black border-none hover:brightness-110 shadow-lg shadow-[#C0C1FF]/10 overflow-hidden"
+                      "bg-[image:var(--btn-primary-bg)] text-[var(--btn-primary-text)] border-none hover:brightness-110 shadow-lg overflow-hidden"
                     end
 
   border_hover_class = if border_hover
-    "hover:border-[#C0C1FF]/40"
+    "hover:border-[var(--border-focus)]"
   end
 
   size_classes = case size
@@ -88,9 +93,8 @@
       form="<%= form %>"
     <% end %>
     <%= "disabled" if disabled || loading %>
-    <% if disable_with.present? %>data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
-    <% data_attributes.each do |key, value| %>data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>
-  >
+    <% if disable_with.present? %> data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
+    <% data_attributes.each do |key, value| %> data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>>
     <%= content %>
   </button>
 <% end %>
