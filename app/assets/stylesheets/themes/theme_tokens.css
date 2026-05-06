@@ -1,0 +1,232 @@
+:root {
+  color-scheme: light;
+
+  /* =========================
+   * Background
+   * ========================= */
+  --bg-page: #fcf9f8;
+  --bg-card: #f0edec;
+  --bg-card-subtle: #f6f3f2;
+  --bg-input: #ffffff;
+  --bg-elevated: #ebe7e7;
+  --bg-overlay: rgba(252, 249, 248, 0.8);
+
+  /* =========================
+   * Text
+   * ========================= */
+  --text-base: #1c1b1b;
+  --text-muted: #464555;
+  --text-subtle: rgba(70, 69, 85, 0.65);
+  --text-on-primary: #ffffff;
+  --text-on-danger: #ffffff;
+  --text-link: #3130c0;
+
+  /* =========================
+   * Border
+   * ========================= */
+  --border-soft: rgba(0, 0, 0, 0.05);
+  --border-default: #c7c4d8;
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --border-focus: #3130c0;
+
+  /* =========================
+   * Brand
+   * ========================= */
+  --brand-primary: #3130c0;
+  --brand-primary-strong: #4b4dd8;
+  --brand-gradient-start: #3130c0;
+  --brand-gradient-end: #4b4dd8;
+
+  /* =========================
+   * State
+   * ========================= */
+  --state-success: #2e7d32;
+  --state-warning: #a44100;
+  --state-error: #ba1a1a;
+  --state-info: #58579b;
+
+  /* State background */
+  --bg-success-soft: rgba(46, 125, 50, 0.1);
+  --bg-warning-soft: rgba(164, 65, 0, 0.1);
+  --bg-error-soft: rgba(186, 26, 26, 0.1);
+  --bg-info-soft: rgba(88, 87, 155, 0.1);
+
+  /* State text */
+  --text-success: #2e7d32;
+  --text-warning: #a44100;
+  --text-error: #ba1a1a;
+  --text-info: #58579b;
+
+  /* =========================
+   * Button
+   * ========================= */
+  --btn-primary-bg: linear-gradient(135deg, #3130c0, #4b4dd8);
+  --btn-primary-text: #ffffff;
+
+  /* Secondary button */
+  --btn-secondary-bg: #ebe7e7;
+  --btn-secondary-text: #1c1b1b;
+  --btn-secondary-border: rgba(49, 48, 192, 0.2);
+
+  /* =========================
+   * Effect
+   * ========================= */
+  --shadow-card:
+    0 20px 40px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+
+  /* Focus shadow */
+  --shadow-primary: 0 0 0 4px rgba(49, 48, 192, 0.1);
+
+  /* Ambient blur */
+  --blur-accent-1: rgba(49, 48, 192, 0.12);
+  --blur-accent-2: rgba(75, 77, 216, 0.08);
+
+  /* =========================
+   * Glass
+   * ========================= */
+  --glass-bg: rgba(252, 249, 248, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.05);
+
+  /* Glass shadow */
+  --glass-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+
+  /* Glass blur */
+  --glass-blur: blur(20px) saturate(180%);
+
+  /* =========================
+   * Surface Card
+   * ========================= */
+  --surface-card-hover-bg: rgba(255, 255, 255, 0.88);
+
+  /* Danger surface card */
+  --surface-card-danger-bg: rgba(186, 26, 26, 0.08);
+  --surface-card-danger-hover-bg: rgba(186, 26, 26, 0.12);
+  --surface-card-danger-border: rgba(186, 26, 26, 0.14);
+
+  /* Warning surface card */
+  --surface-card-warning-bg: rgba(255, 255, 255, 0.72);
+  --surface-card-warning-hover-bg: rgba(255, 255, 255, 0.88);
+  --surface-card-warning-border: rgba(164, 65, 0, 0.22);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* =========================
+   * Background
+   * ========================= */
+  --bg-page: #131313;
+  --bg-card: #201f1f;
+  --bg-card-subtle: #1c1b1b;
+  --bg-input: #0e0e0e;
+  --bg-elevated: #353534;
+  --bg-overlay: rgba(19, 19, 19, 0.8);
+
+  /* =========================
+   * Text
+   * ========================= */
+  --text-base: #e5e2e1;
+  --text-muted: #c7c4d8;
+  --text-subtle: rgba(199, 196, 216, 0.6);
+  --text-on-primary: #1000a9;
+  --text-on-danger: #690005;
+  --text-link: #c0c1ff;
+
+  /* =========================
+   * Border
+   * ========================= */
+  --border-soft: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --border-focus: #c0c1ff;
+
+  /* =========================
+   * Brand
+   * ========================= */
+  --brand-primary: #c0c1ff;
+  --brand-primary-strong: #4b4dd8;
+  --brand-gradient-start: #c0c1ff;
+  --brand-gradient-end: #4b4dd8;
+
+  /* =========================
+   * State
+   * ========================= */
+  --state-success: #4ade80;
+  --state-warning: #ffb695;
+  --state-error: #ffb4ab;
+  --state-info: #c7c4d8;
+
+  /* State background */
+  --bg-success-soft: rgba(74, 222, 128, 0.1);
+  --bg-warning-soft: rgba(255, 182, 149, 0.1);
+  --bg-error-soft: rgba(255, 180, 171, 0.1);
+  --bg-info-soft: rgba(199, 196, 216, 0.1);
+
+  /* State text */
+  --text-success: #4ade80;
+  --text-warning: #ffb695;
+  --text-error: #ffb4ab;
+  --text-info: #c7c4d8;
+
+  /* =========================
+   * Button
+   * ========================= */
+  --btn-primary-bg: linear-gradient(135deg, #c0c1ff, #4b4dd8);
+  --btn-primary-text: #1000a9;
+
+  /* Secondary button */
+  --btn-secondary-bg: #353534;
+  --btn-secondary-text: #e5e2e1;
+  --btn-secondary-border: rgba(255, 255, 255, 0.1);
+
+  /* =========================
+   * Effect
+   * ========================= */
+  --shadow-card:
+    0 20px 40px rgba(99, 102, 241, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* Focus shadow */
+  --shadow-primary: 0 0 0 4px rgba(192, 193, 255, 0.15);
+
+  /* Ambient blur */
+  --blur-accent-1: rgba(192, 193, 255, 0.16);
+  --blur-accent-2: rgba(75, 77, 216, 0.12);
+
+  /* =========================
+   * Glass
+   * ========================= */
+  --glass-bg: rgba(19, 19, 19, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.05);
+
+  /* Glass shadow */
+  --glass-shadow:
+    0 20px 40px rgba(99, 102, 241, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* Glass blur */
+  --glass-blur: blur(20px) saturate(180%);
+
+  /* =========================
+   * Surface Card
+   * ========================= */
+  --surface-card-hover-bg: rgba(42, 42, 42, 0.92);
+
+  /* Danger surface card */
+  --surface-card-danger-bg: rgba(147, 0, 10, 0.12);
+  --surface-card-danger-hover-bg: rgba(147, 0, 10, 0.18);
+  --surface-card-danger-border: rgba(255, 180, 171, 0.1);
+
+  /* Warning surface card */
+  --surface-card-warning-bg: rgba(32, 31, 31, 0.8);
+  --surface-card-warning-hover-bg: rgba(42, 42, 42, 0.92);
+  --surface-card-warning-border: rgba(255, 180, 171, 0.3);
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--text-base);
+}
