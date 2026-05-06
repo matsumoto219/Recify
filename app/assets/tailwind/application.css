@@ -72,7 +72,58 @@ body {
   backdrop-filter: var(--glass-blur);
   /* stylelint-disable-next-line property-no-vendor-prefix */
   -webkit-backdrop-filter: var(--glass-blur);
- }
+}
+
+/* ===== Header Utilities ===== */
+.header-glass {
+  background: var(--glass-bg);
+}
+
+.header-glass-blur {
+  backdrop-filter: var(--glass-blur);
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.header-border {
+  border-color: var(--glass-border);
+}
+
+.header-text {
+  color: var(--text-base);
+}
+
+.header-text-muted {
+  color: var(--text-muted);
+}
+
+.header-text-hover:hover {
+  color: var(--text-base);
+}
+
+.header-text-link {
+  color: var(--text-link);
+}
+
+.header-text-error-hover:hover {
+  color: var(--text-error);
+}
+
+.header-bg-elevated {
+  background: var(--bg-elevated);
+}
+
+.header-brand-bg {
+  background: var(--brand-primary);
+}
+
+.header-brand-border {
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
 
 /* ===== Notice Glass ===== */
 .notice-glass {
