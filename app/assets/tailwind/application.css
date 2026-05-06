@@ -77,9 +77,8 @@ body {
 /* ===== Header Utilities ===== */
 .header-glass {
   background: var(--glass-bg);
-}
 
-.header-glass-blur {
+  /* Header blur */
   backdrop-filter: var(--glass-blur);
   /* stylelint-disable-next-line property-no-vendor-prefix */
   -webkit-backdrop-filter: var(--glass-blur);
@@ -123,6 +122,19 @@ body {
     var(--brand-primary) 20%,
     transparent
   );
+}
+
+/* ===== Mobile Bottom Nav Utilities ===== */
+.mobile-nav-border {
+  border-color: var(--glass-border);
+}
+
+.mobile-nav-active {
+  color: var(--brand-primary);
+}
+
+.mobile-nav-muted {
+  color: var(--text-muted);
 }
 
 /* ===== Notice Glass ===== */
