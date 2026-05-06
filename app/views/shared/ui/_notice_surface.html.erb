@@ -5,46 +5,41 @@
     case notice_type
     when "notice", "success", "ai_notice", "ocr_notice", "success_box", "notice_box"
       {
-        border: "border-[#4ade80]/20",
-        bg: "bg-[#1C1B1B]/90",
-        icon_bg: "bg-[#4ade80]/10",
-        icon_color: "text-[#4ade80]",
+        variant_class: "notice-surface-success",
+        icon_bg: "bg-[var(--bg-success-soft)]",
+        icon_color: "text-[var(--text-success)]",
         icon: "check_circle",
         title: "成功"
       }
     when "caution", "ai_caution", "ocr_caution", "caution_box"
       {
-        border: "border-[#fde047]/30",
-        bg: "bg-[#1C1B1B]/90",
-        icon_bg: "bg-[#fde047]/10",
-        icon_color: "text-[#fde047]",
+        variant_class: "notice-surface-warning",
+        icon_bg: "bg-[var(--bg-warning-soft)]",
+        icon_color: "text-[var(--text-warning)]",
         icon: "info",
         title: "注意"
       }
     when "warning", "ai_warning", "ocr_warning", "warning_box"
       {
-        border: "border-[#ffb695]/20",
-        bg: "bg-[#1C1B1B]/90",
-        icon_bg: "bg-[#ffb695]/10",
-        icon_color: "text-[#ffb695]",
+        variant_class: "notice-surface-warning",
+        icon_bg: "bg-[var(--bg-warning-soft)]",
+        icon_color: "text-[var(--text-warning)]",
         icon: "warning",
         title: "警告"
       }
     when "alert", "error", "ai_error", "ocr_error", "image_error", "error_box", "alert_box"
       {
-        border: "border-[#ffb4ab]/20",
-        bg: "bg-[#1C1B1B]/90",
-        icon_bg: "bg-[#ffb4ab]/10",
-        icon_color: "text-[#ffb4ab]",
+        variant_class: "notice-surface-error",
+        icon_bg: "bg-[var(--bg-error-soft)]",
+        icon_color: "text-[var(--text-error)]",
         icon: "error",
         title: "エラー"
       }
     else
       {
-        border: "border-white/10",
-        bg: "bg-[#1C1B1B]/90",
-        icon_bg: "bg-white/10",
-        icon_color: "text-[#C7C4D8]",
+        variant_class: "notice-surface-info",
+        icon_bg: "bg-[var(--bg-info-soft)]",
+        icon_color: "text-[var(--text-info)]",
         icon: "info",
         title: "通知"
       }
@@ -86,16 +81,17 @@
 
   surface_classes = [
     "pointer-events-auto",
-    tone[:bg],
-    tone[:border],
-    "border rounded-xl p-4 shadow-2xl backdrop-blur-md flex items-start gap-3",
+    "notice-glass",
+    "notice-surface",
+    tone[:variant_class],
+    "p-4 flex items-start gap-3",
     animation_classes,
     extra_classes
   ].compact.join(" ")
 %>
 
 <div
-  <% if surface_id.present? %>id="<%= surface_id %>"<% end %>
+  <% if surface_id.present? %> id="<%= surface_id %>"<% end %>
   class="<%= surface_classes %>"
   role="alert"
   aria-live="polite"
@@ -103,23 +99,22 @@
   data-notice-surface-animation-value="<%= animation_name %>"
   data-notice-surface-auto-dismiss-value="<%= auto_dismiss %>"
   data-notice-surface-auto-dismiss-delay-value="<%= resolved_auto_dismiss_delay %>"
-  data-notice-surface-max-visible-value="<%= max_visible %>"
->
+  data-notice-surface-max-visible-value="<%= max_visible %>">
   <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_bg] %> flex items-center justify-center <%= tone[:icon_color] %>">
     <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= tone[:icon] %></span>
   </div>
 
   <div class="flex-1 min-w-0">
     <% if title.present? %>
-      <p class="text-base font-bold text-[#E5E2E1] leading-tight mb-1"><%= title %></p>
+      <p class="text-base font-bold text-[var(--text-base)] leading-tight mb-1"><%= title %></p>
     <% end %>
 
     <% if body.present? %>
-      <div class="text-xs text-[#C7C4D8] leading-relaxed">
+      <div class="text-xs text-[var(--text-muted)] leading-relaxed">
         <%= body %>
       </div>
     <% elsif message.present? %>
-      <p class="text-xs text-[#C7C4D8] leading-relaxed"><%= message %></p>
+      <p class="text-xs text-[var(--text-muted)] leading-relaxed"><%= message %></p>
     <% end %>
   </div>
 
@@ -128,8 +123,7 @@
       type="button"
       class="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100"
       aria-label="閉じる"
-      data-action="click->notice-surface#close"
-    >close</button>
+      data-action="click->notice-surface#close">close</button>
   <% end %>
 </div>
 
