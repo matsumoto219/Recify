@@ -28,6 +28,52 @@ body {
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+/* ===== Surface Card Utilities ===== */
+.surface-card-default {
+  background: var(--bg-card);
+}
+
+.surface-card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
+.surface-card-shadow-indigo {
+  box-shadow: var(--surface-card-indigo-shadow);
+}
+
+.surface-card-danger {
+  background: var(--surface-card-danger-bg);
+
+  /* Danger surface border */
+  border-color: var(--surface-card-danger-border);
+}
+
+.surface-card-warning {
+  background: var(--surface-card-warning-bg);
+}
+
+.surface-card-warning-border {
+  border-color: var(--surface-card-warning-border);
+}
+
+.surface-card-hover:hover {
+  background: var(--surface-card-hover-bg);
+}
+
+.surface-card-danger-hover:hover {
+  background: var(--surface-card-danger-hover-bg);
+}
+
+.surface-card-warning-hover:hover {
+  background: var(--surface-card-warning-hover-bg);
+}
+
+.surface-card-blur {
+  backdrop-filter: var(--glass-blur);
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-backdrop-filter: var(--glass-blur);
+ }
+
 /* ===== Notice Glass ===== */
 .notice-glass {
   background: var(--glass-bg);
