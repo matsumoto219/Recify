@@ -10,41 +10,43 @@
             title_id: "password-reset-page-title" %>
     </section>
 
-    <%= render "shared/auth/card", title_id: "password-reset-form-title" do %>
-      <h2 id="password-reset-form-title" class="sr-only">パスワード再設定フォーム</h2>
+    <%= render "shared/ui/surface_card", title_id: "password-reset-form-title" do %>
+      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+        <h2 id="password-reset-form-title" class="sr-only">パスワード再設定フォーム</h2>
 
-      <%= form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
+        <%= form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
 
-        <%= render "shared/ui/text_field",
-              f: f,
-              attribute: :email,
-              label: "メールアドレス",
-              icon: "mail",
-              field_type: :email_field,
-              placeholder: "your@email.com",
-              autocomplete: "email",
-              autofocus: true,
-              required: true,
-              input_class: "py-3.5 pl-12 pr-4 text-sm placeholder:text-[#393939] focus:ring-[#C0C1FF]/40",
-              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-              error_message_class: "px-1 text-xs leading-relaxed" %>
+          <%= render "shared/ui/text_field",
+                f: f,
+                attribute: :email,
+                label: "メールアドレス",
+                icon: "mail",
+                field_type: :email_field,
+                placeholder: "your@email.com",
+                autocomplete: "email",
+                autofocus: true,
+                required: true,
+                input_class: "py-3.5 pl-12 pr-4 text-sm placeholder:text-[#393939] focus:ring-[#C0C1FF]/40",
+                label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                error_message_class: "px-1 text-xs leading-relaxed" %>
 
-        <%= render "shared/ui/button",
-              label: "再設定メールを送信",
-              type: "submit",
-              variant: :primary,
-              size: :lg,
-              full_width: true,
-              disable_with: "送信中...",
-              class: "font-bold rounded-lg" %>
-      <% end %>
+          <%= render "shared/ui/button",
+                label: "再設定メールを送信",
+                type: "submit",
+                variant: :primary,
+                size: :lg,
+                full_width: true,
+                disable_with: "送信中...",
+                class: "font-bold rounded-lg" %>
+        <% end %>
 
-      <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
+        <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
 
-      <%= render "shared/ui/navigation_link",
-            path: new_session_path(resource_name),
-            text: "ログインに戻る",
-            arrow: :left %>
+        <%= render "shared/ui/navigation_link",
+              path: new_session_path(resource_name),
+              text: "ログインに戻る",
+              arrow: :left %>
+      </div>
     <% end %>
 
     <%# TODO: フッターブランディングは必要性を確認して、認証画面共通化時に残すか削除するか決める %>

@@ -10,89 +10,91 @@
             title_id: "registration-page-title" %>
     </section>
 
-    <%= render "shared/auth/card", title_id: "registration-form-title" do %>
-      <h2 id="registration-form-title" class="sr-only">新規登録フォーム</h2>
+    <%= render "shared/ui/surface_card", title_id: "registration-form-title" do %>
+      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+        <h2 id="registration-form-title" class="sr-only">新規登録フォーム</h2>
 
-      <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-        <%= render "shared/ui/text_field",
-              f: f,
-              attribute: :email,
-              label: "メールアドレス",
-              icon: "mail",
-              field_type: :email_field,
-              placeholder: "example@email.com",
-              autocomplete: "email",
-              autofocus: true,
-              input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
-              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-              error_message_class: "px-1 text-xs leading-relaxed" %>
-
-        <div class="space-y-2">
-          <div class="flex items-center justify-between gap-3">
-            <%= f.label :password, "パスワード", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
-            <% if @minimum_password_length %>
-              <p class="text-[11px] text-[#C7C4D8]/60 mr-1"><%= @minimum_password_length %>文字以上</p>
-            <% end %>
-          </div>
+        <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
           <%= render "shared/ui/text_field",
                 f: f,
-                attribute: :password,
-                label: "パスワード",
+                attribute: :email,
+                label: "メールアドレス",
+                icon: "mail",
+                field_type: :email_field,
+                placeholder: "example@email.com",
+                autocomplete: "email",
+                autofocus: true,
+                input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                error_message_class: "px-1 text-xs leading-relaxed" %>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <%= f.label :password, "パスワード", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
+              <% if @minimum_password_length %>
+                <p class="text-[11px] text-[#C7C4D8]/60 mr-1"><%= @minimum_password_length %>文字以上</p>
+              <% end %>
+            </div>
+            <%= render "shared/ui/text_field",
+                  f: f,
+                  attribute: :password,
+                  label: "パスワード",
+                  icon: "lock",
+                  field_type: :password_field,
+                  placeholder: "••••••••",
+                  autocomplete: "new-password",
+                  show_label: false,
+                  input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                  error_message_class: "px-1 text-xs leading-relaxed" %>
+          </div>
+
+          <%= render "shared/ui/text_field",
+                f: f,
+                attribute: :password_confirmation,
+                label: "パスワード確認",
                 icon: "lock",
                 field_type: :password_field,
                 placeholder: "••••••••",
                 autocomplete: "new-password",
-                show_label: false,
                 input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
-        </div>
 
-        <%= render "shared/ui/text_field",
-              f: f,
-              attribute: :password_confirmation,
-              label: "パスワード確認",
-              icon: "lock",
-              field_type: :password_field,
-              placeholder: "••••••••",
-              autocomplete: "new-password",
-              input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
-              label_class: "text-xs font-bold uppercase tracking-widest block px-1",
-              error_message_class: "px-1 text-xs leading-relaxed" %>
+          <div class="pt-4">
+            <%= render "shared/ui/button",
+                  label: "登録する",
+                  type: "submit",
+                  variant: :primary,
+                  size: :lg,
+                  full_width: true,
+                  disable_with: "登録中...",
+                  class: "font-bold rounded-lg" %>
+          </div>
+        <% end %>
 
-        <div class="pt-4">
-          <%= render "shared/ui/button",
-                label: "登録する",
-                type: "submit",
-                variant: :primary,
-                size: :lg,
-                full_width: true,
-                disable_with: "登録中...",
-                class: "font-bold rounded-lg" %>
-        </div>
-      <% end %>
+        <section class="text-center" aria-label="規約同意案内">
+          <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
+          <p class="text-[10px] text-center text-[#C7C4D8]/60 leading-relaxed">
+            登録することで、Recifyの
+            <span class="underline hover:text-[#C0C1FF] cursor-pointer">利用規約</span>
+            および
+            <span class="underline hover:text-[#C0C1FF] cursor-pointer">プライバシーポリシー</span>
+            に同意したものとみなされます。
+          </p>
+        </section>
 
-      <section class="text-center" aria-label="規約同意案内">
-        <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
-        <p class="text-[10px] text-center text-[#C7C4D8]/60 leading-relaxed">
-          登録することで、Recifyの
-          <span class="underline hover:text-[#C0C1FF] cursor-pointer">利用規約</span>
-          および
-          <span class="underline hover:text-[#C0C1FF] cursor-pointer">プライバシーポリシー</span>
-          に同意したものとみなされます。
-        </p>
-      </section>
+        <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
+        <section class="text-center space-y-3" aria-label="ログイン案内">
+          <p class="text-sm text-[#C7C4D8]">
+            すでにアカウントをお持ちですか？
+          </p>
 
-      <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
-      <section class="text-center space-y-3" aria-label="ログイン案内">
-        <p class="text-sm text-[#C7C4D8]">
-          すでにアカウントをお持ちですか？
-        </p>
-
-        <%= render "shared/ui/navigation_link",
-              path: new_session_path(resource_name),
-              text: "ログインへ",
-              arrow: :right %>
-      </section>
+          <%= render "shared/ui/navigation_link",
+                path: new_session_path(resource_name),
+                text: "ログインへ",
+                arrow: :right %>
+        </section>
+      </div>
     <% end %>
   </div>
 </main>
