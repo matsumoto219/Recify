@@ -60,10 +60,14 @@
               error_message_class: "px-1 text-xs leading-relaxed" %>
 
         <div class="pt-4">
-          <%= render "shared/auth/primary_button",
-                f: f,
+          <%= render "shared/ui/button",
                 label: "登録する",
-                disable_with: "登録中..." %>
+                type: "submit",
+                variant: :primary,
+                size: :lg,
+                full_width: true,
+                disable_with: "登録中...",
+                class: "font-bold rounded-lg" %>
         </div>
       <% end %>
 

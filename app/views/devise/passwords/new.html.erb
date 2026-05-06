@@ -29,10 +29,14 @@
               label_class: "text-xs font-bold uppercase tracking-widest block px-1",
               error_message_class: "px-1 text-xs leading-relaxed" %>
 
-        <%= render "shared/auth/primary_button",
-              f: f,
+        <%= render "shared/ui/button",
               label: "再設定メールを送信",
-              disable_with: "送信中..." %>
+              type: "submit",
+              variant: :primary,
+              size: :lg,
+              full_width: true,
+              disable_with: "送信中...",
+              class: "font-bold rounded-lg" %>
       <% end %>
 
       <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>

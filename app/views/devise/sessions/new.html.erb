@@ -59,10 +59,14 @@
         <% end %>
 
         <div class="space-y-4">
-          <%= render "shared/auth/primary_button",
-                f: f,
+          <%= render "shared/ui/button",
                 label: "ログイン",
-                disable_with: "ログイン中..." %>
+                type: "submit",
+                variant: :primary,
+                size: :lg,
+                full_width: true,
+                disable_with: "ログイン中...",
+                class: "font-bold rounded-lg" %>
         </div>
       <% end %>
 
