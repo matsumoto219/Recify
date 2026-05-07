@@ -239,6 +239,26 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Auth Icon Utilities ===== */
+.auth-icon-surface {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+
+  /* Auth icon glow */
+  box-shadow: 0 10px 15px color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.auth-icon-symbol {
+  color: var(--btn-primary-text);
+}
+
 /* ===== Notice Glass ===== */
 .notice-glass {
   background: var(--glass-bg);
