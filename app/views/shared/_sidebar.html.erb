@@ -1,9 +1,9 @@
-<aside id="desktop-sidebar" data-component="sidebar" class="hidden md:flex flex-col h-screen md:w-20 xl:w-64 fixed left-0 top-0 bg-[#1C1B1B] py-6 z-50">
+<aside id="desktop-sidebar" data-component="sidebar" class="hidden md:flex flex-col h-screen md:w-20 xl:w-64 fixed left-0 top-0 sidebar-surface py-6 z-50">
   <div class="px-6 mb-10">
     <%= link_to root_path, class: "inline-block" do %>
       <%# TODO: ロゴは仮。タブレット用（md表示時）の簡易ロゴやアイコンロゴを別途用意する可能性あり %>
-      <h1 class="hidden xl:block text-xl font-bold bg-gradient-to-br from-[#C0C1FF] to-[#4B4DD8] bg-clip-text text-transparent">Recify</h1>
-      <p class="hidden xl:block text-[0.6875rem] text-[#C7C4D8] tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
+      <h1 class="hidden xl:block text-xl font-bold sidebar-brand-gradient bg-clip-text text-transparent">Recify</h1>
+      <p class="hidden xl:block text-[0.6875rem] sidebar-text-muted tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
     <% end %>
   </div>
 
@@ -34,12 +34,12 @@
     </div>
 
     <div class="px-4">
-      <div class="hidden xl:block bg-[#2A2A2A] rounded-xl p-4 border border-white/5">
-        <p class="text-[0.75rem] text-[#C7C4D8] mb-2">ストレージ使用量</p>
-        <div class="h-1.5 w-full bg-[#131313] rounded-full overflow-hidden">
-          <div class="h-full bg-[#C0C1FF] w-[65%]"></div>
+      <div class="hidden xl:block sidebar-bg-elevated rounded-xl p-4 border sidebar-border-soft">
+        <p class="text-[0.75rem] sidebar-text-muted mb-2">ストレージ使用量</p>
+        <div class="h-1.5 w-full sidebar-bg-page rounded-full overflow-hidden">
+          <div class="h-full sidebar-brand-bg w-[65%]"></div>
         </div>
-        <p class="text-right text-[0.6875rem] mt-2 text-[#C0C1FF]">6.5GB / 10GB</p>
+        <p class="text-right text-[0.6875rem] mt-2 sidebar-brand-text">6.5GB / 10GB</p>
       </div>
     </div>
   </div>

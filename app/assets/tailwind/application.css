@@ -137,6 +137,43 @@ body {
   color: var(--text-muted);
 }
 
+/* ===== Sidebar Utilities ===== */
+.sidebar-surface {
+  background: var(--bg-card-subtle);
+}
+
+.sidebar-text-muted {
+  color: var(--text-muted);
+}
+
+.sidebar-bg-elevated {
+  background: var(--bg-elevated);
+}
+
+.sidebar-border-soft {
+  border-color: var(--border-soft);
+}
+
+.sidebar-bg-page {
+  background: var(--bg-page);
+}
+
+.sidebar-brand-bg {
+  background: var(--brand-primary);
+}
+
+.sidebar-brand-text {
+  color: var(--brand-primary);
+}
+
+.sidebar-brand-gradient {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
 /* ===== Notice Glass ===== */
 .notice-glass {
   background: var(--glass-bg);
