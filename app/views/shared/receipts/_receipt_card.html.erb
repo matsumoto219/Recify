@@ -8,10 +8,13 @@
                          receipt.store_name.presence || "店舗名なし"
                        end
 
-  card_class = [
-    "group rounded-xl p-5 transition-colors border border-white/5",
-    processing ? "bg-[#242424] animate-pulse" : "bg-[#2A2A2A] hover:bg-[#393939]"
-  ].join(" ")
+  card_classes = [
+    "p-5 group",
+    processing ? "animate-pulse" : nil
+  ].compact.join(" ")
+
+  card_background_class = processing ? "bg-[#242424]" : "bg-[#2A2A2A]"
+  card_hover_class = processing ? nil : "hover:bg-[#393939]"
 
   icon_box_class = [
     "w-10 h-10 rounded-lg bg-[#131313] flex items-center justify-center text-[#C0C1FF] shrink-0",
@@ -19,7 +22,14 @@
   ].compact.join(" ")
 %>
 
-<div id="receipt_<%= receipt.id %>" class="<%= card_class %>">
+<%= render "shared/ui/surface_card",
+  id: dom_id(receipt),
+  class: card_classes,
+  background_class: card_background_class,
+  hover_class: card_hover_class,
+  hoverable: !processing do %>
+  <%# NOTE: 旧外枠 `rounded-xl`, `transition-colors`, `border border-white/5` は surface_card 側のクラスへ置き換え。 %>
+  <%# NOTE: 旧背景 `bg-[#242424]` / `bg-[#2A2A2A]` と旧hover `hover:bg-[#393939]` は surface_card の background_class / hover_class オプションで復活。 %>
   <div class="flex items-start justify-between gap-4">
     <div class="flex items-start gap-3 min-w-0">
       <div class="<%= icon_box_class %>">
@@ -72,4 +82,4 @@
       <% end %>
     </div>
   </div>
-</div>
+<% end %>

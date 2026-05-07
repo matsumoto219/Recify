@@ -4,8 +4,11 @@
   shadow_variant = local_assigns.fetch(:shadow_variant, :default).to_sym
   hoverable = local_assigns.fetch(:hoverable, false)
   extra_classes = local_assigns[:class]
+  background_class = local_assigns[:background_class]
+  hover_class = local_assigns[:hover_class]
+  id = local_assigns[:id]
   title_id = local_assigns[:title_id]
-  custom_background = extra_classes&.match?(/bg-|from-|to-/)
+  custom_background = background_class.present? || extra_classes&.match?(/bg-|from-|to-/)
 
   shadow_classes = case shadow_variant
                    when :indigo
@@ -29,19 +32,20 @@
                     end
 
   hover_classes = if hoverable
-                    case variant
-                    when :danger
-                      "surface-card-danger-hover"
-                    when :warning
-                      "surface-card-warning-hover"
-                    else
-                      "surface-card-hover"
-                    end
+                    hover_class.presence ||
+                      case variant
+                      when :danger
+                        "surface-card-danger-hover"
+                      when :warning
+                        "surface-card-warning-hover"
+                      else
+                        "surface-card-hover"
+                      end
                   end
 
-  surface_classes = [base_classes, variant_classes, hover_classes, extra_classes].compact.join(" ")
+  surface_classes = [base_classes, variant_classes, background_class, hover_classes, extra_classes].compact.join(" ")
 %>
 
-<section class="<%= surface_classes %>"<%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
+<section <%= id.present? ? " id=\"#{id}\"".html_safe : "" %> class="<%= surface_classes %>"<%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
   <%= yield %>
 </section>
