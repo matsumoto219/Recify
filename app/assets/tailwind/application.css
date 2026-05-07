@@ -258,6 +258,31 @@ body {
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+/* ===== Notice Surface ===== */
+.notice-surface {
+  color: var(--text-base);
+}
+
+/* Success notice */
+.notice-surface-success {
+  border-color: color-mix(in srgb, var(--state-success) 20%, transparent);
+}
+
+/* Warning notice */
+.notice-surface-warning {
+  border-color: color-mix(in srgb, var(--state-warning) 20%, transparent);
+}
+
+/* Error notice */
+.notice-surface-error {
+  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
+}
+
+/* Info notice */
+.notice-surface-info {
+  border-color: var(--border-default);
+}
+
 /* ===== Input Field ===== */
 .input-field {
   background-color: var(--bg-input);
@@ -304,31 +329,6 @@ body {
       var(--state-error) 35%,
       transparent
     );
-}
-
-/* ===== Notice Surface ===== */
-.notice-surface {
-  color: var(--text-base);
-}
-
-/* Success notice */
-.notice-surface-success {
-  border-color: color-mix(in srgb, var(--state-success) 20%, transparent);
-}
-
-/* Warning notice */
-.notice-surface-warning {
-  border-color: color-mix(in srgb, var(--state-warning) 20%, transparent);
-}
-
-/* Error notice */
-.notice-surface-error {
-  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
-}
-
-/* Info notice */
-.notice-surface-info {
-  border-color: var(--border-default);
 }
 
 /* ===== Material Icons Adjustment ===== */
