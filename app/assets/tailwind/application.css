@@ -13,6 +13,13 @@ body {
 }
 
 /* ===== Glass Panel Effect ===== */
+
+/* NOTE:
+ * Direct `backdrop-filter: var(...)` declarations are dropped during
+ * Tailwind v4 build output in this project environment.
+ * Use Tailwind backdrop utilities instead.
+ */
+
 .glass-panel {
   background: var(--glass-bg);
 
@@ -23,9 +30,7 @@ body {
   box-shadow: var(--glass-shadow);
 
   /* Glass blur */
-  backdrop-filter: var(--glass-blur);
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-backdrop-filter: var(--glass-blur);
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
 /* ===== Surface Card Utilities ===== */
@@ -69,9 +74,7 @@ body {
 }
 
 .surface-card-blur {
-  backdrop-filter: var(--glass-blur);
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-backdrop-filter: var(--glass-blur);
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
 /* ===== Header Utilities ===== */
@@ -79,9 +82,7 @@ body {
   background: var(--glass-bg);
 
   /* Header blur */
-  backdrop-filter: var(--glass-blur);
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-backdrop-filter: var(--glass-blur);
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
 .header-border {
@@ -273,9 +274,7 @@ body {
   box-shadow: var(--glass-shadow);
 
   /* Notice blur */
-  backdrop-filter: var(--glass-blur);
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-backdrop-filter: var(--glass-blur);
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
 /* ===== Notice Surface ===== */

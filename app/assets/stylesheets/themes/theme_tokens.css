@@ -95,7 +95,8 @@
     0 0 0 1px rgba(0, 0, 0, 0.02);
 
   /* Glass blur */
-  --glass-blur: blur(20px) saturate(180%);
+  --glass-blur-radius: 20px;
+  --glass-saturate: 180%;
 
   /* =========================
    * Surface Card
@@ -215,7 +216,8 @@
     0 0 0 1px rgba(255, 255, 255, 0.05);
 
   /* Glass blur */
-  --glass-blur: blur(20px) saturate(180%);
+  --glass-blur-radius: 20px;
+  --glass-saturate: 180%;
 
   /* =========================
    * Surface Card
