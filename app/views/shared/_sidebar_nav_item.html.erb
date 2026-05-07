@@ -6,8 +6,8 @@
   show_label = local_assigns.fetch(:show_label, true)
   extra_classes = local_assigns[:class]
 
-  active_classes = "bg-[#4B4DD8]/20 text-[#C0C1FF] border-l-4 border-[#C0C1FF] rounded-none md:shadow-[inset_0_0_18px_rgba(192,193,255,0.10)] xl:shadow-none"
-  inactive_classes = "text-[#C7C4D8] hover:bg-[#2A2A2A] hover:text-white"
+  active_classes = "sidebar-nav-active-bg sidebar-nav-active-text border-l-4 sidebar-nav-active-border rounded-none md:sidebar-nav-active-shadow xl:shadow-none"
+  inactive_classes = "sidebar-nav-muted sidebar-nav-hover sidebar-nav-text-hover"
 
   link_class = [
     "group relative flex items-center justify-center xl:justify-start gap-0 xl:gap-3 px-2 xl:px-4 py-3 font-medium transition-all duration-200 md:hover:scale-[1.03] xl:hover:scale-100",
@@ -18,14 +18,14 @@
 
 <%= link_to path, class: link_class, title: label do %>
   <% if active %>
-    <span class="absolute right-2 top-1/2 hidden h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#C0C1FF] shadow-[0_0_12px_rgba(192,193,255,0.8)] md:block xl:hidden"></span>
+    <span class="absolute right-2 top-1/2 hidden h-1.5 w-1.5 -translate-y-1/2 rounded-full sidebar-nav-indicator sidebar-nav-indicator-shadow md:block xl:hidden"></span>
   <% end %>
   <span class="material-symbols-outlined"><%= icon %></span>
 
   <% if show_label %>
     <span class="hidden xl:inline tracking-wide"><%= label %></span>
   <% end %>
-  <span class="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#1C1B1B]/95 px-3 py-1.5 text-xs font-bold text-[#E5E2E1] opacity-0 shadow-lg shadow-black/30 transition-opacity duration-150 group-hover:opacity-100 md:block xl:hidden">
+  <span class="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border sidebar-tooltip-border sidebar-tooltip-surface px-3 py-1.5 text-xs font-bold sidebar-tooltip-text opacity-0 shadow-lg shadow-black/30 transition-opacity duration-150 group-hover:opacity-100 md:block xl:hidden">
     <%= label %>
   </span>
 <% end %>
