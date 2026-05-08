@@ -69,6 +69,7 @@ class Receipt < ApplicationRecord
   validates :store_address, length: { maximum: 255 }, allow_blank: true   # 住所(MAX255文字)
   validates :store_phone_number, length: { maximum: 20 }, allow_blank: true # 電話番号(MAX20文字)
 
+  validate :validate_purchased_at_not_in_future
   validate :validate_image_content_type
   validate :validate_image_file_size
   validate :validate_image_dimensions
@@ -230,6 +231,13 @@ class Receipt < ApplicationRecord
     else
       normalized
     end
+  end
+
+  def validate_purchased_at_not_in_future
+    return if purchased_at.blank?
+    return if purchased_at <= Time.current
+
+    errors.add(:purchased_at, :future_date)
   end
 
   def validate_image_content_type
