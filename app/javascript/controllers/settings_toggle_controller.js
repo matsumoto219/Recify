@@ -1,20 +1,20 @@
-import { Controller } from "@hotwired/stimulus"
-import { Turbo } from "@hotwired/turbo-rails"
+import { Controller } from '@hotwired/stimulus'
+import { Turbo } from '@hotwired/turbo-rails'
 
 export default class extends Controller {
-  static targets = ["checkbox", "hidden", "track", "thumb"]
+  static targets = ['checkbox', 'hidden', 'track', 'thumb']
   static values = {
     url: String,
     name: String,
     checked: Boolean
   }
 
-  connect() {
+  connect () {
     this.isLoading = false
     this.syncFromValue()
   }
 
-  toggle() {
+  toggle () {
     if (this.isLoading) return
     const nextChecked = !this.checkedValue
     this.checkedValue = nextChecked
@@ -23,40 +23,38 @@ export default class extends Controller {
     this.save()
   }
 
-  syncFromValue() {
+  syncFromValue () {
     if (this.hasCheckboxTarget) {
       this.checkboxTarget.checked = this.checkedValue
     }
 
     if (this.hasHiddenTarget) {
-      this.hiddenTarget.value = this.checkedValue ? "1" : "0"
+      this.hiddenTarget.value = this.checkedValue ? '1' : '0'
     }
 
     if (this.hasTrackTarget) {
-      this.trackTarget.classList.toggle("bg-[#C0C1FF]/20", this.checkedValue)
-      this.trackTarget.classList.toggle("border-[#C0C1FF]/40", this.checkedValue)
-      this.trackTarget.classList.toggle("bg-[#353534]", !this.checkedValue)
-      this.trackTarget.classList.toggle("border-white/10", !this.checkedValue)
+      this.trackTarget.classList.toggle('toggle-track-on', this.checkedValue)
+      this.trackTarget.classList.toggle('toggle-track-off', !this.checkedValue)
     }
 
     if (this.hasThumbTarget) {
-      this.thumbTarget.classList.toggle("left-6", this.checkedValue)
-      this.thumbTarget.classList.toggle("bg-[#C0C1FF]", this.checkedValue)
-      this.thumbTarget.classList.toggle("left-1", !this.checkedValue)
-      this.thumbTarget.classList.toggle("bg-[#918FA1]", !this.checkedValue)
+      this.thumbTarget.classList.toggle('left-6', this.checkedValue)
+      this.thumbTarget.classList.toggle('toggle-thumb-on', this.checkedValue)
+      this.thumbTarget.classList.toggle('left-1', !this.checkedValue)
+      this.thumbTarget.classList.toggle('toggle-thumb-off', !this.checkedValue)
     }
   }
 
-  async save() {
+  async save () {
     const token = document.querySelector('meta[name="csrf-token"]')?.content
 
     try {
       const response = await fetch(this.urlValue, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": token,
-          "Accept": "text/vnd.turbo-stream.html"
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': token,
+          Accept: 'text/vnd.turbo-stream.html'
         },
         body: JSON.stringify({
           user: {
@@ -82,17 +80,18 @@ export default class extends Controller {
       this.stopLoading()
     }
   }
-  startLoading() {
+
+  startLoading () {
     this.isLoading = true
     if (this.hasTrackTarget) {
-      this.trackTarget.classList.add("opacity-60", "pointer-events-none")
+      this.trackTarget.classList.add('opacity-60', 'pointer-events-none')
     }
   }
 
-  stopLoading() {
+  stopLoading () {
     this.isLoading = false
     if (this.hasTrackTarget) {
-      this.trackTarget.classList.remove("opacity-60", "pointer-events-none")
+      this.trackTarget.classList.remove('opacity-60', 'pointer-events-none')
     }
   }
 }
