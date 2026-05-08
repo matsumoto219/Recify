@@ -17,7 +17,7 @@
 
 <%= render "shared/ui/surface_card",
       shadow_variant: :indigo,
-      class: ["p-8 relative overflow-hidden bg-gradient-to-br from-[#4B4DD8] to-[#2F2EBE] text-white", wrapper_class].compact.join(" ") do %>
+      class: ["p-8 relative overflow-hidden amount-summary-surface", wrapper_class].compact.join(" ") do %>
   <div class="absolute -right-4 -top-4 opacity-10 pointer-events-none">
     <span class="material-symbols-outlined text-9xl" style="font-size: 120px;"><%= icon %></span>
   </div>
@@ -53,7 +53,7 @@
           <% amount = tax_detail.respond_to?(:amount) ? tax_detail.amount : tax_detail[:amount] || tax_detail["amount"] %>
           <% rate_label = rate.present? ? "#{number_with_precision(rate.to_d * 100, precision: 1, strip_insignificant_zeros: true)}%" : "税率未設定" %>
 
-          <div class="rounded-lg bg-white/10 px-3 py-2 text-xs space-y-1">
+          <div class="rounded-lg amount-summary-detail-surface px-3 py-2 text-xs space-y-1">
             <div class="flex min-w-0 justify-between gap-4 font-medium">
               <span class="min-w-0 truncate" title="<%= rate_label %>対象"><%= rate_label %>対象</span>
               <span class="shrink-0 truncate text-right" title="税額 <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>">税額 <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %></span>

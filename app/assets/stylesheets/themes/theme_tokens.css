@@ -19,6 +19,7 @@
   --text-muted: #464555;
   --text-subtle: rgba(70, 69, 85, 0.65);
   --text-on-primary: #ffffff;
+  --text-on-brand: #ffffff;
   --text-on-danger: #ffffff;
   --text-link: #3130c0;
 
@@ -140,6 +141,7 @@
   --text-muted: #c7c4d8;
   --text-subtle: rgba(199, 196, 216, 0.6);
   --text-on-primary: #1000a9;
+  --text-on-brand: #ffffff;
   --text-on-danger: #690005;
   --text-link: #c0c1ff;
 
