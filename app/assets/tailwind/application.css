@@ -338,6 +338,15 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Navigation Link Utilities ===== */
+.navigation-link {
+  color: var(--brand-primary);
+}
+
+.navigation-link:hover {
+  color: var(--text-base);
+}
+
 /* ===== Amount Summary Card Utilities ===== */
 .amount-summary-surface {
   background-image: linear-gradient(
