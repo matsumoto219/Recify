@@ -31,9 +31,9 @@
       monthly_text: monthly_change_label,
       overall_text: "累計の合計金額",
       monthly_icon: monthly_change_icon,
-      monthly_icon_class: local_assigns.fetch(:monthly_change_icon_class, "text-[#C7C4D8]"),
+      monthly_icon_class: local_assigns.fetch(:monthly_change_icon_class, "summary-card-muted"),
       overall_icon: "",
-      overall_icon_class: "text-[#C7C4D8]"
+      overall_icon_class: "summary-card-muted"
     },
     action_label: "切替",
     action_data: { action: "receipt-summary#toggle" } %>
@@ -53,7 +53,7 @@
     title: "要確認",
     value: "#{review_needed_count}件",
     subtext: review_needed_count.positive? ? "手動確認待ち" : "確認待ちはありません",
-    accent_color: "#FFB4AB",
+    accent: :error,
     value_data: {
       receipt_summary_target: "summaryValue",
       summary_key: "review_needed_count",
