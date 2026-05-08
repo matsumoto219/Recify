@@ -321,6 +321,100 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Receipt Status Badge Utilities ===== */
+.receipt-status-completed {
+  background: var(--bg-success-soft);
+  color: var(--text-success);
+}
+
+.receipt-status-processing {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+  color: var(--brand-primary);
+}
+
+.receipt-status-review-needed {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+}
+
+.receipt-status-failed {
+  background: var(--bg-error-soft);
+  color: var(--text-error);
+}
+
+.receipt-status-default {
+  background: color-mix(
+    in srgb,
+    var(--text-base) 5%,
+    transparent
+  );
+  color: var(--text-muted);
+}
+
+.receipt-status-dot-completed {
+  background: var(--state-success);
+}
+
+.receipt-status-dot-review-needed {
+  background: var(--state-warning);
+}
+
+.receipt-status-dot-failed {
+  background: var(--state-error);
+}
+
+.receipt-status-dot-default {
+  background: var(--state-info);
+}
+
+.receipt-status-text-completed {
+  color: var(--text-success);
+}
+
+.receipt-status-text-review-needed {
+  color: var(--text-warning);
+}
+
+.receipt-status-text-failed {
+  color: var(--text-error);
+}
+
+.receipt-status-text-default {
+  color: var(--text-info);
+}
+
+.receipt-status-border-completed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-success) 20%,
+    transparent
+  );
+}
+
+.receipt-status-border-review-needed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-warning) 20%,
+    transparent
+  );
+}
+
+.receipt-status-border-failed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 20%,
+    transparent
+  );
+}
+
+.receipt-status-border-default {
+  border-color: var(--glass-border);
+}
+
 /* ===== Summary Card Utilities ===== */
 .summary-card-muted {
   color: var(--text-muted);
