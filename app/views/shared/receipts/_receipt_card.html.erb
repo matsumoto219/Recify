@@ -13,11 +13,10 @@
     processing ? "animate-pulse" : nil
   ].compact.join(" ")
 
-  card_background_class = processing ? "bg-[#242424]" : "bg-[#2A2A2A]"
-  card_hover_class = processing ? nil : "hover:bg-[#393939]"
+  card_surface_variant = processing ? :bg_card : :bg_elevated
 
   icon_box_class = [
-    "w-10 h-10 rounded-lg bg-[#131313] flex items-center justify-center text-[#C0C1FF] shrink-0",
+    "w-10 h-10 rounded-lg receipt-card-icon-box flex items-center justify-center shrink-0",
     processing ? "opacity-90" : nil
   ].compact.join(" ")
 %>
@@ -25,11 +24,10 @@
 <%= render "shared/ui/surface_card",
   id: dom_id(receipt),
   class: card_classes,
-  background_class: card_background_class,
-  hover_class: card_hover_class,
+  surface_variant: card_surface_variant,
   hoverable: !processing do %>
   <%# NOTE: 旧外枠 `rounded-xl`, `transition-colors`, `border border-white/5` は surface_card 側のクラスへ置き換え。 %>
-  <%# NOTE: 旧背景 `bg-[#242424]` / `bg-[#2A2A2A]` と旧hover `hover:bg-[#393939]` は surface_card の background_class / hover_class オプションで復活。 %>
+  <%# NOTE: 旧背景 `bg-[#242424]` / `bg-[#2A2A2A]` は surface_variant へ移行。旧hover `hover:bg-[#393939]` は hoverable 経由で surface_card 側に集約。 %>
   <div class="flex items-start justify-between gap-4">
     <div class="flex items-start gap-3 min-w-0">
       <div class="<%= icon_box_class %>">
@@ -41,7 +39,7 @@
       </div>
 
       <div class="min-w-0 flex-1">
-        <h2 class="max-w-full font-bold text-[#E5E2E1] group-hover:text-[#C0C1FF] transition-colors truncate">
+        <h2 class="max-w-full font-bold receipt-card-title receipt-card-title-hover transition-colors truncate">
           <% if processing %>
             <span class="block truncate"><%= display_store_name %></span>
           <% else %>
@@ -49,7 +47,7 @@
           <% end %>
         </h2>
 
-        <p class="truncate text-[0.75rem] text-[#C7C4D8]">
+        <p class="truncate text-[0.75rem] receipt-card-muted">
           <%= processing ? "解析完了後に表示されます" : (receipt.purchased_at ? l(receipt.purchased_at, format: :short) : "日時未設定") %>
         </p>
       </div>
@@ -62,11 +60,11 @@
 
   <div class="flex justify-between items-end mt-2 gap-4">
     <div class="min-w-0 flex-1">
-      <p class="text-[0.6875rem] text-[#C7C4D8] mb-1">合計金額</p>
+      <p class="text-[0.6875rem] receipt-card-muted mb-1">合計金額</p>
       <% if processing %>
-        <div class="mt-2 h-7 w-24 rounded bg-[#3A3938]"></div>
+        <div class="mt-2 h-7 w-24 rounded receipt-card-skeleton"></div>
       <% else %>
-        <p class="truncate text-xl font-bold text-[#E5E2E1]" title="¥<%= number_with_delimiter(receipt.total_amount.to_i) %>">
+        <p class="truncate text-xl font-bold receipt-card-title" title="¥<%= number_with_delimiter(receipt.total_amount.to_i) %>">
           ¥<%= number_with_delimiter(receipt.total_amount.to_i) %>
         </p>
       <% end %>
@@ -74,11 +72,11 @@
 
     <div class="flex shrink-0 items-center gap-3 text-sm">
       <% if processing %>
-        <span class="text-[#C7C4D8]/60 cursor-not-allowed">詳細</span>
-        <span class="text-[#C0C1FF]/50 cursor-not-allowed">編集</span>
+        <span class="receipt-card-disabled-muted cursor-not-allowed">詳細</span>
+        <span class="receipt-card-disabled-brand cursor-not-allowed">編集</span>
       <% else %>
-        <%= link_to "詳細", receipt_path(receipt), class: "text-[#C7C4D8] hover:text-white transition-colors" %>
-        <%= link_to "編集", edit_receipt_path(receipt), class: "text-[#C0C1FF] hover:opacity-80 transition-opacity" %>
+        <%= link_to "詳細", receipt_path(receipt), class: "receipt-card-muted receipt-card-link-hover transition-colors" %>
+        <%= link_to "編集", edit_receipt_path(receipt), class: "receipt-card-brand hover:opacity-80 transition-opacity" %>
       <% end %>
     </div>
   </div>
