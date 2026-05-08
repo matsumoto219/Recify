@@ -302,6 +302,23 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Summary Card Utilities ===== */
+.summary-card-muted {
+  color: var(--text-muted);
+}
+
+.summary-card-brand {
+  color: var(--brand-primary);
+}
+
+.summary-card-text {
+  color: var(--text-base);
+}
+
+.summary-card-link-hover:hover {
+  color: var(--text-base);
+}
+
 /* ===== Auth Icon Utilities ===== */
 .auth-icon-surface {
   background-image: linear-gradient(
