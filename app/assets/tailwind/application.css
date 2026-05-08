@@ -479,15 +479,39 @@ body {
     'opsz' 24;
 }
 
-/* ===== Utility Tweaks ===== */
+/* ===== Button Utilities ===== */
 .btn-primary {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-weight: 600;
+  box-shadow: var(--shadow-button-primary, var(--shadow-card));
 }
 
+.btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border-color: var(--btn-secondary-border);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-floating);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-base);
+  border-color: var(--border-default);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-elevated);
+}
+
+.btn-danger {
+  background: var(--state-error);
+  color: var(--text-on-danger);
+}
+
+/* ===== Utility Tweaks ===== */
 .card {
   background-color: var(--bg-card);
   border-radius: 0.75rem;
