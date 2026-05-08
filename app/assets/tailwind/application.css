@@ -431,6 +431,35 @@ body {
   border-color: var(--border-default);
 }
 
+/* ===== Notice Content Utilities ===== */
+.notice-title {
+  color: var(--text-base);
+}
+
+.notice-message {
+  color: var(--text-muted);
+}
+
+.notice-icon-success {
+  background: var(--bg-success-soft);
+  color: var(--text-success);
+}
+
+.notice-icon-warning {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+}
+
+.notice-icon-error {
+  background: var(--bg-error-soft);
+  color: var(--text-error);
+}
+
+.notice-icon-info {
+  background: var(--bg-info-soft);
+  color: var(--text-info);
+}
+
 /* ===== Input Field ===== */
 .input-field {
   background-color: var(--bg-input);

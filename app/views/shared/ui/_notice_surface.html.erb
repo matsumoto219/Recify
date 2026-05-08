@@ -6,40 +6,35 @@
     when "notice", "success", "ai_notice", "ocr_notice", "success_box", "notice_box"
       {
         variant_class: "notice-surface-success",
-        icon_bg: "bg-[var(--bg-success-soft)]",
-        icon_color: "text-[var(--text-success)]",
+        icon_class: "notice-icon-success",
         icon: "check_circle",
         title: "成功"
       }
     when "caution", "ai_caution", "ocr_caution", "caution_box"
       {
         variant_class: "notice-surface-warning",
-        icon_bg: "bg-[var(--bg-warning-soft)]",
-        icon_color: "text-[var(--text-warning)]",
+        icon_class: "notice-icon-warning",
         icon: "info",
         title: "注意"
       }
     when "warning", "ai_warning", "ocr_warning", "warning_box"
       {
         variant_class: "notice-surface-warning",
-        icon_bg: "bg-[var(--bg-warning-soft)]",
-        icon_color: "text-[var(--text-warning)]",
+        icon_class: "notice-icon-warning",
         icon: "warning",
         title: "警告"
       }
     when "alert", "error", "ai_error", "ocr_error", "image_error", "error_box", "alert_box"
       {
         variant_class: "notice-surface-error",
-        icon_bg: "bg-[var(--bg-error-soft)]",
-        icon_color: "text-[var(--text-error)]",
+        icon_class: "notice-icon-error",
         icon: "error",
         title: "エラー"
       }
     else
       {
         variant_class: "notice-surface-info",
-        icon_bg: "bg-[var(--bg-info-soft)]",
-        icon_color: "text-[var(--text-info)]",
+        icon_class: "notice-icon-info",
         icon: "info",
         title: "通知"
       }
@@ -100,21 +95,21 @@
   data-notice-surface-auto-dismiss-value="<%= auto_dismiss %>"
   data-notice-surface-auto-dismiss-delay-value="<%= resolved_auto_dismiss_delay %>"
   data-notice-surface-max-visible-value="<%= max_visible %>">
-  <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_bg] %> flex items-center justify-center <%= tone[:icon_color] %>">
+  <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_class] %> flex items-center justify-center">
     <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= tone[:icon] %></span>
   </div>
 
   <div class="flex-1 min-w-0">
     <% if title.present? %>
-      <p class="text-base font-bold text-[var(--text-base)] leading-tight mb-1"><%= title %></p>
+      <p class="text-base font-bold notice-title leading-tight mb-1"><%= title %></p>
     <% end %>
 
     <% if body.present? %>
-      <div class="min-w-0 max-w-full text-xs text-[var(--text-muted)] leading-relaxed break-words overflow-hidden">
+      <div class="min-w-0 max-w-full text-xs notice-message leading-relaxed break-words overflow-hidden">
         <%= body %>
       </div>
     <% elsif message.present? %>
-      <p class="min-w-0 max-w-full text-xs text-[var(--text-muted)] leading-relaxed break-words whitespace-pre-wrap"><%= message %></p>
+      <p class="min-w-0 max-w-full text-xs notice-message leading-relaxed break-words whitespace-pre-wrap"><%= message %></p>
     <% end %>
   </div>
 
