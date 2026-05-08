@@ -16,29 +16,23 @@
   trailing_icon_animated = local_assigns.fetch(:trailing_icon_animated, false)
   extra_classes = local_assigns[:class]
   disable_with = local_assigns[:disable_with]
-  text_color = local_assigns[:text_color]
-  border_hover = local_assigns.fetch(:border_hover, false)
   form = local_assigns[:form]
 
   # Theme token based button variants
   variant_classes = case variant
                     # Elevated surface button
                     when :secondary
-                      "bg-[var(--btn-secondary-bg)] text-[var(--btn-secondary-text)] border border-[var(--btn-secondary-border)] hover:bg-[var(--bg-floating)]"
+                      "btn-secondary border hover:brightness-110"
                     # Transparent ghost button
                     when :ghost
-                      "bg-transparent text-[var(--text-base)] border border-[var(--border-default)] hover:bg-[var(--bg-elevated)]"
+                      "btn-ghost border hover:brightness-110"
                     # Error state button
                     when :danger
-                      "bg-[var(--state-error)] text-[var(--text-on-danger)] border border-transparent hover:opacity-90 shadow-lg"
+                      "btn-danger border border-transparent hover:brightness-110 shadow-lg"
                     # Primary CTA button
                     else
-                      "bg-[image:var(--btn-primary-bg)] text-[var(--btn-primary-text)] border-none hover:brightness-110 shadow-lg overflow-hidden"
+                      "btn-primary border-none hover:brightness-110 shadow-lg overflow-hidden"
                     end
-
-  border_hover_class = if border_hover
-    "hover:border-[var(--border-focus)]"
-  end
 
   size_classes = case size
                  when :sm
@@ -49,12 +43,10 @@
                    "px-6 py-3 text-sm rounded-lg"
                  end
 
-  text_color_class = text_color.present? ? text_color : nil
-
   justify_classes = trailing_icon.present? ? "justify-between" : "justify-center"
   width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
   state_classes = "group items-center gap-2 font-medium transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-  button_classes = [width_classes, state_classes, variant_classes, size_classes, text_color_class, border_hover_class, extra_classes].compact.join(" ")
+  button_classes = [width_classes, state_classes, variant_classes, size_classes, extra_classes].compact.join(" ")
 
   current_label = loading ? (disable_with.presence || label) : label
   trailing_icon_class = [
