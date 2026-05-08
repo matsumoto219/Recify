@@ -441,6 +441,77 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Search Box Utilities ===== */
+.search-panel-mobile {
+  background: color-mix(
+    in srgb,
+    var(--bg-card-subtle) 95%,
+    transparent
+  );
+  border-color: var(--glass-border);
+  box-shadow: 0 20px 25px color-mix(
+    in srgb,
+    black 30%,
+    transparent
+  );
+
+  /* Search panel blur */
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}
+
+.search-input {
+  background: var(--bg-card);
+  color: var(--text-base);
+  border-color: var(--glass-border);
+  box-shadow: 0 5px 15px color-mix(
+    in srgb,
+    black 20%,
+    transparent
+  );
+}
+
+.search-input::placeholder {
+  color: color-mix(
+    in srgb,
+    var(--text-muted) 60%,
+    transparent
+  );
+}
+
+.search-input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.search-icon-button {
+  color: var(--text-subtle);
+}
+
+.search-icon-button:hover {
+  color: var(--text-base);
+}
+
+.search-close-button {
+  color: var(--text-muted);
+}
+
+.search-close-button:hover {
+  background: color-mix(
+    in srgb,
+    var(--text-base) 10%,
+    transparent
+  );
+  color: var(--text-base);
+}
+
+.search-focus-line {
+  background-image: linear-gradient(
+    to right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
 /* ===== Receipt Image Utilities ===== */
 .image-preview-surface {
   background: var(--bg-input);

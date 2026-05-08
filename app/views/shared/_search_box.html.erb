@@ -11,12 +11,12 @@
   mobile = variant == :mobile
 
   resolved_wrapper_class = [
-    mobile ? "relative w-full rounded-2xl border border-white/10 bg-[#1C1B1B]/95 p-3 shadow-xl shadow-black/30 backdrop-blur" : "relative w-full",
+    mobile ? "relative w-full rounded-2xl border search-panel-mobile p-3" : "relative w-full",
     wrapper_class
   ].compact.join(" ")
 
   resolved_input_class = [
-    "peer h-10 w-full rounded-lg border border-white/10 bg-[#201F1F] py-2.5 text-sm text-[#E5E2E1] placeholder:text-[#C7C4D8]/60 shadow-[#00000033_0px_5px_15px] outline-none transition-shadow duration-300 focus:border-transparent focus:shadow-none",
+    "peer h-10 w-full rounded-lg border search-input py-2.5 text-sm outline-none transition-shadow duration-300",
     mobile ? "px-10 pr-12" : "px-10",
     input_class
   ].compact.join(" ")
@@ -30,7 +30,7 @@
   <%= form_with url: receipts_path, method: :get, local: true, class: "contents" do %>
   <div class="relative overflow-hidden rounded-lg">
     <button type="submit"
-      class="absolute left-3 top-0 z-10 flex h-10 items-center text-[#C7C4D8]/70 hover:text-white transition-colors"
+      class="absolute left-3 top-0 z-10 flex h-10 items-center search-icon-button transition-colors"
       aria-label="検索">
       <span class="material-symbols-outlined text-[20px] leading-none">search</span>
     </button>
@@ -40,24 +40,23 @@
       name="q"
       value="<%= params[:q] %>"
       data-action="input->search#handleInput"
-      <% if input_id.present? %>id="<%= input_id %>"<% end %>
-      <% if input_name.present? %>name="<%= input_name %>"<% end %>
+      <% if input_id.present? %> id="<%= input_id %>"<% end %>
+      <% if input_name.present? %> name="<%= input_name %>"<% end %>
       placeholder="<%= placeholder %>"
       class="<%= resolved_input_class %>"
       <% input_data.each do |key, value| %>
         data-<%= key.to_s.dasherize %>="<%= value %>"
-      <% end %>
-    >
+      <% end %>>
     <% if mobile && close_action.present? %>
       <button type="button"
-        class="absolute right-5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#C7C4D8] transition-colors hover:bg-white/10 hover:text-white"
+        class="absolute right-5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full search-close-button transition-colors"
         data-action="<%= close_action %>"
         aria-label="検索を閉じる">
         <span class="material-symbols-outlined text-[18px]">close</span>
       </button>
     <% end %>
 
-    <span class="pointer-events-none absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-gradient-to-r from-[#C0C1FF] to-[#4B4DD8] transition-all duration-300 ease-in peer-focus:w-full"></span>
+    <span class="pointer-events-none absolute bottom-0 left-0 h-[2px] w-0 rounded-full search-focus-line transition-all duration-300 ease-in peer-focus:w-full"></span>
   </div>
   <% end %>
 </div>
