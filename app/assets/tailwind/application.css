@@ -347,6 +347,84 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Receipt Image Utilities ===== */
+.image-preview-surface {
+  background: var(--bg-input);
+  border-color: var(--glass-border);
+}
+
+.image-preview-surface-hover:hover {
+  background: var(--bg-card-subtle);
+}
+
+.upload-dropzone {
+  background: var(--bg-input);
+  border-color: var(--glass-border);
+}
+
+.upload-dropzone:hover {
+  background: var(--bg-card-subtle);
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 50%,
+    transparent
+  );
+}
+
+.modal-overlay {
+  background: color-mix(in srgb, black 80%, transparent);
+
+  /* Modal overlay blur */
+  @apply backdrop-blur-sm;
+}
+
+.floating-action-button {
+  background: color-mix(
+    in srgb,
+    var(--bg-floating) 90%,
+    transparent
+  );
+  color: var(--text-base);
+}
+
+.floating-action-button:hover {
+  background: var(--bg-floating);
+}
+
+.image-modal-surface {
+  background: var(--bg-input);
+  border-color: var(--glass-border);
+}
+
+.drop-overlay-surface {
+  background: color-mix(
+    in srgb,
+    var(--bg-input) 85%,
+    transparent
+  );
+
+  /* Drag overlay blur */
+  @apply backdrop-blur-sm;
+}
+
+.drop-overlay-chip {
+  background: color-mix(
+    in srgb,
+    var(--bg-card-subtle) 95%,
+    transparent
+  );
+
+  /* Drop overlay chip border */
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 40%,
+    transparent
+  );
+
+  /* Drop overlay chip text */
+  color: var(--text-base);
+}
+
 /* ===== Amount Summary Card Utilities ===== */
 .amount-summary-surface {
   background-image: linear-gradient(
