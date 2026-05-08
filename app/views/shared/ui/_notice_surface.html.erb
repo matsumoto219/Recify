@@ -110,11 +110,11 @@
     <% end %>
 
     <% if body.present? %>
-      <div class="text-xs text-[var(--text-muted)] leading-relaxed">
+      <div class="min-w-0 max-w-full text-xs text-[var(--text-muted)] leading-relaxed break-words overflow-hidden">
         <%= body %>
       </div>
     <% elsif message.present? %>
-      <p class="text-xs text-[var(--text-muted)] leading-relaxed"><%= message %></p>
+      <p class="min-w-0 max-w-full text-xs text-[var(--text-muted)] leading-relaxed break-words whitespace-pre-wrap"><%= message %></p>
     <% end %>
   </div>
 

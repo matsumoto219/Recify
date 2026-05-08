@@ -15,11 +15,11 @@
     <% grouped_messages.each_with_index do |(type, messages), i| %>
       <% body_content = if messages.many? %>
         <% capture do %>
-          <ul class="space-y-2 text-xs text-[#C7C4D8] leading-relaxed">
+          <ul class="min-w-0 max-w-full space-y-2 text-xs text-[#C7C4D8] leading-relaxed break-words">
             <% messages.each do |message| %>
-              <li class="flex items-start gap-2">
+              <li class="flex min-w-0 max-w-full items-start gap-2 break-words">
                 <span class="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true"></span>
-                <span><%= message %></span>
+                <span class="min-w-0 max-w-full break-words"><%= message %></span>
               </li>
             <% end %>
           </ul>
