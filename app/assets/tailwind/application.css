@@ -338,6 +338,28 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Amount Summary Card Utilities ===== */
+.amount-summary-surface {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-primary-strong),
+    color-mix(
+      in srgb,
+      var(--brand-primary-strong) 70%,
+      black
+    )
+  );
+  color: var(--text-on-brand);
+}
+
+.amount-summary-detail-surface {
+  background: color-mix(
+    in srgb,
+    var(--text-on-brand) 10%,
+    transparent
+  );
+}
+
 /* ===== Auth Icon Utilities ===== */
 .auth-icon-surface {
   background-image: linear-gradient(
