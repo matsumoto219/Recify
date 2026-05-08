@@ -1,12 +1,13 @@
 <!-- 共通カードパーツ -->
 <%
   variant = local_assigns.fetch(:variant, :default).to_sym
+  surface_variant = local_assigns[:surface_variant]&.to_sym
   shadow_variant = local_assigns.fetch(:shadow_variant, :default).to_sym
   hoverable = local_assigns.fetch(:hoverable, false)
   extra_classes = local_assigns[:class]
-  background_class = local_assigns[:background_class]
-  hover_class = local_assigns[:hover_class]
   style = local_assigns[:style]
+
+  # TODO: accent_color は accent token 化後に削除予定
   accent_color = local_assigns[:accent_color]
   accent_width_class = local_assigns[:accent_width_class]
   accent_width = local_assigns[:accent_width] || (accent_width_class.to_s.include?("4") ? "4px" : "2px")
@@ -14,7 +15,8 @@
   accent_sides = [:top, :right, :bottom, :left] if accent_sides.include?(:all)
   id = local_assigns[:id]
   title_id = local_assigns[:title_id]
-  custom_background = background_class.present? || extra_classes&.match?(/bg-|from-|to-/)
+  extra_class_tokens = extra_classes.to_s.split
+  custom_background = extra_class_tokens.any? { |class_name| class_name.start_with?("bg-", "from-", "to-") }
 
   shadow_classes = case shadow_variant
                    when :indigo
@@ -28,25 +30,37 @@
     shadow_classes
   ].join(" ")
 
+  surface_variant_class = case surface_variant
+                          when :bg_card
+                            "surface-card-bg-card"
+                          when :bg_elevated
+                            "surface-card-bg-elevated"
+                          when :bg_card_subtle
+                            "surface-card-bg-card-subtle"
+                          when :bg_input
+                            "surface-card-bg-input"
+                          when :bg_floating
+                            "surface-card-bg-floating"
+                          end
+
   variant_classes = case variant
                     when :danger
                       "surface-card-danger border"
                     when :warning
                       "surface-card-warning border surface-card-warning-border"
                     else
-                      custom_background ? nil : "surface-card-default"
+                      custom_background ? nil : (surface_variant_class || "surface-card-default")
                     end
 
   hover_classes = if hoverable
-                    hover_class.presence ||
-                      case variant
-                      when :danger
-                        "surface-card-danger-hover"
-                      when :warning
-                        "surface-card-warning-hover"
-                      else
-                        "surface-card-hover"
-                      end
+                    case variant
+                    when :danger
+                      "surface-card-danger-hover"
+                    when :warning
+                      "surface-card-warning-hover"
+                    else
+                      "surface-card-hover"
+                    end
                   end
 
   accent_style_rules = if accent_color.present? && accent_sides.any?
@@ -66,7 +80,7 @@
 
   surface_style = [style].flatten.compact.join(" ")
 
-  surface_classes = [base_classes, variant_classes, background_class, hover_classes, extra_classes].compact.join(" ")
+  surface_classes = [base_classes, variant_classes, hover_classes, extra_classes].compact.join(" ")
 %>
 
 <section <%= id.present? ? " id=\"#{id}\"".html_safe : "" %> class="<%= surface_classes %>"<%= surface_style.present? ? " style=\"#{surface_style}\"".html_safe : "" %><%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
