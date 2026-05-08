@@ -33,6 +33,25 @@ body {
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
+/* ===== Ambient Background Utilities ===== */
+.ambient-brand-gradient {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
+.ambient-glow {
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  opacity: 0.1;
+
+  /* Ambient glow blur */
+  @apply blur-[120px];
+}
+
 /* ===== Surface Card Utilities ===== */
 .surface-card-default {
   background: var(--bg-card);
