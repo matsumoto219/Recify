@@ -260,6 +260,48 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Receipt Card Utilities ===== */
+.receipt-card-icon-box {
+  background: var(--bg-page);
+  color: var(--brand-primary);
+}
+
+.receipt-card-title {
+  color: var(--text-base);
+}
+
+.group:hover .receipt-card-title-hover {
+  color: var(--brand-primary);
+}
+
+.receipt-card-muted {
+  color: var(--text-muted);
+}
+
+.receipt-card-brand {
+  color: var(--brand-primary);
+}
+
+.receipt-card-skeleton {
+  background: var(--bg-floating);
+}
+
+.receipt-card-disabled-muted {
+  color: var(--text-subtle);
+}
+
+.receipt-card-disabled-brand {
+  color: color-mix(
+    in srgb,
+    var(--brand-primary) 50%,
+    transparent
+  );
+}
+
+.receipt-card-link-hover:hover {
+  color: var(--text-base);
+}
+
 /* ===== Auth Icon Utilities ===== */
 .auth-icon-surface {
   background-image: linear-gradient(
