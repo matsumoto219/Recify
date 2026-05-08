@@ -39,7 +39,7 @@
     error_flags = {
       store_name: receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain"),
       payment_method: receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain"),
-      purchased_at: receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted"),
+      purchased_at: receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") || receipt.errors[:purchased_at].any?,
       store_address: receipt_review_reason_includes.call("store_address_missing", "store_address_uncertain"),
       store_phone_number: receipt_review_reason_includes.call("store_phone_number_missing", "store_phone_number_uncertain")
     }
@@ -162,6 +162,7 @@
                        value: receipt.purchased_at&.in_time_zone&.to_date,
                        icon: "calendar_today",
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
+                       error_message: receipt.errors.full_messages_for(:purchased_at).first,
                        field_class: "h-11 min-h-11 py-2.5" %>
 
             <%= render "shared/ui/datetime_field",
@@ -241,8 +242,7 @@
                 <% item_review_reason_codes = Array(item.review_reasons).map(&:to_s) %>
                 <% item_review_reason_includes = ->(*codes) { (item_review_reason_codes & codes.map(&:to_s)).any? } %>
                 <%# TODO: 明細のエラーフラグも model 側（例: item.error_flags）へ移動することを検討
-                    現状はView内で完結しているが、将来的な責務分離のため
-                %>
+                    現状はView内で完結しているが、将来的な責務分離のため %>
                 <%
                   item_error_flags = {
                     name: item_review_reason_includes.call("item_name_uncertain"),
