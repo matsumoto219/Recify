@@ -7,31 +7,31 @@
   state_config = case state
                  when :ok
                    {
-                     dot: "bg-green-400",
-                     text_color: "text-green-300",
-                     border: "border-green-400/20",
-                     bg: "bg-green-400/10"
+                     dot: "receipt-status-dot-completed",
+                     text_color: "receipt-status-text-completed",
+                     border: "receipt-status-border-completed",
+                     bg: "receipt-status-completed"
                    }
                  when :degraded
                    {
-                     dot: "bg-orange-400",
-                     text_color: "text-orange-300",
-                     border: "border-orange-400/20",
-                     bg: "bg-orange-400/10"
+                     dot: "receipt-status-dot-review-needed",
+                     text_color: "receipt-status-text-review-needed",
+                     border: "receipt-status-border-review-needed",
+                     bg: "receipt-status-review-needed"
                    }
                  when :down
                    {
-                     dot: "bg-red-400",
-                     text_color: "text-red-300",
-                     border: "border-red-400/20",
-                     bg: "bg-red-400/10"
+                     dot: "receipt-status-dot-failed",
+                     text_color: "receipt-status-text-failed",
+                     border: "receipt-status-border-failed",
+                     bg: "receipt-status-failed"
                    }
                  else
                    {
-                     dot: "bg-gray-400",
-                     text_color: "text-gray-300",
-                     border: "border-white/10",
-                     bg: "bg-[#201F1F]/50"
+                     dot: "receipt-status-dot-default",
+                     text_color: "receipt-status-text-default",
+                     border: "receipt-status-border-default",
+                     bg: "receipt-status-default"
                    }
                  end
 
@@ -46,11 +46,11 @@
 <div class="<%= container_classes %>">
   <div class="flex items-center gap-3">
     <div class="w-2.5 h-2.5 rounded-full <%= state_config[:dot] %>"></div>
-    <span class="text-sm text-[#C7C4D8]"><%= label %></span>
+    <span class="text-sm field-muted"><%= label %></span>
   </div>
 
   <% if text.present? %>
-    <span class="text-sm font-medium text-white"><%= text %></span>
+    <span class="text-sm font-medium field-text"><%= text %></span>
   <% else %>
     <span class="text-sm font-medium <%= state_config[:text_color] %>">
       <%= case state
