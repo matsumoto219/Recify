@@ -8,6 +8,8 @@ ja:
       models:
         receipt:
           attributes:
+            purchased_at:
+              future_date: "は未来の日付・時刻を入力できません"
             image:
               invalid_content_type: "対応していないファイル形式です"
               file_too_large: "ファイルサイズは20MB以下にしてください"
