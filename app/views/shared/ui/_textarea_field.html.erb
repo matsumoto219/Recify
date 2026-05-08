@@ -40,18 +40,18 @@
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
 
   base_wrapper_class = "space-y-2"
-  base_label_class = "text-xs font-bold uppercase tracking-wider text-[#C7C4D8]"
-  base_textarea_class = "w-full rounded-xl bg-[#0E0E0E] text-[#E5E2E1] border border-transparent outline-none transition-all resize-none"
+  base_label_class = "text-xs font-bold uppercase tracking-wider field-label"
+  base_textarea_class = "w-full rounded-xl input-field outline-none transition-all resize-none"
   highlight_classes = if has_error || highlight_variant == :error
-                        "!border-[#FFB4AB] focus:ring-2 focus:ring-[#FFB4AB]/30"
+                        "input-field-error"
                       else
-                        "!border-transparent focus:ring-2 focus:ring-[#C0C1FF]/50"
+                        nil
                       end
   textarea_spacing_class = with_icon ? "pl-11 pr-4" : "px-4"
   merged_wrapper_class = [base_wrapper_class, textarea_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_textarea_class = [base_textarea_class, highlight_classes, textarea_spacing_class, textarea_class].compact.join(" ")
-  merged_error_class = ["text-xs text-[#FFB4AB]", error_message_class].compact.join(" ")
+  merged_error_class = ["text-xs field-error-text", error_message_class].compact.join(" ")
 
   field_options = {
     placeholder: placeholder,
@@ -68,7 +68,7 @@
 
   <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'text-[#FFB4AB] group-focus-within:text-[#FFB4AB]' : 'text-[#C7C4D8] group-focus-within:text-[#C0C1FF]' %>"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'field-icon-error field-icon-error-focus' : 'field-icon field-icon-focus' %>"><%= icon %></span>
     <% end %>
 
     <%= f.text_area attribute, **field_options %>

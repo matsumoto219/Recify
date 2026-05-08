@@ -470,6 +470,72 @@ body {
     );
 }
 
+/* ===== Field Utilities ===== */
+.field-label {
+  color: var(--text-muted);
+}
+
+.field-muted {
+  color: var(--text-muted);
+}
+
+.field-error-text {
+  color: var(--text-error);
+}
+
+.field-icon {
+  color: var(--text-muted);
+}
+
+.group:focus-within .field-icon-focus {
+  color: var(--border-focus);
+}
+
+.field-icon-error,
+.group:focus-within .field-icon-error-focus {
+  color: var(--text-error);
+}
+
+.field-control-wrapper {
+  background: var(--bg-input);
+  border-color: transparent;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.field-control-wrapper:focus-within {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--border-focus) 35%,
+    transparent
+  );
+}
+
+.field-control-wrapper-error {
+  border-color: var(--state-error);
+}
+
+.field-control-wrapper-error:focus-within {
+  border-color: var(--state-error);
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--state-error) 35%,
+    transparent
+  );
+}
+
+.field-stepper-button {
+  color: var(--text-base);
+}
+
+.field-stepper-button:hover,
+.field-stepper-button:focus {
+  background: var(--bg-elevated);
+}
+
 /* ===== Material Icons Adjustment ===== */
 .material-symbols-outlined {
   font-variation-settings:
