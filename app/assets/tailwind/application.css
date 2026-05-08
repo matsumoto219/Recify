@@ -746,6 +746,41 @@ body {
   background: var(--bg-elevated);
 }
 
+/* ===== Toggle Switch Utilities ===== */
+.toggle-label {
+  color: var(--text-base);
+}
+
+.toggle-description {
+  color: var(--text-muted);
+}
+
+.toggle-track-on {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 40%,
+    transparent
+  );
+}
+
+.toggle-track-off {
+  background: var(--bg-floating);
+  border-color: var(--glass-border);
+}
+
+.toggle-thumb-on {
+  background: var(--brand-primary);
+}
+
+.toggle-thumb-off {
+  background: var(--text-muted);
+}
+
 /* ===== Material Icons Adjustment ===== */
 .material-symbols-outlined {
   font-variation-settings:

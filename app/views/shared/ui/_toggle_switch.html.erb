@@ -11,21 +11,21 @@
   remote = local_assigns.fetch(:remote, false)
   update_url = local_assigns[:url]
 
-  resolved_label_class = ["text-sm font-medium text-white", label_class].compact.join(" ")
-  resolved_description_class = ["text-xs text-[#C7C4D8]", description_class].compact.join(" ")
+  resolved_label_class = ["text-sm font-medium toggle-label", label_class].compact.join(" ")
+  resolved_description_class = ["text-xs toggle-description", description_class].compact.join(" ")
   wrapper_classes = ["flex items-center justify-between gap-4", wrapper_class].compact.join(" ")
 
   controller_data_enabled = remote && input_name.present? && update_url.present?
 
   track_classes = [
     "w-11 h-6 rounded-full relative transition-colors duration-200 border shrink-0",
-    checked ? "bg-[#C0C1FF]/20 border-[#C0C1FF]/40" : "bg-[#353534] border-white/10",
+    checked ? "toggle-track-on" : "toggle-track-off",
     disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
   ].join(" ")
 
   thumb_classes = [
     "absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full transition-all duration-200",
-    checked ? "left-6 bg-[#C0C1FF]" : "left-1 bg-[#918FA1]"
+    checked ? "left-6 toggle-thumb-on" : "left-1 toggle-thumb-off"
   ].join(" ")
 %>
 
@@ -36,8 +36,7 @@
     data-settings-toggle-url-value="<%= update_url %>"
     data-settings-toggle-name-value="<%= input_name %>"
     data-settings-toggle-checked-value="<%= checked %>"
-  <% end %>
->
+  <% end %>>
   <div class="space-y-0.5 min-w-0">
     <p class="<%= resolved_label_class %>"><%= label %></p>
     <% if description.present? %>
@@ -50,21 +49,18 @@
     class="inline-flex items-center justify-center p-2 -m-2 shrink-0"
     role="switch"
     aria-checked="<%= checked %>"
-    <% if input_id.present? %>aria-controls="<%= input_id %>"<% end %>
+    <% if input_id.present? %> aria-controls="<%= input_id %>"<% end %>
     <%= "disabled" if disabled %>
     <% if controller_data_enabled && !disabled %>
       data-action="click->settings-toggle#toggle"
-    <% end %>
-  >
+    <% end %>>
     <span
       class="<%= track_classes %>"
-      <% if controller_data_enabled %>data-settings-toggle-target="track"<% end %>
-    >
+      <% if controller_data_enabled %> data-settings-toggle-target="track"<% end %>>
       <span
         class="<%= thumb_classes %>"
         aria-hidden="true"
-        <% if controller_data_enabled %>data-settings-toggle-target="thumb"<% end %>
-      ></span>
+        <% if controller_data_enabled %> data-settings-toggle-target="thumb"<% end %>></span>
     </span>
   </button>
 
@@ -74,7 +70,6 @@
       name="<%= input_name %>"
       id="<%= input_id %>"
       value="<%= checked ? 1 : 0 %>"
-      <% if controller_data_enabled %>data-settings-toggle-target="hidden"<% end %>
-    >
+      <% if controller_data_enabled %> data-settings-toggle-target="hidden"<% end %>>
   <% end %>
 </div>
