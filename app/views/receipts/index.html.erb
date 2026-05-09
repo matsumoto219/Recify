@@ -20,13 +20,15 @@
       wrapper_class: "mt-1" %>
   <% end %>
 
-  <%= render "shared/ui/button",
-    label: "レシート登録",
-    as: :link,
-    href: select_input_method_receipts_path,
-    variant: :primary,
-    size: :md,
-    icon: "add_circle" %>
+  <div class="w-full flex justify-end md:w-auto md:block">
+    <%= render "shared/ui/button",
+      label: "レシート登録",
+      as: :link,
+      href: select_input_method_receipts_path,
+      variant: :primary,
+      size: :md,
+      icon: "add_circle" %>
+  </div>
 </section>
 
 <div id="receipts-summary">
