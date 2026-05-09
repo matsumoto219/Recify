@@ -10,7 +10,7 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
           <div class="relative flex shrink-0 flex-col items-center gap-2">
-            <div class="w-20 h-20 rounded-full overflow-hidden border-2 border-[#C0C1FF]/20 bg-[#2A2A2A] flex items-center justify-center text-[#C0C1FF] text-xl font-bold">
+            <div class="w-20 h-20 rounded-full overflow-hidden border-2 token-border-brand-soft token-bg-elevated flex items-center justify-center token-text-brand text-xl font-bold">
               <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
                 <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
               <% else %>
@@ -18,7 +18,7 @@
                 <%= display_name[0,1]&.upcase || "U" %>
               <% end %>
             </div>
-            <span class="inline-flex w-fit shrink-0 bg-[#C0C1FF]/10 text-[#C0C1FF] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C0C1FF]/20 md:hidden">
+            <span class="inline-flex w-fit shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:hidden">
               <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
             </span>
           </div>
@@ -26,13 +26,13 @@
           <div class="min-w-0 w-0 flex-1 overflow-hidden space-y-1">
             <div class="grid min-w-0 max-w-full grid-cols-1 gap-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-3">
               <div class="min-w-0 flex-1 overflow-hidden">
-                <h2 class="block max-w-full truncate text-lg font-semibold text-white" title="<%= current_user.name.presence || "ユーザー名未設定" %>"><%= current_user.name.presence || "ユーザー名未設定" %></h2>
+                <h2 class="block max-w-full truncate text-lg font-semibold token-text-base" title="<%= current_user.name.presence || "ユーザー名未設定" %>"><%= current_user.name.presence || "ユーザー名未設定" %></h2>
               </div>
-              <span class="hidden w-fit self-start shrink-0 bg-[#C0C1FF]/10 text-[#C0C1FF] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C0C1FF]/20 md:inline-flex md:self-auto">
+              <span class="hidden w-fit self-start shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:inline-flex md:self-auto">
                 <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
               </span>
             </div>
-            <p class="text-sm text-[#C7C4D8] truncate min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14) %></p>
+            <p class="text-sm token-text-muted truncate min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14) %></p>
           </div>
         </div>
 
@@ -43,9 +43,8 @@
                 label: "プロフィールを編集",
                 variant: :secondary,
                 size: :md,
-                text_color: "text-[#C0C1FF]",
                 full_width: true,
-                class: "py-2.5 hover:bg-[#C0C1FF]/10 md:w-auto" %>
+                class: "py-2.5 md:w-auto" %>
         </div>
       </div>
     <% end %>
@@ -105,8 +104,8 @@
           <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[#C7C4D8] text-sm">info</span>
-              <span class="text-[#C7C4D8]">2要素認証 (2FA)</span>
+              <span class="material-symbols-outlined token-text-muted text-sm">info</span>
+              <span class="token-text-muted">2要素認証 (2FA)</span>
             </div>
             <%= render "shared/ui/setting_status_badge",
                   state: :inactive,
@@ -117,8 +116,8 @@
           <%# TODO: Passkey 設定機能を実装する。現状はダミー表示 %>
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[#C7C4D8] text-sm">info</span>
-              <span class="text-[#C7C4D8]">Passkey 設定</span>
+              <span class="material-symbols-outlined token-text-muted text-sm">info</span>
+              <span class="token-text-muted">Passkey 設定</span>
             </div>
             <%= render "shared/ui/setting_status_badge",
                   state: :inactive,
@@ -126,7 +125,7 @@
                   size: :lg %>
           </div>
 
-          <p class="text-[11px] text-[#C7C4D8]/60 leading-relaxed">
+          <p class="text-[11px] token-text-subtle leading-relaxed">
             ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨します。
           </p>
         </div>
@@ -161,7 +160,10 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", variant: :danger, class: "p-6" do %>
+    <%= render "shared/ui/surface_card",
+          variant: :danger,
+          shadow_variant: :danger,
+          class: "p-6" do %>
       <%= render "shared/ui/section_header",
             icon: "delete",
             title: "アカウント操作",
@@ -183,8 +185,8 @@
         </div>
 
         <div class="flex items-start gap-2 pt-2">
-          <span class="material-symbols-outlined text-[#FFB4AB] text-sm mt-0.5">warning</span>
-          <p class="text-xs text-[#FFB4AB]/80 leading-relaxed">
+          <span class="material-symbols-outlined token-text-error text-sm mt-0.5">warning</span>
+          <p class="text-xs token-text-error-muted leading-relaxed">
             退会するとアカウントに紐づくデータが削除されます。この操作は取り消すことができませんのでご注意ください。
           </p>
         </div>

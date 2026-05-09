@@ -30,17 +30,17 @@
               title_size: "text-xl",
               class: "mb-4" %>
 
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#232222] border border-white/10 p-4 rounded-lg min-w-0">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 token-bg-card-subtle border token-border-soft p-4 rounded-lg min-w-0">
           <div class="min-w-0">
-            <p class="text-xs text-[#C7C4D8] mb-1">現在のメールアドレス</p>
-            <p class="truncate text-white font-medium min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 12, local_max_length_mobile: 7, domain_max_length_mobile: 16) %></p>
+            <p class="text-xs token-text-muted mb-1">現在のメールアドレス</p>
+            <p class="truncate token-text-base font-medium min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 25, local_max_length_mobile: 15, domain_max_length_mobile: 16) %></p>
           </div>
 
           <%# TODO: メールアドレス変更機能を実装
               - Deviseのconfirmableを利用
               - 再認証（current_password）を必須化
               - 変更確認メール送信 %>
-          <div class="shrink-0">
+          <div class="shrink-0 flex justify-end md:block">
             <%= render "shared/ui/button",
                   label: "変更する（未対応）",
                   variant: :secondary,
@@ -51,7 +51,7 @@
           </div>
         </div>
 
-        <p class="mt-4 text-sm text-[#C7C4D8]/80 break-words">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
+        <p class="mt-4 text-sm token-text-subtle break-words">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
       <% end %>
     </div>
     <!-- END: settings/security email card -->
@@ -134,7 +134,8 @@
                 - 強度バー（弱/中/強）
                 - 最低文字数や記号チェック %>
 
-            <div class="pt-2">
+            <p class="text-sm token-text-subtle">安全のため、定期的にパスワードを変更してください。</p>
+            <div class="pt-2 flex justify-end">
               <%= render "shared/ui/button",
                     label: "パスワードを保存",
                     variant: :primary,
@@ -145,7 +146,6 @@
           </div>
         <% end %>
 
-        <p class="mt-4 text-sm text-[#C7C4D8]/80">安全のため、定期的にパスワードを変更してください。</p>
       <% end %>
     </div>
     <!-- END: settings/security password card -->
@@ -153,10 +153,10 @@
     <!-- START: settings/security auth options grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- START: settings/security 2fa card -->
-      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
+      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
-            <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
+            <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
             <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
@@ -177,15 +177,15 @@
               full_width: true,
               disabled: true,
               text_color: "text-[#C0C1FF]",
-              class: "py-2.5 border-[#C0C1FF]/20" %>
+              class: "py-2.5 token-border-brand-soft" %>
       <% end %>
       <!-- END: settings/security 2fa card -->
 
       <!-- START: settings/security passkey card -->
-      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border border-white/5" do %>
+      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
-            <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
+            <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
             <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
@@ -206,7 +206,7 @@
               full_width: true,
               disabled: true,
               text_color: "text-[#C0C1FF]",
-              class: "py-2.5 border-[#C0C1FF]/20" %>
+              class: "py-2.5 token-border-brand-soft" %>
       <% end %>
       <!-- END: settings/security passkey card -->
     </div>
@@ -216,7 +216,7 @@
   <!-- START: settings/security notice -->
   <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-6 mb-4" %>
   <footer>
-    <div class="flex items-start gap-3 text-[#C7C4D8]/60 text-xs">
+    <div class="flex items-start gap-3 token-text-subtle text-xs">
       <span class="material-symbols-outlined text-sm mt-0.5">info</span>
       <p class="break-words">
         セキュリティ設定を変更した際、確認メールが送信される場合があります。不審な操作があれば速やかにパスワードを変更してください。
