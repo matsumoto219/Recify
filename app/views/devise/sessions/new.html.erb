@@ -89,9 +89,15 @@
 
           <%= button_to guest_sign_in_path,
                         method: :post,
-                        class: "w-full py-3.5 bg-[#353534] text-[#E5E2E1] font-medium rounded-lg hover:bg-[#393939] active:scale-[0.98] transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer" do %>
-            <span class="material-symbols-outlined text-xl" aria-hidden="true">person_search</span>
-            <span>ゲストとして試す</span>
+                        class: "w-full border-0 bg-transparent p-0 cursor-pointer" do %>
+            <%= render "shared/ui/button",
+                  as: :content,
+                  label: "ゲストとして試す",
+                  variant: :secondary,
+                  size: :lg,
+                  full_width: true,
+                  icon: "person_search",
+                  class: "py-3.5" %>
           <% end %>
 
           <%# TODO: ゲストユーザー仕様の最終文言調整
