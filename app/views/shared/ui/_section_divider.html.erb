@@ -10,11 +10,11 @@
 
   line_class = case variant
                when :gradient
-                 "h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                 "section-divider-line-gradient h-px flex-1"
                else
-                 "h-px flex-1 border-t border-white/20"
+                 "section-divider-line h-px flex-1 border-t"
                end
-  label_class = "text-[0.6875rem] text-[#C7C4D8]/40 tracking-[0.5em] uppercase font-bold whitespace-nowrap"
+  label_class = "section-divider-label text-[0.6875rem] tracking-[0.5em] uppercase font-bold whitespace-nowrap"
 %>
 
 <% if label.present? %>
