@@ -5,8 +5,7 @@
 <section
   class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
   data-controller="security-scroll"
-  data-security-scroll-scroll-to-password-value="<%= security_form_error %>"
->
+  data-security-scroll-scroll-to-password-value="<%= security_form_error %>">
   <!-- START: settings/security page header -->
   <%= render "shared/ui/section_header",
         title: "セキュリティ",
@@ -158,10 +157,17 @@
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
+            <%# TODO: ステータスバッジを共通パーシャル化
+                - settings/security 以外でも再利用できるようにする
+                - 状態ごとの配色・サイズ・variant を統一管理する %>
             <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
           </div>
-          <h3 class="text-lg font-semibold text-white mb-2">2要素認証 (2FA)</h3>
-          <p class="text-sm text-[#C7C4D8] mb-6 break-words">認証アプリを使用して、セキュリティを強化します。</p>
+          <%= render "shared/ui/section_header",
+                title: "2要素認証 (2FA)",
+                subtitle: "認証アプリを使用して、セキュリティを強化します。",
+                title_size: "text-lg",
+                subtitle_size: "text-sm",
+                class: "mb-6" %>
         </div>
 
         <%# TODO: 2FA実装（TOTP）
@@ -185,8 +191,12 @@
             <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
             <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
           </div>
-          <h3 class="text-lg font-semibold text-white mb-2">パスキー</h3>
-          <p class="text-sm text-[#C7C4D8] mb-6 break-words">指紋や顔認証で安全にログインできます。</p>
+          <%= render "shared/ui/section_header",
+                title: "パスキー",
+                subtitle: "指紋や顔認証で安全にログインできます。",
+                title_size: "text-lg",
+                subtitle_size: "text-sm",
+                class: "mb-6" %>
         </div>
 
         <%# TODO: Passkey実装（WebAuthn）
