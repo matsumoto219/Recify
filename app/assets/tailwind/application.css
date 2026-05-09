@@ -522,6 +522,101 @@ body {
   color: var(--text-muted);
 }
 
+/* ===== Selection Card Utilities ===== */
+.selection-card {
+  background: var(--bg-card);
+}
+
+.selection-card:hover {
+  background: var(--bg-elevated);
+}
+
+.selection-card-secondary {
+  border-color: var(--border-soft);
+}
+
+.selection-card-secondary:hover {
+  border-color: var(--border-strong);
+}
+
+.selection-card-primary {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.selection-card-primary:hover {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 60%,
+    transparent
+  );
+}
+
+.selection-card-primary-overlay {
+  background-image: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--brand-primary) 10%, transparent),
+    transparent,
+    transparent
+  );
+}
+
+.selection-card-primary-icon {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+  color: var(--text-on-primary);
+  box-shadow: 0 10px 15px color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.selection-card-secondary-icon {
+  background: var(--bg-floating);
+  color: var(--brand-primary);
+}
+
+.selection-card-badge-primary {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+  color: var(--brand-primary);
+}
+
+.selection-card-badge-primary-bordered {
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.selection-card-badge-secondary {
+  border-color: var(--border-soft);
+  color: var(--text-muted);
+}
+
+.selection-card-title {
+  color: var(--text-base);
+}
+
+.selection-card-description {
+  color: var(--text-muted);
+}
+
+.selection-card-chevron {
+  color: var(--text-subtle);
+}
+
 /* ===== Summary Card Utilities ===== */
 .summary-card-muted {
   color: var(--text-muted);
