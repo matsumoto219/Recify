@@ -60,11 +60,11 @@
         <%# v0.5: 監視ジョブ（ExternalServiceStatus + 定期APIチェック）と連携し、状態を自動更新する %>
         <%# 表示更新は Turbo Streams または polling でリアルタイム反映する想定 %>
         <%# 例: state: @ocr_service_status.state.to_sym %>
-        <%= render "shared/ui/status_badge",
+        <%= render "shared/ui/service_status_badge",
               label: "OCRサービス",
               state: @ocr_state %>
 
-        <%= render "shared/ui/status_badge",
+        <%= render "shared/ui/service_status_badge",
               label: "AIサービス",
               state: @ai_state %>
       </div>
