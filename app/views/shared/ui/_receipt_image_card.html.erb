@@ -19,7 +19,7 @@
 
 <div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-action="dragenter->receipt-image-card#handleDragEnter dragover->receipt-image-card#handleDragOver dragleave->receipt-image-card#handleDragLeave drop->receipt-image-card#handleDrop").html_safe : "" %>>
   <%= render "shared/ui/surface_card", class: "p-4" do %>
-    <p class="text-xs font-bold field-label uppercase tracking-widest mb-3 px-2">
+    <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
     </p>
 
@@ -33,7 +33,7 @@
           data-receipt-image-card-target="toggleButton">
           <div>
             <p class="text-sm font-semibold field-text">画像を表示</p>
-            <p class="text-xs field-muted mt-1">コンパクト表示で確認できます</p>
+            <p class="text-xs token-text-muted mt-1">コンパクト表示で確認できます</p>
           </div>
           <span
             class="material-symbols-outlined navigation-link transition-transform"
@@ -82,20 +82,20 @@
       </div>
     <% else %>
       <% if keep_image_enabled %>
-        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center field-muted surface-card-bg-card-subtle relative overflow-hidden">
+        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center token-text-muted surface-card-bg-card-subtle relative overflow-hidden">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p><%= empty_message %></p>
 
           <%= image_tag "",
-                class: "hidden absolute inset-0 w-full h-full object-contain surface-card-bg-input",
+                class: "hidden absolute inset-0 w-full h-full object-contain token-bg-input",
                 data: { receipt_image_card_target: "previewImage" } %>
         </div>
       <% else %>
         <%# TODO: keep_image 設定に応じた画像なしUIは専用カメラUI仕様確定後に再調整する %>
-        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center field-muted surface-card-bg-card-subtle">
+        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center token-text-muted surface-card-bg-card-subtle">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p>画像は保存されていません</p>
-          <p class="mt-2 text-xs field-muted">画像を保存しない設定のため、プレビューは表示されません</p>
+          <p class="mt-2 text-xs token-text-muted">画像を保存しない設定のため、プレビューは表示されません</p>
         </div>
       <% end %>
     <% end %>
@@ -120,8 +120,8 @@
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="min-w-0">
               <p class="text-sm font-semibold field-text">レシートをアップロード</p>
-              <p class="mt-1 text-xs field-muted">画像を選択するか、このカードにドラッグ&ドロップ</p>
-              <p class="mt-2 truncate text-xs field-muted"
+              <p class="mt-1 text-xs token-text-muted">画像を選択するか、このカードにドラッグ&ドロップ</p>
+              <p class="mt-2 truncate text-xs token-text-muted"
                  data-receipt-image-card-target="fileName"
                  data-initial-label="<%= has_image ? "現在の画像" : "ファイル未選択" %>">
                 <%= has_image ? "現在の画像" : "ファイル未選択" %>
@@ -138,13 +138,13 @@
           </div>
         </div>
 
-        <p class="hidden text-xs field-error-text"
+        <p class="hidden text-xs token-text-error"
            data-receipt-image-card-target="uploadError">
           画像ファイルを選択してください
         </p>
 
         <% if helper_text.present? %>
-          <p class="text-xs field-muted whitespace-pre-line">
+          <p class="text-xs token-text-muted whitespace-pre-line">
             <%= helper_text %>
           </p>
         <% end %>
@@ -175,7 +175,7 @@
               <span class="material-symbols-outlined">close</span>
             </button>
             <%= image_tag receipt.image,
-                  class: "block w-full max-h-[85vh] object-contain surface-card-bg-input",
+                  class: "block w-full max-h-[85vh] object-contain token-bg-input",
                   data: { receipt_image_card_target: "modalImage" } %>
           </div>
         </div>

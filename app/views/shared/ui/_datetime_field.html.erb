@@ -37,7 +37,7 @@
 
   input_type = type.to_s
   base_wrapper_class = "space-y-2"
-  base_label_class = "text-xs font-bold uppercase tracking-wider field-label"
+  base_label_class = "text-xs font-bold uppercase tracking-wider token-text-muted"
   has_error = highlight_variant == :error || error_message.present?
 
   highlight_classes = has_error ? "input-field-error" : nil
@@ -51,7 +51,7 @@
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_field_class = [base_field_class, field_spacing_class, field_class].compact.join(" ")
-  merged_error_class = ["px-1 text-xs field-error-text leading-relaxed", error_message_class].compact.join(" ")
+  merged_error_class = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")
 %>
 
 <div class="<%= merged_wrapper_class %>">
@@ -68,7 +68,7 @@
                   class: merged_field_class %>
 
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error ? 'field-icon-error field-icon-error-focus' : 'field-icon field-icon-focus' %>"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
     <% end %>
   </div>
 

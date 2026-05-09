@@ -6,28 +6,28 @@
     when "notice", "success", "ai_notice", "ocr_notice", "success_box", "notice_box"
       {
         variant_class: "notice-surface-success",
-        icon_class: "notice-icon-success",
+        icon_class: "token-state-success-soft",
         icon: "check_circle",
         title: "成功"
       }
     when "caution", "ai_caution", "ocr_caution", "caution_box"
       {
         variant_class: "notice-surface-warning",
-        icon_class: "notice-icon-warning",
+        icon_class: "token-state-warning-soft",
         icon: "info",
         title: "注意"
       }
     when "warning", "ai_warning", "ocr_warning", "warning_box"
       {
         variant_class: "notice-surface-warning",
-        icon_class: "notice-icon-warning",
+        icon_class: "token-state-warning-soft",
         icon: "warning",
         title: "警告"
       }
     when "alert", "error", "ai_error", "ocr_error", "image_error", "error_box", "alert_box"
       {
         variant_class: "notice-surface-error",
-        icon_class: "notice-icon-error",
+        icon_class: "token-state-error-soft",
         icon: "error",
         title: "エラー"
       }
@@ -101,15 +101,15 @@
 
   <div class="flex-1 min-w-0">
     <% if title.present? %>
-      <p class="text-base font-bold notice-title leading-tight mb-1"><%= title %></p>
+      <p class="text-base font-bold token-text-base leading-tight mb-1"><%= title %></p>
     <% end %>
 
     <% if body.present? %>
-      <div class="min-w-0 max-w-full text-xs notice-message leading-relaxed break-words overflow-hidden">
+      <div class="min-w-0 max-w-full text-xs token-text-muted leading-relaxed break-words overflow-hidden">
         <%= body %>
       </div>
     <% elsif message.present? %>
-      <p class="min-w-0 max-w-full text-xs notice-message leading-relaxed break-words whitespace-pre-wrap"><%= message %></p>
+      <p class="min-w-0 max-w-full text-xs token-text-muted leading-relaxed break-words whitespace-pre-wrap"><%= message %></p>
     <% end %>
   </div>
 

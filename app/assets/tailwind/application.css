@@ -12,6 +12,154 @@ body {
   display: none;
 }
 
+/* ===== Shared Token Utilities ===== */
+.token-text-base {
+  color: var(--text-base);
+}
+
+.token-text-muted {
+  color: var(--text-muted);
+}
+
+.token-text-subtle {
+  color: var(--text-subtle);
+}
+
+.token-text-brand {
+  color: var(--brand-primary);
+}
+
+.token-text-link {
+  color: var(--text-link);
+}
+
+.token-text-success {
+  color: var(--text-success);
+}
+
+.token-text-warning {
+  color: var(--text-warning);
+}
+
+.token-text-error {
+  color: var(--text-error);
+}
+
+.token-bg-page {
+  background: var(--bg-page);
+}
+
+.token-bg-card {
+  background: var(--bg-card);
+}
+
+.token-bg-card-subtle {
+  background: var(--bg-card-subtle);
+}
+
+.token-bg-elevated {
+  background: var(--bg-elevated);
+}
+
+.token-bg-input {
+  background: var(--bg-input);
+}
+
+.token-bg-floating {
+  background: var(--bg-floating);
+}
+
+.token-bg-success-soft {
+  background: var(--bg-success-soft);
+}
+
+.token-bg-warning-soft {
+  background: var(--bg-warning-soft);
+}
+
+.token-bg-error-soft {
+  background: var(--bg-error-soft);
+}
+
+.token-bg-info-soft {
+  background: var(--bg-info-soft);
+}
+
+.token-border-default {
+  border-color: var(--border-default);
+}
+
+.token-border-soft {
+  border-color: var(--border-soft);
+}
+
+.token-border-strong {
+  border-color: var(--border-strong);
+}
+
+.token-border-glass {
+  border-color: var(--glass-border);
+}
+
+.token-border-focus {
+  border-color: var(--border-focus);
+}
+
+.token-brand-gradient {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
+.token-brand-gradient-horizontal {
+  background-image: linear-gradient(
+    to right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
+.token-shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.token-shadow-glass {
+  box-shadow: var(--glass-shadow);
+}
+
+.token-border-brand-soft {
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.token-brand-soft-bg {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+}
+
+.token-state-success-soft {
+  background: var(--bg-success-soft);
+  color: var(--text-success);
+}
+
+.token-state-warning-soft {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+}
+
+.token-state-error-soft {
+  background: var(--bg-error-soft);
+  color: var(--text-error);
+}
+
 /* ===== Glass Panel Effect ===== */
 
 /* NOTE:
@@ -34,14 +182,6 @@ body {
 }
 
 /* ===== Ambient Background Utilities ===== */
-.ambient-brand-gradient {
-  background-image: linear-gradient(
-    to bottom right,
-    var(--brand-gradient-start),
-    var(--brand-gradient-end)
-  );
-}
-
 .ambient-glow {
   width: 24rem;
   height: 24rem;
@@ -53,28 +193,12 @@ body {
 }
 
 /* ===== Surface Card Utilities ===== */
-.surface-card-default {
-  background: var(--bg-card);
-}
-
 .surface-card-bg-card {
   background: var(--bg-card);
 }
 
-.surface-card-bg-elevated {
-  background: var(--bg-elevated);
-}
-
 .surface-card-bg-card-subtle {
   background: var(--bg-card-subtle);
-}
-
-.surface-card-bg-input {
-  background: var(--bg-input);
-}
-
-.surface-card-bg-floating {
-  background: var(--bg-floating);
 }
 
 .surface-card-shadow {
@@ -124,57 +248,16 @@ body {
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
-.header-border {
-  border-color: var(--glass-border);
-}
-
-.header-text {
-  color: var(--text-base);
-}
-
-.header-text-muted {
-  color: var(--text-muted);
-}
-
 .header-text-hover:hover {
   color: var(--text-base);
-}
-
-.header-text-link {
-  color: var(--text-link);
 }
 
 .header-text-error-hover:hover {
   color: var(--text-error);
 }
 
-.header-bg-elevated {
-  background: var(--bg-elevated);
-}
-
 .header-brand-bg {
   background: var(--brand-primary);
-}
-
-.header-brand-border {
-  border-color: color-mix(
-    in srgb,
-    var(--brand-primary) 20%,
-    transparent
-  );
-}
-
-/* ===== Mobile Bottom Nav Utilities ===== */
-.mobile-nav-border {
-  border-color: var(--glass-border);
-}
-
-.mobile-nav-active {
-  color: var(--brand-primary);
-}
-
-.mobile-nav-muted {
-  color: var(--text-muted);
 }
 
 /* ===== Sidebar Utilities ===== */
@@ -182,36 +265,8 @@ body {
   background: var(--bg-card-subtle);
 }
 
-.sidebar-text-muted {
-  color: var(--text-muted);
-}
-
-.sidebar-bg-elevated {
-  background: var(--bg-elevated);
-}
-
-.sidebar-border-soft {
-  border-color: var(--border-soft);
-}
-
-.sidebar-bg-page {
-  background: var(--bg-page);
-}
-
 .sidebar-brand-bg {
   background: var(--brand-primary);
-}
-
-.sidebar-brand-text {
-  color: var(--brand-primary);
-}
-
-.sidebar-brand-gradient {
-  background-image: linear-gradient(
-    to bottom right,
-    var(--brand-gradient-start),
-    var(--brand-gradient-end)
-  );
 }
 
 /* ===== Sidebar Nav Utilities ===== */
@@ -221,10 +276,6 @@ body {
     var(--brand-primary) 20%,
     transparent
   );
-}
-
-.sidebar-nav-active-text {
-  color: var(--brand-primary);
 }
 
 .sidebar-nav-active-border {
@@ -237,10 +288,6 @@ body {
     var(--brand-primary) 10%,
     transparent
   );
-}
-
-.sidebar-nav-muted {
-  color: var(--text-muted);
 }
 
 .sidebar-nav-hover:hover {
@@ -263,10 +310,6 @@ body {
   );
 }
 
-.sidebar-tooltip-border {
-  border-color: var(--glass-border);
-}
-
 .sidebar-tooltip-surface {
   background: color-mix(
     in srgb,
@@ -275,38 +318,18 @@ body {
   );
 }
 
-.sidebar-tooltip-text {
-  color: var(--text-base);
-}
-
 /* ===== Receipt Card Utilities ===== */
 .receipt-card-icon-box {
   background: var(--bg-page);
   color: var(--brand-primary);
 }
 
-.receipt-card-title {
-  color: var(--text-base);
-}
-
 .group:hover .receipt-card-title-hover {
-  color: var(--brand-primary);
-}
-
-.receipt-card-muted {
-  color: var(--text-muted);
-}
-
-.receipt-card-brand {
   color: var(--brand-primary);
 }
 
 .receipt-card-skeleton {
   background: var(--bg-floating);
-}
-
-.receipt-card-disabled-muted {
-  color: var(--text-subtle);
 }
 
 .receipt-card-disabled-brand {
@@ -322,11 +345,6 @@ body {
 }
 
 /* ===== Receipt Status Badge Utilities ===== */
-.receipt-status-completed {
-  background: var(--bg-success-soft);
-  color: var(--text-success);
-}
-
 .receipt-status-processing {
   background: color-mix(
     in srgb,
@@ -334,16 +352,6 @@ body {
     transparent
   );
   color: var(--brand-primary);
-}
-
-.receipt-status-review-needed {
-  background: var(--bg-warning-soft);
-  color: var(--text-warning);
-}
-
-.receipt-status-failed {
-  background: var(--bg-error-soft);
-  color: var(--text-error);
 }
 
 .receipt-status-default {
@@ -411,10 +419,6 @@ body {
   );
 }
 
-.receipt-status-border-default {
-  border-color: var(--glass-border);
-}
-
 /* ===== Setting Status Badge Utilities ===== */
 .setting-status-active {
   background: var(--bg-success-soft);
@@ -474,10 +478,6 @@ body {
   color: var(--text-warning);
 }
 
-.setting-status-text-warning {
-  color: var(--text-error);
-}
-
 .setting-status-text-default {
   color: var(--text-muted);
 }
@@ -485,19 +485,6 @@ body {
 /* ===== Section Header Utilities ===== */
 .section-header-title {
   color: var(--text-base);
-}
-
-.section-header-subtitle {
-  color: var(--text-muted);
-}
-
-.section-header-icon {
-  color: var(--brand-primary);
-}
-
-.section-header-danger-title,
-.section-header-danger-icon {
-  color: var(--text-error);
 }
 
 .section-header-danger-subtitle {
@@ -508,12 +495,7 @@ body {
   );
 }
 
-.section-header-breadcrumb {
-  color: var(--text-muted);
-}
-
-.section-header-breadcrumb-link:hover,
-.section-header-breadcrumb-current {
+.section-header-breadcrumb-link:hover {
   color: var(--brand-primary);
 }
 
@@ -592,14 +574,6 @@ body {
   color: var(--brand-primary);
 }
 
-.selection-card-badge-primary-bordered {
-  border-color: color-mix(
-    in srgb,
-    var(--brand-primary) 20%,
-    transparent
-  );
-}
-
 .selection-card-badge-secondary {
   border-color: var(--border-soft);
   color: var(--text-muted);
@@ -609,27 +583,7 @@ body {
   color: var(--text-base);
 }
 
-.selection-card-description {
-  color: var(--text-muted);
-}
-
-.selection-card-chevron {
-  color: var(--text-subtle);
-}
-
 /* ===== Summary Card Utilities ===== */
-.summary-card-muted {
-  color: var(--text-muted);
-}
-
-.summary-card-brand {
-  color: var(--brand-primary);
-}
-
-.summary-card-text {
-  color: var(--text-base);
-}
-
 .summary-card-link-hover:hover {
   color: var(--text-base);
 }
@@ -734,14 +688,6 @@ body {
     transparent
   );
   color: var(--text-base);
-}
-
-.search-focus-line {
-  background-image: linear-gradient(
-    to right,
-    var(--brand-gradient-start),
-    var(--brand-gradient-end)
-  );
 }
 
 /* ===== Receipt Image Utilities ===== */
@@ -907,29 +853,6 @@ body {
 }
 
 /* ===== Notice Content Utilities ===== */
-.notice-title {
-  color: var(--text-base);
-}
-
-.notice-message {
-  color: var(--text-muted);
-}
-
-.notice-icon-success {
-  background: var(--bg-success-soft);
-  color: var(--text-success);
-}
-
-.notice-icon-warning {
-  background: var(--bg-warning-soft);
-  color: var(--text-warning);
-}
-
-.notice-icon-error {
-  background: var(--bg-error-soft);
-  color: var(--text-error);
-}
-
 .notice-icon-info {
   background: var(--bg-info-soft);
   color: var(--text-info);
@@ -984,27 +907,10 @@ body {
 }
 
 /* ===== Field Utilities ===== */
-.field-label {
-  color: var(--text-muted);
-}
-
-.field-muted {
-  color: var(--text-muted);
-}
-
-.field-error-text {
-  color: var(--text-error);
-}
-
-.field-icon {
-  color: var(--text-muted);
-}
-
 .group:focus-within .field-icon-focus {
   color: var(--border-focus);
 }
 
-.field-icon-error,
 .group:focus-within .field-icon-error-focus {
   color: var(--text-error);
 }
@@ -1050,14 +956,6 @@ body {
 }
 
 /* ===== Toggle Switch Utilities ===== */
-.toggle-label {
-  color: var(--text-base);
-}
-
-.toggle-description {
-  color: var(--text-muted);
-}
-
 .toggle-track-on {
   background: color-mix(
     in srgb,

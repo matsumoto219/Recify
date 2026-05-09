@@ -10,27 +10,27 @@
                      dot: "receipt-status-dot-completed",
                      text_color: "receipt-status-text-completed",
                      border: "receipt-status-border-completed",
-                     bg: "receipt-status-completed"
+                     bg: "token-state-success-soft"
                    }
                  when :degraded
                    {
                      dot: "receipt-status-dot-review-needed",
                      text_color: "receipt-status-text-review-needed",
                      border: "receipt-status-border-review-needed",
-                     bg: "receipt-status-review-needed"
+                     bg: "token-state-warning-soft"
                    }
                  when :down
                    {
                      dot: "receipt-status-dot-failed",
                      text_color: "receipt-status-text-failed",
                      border: "receipt-status-border-failed",
-                     bg: "receipt-status-failed"
+                     bg: "token-state-error-soft"
                    }
                  else
                    {
                      dot: "receipt-status-dot-default",
                      text_color: "receipt-status-text-default",
-                     border: "receipt-status-border-default",
+                     border: "token-border-glass",
                      bg: "receipt-status-default"
                    }
                  end
@@ -46,7 +46,7 @@
 <div class="<%= container_classes %>">
   <div class="flex items-center gap-3">
     <div class="w-2.5 h-2.5 rounded-full <%= state_config[:dot] %>"></div>
-    <span class="text-sm field-muted"><%= label %></span>
+    <span class="text-sm token-text-muted"><%= label %></span>
   </div>
 
   <% if text.present? %>

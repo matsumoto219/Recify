@@ -6,7 +6,7 @@
   show_label = local_assigns.fetch(:show_label, true)
   extra_classes = local_assigns[:class]
 
-  active_classes = "sidebar-nav-active-bg sidebar-nav-active-text border-l-4 sidebar-nav-active-border rounded-none md:sidebar-nav-active-shadow xl:shadow-none"
+  active_classes = "sidebar-nav-active-bg token-text-brand border-l-4 sidebar-nav-active-border rounded-none md:sidebar-nav-active-shadow xl:shadow-none"
   inactive_classes = "sidebar-nav-muted sidebar-nav-hover sidebar-nav-text-hover"
 
   link_class = [
@@ -25,7 +25,7 @@
   <% if show_label %>
     <span class="hidden xl:inline tracking-wide"><%= label %></span>
   <% end %>
-  <span class="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border sidebar-tooltip-border sidebar-tooltip-surface px-3 py-1.5 text-xs font-bold sidebar-tooltip-text opacity-0 shadow-lg shadow-black/30 transition-opacity duration-150 group-hover:opacity-100 md:block xl:hidden">
+  <span class="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border token-border-glass sidebar-tooltip-surface px-3 py-1.5 text-xs font-bold token-text-base opacity-0 shadow-lg shadow-black/30 transition-opacity duration-150 group-hover:opacity-100 md:block xl:hidden">
     <%= label %>
   </span>
 <% end %>

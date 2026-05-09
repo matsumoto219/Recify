@@ -3,7 +3,7 @@
   value = local_assigns.fetch(:value)
   subtext = local_assigns[:subtext]
   subtext_icon = local_assigns[:subtext_icon]
-  subtext_icon_class = local_assigns.fetch(:subtext_icon_class, "summary-card-muted")
+  subtext_icon_class = local_assigns.fetch(:subtext_icon_class, "token-text-muted")
   accent = local_assigns.fetch(:accent, :brand)
   title_id = local_assigns[:title_id]
   value_id = local_assigns[:value_id]
@@ -33,7 +33,7 @@
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0 flex-1">
       <p id="<%= title_id %>"
-        class="truncate text-[0.6875rem] uppercase tracking-widest summary-card-muted font-bold"
+        class="truncate text-[0.6875rem] uppercase tracking-widest token-text-muted font-bold"
         <% title_data.each do |key, data_value| %>
           data-<%= key.to_s.dasherize %>="<%= data_value %>"
         <% end %>>
@@ -43,7 +43,7 @@
 
     <% if action_label.present? %>
       <button type="button"
-        class="text-[0.6875rem] font-bold summary-card-brand summary-card-link-hover transition-colors shrink-0"
+        class="text-[0.6875rem] font-bold token-text-brand summary-card-link-hover transition-colors shrink-0"
         <% action_data.each do |key, data_value| %>
           data-<%= key.to_s.dasherize %>="<%= data_value %>"
         <% end %>
@@ -54,7 +54,7 @@
   </div>
 
   <p id="<%= value_id %>"
-    class="truncate text-2xl font-bold mt-2 summary-card-text"
+    class="truncate text-2xl font-bold mt-2 token-text-base"
     title="<%= value %>"
     <% value_data.each do |key, data_value| %>
       data-<%= key.to_s.dasherize %>="<%= data_value %>"
@@ -64,7 +64,7 @@
 
   <% if subtext.present? %>
     <p id="<%= subtext_id %>"
-      class="flex min-w-0 items-center gap-1 text-[0.6875rem] leading-none summary-card-muted mt-1"
+      class="flex min-w-0 items-center gap-1 text-[0.6875rem] leading-none token-text-muted mt-1"
       <% subtext_data.each do |key, data_value| %>
         data-<%= key.to_s.dasherize %>="<%= data_value %>"
       <% end %>>

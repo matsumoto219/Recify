@@ -40,7 +40,7 @@
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
 
   base_wrapper_class = "space-y-2"
-  base_label_class = "text-xs font-bold uppercase tracking-wider field-label"
+  base_label_class = "text-xs font-bold uppercase tracking-wider token-text-muted"
   base_textarea_class = "w-full rounded-xl input-field outline-none transition-all resize-none"
   highlight_classes = if has_error || highlight_variant == :error
                         "input-field-error"
@@ -51,7 +51,7 @@
   merged_wrapper_class = [base_wrapper_class, textarea_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_textarea_class = [base_textarea_class, highlight_classes, textarea_spacing_class, textarea_class].compact.join(" ")
-  merged_error_class = ["text-xs field-error-text", error_message_class].compact.join(" ")
+  merged_error_class = ["text-xs token-text-error", error_message_class].compact.join(" ")
 
   field_options = {
     placeholder: placeholder,
@@ -68,7 +68,7 @@
 
   <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'field-icon-error field-icon-error-focus' : 'field-icon field-icon-focus' %>"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
     <% end %>
 
     <%= f.text_area attribute, **field_options %>

@@ -15,14 +15,14 @@
   title_size = local_assigns.fetch(:title_size, "text-lg")
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
   breadcrumb_wrapper_class = [
-    "flex flex-wrap items-center text-sm section-header-breadcrumb mb-2 space-x-2",
+    "flex flex-wrap items-center text-sm token-text-muted mb-2 space-x-2",
     center_breadcrumb && align == :center ? "justify-center" : nil,
     center_breadcrumb && responsive_align == :center ? "md:justify-center" : nil,
     center_breadcrumb && responsive_align == :left ? "md:justify-start" : nil
   ].compact.join(" ")
-  breadcrumb_link_class = "section-header-breadcrumb section-header-breadcrumb-link transition-colors"
-  breadcrumb_current_class = "section-header-breadcrumb-current font-medium"
-  breadcrumb_separator_class = "text-xs section-header-breadcrumb"
+  breadcrumb_link_class = "token-text-muted section-header-breadcrumb-link transition-colors"
+  breadcrumb_current_class = "token-text-brand font-medium"
+  breadcrumb_separator_class = "text-xs token-text-muted"
 
   align_class = case align
                 when :center
@@ -59,15 +59,15 @@
   tone = case variant
          when :danger
            {
-             title: "section-header-danger-title",
+             title: "token-text-error",
              subtitle: "section-header-danger-subtitle",
-             icon: "section-header-danger-icon"
+             icon: "token-text-error"
            }
          else
            {
              title: "section-header-title",
-             subtitle: "section-header-subtitle",
-             icon: "section-header-icon"
+             subtitle: "token-text-muted",
+             icon: "token-text-brand"
            }
          end
 
