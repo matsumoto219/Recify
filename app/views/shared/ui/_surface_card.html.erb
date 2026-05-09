@@ -20,6 +20,10 @@
   shadow_classes = case shadow_variant
                    when :indigo
                      "surface-card-shadow-indigo"
+                   when :danger
+                     "surface-card-shadow-danger"
+                   when :warning
+                     "surface-card-shadow-warning"
                    else
                      "surface-card-shadow"
                    end
@@ -53,7 +57,7 @@
                     when :danger
                       "surface-card-danger border"
                     when :warning
-                      "surface-card-warning border surface-card-warning-border"
+                      "surface-card-warning border"
                     else
                       custom_background ? nil : (surface_variant_class || "surface-card-bg-card")
                     end

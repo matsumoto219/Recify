@@ -29,6 +29,10 @@ body {
   color: var(--brand-primary);
 }
 
+.token-text-on-brand {
+  color: var(--text-on-brand);
+}
+
 .token-text-link {
   color: var(--text-link);
 }
@@ -43,6 +47,14 @@ body {
 
 .token-text-error {
   color: var(--text-error);
+}
+
+.token-text-error-muted {
+  color: color-mix(
+    in srgb,
+    var(--text-error) 80%,
+    transparent
+  );
 }
 
 .token-bg-page {
@@ -67,6 +79,10 @@ body {
 
 .token-bg-floating {
   background: var(--bg-floating);
+}
+
+.token-bg-brand-strong {
+  background: var(--brand-primary-strong);
 }
 
 .token-bg-success-soft {
@@ -105,6 +121,14 @@ body {
   border-color: var(--border-focus);
 }
 
+.token-focus-ring-brand:focus {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 40%,
+    transparent
+  );
+}
+
 .token-brand-gradient {
   background-image: linear-gradient(
     to bottom right,
@@ -141,6 +165,34 @@ body {
   background: color-mix(
     in srgb,
     var(--brand-primary) 10%,
+    transparent
+  );
+}
+
+.token-hover-bg-card-subtle:hover {
+  background: var(--bg-card-subtle);
+}
+
+.token-hover-bg-elevated:hover {
+  background: var(--bg-elevated);
+}
+
+.token-hover-text-error:hover {
+  color: var(--text-error);
+}
+
+.token-hover-text-brand:hover {
+  color: var(--brand-primary);
+}
+
+.token-hover-border-brand:hover {
+  border-color: var(--brand-primary);
+}
+
+.empty-state-icon {
+  color: color-mix(
+    in srgb,
+    var(--text-muted) 30%,
     transparent
   );
 }
@@ -209,6 +261,14 @@ body {
   box-shadow: var(--surface-card-indigo-shadow);
 }
 
+.surface-card-shadow-danger {
+  box-shadow: var(--surface-card-danger-shadow);
+}
+
+.surface-card-shadow-warning {
+  box-shadow: var(--surface-card-warning-shadow);
+}
+
 .surface-card-danger {
   background: var(--surface-card-danger-bg);
 
@@ -218,9 +278,8 @@ body {
 
 .surface-card-warning {
   background: var(--surface-card-warning-bg);
-}
 
-.surface-card-warning-border {
+  /* Warning surface border */
   border-color: var(--surface-card-warning-border);
 }
 
@@ -417,6 +476,28 @@ body {
     var(--state-error) 20%,
     transparent
   );
+}
+
+/* ===== Account Settings Utilities ===== */
+.account-form-footer {
+  background: color-mix(
+    in srgb,
+    var(--bg-elevated) 50%,
+    transparent
+  );
+}
+
+.avatar-file-input {
+  color: var(--text-muted);
+}
+
+.avatar-file-input::file-selector-button {
+  background: var(--bg-floating);
+  color: var(--brand-primary);
+}
+
+.avatar-file-input::file-selector-button:hover {
+  background: var(--bg-elevated);
 }
 
 /* ===== Setting Status Badge Utilities ===== */
@@ -766,6 +847,56 @@ body {
 
   /* Drop overlay chip text */
   color: var(--text-base);
+}
+
+/* ===== Receipt Form Utilities ===== */
+.receipt-form-item-row {
+  background: var(--bg-card-subtle);
+}
+
+.receipt-form-item-row:hover {
+  background: var(--bg-elevated);
+}
+
+.receipt-form-item-review-row {
+  background: color-mix(
+    in srgb,
+    var(--state-error) 12%,
+    var(--bg-card-subtle)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 40%,
+    transparent
+  );
+}
+
+.receipt-form-item-review-row:hover {
+  background: color-mix(
+    in srgb,
+    var(--state-error) 18%,
+    var(--bg-card-subtle)
+  );
+}
+
+.receipt-form-delete-button {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.receipt-form-delete-button:hover {
+  color: var(--text-error);
+  background: color-mix(
+    in srgb,
+    var(--state-error) 16%,
+    var(--bg-elevated)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 40%,
+    transparent
+  );
 }
 
 /* ===== Amount Summary Card Utilities ===== */

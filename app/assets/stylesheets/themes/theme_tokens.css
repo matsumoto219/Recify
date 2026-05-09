@@ -113,11 +113,17 @@
   --surface-card-danger-bg: rgba(255, 218, 214, 0.72);
   --surface-card-danger-hover-bg: rgba(255, 218, 214, 0.88);
   --surface-card-danger-border: rgba(186, 26, 26, 0.18);
+  --surface-card-danger-shadow:
+    0 20px 40px rgba(186, 26, 26, 0.08),
+    0 0 0 1px rgba(186, 26, 26, 0.06);
 
   /* Warning surface card */
   --surface-card-warning-bg: rgba(255, 255, 255, 0.72);
   --surface-card-warning-hover-bg: rgba(255, 255, 255, 0.88);
   --surface-card-warning-border: rgba(164, 65, 0, 0.22);
+  --surface-card-warning-shadow:
+    0 20px 40px rgba(164, 65, 0, 0.08),
+    0 0 0 1px rgba(164, 65, 0, 0.06);
 }
 
 .dark {
@@ -235,11 +241,17 @@
   --surface-card-danger-bg: rgba(147, 0, 10, 0.12);
   --surface-card-danger-hover-bg: rgba(147, 0, 10, 0.18);
   --surface-card-danger-border: rgba(255, 180, 171, 0.1);
+  --surface-card-danger-shadow:
+    0 20px 40px rgba(147, 0, 10, 0.22),
+    0 0 0 1px rgba(255, 180, 171, 0.08);
 
   /* Warning surface card */
   --surface-card-warning-bg: rgba(32, 31, 31, 0.8);
   --surface-card-warning-hover-bg: rgba(42, 42, 42, 0.92);
   --surface-card-warning-border: rgba(255, 180, 171, 0.3);
+  --surface-card-warning-shadow:
+    0 20px 40px rgba(164, 65, 0, 0.16),
+    0 0 0 1px rgba(255, 182, 149, 0.1);
 }
 
 body {
