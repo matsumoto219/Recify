@@ -482,6 +482,46 @@ body {
   color: var(--text-muted);
 }
 
+/* ===== Section Header Utilities ===== */
+.section-header-title {
+  color: var(--text-base);
+}
+
+.section-header-subtitle {
+  color: var(--text-muted);
+}
+
+.section-header-icon {
+  color: var(--brand-primary);
+}
+
+.section-header-danger-title,
+.section-header-danger-icon {
+  color: var(--text-error);
+}
+
+.section-header-danger-subtitle {
+  color: color-mix(
+    in srgb,
+    var(--text-error) 80%,
+    transparent
+  );
+}
+
+.section-header-breadcrumb {
+  color: var(--text-muted);
+}
+
+.section-header-breadcrumb-link:hover,
+.section-header-breadcrumb-current {
+  color: var(--brand-primary);
+}
+
+.section-header-title-suffix {
+  background: var(--bg-floating);
+  color: var(--text-muted);
+}
+
 /* ===== Summary Card Utilities ===== */
 .summary-card-muted {
   color: var(--text-muted);
