@@ -5,10 +5,14 @@
   <div class="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
     <section class="w-full max-w-[560px] space-y-8" aria-labelledby="edit-registration-title">
       <div class="space-y-5 text-center">
-        <%= render "shared/auth/header",
-                   title: "アカウント情報変更",
-                   subtitle: "メールアドレスやパスワードを変更できます。",
-                   title_id: "edit-registration-title" %>
+        <%= render "shared/ui/section_header",
+              title: "アカウント情報変更",
+              subtitle: "メールアドレスやパスワードを変更できます。",
+              title_id: "edit-registration-title",
+              align: :center,
+              title_size: "text-3xl",
+              subtitle_size: "text-sm",
+              spacing_class: "space-y-3" %>
       </div>
 
       <%= render "shared/ui/surface_card", title_id: "edit-registration-title" do %>

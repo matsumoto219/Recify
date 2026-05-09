@@ -1,6 +1,7 @@
 <%
   title = local_assigns.fetch(:title)
   subtitle = local_assigns[:subtitle]
+  title_id = local_assigns[:title_id]
   title_suffix = local_assigns[:title_suffix]
   breadcrumb_label = local_assigns[:breadcrumb_label]
   breadcrumb_path = local_assigns[:breadcrumb_path]
@@ -14,6 +15,7 @@
   title_suffix_class = local_assigns[:title_suffix_class]
   title_size = local_assigns.fetch(:title_size, "text-lg")
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
+  spacing_class = local_assigns.fetch(:spacing_class, "space-y-1")
   breadcrumb_wrapper_class = [
     "flex flex-wrap items-center text-sm token-text-muted mb-2 space-x-2",
     center_breadcrumb && align == :center ? "justify-center" : nil,
@@ -78,7 +80,7 @@
     title_suffix_class
   ].compact.join(" ")
   subtitle_class = [subtitle_size, "leading-relaxed", tone[:subtitle]].join(" ")
-  header_classes = ["space-y-1", align_class, responsive_align_class, wrapper_class].compact.join(" ")
+  header_classes = [spacing_class, align_class, responsive_align_class, wrapper_class].compact.join(" ")
   title_row_class = ["flex items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
 %>
 
@@ -101,7 +103,11 @@
       <span class="material-symbols-outlined <%= resolved_icon_class %>" aria-hidden="true"><%= icon %></span>
     <% end %>
 
-    <h2 class="<%= title_class %>"><%= title %></h2>
+    <h2
+      <% if title_id.present? %> id="<%= title_id %>"<% end %>
+      class="<%= title_class %>">
+      <%= title %>
+    </h2>
 
     <% if title_suffix.present? %>
       <span class="<%= resolved_title_suffix_class %>"><%= title_suffix %></span>
