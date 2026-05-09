@@ -3,11 +3,15 @@
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="password-reset-page-title">
-      <%= render "shared/auth/icon" %>
-      <%= render "shared/auth/header",
+      <%= render "shared/ui/icon" %>
+      <%= render "shared/ui/section_header",
             title: "パスワード再設定",
             subtitle: "登録したメールアドレスを入力してください",
-            title_id: "password-reset-page-title" %>
+            title_id: "password-reset-page-title",
+            align: :center,
+            title_size: "text-3xl",
+            subtitle_size: "text-sm",
+            spacing_class: "space-y-3" %>
     </section>
 
     <%= render "shared/ui/surface_card", title_id: "password-reset-form-title" do %>
