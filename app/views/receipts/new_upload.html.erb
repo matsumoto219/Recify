@@ -10,13 +10,13 @@
     <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit" } } do |form| %>
       <div class="space-y-6">
         <div>
-          <p class="block text-sm font-medium text-[#E5E2E1]">レシート画像</p>
+          <p class="block text-sm font-medium token-text-base">レシート画像</p>
 
-          <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-white/10 bg-black/20 px-6 py-10 text-center group-hover:bg-[#2A2A2A] transition-colors">
+          <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed upload-dropzone px-6 py-10 text-center transition-colors">
             <div class="flex flex-col items-center gap-4" data-receipt-upload-target="emptyState">
-              <span class="material-symbols-outlined text-5xl text-[#C0C1FF] opacity-80">photo_camera</span>
-              <p class="text-base font-medium text-[#E5E2E1]">レシートを撮影または選択</p>
-              <p class="text-xs text-[#C7C4D8]">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
+              <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
+              <p class="text-base font-medium token-text-base">レシートを撮影または選択</p>
+              <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
             </div>
 
             <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
@@ -46,7 +46,7 @@
               data: { action: "receipt-upload#openLibrary" } %>
           </div>
 
-          <p class="text-xs text-center text-[#C7C4D8]" data-receipt-upload-target="fileName">
+          <p class="text-xs text-center token-text-muted" data-receipt-upload-target="fileName">
             画像はまだ選択されていません
           </p>
 
@@ -77,8 +77,8 @@
   <% end %>
 
   <footer class="text-center space-y-6">
-    <div class="flex items-center justify-center gap-2 text-sm text-[#C7C4D8] bg-[#1C1B1B] py-2 px-4 rounded-full w-fit mx-auto">
-      <span class="material-symbols-outlined text-sm text-[#C0C1FF]">info</span>
+    <div class="flex items-center justify-center gap-2 text-sm token-text-muted token-bg-card-subtle py-2 px-4 rounded-full w-fit mx-auto">
+      <span class="material-symbols-outlined text-sm token-text-brand">info</span>
       アップロード後は解析キューに追加されます
     </div>
 

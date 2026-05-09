@@ -43,17 +43,17 @@
       <%= render "shared/ui/surface_card", class: "p-8" do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
-            <div class="h-14 w-14 bg-[#4B4DD8] rounded-xl flex items-center justify-center mr-4 shrink-0">
-              <span class="material-symbols-outlined text-white text-3xl" style="font-size: 32px;">shopping_bag</span>
+            <div class="h-14 w-14 token-bg-brand-strong rounded-xl flex items-center justify-center mr-4 shrink-0">
+              <span class="material-symbols-outlined token-text-on-brand text-3xl" style="font-size: 32px;">shopping_bag</span>
             </div>
             <div class="min-w-0">
-              <p class="text-xs font-bold text-[#C0C1FF] uppercase tracking-widest mb-1">Store Information</p>
-              <h2 class="text-2xl font-bold text-white truncate"><%= @receipt.store_name.presence || "店舗名なし" %></h2>
-              <p class="truncate text-sm text-[#C7C4D8] mt-1" title="<%= @receipt.store_address.presence || "住所未登録" %>"><%= @receipt.store_address.presence || "住所未登録" %></p>
+              <p class="text-xs font-bold token-text-brand uppercase tracking-widest mb-1">Store Information</p>
+              <h2 class="text-2xl font-bold token-text-base truncate"><%= @receipt.store_name.presence || "店舗名なし" %></h2>
+              <p class="truncate text-sm token-text-muted mt-1" title="<%= @receipt.store_address.presence || "住所未登録" %>"><%= @receipt.store_address.presence || "住所未登録" %></p>
 
               <!-- mobile only: ID + status -->
               <div class="flex items-center justify-between mt-2 md:hidden gap-3">
-                <p class="text-xs text-[#C7C4D8] truncate" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+                <p class="text-xs token-text-muted truncate" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
                 <%= render "shared/ui/receipt_status_badge",
                       status: @receipt.status,
                       label: @receipt.status_label,
@@ -67,24 +67,24 @@
                   status: @receipt.status,
                   label: @receipt.status_label,
                   size: :md %>
-            <p class="truncate text-sm text-[#C7C4D8] mt-2" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+            <p class="truncate text-sm token-text-muted mt-2" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-6 py-6 border-y border-white/10">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-6 py-6 border-y token-border-soft">
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1"><%= t(".purchased_at") %></p>
-            <p class="font-semibold text-white"><%= @receipt.purchased_at ? l(@receipt.purchased_at.to_date, format: :default) : "未設定" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t(".purchased_at") %></p>
+            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at.to_date, format: :default) : "未設定" %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">時刻</p>
-            <p class="font-semibold text-white"><%= @receipt.purchased_at ? l(@receipt.purchased_at, format: :short).split.last : "未設定" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">時刻</p>
+            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at, format: :short).split.last : "未設定" %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1"><%= t(".payment_method") %></p>
-            <p class="font-semibold text-white flex items-center min-w-0">
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t(".payment_method") %></p>
+            <p class="font-semibold token-text-base flex items-center min-w-0">
               <span class="material-symbols-outlined text-sm mr-1">payments</span>
               <% payment_method_text = @receipt.payment_method_label.presence || "未設定" %>
               <span class="min-w-0 truncate" title="<%= payment_method_text %>"><%= payment_method_text %></span>
@@ -92,39 +92,39 @@
           </div>
 
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">電話番号</p>
-            <p class="truncate font-semibold text-white" title="<%= display_phone_number(@receipt.display_store_phone_number) %>"><%= display_phone_number(@receipt.display_store_phone_number) %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">電話番号</p>
+            <p class="truncate font-semibold token-text-base" title="<%= display_phone_number(@receipt.display_store_phone_number) %>"><%= display_phone_number(@receipt.display_store_phone_number) %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">画像保存</p>
-            <p class="font-semibold text-white"><%= @receipt.image.attached? ? "あり" : "なし" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">画像保存</p>
+            <p class="font-semibold token-text-base"><%= @receipt.image.attached? ? "あり" : "なし" %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold text-[#C7C4D8] uppercase tracking-wider mb-1">OCR完了</p>
-            <p class="font-semibold text-white"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : "未完了" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">OCR完了</p>
+            <p class="font-semibold token-text-base"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : "未完了" %></p>
           </div>
         </div>
 
         <div class="mt-8">
           <div class="flex items-center justify-between mb-4 gap-4">
-            <h3 class="text-sm font-bold text-white">明細一覧</h3>
-            <span class="text-xs text-[#C7C4D8]"><%= @receipt.receipt_items.count %>件</span>
+            <h3 class="text-sm font-bold token-text-base">明細一覧</h3>
+            <span class="text-xs token-text-muted"><%= @receipt.receipt_items.count %>件</span>
           </div>
 
           <% if @receipt.receipt_items.any? %>
             <div class="space-y-4">
               <% @receipt.receipt_items.order(:position_index).each do |item| %>
-                <div class="flex justify-between items-center py-3 hover:bg-[#1C1B1B] rounded-lg px-3 transition-colors gap-4">
+                <div class="flex justify-between items-center py-3 token-hover-bg-card-subtle rounded-lg px-3 transition-colors gap-4">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
-                      <p class="font-medium text-[#E5E2E1] truncate"><%= item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "商品名なし" %></p>
+                      <p class="font-medium token-text-base truncate"><%= item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "商品名なし" %></p>
                       <% if item.needs_review %>
-                        <span class="px-2 py-0.5 rounded-full bg-[#FFB695]/10 text-[#FFB695] text-[10px] font-bold">要確認</span>
+                        <span class="px-2 py-0.5 rounded-full token-state-warning-soft text-[10px] font-bold">要確認</span>
                       <% end %>
                     </div>
-                    <p class="text-xs text-[#C7C4D8] mt-1 break-words">
+                    <p class="text-xs token-text-muted mt-1 break-words">
                       <span>カテゴリ: <%= item.category_label.presence || "未分類" %></span>
                       <span class="mx-2">/</span>
                       <span>数量: <%= item.quantity.presence || 1 %></span>
@@ -134,7 +134,7 @@
                       <% end %>
                     </p>
                   </div>
-                  <p class="font-bold text-white shrink-0 truncate" title="¥<%= number_with_delimiter(item.line_total.to_i) %>">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
+                  <p class="font-bold token-text-base shrink-0 truncate" title="¥<%= number_with_delimiter(item.line_total.to_i) %>">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
                 </div>
               <% end %>
             </div>
@@ -142,7 +142,7 @@
             <%# TODO: 明細空状態の本実装
                 - 空状態文言を I18n 化
                 - 手動登録導線や編集導線を追加する %>
-            <div class="rounded-xl border border-dashed border-white/10 p-8 text-center text-[#C7C4D8]">
+            <div class="rounded-xl border border-dashed token-border-soft p-8 text-center token-text-muted">
               明細はありません
             </div>
           <% end %>
@@ -151,12 +151,12 @@
 
       <%= render "shared/ui/surface_card", class: "p-8" do %>
         <div class="flex items-center mb-4">
-          <span class="material-symbols-outlined text-[#C0C1FF] mr-2">notes</span>
-          <h3 class="text-sm font-bold text-white uppercase tracking-wider"><%= t(".memo") %></h3>
+          <span class="material-symbols-outlined token-text-brand mr-2">notes</span>
+          <h3 class="text-sm font-bold token-text-base uppercase tracking-wider"><%= t(".memo") %></h3>
         </div>
         <%# TODO: メモ表示の本実装調整
             - 本実装時は文言を I18n 化し、空状態デザインも統一する %>
-        <div class="text-[#C7C4D8] leading-relaxed border-l-4 border-[#C0C1FF]/40 pl-4 min-h-12 break-words whitespace-pre-wrap"><%= @receipt.memo.presence || "メモはありません" %></div>
+        <div class="token-text-muted leading-relaxed border-l-4 token-border-brand-soft pl-4 min-h-12 break-words whitespace-pre-wrap"><%= @receipt.memo.presence || "メモはありません" %></div>
       <% end %>
     </div>
 

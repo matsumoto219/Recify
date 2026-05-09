@@ -6,20 +6,20 @@
   </section>
 <% else %>
   <section class="flex flex-col items-center justify-center py-24 text-center">
-    <div class="w-24 h-24 mb-6 rounded-full bg-[#2A2A2A] flex items-center justify-center">
-      <span class="material-symbols-outlined text-4xl text-[#C7C4D8]/30">search_off</span>
+    <div class="w-24 h-24 mb-6 rounded-full token-bg-elevated flex items-center justify-center">
+      <span class="material-symbols-outlined text-4xl empty-state-icon">search_off</span>
     </div>
 
     <% if defined?(query) && query.present? %>
-      <h2 class="text-lg font-bold text-[#E5E2E1] mb-2">検索結果が見つかりません</h2>
-      <p class="text-[#C7C4D8] text-sm mb-6">
-        「<span class="text-[#C0C1FF]"><%= query %></span>」に一致するレシートはありません。
+      <h2 class="text-lg font-bold token-text-base mb-2">検索結果が見つかりません</h2>
+      <p class="token-text-muted text-sm mb-6">
+        「<span class="token-text-brand"><%= query %></span>」に一致するレシートはありません。
       </p>
       <%= link_to "一覧に戻る", receipts_path,
-        class: "text-sm text-[#C0C1FF] hover:underline" %>
+        class: "text-sm token-text-brand hover:underline" %>
     <% else %>
-      <h2 class="text-lg font-bold text-[#E5E2E1] mb-2">レシートがありません</h2>
-      <p class="text-[#C7C4D8] text-sm mb-8">最初のレシートを登録しましょう。</p>
+      <h2 class="text-lg font-bold token-text-base mb-2">レシートがありません</h2>
+      <p class="token-text-muted text-sm mb-8">最初のレシートを登録しましょう。</p>
       <%= render "shared/ui/button",
         label: "今すぐ登録する",
         as: :link,

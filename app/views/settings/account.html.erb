@@ -21,53 +21,51 @@
             <% persisted_avatar_url = if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted?
                                         url_for(form_resource.avatar)
                                       end %>
-            <div class="w-24 h-24 rounded-full bg-[#353534] flex items-center justify-center text-3xl font-bold text-[#C0C1FF] border-2 border-[#C0C1FF]/20 shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
+            <div class="w-24 h-24 rounded-full token-bg-floating flex items-center justify-center text-3xl font-bold token-text-brand border-2 token-border-brand-soft shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
               <img
                 src="<%= persisted_avatar_url %>"
                 alt="プロフィール画像プレビュー"
                 class="w-full h-full object-cover <%= persisted_avatar_url.present? ? '' : 'hidden' %>"
                 data-avatar-preview-target="image"
-                data-persisted-url="<%= persisted_avatar_url %>"
-              >
+                data-persisted-url="<%= persisted_avatar_url %>">
               <span
                 class="<%= persisted_avatar_url.present? ? 'hidden' : '' %>"
                 data-avatar-preview-target="fallback"
-                data-default-text="<%= fallback_text %>"
-              ><%= fallback_text %></span>
+                data-default-text="<%= fallback_text %>"><%= fallback_text %></span>
             </div>
           </div>
 
           <div class="text-center md:text-left w-full min-w-0">
-            <h2 class="truncate text-lg font-semibold text-[#E5E2E1] mb-1" title="プロフィール写真">プロフィール写真</h2>
-            <p class="text-xs text-[#C7C4D8] mb-4 break-words">PNG / JPG / WebP を設定できます(5MB以下)</p>
+            <h2 class="truncate text-lg font-semibold token-text-base mb-1" title="プロフィール写真">プロフィール写真</h2>
+            <p class="text-xs token-text-muted mb-4 break-words">PNG / JPG / WebP を設定できます(5MB以下)</p>
             <%= f.file_field :avatar,
-                  class: "block w-full text-sm text-[#C7C4D8] file:mr-4 file:rounded-lg file:border-0 file:bg-[#353534] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[#C0C1FF] hover:file:bg-[#393939]",
+                  class: "block w-full text-sm avatar-file-input file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
                   accept: "image/png,image/jpeg,image/webp",
                   data: {
                     avatar_preview_target: "input",
                     action: "change->avatar-preview#preview"
                   } %>
-            <p class="mt-2 hidden text-xs text-[#FFB4AB] leading-relaxed break-words" data-avatar-preview-target="error">
+            <p class="mt-2 hidden text-xs token-text-error leading-relaxed break-words" data-avatar-preview-target="error">
               <span data-avatar-preview-target="errorText"></span>
             </p>
 
             <% if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted? %>
               <label class="mt-4 flex items-start gap-3 text-left cursor-pointer select-none min-w-0">
                 <%= check_box_tag :remove_avatar, "1", false,
-                      class: "mt-0.5 h-4 w-4 rounded border border-white/20 bg-[#0E0E0E] text-[#C0C1FF] focus:ring-2 focus:ring-[#C0C1FF]/40",
+                      class: "mt-0.5 h-4 w-4 rounded border token-border-strong token-bg-input token-text-brand focus:ring-2 token-focus-ring-brand",
                       data: {
                         avatar_preview_target: "removeCheckbox",
                         action: "change->avatar-preview#toggleRemove"
                       } %>
                 <span class="space-y-1 min-w-0">
-                  <span class="block text-sm font-medium text-[#E5E2E1]">現在のプロフィール画像を削除する</span>
-                  <span class="block text-xs text-[#C7C4D8] leading-relaxed">保存すると画像は削除され、初期アイコン表示に戻ります。</span>
+                  <span class="block text-sm font-medium token-text-base">現在のプロフィール画像を削除する</span>
+                  <span class="block text-xs token-text-muted leading-relaxed">保存すると画像は削除され、初期アイコン表示に戻ります。</span>
                 </span>
               </label>
             <% end %>
 
             <% if form_resource.errors[:avatar].any? %>
-              <p class="mt-2 text-xs text-[#FFB4AB] leading-relaxed break-words">
+              <p class="mt-2 text-xs token-text-error leading-relaxed break-words">
                 <%= form_resource.errors.full_messages_for(:avatar).first %>
               </p>
             <% end %>
@@ -97,7 +95,7 @@
               input_wrapper_class: "" %>
       </div>
 
-      <div class="bg-[#2A2A2A]/50 -mx-8 -mb-8 px-8 py-6 flex flex-col-reverse md:flex-row justify-end gap-3">
+      <div class="account-form-footer -mx-8 -mb-8 px-8 py-6 flex flex-col-reverse md:flex-row justify-end gap-3">
         <%= render "shared/ui/button",
               as: :link,
               href: settings_path,
