@@ -157,10 +157,7 @@
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">vibration</span>
-            <%# TODO: ステータスバッジを共通パーシャル化
-                - settings/security 以外でも再利用できるようにする
-                - 状態ごとの配色・サイズ・variant を統一管理する %>
-            <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+            <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
                 title: "2要素認証 (2FA)",
@@ -189,7 +186,7 @@
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined text-[#C0C1FF] text-3xl">passkey</span>
-            <span class="px-2 py-1 bg-[#353534] text-[#FFB4AB] text-[10px] font-bold rounded uppercase">未設定</span>
+            <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
                 title: "パスキー",
