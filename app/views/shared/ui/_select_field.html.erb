@@ -39,7 +39,7 @@
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
 
   base_wrapper_class = "space-y-2"
-  base_label_class = "text-xs font-bold uppercase tracking-wider field-label"
+  base_label_class = "text-xs font-bold uppercase tracking-wider token-text-muted"
   base_select_class = "w-full rounded-lg input-field appearance-none outline-none transition-all"
   highlight_classes = if has_error || highlight_variant == :error
                         "input-field-error"
@@ -50,7 +50,7 @@
   merged_wrapper_class = [base_wrapper_class, select_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_select_class = [base_select_class, highlight_classes, select_spacing_class, select_class].compact.join(" ")
-  merged_error_class = ["text-xs field-error-text", error_message_class].compact.join(" ")
+  merged_error_class = ["text-xs token-text-error", error_message_class].compact.join(" ")
 %>
 
 <div class="<%= merged_wrapper_class %>">
@@ -60,7 +60,7 @@
 
   <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'field-icon-error field-icon-error-focus' : 'field-icon field-icon-focus' %>"><%= icon %></span>
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
     <% end %>
 
     <%= f.select attribute,
@@ -69,7 +69,7 @@
                  class: merged_select_class,
                  required: required %>
 
-    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'field-icon-error field-icon-error-focus' : 'field-icon field-icon-focus' %>">expand_more</span>
+    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>">expand_more</span>
   </div>
 
   <% if show_error_message && has_error %>

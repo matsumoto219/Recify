@@ -40,7 +40,7 @@
   <div class="relative z-10 ml-4 md:ml-0 flex-1 min-w-0 md:flex-none">
     <% if mobile_badge.present? %>
       <div class="mb-1 md:hidden">
-        <span class="inline-block px-2 py-0.5 rounded-full selection-card-badge-primary selection-card-badge-primary-bordered border text-[10px] font-bold tracking-widest uppercase">
+        <span class="inline-block px-2 py-0.5 rounded-full selection-card-badge-primary token-border-brand-soft border text-[10px] font-bold tracking-widest uppercase">
           <%= mobile_badge %>
         </span>
       </div>
@@ -50,11 +50,11 @@
       <h2 class="<%= [title_size, 'font-bold selection-card-title leading-none md:leading-tight'].join(' ') %>"><%= title %></h2>
     </div>
 
-    <p class="<%= [description_size, 'selection-card-description leading-relaxed'].join(' ') %>"><%= description %></p>
+    <p class="<%= [description_size, 'token-text-muted leading-relaxed'].join(' ') %>"><%= description %></p>
   </div>
 
   <span class="relative z-10 ml-3 shrink-0 block md:hidden">
-    <span class="material-symbols-outlined selection-card-chevron text-lg">chevron_right</span>
+    <span class="material-symbols-outlined token-text-subtle text-lg">chevron_right</span>
   </span>
 
   <% if desktop_badge.present? %>

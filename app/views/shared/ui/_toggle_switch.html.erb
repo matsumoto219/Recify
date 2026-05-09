@@ -11,8 +11,8 @@
   remote = local_assigns.fetch(:remote, false)
   update_url = local_assigns[:url]
 
-  resolved_label_class = ["text-sm font-medium toggle-label", label_class].compact.join(" ")
-  resolved_description_class = ["text-xs toggle-description", description_class].compact.join(" ")
+  resolved_label_class = ["text-sm font-medium token-text-base", label_class].compact.join(" ")
+  resolved_description_class = ["text-xs token-text-muted", description_class].compact.join(" ")
   wrapper_classes = ["flex items-center justify-between gap-4", wrapper_class].compact.join(" ")
 
   controller_data_enabled = remote && input_name.present? && update_url.present?

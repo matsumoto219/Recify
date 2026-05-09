@@ -8,7 +8,7 @@
 
   <div class="flex items-center gap-3 md:gap-5 lg:gap-6 shrink-0 ml-2 md:ml-4">
     <button type="button"
-      class="sm:hidden header-text-muted header-text-hover transition-colors"
+      class="sm:hidden token-text-muted header-text-hover transition-colors"
       data-action="search#toggle"
       aria-label="検索">
       <span class="material-symbols-outlined">search</span>
@@ -21,19 +21,19 @@
         - ストレージ上限に近づいた警告
         - 未読件数のバッジ表示（赤丸）
         実装時はNotificationモデル + 既読管理 + バッジ表示を追加 %>
-    <button type="button" class="header-text-muted header-text-hover transition-colors" aria-label="通知">
+    <button type="button" class="token-text-muted header-text-hover transition-colors" aria-label="通知">
       <span class="material-symbols-outlined">notifications</span>
     </button>
 
     <% if user_signed_in? %>
-      <div class="flex items-center gap-3 border-l header-border pl-4 md:pl-6">
+      <div class="flex items-center gap-3 border-l token-border-glass pl-4 md:pl-6">
         <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
-          <p class="truncate text-xs font-bold header-text" title="<%= current_user.name.presence || current_user.email %>">
+          <p class="truncate text-xs font-bold token-text-base" title="<%= current_user.name.presence || current_user.email %>">
             <%= current_user.name.presence || current_user.email %>
           </p>
         </div>
 
-        <div class="w-8 h-8 rounded-full overflow-hidden border header-brand-border header-bg-elevated flex items-center justify-center header-text-link text-xs font-bold">
+        <div class="w-8 h-8 rounded-full overflow-hidden border token-border-brand-soft token-bg-elevated flex items-center justify-center token-text-brand text-xs font-bold">
           <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
             <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
           <% else %>
@@ -47,7 +47,7 @@
             turbo_method: :delete,
             turbo_confirm: "ログアウトしますか？"
           },
-          class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] header-text-muted header-text-error-hover transition-colors ml-1 rounded-md" do %>
+          class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] token-text-muted header-text-error-hover transition-colors ml-1 rounded-md" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
           <span class="hidden sm:inline">ログアウト</span>
         <% end %>
@@ -59,7 +59,7 @@
           public_header へ移行する %>
       <%#
       <div class="flex items-center gap-3">
-        <%= link_to t("common.login"), new_user_session_path, class: "text-sm header-text-muted header-text-hover transition-colors"
+        <%= link_to t("common.login"), new_user_session_path, class: "text-sm token-text-muted header-text-hover transition-colors"
       %>
         <%= link_to t("common.sign_up"), new_user_registration_path, class: "inline-flex items-center rounded-lg header-brand-bg text-black px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity" %>
       </div>

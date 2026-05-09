@@ -33,13 +33,13 @@
                           when :bg_card
                             "surface-card-bg-card"
                           when :bg_elevated
-                            "surface-card-bg-elevated"
+                            "token-bg-elevated"
                           when :bg_card_subtle
                             "surface-card-bg-card-subtle"
                           when :bg_input
-                            "surface-card-bg-input"
+                            "token-bg-input"
                           when :bg_floating
-                            "surface-card-bg-floating"
+                            "token-bg-floating"
                           end
 
   accent_color = case accent
@@ -55,7 +55,7 @@
                     when :warning
                       "surface-card-warning border surface-card-warning-border"
                     else
-                      custom_background ? nil : (surface_variant_class || "surface-card-default")
+                      custom_background ? nil : (surface_variant_class || "surface-card-bg-card")
                     end
 
   hover_classes = if hoverable
