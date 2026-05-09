@@ -1,0 +1,72 @@
+<%#
+  Setting status badge
+
+  Options:
+    state:     Status key. Supported: :active, :inactive, :pending, :warning
+    label:     Optional display label. Defaults are resolved from state.
+    size:      Optional size key. Supported: :sm, :md, :lg. Default: :sm
+    variant:   Optional display style. Supported: :pill, :text. Default: :pill
+    class:     Optional additional CSS classes.
+%>
+
+<%
+  state = local_assigns.fetch(:state).to_sym
+  size = local_assigns.fetch(:size, :sm).to_sym
+  variant = local_assigns.fetch(:variant, :pill).to_sym
+
+  state_styles = {
+    pill: {
+      active: "setting-status-active border",
+      inactive: "setting-status-inactive border",
+      pending: "setting-status-pending border",
+      warning: "setting-status-warning border"
+    },
+
+    text: {
+      active: "setting-status-text-active",
+      inactive: "setting-status-text-inactive",
+      pending: "setting-status-text-pending",
+      warning: "setting-status-text-warning"
+    }
+  }
+
+  default_labels = {
+    active: "有効",
+    inactive: "未設定",
+    pending: "設定中",
+    warning: "注意"
+  }
+
+  pill_size_styles = {
+    sm: "px-2 py-1 text-[10px]",
+    md: "px-3 py-1 text-xs",
+    lg: "px-4 py-1.5 text-sm"
+  }
+
+  text_size_styles = {
+    sm: "text-[10px]",
+    md: "text-xs",
+    lg: "text-sm"
+  }
+
+  size_styles = variant == :text ? text_size_styles : pill_size_styles
+
+  base_classes = if variant == :text
+    "inline-flex items-center leading-none whitespace-nowrap"
+  else
+    "inline-flex items-center rounded font-bold uppercase leading-none whitespace-nowrap"
+  end
+
+  fallback_style = variant == :text ? "setting-status-text-default" : "setting-status-default border"
+
+  badge_classes = [
+    base_classes,
+    state_styles.fetch(variant, {}).fetch(state, fallback_style),
+    size_styles.fetch(size, size_styles[:sm]),
+    local_assigns[:class]
+  ].compact.join(" ")
+
+  label = local_assigns.fetch(:label, default_labels.fetch(state, "不明"))
+%>
+
+<span class="<%= badge_classes %>"><%= label %></span>
