@@ -36,7 +36,7 @@
           </div>
         </div>
 
-        <div class="w-full flex justify-end mt-2 md:mt-0 md:w-auto md:block shrink-0">
+        <div class="w-full mt-2 md:mt-0 md:w-auto md:shrink-0">
           <%= render "shared/ui/button",
                 as: :link,
                 href: settings_account_path,
@@ -44,7 +44,8 @@
                 variant: :secondary,
                 size: :md,
                 text_color: "text-[#C0C1FF]",
-                class: "py-2.5 hover:bg-[#C0C1FF]/10" %>
+                full_width: true,
+                class: "py-2.5 hover:bg-[#C0C1FF]/10 md:w-auto" %>
         </div>
       </div>
     <% end %>
@@ -107,7 +108,10 @@
               <span class="material-symbols-outlined text-[#C7C4D8] text-sm">info</span>
               <span class="text-[#C7C4D8]">2要素認証 (2FA)</span>
             </div>
-            <span class="text-xs text-[#C7C4D8]">未設定</span>
+            <%= render "shared/ui/setting_status_badge",
+                  state: :inactive,
+                  variant: :text,
+                  size: :lg %>
           </div>
 
           <%# TODO: Passkey 設定機能を実装する。現状はダミー表示 %>
@@ -116,7 +120,10 @@
               <span class="material-symbols-outlined text-[#C7C4D8] text-sm">info</span>
               <span class="text-[#C7C4D8]">Passkey 設定</span>
             </div>
-            <span class="text-xs text-[#C7C4D8]">未設定</span>
+            <%= render "shared/ui/setting_status_badge",
+                  state: :inactive,
+                  variant: :text,
+                  size: :lg %>
           </div>
 
           <p class="text-[11px] text-[#C7C4D8]/60 leading-relaxed">
