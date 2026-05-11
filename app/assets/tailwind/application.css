@@ -664,6 +664,31 @@ body {
   color: var(--text-base);
 }
 
+/* ===== Segmented Control Utilities ===== */
+.segmented-control-indicator-surface {
+  border-color: var(--btn-secondary-border);
+  background: var(--brand-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.segmented-control-option {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+
+.segmented-control-option:hover {
+  color: var(--text-base);
+}
+
+.peer:checked + .segmented-control-option {
+  color: var(--text-on-primary);
+  text-shadow: none;
+}
+
+.peer:focus-visible + .segmented-control-option {
+  outline-color: var(--border-focus);
+}
+
 /* ===== Summary Card Utilities ===== */
 .summary-card-link-hover:hover {
   color: var(--text-base);
