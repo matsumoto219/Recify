@@ -52,7 +52,7 @@ export default class extends Controller {
         method: this.methodValue.toUpperCase(),
         headers: {
           'Content-Type': 'application/json',
-          Accept: 'application/json',
+          Accept: 'text/vnd.turbo-stream.html',
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
         },
         body: JSON.stringify({
@@ -65,6 +65,20 @@ export default class extends Controller {
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
       }
+
+      const responseBody = await response.text()
+
+      if (responseBody.trim() !== '') {
+        Turbo.renderStreamMessage(responseBody)
+      }
+
+      this.dispatch('success', {
+        detail: {
+          name: this.nameValue,
+          value
+        },
+        bubbles: true
+      })
     } catch (error) {
       console.error('[SegmentedControl] Failed to update setting:', error)
     }
