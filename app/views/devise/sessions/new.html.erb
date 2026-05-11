@@ -39,8 +39,8 @@
 
           <div class="space-y-2">
             <div class="flex justify-between items-center px-1 gap-3">
-              <%= f.label :password, "パスワード", class: "text-xs font-bold text-[#C7C4D8] uppercase tracking-widest block" %>
-              <%= link_to "パスワードをお忘れですか？", new_password_path(resource_name), class: "text-xs text-[#C0C1FF] hover:text-white transition-colors whitespace-nowrap" %>
+              <%= f.label :password, "パスワード", class: "text-xs font-bold token-text-muted uppercase tracking-widest block" %>
+              <%= link_to "パスワードをお忘れですか？", new_password_path(resource_name), class: "text-xs token-text-brand hover:token-text-base transition-colors whitespace-nowrap" %>
             </div>
 
             <%= render "shared/ui/text_field",
@@ -58,8 +58,8 @@
 
           <% if devise_mapping.rememberable? %>
             <div class="flex items-center gap-3 px-1">
-              <%= f.check_box :remember_me, class: "rounded border-white/20 bg-[#0E0E0E] text-[#4B4DD8] focus:ring-[#C0C1FF]/50" %>
-              <%= f.label :remember_me, "ログイン状態を保持する", class: "text-sm text-[#C7C4D8]" %>
+              <%= f.check_box :remember_me, class: "rounded token-checkbox" %>
+              <%= f.label :remember_me, "ログイン状態を保持する", class: "text-sm token-text-muted" %>
             </div>
           <% end %>
 
@@ -76,9 +76,9 @@
         <% end %>
 
         <section class="text-center pt-2" aria-label="新規登録案内">
-          <p class="flex flex-col items-center gap-1 text-sm text-[#C7C4D8] sm:block">
+          <p class="flex flex-col items-center gap-1 text-sm token-text-muted sm:block">
             <span>アカウントをお持ちではありませんか？</span>
-            <%= link_to "新規登録", new_registration_path(resource_name), class: "text-[#C0C1FF] font-medium hover:underline underline-offset-4 sm:ml-1" %>
+            <%= link_to "新規登録", new_registration_path(resource_name), class: "token-text-brand font-medium hover:underline underline-offset-4 sm:ml-1" %>
           </p>
         </section>
 
@@ -103,7 +103,7 @@
           <%# TODO: ゲストユーザー仕様の最終文言調整
               - 7日間未使用で削除など、正確な仕様に合わせる
               - 将来の仕様変更に対応できるようI18n化する %>
-          <p class="text-center text-[11px] text-zinc-500 leading-relaxed">
+          <p class="text-center text-[11px] token-text-subtle leading-relaxed">
             一部機能をすぐに体験できます。<br>
             一定期間利用がない場合、データは自動的に削除されます。
           </p>

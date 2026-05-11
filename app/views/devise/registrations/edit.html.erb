@@ -1,6 +1,5 @@
 <%# TODO: 動線は settings 側を優先し、この画面は直リンク時の受け皿として残す /users/edit %>
-<main class="relative min-h-screen overflow-hidden bg-[#131313] text-[#E5E2E1]">
-  <%= render "shared/ui/ambient_background" %>
+<div class="relative min-h-screen overflow-hidden token-bg-page token-text-base">
 
   <div class="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
     <section class="w-full max-w-[560px] space-y-8" aria-labelledby="edit-registration-title">
@@ -38,12 +37,12 @@
                       error_message_class: "px-1 text-xs leading-relaxed" %>
 
             <% if devise_mapping.confirmable? && resource.pending_reconfirmation? %>
-              <div class="rounded-2xl border border-[#FFB695]/30 bg-[#FFB695]/10 px-4 py-3 text-sm text-[#FFB695]">
+              <div class="rounded-2xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
                 確認待ちメールアドレス: <%= resource.unconfirmed_email %>
               </div>
             <% end %>
 
-            <%= render "shared/ui/section_divider", variant: :gradient, label: "パスワード変更", class: "mt-8 mb-8" %>
+            <%= render "shared/ui/section_divider", class: "mt-8 mb-8" %>
 
             <%= render "shared/ui/text_field",
                       f: f,
@@ -59,7 +58,7 @@
                       error_message_class: "px-1 text-xs leading-relaxed" %>
 
             <% if @minimum_password_length %>
-              <p class="px-1 text-xs text-[#C7C4D8]">
+              <p class="px-1 text-xs token-text-muted">
                 <%= @minimum_password_length %>文字以上
               </p>
             <% end %>
@@ -90,7 +89,7 @@
                       label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                       error_message_class: "px-1 text-xs leading-relaxed" %>
 
-            <p class="px-1 text-xs text-[#C7C4D8]">変更内容を保存するには現在のパスワードが必要です</p>
+            <p class="px-1 text-xs token-text-muted">変更内容を保存するには現在のパスワードが必要です</p>
 
             <%= render "shared/ui/button",
                       label: "変更を保存",
@@ -100,25 +99,33 @@
                       full_width: true,
                       disable_with: "保存中...",
                       class: "font-bold rounded-lg" %>
+
+            <p class="text-[11px] token-text-subtle leading-relaxed mt-3">
+              ※ 詳細な設定やセキュリティ管理は設定画面からも行えます。
+            </p>
           <% end %>
 
           <div class="space-y-5 pt-2">
-            <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-sm text-[#C7C4D8]">
-              詳細な設定やセキュリティ管理は設定画面からも行えます。
-            </div>
-
             <div class="space-y-3">
-              <%= link_to "セキュリティ設定へ",
-                          settings_security_path,
-                          class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-[#353534] px-4 text-sm font-medium text-[#E5E2E1] transition hover:border-white/20 hover:bg-[#3F3F3E]" %>
+              <%= render "shared/ui/button",
+                        as: :link,
+                        href: settings_security_path,
+                        label: "セキュリティ設定へ",
+                        variant: :secondary,
+                        size: :md,
+                        full_width: true %>
 
-              <%= link_to "設定トップへ",
-                          settings_path,
-                          class: "flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-transparent px-4 text-sm font-medium text-[#C7C4D8] transition hover:border-white/20 hover:bg-white/5 hover:text-[#E5E2E1]" %>
+              <%= render "shared/ui/button",
+                        as: :link,
+                        href: settings_path,
+                        label: "設定トップへ",
+                        variant: :ghost,
+                        size: :md,
+                        full_width: true %>
             </div>
           </div>
         </div>
       <% end %>
     </section>
   </div>
-</main>
+</div>

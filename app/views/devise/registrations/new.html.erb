@@ -28,15 +28,15 @@
                 placeholder: "example@email.com",
                 autocomplete: "email",
                 autofocus: true,
-                input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                input_class: "rounded-xl py-4 pl-12 pr-4",
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
           <div class="space-y-2">
             <div class="flex items-center justify-between gap-3">
-              <%= f.label :password, "パスワード", class: "text-xs font-semibold uppercase tracking-widest text-[#C7C4D8]/80 ml-1 block" %>
+              <%= f.label :password, "パスワード", class: "text-xs font-semibold uppercase tracking-widest token-text-muted ml-1 block" %>
               <% if @minimum_password_length %>
-                <p class="text-[11px] text-[#C7C4D8]/60 mr-1"><%= @minimum_password_length %>文字以上</p>
+                <p class="text-[11px] token-text-subtle mr-1"><%= @minimum_password_length %>文字以上</p>
               <% end %>
             </div>
             <%= render "shared/ui/text_field",
@@ -48,7 +48,7 @@
                   placeholder: "••••••••",
                   autocomplete: "new-password",
                   show_label: false,
-                  input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                  input_class: "rounded-xl py-4 pl-12 pr-4",
                   error_message_class: "px-1 text-xs leading-relaxed" %>
           </div>
 
@@ -60,7 +60,7 @@
                 field_type: :password_field,
                 placeholder: "••••••••",
                 autocomplete: "new-password",
-                input_class: "rounded-xl py-4 pl-12 pr-4 placeholder:text-[#918FA1]/50 focus:ring-[#C0C1FF]/20",
+                input_class: "rounded-xl py-4 pl-12 pr-4",
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
@@ -78,18 +78,18 @@
 
         <section class="text-center" aria-label="規約同意案内">
           <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
-          <p class="text-[10px] text-center text-[#C7C4D8]/60 leading-relaxed">
+          <p class="text-[10px] text-center token-text-subtle leading-relaxed">
             登録することで、Recifyの
-            <span class="underline hover:text-[#C0C1FF] cursor-pointer">利用規約</span>
+            <span class="underline token-hover-text-brand cursor-pointer">利用規約</span>
             および
-            <span class="underline hover:text-[#C0C1FF] cursor-pointer">プライバシーポリシー</span>
+            <span class="underline token-hover-text-brand cursor-pointer">プライバシーポリシー</span>
             に同意したものとみなされます。
           </p>
         </section>
 
         <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
         <section class="text-center space-y-3" aria-label="ログイン案内">
-          <p class="text-sm text-[#C7C4D8]">
+          <p class="text-sm token-text-muted">
             すでにアカウントをお持ちですか？
           </p>
 
