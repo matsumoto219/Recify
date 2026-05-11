@@ -21,7 +21,8 @@ class SettingsController < ApplicationController
             ok: true,
             message: "設定を更新しました",
             push_notification_enabled: current_user.push_notification_enabled,
-            product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled
+            product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled,
+            theme_preference: current_user.theme_preference
           }
         end
 
@@ -53,7 +54,8 @@ class SettingsController < ApplicationController
   def settings_params
     params.require(:user).permit(
       :push_notification_enabled,
-      :product_name_ai_completion_enabled
+      :product_name_ai_completion_enabled,
+      :theme_preference
     )
   end
 end
