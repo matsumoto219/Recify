@@ -1,11 +1,12 @@
-import { Controller } from "@hotwired/stimulus"
+/* global DataTransfer */
+import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
-  static targets = ["content", "chevron", "toggleButton", "modal", "fileInput", "previewImage", "modalImage", "fileName", "dropOverlay", "uploadError"]
+  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError']
   static values = { initiallyOpen: Boolean }
 
-  connect() {
+  connect () {
     this.isOpen = this.initiallyOpenValue
     this.objectUrl = null
     this.dragDepth = 0
@@ -14,18 +15,21 @@ export default class extends Controller {
     this.initializeFileName()
 
     this.handleKeydown = this.handleKeydown.bind(this)
-    document.addEventListener("keydown", this.handleKeydown)
+    document.addEventListener('keydown', this.handleKeydown)
   }
 
-  disconnect() {
+  disconnect () {
     this.unlockBodyScroll()
     this.revokeObjectUrl()
-    document.removeEventListener("keydown", this.handleKeydown)
+    document.removeEventListener('keydown', this.handleKeydown)
   }
 
-  previewSelectedImage(event) {
-    const file = event.target.files?.[0]
-    if (!file || !file.type.startsWith("image/")) return
+  previewSelectedImage (event) {
+    this.previewFile(event.target.files?.[0])
+  }
+
+  previewFile (file) {
+    if (!file || !file.type.startsWith('image/')) return
 
     this.updateFileName(file.name)
     this.hideUploadError()
@@ -35,13 +39,13 @@ export default class extends Controller {
 
     if (this.hasPreviewImageTarget) {
       this.previewImageTarget.src = this.objectUrl
-      this.previewImageTarget.classList.remove("hidden")
+      this.previewImageTarget.classList.remove('hidden')
 
       // placeholder（親要素内のテキスト等）を非表示にする
-      const container = this.previewImageTarget.closest(".relative")
+      const container = this.previewImageTarget.closest('.relative')
       if (container) {
-        const texts = container.querySelectorAll("span, p")
-        texts.forEach(el => el.classList.add("hidden"))
+        const texts = container.querySelectorAll('span, p')
+        texts.forEach(el => el.classList.add('hidden'))
       }
     }
 
@@ -50,78 +54,78 @@ export default class extends Controller {
     }
   }
 
-  updateFileName(fileName) {
+  updateFileName (fileName) {
     if (!this.hasFileNameTarget) return
 
-    this.fileNameTarget.textContent = fileName || "未選択"
+    this.fileNameTarget.textContent = fileName || '未選択'
   }
 
-  showUploadError() {
+  showUploadError () {
     if (!this.hasUploadErrorTarget) return
 
-    this.uploadErrorTarget.classList.remove("hidden")
+    this.uploadErrorTarget.classList.remove('hidden')
   }
 
-  hideUploadError() {
+  hideUploadError () {
     if (!this.hasUploadErrorTarget) return
 
-    this.uploadErrorTarget.classList.add("hidden")
+    this.uploadErrorTarget.classList.add('hidden')
   }
 
-  initializeFileName() {
+  initializeFileName () {
     if (!this.hasFileNameTarget) return
 
     const initial = this.fileNameTarget.dataset.initialLabel
     if (initial) {
       this.fileNameTarget.textContent = initial
     } else {
-      this.fileNameTarget.textContent = "ファイル未選択"
+      this.fileNameTarget.textContent = 'ファイル未選択'
     }
   }
 
-  handleDragOver(event) {
+  handleDragOver (event) {
     event.preventDefault()
   }
 
-  handleDragEnter(event) {
+  handleDragEnter (event) {
     event.preventDefault()
     this.dragDepth += 1
-    this.element.classList.add("ring-2", "ring-[#C0C1FF]/50", "rounded-xl")
+    this.element.classList.add('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
 
     if (this.hasDropOverlayTarget) {
-      this.dropOverlayTarget.classList.remove("hidden")
-      this.dropOverlayTarget.classList.add("flex")
+      this.dropOverlayTarget.classList.remove('hidden')
+      this.dropOverlayTarget.classList.add('flex')
     }
 
     this.hideUploadError()
   }
 
-  handleDragLeave(event) {
+  handleDragLeave (event) {
     event.preventDefault()
     this.dragDepth = Math.max(0, this.dragDepth - 1)
     if (this.dragDepth === 0) {
-      this.element.classList.remove("ring-2", "ring-[#C0C1FF]/50", "rounded-xl")
+      this.element.classList.remove('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
 
       if (this.hasDropOverlayTarget) {
-        this.dropOverlayTarget.classList.add("hidden")
-        this.dropOverlayTarget.classList.remove("flex")
+        this.dropOverlayTarget.classList.add('hidden')
+        this.dropOverlayTarget.classList.remove('flex')
       }
     }
   }
 
-  handleDrop(event) {
+  handleDrop (event) {
     event.preventDefault()
 
     this.dragDepth = 0
-    this.element.classList.remove("ring-2", "ring-[#C0C1FF]/50", "rounded-xl")
+    this.element.classList.remove('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
 
     if (this.hasDropOverlayTarget) {
-      this.dropOverlayTarget.classList.add("hidden")
-      this.dropOverlayTarget.classList.remove("flex")
+      this.dropOverlayTarget.classList.add('hidden')
+      this.dropOverlayTarget.classList.remove('flex')
     }
 
     const file = event.dataTransfer?.files?.[0]
-    if (!file || !file.type.startsWith("image/")) {
+    if (!file || !file.type.startsWith('image/')) {
       this.showUploadError()
       return
     }
@@ -135,70 +139,69 @@ export default class extends Controller {
       this.fileInputTarget.files = dataTransfer.files
     }
 
-    // プレビュー更新（既存処理を再利用）
-    this.previewSelectedImage({ target: { files: [file] } })
+    this.previewFile(file)
   }
 
-  revokeObjectUrl() {
+  revokeObjectUrl () {
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl)
       this.objectUrl = null
     }
   }
 
-  toggle() {
+  toggle () {
     this.isOpen = !this.isOpen
     this.sync()
   }
 
-  openModal() {
+  openModal () {
     if (!this.hasModalTarget || !this.hasModalImageTarget) return
-    if (!this.modalTarget.classList.contains("hidden")) return
+    if (!this.modalTarget.classList.contains('hidden')) return
 
-    this.modalTarget.classList.remove("hidden")
-    this.modalTarget.setAttribute("aria-hidden", "false")
+    this.modalTarget.classList.remove('hidden')
+    this.modalTarget.setAttribute('aria-hidden', 'false')
     this.lockBodyScroll()
     this.modalTarget.focus()
   }
 
-  closeModal() {
+  closeModal () {
     if (!this.hasModalTarget) return
 
-    this.modalTarget.classList.add("hidden")
-    this.modalTarget.setAttribute("aria-hidden", "true")
+    this.modalTarget.classList.add('hidden')
+    this.modalTarget.setAttribute('aria-hidden', 'true')
     this.unlockBodyScroll()
   }
 
-  handleKeydown(e) {
-    if (e.key !== "Escape") return
-    if (!this.hasModalTarget || this.modalTarget.classList.contains("hidden")) return
+  handleKeydown (e) {
+    if (e.key !== 'Escape') return
+    if (!this.hasModalTarget || this.modalTarget.classList.contains('hidden')) return
 
     this.closeModal()
   }
 
-  stopPropagation(e) {
+  stopPropagation (e) {
     e.stopPropagation()
   }
 
-  sync() {
+  sync () {
     if (this.hasContentTarget) {
-      this.contentTarget.classList.toggle("hidden", !this.isOpen)
+      this.contentTarget.classList.toggle('hidden', !this.isOpen)
     }
 
     if (this.hasChevronTarget) {
-      this.chevronTarget.classList.toggle("rotate-180", this.isOpen)
+      this.chevronTarget.classList.toggle('rotate-180', this.isOpen)
     }
 
     if (this.hasToggleButtonTarget) {
-      this.toggleButtonTarget.setAttribute("aria-expanded", String(this.isOpen))
+      this.toggleButtonTarget.setAttribute('aria-expanded', String(this.isOpen))
     }
   }
 
-  lockBodyScroll() {
-    document.body.classList.add("overflow-hidden")
+  lockBodyScroll () {
+    document.body.classList.add('overflow-hidden')
   }
 
-  unlockBodyScroll() {
-    document.body.classList.remove("overflow-hidden")
+  unlockBodyScroll () {
+    document.body.classList.remove('overflow-hidden')
   }
 }
