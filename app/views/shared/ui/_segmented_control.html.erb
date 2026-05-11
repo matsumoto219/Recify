@@ -13,6 +13,9 @@
     item_class:    extra classes for each segment label
     full_width:    true makes the control stretch horizontally
     data:          data attributes for the outer wrapper
+    remote:        true enables remote submit on change
+    url:           remote submit endpoint
+    method:        remote submit HTTP method
 %>
 
 <% name = local_assigns.fetch(:name) %>
@@ -23,8 +26,17 @@
 <% wrapper_class = local_assigns[:wrapper_class] %>
 <% item_class = local_assigns[:item_class] %>
 <% full_width = local_assigns.fetch(:full_width, false) %>
+<% remote = local_assigns.fetch(:remote, false) %>
+<% url = local_assigns[:url] %>
+<% method = local_assigns.fetch(:method, :patch) %>
 <% data_attributes = local_assigns.fetch(:data, {}) %>
-<% data_attributes = data_attributes.merge(controller: [data_attributes[:controller], "segmented-control"].compact.join(" ")) %>
+<% data_attributes = data_attributes.merge(
+     controller: [data_attributes[:controller], "segmented-control"].compact.join(" "),
+     segmented_control_remote_value: remote,
+     segmented_control_name_value: name,
+     segmented_control_method_value: method
+   ) %>
+<% data_attributes[:segmented_control_url_value] = url if url.present? %>
 <% active_index = options.index { |option| option.fetch(:value).to_s == value.to_s } || 0 %>
 
 <% size_classes = case size
