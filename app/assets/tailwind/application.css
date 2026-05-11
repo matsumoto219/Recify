@@ -181,6 +181,10 @@ body {
   color: var(--text-error);
 }
 
+.token-hover-text-base:hover {
+  color: var(--text-base);
+}
+
 .token-hover-text-brand:hover {
   color: var(--brand-primary);
 }
@@ -1012,6 +1016,21 @@ body {
 .notice-icon-info {
   background: var(--bg-info-soft);
   color: var(--text-info);
+}
+
+/* ===== Checkbox Utilities ===== */
+.token-checkbox {
+  background-color: var(--bg-input);
+  color: var(--brand-primary-strong);
+  border-color: var(--border-strong);
+}
+
+.token-checkbox:focus {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 50%,
+    transparent
+  );
 }
 
 /* ===== Input Field ===== */
