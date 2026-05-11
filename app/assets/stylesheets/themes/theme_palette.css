@@ -1,0 +1,187 @@
+:root {
+  /* =========================
+   * Light Palette
+   * ========================= */
+  --color-light-bg-page: #fcf9f8;
+  --color-light-bg-card: #f0edec;
+  --color-light-bg-card-subtle: #f6f3f2;
+  --color-light-bg-input: #ffffff;
+  --color-light-bg-elevated: #ebe7e7;
+  --color-light-bg-floating: #dedada;
+  --color-light-bg-overlay: rgba(252, 249, 248, 0.8);
+
+  /* Text palette */
+  --color-light-text-base: #1c1b1b;
+  --color-light-text-muted: #464555;
+  --color-light-text-subtle: rgba(70, 69, 85, 0.65);
+  --color-light-text-on-primary: #ffffff;
+  --color-light-text-on-brand: #ffffff;
+  --color-light-text-on-danger: #ffffff;
+  --color-light-text-link: #3130c0;
+
+  /* Border palette */
+  --color-light-border-soft: rgba(0, 0, 0, 0.05);
+  --color-light-border-default: rgba(121, 117, 129, 0.35);
+  --color-light-border-strong: rgba(0, 0, 0, 0.14);
+  --color-light-border-focus: #3130c0;
+
+  /* Brand palette */
+  --color-light-brand-primary: #3130c0;
+  --color-light-brand-primary-strong: #4b4dd8;
+  --color-light-brand-gradient-start: #3130c0;
+  --color-light-brand-gradient-end: #4b4dd8;
+
+  /* State palette */
+  --color-light-state-success: #2e7d32;
+  --color-light-state-warning: #a44100;
+  --color-light-state-error: #ba1a1a;
+  --color-light-state-info: #58579b;
+
+  /* State background palette */
+  --color-light-bg-success-soft: rgba(46, 125, 50, 0.1);
+  --color-light-bg-warning-soft: rgba(164, 65, 0, 0.1);
+  --color-light-bg-error-soft: rgba(186, 26, 26, 0.1);
+  --color-light-bg-info-soft: rgba(88, 87, 155, 0.1);
+
+  /* Shadow palette */
+  --color-light-shadow-card:
+    0 20px 40px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+
+  /* Focus shadow palette */
+  --color-light-shadow-primary: 0 0 0 4px rgba(49, 48, 192, 0.1);
+
+  /* Blur palette */
+  --color-light-blur-accent-1: rgba(49, 48, 192, 0.12);
+  --color-light-blur-accent-2: rgba(75, 77, 216, 0.08);
+
+  /* Glass palette */
+  --color-light-glass-bg: rgba(252, 249, 248, 0.8);
+  --color-light-glass-border: rgba(0, 0, 0, 0.05);
+
+  /* Glass shadow palette */
+  --color-light-glass-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+
+  /* Surface card palette */
+  --color-light-surface-card-hover-bg: rgba(255, 255, 255, 0.88);
+
+  /* Indigo surface card palette */
+  --color-light-surface-card-indigo-shadow:
+    0 20px 40px rgba(49, 48, 192, 0.08),
+    0 0 0 1px rgba(49, 48, 192, 0.06);
+
+  /* Danger surface card palette */
+  --color-light-surface-card-danger-bg: rgba(255, 218, 214, 0.72);
+  --color-light-surface-card-danger-hover-bg: rgba(255, 218, 214, 0.88);
+  --color-light-surface-card-danger-border: rgba(186, 26, 26, 0.18);
+
+  /* Danger surface card shadow palette */
+  --color-light-surface-card-danger-shadow:
+    0 20px 40px rgba(186, 26, 26, 0.08),
+    0 0 0 1px rgba(186, 26, 26, 0.06);
+
+  /* Warning surface card palette */
+  --color-light-surface-card-warning-bg: rgba(255, 255, 255, 0.72);
+  --color-light-surface-card-warning-hover-bg: rgba(255, 255, 255, 0.88);
+  --color-light-surface-card-warning-border: rgba(164, 65, 0, 0.22);
+
+  /* Warning surface card shadow palette */
+  --color-light-surface-card-warning-shadow:
+    0 20px 40px rgba(164, 65, 0, 0.08),
+    0 0 0 1px rgba(164, 65, 0, 0.06);
+
+  /* =========================
+   * Dark Palette
+   * ========================= */
+  --color-dark-bg-page: #131313;
+  --color-dark-bg-card: #201f1f;
+  --color-dark-bg-card-subtle: #1c1b1b;
+  --color-dark-bg-input: #0e0e0e;
+  --color-dark-bg-elevated: #2a2a2a;
+  --color-dark-bg-floating: #353534;
+  --color-dark-bg-overlay: rgba(19, 19, 19, 0.8);
+
+  /* Text palette */
+  --color-dark-text-base: #e5e2e1;
+  --color-dark-text-muted: #c7c4d8;
+  --color-dark-text-subtle: rgba(199, 196, 216, 0.6);
+  --color-dark-text-on-primary: #1000a9;
+  --color-dark-text-on-brand: #ffffff;
+  --color-dark-text-on-danger: #690005;
+  --color-dark-text-link: #c0c1ff;
+
+  /* Border palette */
+  --color-dark-border-soft: rgba(255, 255, 255, 0.05);
+  --color-dark-border-default: rgba(70, 69, 85, 0.4);
+  --color-dark-border-strong: rgba(255, 255, 255, 0.2);
+  --color-dark-border-focus: #c0c1ff;
+
+  /* Brand palette */
+  --color-dark-brand-primary: #c0c1ff;
+  --color-dark-brand-primary-strong: #4b4dd8;
+  --color-dark-brand-gradient-start: #c0c1ff;
+  --color-dark-brand-gradient-end: #4b4dd8;
+
+  /* State palette */
+  --color-dark-state-success: #4ade80;
+  --color-dark-state-warning: #ffb695;
+  --color-dark-state-error: #ffb4ab;
+  --color-dark-state-info: #c7c4d8;
+
+  /* State background palette */
+  --color-dark-bg-success-soft: rgba(74, 222, 128, 0.1);
+  --color-dark-bg-warning-soft: rgba(255, 182, 149, 0.1);
+  --color-dark-bg-error-soft: rgba(255, 180, 171, 0.1);
+  --color-dark-bg-info-soft: rgba(199, 196, 216, 0.1);
+
+  /* Shadow palette */
+  --color-dark-shadow-card:
+    0 20px 40px rgba(99, 102, 241, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* Focus shadow palette */
+  --color-dark-shadow-primary: 0 0 0 4px rgba(192, 193, 255, 0.15);
+
+  /* Blur palette */
+  --color-dark-blur-accent-1: rgba(192, 193, 255, 0.16);
+  --color-dark-blur-accent-2: rgba(75, 77, 216, 0.12);
+
+  /* Glass palette */
+  --color-dark-glass-bg: rgba(19, 19, 19, 0.8);
+  --color-dark-glass-border: rgba(255, 255, 255, 0.05);
+
+  /* Glass shadow palette */
+  --color-dark-glass-shadow:
+    0 20px 40px rgba(99, 102, 241, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* Surface card palette */
+  --color-dark-surface-card-hover-bg: rgba(42, 42, 42, 0.92);
+
+  /* Indigo surface card palette */
+  --color-dark-surface-card-indigo-shadow:
+    0 20px 40px rgba(49, 46, 129, 0.35),
+    0 0 0 1px rgba(229, 226, 225, 0.05);
+
+  /* Danger surface card palette */
+  --color-dark-surface-card-danger-bg: rgba(147, 0, 10, 0.12);
+  --color-dark-surface-card-danger-hover-bg: rgba(147, 0, 10, 0.18);
+  --color-dark-surface-card-danger-border: rgba(255, 180, 171, 0.1);
+
+  /* Danger surface card shadow palette */
+  --color-dark-surface-card-danger-shadow:
+    0 20px 40px rgba(147, 0, 10, 0.22),
+    0 0 0 1px rgba(255, 180, 171, 0.08);
+
+  /* Warning surface card palette */
+  --color-dark-surface-card-warning-bg: rgba(32, 31, 31, 0.8);
+  --color-dark-surface-card-warning-hover-bg: rgba(42, 42, 42, 0.92);
+  --color-dark-surface-card-warning-border: rgba(255, 180, 171, 0.3);
+
+  /* Warning surface card shadow palette */
+  --color-dark-surface-card-warning-shadow:
+    0 20px 40px rgba(164, 65, 0, 0.16),
+    0 0 0 1px rgba(255, 182, 149, 0.1);
+}

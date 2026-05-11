@@ -4,254 +4,312 @@
   /* =========================
    * Background
    * ========================= */
-  --bg-page: #fcf9f8;
-  --bg-card: #f0edec;
-  --bg-card-subtle: #f6f3f2;
-  --bg-input: #ffffff;
-  --bg-elevated: #ebe7e7;
-  --bg-floating: #dedada;
-  --bg-overlay: rgba(252, 249, 248, 0.8);
+  --bg-page: var(--color-light-bg-page);
+  --bg-card: var(--color-light-bg-card);
+  --bg-card-subtle: var(--color-light-bg-card-subtle);
+  --bg-input: var(--color-light-bg-input);
+  --bg-elevated: var(--color-light-bg-elevated);
+  --bg-floating: var(--color-light-bg-floating);
+  --bg-overlay: var(--color-light-bg-overlay);
 
   /* =========================
    * Text
    * ========================= */
-  --text-base: #1c1b1b;
-  --text-muted: #464555;
-  --text-subtle: rgba(70, 69, 85, 0.65);
-  --text-on-primary: #ffffff;
-  --text-on-brand: #ffffff;
-  --text-on-danger: #ffffff;
-  --text-link: #3130c0;
+  --text-base: var(--color-light-text-base);
+  --text-muted: var(--color-light-text-muted);
+  --text-subtle: var(--color-light-text-subtle);
+  --text-on-primary: var(--color-light-text-on-primary);
+  --text-on-brand: var(--color-light-text-on-brand);
+  --text-on-danger: var(--color-light-text-on-danger);
+  --text-link: var(--color-light-text-link);
 
   /* =========================
    * Border
    * ========================= */
-  --border-soft: rgba(0, 0, 0, 0.05);
-  --border-default: rgba(121, 117, 129, 0.35);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --border-focus: #3130c0;
+  --border-soft: var(--color-light-border-soft);
+  --border-default: var(--color-light-border-default);
+  --border-strong: var(--color-light-border-strong);
+  --border-focus: var(--color-light-border-focus);
 
   /* =========================
    * Brand
    * ========================= */
-  --brand-primary: #3130c0;
-  --brand-primary-strong: #4b4dd8;
-  --brand-gradient-start: #3130c0;
-  --brand-gradient-end: #4b4dd8;
+  --brand-primary: var(--color-light-brand-primary);
+  --brand-primary-strong: var(--color-light-brand-primary-strong);
+  --brand-gradient-start: var(--color-light-brand-gradient-start);
+  --brand-gradient-end: var(--color-light-brand-gradient-end);
 
   /* =========================
    * State
    * ========================= */
-  --state-success: #2e7d32;
-  --state-warning: #a44100;
-  --state-error: #ba1a1a;
-  --state-info: #58579b;
+  --state-success: var(--color-light-state-success);
+  --state-warning: var(--color-light-state-warning);
+  --state-error: var(--color-light-state-error);
+  --state-info: var(--color-light-state-info);
 
   /* State background */
-  --bg-success-soft: rgba(46, 125, 50, 0.1);
-  --bg-warning-soft: rgba(164, 65, 0, 0.1);
-  --bg-error-soft: rgba(186, 26, 26, 0.1);
-  --bg-info-soft: rgba(88, 87, 155, 0.1);
+  --bg-success-soft: var(--color-light-bg-success-soft);
+  --bg-warning-soft: var(--color-light-bg-warning-soft);
+  --bg-error-soft: var(--color-light-bg-error-soft);
+  --bg-info-soft: var(--color-light-bg-info-soft);
 
   /* State text */
-  --text-success: #2e7d32;
-  --text-warning: #a44100;
-  --text-error: #ba1a1a;
-  --text-info: #58579b;
+  --text-success: var(--color-light-state-success);
+  --text-warning: var(--color-light-state-warning);
+  --text-error: var(--color-light-state-error);
+  --text-info: var(--color-light-state-info);
 
   /* =========================
    * Button
    * ========================= */
-  --btn-primary-bg: linear-gradient(135deg, #3130c0, #4b4dd8);
-  --btn-primary-text: #ffffff;
+  --btn-primary-bg: linear-gradient(135deg, var(--color-light-brand-gradient-start), var(--color-light-brand-gradient-end));
+  --btn-primary-text: var(--color-light-text-on-primary);
 
   /* Secondary button */
-  --btn-secondary-bg: #ebe7e7;
-  --btn-secondary-text: #1c1b1b;
-  --btn-secondary-border: rgba(49, 48, 192, 0.2);
+  --btn-secondary-bg: var(--color-light-bg-elevated);
+  --btn-secondary-text: var(--color-light-text-base);
+  --btn-secondary-border: color-mix(in srgb, var(--color-light-brand-primary) 20%, transparent);
 
   /* =========================
    * Effect
    * ========================= */
-  --shadow-card:
-    0 20px 40px rgba(0, 0, 0, 0.05),
-    0 0 0 1px rgba(0, 0, 0, 0.02);
-
-  /* Focus shadow */
-  --shadow-primary: 0 0 0 4px rgba(49, 48, 192, 0.1);
-
-  /* Ambient blur */
-  --blur-accent-1: rgba(49, 48, 192, 0.12);
-  --blur-accent-2: rgba(75, 77, 216, 0.08);
+  --shadow-card: var(--color-light-shadow-card);
+  --shadow-primary: var(--color-light-shadow-primary);
+  --blur-accent-1: var(--color-light-blur-accent-1);
+  --blur-accent-2: var(--color-light-blur-accent-2);
 
   /* =========================
    * Glass
    * ========================= */
-  --glass-bg: rgba(252, 249, 248, 0.8);
-  --glass-border: rgba(0, 0, 0, 0.05);
-
-  /* Glass shadow */
-  --glass-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.05),
-    0 0 0 1px rgba(0, 0, 0, 0.02);
-
-  /* Glass blur */
+  --glass-bg: var(--color-light-glass-bg);
+  --glass-border: var(--color-light-glass-border);
+  --glass-shadow: var(--color-light-glass-shadow);
   --glass-blur-radius: 20px;
   --glass-saturate: 180%;
 
   /* =========================
    * Surface Card
    * ========================= */
-  --surface-card-hover-bg: rgba(255, 255, 255, 0.88);
-
-  /* Indigo surface card */
-  --surface-card-indigo-shadow:
-    0 20px 40px rgba(49, 48, 192, 0.08),
-    0 0 0 1px rgba(49, 48, 192, 0.06);
-
-  /* Danger surface card */
-  --surface-card-danger-bg: rgba(255, 218, 214, 0.72);
-  --surface-card-danger-hover-bg: rgba(255, 218, 214, 0.88);
-  --surface-card-danger-border: rgba(186, 26, 26, 0.18);
-  --surface-card-danger-shadow:
-    0 20px 40px rgba(186, 26, 26, 0.08),
-    0 0 0 1px rgba(186, 26, 26, 0.06);
-
-  /* Warning surface card */
-  --surface-card-warning-bg: rgba(255, 255, 255, 0.72);
-  --surface-card-warning-hover-bg: rgba(255, 255, 255, 0.88);
-  --surface-card-warning-border: rgba(164, 65, 0, 0.22);
-  --surface-card-warning-shadow:
-    0 20px 40px rgba(164, 65, 0, 0.08),
-    0 0 0 1px rgba(164, 65, 0, 0.06);
+  --surface-card-hover-bg: var(--color-light-surface-card-hover-bg);
+  --surface-card-indigo-shadow: var(--color-light-surface-card-indigo-shadow);
+  --surface-card-danger-bg: var(--color-light-surface-card-danger-bg);
+  --surface-card-danger-hover-bg: var(--color-light-surface-card-danger-hover-bg);
+  --surface-card-danger-border: var(--color-light-surface-card-danger-border);
+  --surface-card-danger-shadow: var(--color-light-surface-card-danger-shadow);
+  --surface-card-warning-bg: var(--color-light-surface-card-warning-bg);
+  --surface-card-warning-hover-bg: var(--color-light-surface-card-warning-hover-bg);
+  --surface-card-warning-border: var(--color-light-surface-card-warning-border);
+  --surface-card-warning-shadow: var(--color-light-surface-card-warning-shadow);
 }
 
-.dark {
+[data-theme="dark"] {
   color-scheme: dark;
 
   /* =========================
    * Background
    * ========================= */
-  --bg-page: #131313;
-  --bg-card: #201f1f;
-  --bg-card-subtle: #1c1b1b;
-  --bg-input: #0e0e0e;
-  --bg-elevated: #2a2a2a;
-  --bg-floating: #353534;
-  --bg-overlay: rgba(19, 19, 19, 0.8);
+  --bg-page: var(--color-dark-bg-page);
+  --bg-card: var(--color-dark-bg-card);
+  --bg-card-subtle: var(--color-dark-bg-card-subtle);
+  --bg-input: var(--color-dark-bg-input);
+  --bg-elevated: var(--color-dark-bg-elevated);
+  --bg-floating: var(--color-dark-bg-floating);
+  --bg-overlay: var(--color-dark-bg-overlay);
 
   /* =========================
    * Text
    * ========================= */
-  --text-base: #e5e2e1;
-  --text-muted: #c7c4d8;
-  --text-subtle: rgba(199, 196, 216, 0.6);
-  --text-on-primary: #1000a9;
-  --text-on-brand: #ffffff;
-  --text-on-danger: #690005;
-  --text-link: #c0c1ff;
+  --text-base: var(--color-dark-text-base);
+  --text-muted: var(--color-dark-text-muted);
+  --text-subtle: var(--color-dark-text-subtle);
+  --text-on-primary: var(--color-dark-text-on-primary);
+  --text-on-brand: var(--color-dark-text-on-brand);
+  --text-on-danger: var(--color-dark-text-on-danger);
+  --text-link: var(--color-dark-text-link);
 
   /* =========================
    * Border
    * ========================= */
-  --border-soft: rgba(255, 255, 255, 0.05);
-  --border-default: rgba(70, 69, 85, 0.4);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --border-focus: #c0c1ff;
+  --border-soft: var(--color-dark-border-soft);
+  --border-default: var(--color-dark-border-default);
+  --border-strong: var(--color-dark-border-strong);
+  --border-focus: var(--color-dark-border-focus);
 
   /* =========================
    * Brand
    * ========================= */
-  --brand-primary: #c0c1ff;
-  --brand-primary-strong: #4b4dd8;
-  --brand-gradient-start: #c0c1ff;
-  --brand-gradient-end: #4b4dd8;
+  --brand-primary: var(--color-dark-brand-primary);
+  --brand-primary-strong: var(--color-dark-brand-primary-strong);
+  --brand-gradient-start: var(--color-dark-brand-gradient-start);
+  --brand-gradient-end: var(--color-dark-brand-gradient-end);
 
   /* =========================
    * State
    * ========================= */
-  --state-success: #4ade80;
-  --state-warning: #ffb695;
-  --state-error: #ffb4ab;
-  --state-info: #c7c4d8;
+  --state-success: var(--color-dark-state-success);
+  --state-warning: var(--color-dark-state-warning);
+  --state-error: var(--color-dark-state-error);
+  --state-info: var(--color-dark-state-info);
 
   /* State background */
-  --bg-success-soft: rgba(74, 222, 128, 0.1);
-  --bg-warning-soft: rgba(255, 182, 149, 0.1);
-  --bg-error-soft: rgba(255, 180, 171, 0.1);
-  --bg-info-soft: rgba(199, 196, 216, 0.1);
+  --bg-success-soft: var(--color-dark-bg-success-soft);
+  --bg-warning-soft: var(--color-dark-bg-warning-soft);
+  --bg-error-soft: var(--color-dark-bg-error-soft);
+  --bg-info-soft: var(--color-dark-bg-info-soft);
 
   /* State text */
-  --text-success: #4ade80;
-  --text-warning: #ffb695;
-  --text-error: #ffb4ab;
-  --text-info: #c7c4d8;
+  --text-success: var(--color-dark-state-success);
+  --text-warning: var(--color-dark-state-warning);
+  --text-error: var(--color-dark-state-error);
+  --text-info: var(--color-dark-state-info);
 
   /* =========================
    * Button
    * ========================= */
-  --btn-primary-bg: linear-gradient(135deg, #c0c1ff, #4b4dd8);
-  --btn-primary-text: #1000a9;
+  --btn-primary-bg: linear-gradient(135deg, var(--color-dark-brand-gradient-start), var(--color-dark-brand-gradient-end));
+  --btn-primary-text: var(--color-dark-text-on-primary);
 
   /* Secondary button */
-  --btn-secondary-bg: #353534;
-  --btn-secondary-text: #e5e2e1;
-  --btn-secondary-border: rgba(192, 193, 255, 0.2);
+  --btn-secondary-bg: var(--color-dark-bg-floating);
+  --btn-secondary-text: var(--color-dark-text-base);
+  --btn-secondary-border: color-mix(in srgb, var(--color-dark-brand-primary) 20%, transparent);
 
   /* =========================
    * Effect
    * ========================= */
-  --shadow-card:
-    0 20px 40px rgba(99, 102, 241, 0.05),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-
-  /* Focus shadow */
-  --shadow-primary: 0 0 0 4px rgba(192, 193, 255, 0.15);
-
-  /* Ambient blur */
-  --blur-accent-1: rgba(192, 193, 255, 0.16);
-  --blur-accent-2: rgba(75, 77, 216, 0.12);
+  --shadow-card: var(--color-dark-shadow-card);
+  --shadow-primary: var(--color-dark-shadow-primary);
+  --blur-accent-1: var(--color-dark-blur-accent-1);
+  --blur-accent-2: var(--color-dark-blur-accent-2);
 
   /* =========================
    * Glass
    * ========================= */
-  --glass-bg: rgba(19, 19, 19, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.05);
-
-  /* Glass shadow */
-  --glass-shadow:
-    0 20px 40px rgba(99, 102, 241, 0.05),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-
-  /* Glass blur */
+  --glass-bg: var(--color-dark-glass-bg);
+  --glass-border: var(--color-dark-glass-border);
+  --glass-shadow: var(--color-dark-glass-shadow);
   --glass-blur-radius: 20px;
   --glass-saturate: 180%;
 
   /* =========================
    * Surface Card
    * ========================= */
-  --surface-card-hover-bg: rgba(42, 42, 42, 0.92);
+  --surface-card-hover-bg: var(--color-dark-surface-card-hover-bg);
+  --surface-card-indigo-shadow: var(--color-dark-surface-card-indigo-shadow);
+  --surface-card-danger-bg: var(--color-dark-surface-card-danger-bg);
+  --surface-card-danger-hover-bg: var(--color-dark-surface-card-danger-hover-bg);
+  --surface-card-danger-border: var(--color-dark-surface-card-danger-border);
+  --surface-card-danger-shadow: var(--color-dark-surface-card-danger-shadow);
+  --surface-card-warning-bg: var(--color-dark-surface-card-warning-bg);
+  --surface-card-warning-hover-bg: var(--color-dark-surface-card-warning-hover-bg);
+  --surface-card-warning-border: var(--color-dark-surface-card-warning-border);
+  --surface-card-warning-shadow: var(--color-dark-surface-card-warning-shadow);
+}
 
-  /* Indigo surface card */
-  --surface-card-indigo-shadow:
-    0 20px 40px rgba(49, 46, 129, 0.35),
-    0 0 0 1px rgba(229, 226, 225, 0.05);
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    color-scheme: dark;
 
-  /* Danger surface card */
-  --surface-card-danger-bg: rgba(147, 0, 10, 0.12);
-  --surface-card-danger-hover-bg: rgba(147, 0, 10, 0.18);
-  --surface-card-danger-border: rgba(255, 180, 171, 0.1);
-  --surface-card-danger-shadow:
-    0 20px 40px rgba(147, 0, 10, 0.22),
-    0 0 0 1px rgba(255, 180, 171, 0.08);
+    /* =========================
+     * Background
+     * ========================= */
+    --bg-page: var(--color-dark-bg-page);
+    --bg-card: var(--color-dark-bg-card);
+    --bg-card-subtle: var(--color-dark-bg-card-subtle);
+    --bg-input: var(--color-dark-bg-input);
+    --bg-elevated: var(--color-dark-bg-elevated);
+    --bg-floating: var(--color-dark-bg-floating);
+    --bg-overlay: var(--color-dark-bg-overlay);
 
-  /* Warning surface card */
-  --surface-card-warning-bg: rgba(32, 31, 31, 0.8);
-  --surface-card-warning-hover-bg: rgba(42, 42, 42, 0.92);
-  --surface-card-warning-border: rgba(255, 180, 171, 0.3);
-  --surface-card-warning-shadow:
-    0 20px 40px rgba(164, 65, 0, 0.16),
-    0 0 0 1px rgba(255, 182, 149, 0.1);
+    /* =========================
+     * Text
+     * ========================= */
+    --text-base: var(--color-dark-text-base);
+    --text-muted: var(--color-dark-text-muted);
+    --text-subtle: var(--color-dark-text-subtle);
+    --text-on-primary: var(--color-dark-text-on-primary);
+    --text-on-brand: var(--color-dark-text-on-brand);
+    --text-on-danger: var(--color-dark-text-on-danger);
+    --text-link: var(--color-dark-text-link);
+
+    /* =========================
+     * Border
+     * ========================= */
+    --border-soft: var(--color-dark-border-soft);
+    --border-default: var(--color-dark-border-default);
+    --border-strong: var(--color-dark-border-strong);
+    --border-focus: var(--color-dark-border-focus);
+
+    /* =========================
+     * Brand
+     * ========================= */
+    --brand-primary: var(--color-dark-brand-primary);
+    --brand-primary-strong: var(--color-dark-brand-primary-strong);
+    --brand-gradient-start: var(--color-dark-brand-gradient-start);
+    --brand-gradient-end: var(--color-dark-brand-gradient-end);
+
+    /* =========================
+     * State
+     * ========================= */
+    --state-success: var(--color-dark-state-success);
+    --state-warning: var(--color-dark-state-warning);
+    --state-error: var(--color-dark-state-error);
+    --state-info: var(--color-dark-state-info);
+
+    /* State background */
+    --bg-success-soft: var(--color-dark-bg-success-soft);
+    --bg-warning-soft: var(--color-dark-bg-warning-soft);
+    --bg-error-soft: var(--color-dark-bg-error-soft);
+    --bg-info-soft: var(--color-dark-bg-info-soft);
+
+    /* State text */
+    --text-success: var(--color-dark-state-success);
+    --text-warning: var(--color-dark-state-warning);
+    --text-error: var(--color-dark-state-error);
+    --text-info: var(--color-dark-state-info);
+
+    /* =========================
+     * Button
+     * ========================= */
+    --btn-primary-bg: linear-gradient(135deg, var(--color-dark-brand-gradient-start), var(--color-dark-brand-gradient-end));
+    --btn-primary-text: var(--color-dark-text-on-primary);
+
+    /* Secondary button */
+    --btn-secondary-bg: var(--color-dark-bg-floating);
+    --btn-secondary-text: var(--color-dark-text-base);
+    --btn-secondary-border: color-mix(in srgb, var(--color-dark-brand-primary) 20%, transparent);
+
+    /* =========================
+     * Effect
+     * ========================= */
+    --shadow-card: var(--color-dark-shadow-card);
+    --shadow-primary: var(--color-dark-shadow-primary);
+    --blur-accent-1: var(--color-dark-blur-accent-1);
+    --blur-accent-2: var(--color-dark-blur-accent-2);
+
+    /* =========================
+     * Glass
+     * ========================= */
+    --glass-bg: var(--color-dark-glass-bg);
+    --glass-border: var(--color-dark-glass-border);
+    --glass-shadow: var(--color-dark-glass-shadow);
+    --glass-blur-radius: 20px;
+    --glass-saturate: 180%;
+
+    /* =========================
+     * Surface Card
+     * ========================= */
+    --surface-card-hover-bg: var(--color-dark-surface-card-hover-bg);
+    --surface-card-indigo-shadow: var(--color-dark-surface-card-indigo-shadow);
+    --surface-card-danger-bg: var(--color-dark-surface-card-danger-bg);
+    --surface-card-danger-hover-bg: var(--color-dark-surface-card-danger-hover-bg);
+    --surface-card-danger-border: var(--color-dark-surface-card-danger-border);
+    --surface-card-danger-shadow: var(--color-dark-surface-card-danger-shadow);
+    --surface-card-warning-bg: var(--color-dark-surface-card-warning-bg);
+    --surface-card-warning-hover-bg: var(--color-dark-surface-card-warning-hover-bg);
+    --surface-card-warning-border: var(--color-dark-surface-card-warning-border);
+    --surface-card-warning-shadow: var(--color-dark-surface-card-warning-shadow);
+  }
 }
 
 body {

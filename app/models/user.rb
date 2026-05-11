@@ -13,6 +13,11 @@ class User < ApplicationRecord
 
   validates :name, length: { maximum: 30 }, allow_blank: true
 
+  THEME_PREFERENCES = %w[system light dark].freeze
+
+  validates :theme_preference,
+            inclusion: { in: THEME_PREFERENCES }
+
   def self.guest!
     create!(
       email: "guest_#{SecureRandom.hex(8)}@example.com",
