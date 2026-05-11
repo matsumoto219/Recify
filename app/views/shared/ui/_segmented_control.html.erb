@@ -1,0 +1,113 @@
+<%#
+  Segmented control for choosing one value from a small set of options.
+
+  Required locals:
+    name:    form field name
+    value:   currently selected value
+    options: array of hashes, e.g. [{ label: "ライト", value: "light" }]
+
+  Optional locals:
+    size:          :sm | :md | :lg
+    legend:        accessible label text
+    wrapper_class: extra classes for the outer wrapper
+    item_class:    extra classes for each segment label
+    full_width:    true makes the control stretch horizontally
+    data:          data attributes for the outer wrapper
+%>
+
+<% name = local_assigns.fetch(:name) %>
+<% value = local_assigns.fetch(:value) %>
+<% options = local_assigns.fetch(:options) %>
+<% size = local_assigns.fetch(:size, :md).to_sym %>
+<% legend = local_assigns[:legend] %>
+<% wrapper_class = local_assigns[:wrapper_class] %>
+<% item_class = local_assigns[:item_class] %>
+<% full_width = local_assigns.fetch(:full_width, false) %>
+<% data_attributes = local_assigns.fetch(:data, {}) %>
+<% data_attributes = data_attributes.merge(controller: [data_attributes[:controller], "segmented-control"].compact.join(" ")) %>
+<% active_index = options.index { |option| option.fetch(:value).to_s == value.to_s } || 0 %>
+
+<% size_classes = case size
+   when :sm
+     "text-xs"
+   when :lg
+     "text-base"
+   else
+     "text-sm"
+   end %>
+
+<% item_size_classes = case size
+   when :sm
+     "min-w-[4.75rem] px-3 py-1.5"
+   when :lg
+     "min-w-[6.25rem] px-5 py-3"
+   else
+     "min-w-[5.5rem] px-4 py-2"
+   end %>
+
+<% wrapper_classes = [
+     "relative isolate inline-grid min-w-max overflow-hidden rounded-lg border token-border-soft token-bg-floating p-1 shadow-inner",
+     ("w-full" if full_width),
+     size_classes,
+     wrapper_class
+   ].compact.join(" ") %>
+
+<% base_item_classes = [
+     "relative z-10 cursor-pointer font-semibold",
+     item_class
+   ].compact.join(" ") %>
+
+<% content_classes = [
+     "segmented-control-option inline-flex w-full items-center justify-center rounded-md whitespace-nowrap",
+     "transition-colors duration-200",
+     item_size_classes
+   ].compact.join(" ") %>
+
+<% style_value = [
+     "--segmented-count: #{options.size}",
+     "--segmented-active-index: #{active_index}",
+     "grid-template-columns: repeat(#{options.size}, minmax(0, 1fr))"
+   ].join("; ") %>
+
+<fieldset class="<%= wrapper_classes %>" style="<%= style_value %>" <%= tag.attributes(data: data_attributes) if data_attributes.present? %>>
+  <% if legend.present? %>
+    <legend class="sr-only"><%= legend %></legend>
+  <% end %>
+
+    <span
+      class="segmented-control-indicator-surface absolute top-1 bottom-1 left-1 z-0 rounded-md border transition-transform duration-200 ease-out"
+      style="width: calc((100% - 0.5rem) / var(--segmented-count)); transform: translateX(calc(var(--segmented-active-index) * 100%));"
+      aria-hidden="true"></span>
+
+  <% options.each do |option| %>
+    <% option_label = option.fetch(:label) %>
+    <% option_value = option.fetch(:value) %>
+    <% option_icon = option[:icon] %>
+    <% option_id = "#{name}_#{option_value}".parameterize %>
+
+    <label class="<%= base_item_classes %>" for="<%= option_id %>">
+      <%= radio_button_tag name,
+            option_value,
+            option_value.to_s == value.to_s,
+            id: option_id,
+            class: "peer sr-only",
+            data: {
+              segmented_control_target: "input",
+              action: "change->segmented-control#update"
+            } %>
+
+      <span class="<%= content_classes %>">
+        <% if option_icon.present? %>
+          <span class="inline-flex items-center justify-center gap-2">
+            <span
+              class="material-symbols-outlined inline-flex w-[1.15em] justify-center text-[1em] leading-none"
+              aria-hidden="true"><%= option_icon %></span>
+            <span><%= option_label %></span>
+          </span>
+        <% else %>
+          <span><%= option_label %></span>
+        <% end %>
+      </span>
+    </label>
+  <% end %>
+</fieldset>
