@@ -1,4 +1,7 @@
-<section class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section
+  class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
+  data-controller="settings"
+  data-action="segmented-control:success->settings#applySegmentedControlSetting">
   <%= render "shared/ui/section_header",
         title: "設定",
         subtitle: "アカウント情報やセキュリティ設定を管理できます",
@@ -130,6 +133,39 @@
           </p>
         </div>
       </div>
+    <% end %>
+
+    <%= render "shared/ui/surface_card", class: "p-6" do %>
+      <%= render "shared/ui/section_header",
+            icon: "palette",
+            title: "外観",
+            class: "mb-6" %>
+
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div class="space-y-1">
+          <h3 class="text-sm font-semibold token-text-base">表示テーマ</h3>
+          <p class="text-xs token-text-muted leading-relaxed">
+            アプリケーションの見た目を設定します
+          </p>
+        </div>
+
+        <%= render "shared/ui/segmented_control",
+              name: "theme_preference",
+              value: current_user.theme_preference,
+              url: settings_path,
+              method: :patch,
+              remote: true,
+              size: :sm,
+              options: [
+                { label: "自動", value: "system", icon: "brightness_auto" },
+                { label: "ライト", value: "light", icon: "light_mode" },
+                { label: "ダーク", value: "dark", icon: "dark_mode" }
+              ] %>
+      </div>
+
+      <p class="text-[11px] token-text-subtle leading-relaxed mt-3">
+        ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
+      </p>
     <% end %>
 
     <%= render "shared/ui/surface_card", class: "p-6" do %>
