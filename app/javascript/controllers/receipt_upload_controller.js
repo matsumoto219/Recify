@@ -1,48 +1,89 @@
-import { Controller } from "@hotwired/stimulus"
+/* global DataTransfer */
+import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
   static targets = [
-    "cameraInput",
-    "libraryInput",
-    "submitButton",
-    "fileName",
-    "emptyState",
-    "previewWrapper",
-    "preview"
+    'cameraInput',
+    'libraryInput',
+    'submitButton',
+    'fileName',
+    'emptyState',
+    'previewWrapper',
+    'preview',
+    'dropzone',
+    'dropOverlay'
   ]
 
-  connect() {
+  connect () {
     this.selectedObjectUrl = null
   }
 
-  disconnect() {
+  disconnect () {
     this.revokePreviewUrl()
   }
 
-  openCamera() {
-    this.libraryInputTarget.value = ""
+  openCamera () {
+    this.libraryInputTarget.value = ''
     this.cameraInputTarget.click()
   }
 
-  openLibrary() {
-    this.cameraInputTarget.value = ""
+  openLibrary () {
+    this.cameraInputTarget.value = ''
     this.libraryInputTarget.click()
   }
 
-  previewCamera() {
-    this.updatePreview(this.cameraInputTarget)
+  previewCamera () {
+    this.previewFile(this.cameraInputTarget.files?.[0])
   }
 
-  previewLibrary() {
-    this.updatePreview(this.libraryInputTarget)
+  previewLibrary () {
+    this.previewFile(this.libraryInputTarget.files?.[0])
   }
 
-  disableSubmit() {
+  handleDragEnter (event) {
+    event.preventDefault()
+    this.showDropOverlay()
+  }
+
+  handleDragOver (event) {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    this.showDropOverlay()
+  }
+
+  handleDragLeave (event) {
+    event.preventDefault()
+
+    if (this.hasDropzoneTarget && this.dropzoneTarget.contains(event.relatedTarget)) return
+
+    this.hideDropOverlay()
+  }
+
+  handleDrop (event) {
+    event.preventDefault()
+    this.hideDropOverlay()
+
+    const file = event.dataTransfer?.files?.[0]
+    if (!file) return
+
+    if (!this.isImageFile(file)) {
+      this.showFileError('画像ファイルを選択してください')
+      return
+    }
+
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(file)
+    this.libraryInputTarget.files = dataTransfer.files
+    this.cameraInputTarget.value = ''
+
+    this.previewFile(file)
+  }
+
+  disableSubmit () {
     this.submitButtonTarget.disabled = true
   }
 
-  updatePreview(input) {
-    const file = input.files && input.files[0]
+  previewFile (file) {
     this.submitButtonTarget.disabled = !file
 
     if (!file) {
@@ -50,23 +91,50 @@ export default class extends Controller {
       return
     }
 
+    if (!this.isImageFile(file)) {
+      this.showFileError('画像ファイルを選択してください')
+      return
+    }
+
     this.revokePreviewUrl()
     this.selectedObjectUrl = URL.createObjectURL(file)
     this.previewTarget.src = this.selectedObjectUrl
-    this.previewWrapperTarget.classList.remove("hidden")
-    this.emptyStateTarget.classList.add("hidden")
+    this.previewWrapperTarget.classList.remove('hidden')
+    this.emptyStateTarget.classList.add('hidden')
     this.fileNameTarget.textContent = file.name
   }
 
-  clearPreview() {
-    this.revokePreviewUrl()
-    this.previewTarget.src = ""
-    this.previewWrapperTarget.classList.add("hidden")
-    this.emptyStateTarget.classList.remove("hidden")
-    this.fileNameTarget.textContent = "画像はまだ選択されていません"
+  showDropOverlay () {
+    if (!this.hasDropOverlayTarget) return
+
+    this.dropOverlayTarget.classList.remove('hidden')
   }
 
-  revokePreviewUrl() {
+  hideDropOverlay () {
+    if (!this.hasDropOverlayTarget) return
+
+    this.dropOverlayTarget.classList.add('hidden')
+  }
+
+  showFileError (message) {
+    this.clearPreview()
+    this.fileNameTarget.textContent = message
+    this.submitButtonTarget.disabled = true
+  }
+
+  isImageFile (file) {
+    return file.type.startsWith('image/')
+  }
+
+  clearPreview () {
+    this.revokePreviewUrl()
+    this.previewTarget.src = ''
+    this.previewWrapperTarget.classList.add('hidden')
+    this.emptyStateTarget.classList.remove('hidden')
+    this.fileNameTarget.textContent = '画像はまだ選択されていません'
+  }
+
+  revokePreviewUrl () {
     if (!this.selectedObjectUrl) return
 
     URL.revokeObjectURL(this.selectedObjectUrl)
