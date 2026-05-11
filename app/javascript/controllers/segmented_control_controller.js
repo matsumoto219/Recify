@@ -68,8 +68,8 @@ export default class extends Controller {
 
       const responseBody = await response.text()
 
-      if (responseBody.trim() !== '') {
-        Turbo.renderStreamMessage(responseBody)
+      if (responseBody.trim() !== '' && window.Turbo) {
+        window.Turbo.renderStreamMessage(responseBody)
       }
 
       this.dispatch('success', {
