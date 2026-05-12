@@ -34,6 +34,7 @@
   error_message = local_assigns.fetch(:error_message, nil)
   error_message_class = local_assigns.fetch(:error_message_class, nil)
   show_error_message = local_assigns.fetch(:show_error_message, true)
+  size = local_assigns.fetch(:size, :md).to_sym
 
   input_type = type.to_s
   base_wrapper_class = "space-y-2"
@@ -46,7 +47,12 @@
   # iOS Safari の input[type="date/time"] は h-11 を無視して高さが崩れるため、
   # 暫定的に ::-webkit-date-and-time-value へ min-height / line-height を指定している
   base_field_class = "w-full rounded-lg input-field leading-none appearance-none outline-none transition-all [&::-webkit-date-and-time-value]:min-h-[1.5rem] [&::-webkit-date-and-time-value]:leading-[1.5rem] #{highlight_classes}"
-  field_spacing_class = with_icon ? "pl-10 pr-4" : "px-4"
+  field_spacing_class = case size
+                        when :regular
+                          with_icon ? "h-11 min-h-11 py-2.5 pl-10 pr-4" : "h-11 min-h-11 py-2.5 px-4"
+                        else
+                          with_icon ? "pl-10 pr-4" : "px-4"
+                        end
 
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")

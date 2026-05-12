@@ -35,6 +35,7 @@
   textarea_wrapper_class = local_assigns[:textarea_wrapper_class]
   label_class = local_assigns[:label_class]
   error_message_class = local_assigns[:error_message_class]
+  size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
 
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
@@ -47,7 +48,12 @@
                       else
                         nil
                       end
-  textarea_spacing_class = with_icon ? "pl-11 pr-4" : "px-4"
+  textarea_spacing_class = case size
+                           when :tall
+                             with_icon ? "h-32 pl-11 pr-4 py-2" : "h-32 px-3 py-2"
+                           else
+                             with_icon ? "pl-11 pr-4" : "px-4"
+                           end
   merged_wrapper_class = [base_wrapper_class, textarea_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_textarea_class = [base_textarea_class, highlight_classes, textarea_spacing_class, textarea_class].compact.join(" ")

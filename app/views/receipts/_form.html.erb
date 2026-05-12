@@ -141,7 +141,7 @@
                        icon: "storefront",
                        placeholder: "店舗名を入力",
                        highlight_variant: (error_flags[:store_name] ? :error : nil),
-                       input_class: "h-11",
+                       size: :regular,
                        html_options: { maxlength: 100, autocomplete: "organization" } %>
 
             <%= render "shared/ui/select_field",
@@ -152,7 +152,7 @@
                        selected: f.object.payment_method,
                        include_blank: "選択してください",
                        highlight_variant: (error_flags[:payment_method] ? :error : nil),
-                       select_class: "h-11 px-3 py-2.5" %>
+                       size: :regular %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_on]",
@@ -163,7 +163,7 @@
                        icon: "calendar_today",
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
                        error_message: receipt.errors.full_messages_for(:purchased_at).first,
-                       field_class: "h-11 min-h-11 py-2.5" %>
+                       size: :regular %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_time]",
@@ -173,7 +173,7 @@
                        value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
                        icon: "schedule",
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
-                       field_class: "h-11 min-h-11 py-2.5" %>
+                       size: :regular %>
 
             <%= render "shared/ui/text_field",
                        f: f,
@@ -184,7 +184,7 @@
                        field_type: :telephone_field,
                        placeholder: "例: 03-1234-5678",
                        highlight_variant: (error_flags[:store_phone_number] ? :error : nil),
-                       input_class: "h-11",
+                       size: :regular,
                        html_options: {
                          inputmode: "tel",
                          pattern: "[0-9\\-]*",
@@ -200,7 +200,8 @@
                        options: [["未定義", ""]],
                        selected: nil,
                        include_blank: "未対応",
-                       select_class: "h-11 px-3 py-2.5 opacity-60 cursor-not-allowed",
+                       size: :regular,
+                       select_class: "opacity-60 cursor-not-allowed",
                        html_options: { disabled: true } %>
 
             <div class="md:col-span-2">
@@ -211,7 +212,7 @@
                          icon: "location_on",
                          placeholder: "店舗住所を入力",
                          highlight_variant: (error_flags[:store_address] ? :error : nil),
-                         input_class: "h-11",
+                         size: :regular,
                          html_options: { maxlength: 255, autocomplete: "street-address" } %>
             </div>
           </div>
@@ -269,7 +270,7 @@
                                show_label: false,
                                highlight_variant: (item.needs_review && item_error_flags[:name] ? :error : nil),
                                show_error_message: false,
-                               input_class: "h-10 px-3 py-2 rounded-md",
+                               size: :dense,
                                html_options: { maxlength: 500, autocomplete: "off" } %>
                       </div>
                     </div>
@@ -290,7 +291,7 @@
                                  min: 0,
                                  max: 9999,
                                  step: 1,
-                                 input_class: "h-10 px-3 py-2",
+                                 size: :dense,
                                  highlight_variant: (item.errors[:quantity].any? ? :error : nil),
                                  show_error_message: false,
                                  html_options: {
@@ -318,7 +319,7 @@
                                  min: 0,
                                  max: 999999999,
                                  step: 1,
-                                 input_class: "h-10 px-3 py-2 rounded-md",
+                                 size: :dense,
                                  highlight_variant: (item.errors[:price].any? ? :error : nil),
                                  show_error_message: false,
                                  html_options: {
@@ -349,7 +350,7 @@
                                    text_align: :center,
                                    show_stepper_buttons: true,
                                    stepper_button_class: "md:hidden",
-                                   input_class: "h-10 px-3 py-2 rounded-md",
+                                   size: :dense,
                                    html_options: {
                                      data: {
                                        action: "input->receipt-form#recalculate",
@@ -375,7 +376,7 @@
                                  include_blank: "未分類",
                                  show_label: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-10 px-3 py-2 rounded-md",
+                                 size: :dense,
                                  highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
                                  show_error_message: false %>
                       </div>
@@ -397,7 +398,7 @@
                     </button>
                   </div>
 
-                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border token-border-soft token-bg-input px-3 py-1.5 text-sm font-medium token-text-base shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border token-border-soft token-bg-input px-3 py-1.5 text-sm font-medium token-text-base receipt-form-line-total-tooltip opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
                     <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="小計 ¥<%= number_with_delimiter(item.line_total.to_i) %>">小計 ¥<%= number_with_delimiter(item.line_total.to_i) %></span>
                   </div>
 
@@ -442,7 +443,7 @@
                                placeholder: "品名を入力",
                                show_label: false,
                                show_error_message: false,
-                               input_class: "h-10 px-3 py-2 rounded-md",
+                               size: :dense,
                                html_options: { maxlength: 500, autocomplete: "off" } %>
                       </div>
                     </div>
@@ -463,7 +464,7 @@
                                  min: 0,
                                  max: 9999,
                                  step: 1,
-                                 input_class: "h-10 px-3 py-2",
+                                 size: :dense,
                                  show_error_message: false,
                                  html_options: {
                                    data: {
@@ -490,7 +491,7 @@
                                  min: 0,
                                  max: 999999999,
                                  step: 1,
-                                 input_class: "h-10 px-3 py-2 rounded-md",
+                                 size: :dense,
                                  show_error_message: false,
                                  html_options: {
                                    data: {
@@ -519,7 +520,7 @@
                                    text_align: :center,
                                    show_stepper_buttons: true,
                                    stepper_button_class: "md:hidden",
-                                   input_class: "h-10 px-3 py-2 rounded-md",
+                                   size: :dense,
                                    show_error_message: false,
                                    html_options: {
                                      data: {
@@ -545,7 +546,7 @@
                                  show_label: false,
                                  show_error_message: false,
                                  select_wrapper_class: "w-full",
-                                 select_class: "h-10 px-3 py-2 rounded-md" %>
+                                 size: :dense %>
                       </div>
                     </div>
                   </div>
@@ -565,7 +566,7 @@
                     </button>
                   </div>
 
-                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border token-border-soft token-bg-input px-3 py-1.5 text-sm font-medium token-text-base shadow-lg opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
+                  <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border token-border-soft token-bg-input px-3 py-1.5 text-sm font-medium token-text-base receipt-form-line-total-tooltip opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
                     <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="小計 ¥0">小計 ¥0</span>
                   </div>
 
@@ -598,7 +599,7 @@
                      placeholder: "用途や補足があれば入力してください",
                      show_label: false,
                      rows: 4,
-                     textarea_class: "h-32 px-3 py-2",
+                     size: :tall,
                      html_options: { maxlength: 1000 } %>
         <% end %>
       </div>
