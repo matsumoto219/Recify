@@ -10,7 +10,11 @@
   "standard": {
     "globals": [
       "Turbo",
-      "Stimulus"
+      "Stimulus",
+      "sessionStorage",
+      "DataTransfer",
+      "requestAnimationFrame",
+      "cancelAnimationFrame"
     ]
   }
 }

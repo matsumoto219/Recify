@@ -1,4 +1,3 @@
-/* global DataTransfer */
 import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="receipt-image-card"
