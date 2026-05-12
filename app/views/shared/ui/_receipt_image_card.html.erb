@@ -59,7 +59,7 @@
                   class: "w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
                   data: { receipt_image_card_target: "previewImage" } %>
 
-            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+            <div class="absolute inset-0 image-preview-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
               <div class="floating-action-button p-3 rounded-full flex items-center justify-center backdrop-blur-md">
                 <span class="material-symbols-outlined field-text">zoom_in</span>
               </div>
@@ -82,7 +82,7 @@
       </div>
     <% else %>
       <% if keep_image_enabled %>
-        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center token-text-muted surface-card-bg-card-subtle relative overflow-hidden">
+        <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle relative overflow-hidden">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p><%= empty_message %></p>
 
@@ -92,7 +92,7 @@
         </div>
       <% else %>
         <%# TODO: keep_image 設定に応じた画像なしUIは専用カメラUI仕様確定後に再調整する %>
-        <div class="rounded-lg border border-dashed border-white/10 p-10 text-center token-text-muted surface-card-bg-card-subtle">
+        <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p>画像は保存されていません</p>
           <p class="mt-2 text-xs token-text-muted">画像を保存しない設定のため、プレビューは表示されません</p>

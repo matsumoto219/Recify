@@ -9,6 +9,7 @@
   --color-light-bg-elevated: #ebe7e7;
   --color-light-bg-floating: #dedada;
   --color-light-bg-overlay: rgba(252, 249, 248, 0.8);
+  --image-preview-overlay: rgb(0 0 0 / 0.4);
 
   /* Text palette */
   --color-light-text-base: #1c1b1b;
