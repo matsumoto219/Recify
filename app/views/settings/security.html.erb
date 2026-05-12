@@ -138,9 +138,10 @@
               <%= render "shared/ui/button",
                     label: "パスワードを保存",
                     variant: :primary,
+                    size: :compact,
                     type: "submit",
                     disable_with: "保存中...",
-                    class: "px-6 py-2.5 font-bold" %>
+                    class: "px-6 font-bold" %>
             </div>
           </div>
         <% end %>
@@ -173,9 +174,10 @@
         <%= render "shared/ui/button",
               label: "有効化する（未対応）",
               variant: :secondary,
+              size: :compact,
               full_width: true,
               disabled: true,
-              class: "py-2.5 token-border-brand-soft" %>
+              class: "token-border-brand-soft" %>
       <% end %>
       <!-- END: settings/security 2fa card -->
 
@@ -201,9 +203,10 @@
         <%= render "shared/ui/button",
               label: "登録する（未対応）",
               variant: :secondary,
+              size: :compact,
               full_width: true,
               disabled: true,
-              class: "py-2.5 token-border-brand-soft" %>
+              class: "token-border-brand-soft" %>
       <% end %>
       <!-- END: settings/security passkey card -->
     </div>

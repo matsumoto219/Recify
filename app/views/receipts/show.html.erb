@@ -23,18 +23,18 @@
             variant: :secondary,
             label: t("common.delete"),
             icon: "delete",
+            size: :compact,
             data: {
               turbo_method: :delete,
               turbo_confirm: t("common.confirm_delete")
-            },
-            class: "px-6 py-2.5" %>
+            } %>
 
       <%= render "shared/ui/button",
             as: :link,
             href: edit_receipt_path(@receipt),
             label: t("common.edit"),
             icon: "edit",
-            class: "px-6 py-2.5" %>
+            size: :compact %>
     </div>
   </div>
 
