@@ -35,6 +35,7 @@
   select_wrapper_class = local_assigns.fetch(:select_wrapper_class, nil)
   label_class = local_assigns.fetch(:label_class, nil)
   error_message_class = local_assigns.fetch(:error_message_class, nil)
+  size = local_assigns.fetch(:size, :md).to_sym
 
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
 
@@ -46,7 +47,14 @@
                       else
                         nil
                       end
-  select_spacing_class = with_icon ? "pl-11 pr-10" : "px-4 pr-10"
+  select_spacing_class = case size
+                         when :regular
+                           with_icon ? "h-11 pl-11 pr-10 py-2.5" : "h-11 px-3 py-2.5 pr-10"
+                         when :dense
+                           with_icon ? "h-10 pl-11 pr-10 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+                         else
+                           with_icon ? "pl-11 pr-10" : "px-4 pr-10"
+                         end
   merged_wrapper_class = [base_wrapper_class, select_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_select_class = [base_select_class, highlight_classes, select_spacing_class, select_class].compact.join(" ")

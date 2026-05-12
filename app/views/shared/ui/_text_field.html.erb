@@ -36,6 +36,7 @@
   input_wrapper_class = local_assigns[:input_wrapper_class]
   label_class = local_assigns[:label_class]
   error_message_class = local_assigns[:error_message_class]
+  size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
 
   attribute_errors = Array(f.object&.errors&.[](attribute))
@@ -63,7 +64,18 @@
   ].compact.join(" ")
   error_classes = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")
 
-  input_spacing_class = with_icon ? "pl-11 pr-4" : "px-4"
+  input_spacing_class = case size
+                        when :comfortable
+                          with_icon ? "px-4 py-3 pl-12" : "px-4 py-3"
+                        when :prominent
+                          with_icon ? "py-3.5 pl-12 pr-4" : "px-4 py-3.5"
+                        when :regular
+                          with_icon ? "h-11 pl-11 pr-4" : "h-11 px-4"
+                        when :dense
+                          with_icon ? "h-10 pl-11 pr-4 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+                        else
+                          with_icon ? "pl-11 pr-4" : "px-4"
+                        end
   merged_input_class = [base_input_class, highlight_classes, input_spacing_class, input_class].compact.join(" ")
   field_options = {
     placeholder: placeholder,
