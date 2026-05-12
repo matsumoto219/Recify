@@ -30,12 +30,7 @@
     tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : nil
 
     receipt_review_reason_codes = Array(receipt.review_reasons).map(&:to_s)
-    receipt_review_reason_labels = receipt_review_reason_codes.map do |code|
-      I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
-    end
     receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }
-    review_items = receipt.receipt_items.select(&:needs_review)
-    has_review_notes = receipt_review_reason_labels.any? || review_items.any?
     error_flags = {
       store_name: receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain"),
       payment_method: receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain"),
@@ -50,7 +45,8 @@
           type: "submit",
           form: form_dom_id,
           full_width: true,
-          class: "py-3 rounded-xl cursor-pointer" %>
+          radius: :xl,
+          class: "py-3 cursor-pointer" %>
   <% end %>
 
   <section class="max-w-7xl mx-auto px-0 md:px-4 py-2 md:pb-2">
@@ -66,68 +62,27 @@
               href: cancel_path,
               label: "キャンセル",
               variant: :secondary,
-              class: "px-6 py-2.5 rounded-xl" %>
+              size: :compact,
+              radius: :xl %>
 
         <%= render "shared/ui/button",
               label: "保存",
               type: "submit",
-              class: "px-10 py-2.5 rounded-xl cursor-pointer" %>
+              size: :compact,
+              radius: :xl,
+              class: "px-10 cursor-pointer" %>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div class="lg:col-span-8 space-y-6 min-w-0">
-        <% if has_review_notes %>
-          <%= render "shared/ui/surface_card", variant: :warning, class: "p-6" do %>
-            <div class="flex items-start gap-3">
-              <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-state-error-soft">
-                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">error</span>
-              </div>
-
-              <div class="min-w-0 flex-1 space-y-4">
-                <div>
-                  <h3 class="text-base font-bold token-text-error">要確認内容</h3>
-                  <p class="mt-1 text-sm token-text-muted">保存前に以下の内容を確認してください。</p>
-                </div>
-
-                <% if receipt_review_reason_labels.any? %>
-                  <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-                    <div class="mb-1 text-xs font-bold token-text-error">レシート全体</div>
-                    <ul class="space-y-1 pl-5 text-sm token-text-base list-disc break-words">
-                      <% receipt_review_reason_labels.each do |reason| %>
-                        <li><%= reason %></li>
-                      <% end %>
-                    </ul>
-                  </div>
-                <% end %>
-
-                <% if review_items.any? %>
-                  <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-                    <div class="mb-1 text-xs font-bold token-text-error">明細</div>
-                    <ul class="space-y-2 text-sm token-text-base break-words">
-                      <% review_items.each do |review_item| %>
-                        <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || "名称未設定" %>
-                        <li>
-                          <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
-                          <% if review_item.review_reason_labels.any? %>
-                            <ul class="mt-1 space-y-1 pl-5 text-xs token-text-muted list-disc break-words">
-                              <% review_item.review_reason_labels.each do |reason| %>
-                                <li><%= reason %></li>
-                              <% end %>
-                            </ul>
-                          <% else %>
-                            <p class="mt-1 text-xs token-text-muted">明細内容を確認してください。</p>
-                          <% end %>
-                        </li>
-                      <% end %>
-                    </ul>
-                  </div>
-                <% end %>
-              </div>
-            </div>
-          <% end %>
+        <% if receipt.has_review_notes? %>
+          <%= render "receipts/review_notes_card",
+                receipt: receipt,
+                description: "保存前に以下の内容を確認してください。" %>
         <% end %>
-        <%= render "shared/ui/surface_card", class: "p-6" do %>
+
+        <%= render "shared/ui/surface_card", padding: :md do %>
           <%= render "shared/ui/section_header",
                 title: "基本情報",
                 icon: "info",
@@ -586,7 +541,7 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/surface_card", class: "p-6" do %>
+        <%= render "shared/ui/surface_card", padding: :md do %>
           <%= render "shared/ui/section_header",
                 title: "メモ",
                 icon: "notes",

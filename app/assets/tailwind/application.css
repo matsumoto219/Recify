@@ -121,6 +121,10 @@ body {
   border-color: var(--border-focus);
 }
 
+.token-border-error-soft {
+  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
+}
+
 .token-focus-ring-brand:focus {
   --tw-ring-color: color-mix(
     in srgb,
