@@ -24,6 +24,7 @@
             label: t("common.delete"),
             icon: "delete",
             size: :compact,
+            radius: :xl,
             data: {
               turbo_method: :delete,
               turbo_confirm: t("common.confirm_delete")
@@ -34,13 +35,20 @@
             href: edit_receipt_path(@receipt),
             label: t("common.edit"),
             icon: "edit",
-            size: :compact %>
+            size: :compact,
+            radius: :xl %>
     </div>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     <div class="order-2 lg:order-none lg:col-span-8 space-y-6">
-      <%= render "shared/ui/surface_card", class: "p-8" do %>
+      <% if @receipt.has_review_notes? %>
+        <%= render "receipts/review_notes_card",
+              receipt: @receipt,
+              description: "このレシートには確認が必要な項目があります。" %>
+      <% end %>
+
+      <%= render "shared/ui/surface_card", padding: :lg do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
             <div class="h-14 w-14 token-bg-brand-strong rounded-xl flex items-center justify-center mr-4 shrink-0">
@@ -149,7 +157,7 @@
         </div>
       <% end %>
 
-      <%= render "shared/ui/surface_card", class: "p-8" do %>
+      <%= render "shared/ui/surface_card", padding: :lg do %>
         <div class="flex items-center mb-4">
           <span class="material-symbols-outlined token-text-brand mr-2">notes</span>
           <h3 class="text-sm font-bold token-text-base uppercase tracking-wider"><%= t(".memo") %></h3>

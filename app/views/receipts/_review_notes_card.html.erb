@@ -1,0 +1,53 @@
+<%
+  receipt_review_reason_labels = receipt.review_reason_labels
+  review_items = receipt.review_items
+%>
+
+<%= render "shared/ui/surface_card", variant: :warning, padding: :md do %>
+  <div class="flex items-start gap-3">
+    <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-state-error-soft">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">error</span>
+    </div>
+
+    <div class="min-w-0 flex-1 space-y-4">
+      <div>
+        <h3 class="text-base font-bold token-text-error">要確認内容</h3>
+        <p class="mt-1 text-sm token-text-muted"><%= description %></p>
+      </div>
+
+      <% if receipt_review_reason_labels.any? %>
+        <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
+          <div class="mb-1 text-xs font-bold token-text-error">レシート全体</div>
+          <ul class="space-y-1 pl-5 text-sm token-text-base list-disc break-words">
+            <% receipt_review_reason_labels.each do |reason| %>
+              <li><%= reason %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <% if review_items.any? %>
+        <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
+          <div class="mb-1 text-xs font-bold token-text-error">明細</div>
+          <ul class="space-y-2 text-sm token-text-base break-words">
+            <% review_items.each do |review_item| %>
+              <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || "名称未設定" %>
+              <li>
+                <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
+                <% if review_item.review_reason_labels.any? %>
+                  <ul class="mt-1 space-y-1 pl-5 text-xs token-text-muted list-disc break-words">
+                    <% review_item.review_reason_labels.each do |reason| %>
+                      <li><%= reason %></li>
+                    <% end %>
+                  </ul>
+                <% else %>
+                  <p class="mt-1 text-xs token-text-muted">明細内容を確認してください。</p>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>

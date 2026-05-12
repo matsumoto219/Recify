@@ -366,6 +366,20 @@ class Receipt < ApplicationRecord
     I18n.t("enums.receipt.status.#{status}", default: status)
   end
 
+  def review_reason_labels
+    Array(review_reasons).map do |code|
+      I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
+    end
+  end
+
+  def review_items
+    receipt_items.select(&:needs_review)
+  end
+
+  def has_review_notes?
+    review_reason_labels.any? || review_items.any?
+  end
+
   def tax_rate_percentage_input
     return nil if tax_rate.blank?
 
