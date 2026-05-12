@@ -6,7 +6,7 @@
     align: :center,
     wrapper_class: "space-y-3" %>
 
-  <%= render "shared/ui/surface_card", class: "p-6 group" do %>
+  <%= render "shared/ui/surface_card", padding: :md, class: "group" do %>
     <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit" } } do |form| %>
       <div class="space-y-6">
         <div>

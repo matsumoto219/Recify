@@ -9,7 +9,7 @@
                        end
 
   card_classes = [
-    "p-5 group",
+    "group",
     processing ? "animate-pulse" : nil
   ].compact.join(" ")
 
@@ -23,6 +23,7 @@
 
 <%= render "shared/ui/surface_card",
   id: dom_id(receipt),
+  padding: :card,
   class: card_classes,
   surface_variant: card_surface_variant,
   hoverable: !processing do %>

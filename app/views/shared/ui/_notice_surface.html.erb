@@ -50,6 +50,7 @@
   auto_dismiss = local_assigns.fetch(:auto_dismiss, false)
   auto_dismiss_delay = local_assigns[:auto_dismiss_delay]
   max_visible = local_assigns.fetch(:max_visible, 1)
+  align = local_assigns.fetch(:align, :start).to_sym
   extra_classes = local_assigns[:class]
 
   default_auto_dismiss_delay =
@@ -74,12 +75,21 @@
       end
     end
 
+  align_classes =
+    case align
+    when :center
+      "items-center"
+    else
+      "items-start"
+    end
+
   surface_classes = [
     "pointer-events-auto",
     "notice-glass",
     "notice-surface",
     tone[:variant_class],
-    "p-4 flex items-start gap-3",
+    "p-4 flex gap-3",
+    align_classes,
     animation_classes,
     extra_classes
   ].compact.join(" ")

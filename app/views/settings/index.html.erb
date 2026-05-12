@@ -9,7 +9,7 @@
         subtitle_size: "text-base" %>
 
   <div class="space-y-6">
-    <%= render "shared/ui/surface_card", hoverable: true, class: "p-6" do %>
+    <%= render "shared/ui/surface_card", hoverable: true, padding: :md do %>
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
           <div class="relative flex shrink-0 flex-col items-center gap-2">
@@ -52,7 +52,7 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", class: "p-6" do %>
+    <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "monitoring",
             title: "システム状態",
@@ -73,7 +73,7 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", class: "p-6" do %>
+    <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "shield",
             title: "セキュリティ",
@@ -135,7 +135,7 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", class: "p-6" do %>
+    <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "palette",
             title: "外観",
@@ -168,7 +168,7 @@
       </p>
     <% end %>
 
-    <%= render "shared/ui/surface_card", class: "p-6" do %>
+    <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "settings",
             title: "利用設定",
@@ -199,7 +199,7 @@
     <%= render "shared/ui/surface_card",
           variant: :danger,
           shadow_variant: :danger,
-          class: "p-6" do %>
+          padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "delete",
             title: "アカウント操作",
