@@ -1,11 +1,10 @@
 // app/javascript/controllers/mobile_ui_controller.js
-import { Controller } from "@hotwired/stimulus"
+import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
-  static targets = ["nav", "actions"]
+  static targets = ['nav', 'actions']
 
-  connect() {
-
+  connect () {
     this.lastScrollY = window.scrollY
     this.threshold = 30
     this.scrollDelta = 0
@@ -20,25 +19,27 @@ export default class extends Controller {
     this.handleFocusIn = this.handleFocusIn.bind(this)
     this.handleFocusOut = this.handleFocusOut.bind(this)
 
-    window.addEventListener("scroll", this.handleScroll)
-    window.addEventListener("focusin", this.handleFocusIn)
-    window.addEventListener("focusout", this.handleFocusOut)
-    window.visualViewport?.addEventListener("resize", this.handleViewportResize)
+    window.addEventListener('scroll', this.handleScroll)
+    window.addEventListener('focusin', this.handleFocusIn)
+    window.addEventListener('focusout', this.handleFocusOut)
+    window.visualViewport?.addEventListener('resize', this.handleViewportResize)
   }
 
-  disconnect() {
+  disconnect () {
     window.clearTimeout(this.actionsHideTimeout)
 
-    window.removeEventListener("scroll", this.handleScroll)
-    window.removeEventListener("focusin", this.handleFocusIn)
-    window.removeEventListener("focusout", this.handleFocusOut)
-    window.visualViewport?.removeEventListener("resize", this.handleViewportResize)
+    window.removeEventListener('scroll', this.handleScroll)
+    window.removeEventListener('focusin', this.handleFocusIn)
+    window.removeEventListener('focusout', this.handleFocusOut)
+    window.visualViewport?.removeEventListener('resize', this.handleViewportResize)
   }
 
-  handleScroll() {
-    if (this.isKeyboardVisible) {
+  handleScroll () {
+    if (this.isFormFocused || this.isKeyboardVisible) {
       this.hideNav()
       this.hideActions()
+      this.lastScrollY = window.scrollY
+      this.scrollDelta = 0
       return
     }
 
@@ -87,10 +88,9 @@ export default class extends Controller {
     this.lastDirection = direction
   }
 
-  handleViewportResize() {
+  handleViewportResize () {
     const currentHeight = this.currentViewportHeight()
     const heightDiff = this.initialViewportHeight - currentHeight
-
 
     this.isKeyboardVisible = this.isFormFocused && heightDiff > this.keyboardThreshold
 
@@ -107,9 +107,8 @@ export default class extends Controller {
     }
   }
 
-  handleFocusIn(event) {
+  handleFocusIn (event) {
     if (!this.isFormControl(event.target)) return
-
 
     // visualViewport resize が遅れる端末向けの保険
     this.isFormFocused = true
@@ -118,9 +117,8 @@ export default class extends Controller {
     this.hideActions()
   }
 
-  handleFocusOut(event) {
+  handleFocusOut (event) {
     if (!this.isFormControl(event.target)) return
-
 
     this.isFormFocused = false
 
@@ -130,53 +128,53 @@ export default class extends Controller {
     }, 150)
   }
 
-  currentViewportHeight() {
+  currentViewportHeight () {
     return window.visualViewport?.height || window.innerHeight
   }
 
-  isFormControl(element) {
+  isFormControl (element) {
     return element instanceof HTMLInputElement ||
       element instanceof HTMLTextAreaElement ||
       element instanceof HTMLSelectElement
   }
 
-  showNav() {
+  showNav () {
     if (!this.hasNavTarget) return
 
-    this.navTarget.classList.remove("translate-y-full", "opacity-0", "pointer-events-none")
+    this.navTarget.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none')
   }
 
-  hideNav() {
+  hideNav () {
     if (!this.hasNavTarget) return
 
-    this.navTarget.classList.add("translate-y-full", "opacity-0", "pointer-events-none")
+    this.navTarget.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none')
   }
 
-  showActions() {
+  showActions () {
     if (!this.hasActionsTarget) return
 
     window.clearTimeout(this.actionsHideTimeout)
 
     // 先に表示状態へ戻す
-    this.actionsTarget.classList.remove("opacity-0", "pointer-events-none")
+    this.actionsTarget.classList.remove('opacity-0', 'pointer-events-none')
 
     // 次フレームで下からスライドイン
     window.requestAnimationFrame(() => {
-      this.actionsTarget.classList.remove("translate-y-full")
+      this.actionsTarget.classList.remove('translate-y-full')
     })
   }
 
-  hideActions() {
+  hideActions () {
     if (!this.hasActionsTarget) return
 
     window.clearTimeout(this.actionsHideTimeout)
 
     // 先に下へスライドアウト
-    this.actionsTarget.classList.add("translate-y-full", "pointer-events-none")
+    this.actionsTarget.classList.add('translate-y-full', 'pointer-events-none')
 
     // 完全に下がってから透明化（Safari/iOSのちらつき対策）
     this.actionsHideTimeout = window.setTimeout(() => {
-      this.actionsTarget.classList.add("opacity-0")
+      this.actionsTarget.classList.add('opacity-0')
     }, 300)
   }
 }
