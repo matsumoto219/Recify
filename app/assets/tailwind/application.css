@@ -746,11 +746,7 @@ body {
     transparent
   );
   border-color: var(--glass-border);
-  box-shadow: 0 20px 25px color-mix(
-    in srgb,
-    black 30%,
-    transparent
-  );
+  box-shadow: var(--search-panel-shadow);
 
   /* Search panel blur */
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
@@ -760,11 +756,7 @@ body {
   background: var(--bg-card);
   color: var(--text-base);
   border-color: var(--glass-border);
-  box-shadow: 0 5px 15px color-mix(
-    in srgb,
-    black 20%,
-    transparent
-  );
+  box-shadow: var(--search-input-shadow);
 }
 
 .search-input::placeholder {
@@ -830,7 +822,7 @@ body {
 }
 
 .modal-overlay {
-  background: color-mix(in srgb, black 80%, transparent);
+  background: var(--modal-overlay);
 
   /* Modal overlay blur */
   @apply backdrop-blur-sm;
@@ -852,7 +844,7 @@ body {
 .image-modal-surface {
   background: var(--bg-input);
   border-color: var(--glass-border);
-  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  box-shadow: var(--modal-shadow);
 }
 
 .drop-overlay-surface {
@@ -882,6 +874,7 @@ body {
 
   /* Drop overlay chip text */
   color: var(--text-base);
+  box-shadow: var(--drop-overlay-chip-shadow);
 }
 
 /* ===== Receipt Form Utilities ===== */
@@ -934,16 +927,16 @@ body {
   );
 }
 
+.receipt-form-line-total-tooltip {
+  box-shadow: var(--glass-shadow);
+}
+
 /* ===== Amount Summary Card Utilities ===== */
 .amount-summary-surface {
   background-image: linear-gradient(
     to bottom right,
     var(--brand-primary-strong),
-    color-mix(
-      in srgb,
-      var(--brand-primary-strong) 70%,
-      black
-    )
+    var(--amount-summary-gradient-end)
   );
   color: var(--text-on-brand);
 }
