@@ -26,8 +26,7 @@
   class: card_classes,
   surface_variant: card_surface_variant,
   hoverable: !processing do %>
-  <%# NOTE: 旧外枠 `rounded-xl`, `transition-colors`, `border border-white/5` は surface_card 側のクラスへ置き換え。 %>
-  <%# NOTE: 旧背景 `bg-[#242424]` / `bg-[#2A2A2A]` は surface_variant へ移行。旧hover `hover:bg-[#393939]` は hoverable 経由で surface_card 側に集約。 %>
+
   <div class="flex items-start justify-between gap-4">
     <div class="flex items-start gap-3 min-w-0">
       <div class="<%= icon_box_class %>">
