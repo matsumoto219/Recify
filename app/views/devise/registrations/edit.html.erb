@@ -37,7 +37,7 @@
                       error_message_class: "px-1 text-xs leading-relaxed" %>
 
             <% if devise_mapping.confirmable? && resource.pending_reconfirmation? %>
-              <div class="rounded-2xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
+              <div class="rounded-2xl border token-border-soft token-state-warning-soft px-4 py-3 text-sm">
                 確認待ちメールアドレス: <%= resource.unconfirmed_email %>
               </div>
             <% end %>
@@ -96,9 +96,10 @@
                       type: "submit",
                       variant: :primary,
                       size: :lg,
+                      weight: :bold,
+                      radius: :lg,
                       full_width: true,
-                      disable_with: "保存中...",
-                      class: "font-bold rounded-lg" %>
+                      disable_with: "保存中..." %>
 
             <p class="text-[11px] token-text-subtle leading-relaxed mt-3">
               ※ 詳細な設定やセキュリティ管理は設定画面からも行えます。

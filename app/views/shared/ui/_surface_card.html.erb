@@ -4,6 +4,7 @@
   surface_variant = local_assigns[:surface_variant]&.to_sym
   shadow_variant = local_assigns.fetch(:shadow_variant, :default).to_sym
   hoverable = local_assigns.fetch(:hoverable, false)
+  padding = local_assigns[:padding]&.to_sym
   extra_classes = local_assigns[:class]
   style = local_assigns[:style]
 
@@ -73,6 +74,19 @@
                     end
                   end
 
+  padding_classes = case padding
+                    when :sm
+                      "p-4"
+                    when :md
+                      "p-6"
+                    when :lg
+                      "p-8"
+                    when :responsive
+                      "p-6 lg:p-8"
+                    when :card
+                      "p-5"
+                    end
+
   accent_style_rules = if accent_color.present? && accent_sides.any?
                          accent_sides.map do |side|
                            case side
@@ -90,7 +104,7 @@
 
   surface_style = [style].flatten.compact.join(" ")
 
-  surface_classes = [base_classes, variant_classes, hover_classes, extra_classes].compact.join(" ")
+  surface_classes = [base_classes, variant_classes, hover_classes, padding_classes, extra_classes].compact.join(" ")
 %>
 
 <section <%= id.present? ? " id=\"#{id}\"".html_safe : "" %> class="<%= surface_classes %>"<%= surface_style.present? ? " style=\"#{surface_style}\"".html_safe : "" %><%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>

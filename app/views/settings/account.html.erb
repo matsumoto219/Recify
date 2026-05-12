@@ -6,7 +6,7 @@
         subtitle_size: "text-base",
         class: "px-4 md:px-0" %>
 
-  <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+  <%= render "shared/ui/surface_card", padding: :responsive do %>
     <%
       form_resource = defined?(resource) && resource.present? ? resource : current_user
       form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
@@ -111,7 +111,7 @@
               variant: :primary,
               type: "submit",
               disable_with: "保存中...",
-              class: "px-10 py-3 font-bold" %>
+              class: "px-10 py-3 font-bold cursor-pointer" %>
       </div>
     <% end %>
   <% end %>

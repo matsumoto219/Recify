@@ -17,7 +17,8 @@
 
 <%= render "shared/ui/surface_card",
       shadow_variant: :indigo,
-      class: ["p-8 relative overflow-hidden amount-summary-surface", wrapper_class].compact.join(" ") do %>
+      padding: :lg,
+      class: ["relative overflow-hidden amount-summary-surface", wrapper_class].compact.join(" ") do %>
   <div class="absolute -right-4 -top-4 opacity-10 pointer-events-none">
     <span class="material-symbols-outlined text-9xl" style="font-size: 120px;"><%= icon %></span>
   </div>

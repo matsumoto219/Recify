@@ -18,7 +18,7 @@
 %>
 
 <div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}").html_safe : "" %>>
-  <%= render "shared/ui/surface_card", class: "p-4" do %>
+  <%= render "shared/ui/surface_card", padding: :sm do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
     </p>

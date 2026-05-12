@@ -23,7 +23,7 @@
   <!-- START: settings/security email card -->
   <div class="space-y-6">
     <div id="email" class="scroll-mt-24">
-      <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+      <%= render "shared/ui/surface_card", padding: :responsive do %>
         <%= render "shared/ui/section_header",
               icon: "mail",
               title: "メールアドレス",
@@ -57,7 +57,7 @@
 
     <!-- START: settings/security password card -->
     <div id="password" class="scroll-mt-24">
-      <%= render "shared/ui/surface_card", class: "p-6 lg:p-8" do %>
+      <%= render "shared/ui/surface_card", padding: :responsive do %>
         <%= render "shared/ui/section_header",
               icon: "lock",
               title: "パスワード変更",
@@ -139,9 +139,9 @@
                     label: "パスワードを保存",
                     variant: :primary,
                     size: :compact,
+                    weight: :bold,
                     type: "submit",
-                    disable_with: "保存中...",
-                    class: "px-6 font-bold" %>
+                    disable_with: "保存中..." %>
             </div>
           </div>
         <% end %>
@@ -153,7 +153,7 @@
     <!-- START: settings/security auth options grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- START: settings/security 2fa card -->
-      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border token-border-soft" do %>
+      <%= render "shared/ui/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
@@ -182,7 +182,7 @@
       <!-- END: settings/security 2fa card -->
 
       <!-- START: settings/security passkey card -->
-      <%= render "shared/ui/surface_card", class: "p-6 flex flex-col justify-between border token-border-soft" do %>
+      <%= render "shared/ui/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>

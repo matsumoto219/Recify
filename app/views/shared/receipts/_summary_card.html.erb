@@ -17,12 +17,12 @@
   extra_class = local_assigns[:class]
 
   card_classes = [
-    "p-5",
     extra_class
   ].compact.join(" ")
 %>
 
 <%= render "shared/ui/surface_card",
+  padding: :card,
   class: card_classes,
   surface_variant: :bg_card,
   accent_side: :left,
