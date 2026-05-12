@@ -14,7 +14,10 @@
       "sessionStorage",
       "DataTransfer",
       "requestAnimationFrame",
-      "cancelAnimationFrame"
+      "cancelAnimationFrame",
+      "HTMLInputElement",
+      "HTMLTextAreaElement",
+      "HTMLSelectElement"
     ]
   }
 }
