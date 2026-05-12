@@ -17,7 +17,7 @@
   enable_controller = show_toggle || show_modal || show_upload
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-action="dragenter->receipt-image-card#handleDragEnter dragover->receipt-image-card#handleDragOver dragleave->receipt-image-card#handleDragLeave drop->receipt-image-card#handleDrop").html_safe : "" %>>
+<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}").html_safe : "" %>>
   <%= render "shared/ui/surface_card", class: "p-4" do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
@@ -110,8 +110,9 @@
                 action: "change->receipt-image-card#previewSelectedImage"
               } %>
 
-        <div class="relative overflow-hidden rounded-xl border border-dashed upload-dropzone p-4 transition-colors">
-          <div class="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center drop-overlay-surface"
+        <div class="relative overflow-hidden rounded-xl border border-dashed upload-dropzone p-4 transition-colors"
+             data-action="dragenter->receipt-image-card#handleDragEnter dragover->receipt-image-card#handleDragOver dragleave->receipt-image-card#handleDragLeave drop->receipt-image-card#handleDrop">
+          <div class="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-xl drop-overlay-surface"
                data-receipt-image-card-target="dropOverlay">
             <div class="rounded-full border drop-overlay-chip px-4 py-2 text-sm font-semibold shadow-lg">
               ドロップして画像をアップロード

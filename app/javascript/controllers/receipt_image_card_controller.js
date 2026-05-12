@@ -87,16 +87,24 @@ export default class extends Controller {
     event.preventDefault()
   }
 
+  showDropOverlay () {
+    if (!this.hasDropOverlayTarget) return
+
+    this.dropOverlayTarget.classList.remove('hidden')
+    this.dropOverlayTarget.classList.add('flex')
+  }
+
+  hideDropOverlay () {
+    if (!this.hasDropOverlayTarget) return
+
+    this.dropOverlayTarget.classList.add('hidden')
+    this.dropOverlayTarget.classList.remove('flex')
+  }
+
   handleDragEnter (event) {
     event.preventDefault()
     this.dragDepth += 1
-    this.element.classList.add('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
-
-    if (this.hasDropOverlayTarget) {
-      this.dropOverlayTarget.classList.remove('hidden')
-      this.dropOverlayTarget.classList.add('flex')
-    }
-
+    this.showDropOverlay()
     this.hideUploadError()
   }
 
@@ -104,12 +112,7 @@ export default class extends Controller {
     event.preventDefault()
     this.dragDepth = Math.max(0, this.dragDepth - 1)
     if (this.dragDepth === 0) {
-      this.element.classList.remove('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
-
-      if (this.hasDropOverlayTarget) {
-        this.dropOverlayTarget.classList.add('hidden')
-        this.dropOverlayTarget.classList.remove('flex')
-      }
+      this.hideDropOverlay()
     }
   }
 
@@ -117,12 +120,7 @@ export default class extends Controller {
     event.preventDefault()
 
     this.dragDepth = 0
-    this.element.classList.remove('ring-2', 'ring-[#C0C1FF]/50', 'rounded-xl')
-
-    if (this.hasDropOverlayTarget) {
-      this.dropOverlayTarget.classList.add('hidden')
-      this.dropOverlayTarget.classList.remove('flex')
-    }
+    this.hideDropOverlay()
 
     const file = event.dataTransfer?.files?.[0]
     if (!file || !file.type.startsWith('image/')) {
