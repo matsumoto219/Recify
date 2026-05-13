@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "raw_text": "複数税率ストア\n2026/04/11 12:00\n食品 108\n雑貨 110\n合計 218\n現金",
+  "lines": [
+    "複数税率ストア",
+    "2026/04/11 12:00",
+    "食品 108",
+    "雑貨 110",
+    "合計 218",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "複数税率ストア",
+    "purchased_at_text": "2026/04/11 12:00",
+    "total_amount": 218,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.94,
+      "overall": 0.95
+    },
+    "items": [
+      {
+        "raw_text": "食品",
+        "price": 108,
+        "quantity": 1,
+        "line_total": 108,
+        "tax_rate": 8,
+        "confidence": 0.95
+      },
+      {
+        "raw_text": "雑貨",
+        "price": 110,
+        "quantity": 1,
+        "line_total": 110,
+        "tax_rate": 10,
+        "confidence": 0.94
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 218 }
+    ],
+    "tax_details": []
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}

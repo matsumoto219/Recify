@@ -1,0 +1,42 @@
+{
+  "success": true,
+  "raw_text": "ノイズストア\n2026/04/13 12:00\n*** 0000\n商品A 110\n合計 110\n現金",
+  "lines": [
+    "ノイズストア",
+    "2026/04/13 12:00",
+    "*** 0000",
+    "商品A 110",
+    "合計 110",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "ノイズストア",
+    "purchased_at_text": "2026/04/13 12:00",
+    "total_amount": 110,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.91,
+      "overall": 0.92
+    },
+    "items": [
+      {
+        "raw_text": "商品A",
+        "price": 110,
+        "quantity": 1,
+        "line_total": 110,
+        "tax_rate": 10,
+        "confidence": 0.91
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 110 }
+    ],
+    "tax_details": []
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}

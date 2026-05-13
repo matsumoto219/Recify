@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "raw_text": "小計欠損ストア\n2026/04/14 12:00\n商品A 999\n合計 999\n現金",
+  "lines": [
+    "小計欠損ストア",
+    "2026/04/14 12:00",
+    "商品A 999",
+    "合計 999",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "小計欠損ストア",
+    "purchased_at_text": "2026/04/14 12:00",
+    "total_amount": 999,
+    "tax_amount": null,
+    "subtotal_amount": null,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.95,
+      "overall": 0.96
+    },
+    "items": [
+      {
+        "raw_text": "商品A",
+        "price": 999,
+        "quantity": 1,
+        "line_total": 999,
+        "tax_rate": 10,
+        "confidence": 0.95
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 999 }
+    ],
+    "tax_details": []
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}

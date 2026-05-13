@@ -75,4 +75,37 @@ RSpec.describe ReviewReasonSource do
       )
     end
   end
+
+  describe '.review_reasons_for_user' do
+    it 'excludes system reasons and keeps user-facing reasons' do
+      result = described_class.review_reasons_for_user([
+        'item_name_uncertain',
+        'ocr_low_confidence',
+        'tax_detail_mismatch',
+        'analysis_missing_keys',
+        'unexpected_error'
+      ])
+
+      expect(result).to eq([
+        'item_name_uncertain',
+        'ocr_low_confidence',
+        'tax_detail_mismatch'
+      ])
+    end
+  end
+
+  describe '.internal_processing_reasons' do
+    it 'keeps only system reasons' do
+      result = described_class.internal_processing_reasons([
+        'item_name_uncertain',
+        'analysis_missing_keys',
+        'unexpected_error'
+      ])
+
+      expect(result).to eq([
+        'analysis_missing_keys',
+        'unexpected_error'
+      ])
+    end
+  end
 end

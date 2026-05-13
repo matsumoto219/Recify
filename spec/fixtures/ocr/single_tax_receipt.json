@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "raw_text": "単一税率ストア\n2026/04/10 12:00\nコーヒー 432\nサンド 648\n小計 1080\n現金",
+  "lines": [
+    "単一税率ストア",
+    "2026/04/10 12:00",
+    "コーヒー 432",
+    "サンド 648",
+    "小計 1080",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "単一税率ストア",
+    "purchased_at_text": "2026/04/10 12:00",
+    "total_amount": 1080,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.95,
+      "overall": 0.96
+    },
+    "items": [
+      {
+        "raw_text": "コーヒー",
+        "price": 432,
+        "quantity": 1,
+        "line_total": 432,
+        "tax_rate": 10,
+        "confidence": 0.96
+      },
+      {
+        "raw_text": "サンド",
+        "price": 648,
+        "quantity": 1,
+        "line_total": 648,
+        "tax_rate": 10,
+        "confidence": 0.95
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 1080 }
+    ],
+    "tax_details": []
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}

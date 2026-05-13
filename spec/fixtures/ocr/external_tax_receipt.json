@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "raw_text": "外税ストア\n2026/04/12 12:00\n業務品 1000\n外税 100\n合計 1100\n現金",
+  "lines": [
+    "外税ストア",
+    "2026/04/12 12:00",
+    "業務品 1000",
+    "外税 100",
+    "合計 1100",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "外税ストア",
+    "purchased_at_text": "2026/04/12 12:00",
+    "total_amount": 1100,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.96,
+      "overall": 0.96
+    },
+    "items": [
+      {
+        "raw_text": "業務品",
+        "price": 1000,
+        "quantity": 1,
+        "line_total": 1000,
+        "tax_rate": 10,
+        "confidence": 0.96
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 1100 }
+    ],
+    "tax_details": [
+      {
+        "description": "外税 10%",
+        "amount": 100,
+        "rate": 10,
+        "net_amount": 1000
+      }
+    ]
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}
