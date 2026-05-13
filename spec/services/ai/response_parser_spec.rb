@@ -70,6 +70,48 @@ RSpec.describe Ai::ResponseParser do
           expect(result[:meta]).to eq(provider: :openai)
         end
       end
+
+      it 'promptで許可しているreview_reasonsを保持する' do
+        payload['review_reasons'] = [
+          'item_tax_rate_uncertain',
+          'ocr_unreadable',
+          'ocr_low_confidence'
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:review_reasons]).to eq([
+          'item_tax_rate_uncertain',
+          'ocr_unreadable',
+          'ocr_low_confidence'
+        ])
+      end
+    end
+
+    describe 'review reason definitions' do
+      def prompt_allowed_review_reasons
+        Ai::PromptTemplate.new({}).send(:allowed_review_reasons)
+      end
+
+      def locale_review_reason_keys
+        I18n.t('enums.receipt_item.review_reason').keys.map(&:to_s)
+      end
+
+      it 'keeps parser and prompt allowed review reasons in sync' do
+        expect(described_class::ALLOWED_REVIEW_REASONS).to match_array(prompt_allowed_review_reasons)
+      end
+
+      it 'has locale translations for parser allowed review reasons' do
+        expect(locale_review_reason_keys).to include(*described_class::ALLOWED_REVIEW_REASONS)
+      end
+
+      it 'has locale translations for prompt allowed review reasons' do
+        expect(locale_review_reason_keys).to include(*prompt_allowed_review_reasons)
+      end
+
+      it 'has locale translations for amount mismatch reasons' do
+        expect(locale_review_reason_keys).to include(*Amounts::MismatchCodes.all.map(&:to_s))
+      end
     end
 
     context '必須キー不足' do

@@ -24,6 +24,9 @@ module Ai
       items_missing
       item_name_uncertain
       item_category_uncertain
+      item_tax_rate_uncertain
+      ocr_unreadable
+      ocr_low_confidence
     ].freeze
 
     class << self
