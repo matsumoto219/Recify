@@ -2,11 +2,12 @@
 
 module Amounts
   class TaxDetailAggregator
-    def initialize(items:, fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil)
+    def initialize(items:, fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil, rounding_mode: :floor)
       @items = Array(items)
       @fallback_tax_rate = normalize_tax_rate(fallback_tax_rate)
       @fallback_net_amount = to_i(fallback_net_amount)
       @fallback_tax_amount = to_i(fallback_tax_amount)
+      @rounding_mode = normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -43,7 +44,7 @@ module Amounts
       end
 
       gross_totals.each_with_object({}) do |(tax_rate, gross_total), grouped|
-        tax_amount = (BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)).floor
+        tax_amount = rounded_tax_from_gross(gross_total, tax_rate)
         net_amount = gross_total - tax_amount
 
         grouped[tax_rate] = {
@@ -91,6 +92,26 @@ module Amounts
       tax_rate > 1 ? tax_rate / 100 : tax_rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def rounded_tax_from_gross(gross_total, tax_rate)
+      apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate))
+    end
+
+    def apply_rounding(value)
+      case @rounding_mode
+      when :ceil
+        value.ceil
+      when :round
+        value.round
+      else
+        value.floor
+      end
+    end
+
+    def normalize_rounding_mode(value)
+      mode = value.to_s.to_sym
+      %i[floor ceil round].include?(mode) ? mode : :floor
     end
 
     def to_i(value)

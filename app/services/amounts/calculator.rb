@@ -2,10 +2,11 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:)
+    def initialize(receipt:, items:, tax_details:, rounding_mode: :floor)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
+      @rounding_mode = normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -67,7 +68,7 @@ module Amounts
       # 単一税率の場合は全体から逆算（端数ズレ防止）
       tax_rate = resolve_tax_rate(fallback_tax_rate)
       if tax_rate&.positive?
-        tax = (BigDecimal(total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)).floor
+        tax = rounded_tax_from_gross(total, tax_rate)
         return total - tax
       end
 
@@ -79,7 +80,7 @@ module Amounts
 
         next line_total if rate <= 0
 
-        (BigDecimal(line_total.to_s) / (BigDecimal("1") + rate)).floor
+        line_total - rounded_tax_from_gross(line_total, rate)
       end
     end
 
@@ -147,7 +148,7 @@ module Amounts
       # subtotal + tax_rate → tax を補完
       tax_rate = normalize_tax_rate(@receipt[:tax_rate])
       if subtotal.to_i.positive? && tax_rate.positive?
-        return (BigDecimal(subtotal.to_s) * tax_rate).round
+        return apply_rounding(BigDecimal(subtotal.to_s) * tax_rate)
       end
 
       # total fallback時に subtotal が無い（0）の場合は税額補完しない
@@ -167,7 +168,7 @@ module Amounts
 
       resolved_total = total.to_i
       if resolved_total.positive? && tax_rate.positive?
-        return (BigDecimal(resolved_total.to_s) / (BigDecimal("1") + tax_rate)).floor
+        return resolved_total - rounded_tax_from_gross(resolved_total, tax_rate)
       end
 
       subtotal = item_total - tax_total.to_i
@@ -228,6 +229,11 @@ module Amounts
 
     def infer_tax_rate_from_amounts(item_total, tax_detail_total)
       tax_amount = tax_detail_total.positive? ? tax_detail_total : to_i(@receipt[:tax_amount])
+      receipt_subtotal = to_i(@receipt[:subtotal_amount])
+      if tax_amount.positive? && receipt_subtotal.positive?
+        return normalize_inferred_tax_rate(BigDecimal(tax_amount.to_s) / BigDecimal(receipt_subtotal.to_s))
+      end
+
       total_amount = item_total.positive? ? item_total : to_i(@receipt[:total_amount])
       return BigDecimal("0") if tax_amount <= 0
       return BigDecimal("0") if total_amount <= tax_amount
@@ -263,6 +269,26 @@ module Amounts
       tax_rate > 1 ? tax_rate / 100 : tax_rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def rounded_tax_from_gross(gross_total, tax_rate)
+      apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate))
+    end
+
+    def apply_rounding(value)
+      case @rounding_mode
+      when :ceil
+        value.ceil
+      when :round
+        value.round
+      else
+        value.floor
+      end
+    end
+
+    def normalize_rounding_mode(value)
+      mode = value.to_s.to_sym
+      %i[floor ceil round].include?(mode) ? mode : :floor
     end
 
     def to_i(value)

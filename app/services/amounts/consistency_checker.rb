@@ -31,7 +31,7 @@ module Amounts
         errors << :tax_amount_mismatch
       end
 
-      if tax_detail_total.positive? && item_tax_total.positive? && tax_detail_total != item_tax_total
+      if tax_detail_total.positive? && item_tax_total.positive? && tax_detail_total != item_tax_total && !tax_details_match_rounding_candidate?
         errors << :tax_detail_mismatch
       end
 
@@ -97,6 +97,7 @@ module Amounts
       generated_groups = tax_details_by_rate(@generated_tax_details)
 
       return false if source_groups.blank? || generated_groups.blank?
+      return false if tax_details_match_rounding_candidate?(source_groups)
 
       source_groups.any? do |rate, source_amounts|
         generated_amounts = generated_groups[rate]
@@ -105,6 +106,61 @@ module Amounts
         source_amounts[:amount] != generated_amounts[:amount] ||
           source_amounts[:net_amount] != generated_amounts[:net_amount]
       end
+    end
+
+    def tax_details_match_rounding_candidate?(source_groups = nil)
+      source_groups ||= tax_details_by_rate(comparable_source_tax_details)
+      return false if source_groups.blank? || @items.blank?
+
+      %i[floor ceil round].any? do |rounding_mode|
+        rounding_candidate_tax_details(rounding_mode) == source_groups
+      end
+    end
+
+    def rounding_candidate_tax_details(rounding_mode)
+      gross_totals = @items.each_with_object({}) do |item, groups|
+        rate = normalize_rate(fetch_value(item, :tax_rate))
+        rate = normalize_rate(@resolved[:tax_rate]) if rate <= 0
+        next if rate <= 0
+
+        line_total = item_line_total(item)
+        next if line_total <= 0
+
+        groups[rate] ||= 0
+        groups[rate] += line_total
+      end
+
+      gross_totals.each_with_object({}) do |(rate, gross_total), groups|
+        tax_amount = rounded_tax_from_gross(gross_total, rate, rounding_mode)
+        groups[rate] = {
+          amount: tax_amount,
+          net_amount: gross_total - tax_amount
+        }
+      end
+    end
+
+    def rounded_tax_from_gross(gross_total, tax_rate, rounding_mode)
+      value = BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)
+
+      case rounding_mode
+      when :ceil
+        value.ceil
+      when :round
+        value.round
+      else
+        value.floor
+      end
+    end
+
+    def item_line_total(item)
+      line_total = fetch_value(item, :line_total).to_i
+      return line_total if line_total.positive?
+
+      price = fetch_value(item, :price).to_i
+      quantity = fetch_value(item, :quantity).to_i
+      quantity = 1 if quantity <= 0
+
+      price * quantity
     end
 
     def comparable_source_tax_details
