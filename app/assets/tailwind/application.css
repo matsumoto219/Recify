@@ -242,6 +242,20 @@ body {
 }
 
 /* ===== Ambient Background Utilities ===== */
+.ambient-background {
+  display: none;
+}
+
+[data-theme="dark"] .ambient-background {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .ambient-background {
+    display: block;
+  }
+}
+
 .ambient-glow {
   width: 24rem;
   height: 24rem;
@@ -630,7 +644,7 @@ body {
 .selection-card-primary:hover {
   --tw-ring-color: color-mix(
     in srgb,
-    var(--brand-primary) 60%,
+    var(--brand-primary) 40%,
     transparent
   );
 }
