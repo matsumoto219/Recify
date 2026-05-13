@@ -429,6 +429,23 @@ RSpec.describe 'Receipts', type: :request do
       expect(response.body).to include('テスト店')
     end
 
+    it 'failedかつprocessing_error_codeがあるレシートは処理失敗カードを表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'ocr_timeout',
+        processing_error_message: 'OCR service timeout'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include('OCR処理に失敗しました')
+        expect(response.body).to include('OCR service timeout')
+      end
+    end
+
     it 'warningのみのレシートは完了状態のまま確認情報として表示する' do
       receipt.update!(
         status: 'completed',
@@ -446,6 +463,22 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'review_neededかつamount blockingのレシートはreview cardを表示する' do
+      receipt.update!(
+        status: 'review_needed',
+        review_reasons: [ 'tax_detail_mismatch' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('要確認内容')
+        expect(response.body).to include('税内訳と明細の税額が一致していません')
+        expect(response.body).not_to include('処理に失敗しました')
+      end
+    end
+
     it 'blockingとwarningが混在するレシートは両方を分離表示する' do
       receipt.update!(
         status: 'review_needed',
@@ -460,6 +493,26 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include('税内訳と明細の税額が一致していません')
         expect(response.body).to include('確認情報')
         expect(response.body).to include('画像の精度が低い可能性があります')
+      end
+    end
+
+    it 'system系reasonはreview cardに表示しない' do
+      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+
+      receipt.update!(
+        status: 'completed',
+        review_reasons: [ 'analysis_missing_keys' ],
+        processing_error_code: 'analysis_missing_keys'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に関する注意')
+        expect(response.body).to include('AI補完処理に失敗しました')
+        expect(response.body).not_to include('要確認内容')
+        expect(response.body).not_to include('解析結果に必要な項目が不足しています')
       end
     end
 

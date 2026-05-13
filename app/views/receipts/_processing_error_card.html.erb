@@ -1,0 +1,31 @@
+<%
+  strong_error = receipt.failed?
+  card_variant = strong_error ? :danger : :warning
+  icon = strong_error ? "error" : "info"
+  icon_class = strong_error ? "token-state-error-soft" : "token-state-warning-soft"
+  title_class = strong_error ? "token-text-error" : "token-text-warning"
+  box_class = strong_error ? "token-border-error-soft token-bg-error-soft" : "token-border-soft token-bg-warning-soft"
+  title = strong_error ? t("receipts.processing_error_card.failed_title") : t("receipts.processing_error_card.attention_title")
+%>
+
+<%= render "shared/ui/surface_card", variant: card_variant, padding: :md do %>
+  <div class="flex items-start gap-3">
+    <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full <%= icon_class %>">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;"><%= icon %></span>
+    </div>
+
+    <div class="min-w-0 flex-1 space-y-4">
+      <div>
+        <h3 class="text-base font-bold <%= title_class %>"><%= title %></h3>
+        <p class="mt-1 text-sm token-text-muted"><%= receipt.processing_error_user_message %></p>
+      </div>
+
+      <% if receipt.processing_error_message.present? %>
+        <div class="rounded-lg border <%= box_class %> px-3 py-2">
+          <div class="mb-1 text-xs font-bold <%= title_class %>"><%= t("receipts.processing_error_card.details_label") %></div>
+          <p class="text-sm token-text-base break-words"><%= receipt.processing_error_message %></p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>

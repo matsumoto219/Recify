@@ -430,6 +430,10 @@ class Receipt < ApplicationRecord
     Analysis::ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]&.to_sym
   end
 
+  def has_processing_error?
+    processing_error_code.present?
+  end
+
   def failed_with_error?
     failed? && processing_error_code.present?
   end
@@ -453,6 +457,12 @@ class Receipt < ApplicationRecord
 
   def processing_flash_message
     return nil unless failed_with_error?
+
+    processing_error_user_message
+  end
+
+  def processing_error_user_message
+    return nil unless has_processing_error?
 
     I18n.t(
       "receipts.processing_errors.#{error_category}",

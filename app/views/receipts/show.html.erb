@@ -43,6 +43,10 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     <div class="order-2 lg:order-none lg:col-span-8 space-y-6">
+      <% if @receipt.has_processing_error? %>
+        <%= render "receipts/processing_error_card", receipt: @receipt %>
+      <% end %>
+
       <% if @receipt.has_blocking_review_notes? %>
         <%= render "receipts/review_notes_card",
               receipt: @receipt,
