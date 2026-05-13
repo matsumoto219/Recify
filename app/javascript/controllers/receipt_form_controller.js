@@ -1,33 +1,34 @@
-import { Controller } from "@hotwired/stimulus"
+import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
   static targets = [
-    "itemsContainer",
-    "template",
-    "itemRow",
-    "destroyField",
-    "quantityInput",
-    "priceInput",
-    "taxRateInput",
-    "lineTotalDisplay",
-    "lineTotalTooltip",
-    "lineTotalInput",
-    "totalAmount",
-    "subtotalAmount",
-    "taxAmount",
-    "taxRateSummary"
+    'itemsContainer',
+    'template',
+    'itemRow',
+    'destroyField',
+    'quantityInput',
+    'priceInput',
+    'taxRateInput',
+    'lineTotalDisplay',
+    'lineTotalTooltip',
+    'lineTotalInput',
+    'totalAmount',
+    'subtotalAmount',
+    'taxAmount',
+    'taxRateSummary'
   ]
+
   static values = { nextIndex: Number }
 
-  connect() {
+  connect () {
     this.lineTotalTooltipDelay = 500
   }
 
-  disconnect() {
+  disconnect () {
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
   }
 
-  addItem(event) {
+  addItem (event) {
     event.preventDefault()
 
     const template = this.templateTarget.innerHTML.trim()
@@ -36,11 +37,11 @@ export default class extends Controller {
     const index = this.nextIndexValue
     const html = template.replace(/NEW_RECORD/g, String(index))
 
-    event.currentTarget.insertAdjacentHTML("beforebegin", html)
+    event.currentTarget.insertAdjacentHTML('beforebegin', html)
     this.nextIndexValue = index + 1
   }
 
-  removeItem(event) {
+  removeItem (event) {
     event.preventDefault()
 
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
@@ -50,8 +51,8 @@ export default class extends Controller {
 
     if (destroyField) {
       // 既存レコード → _destroy を有効にして非表示
-      destroyField.value = "1"
-      row.style.display = "none"
+      destroyField.value = '1'
+      row.style.display = 'none'
     } else {
       // 新規レコード → DOMから削除
       row.remove()
@@ -60,7 +61,7 @@ export default class extends Controller {
     this.recalculate()
   }
 
-  scheduleLineTotalTooltip(event) {
+  scheduleLineTotalTooltip (event) {
     // lg未満は表示しない
     if (window.innerWidth < 1024) return
 
@@ -77,17 +78,17 @@ export default class extends Controller {
     }, this.lineTotalTooltipDelay)
   }
 
-  hideLineTotalTooltip(event) {
+  hideLineTotalTooltip (event) {
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]') || event.currentTarget
     this.hideLineTotalTooltipFor(row)
   }
 
-  hideLineTotalTooltipOnFocus(event) {
+  hideLineTotalTooltipOnFocus (event) {
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]') || event.currentTarget
     this.hideLineTotalTooltipFor(row)
   }
 
-  showLineTotalTooltipFor(row) {
+  showLineTotalTooltipFor (row) {
     // lg未満は表示しない
     if (window.innerWidth < 1024) return
 
@@ -95,33 +96,33 @@ export default class extends Controller {
 
     if (!tooltip) return
 
-    tooltip.classList.remove("hidden", "opacity-0")
-    tooltip.classList.add("opacity-100")
+    tooltip.classList.remove('hidden', 'opacity-0')
+    tooltip.classList.add('opacity-100')
   }
 
-  hideLineTotalTooltipFor(row) {
+  hideLineTotalTooltipFor (row) {
     const tooltip = this.lineTotalTooltipFor(row)
 
     this.clearLineTotalTooltipTimer(row)
 
     if (!tooltip) return
 
-    tooltip.classList.add("hidden", "opacity-0")
-    tooltip.classList.remove("opacity-100")
+    tooltip.classList.add('hidden', 'opacity-0')
+    tooltip.classList.remove('opacity-100')
   }
 
-  clearLineTotalTooltipTimer(row) {
+  clearLineTotalTooltipTimer (row) {
     if (!row?.lineTotalTooltipTimer) return
 
     window.clearTimeout(row.lineTotalTooltipTimer)
     row.lineTotalTooltipTimer = null
   }
 
-  lineTotalTooltipFor(row) {
+  lineTotalTooltipFor (row) {
     return row?.querySelector('[data-receipt-form-target="lineTotalTooltip"]')
   }
 
-  recalculate() {
+  recalculate () {
     let subtotalSum = 0
     let taxSum = 0
     let total = 0
@@ -129,7 +130,7 @@ export default class extends Controller {
 
     this.itemRowTargets.forEach((row) => {
       // 削除済み（非表示）はスキップ
-      if (row.style.display === "none") return
+      if (row.style.display === 'none') return
 
       const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
@@ -195,7 +196,7 @@ export default class extends Controller {
     }
   }
 
-  animateLineTotal(target, nextValue, { withLabel = false } = {}) {
+  animateLineTotal (target, nextValue, { withLabel = false } = {}) {
     const duration = 250
     const startValue = this.currentAmountValue(target)
     const endValue = Math.floor(nextValue)
@@ -239,16 +240,16 @@ export default class extends Controller {
     target.amountAnimationFrame = requestAnimationFrame(tick)
   }
 
-  formatNumber(num) {
+  formatNumber (num) {
     return Math.floor(num).toLocaleString()
   }
 
-  clampNumber(value, min, max) {
+  clampNumber (value, min, max) {
     if (Number.isNaN(value)) return min
     return Math.min(Math.max(value, min), max)
   }
 
-  animateAmount(target, nextValue) {
+  animateAmount (target, nextValue) {
     const duration = 300
     const startValue = this.currentAmountValue(target)
     const endValue = Math.floor(nextValue)
@@ -287,28 +288,28 @@ export default class extends Controller {
     target.amountAnimationFrame = requestAnimationFrame(tick)
   }
 
-  currentAmountValue(target) {
+  currentAmountValue (target) {
     if (target.dataset.amountValue) {
       return parseInt(target.dataset.amountValue, 10) || 0
     }
 
-    const rawText = target.textContent || ""
-    return parseInt(rawText.replace(/[^0-9-]/g, ""), 10) || 0
+    const rawText = target.textContent || ''
+    return parseInt(rawText.replace(/[^0-9-]/g, ''), 10) || 0
   }
 
-  easeOutCubic(progress) {
+  easeOutCubic (progress) {
     return 1 - Math.pow(1 - progress, 3)
   }
 
-  formatTaxRateSummary(taxRates) {
-    if (taxRates.size === 0) return "未設定"
-    if (taxRates.size > 1) return "複数税率"
+  formatTaxRateSummary (taxRates) {
+    if (taxRates.size === 0) return '未設定'
+    if (taxRates.size > 1) return '複数税率'
 
     const [taxRate] = Array.from(taxRates)
     return `${this.formatTaxRate(taxRate)}%`
   }
 
-  formatTaxRate(taxRate) {
-    return Number.isInteger(taxRate) ? String(taxRate) : String(taxRate).replace(/\.0+$/, "")
+  formatTaxRate (taxRate) {
+    return Number.isInteger(taxRate) ? String(taxRate) : String(taxRate).replace(/\.0+$/, '')
   }
 }

@@ -17,7 +17,8 @@
       "cancelAnimationFrame",
       "HTMLInputElement",
       "HTMLTextAreaElement",
-      "HTMLSelectElement"
+      "HTMLSelectElement",
+      "DOMParser"
     ]
   }
 }
