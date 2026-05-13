@@ -12,5 +12,6 @@ export default class extends Controller {
 
   applyTheme (value) {
     document.documentElement.dataset.theme = value
+    window.dispatchEvent(new CustomEvent('recify:theme-change'))
   }
 }

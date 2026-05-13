@@ -10,10 +10,9 @@
 
   card_classes = [
     "group",
+    "receipt-card-surface",
     processing ? "animate-pulse" : nil
   ].compact.join(" ")
-
-  card_surface_variant = processing ? :bg_card : :bg_elevated
 
   icon_box_class = [
     "w-10 h-10 rounded-lg receipt-card-icon-box flex items-center justify-center shrink-0",
@@ -25,7 +24,6 @@
   id: dom_id(receipt),
   padding: :card,
   class: card_classes,
-  surface_variant: card_surface_variant,
   hoverable: !processing do %>
 
   <div class="flex items-start justify-between gap-4">
