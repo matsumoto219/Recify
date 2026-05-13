@@ -114,7 +114,7 @@ body {
 }
 
 .token-border-glass {
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .token-border-focus {
@@ -154,7 +154,7 @@ body {
 }
 
 .token-shadow-glass {
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--neutral-glass-shadow);
 }
 
 .token-border-brand-soft {
@@ -229,13 +229,13 @@ body {
  */
 
 .glass-panel {
-  background: var(--glass-bg);
+  background: var(--floating-glass-bg);
 
   /* Glass border */
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--floating-glass-border);
 
   /* Glass shadow */
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--floating-glass-shadow);
 
   /* Glass blur */
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
@@ -309,7 +309,7 @@ body {
 
 /* ===== Header Utilities ===== */
 .header-glass {
-  background: var(--glass-bg);
+  background: var(--header-glass-bg);
 
   /* Header blur */
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
@@ -383,10 +383,14 @@ body {
     var(--bg-card-subtle) 95%,
     transparent
   );
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--neutral-glass-shadow);
 }
 
 /* ===== Receipt Card Utilities ===== */
+.receipt-card-surface {
+  background: var(--receipt-card-bg);
+}
+
 .receipt-card-icon-box {
   background: var(--bg-page);
   color: var(--brand-primary);
@@ -523,7 +527,7 @@ body {
 .setting-status-inactive {
   background: var(--bg-floating);
   color: var(--text-error);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .setting-status-pending {
@@ -553,7 +557,7 @@ body {
     transparent
   );
   color: var(--text-muted);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .setting-status-text-active {
@@ -749,7 +753,7 @@ body {
     var(--bg-card-subtle) 95%,
     transparent
   );
-  border-color: var(--glass-border);
+  border-color: var(--floating-glass-border);
   box-shadow: var(--search-panel-shadow);
 
   /* Search panel blur */
@@ -759,7 +763,7 @@ body {
 .search-input {
   background: var(--bg-card);
   color: var(--text-base);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
   box-shadow: var(--search-input-shadow);
 }
 
@@ -800,7 +804,7 @@ body {
 /* ===== Receipt Image Utilities ===== */
 .image-preview-surface {
   background: var(--bg-input);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .image-preview-surface-hover:hover {
@@ -813,7 +817,7 @@ body {
 
 .upload-dropzone {
   background: var(--bg-input);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .upload-dropzone:hover {
@@ -847,7 +851,7 @@ body {
 
 .image-modal-surface {
   background: var(--bg-input);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
   box-shadow: var(--modal-shadow);
 }
 
@@ -932,7 +936,7 @@ body {
 }
 
 .receipt-form-line-total-tooltip {
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--neutral-glass-shadow);
 }
 
 /* ===== Amount Summary Card Utilities ===== */
@@ -975,16 +979,16 @@ body {
 
 /* ===== Notice Glass ===== */
 .notice-glass {
-  background: var(--glass-bg);
+  background: var(--neutral-glass-bg);
 
   /* Notice border */
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--neutral-glass-border);
 
   /* Notice radius */
   border-radius: 0.75rem;
 
   /* Floating shadow */
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--neutral-glass-shadow);
 
   /* Notice blur */
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
@@ -1041,8 +1045,8 @@ body {
   background-color: var(--bg-input);
   color: var(--text-base);
 
-  /* Transparent input border */
-  border: 1px solid transparent;
+  /* Input border */
+  border: 1px solid var(--border-soft);
 
   /* Input radius */
   border-radius: 0.5rem;
@@ -1095,7 +1099,7 @@ body {
 
 .field-control-wrapper {
   background: var(--bg-input);
-  border-color: transparent;
+  border-color: var(--border-soft);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
@@ -1149,7 +1153,7 @@ body {
 
 .toggle-track-off {
   background: var(--bg-floating);
-  border-color: var(--glass-border);
+  border-color: var(--neutral-glass-border);
 }
 
 .toggle-thumb-on {

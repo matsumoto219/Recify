@@ -13,6 +13,7 @@
   --bg-overlay: var(--color-light-bg-overlay);
   --browser-chrome-bg: var(--color-light-browser-chrome-bg);
   --sidebar-bg: var(--color-light-sidebar-bg);
+  --receipt-card-bg: var(--color-light-receipt-card-bg);
 
   /* =========================
    * Text
@@ -40,6 +41,7 @@
   --brand-primary-strong: var(--color-light-brand-primary-strong);
   --brand-gradient-start: var(--color-light-brand-gradient-start);
   --brand-gradient-end: var(--color-light-brand-gradient-end);
+  --amount-summary-gradient-end: var(--color-light-amount-summary-gradient-end);
 
   /* =========================
    * State
@@ -83,9 +85,15 @@
   /* =========================
    * Glass
    * ========================= */
-  --glass-bg: var(--color-light-glass-bg);
-  --glass-border: var(--color-light-glass-border);
-  --glass-shadow: var(--color-light-glass-shadow);
+  --header-glass-bg: var(--color-light-header-glass-bg);
+  --header-glass-border: var(--color-light-header-glass-border);
+  --header-glass-shadow: var(--color-light-header-glass-shadow);
+  --neutral-glass-bg: var(--color-light-neutral-glass-bg);
+  --neutral-glass-border: var(--color-light-neutral-glass-border);
+  --neutral-glass-shadow: var(--color-light-neutral-glass-shadow);
+  --floating-glass-bg: var(--color-light-floating-glass-bg);
+  --floating-glass-border: var(--color-light-floating-glass-border);
+  --floating-glass-shadow: var(--color-light-floating-glass-shadow);
   --glass-blur-radius: 20px;
   --glass-saturate: 180%;
 
@@ -119,6 +127,7 @@
   --bg-overlay: var(--color-dark-bg-overlay);
   --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
   --sidebar-bg: var(--color-dark-sidebar-bg);
+  --receipt-card-bg: var(--color-dark-receipt-card-bg);
 
   /* =========================
    * Text
@@ -146,6 +155,7 @@
   --brand-primary-strong: var(--color-dark-brand-primary-strong);
   --brand-gradient-start: var(--color-dark-brand-gradient-start);
   --brand-gradient-end: var(--color-dark-brand-gradient-end);
+  --amount-summary-gradient-end: var(--color-dark-amount-summary-gradient-end);
 
   /* =========================
    * State
@@ -189,9 +199,15 @@
   /* =========================
    * Glass
    * ========================= */
-  --glass-bg: var(--color-dark-glass-bg);
-  --glass-border: var(--color-dark-glass-border);
-  --glass-shadow: var(--color-dark-glass-shadow);
+  --header-glass-bg: var(--color-dark-header-glass-bg);
+  --header-glass-border: var(--color-dark-header-glass-border);
+  --header-glass-shadow: var(--color-dark-header-glass-shadow);
+  --neutral-glass-bg: var(--color-dark-neutral-glass-bg);
+  --neutral-glass-border: var(--color-dark-neutral-glass-border);
+  --neutral-glass-shadow: var(--color-dark-neutral-glass-shadow);
+  --floating-glass-bg: var(--color-dark-floating-glass-bg);
+  --floating-glass-border: var(--color-dark-floating-glass-border);
+  --floating-glass-shadow: var(--color-dark-floating-glass-shadow);
   --glass-blur-radius: 20px;
   --glass-saturate: 180%;
 
@@ -226,6 +242,7 @@
     --bg-overlay: var(--color-dark-bg-overlay);
     --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
     --sidebar-bg: var(--color-dark-sidebar-bg);
+    --receipt-card-bg: var(--color-dark-receipt-card-bg);
 
     /* =========================
      * Text
@@ -253,6 +270,7 @@
     --brand-primary-strong: var(--color-dark-brand-primary-strong);
     --brand-gradient-start: var(--color-dark-brand-gradient-start);
     --brand-gradient-end: var(--color-dark-brand-gradient-end);
+    --amount-summary-gradient-end: var(--color-dark-amount-summary-gradient-end);
 
     /* =========================
      * State
@@ -296,9 +314,15 @@
     /* =========================
      * Glass
      * ========================= */
-    --glass-bg: var(--color-dark-glass-bg);
-    --glass-border: var(--color-dark-glass-border);
-    --glass-shadow: var(--color-dark-glass-shadow);
+    --header-glass-bg: var(--color-dark-header-glass-bg);
+    --header-glass-border: var(--color-dark-header-glass-border);
+    --header-glass-shadow: var(--color-dark-header-glass-shadow);
+    --neutral-glass-bg: var(--color-dark-neutral-glass-bg);
+    --neutral-glass-border: var(--color-dark-neutral-glass-border);
+    --neutral-glass-shadow: var(--color-dark-neutral-glass-shadow);
+    --floating-glass-bg: var(--color-dark-floating-glass-bg);
+    --floating-glass-border: var(--color-dark-floating-glass-border);
+    --floating-glass-shadow: var(--color-dark-floating-glass-shadow);
     --glass-blur-radius: 20px;
     --glass-saturate: 180%;
 
