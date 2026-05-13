@@ -600,11 +600,11 @@ body {
 
 /* ===== Selection Card Utilities ===== */
 .selection-card {
-  background: var(--bg-card);
+  background: var(--selection-card-bg);
 }
 
 .selection-card:hover {
-  background: var(--bg-elevated);
+  background: var(--selection-card-hover-bg);
 }
 
 .selection-card-secondary {

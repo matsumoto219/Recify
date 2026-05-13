@@ -12,6 +12,8 @@
   --color-light-browser-chrome-bg: #e8e9ff;
   --color-light-sidebar-bg: rgba(242, 243, 247, 0.78);
   --color-light-receipt-card-bg: var(--color-light-bg-card);
+  --color-light-selection-card-bg: var(--color-light-bg-card-subtle);
+  --color-light-selection-card-hover-bg: #ffffff;
 
   /* Text palette */
   --color-light-text-base: #1c1b1b;
@@ -37,8 +39,8 @@
 
   /* State palette */
   --color-light-state-success: #2e7d32;
-  --color-light-state-warning: #a44100;
-  --color-light-state-error: #ba1a1a;
+  --color-light-state-warning: #c96a00;
+  --color-light-state-error: #d93025;
   --color-light-state-info: #58579b;
 
   /* State background palette */
@@ -114,9 +116,11 @@
   --color-dark-bg-elevated: #2a2a2a;
   --color-dark-bg-floating: #353534;
   --color-dark-bg-overlay: rgba(19, 19, 19, 0.8);
-  --color-dark-browser-chrome-bg: #201f1f;
+  --color-dark-browser-chrome-bg: #1c1c1c;
   --color-dark-sidebar-bg: var(--color-dark-bg-card-subtle);
   --color-dark-receipt-card-bg: var(--color-dark-bg-elevated);
+  --color-dark-selection-card-bg: var(--color-dark-bg-card);
+  --color-dark-selection-card-hover-bg: var(--color-dark-bg-elevated);
 
   /* Text palette */
   --color-dark-text-base: #e5e2e1;
@@ -165,7 +169,7 @@
   --color-dark-blur-accent-2: rgba(75, 77, 216, 0.12);
 
   /* Glass palette */
-  --color-dark-header-glass-bg: rgba(32, 31, 31, 0.8);
+  --color-dark-header-glass-bg: rgba(19, 19, 19, 0.8);
   --color-dark-header-glass-border: rgba(255, 255, 255, 0.05);
   --color-dark-header-glass-shadow:
     0 20px 40px rgba(99, 102, 241, 0.05),

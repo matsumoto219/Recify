@@ -14,6 +14,8 @@
   --browser-chrome-bg: var(--color-light-browser-chrome-bg);
   --sidebar-bg: var(--color-light-sidebar-bg);
   --receipt-card-bg: var(--color-light-receipt-card-bg);
+  --selection-card-bg: var(--color-light-selection-card-bg);
+  --selection-card-hover-bg: var(--color-light-selection-card-hover-bg);
 
   /* =========================
    * Text
@@ -128,6 +130,8 @@
   --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
   --sidebar-bg: var(--color-dark-sidebar-bg);
   --receipt-card-bg: var(--color-dark-receipt-card-bg);
+  --selection-card-bg: var(--color-dark-selection-card-bg);
+  --selection-card-hover-bg: var(--color-dark-selection-card-hover-bg);
 
   /* =========================
    * Text
@@ -243,6 +247,8 @@
     --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
     --sidebar-bg: var(--color-dark-sidebar-bg);
     --receipt-card-bg: var(--color-dark-receipt-card-bg);
+    --selection-card-bg: var(--color-dark-selection-card-bg);
+    --selection-card-hover-bg: var(--color-dark-selection-card-hover-bg);
 
     /* =========================
      * Text
