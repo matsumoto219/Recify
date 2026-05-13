@@ -2,15 +2,15 @@
   /* =========================
    * Light Palette
    * ========================= */
-  --color-light-bg-page: #fcf9f8;
-  --color-light-bg-card: #f0edec;
-  --color-light-bg-card-subtle: #f6f3f2;
+  --color-light-bg-page: #fafafa;
+  --color-light-bg-card: #ffffff;
+  --color-light-bg-card-subtle: #f4f4f4;
   --color-light-bg-input: #ffffff;
-  --color-light-bg-elevated: #ebe7e7;
-  --color-light-bg-floating: #dedada;
-  --color-light-bg-overlay: rgba(252, 249, 248, 0.8);
-  --image-preview-overlay: rgb(0 0 0 / 0.4);
-  --modal-overlay: rgb(0 0 0 / 0.8);
+  --color-light-bg-elevated: #f0f0f0;
+  --color-light-bg-floating: #ebebeb;
+  --color-light-bg-overlay: rgba(250, 250, 250, 0.8);
+  --color-light-browser-chrome-bg: #4b4dd8;
+  --color-light-sidebar-bg: rgba(210, 214, 255, 0.86);
 
   /* Text palette */
   --color-light-text-base: #1c1b1b;
@@ -22,17 +22,16 @@
   --color-light-text-link: #3130c0;
 
   /* Border palette */
-  --color-light-border-soft: rgba(0, 0, 0, 0.05);
-  --color-light-border-default: rgba(121, 117, 129, 0.35);
-  --color-light-border-strong: rgba(0, 0, 0, 0.14);
-  --color-light-border-focus: #3130c0;
+  --color-light-border-soft: rgba(199, 196, 216, 0.35);
+  --color-light-border-default: #c7c4d8;
+  --color-light-border-strong: #918fa1;
+  --color-light-border-focus: #4b4dd8;
 
   /* Brand palette */
-  --color-light-brand-primary: #3130c0;
-  --color-light-brand-primary-strong: #4b4dd8;
-  --color-light-brand-gradient-start: #3130c0;
+  --color-light-brand-primary: #4b4dd8;
+  --color-light-brand-primary-strong: #3130c0;
+  --color-light-brand-gradient-start: #8a8cff;
   --color-light-brand-gradient-end: #4b4dd8;
-  --amount-summary-gradient-end: color-mix(in srgb, var(--color-light-brand-primary-strong) 70%, black);
 
   /* State palette */
   --color-light-state-success: #2e7d32;
@@ -50,10 +49,6 @@
   --color-light-shadow-card:
     0 20px 40px rgba(0, 0, 0, 0.05),
     0 0 0 1px rgba(0, 0, 0, 0.02);
-  --modal-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  --search-panel-shadow: 0 20px 25px color-mix(in srgb, black 30%, transparent);
-  --search-input-shadow: 0 5px 15px color-mix(in srgb, black 20%, transparent);
-  --drop-overlay-chip-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   /* Focus shadow palette */
   --color-light-shadow-primary: 0 0 0 4px rgba(49, 48, 192, 0.1);
@@ -63,8 +58,8 @@
   --color-light-blur-accent-2: rgba(75, 77, 216, 0.08);
 
   /* Glass palette */
-  --color-light-glass-bg: rgba(252, 249, 248, 0.8);
-  --color-light-glass-border: rgba(0, 0, 0, 0.05);
+  --color-light-glass-bg: rgba(226, 228, 255, 0.76);
+  --color-light-glass-border: rgba(75, 77, 216, 0.14);
 
   /* Glass shadow palette */
   --color-light-glass-shadow:
@@ -109,6 +104,8 @@
   --color-dark-bg-elevated: #2a2a2a;
   --color-dark-bg-floating: #353534;
   --color-dark-bg-overlay: rgba(19, 19, 19, 0.8);
+  --color-dark-browser-chrome-bg: #201f1f;
+  --color-dark-sidebar-bg: var(--color-dark-bg-card-subtle);
 
   /* Text palette */
   --color-dark-text-base: #e5e2e1;
@@ -191,4 +188,15 @@
   --color-dark-surface-card-warning-shadow:
     0 20px 40px rgba(164, 65, 0, 0.16),
     0 0 0 1px rgba(255, 182, 149, 0.1);
+
+  /* =========================
+   * Shared Component Palette
+   * ========================= */
+  --image-preview-overlay: rgb(0 0 0 / 0.4);
+  --modal-overlay: rgb(0 0 0 / 0.8);
+  --amount-summary-gradient-end: color-mix(in srgb, var(--color-light-brand-primary-strong) 70%, black);
+  --modal-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --search-panel-shadow: 0 20px 25px color-mix(in srgb, black 30%, transparent);
+  --search-input-shadow: 0 5px 15px color-mix(in srgb, black 20%, transparent);
+  --drop-overlay-chip-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }

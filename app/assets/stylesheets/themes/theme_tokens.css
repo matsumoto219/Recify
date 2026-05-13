@@ -11,6 +11,8 @@
   --bg-elevated: var(--color-light-bg-elevated);
   --bg-floating: var(--color-light-bg-floating);
   --bg-overlay: var(--color-light-bg-overlay);
+  --browser-chrome-bg: var(--color-light-browser-chrome-bg);
+  --sidebar-bg: var(--color-light-sidebar-bg);
 
   /* =========================
    * Text
@@ -115,6 +117,8 @@
   --bg-elevated: var(--color-dark-bg-elevated);
   --bg-floating: var(--color-dark-bg-floating);
   --bg-overlay: var(--color-dark-bg-overlay);
+  --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
+  --sidebar-bg: var(--color-dark-sidebar-bg);
 
   /* =========================
    * Text
@@ -220,6 +224,8 @@
     --bg-elevated: var(--color-dark-bg-elevated);
     --bg-floating: var(--color-dark-bg-floating);
     --bg-overlay: var(--color-dark-bg-overlay);
+    --browser-chrome-bg: var(--color-dark-browser-chrome-bg);
+    --sidebar-bg: var(--color-dark-sidebar-bg);
 
     /* =========================
      * Text
