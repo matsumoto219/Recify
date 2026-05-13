@@ -9,15 +9,23 @@ export default class extends Controller {
     this.isOpen = this.initiallyOpenValue
     this.objectUrl = null
     this.dragDepth = 0
+    this.modalElement = this.hasModalTarget ? this.modalTarget : null
+    this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
+    this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.sync()
 
     this.initializeFileName()
 
     this.handleKeydown = this.handleKeydown.bind(this)
+    this.handleModalCloseClick = this.handleModalCloseClick.bind(this)
+    this.handleModalPanelClick = this.handleModalPanelClick.bind(this)
     document.addEventListener('keydown', this.handleKeydown)
+    this.addModalEventListeners()
   }
 
   disconnect () {
+    this.removeModalEventListeners()
+    this.restoreModal()
     this.unlockBodyScroll()
     this.revokeObjectUrl()
     document.removeEventListener('keydown', this.handleKeydown)
@@ -48,8 +56,8 @@ export default class extends Controller {
       }
     }
 
-    if (this.hasModalImageTarget) {
-      this.modalImageTarget.src = this.objectUrl
+    if (this.modalImageElement) {
+      this.modalImageElement.src = this.objectUrl
     }
   }
 
@@ -152,32 +160,88 @@ export default class extends Controller {
   }
 
   openModal () {
-    if (!this.hasModalTarget || !this.hasModalImageTarget) return
-    if (!this.modalTarget.classList.contains('hidden')) return
+    if (!this.modalElement || !this.modalImageElement) return
+    if (!this.modalElement.classList.contains('hidden')) return
 
-    this.modalTarget.classList.remove('hidden')
-    this.modalTarget.setAttribute('aria-hidden', 'false')
+    this.moveModalToBody()
+    this.modalElement.classList.remove('hidden')
+    this.modalElement.setAttribute('aria-hidden', 'false')
     this.lockBodyScroll()
-    this.modalTarget.focus()
+    this.modalElement.focus()
   }
 
   closeModal () {
-    if (!this.hasModalTarget) return
+    if (!this.modalElement) return
 
-    this.modalTarget.classList.add('hidden')
-    this.modalTarget.setAttribute('aria-hidden', 'true')
+    this.modalElement.classList.add('hidden')
+    this.modalElement.setAttribute('aria-hidden', 'true')
     this.unlockBodyScroll()
+    this.restoreModal()
   }
 
   handleKeydown (e) {
     if (e.key !== 'Escape') return
-    if (!this.hasModalTarget || this.modalTarget.classList.contains('hidden')) return
+    if (!this.modalElement || this.modalElement.classList.contains('hidden')) return
 
     this.closeModal()
   }
 
+  handleModalCloseClick (event) {
+    event.preventDefault()
+    this.closeModal()
+  }
+
+  handleModalPanelClick (event) {
+    event.stopPropagation()
+  }
+
   stopPropagation (e) {
     e.stopPropagation()
+  }
+
+  addModalEventListeners () {
+    if (!this.modalElement) return
+
+    this.modalOverlayElement = this.modalElement.querySelector('[data-receipt-image-card-modal-part="overlay"]')
+    this.modalContainerElement = this.modalElement.querySelector('[data-receipt-image-card-modal-part="container"]')
+    this.modalPanelElement = this.modalElement.querySelector('[data-receipt-image-card-modal-part="panel"]')
+    this.modalCloseElement = this.modalElement.querySelector('[data-receipt-image-card-modal-part="close"]')
+
+    this.modalOverlayElement?.addEventListener('click', this.handleModalCloseClick)
+    this.modalContainerElement?.addEventListener('click', this.handleModalCloseClick)
+    this.modalCloseElement?.addEventListener('click', this.handleModalCloseClick)
+    this.modalPanelElement?.addEventListener('click', this.handleModalPanelClick)
+  }
+
+  removeModalEventListeners () {
+    this.modalOverlayElement?.removeEventListener('click', this.handleModalCloseClick)
+    this.modalContainerElement?.removeEventListener('click', this.handleModalCloseClick)
+    this.modalCloseElement?.removeEventListener('click', this.handleModalCloseClick)
+    this.modalPanelElement?.removeEventListener('click', this.handleModalPanelClick)
+  }
+
+  moveModalToBody () {
+    if (!this.modalElement || this.modalElement.parentNode === document.body) return
+
+    if (!this.modalPlaceholder.parentNode) {
+      this.modalElement.parentNode.insertBefore(this.modalPlaceholder, this.modalElement)
+    }
+
+    document.body.appendChild(this.modalElement)
+  }
+
+  restoreModal () {
+    if (!this.modalElement) return
+
+    if (!this.modalPlaceholder.parentNode) {
+      if (this.modalElement.parentNode === document.body) {
+        this.modalElement.remove()
+      }
+      return
+    }
+
+    this.modalPlaceholder.parentNode.insertBefore(this.modalElement, this.modalPlaceholder)
+    this.modalPlaceholder.remove()
   }
 
   sync () {
