@@ -82,7 +82,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div class="lg:col-span-8 space-y-6 min-w-0">
-        <% if receipt.has_review_notes? %>
+        <% if receipt.has_blocking_review_notes? %>
           <%= render "receipts/review_notes_card",
                 receipt: receipt,
                 description: "保存前に以下の内容を確認してください。" %>

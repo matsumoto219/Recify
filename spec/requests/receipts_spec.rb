@@ -429,6 +429,40 @@ RSpec.describe 'Receipts', type: :request do
       expect(response.body).to include('テスト店')
     end
 
+    it 'warningのみのレシートは完了状態のまま確認情報として表示する' do
+      receipt.update!(
+        status: 'completed',
+        review_reasons: [ 'ocr_low_confidence' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('確認情報')
+        expect(response.body).to include('OCR')
+        expect(response.body).to include('画像の精度が低い可能性があります')
+        expect(response.body).not_to include('要確認内容')
+      end
+    end
+
+    it 'blockingとwarningが混在するレシートは両方を分離表示する' do
+      receipt.update!(
+        status: 'review_needed',
+        review_reasons: [ 'tax_detail_mismatch', 'ocr_low_confidence' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('要確認内容')
+        expect(response.body).to include('税内訳と明細の税額が一致していません')
+        expect(response.body).to include('確認情報')
+        expect(response.body).to include('画像の精度が低い可能性があります')
+      end
+    end
+
     it '他人のレシートは取得できない' do
       other_user = create(:user, email: 'other@example.com')
       other_receipt = create(

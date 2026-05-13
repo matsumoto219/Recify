@@ -367,7 +367,27 @@ class Receipt < ApplicationRecord
   end
 
   def review_reason_labels
-    Array(review_reasons).map do |code|
+    review_reason_labels_for(review_reasons)
+  end
+
+  def blocking_review_reason_codes
+    ReviewReasonSource.blocking_reasons_for_user(review_reasons)
+  end
+
+  def blocking_review_reason_labels
+    review_reason_labels_for(blocking_review_reason_codes)
+  end
+
+  def warning_review_reason_codes
+    ReviewReasonSource.warning_reasons_for_user(review_reasons)
+  end
+
+  def warning_review_reason_labels
+    review_reason_labels_for(warning_review_reason_codes)
+  end
+
+  def review_reason_labels_for(codes)
+    Array(codes).map do |code|
       I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
     end
   end
@@ -376,8 +396,16 @@ class Receipt < ApplicationRecord
     receipt_items.select(&:needs_review)
   end
 
+  def has_blocking_review_notes?
+    blocking_review_reason_labels.any? || review_items.any?
+  end
+
+  def has_warning_notes?
+    warning_review_reason_labels.any?
+  end
+
   def has_review_notes?
-    review_reason_labels.any? || review_items.any?
+    has_blocking_review_notes? || has_warning_notes?
   end
 
   def tax_rate_percentage_input

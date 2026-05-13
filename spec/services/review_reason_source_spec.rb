@@ -94,6 +94,38 @@ RSpec.describe ReviewReasonSource do
     end
   end
 
+  describe '.warning_reasons_for_user' do
+    it 'keeps user-facing warning reasons only' do
+      result = described_class.warning_reasons_for_user([
+        'ocr_low_confidence',
+        'tax_detail_rate_mismatch',
+        'tax_detail_mismatch',
+        'analysis_missing_keys'
+      ])
+
+      expect(result).to eq([
+        'ocr_low_confidence',
+        'tax_detail_rate_mismatch'
+      ])
+    end
+  end
+
+  describe '.blocking_reasons_for_user' do
+    it 'keeps user-facing blocking reasons only' do
+      result = described_class.blocking_reasons_for_user([
+        'ocr_low_confidence',
+        'item_name_uncertain',
+        'tax_detail_mismatch',
+        'analysis_missing_keys'
+      ])
+
+      expect(result).to eq([
+        'item_name_uncertain',
+        'tax_detail_mismatch'
+      ])
+    end
+  end
+
   describe '.internal_processing_reasons' do
     it 'keeps only system reasons' do
       result = described_class.internal_processing_reasons([

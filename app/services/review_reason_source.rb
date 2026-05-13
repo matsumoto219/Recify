@@ -49,6 +49,11 @@ module ReviewReasonSource
     ai_fallback_failed
   ].freeze
 
+  WARNING_REASONS = (
+    Amounts::MismatchSeverity::WARNING.map(&:to_s) +
+    %w[ocr_low_confidence]
+  ).freeze
+
   SOURCES = %i[
     ai
     ocr
@@ -86,6 +91,25 @@ module ReviewReasonSource
 
       normalized
     end.uniq
+  end
+
+  def warning_reason?(reason)
+    WARNING_REASONS.include?(normalize(reason))
+  end
+
+  def blocking_reason?(reason)
+    normalized = normalize(reason)
+    normalized.present? &&
+      source_for(normalized) != :system &&
+      !warning_reason?(normalized)
+  end
+
+  def warning_reasons_for_user(reasons)
+    review_reasons_for_user(reasons).select { |reason| warning_reason?(reason) }
+  end
+
+  def blocking_reasons_for_user(reasons)
+    review_reasons_for_user(reasons).select { |reason| blocking_reason?(reason) }
   end
 
   def internal_processing_reasons(reasons)
