@@ -11,6 +11,9 @@
   <% page_title = receipt.persisted? ? "レシート編集" : "レシート登録" %>
   <% page_description = receipt.persisted? ? "内容を確認・修正して保存してください" : "内容を入力して保存してください" %>
   <% cancel_path = receipt.persisted? ? receipt_path(receipt) : receipts_path %>
+  <% from_index = receipt.persisted? && params[:from].to_s == "index" %>
+  <% breadcrumb_label = receipt.persisted? ? (from_index ? "レシート一覧" : "レシート詳細") : nil %>
+  <% breadcrumb_path = receipt.persisted? ? (from_index ? receipts_path : receipt_path(receipt)) : nil %>
   <% total_amount_value = receipt.total_amount.to_i %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
@@ -54,7 +57,9 @@
       <%= render "shared/ui/section_header",
             title: page_title,
             subtitle: page_description,
-            title_size: "text-3xl md:text-4xl" %>
+            title_size: "text-3xl md:text-4xl",
+            breadcrumb_label: breadcrumb_label,
+            breadcrumb_path: breadcrumb_path %>
 
       <div class="hidden md:flex items-center gap-3">
         <%= render "shared/ui/button",

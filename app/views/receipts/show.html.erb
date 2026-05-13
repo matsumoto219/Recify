@@ -8,6 +8,7 @@
                        else
                          "複数税率"
                        end
+    edit_from = params[:from].to_s == "index" ? "index" : "show"
   %>
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
     <%= render "shared/ui/section_header",
@@ -32,7 +33,7 @@
 
       <%= render "shared/ui/button",
             as: :link,
-            href: edit_receipt_path(@receipt),
+            href: edit_receipt_path(@receipt, from: edit_from),
             label: t("common.edit"),
             icon: "edit",
             size: :compact,

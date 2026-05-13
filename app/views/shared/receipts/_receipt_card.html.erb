@@ -41,7 +41,7 @@
           <% if processing %>
             <span class="block truncate"><%= display_store_name %></span>
           <% else %>
-            <%= link_to display_store_name, receipt_path(receipt), class: "block truncate hover:underline" %>
+            <%= link_to display_store_name, receipt_path(receipt, from: "index"), class: "block truncate hover:underline" %>
           <% end %>
         </h2>
 
@@ -73,8 +73,8 @@
         <span class="token-text-subtle cursor-not-allowed">詳細</span>
         <span class="receipt-card-disabled-brand cursor-not-allowed">編集</span>
       <% else %>
-        <%= link_to "詳細", receipt_path(receipt), class: "token-text-muted receipt-card-link-hover transition-colors" %>
-        <%= link_to "編集", edit_receipt_path(receipt), class: "token-text-brand hover:opacity-80 transition-opacity" %>
+        <%= link_to "詳細", receipt_path(receipt, from: "index"), class: "token-text-muted receipt-card-link-hover transition-colors" %>
+        <%= link_to "編集", edit_receipt_path(receipt, from: "index"), class: "token-text-brand hover:opacity-80 transition-opacity" %>
       <% end %>
     </div>
   </div>
