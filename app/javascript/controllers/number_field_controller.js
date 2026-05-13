@@ -1,13 +1,13 @@
-import { Controller } from "@hotwired/stimulus"
+import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="number-field"
 export default class extends Controller {
-  static targets = ["input"]
+  static targets = ['input']
   static values = {
     decimalPrecision: Number
   }
 
-  connect() {
+  connect () {
     this.repeatTimeoutId = null
     this.repeatIntervalId = null
     this.accelerationTimeoutIds = []
@@ -15,19 +15,19 @@ export default class extends Controller {
     this.isComposing = false
   }
 
-  disconnect() {
+  disconnect () {
     this.stopChanging()
   }
 
-  startIncrementing(event) {
+  startIncrementing (event) {
     this.startChanging(event, 1)
   }
 
-  startDecrementing(event) {
+  startDecrementing (event) {
     this.startChanging(event, -1)
   }
 
-  startChanging(event, delta) {
+  startChanging (event, delta) {
     event.preventDefault()
 
     this.stopChanging()
@@ -61,7 +61,7 @@ export default class extends Controller {
     }, 350)
   }
 
-  startRepeat(delta, intervalMs) {
+  startRepeat (delta, intervalMs) {
     if (this.currentDelta !== delta) return
 
     if (this.repeatIntervalId) {
@@ -73,7 +73,7 @@ export default class extends Controller {
     }, intervalMs)
   }
 
-  stopChanging() {
+  stopChanging () {
     if (this.repeatTimeoutId) {
       window.clearTimeout(this.repeatTimeoutId)
       this.repeatTimeoutId = null
@@ -91,21 +91,22 @@ export default class extends Controller {
     this.currentDelta = null
   }
 
-  changeValue(delta) {
+  changeValue (delta) {
     if (!this.hasInputTarget) return
 
     const input = this.inputTarget
-    const step = Number.parseFloat(input.step || "1") || 1
-    const currentValue = Number.parseFloat(input.value || "0") || 0
+    const step = Number.parseFloat(input.step || '1') || 1
+    const currentValue = Number.parseFloat(input.value || '0') || 0
     const nextValue = this.clampValue(currentValue + (step * delta), input)
 
     input.value = this.formatValue(nextValue, step)
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-    input.dispatchEvent(new Event("change", { bubbles: true }))
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
   }
-  clampValue(value, input) {
-    const min = input.min === "" ? null : Number.parseFloat(input.min)
-    const max = input.max === "" ? null : Number.parseFloat(input.max)
+
+  clampValue (value, input) {
+    const min = input.min === '' ? null : Number.parseFloat(input.min)
+    const max = input.max === '' ? null : Number.parseFloat(input.max)
 
     if (min !== null && !Number.isNaN(min) && value < min) return min
     if (max !== null && !Number.isNaN(max) && value > max) return max
@@ -113,7 +114,7 @@ export default class extends Controller {
     return value
   }
 
-  formatValue(value, step) {
+  formatValue (value, step) {
     if (Number.isInteger(step) && !this.hasDecimalPrecisionValue) {
       return String(Math.round(value))
     }
@@ -123,24 +124,24 @@ export default class extends Controller {
     const roundedValue = Math.round((value + Number.EPSILON) * multiplier) / multiplier
 
     if (precision > 0) {
-      return String(roundedValue).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+      return String(roundedValue).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
     }
 
     return String(Math.round(roundedValue))
   }
 
-  decimalPrecision(value) {
+  decimalPrecision (value) {
     const valueText = String(value)
-    const decimalPart = valueText.split(".")[1]
+    const decimalPart = valueText.split('.')[1]
 
     return decimalPart ? decimalPart.length : 0
   }
 
-  startComposition() {
+  startComposition () {
     this.isComposing = true
   }
 
-  finishComposition(event) {
+  finishComposition (event) {
     this.isComposing = false
     this.normalize(event)
 
@@ -149,12 +150,12 @@ export default class extends Controller {
     if (!Number.isNaN(numericValue)) {
       input.value = this.formatValue(
         this.clampValue(numericValue, input),
-        Number.parseFloat(input.step || "1") || 1
+        Number.parseFloat(input.step || '1') || 1
       )
     }
   }
 
-  normalize(event) {
+  normalize (event) {
     const input = event.target
     if (this.isComposing || event.isComposing) return
     const originalValue = input.value
@@ -166,14 +167,14 @@ export default class extends Controller {
 
     // 全角小数点・マイナス対応
     value = value
-      .replace(/．/g, ".")
-      .replace(/－/g, "-")
+      .replace(/．/g, '.')
+      .replace(/－/g, '-')
 
     // 数字・小数点・マイナス以外を除去
-    value = value.replace(/[^0-9.\-]/g, "")
+    value = value.replace(/[^0-9.-]/g, '')
 
     // マイナスは先頭のみ許可
-    value = value.replace(/(?!^)-/g, "")
+    value = value.replace(/(?!^)-/g, '')
 
     // 小数点は1つだけ許可
     const parts = value.split('.')
@@ -181,8 +182,8 @@ export default class extends Controller {
       value = parts[0] + '.' + parts.slice(1).join('')
     }
 
-    if (value !== "" && value !== "-" && value !== "." && value !== "-.") {
-      const isEditingDecimal = value.endsWith(".") || value === "-."
+    if (value !== '' && value !== '-' && value !== '.' && value !== '-.') {
+      const isEditingDecimal = value.endsWith('.') || value === '-.'
 
       if (!isEditingDecimal) {
         const numericValue = Number.parseFloat(value)
@@ -194,7 +195,7 @@ export default class extends Controller {
 
     if (value !== originalValue) {
       input.value = value
-      input.dispatchEvent(new Event("input", { bubbles: true }))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Controller } from "@hotwired/stimulus"
+import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="notice-surface"
 export default class extends Controller {
@@ -9,9 +9,9 @@ export default class extends Controller {
     maxVisible: Number
   }
 
-  connect() {
-    if (this.element.dataset.noticeInitialized === "true") return
-    this.element.dataset.noticeInitialized = "true"
+  connect () {
+    if (this.element.dataset.noticeInitialized === 'true') return
+    this.element.dataset.noticeInitialized = 'true'
 
     if (this.maxVisibleValue > 0) {
       const selector = `[data-controller~="notice-surface"][data-notice-surface-max-visible-value="${this.maxVisibleValue}"]`
@@ -24,12 +24,12 @@ export default class extends Controller {
     }
 
     requestAnimationFrame(() => {
-      if (this.animationValue === "slide_right") {
-        this.element.classList.remove("opacity-0", "translate-x-full")
-      } else if (this.animationValue === "slide_down") {
-        this.element.classList.remove("opacity-0", "-translate-y-4")
+      if (this.animationValue === 'slide_right') {
+        this.element.classList.remove('opacity-0', 'translate-x-full')
+      } else if (this.animationValue === 'slide_down') {
+        this.element.classList.remove('opacity-0', '-translate-y-4')
       } else {
-        this.element.classList.remove("opacity-0")
+        this.element.classList.remove('opacity-0')
       }
     })
 
@@ -38,25 +38,25 @@ export default class extends Controller {
 
       this.dismissTimeout = setTimeout(() => {
         if (!this.element.isConnected) return
-        this.element.classList.add("opacity-0", "-translate-y-2")
+        this.element.classList.add('opacity-0', '-translate-y-2')
         this.removeTimeout = setTimeout(() => this.element.remove(), 250)
       }, timeout)
     }
   }
 
-  close() {
+  close () {
     if (!this.element.isConnected) return
 
     this.clearTimers()
-    this.element.classList.add("opacity-0", "-translate-y-2")
+    this.element.classList.add('opacity-0', '-translate-y-2')
     this.removeTimeout = setTimeout(() => this.element.remove(), 250)
   }
 
-  disconnect() {
+  disconnect () {
     this.clearTimers()
   }
 
-  clearTimers() {
+  clearTimers () {
     if (this.dismissTimeout) {
       clearTimeout(this.dismissTimeout)
       this.dismissTimeout = null
