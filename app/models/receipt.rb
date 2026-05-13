@@ -322,7 +322,7 @@ class Receipt < ApplicationRecord
     return {
       label: "先月データなし",
       icon: "trending_flat",
-      icon_class: "text-[#C7C4D8]"
+      icon_class: "token-text-muted"
     } if previous_total.zero?
 
     change_rate = ((current_total - previous_total).to_d / previous_total * 100).round
@@ -331,19 +331,19 @@ class Receipt < ApplicationRecord
       {
         label: "先月比 +#{change_rate}%",
         icon: "trending_up",
-        icon_class: "text-[#FFB4AB]"
+        icon_class: "token-text-error"
       }
     elsif change_rate.negative?
       {
         label: "先月比 #{change_rate}%",
         icon: "trending_down",
-        icon_class: "text-[#4ADE80]"
+        icon_class: "token-text-success"
       }
     else
       {
         label: "先月比 ±0%",
         icon: "trending_flat",
-        icon_class: "text-[#C7C4D8]"
+        icon_class: "token-text-muted"
       }
     end
   end
