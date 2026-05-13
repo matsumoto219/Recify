@@ -329,7 +329,7 @@ body {
 
 /* ===== Sidebar Utilities ===== */
 .sidebar-surface {
-  background: var(--bg-card-subtle);
+  background: var(--sidebar-bg);
 }
 
 .sidebar-brand-bg {
