@@ -343,6 +343,6 @@
 }
 
 body {
-  background-color: var(--bg-page);
+  background-color: var(--browser-chrome-bg);
   color: var(--text-base);
 }

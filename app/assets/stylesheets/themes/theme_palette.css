@@ -60,7 +60,7 @@
   --color-light-blur-accent-2: rgba(75, 77, 216, 0.08);
 
   /* Glass palette */
-  --color-light-header-glass-bg: rgba(238, 239, 255, 0.94);
+  --color-light-header-glass-bg: rgba(226, 228, 255, 0.76);
   --color-light-header-glass-border: rgba(75, 77, 216, 0.14);
   --color-light-header-glass-shadow:
     0 20px 40px rgba(0, 0, 0, 0.05),
@@ -165,7 +165,7 @@
   --color-dark-blur-accent-2: rgba(75, 77, 216, 0.12);
 
   /* Glass palette */
-  --color-dark-header-glass-bg: rgba(32, 31, 31, 0.92);
+  --color-dark-header-glass-bg: rgba(32, 31, 31, 0.8);
   --color-dark-header-glass-border: rgba(255, 255, 255, 0.05);
   --color-dark-header-glass-shadow:
     0 20px 40px rgba(99, 102, 241, 0.05),
