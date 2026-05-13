@@ -504,6 +504,10 @@ body {
   color: var(--text-muted);
 }
 
+.avatar-preview-surface {
+  box-shadow: var(--shadow-card);
+}
+
 .avatar-file-input::file-selector-button {
   background: var(--bg-floating);
   color: var(--brand-primary);
@@ -1203,6 +1207,7 @@ body {
 .btn-danger {
   background: var(--state-error);
   color: var(--text-on-danger);
+  box-shadow: var(--shadow-card);
 }
 
 /* ===== Utility Tweaks ===== */
