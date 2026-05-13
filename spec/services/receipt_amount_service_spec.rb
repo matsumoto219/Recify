@@ -133,5 +133,173 @@ RSpec.describe ReceiptAmountService do
         expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
       end
     end
+
+    it 'accepts symbol context values' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100,
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      expect(result[:resolved][:total]).to eq(1_100)
+    end
+
+    it 'normalizes string context values to symbols' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100,
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [],
+        context: 'manual'
+      )
+
+      expect(result[:resolved][:total]).to eq(1_100)
+    end
+
+    it 'falls back nil context to analysis' do
+      result = call_service(
+        receipt: {
+          total_amount: 9_999,
+          subtotal_amount: 9_000,
+          tax_amount: 999,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        context: nil
+      )
+
+      expect(result[:resolved][:total]).to eq(108)
+    end
+
+    it 'preserves user-entered amounts in edit_save context when no items exist' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100,
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(1_100)
+        expect(result[:resolved][:subtotal]).to eq(1_000)
+        expect(result[:resolved][:tax]).to eq(100)
+        expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
+      end
+    end
+
+    it 'treats unknown context as analysis' do
+      result = call_service(
+        receipt: {
+          total_amount: 9_999,
+          subtotal_amount: 9_000,
+          tax_amount: 999,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :unexpected
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(108)
+        expect(result[:resolved][:subtotal]).to eq(99)
+        expect(result[:resolved][:tax]).to eq(9)
+      end
+    end
+
+    it 'uses multiple tax_details in analysis context and keeps resolved tax_rate nil' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 1_100 }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 500, amount: 40 },
+          { rate: BigDecimal('0.1'), net_amount: 500, amount: 50 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:subtotal]).to eq(1_000)
+        expect(result[:resolved][:tax]).to eq(90)
+        expect(result[:resolved][:total]).to eq(1_090)
+        expect(result[:resolved][:tax_rate]).to be_nil
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'uses tax_details in analysis context when item tax_rate is missing' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 1_100 }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:subtotal]).to eq(1_000)
+        expect(result[:resolved][:tax]).to eq(100)
+        expect(result[:resolved][:total]).to eq(1_100)
+        expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'prefers item calculation over tax_details in edit_save context when items exist' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:subtotal]).to eq(99)
+        expect(result[:resolved][:tax]).to eq(9)
+        expect(result[:resolved][:total]).to eq(108)
+      end
+    end
+
+    it 'uses tax_details in manual context when no items exist' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:subtotal]).to eq(1_000)
+        expect(result[:resolved][:tax]).to eq(100)
+        expect(result[:resolved][:total]).to eq(1_100)
+        expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
+      end
+    end
   end
 end

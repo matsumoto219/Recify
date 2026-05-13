@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::ConsistencyChecker do
-  def check(computed:, resolved:, item_total:, tax_total:, receipt: {}, context: :analysis, items: [], item_count: nil, external_tax: false, source_tax_details: [], generated_tax_details: [])
+  def check(computed:, resolved:, item_total:, tax_total:, receipt: {}, context: :analysis, items: [], item_count: nil, external_tax: false, source_tax_details: [], generated_tax_details: [], rounding_mode: :floor)
     described_class.new(
       computed: computed,
       resolved: resolved,
@@ -13,7 +13,8 @@ RSpec.describe Amounts::ConsistencyChecker do
       item_count: item_count || items.size,
       external_tax: external_tax,
       source_tax_details: source_tax_details,
-      generated_tax_details: generated_tax_details
+      generated_tax_details: generated_tax_details,
+      rounding_mode: rounding_mode
     ).call
   end
 
@@ -76,6 +77,66 @@ RSpec.describe Amounts::ConsistencyChecker do
       )
 
       expect(inconsistencies).to include(:tax_detail_mismatch)
+    end
+
+    it 'does not mark mismatch when item calculation and tax_details match exactly' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 9,
+          tax_detail_total: 9
+        },
+        resolved: {
+          subtotal: 99,
+          tax: 9,
+          total: 108,
+          tax_rate: BigDecimal('0.1')
+        },
+        item_total: 108,
+        tax_total: 9,
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        source_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 99, amount: 9 }
+        ],
+        generated_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 99, amount: 9 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(inconsistencies).not_to include(:tax_detail_mismatch)
+        expect(inconsistencies).not_to include(:tax_detail_rate_mismatch)
+      end
+    end
+
+    it 'accepts rounding_mode without changing rounding candidate checks' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 9,
+          tax_detail_total: 10
+        },
+        resolved: {
+          subtotal: 99,
+          tax: 9,
+          total: 108,
+          tax_rate: BigDecimal('0.1')
+        },
+        item_total: 108,
+        tax_total: 9,
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        source_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 98, amount: 10 }
+        ],
+        generated_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 99, amount: 9 }
+        ],
+        rounding_mode: :ceil
+      )
+
+      expect(inconsistencies).not_to include(:tax_detail_mismatch)
     end
   end
 end

@@ -1,11 +1,12 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::Calculator do
-  def calculate(receipt: {}, items: [], tax_details: [], rounding_mode: nil)
+  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil)
     kwargs = {
       receipt: receipt,
       items: items,
-      tax_details: tax_details
+      tax_details: tax_details,
+      context: context
     }
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
 
@@ -110,6 +111,79 @@ RSpec.describe Amounts::Calculator do
       )
 
       expect(result[:tax_rate]).to be_nil
+    end
+
+    it 'prefers multiple tax_details in analysis context and keeps tax_rate nil' do
+      result = calculate(
+        items: [
+          { line_total: 1_100 }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 500, amount: 40 },
+          { rate: BigDecimal('0.1'), net_amount: 500, amount: 50 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(1_000)
+        expect(result[:tax]).to eq(90)
+        expect(result[:total]).to eq(1_090)
+        expect(result[:tax_rate]).to be_nil
+      end
+    end
+
+    it 'uses tax_details when item tax_rate is missing in analysis context' do
+      result = calculate(
+        items: [
+          { line_total: 1_100 }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(1_000)
+        expect(result[:tax]).to eq(100)
+        expect(result[:total]).to eq(1_100)
+        expect(result[:tax_rate]).to eq(BigDecimal('0.1'))
+      end
+    end
+
+    it 'prefers item calculation over conflicting tax_details in edit_save context when items exist' do
+      result = calculate(
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(99)
+        expect(result[:tax]).to eq(9)
+        expect(result[:total]).to eq(108)
+      end
+    end
+
+    it 'uses tax_details in manual context when no items exist' do
+      result = calculate(
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(1_000)
+        expect(result[:tax]).to eq(100)
+        expect(result[:total]).to eq(1_100)
+        expect(result[:tax_rate]).to eq(BigDecimal('0.1'))
+      end
     end
   end
 end
