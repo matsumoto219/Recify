@@ -1,5 +1,5 @@
 <%
-  receipt_review_reason_labels = receipt.blocking_review_reason_labels
+  review_groups = ReviewReasonSource.group_by_source(receipt.blocking_review_reason_codes).select { |_source, reasons| reasons.any? }
   review_items = receipt.review_items
 %>
 
@@ -15,11 +15,11 @@
         <p class="mt-1 text-sm token-text-muted"><%= description %></p>
       </div>
 
-      <% if receipt_review_reason_labels.any? %>
+      <% review_groups.each do |source, reasons| %>
         <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-          <div class="mb-1 text-xs font-bold token-text-error">レシート全体</div>
+          <div class="mb-1 text-xs font-bold token-text-error"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
           <ul class="space-y-1 pl-5 text-sm token-text-base list-disc break-words">
-            <% receipt_review_reason_labels.each do |reason| %>
+            <% receipt.review_reason_labels_for(reasons).each do |reason| %>
               <li><%= reason %></li>
             <% end %>
           </ul>

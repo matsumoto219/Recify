@@ -25,3 +25,8 @@ ja:
       failed_title: 処理に失敗しました
       attention_title: 処理に関する注意
       details_label: 補足
+    review_reason_sources:
+      ai: AI補完
+      ocr: OCR品質
+      amount: 金額整合性
+      unknown: その他

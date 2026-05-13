@@ -457,9 +457,25 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('確認情報')
-        expect(response.body).to include('OCR')
+        expect(response.body).to include('OCR品質')
         expect(response.body).to include('画像の精度が低い可能性があります')
         expect(response.body).not_to include('要確認内容')
+      end
+    end
+
+    it 'AI reasonのみのレシートはAI補完セクションとして表示する' do
+      receipt.update!(
+        status: 'review_needed',
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('要確認内容')
+        expect(response.body).to include('AI補完')
+        expect(response.body).to include('商品名の精度が低い可能性があります')
       end
     end
 
@@ -474,6 +490,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('要確認内容')
+        expect(response.body).to include('金額整合性')
         expect(response.body).to include('税内訳と明細の税額が一致していません')
         expect(response.body).not_to include('処理に失敗しました')
       end
@@ -490,8 +507,10 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('要確認内容')
+        expect(response.body).to include('金額整合性')
         expect(response.body).to include('税内訳と明細の税額が一致していません')
         expect(response.body).to include('確認情報')
+        expect(response.body).to include('OCR品質')
         expect(response.body).to include('画像の精度が低い可能性があります')
       end
     end

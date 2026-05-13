@@ -1,11 +1,5 @@
 <%
   warning_groups = ReviewReasonSource.group_by_source(receipt.warning_review_reason_codes).select { |_source, reasons| reasons.any? }
-  source_labels = {
-    ocr: "OCR",
-    amount: "金額",
-    ai: "AI",
-    unknown: "その他"
-  }
 %>
 
 <%= render "shared/ui/surface_card", padding: :md do %>
@@ -22,7 +16,7 @@
 
       <% warning_groups.each do |source, reasons| %>
         <div class="rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
-          <div class="mb-1 text-xs font-bold token-text-warning"><%= source_labels.fetch(source, source_labels[:unknown]) %></div>
+          <div class="mb-1 text-xs font-bold token-text-warning"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
           <ul class="space-y-1 pl-5 text-sm token-text-base list-disc break-words">
             <% receipt.review_reason_labels_for(reasons).each do |reason| %>
               <li><%= reason %></li>
