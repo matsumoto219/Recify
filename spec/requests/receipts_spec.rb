@@ -187,6 +187,186 @@ RSpec.describe 'Receipts', type: :request do
       expect([ 200, 422 ]).to include(response.status)
     end
 
+    it '明細あり作成時にsubtotal/tax/totalを再計算して保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '明細あり作成',
+          payment_method: 'cash',
+          total_amount: 9_999,
+          subtotal_amount: 9_000,
+          tax_amount: 999,
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 108,
+              quantity: 2,
+              tax_rate: 10,
+              line_total: 0,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.subtotal_amount).to eq(197)
+        expect(receipt.tax_amount).to eq(19)
+        expect(receipt.total_amount).to eq(216)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(item.line_total).to eq(216)
+      end
+    end
+
+    it '明細なし手動作成時は入力金額を尊重する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '明細なし作成',
+          payment_method: 'cash',
+          total_amount: 1_100,
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          tax_rate: 0.1
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1_100)
+        expect(receipt.subtotal_amount).to eq(1_000)
+        expect(receipt.tax_amount).to eq(100)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+      end
+    end
+
+    it '複数税率の明細作成時はreceipt.tax_rateをnilで保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '複数税率作成',
+          payment_method: 'cash',
+          total_amount: 9_999,
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '軽減税率商品',
+              price: 108,
+              quantity: 1,
+              tax_rate: 8,
+              line_total: 0,
+              needs_review: false
+            },
+            '1' => {
+              confirmed_name: '標準税率商品',
+              price: 110,
+              quantity: 1,
+              tax_rate: 10,
+              line_total: 0,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(218)
+        expect(receipt.subtotal_amount).to eq(200)
+        expect(receipt.tax_amount).to eq(18)
+        expect(receipt.tax_rate).to be_nil
+      end
+    end
+
+    it '税率別内訳を保存する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '税率別内訳あり',
+            payment_method: 'cash',
+            total_amount: 9_999,
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 110,
+                quantity: 1,
+                tax_rate: 10,
+                line_total: 0,
+                needs_review: false
+              }
+            }
+          }
+        }
+      end.to change(ReceiptTaxDetail, :count).by(1)
+
+      tax_detail = Receipt.order(:id).last.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(tax_detail.description).to eq('10%対象')
+        expect(tax_detail.net_amount).to eq(100)
+        expect(tax_detail.amount).to eq(10)
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+      end
+    end
+
+    it 'floor丸めで税額を保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'floor丸め作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '丸め確認商品',
+              price: 108,
+              quantity: 1,
+              tax_rate: 10,
+              line_total: 0,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(receipt.total_amount).to eq(108)
+        expect(receipt.subtotal_amount).to eq(99)
+        expect(receipt.tax_amount).to eq(9)
+      end
+    end
+
+    it '整合している明細はreview_neededにしない' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '整合明細',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 110,
+              quantity: 1,
+              tax_rate: 10,
+              line_total: 0,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_items.first.needs_review).to be(false)
+      end
+    end
+
     it '対応外形式の画像では作成できない' do
       invalid_file = Rack::Test::UploadedFile.new(
         Tempfile.create([ 'invalid', '.txt' ]).tap { |f| f.write('dummy'); f.rewind }.path,
@@ -419,6 +599,70 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.status).to eq('review_needed')
         expect(ReceiptAnalysisService).not_to have_received(:call)
+      end
+    end
+
+    it '明細変更時に金額を再計算して保存する' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '更新前商品',
+        price: 110,
+        quantity: 1,
+        tax_rate: BigDecimal('0.1'),
+        line_total: 110,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '明細更新後',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: '更新後商品',
+              price: 108,
+              quantity: 2,
+              tax_rate: 10,
+              line_total: 216,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(216)
+        expect(receipt.subtotal_amount).to eq(197)
+        expect(receipt.tax_amount).to eq(19)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(item.line_total).to eq(216)
+      end
+    end
+
+    it '明細なし編集保存時は入力金額を尊重する' do
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '明細なし更新',
+          payment_method: 'cash',
+          total_amount: 3_300,
+          subtotal_amount: 3_000,
+          tax_amount: 300,
+          tax_rate: 0.1
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(3_300)
+        expect(receipt.subtotal_amount).to eq(3_000)
+        expect(receipt.tax_amount).to eq(300)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
       end
     end
 
