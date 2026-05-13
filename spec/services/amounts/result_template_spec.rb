@@ -18,6 +18,7 @@ RSpec.describe Amounts::ResultTemplate do
       expect(result[:warning_inconsistencies]).to eq([:ocr_total_mismatch])
       expect(result[:blocking_inconsistencies]).to be_empty
       expect(result[:warning_mismatch_codes]).to eq(['OCR_TOTAL_MISMATCH'])
+      expect(result[:warning_reasons]).to eq(['ocr_total_mismatch'])
     end
   end
 

@@ -108,6 +108,30 @@ RSpec.describe ReceiptAnalysisService do
     }
   end
 
+  def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
+    {
+      resolved: {
+        total: 1280,
+        subtotal: 1164,
+        tax: 116,
+        tax_rate: BigDecimal('0.1')
+      },
+      computed: {
+        items: []
+      },
+      tax_details: [],
+      inconsistencies: inconsistencies,
+      blocking_inconsistencies: blocking_inconsistencies,
+      warning_inconsistencies: warning_inconsistencies,
+      mismatch_codes: inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      blocking_mismatch_codes: blocking_inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      warning_mismatch_codes: warning_inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      warning_reasons: warning_inconsistencies.map(&:to_s),
+      mismatch_messages: [],
+      needs_review: blocking_inconsistencies.any?
+    }
+  end
+
   describe '.call' do
     it 'OCR結果からレシート情報を保存する' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
@@ -225,6 +249,72 @@ RSpec.describe ReceiptAnalysisService do
       receipt.reload
 
       expect(receipt.status).to eq('review_needed')
+    end
+
+    it 'warning mismatch only does not add amount review_reasons or review_needed status' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [:ocr_total_mismatch],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: [:ocr_total_mismatch]
+        )
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it 'blocking mismatch adds amount review_reasons and review_needed status' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [:tax_detail_mismatch],
+          blocking_inconsistencies: [:tax_detail_mismatch],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq(['tax_detail_mismatch'])
+      end
+    end
+
+    it 'mixed mismatch stores only blocking amount review_reasons' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [:ocr_total_mismatch, :tax_detail_mismatch],
+          blocking_inconsistencies: [:tax_detail_mismatch],
+          warning_inconsistencies: [:ocr_total_mismatch]
+        )
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq(['tax_detail_mismatch'])
+      end
     end
 
     it 'OCRが success: false かつ ocr_timeout の場合は failed になる' do

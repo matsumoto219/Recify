@@ -226,7 +226,7 @@ class ReceiptAnalysisService
 
     review_reasons = merge_review_reasons(
       ai_result[:review_reasons],
-      amount_result[:inconsistencies],
+      amount_review_reasons(amount_result),
       ocr_review_reasons
     )
 
@@ -288,7 +288,7 @@ class ReceiptAnalysisService
       ocr_review_reasons << "ocr_low_confidence"
     end
 
-    review_reasons = merge_review_reasons([], amount_result[:inconsistencies], ocr_review_reasons)
+    review_reasons = merge_review_reasons([], amount_review_reasons(amount_result), ocr_review_reasons)
 
     # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
     # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -344,7 +344,7 @@ class ReceiptAnalysisService
       ocr_review_reasons << "ocr_low_confidence"
     end
 
-    review_reasons = merge_review_reasons([], amount_result[:inconsistencies], ocr_review_reasons)
+    review_reasons = merge_review_reasons([], amount_review_reasons(amount_result), ocr_review_reasons)
 
     # NOTE:
     # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
@@ -441,6 +441,14 @@ class ReceiptAnalysisService
       .map(&:to_s)
       .reject(&:blank?)
       .uniq
+  end
+
+  def amount_review_reasons(amount_result)
+    if amount_result.key?(:blocking_inconsistencies)
+      Array(amount_result[:blocking_inconsistencies])
+    else
+      Array(amount_result[:inconsistencies])
+    end
   end
 
   # ReceiptBuildParamsService が save-ready な item 値を返す前提で、

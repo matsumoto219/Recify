@@ -13,6 +13,7 @@ module Amounts
         inconsistencies: inconsistencies,
         blocking_inconsistencies: blocking_inconsistencies,
         warning_inconsistencies: warning_inconsistencies,
+        warning_reasons: warning_inconsistencies.map(&:to_s),
         mismatch_codes: mismatch_codes,
         blocking_mismatch_codes: mismatch_codes_for(blocking_inconsistencies),
         warning_mismatch_codes: mismatch_codes_for(warning_inconsistencies),
