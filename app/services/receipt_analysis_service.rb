@@ -435,12 +435,14 @@ class ReceiptAnalysisService
   end
 
   def merge_review_reasons(*reason_groups)
-    reason_groups
+    ReviewReasonSource.review_reasons_for_user(
+      reason_groups
       .flatten
       .compact
       .map(&:to_s)
       .reject(&:blank?)
       .uniq
+    )
   end
 
   def amount_review_reasons(amount_result)

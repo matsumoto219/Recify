@@ -78,6 +78,26 @@ module ReviewReasonSource
     end
   end
 
+  def review_reasons_for_user(reasons)
+    Array(reasons).filter_map do |reason|
+      normalized = normalize(reason)
+      next if normalized.blank?
+      next if source_for(normalized) == :system
+
+      normalized
+    end.uniq
+  end
+
+  def internal_processing_reasons(reasons)
+    Array(reasons).filter_map do |reason|
+      normalized = normalize(reason)
+      next if normalized.blank?
+      next unless source_for(normalized) == :system
+
+      normalized
+    end.uniq
+  end
+
   def normalize(reason)
     reason.to_s.strip
   end
