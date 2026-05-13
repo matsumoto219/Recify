@@ -7,7 +7,7 @@ module Amounts
       @fallback_tax_rate = normalize_tax_rate(fallback_tax_rate)
       @fallback_net_amount = to_i(fallback_net_amount)
       @fallback_tax_amount = to_i(fallback_tax_amount)
-      @rounding_mode = normalize_rounding_mode(rounding_mode)
+      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -95,23 +95,7 @@ module Amounts
     end
 
     def rounded_tax_from_gross(gross_total, tax_rate)
-      apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate))
-    end
-
-    def apply_rounding(value)
-      case @rounding_mode
-      when :ceil
-        value.ceil
-      when :round
-        value.round
-      else
-        value.floor
-      end
-    end
-
-    def normalize_rounding_mode(value)
-      mode = value.to_s.to_sym
-      %i[floor ceil round].include?(mode) ? mode : :floor
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), @rounding_mode)
     end
 
     def to_i(value)

@@ -38,8 +38,8 @@ class ReceiptAmountService
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
-    @context = context # :analysis / :edit_save / :manual
-    @rounding_mode = normalize_rounding_mode(rounding_mode)
+    @context = normalize_context(context)
+    @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
   end
 
   def call
@@ -48,6 +48,7 @@ class ReceiptAmountService
       receipt: @receipt,
       items: @items,
       tax_details: @tax_details,
+      context: @context,
       rounding_mode: @rounding_mode
     ).call
 
@@ -55,11 +56,13 @@ class ReceiptAmountService
     resolved = Amounts::Resolver.new(
       computed: calc,
       receipt: @receipt,
-      context: @context
+      context: @context,
+      items: calc[:items] || @items,
+      tax_details: @tax_details
     ).call
 
     # --- 3) TaxDetailAggregator（税率別集計）
-    tax_details = if calc[:external_tax]
+    tax_details = if calc[:external_tax] || calc[:tax_details_primary]
       source_tax_details_for_external_tax.map do |t|
         {
           description: "#{(t[:rate].to_f * 100).to_i}%対象",
@@ -90,7 +93,9 @@ class ReceiptAmountService
       item_count: @items.size,
       external_tax: calc[:external_tax],
       source_tax_details: @tax_details,
-      generated_tax_details: tax_details
+      generated_tax_details: tax_details,
+      tax_details_primary: calc[:tax_details_primary],
+      rounding_mode: @rounding_mode
     ).call
 
     mismatch_codes = build_mismatch_codes(inconsistencies)
@@ -115,9 +120,9 @@ class ReceiptAmountService
 
   private
 
-  def normalize_rounding_mode(value)
-    mode = value.to_s.to_sym
-    %i[floor ceil round].include?(mode) ? mode : :floor
+  def normalize_context(value)
+    context = value.to_s.to_sym
+    %i[analysis edit_save manual].include?(context) ? context : :analysis
   end
 
   def build_mismatch_codes(inconsistencies)

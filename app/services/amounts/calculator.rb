@@ -2,11 +2,12 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, rounding_mode: :floor)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: :floor)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
-      @rounding_mode = normalize_rounding_mode(rounding_mode)
+      @context = normalize_context(context)
+      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -17,8 +18,9 @@ module Amounts
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
       external_tax = external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
+      tax_details_primary = tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
 
-      if external_tax
+      if external_tax || tax_details_primary
         item_subtotal = tax_detail_subtotal
         item_tax_total = tax_detail_total
         subtotal = tax_detail_subtotal
@@ -29,8 +31,8 @@ module Amounts
         item_tax_total = item_total - item_subtotal
 
         total = resolve_total(item_total, nil, nil)
-        subtotal = resolve_subtotal(item_total, item_subtotal, nil, total:, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
-        tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total:, subtotal: subtotal)
+        subtotal = resolve_subtotal(item_total, item_subtotal, nil, total: total, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
+        tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total: total, subtotal: subtotal)
         total = resolve_total(item_total, subtotal, tax_total)
       end
 
@@ -46,6 +48,7 @@ module Amounts
         total: total,
         tax_rate: tax_rate,
         external_tax: external_tax,
+        tax_details_primary: tax_details_primary,
         items: @items
       }
     end
@@ -135,6 +138,19 @@ module Amounts
       end
     end
 
+    def tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
+      return false unless tax_detail_subtotal.positive?
+      return false unless tax_detail_total.positive?
+      return true unless item_total.positive?
+
+      return false unless @context == :analysis
+
+      tax_detail_rates = positive_tax_detail_rates
+      item_tax_rates = positive_item_tax_rates
+
+      tax_detail_rates.many? || item_tax_rates.empty?
+    end
+
     # -----------------------------
     # Resolve helpers
     # -----------------------------
@@ -185,18 +201,12 @@ module Amounts
     end
 
     def resolve_tax_rate(fallback_tax_rate = BigDecimal("0"))
-      item_tax_rates = @items.filter_map do |item|
-        tax_rate = normalize_tax_rate(item[:tax_rate])
-        tax_rate.positive? ? tax_rate : nil
-      end.uniq
+      item_tax_rates = positive_item_tax_rates
 
       return item_tax_rates.first if item_tax_rates.one?
       return nil if item_tax_rates.many?
 
-      tax_detail_rates = @tax_details.filter_map do |tax_detail|
-        tax_rate = normalize_tax_rate(tax_detail[:rate])
-        tax_rate.positive? ? tax_rate : nil
-      end.uniq
+      tax_detail_rates = positive_tax_detail_rates
 
       return tax_detail_rates.first if tax_detail_rates.one?
       return fallback_tax_rate if fallback_tax_rate.positive?
@@ -205,18 +215,12 @@ module Amounts
     end
 
     def resolve_fallback_tax_rate(item_total, tax_detail_total)
-      item_tax_rates = @items.filter_map do |item|
-        tax_rate = normalize_tax_rate(item[:tax_rate])
-        tax_rate.positive? ? tax_rate : nil
-      end.uniq
+      item_tax_rates = positive_item_tax_rates
 
       return item_tax_rates.first if item_tax_rates.one?
       return BigDecimal("0") if item_tax_rates.many?
 
-      tax_detail_rates = @tax_details.filter_map do |tax_detail|
-        tax_rate = normalize_tax_rate(tax_detail[:rate])
-        tax_rate.positive? ? tax_rate : nil
-      end.uniq
+      tax_detail_rates = positive_tax_detail_rates
 
       return tax_detail_rates.first if tax_detail_rates.one?
       return BigDecimal("0") if tax_detail_rates.many?
@@ -225,6 +229,20 @@ module Amounts
       return receipt_tax_rate if receipt_tax_rate.positive?
 
       infer_tax_rate_from_amounts(item_total, tax_detail_total)
+    end
+
+    def positive_item_tax_rates
+      @items.filter_map do |item|
+        tax_rate = normalize_tax_rate(item[:tax_rate])
+        tax_rate.positive? ? tax_rate : nil
+      end.uniq
+    end
+
+    def positive_tax_detail_rates
+      @tax_details.filter_map do |tax_detail|
+        tax_rate = normalize_tax_rate(tax_detail[:rate])
+        tax_rate.positive? ? tax_rate : nil
+      end.uniq
     end
 
     def infer_tax_rate_from_amounts(item_total, tax_detail_total)
@@ -272,23 +290,12 @@ module Amounts
     end
 
     def rounded_tax_from_gross(gross_total, tax_rate)
-      apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate))
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), @rounding_mode)
     end
 
-    def apply_rounding(value)
-      case @rounding_mode
-      when :ceil
-        value.ceil
-      when :round
-        value.round
-      else
-        value.floor
-      end
-    end
-
-    def normalize_rounding_mode(value)
-      mode = value.to_s.to_sym
-      %i[floor ceil round].include?(mode) ? mode : :floor
+    def normalize_context(value)
+      context = value.to_s.to_sym
+      %i[analysis edit_save manual].include?(context) ? context : :analysis
     end
 
     def to_i(value)

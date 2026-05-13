@@ -2,7 +2,7 @@
 
 module Amounts
   class ConsistencyChecker
-    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, items: [], item_count: 0, external_tax: false, source_tax_details: [], generated_tax_details: [])
+    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, items: [], item_count: 0, external_tax: false, source_tax_details: [], generated_tax_details: [], tax_details_primary: false, rounding_mode: :floor)
       @computed = computed
       @resolved = resolved
       @item_total = item_total
@@ -14,6 +14,8 @@ module Amounts
       @external_tax = external_tax
       @source_tax_details = Array(source_tax_details)
       @generated_tax_details = Array(generated_tax_details)
+      @tax_details_primary = tax_details_primary
+      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -70,6 +72,7 @@ module Amounts
 
     def item_total_mismatch?
       return false unless item_data_present?
+      return false if @tax_details_primary
 
       expected_total = @external_tax ? @resolved[:subtotal] : @resolved[:total]
       @item_total.to_i != expected_total.to_i
@@ -97,6 +100,7 @@ module Amounts
       generated_groups = tax_details_by_rate(@generated_tax_details)
 
       return false if source_groups.blank? || generated_groups.blank?
+      return false if @tax_details_primary
       return false if tax_details_match_rounding_candidate?(source_groups)
 
       source_groups.any? do |rate, source_amounts|
@@ -140,16 +144,7 @@ module Amounts
     end
 
     def rounded_tax_from_gross(gross_total, tax_rate, rounding_mode)
-      value = BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate)
-
-      case rounding_mode
-      when :ceil
-        value.ceil
-      when :round
-        value.round
-      else
-        value.floor
-      end
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), rounding_mode)
     end
 
     def item_line_total(item)
