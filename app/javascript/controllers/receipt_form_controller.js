@@ -18,7 +18,10 @@ export default class extends Controller {
     'taxRateSummary'
   ]
 
-  static values = { nextIndex: Number }
+  static values = {
+    nextIndex: Number,
+    roundingMode: { type: String, default: 'floor' }
+  }
 
   connect () {
     this.lineTotalTooltipDelay = 500
@@ -149,10 +152,10 @@ export default class extends Controller {
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
       let lineTotal = quantity * price
-      let subtotal = taxRatePercent > 0
-        ? Math.floor((lineTotal * 100) / (100 + taxRatePercent))
-        : lineTotal
-      let tax = lineTotal - subtotal
+      let tax = taxRatePercent > 0
+        ? this.applyRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
+        : 0
+      let subtotal = lineTotal - tax
 
       lineTotal = this.clampNumber(lineTotal, 0, 999999999)
       subtotal = this.clampNumber(subtotal, 0, 999999999)
@@ -238,6 +241,21 @@ export default class extends Controller {
     }
 
     target.amountAnimationFrame = requestAnimationFrame(tick)
+  }
+
+  normalizeRoundingMode (value) {
+    return ['floor', 'ceil', 'round'].includes(value) ? value : 'floor'
+  }
+
+  applyRounding (value) {
+    switch (this.normalizeRoundingMode(this.roundingModeValue)) {
+      case 'ceil':
+        return Math.ceil(value)
+      case 'round':
+        return Math.round(value)
+      default:
+        return Math.floor(value)
+    }
   }
 
   formatNumber (num) {
