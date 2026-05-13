@@ -21,7 +21,7 @@
             <% persisted_avatar_url = if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted?
                                         url_for(form_resource.avatar)
                                       end %>
-            <div class="w-24 h-24 rounded-full token-bg-floating flex items-center justify-center text-3xl font-bold token-text-brand border-2 token-border-brand-soft shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
+            <div class="w-24 h-24 rounded-full token-bg-floating flex items-center justify-center text-3xl font-bold token-text-brand border-2 token-border-brand-soft avatar-preview-surface transition-transform duration-300 group-hover:scale-105 overflow-hidden">
               <img
                 src="<%= persisted_avatar_url %>"
                 alt="プロフィール画像プレビュー"
