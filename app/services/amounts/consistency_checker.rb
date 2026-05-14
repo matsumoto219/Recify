@@ -21,7 +21,7 @@ module Amounts
     def call
       errors = []
 
-      if @resolved[:subtotal].to_i + @resolved[:tax].to_i != @resolved[:total].to_i
+      if to_i(@resolved[:subtotal]) + to_i(@resolved[:tax]) != to_i(@resolved[:total])
         errors << :total_mismatch
       end
 
@@ -33,7 +33,7 @@ module Amounts
         errors << :item_total_mismatch
       end
 
-      if @tax_total > 0 && @tax_total.to_i != @resolved[:tax].to_i
+      if to_i(@tax_total).positive? && to_i(@tax_total) != to_i(@resolved[:tax])
         errors << :tax_amount_mismatch
       end
 
@@ -62,7 +62,7 @@ module Amounts
       end
 
       if @context == :analysis
-        if present?(@receipt[:total_amount]) && @receipt[:total_amount].to_i != @resolved[:total].to_i
+        if present?(@receipt[:total_amount]) && to_i(@receipt[:total_amount]) != to_i(@resolved[:total])
           errors << :ocr_total_mismatch
         end
       end
@@ -91,7 +91,7 @@ module Amounts
       return false if @tax_details_primary
 
       expected_total = @external_tax ? @resolved[:subtotal] : @resolved[:total]
-      @item_total.to_i != expected_total.to_i
+      to_i(@item_total) != to_i(expected_total)
     end
 
     def item_line_total_mismatch?
@@ -100,12 +100,14 @@ module Amounts
 
     def item_line_total_conflicts_with_unit_total?(item)
       line_total = original_line_total_for(item)
-      price = fetch_value(item, :price).to_i
-      quantity = fetch_value(item, :quantity).to_i
+      price = to_amount_decimal(fetch_value(item, :price))
+      quantity = to_decimal(fetch_value(item, :quantity))
+      quantity_unit = fetch_value(item, :quantity_unit)
 
       return false unless line_total.positive?
       return false unless price.positive?
       return false unless quantity.positive?
+      return false unless countable_quantity_unit?(quantity_unit)
 
       unit_total = price * quantity
       return false if line_total == unit_total
@@ -117,11 +119,11 @@ module Amounts
     end
 
     def original_line_total_for(item)
-      original_line_total = fetch_value(item, :original_line_total).to_i
+      original_line_total = to_i(fetch_value(item, :original_line_total))
       return original_line_total if original_line_total.positive?
 
-      line_total = fetch_value(item, :line_total).to_i
-      discount_amount = fetch_value(item, :discount_amount).to_i
+      line_total = to_i(fetch_value(item, :line_total))
+      discount_amount = to_i(fetch_value(item, :discount_amount))
       line_total + discount_amount
     end
 
@@ -140,18 +142,18 @@ module Amounts
     def discount_data_incomplete?
       @items.any? do |item|
         discount_rate = normalize_rate(fetch_value(item, :discount_rate))
-        discount_amount = fetch_value(item, :discount_amount).to_i
+        discount_amount = to_i(fetch_value(item, :discount_amount))
 
         discount_rate.positive? && discount_amount <= 0
       end
     end
 
     def item_tax_total
-      @computed[:item_tax_total].to_i
+      to_i(@computed[:item_tax_total])
     end
 
     def tax_detail_total
-      @computed[:tax_detail_total].to_i
+      to_i(@computed[:tax_detail_total])
     end
 
     def tax_detail_mismatch?
@@ -202,7 +204,7 @@ module Amounts
     def tax_detail_partial?
       return false if tax_detail_incomplete?
 
-      receipt_tax_amount = fetch_value(@receipt, :tax_amount).to_i
+      receipt_tax_amount = to_i(fetch_value(@receipt, :tax_amount))
       return false unless receipt_tax_amount.positive?
       return false unless tax_detail_total.positive?
 
@@ -249,20 +251,20 @@ module Amounts
 
     def item_line_total(item)
       line_total = fetch_value(item, :line_total)
-      return line_total.to_i if line_total_present?(item)
+      return to_i(line_total) if line_total_present?(item)
 
-      price = fetch_value(item, :price).to_i
-      quantity = fetch_value(item, :quantity).to_i
-      quantity = 1 if quantity <= 0
+      price = to_amount_decimal(fetch_value(item, :price))
+      quantity = to_decimal(fetch_value(item, :quantity))
+      quantity = BigDecimal("1") if quantity <= 0
 
-      price * quantity
+      round_amount(price * quantity)
     end
 
     def comparable_source_tax_details
       return @source_tax_details unless @external_tax
 
       details_with_net_amount = @source_tax_details.select do |tax_detail|
-        fetch_value(tax_detail, :net_amount).to_i.positive?
+        to_i(fetch_value(tax_detail, :net_amount)).positive?
       end
 
       details_with_net_amount.presence || @source_tax_details
@@ -274,8 +276,8 @@ module Amounts
         next if rate <= 0
 
         groups[rate] ||= { amount: 0, net_amount: 0 }
-        groups[rate][:amount] += fetch_value(tax_detail, :amount).to_i
-        groups[rate][:net_amount] += fetch_value(tax_detail, :net_amount).to_i
+        groups[rate][:amount] += to_i(fetch_value(tax_detail, :amount))
+        groups[rate][:net_amount] += to_i(fetch_value(tax_detail, :net_amount))
       end
     end
 
@@ -306,8 +308,8 @@ module Amounts
     def mixed_tax_inclusion_suspected?
       return false unless @context == :analysis
 
-      ocr_total = @receipt[:total_amount].to_i
-      resolved_total = @resolved[:total].to_i
+      ocr_total = to_i(@receipt[:total_amount])
+      resolved_total = to_i(@resolved[:total])
 
       return false if ocr_total == 0 || resolved_total == 0
 
@@ -315,7 +317,7 @@ module Amounts
       mismatch = ocr_total != resolved_total
 
       # tax mismatchが発生している（内訳もズレている）
-      tax_mismatch = (@computed[:tax_detail_total].to_i != @computed[:item_tax_total].to_i)
+      tax_mismatch = (to_i(@computed[:tax_detail_total]) != to_i(@computed[:item_tax_total]))
 
       # どちらかでも起きていれば「混在の可能性」とみなす
       mismatch && tax_mismatch
@@ -323,11 +325,11 @@ module Amounts
 
     def insufficient_data?
       # 金額情報を持つ明細があればOK。0円明細も明示値なら有効な明細として扱う。
-      has_items = @item_total.to_i > 0 || @items.any? { |item| item_amount_data_present?(item) }
+      has_items = to_i(@item_total).positive? || @items.any? { |item| item_amount_data_present?(item) }
 
       # tax_detailsやtotalなどの最低限データ
-      has_tax_details = @computed[:tax_detail_total].to_i > 0
-      has_total = @resolved[:total].to_i > 0
+      has_tax_details = to_i(@computed[:tax_detail_total]).positive?
+      has_total = to_i(@resolved[:total]).positive?
 
       # itemsが無く、かつ他の情報も弱い場合
       !has_items && !has_tax_details && !has_total
@@ -350,13 +352,13 @@ module Amounts
     end
 
     def explicit_zero_line_total?(item)
-      line_total_present?(item) && fetch_value(item, :line_total).to_i.zero?
+      line_total_present?(item) && to_i(fetch_value(item, :line_total)).zero?
     end
 
     def explicit_zero_price_total?(item)
       return false unless value_was_present?(item, :price)
 
-      fetch_value(item, :price).to_i.zero?
+      to_i(fetch_value(item, :price)).zero?
     end
 
     def line_total_present?(item)
@@ -368,6 +370,26 @@ module Amounts
       return flag if [ true, false ].include?(flag)
 
       present?(fetch_value(item, key))
+    end
+
+    def to_decimal(value)
+      Amounts::NumberParser.parse_quantity(value)
+    end
+
+    def to_amount_decimal(value)
+      BigDecimal(to_i(value).to_s)
+    end
+
+    def round_amount(value)
+      BigDecimal(value.to_s).round(0).to_i
+    end
+
+    def to_i(value)
+      Amounts::NumberParser.parse_amount(value)
+    end
+
+    def countable_quantity_unit?(unit)
+      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
 
     def present?(v)

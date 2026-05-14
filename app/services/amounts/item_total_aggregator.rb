@@ -9,7 +9,7 @@ module Amounts
 
       {
         items: normalized,
-        total: normalized.sum { |item| item[:line_total].to_i }
+        total: normalized.sum { |item| to_i(item[:line_total]) }
       }
     end
 
@@ -53,14 +53,15 @@ module Amounts
     def item_line_total(item)
       line_total_value = fetch_value(item, :line_total)
       return to_i(line_total_value) if value_present?(line_total_value)
+      return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
 
-      price = to_i(fetch_value(item, :price))
-      price * normalized_quantity_for(item)
+      price = to_amount_decimal(fetch_value(item, :price))
+      round_amount(price * normalized_quantity_for(item))
     end
 
     def normalized_quantity_for(item)
-      quantity = to_i(fetch_value(item, :quantity))
-      quantity.positive? ? quantity : 1
+      quantity = to_decimal(fetch_value(item, :quantity))
+      quantity.positive? ? quantity : BigDecimal("1")
     end
 
     def fetch_value(item, key)
@@ -71,7 +72,23 @@ module Amounts
     end
 
     def to_i(value)
-      value.to_s.delete(",").to_i
+      Amounts::NumberParser.parse_amount(value)
+    end
+
+    def to_decimal(value)
+      Amounts::NumberParser.parse_quantity(value)
+    end
+
+    def to_amount_decimal(value)
+      BigDecimal(to_i(value).to_s)
+    end
+
+    def round_amount(value)
+      BigDecimal(value.to_s).round(0).to_i
+    end
+
+    def countable_quantity_unit?(unit)
+      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
 
     def value_present?(value)

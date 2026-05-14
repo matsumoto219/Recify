@@ -237,9 +237,11 @@ class ReceiptsController < ApplicationController
       next if calc.blank?
 
       quantity = calc[:quantity] || calc["quantity"]
+      price = calc[:price] || calc["price"]
       line_total = calc[:line_total] || calc["line_total"]
 
       item_attr["quantity"] = quantity unless quantity.nil?
+      item_attr["price"] = price unless price.nil?
       item_attr["line_total"] = line_total unless line_total.nil?
     end
   end

@@ -90,12 +90,13 @@ module Amounts
     def item_line_total(item)
       line_total = item[:line_total]
       return to_i(line_total) if line_total_present?(item)
+      return 0 unless countable_quantity_unit?(item[:quantity_unit])
 
-      price = to_i(item[:price])
-      quantity = to_i(item[:quantity])
-      quantity = 1 if quantity <= 0
+      price = to_amount_decimal(item[:price])
+      quantity = to_decimal(item[:quantity])
+      quantity = BigDecimal("1") if quantity <= 0
 
-      price * quantity
+      round_amount(price * quantity)
     end
 
     # -----------------------------
@@ -160,14 +161,14 @@ module Amounts
 
       # subtotal + tax_rate → tax を補完
       tax_rate = normalize_tax_rate(@receipt[:tax_rate])
-      if subtotal.to_i.positive? && tax_rate.positive?
+      if to_i(subtotal).positive? && tax_rate.positive?
         return apply_rounding(BigDecimal(subtotal.to_s) * tax_rate)
       end
 
       # total fallback時に subtotal が無い（0）の場合は税額補完しない
-      return 0 if subtotal.to_i <= 0
+      return 0 if to_i(subtotal) <= 0
 
-      calculated_tax = total.to_i - subtotal.to_i
+      calculated_tax = to_i(total) - to_i(subtotal)
       calculated_tax.positive? ? calculated_tax : 0
     end
 
@@ -177,14 +178,14 @@ module Amounts
       receipt_subtotal = to_i(@receipt[:subtotal_amount])
       return receipt_subtotal if receipt_subtotal.positive?
 
-      return tax_detail_subtotal if tax_detail_subtotal.to_i.positive?
+      return tax_detail_subtotal if to_i(tax_detail_subtotal).positive?
 
-      resolved_total = total.to_i
+      resolved_total = to_i(total)
       if resolved_total.positive? && tax_rate.positive?
         return resolved_total - rounded_tax_from_gross(resolved_total, tax_rate)
       end
 
-      subtotal = item_total - tax_total.to_i
+      subtotal = item_total - to_i(tax_total)
       subtotal.positive? ? subtotal : item_total
     end
 
@@ -194,7 +195,7 @@ module Amounts
       receipt_total = to_i(@receipt[:total_amount])
       return receipt_total if receipt_total.positive?
 
-      subtotal.to_i + tax_total.to_i
+      to_i(subtotal) + to_i(tax_total)
     end
 
     def resolve_tax_rate(fallback_tax_rate = BigDecimal("0"))
@@ -296,9 +297,19 @@ module Amounts
     end
 
     def to_i(value)
-      return 0 if blank?(value)
+      Amounts::NumberParser.parse_amount(value)
+    end
 
-      value.to_i
+    def to_decimal(value)
+      Amounts::NumberParser.parse_quantity(value)
+    end
+
+    def to_amount_decimal(value)
+      BigDecimal(to_i(value).to_s)
+    end
+
+    def round_amount(value)
+      BigDecimal(value.to_s).round(0).to_i
     end
 
     def blank?(value)
@@ -310,6 +321,10 @@ module Amounts
       return flag if [ true, false ].include?(flag)
 
       !blank?(item[:line_total])
+    end
+
+    def countable_quantity_unit?(unit)
+      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
   end
 end

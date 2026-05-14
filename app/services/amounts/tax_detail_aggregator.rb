@@ -68,14 +68,14 @@ module Amounts
     end
 
     def item_line_total(item)
-      line_total = to_i(fetch_value(item, :line_total))
-      return line_total if line_total.positive?
+      line_total = fetch_value(item, :line_total)
+      return to_i(line_total) if present?(line_total)
 
-      price = to_i(fetch_value(item, :price))
-      quantity = to_i(fetch_value(item, :quantity, 1))
-      quantity = 1 if quantity <= 0
+      price = to_amount_decimal(fetch_value(item, :price))
+      quantity = to_decimal(fetch_value(item, :quantity, 1))
+      quantity = BigDecimal("1") if quantity <= 0
 
-      price * quantity
+      round_amount(price * quantity)
     end
 
     def description_for(rate)
@@ -99,23 +99,44 @@ module Amounts
     end
 
     def to_i(value)
-      return 0 if blank?(value)
-
-      value.to_i
+      Amounts::NumberParser.parse_amount(value)
     end
 
     def fetch_value(object, key, default = nil)
-      if object.respond_to?(:[])
-        object[key] || object[key.to_s] || default
+      if object.respond_to?(:key?)
+        return object[key] if object.key?(key)
+        return object[key.to_s] if object.key?(key.to_s)
+      elsif object.respond_to?(:[])
+        value = object[key]
+        return value unless value.nil?
+
+        string_value = object[key.to_s]
+        return string_value unless string_value.nil?
       elsif object.respond_to?(key)
-        object.public_send(key)
-      else
-        default
+        return object.public_send(key)
       end
+
+      default
     end
 
     def blank?(value)
       value.nil? || value == ""
+    end
+
+    def present?(value)
+      !blank?(value)
+    end
+
+    def to_decimal(value)
+      Amounts::NumberParser.parse_quantity(value)
+    end
+
+    def to_amount_decimal(value)
+      BigDecimal(to_i(value).to_s)
+    end
+
+    def round_amount(value)
+      BigDecimal(value.to_s).round(0).to_i
     end
   end
 end

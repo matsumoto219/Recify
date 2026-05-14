@@ -11,6 +11,34 @@ class ReceiptItem < ApplicationRecord
     other
   ].freeze
 
+  COUNTABLE_QUANTITY_UNITS = %w[
+    個
+    点
+    本
+    袋
+    枚
+    台
+    箱
+    セット
+  ].freeze
+
+  MEASUREMENT_QUANTITY_UNITS = %w[
+    kg
+    g
+    mg
+    L
+    ml
+    cc
+  ].freeze
+
+  QUANTITY_UNITS = [
+    *COUNTABLE_QUANTITY_UNITS,
+    *MEASUREMENT_QUANTITY_UNITS,
+    "その他"
+  ].freeze
+
+  DEFAULT_QUANTITY_UNIT = "個"
+
   belongs_to :receipt
 
   scope :needs_review_only, -> { where(needs_review: true) }
@@ -26,7 +54,10 @@ class ReceiptItem < ApplicationRecord
             allow_blank: true
 
   validates :quantity,
-            :position_index,
+            numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999.999 },
+            allow_blank: true
+
+  validates :position_index,
             numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999 },
             allow_blank: true
 
@@ -65,6 +96,10 @@ class ReceiptItem < ApplicationRecord
     end
   end
 
+  def self.quantity_unit_options
+    QUANTITY_UNITS.map { |unit| [ unit, unit ] }
+  end
+
   def category_label
     return "" if category.blank?
 
@@ -75,5 +110,32 @@ class ReceiptItem < ApplicationRecord
     Array(review_reasons).map do |code|
       I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
     end
+  end
+
+  def quantity_unit_label
+    quantity_unit.presence || DEFAULT_QUANTITY_UNIT
+  end
+
+  def formatted_quantity
+    value = quantity.presence || BigDecimal("1")
+    decimal = BigDecimal(value.to_s)
+
+    return decimal.to_i.to_s if decimal.frac.zero?
+
+    format("%.3f", decimal)
+  end
+
+  def formatted_quantity_for_input
+    return nil if quantity.blank?
+
+    decimal = BigDecimal(quantity.to_s)
+
+    return decimal.to_i.to_s if decimal.frac.zero?
+
+    decimal.to_s("F").sub(/\.?0+\z/, "")
+  end
+
+  def formatted_quantity_with_unit
+    "#{formatted_quantity} #{quantity_unit_label}"
   end
 end

@@ -361,7 +361,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 250, quantity: 2, line_total: nil, tax_rate: BigDecimal('0.1') }
+          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -374,11 +374,125 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'fills line_total from price multiplied by decimal quantity when line_total is nil' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:quantity]).to eq(BigDecimal('0.300'))
+        expect(result[:computed][:items].first[:line_total]).to eq(4_320)
+        expect(result[:resolved][:total]).to eq(4_320)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'parses decimal comma quantity as decimal' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: '0,300', line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:quantity]).to eq(BigDecimal('0.300'))
+        expect(result[:computed][:items].first[:line_total]).to eq(4_320)
+        expect(result[:resolved][:total]).to eq(4_320)
+      end
+    end
+
+    it 'does not fill line_total from price multiplied by quantity for measurement unit' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: 'kg' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:quantity]).to eq(BigDecimal('0.300'))
+        expect(result[:computed][:items].first[:line_total]).to eq(0)
+        expect(result[:resolved][:total]).not_to eq(4_320)
+        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it 'keeps explicit line_total for measurement unit' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: 4_320, tax_rate: BigDecimal('0.1'), quantity_unit: 'kg' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:quantity]).to eq(BigDecimal('0.300'))
+        expect(result[:computed][:items].first[:line_total]).to eq(4_320)
+        expect(result[:resolved][:total]).to eq(4_320)
+        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it 'does not fill line_total from price multiplied by quantity for unknown unit' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '束' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:line_total]).to eq(0)
+        expect(result[:resolved][:total]).not_to eq(4_320)
+        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it 'parses comma separated amount strings without truncating at the comma' do
+      result = call_service(
+        receipt: {
+          total_amount: '5,000'
+        },
+        receipt_items: [
+          { price: '1,234', quantity: 2, line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '個' },
+          { price: nil, quantity: 1, line_total: '4,320', tax_rate: BigDecimal('0.1') }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].first[:line_total]).to eq(2_468)
+        expect(result[:computed][:items].second[:line_total]).to eq(4_320)
+        expect(result[:resolved][:total]).to eq(6_788)
+      end
+    end
+
+    it 'parses comma separated receipt total as yen amount when no items exist' do
+      result = call_service(
+        receipt: {
+          total_amount: '5,000'
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      expect(result[:resolved][:total]).to eq(5_000)
+    end
+
     it 'marks item_total_mismatch when price multiplied by quantity clearly conflicts with line_total' do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 300, quantity: 2, line_total: 500, tax_rate: BigDecimal('0.1') }
+          { price: 300, quantity: 2, line_total: 500, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
         ],
         context: :analysis
       )
@@ -390,11 +504,43 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'does not mark item_total_mismatch for measurement unit when line_total conflicts with price times quantity' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 500, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(500)
+        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'does not mark item_total_mismatch for unknown unit when line_total conflicts with price times quantity' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 300, quantity: 2, quantity_unit: '束', line_total: 500, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(500)
+        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
     it 'does not mark item_total_mismatch when price appears tax-exclusive and line_total is tax-included' do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 100, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.1') }
+          { price: 100, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
         ],
         context: :analysis
       )

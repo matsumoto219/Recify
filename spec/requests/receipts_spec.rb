@@ -200,8 +200,9 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 108,
               quantity: 2,
+              quantity_unit: '個',
               tax_rate: 10,
-              line_total: 0,
+              line_total: nil,
               needs_review: false
             }
           }
@@ -218,6 +219,107 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(216)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(item.line_total).to eq(216)
+      end
+    end
+
+    it 'measurement unitの小数quantityとquantity_unitを保存し、明示line_totalを維持する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '量り売り作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '量り売り商品',
+              price: 14_400,
+              quantity: '0.300',
+              quantity_unit: 'kg',
+              tax_rate: 10,
+              line_total: 4_320,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(4_320)
+        expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit).to eq('kg')
+        expect(item.line_total).to eq(4_320)
+      end
+    end
+
+    it 'decimal comma quantityとcomma区切り金額を保存時に正しく扱う' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'decimal comma 作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '量り売り商品',
+              price: '14,400',
+              quantity: '0,300',
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            },
+            '1' => {
+              confirmed_name: '行合計商品',
+              price: nil,
+              quantity: 1,
+              tax_rate: 10,
+              line_total: '4,320',
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      items = receipt.receipt_items.order(:position_index)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(8_640)
+        expect(items.first.quantity).to eq(BigDecimal('0.300'))
+        expect(items.first.line_total).to eq(4_320)
+        expect(items.second.line_total).to eq(4_320)
+      end
+    end
+
+    it 'measurement unitのline_total nilはprice multiplied by quantityで自動補完しない' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'measurement line_total nil 作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '量り売り商品',
+              price: 14_400,
+              quantity: '0.300',
+              quantity_unit: 'kg',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).not_to eq(4_320)
+        expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit).to eq('kg')
+        expect(item.line_total).to eq(0)
       end
     end
 
@@ -244,6 +346,28 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '明細なし手動作成時のcomma区切り入力金額を正しく保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'comma金額作成',
+          payment_method: 'cash',
+          total_amount: '5,000',
+          subtotal_amount: '4,546',
+          tax_amount: '454',
+          tax_rate: 0.1
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(5_000)
+        expect(receipt.subtotal_amount).to eq(4_546)
+        expect(receipt.tax_amount).to eq(454)
+      end
+    end
+
     it '複数税率の明細作成時はreceipt.tax_rateをnilで保存する' do
       post receipts_path, params: {
         receipt: {
@@ -255,16 +379,18 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '軽減税率商品',
               price: 108,
               quantity: 1,
+              quantity_unit: '個',
               tax_rate: 8,
-              line_total: 0,
+              line_total: nil,
               needs_review: false
             },
             '1' => {
               confirmed_name: '標準税率商品',
               price: 110,
               quantity: 1,
+              quantity_unit: '個',
               tax_rate: 10,
-              line_total: 0,
+              line_total: nil,
               needs_review: false
             }
           }
@@ -294,8 +420,9 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 110,
                 quantity: 1,
+                quantity_unit: '個',
                 tax_rate: 10,
-                line_total: 0,
+                line_total: nil,
                 needs_review: false
               }
             }
@@ -323,8 +450,9 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '丸め確認商品',
               price: 108,
               quantity: 1,
+              quantity_unit: '個',
               tax_rate: 10,
-              line_total: 0,
+              line_total: nil,
               needs_review: false
             }
           }
@@ -351,7 +479,7 @@ RSpec.describe 'Receipts', type: :request do
               price: 110,
               quantity: 1,
               tax_rate: 10,
-              line_total: 0,
+              line_total: nil,
               needs_review: false
             }
           }
@@ -746,6 +874,170 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.tax_amount).to eq(19)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(item.line_total).to eq(216)
+      end
+    end
+
+    it 'measurement unitの小数quantityとquantity_unitを更新し、明示line_totalを維持できる' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '更新前量り売り商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit: nil,
+        tax_rate: BigDecimal('0.1'),
+        line_total: 100,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '小数数量更新後',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: '更新後量り売り商品',
+              price: 14_400,
+              quantity: '0.300',
+              quantity_unit: 'kg',
+              tax_rate: 10,
+              line_total: 4_320,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(4_320)
+        expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit).to eq('kg')
+        expect(item.line_total).to eq(4_320)
+      end
+    end
+
+    it 'unit変更のみのPATCHではline_totalを変えない' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '単位だけ変更する商品',
+        price: 9_999,
+        quantity: 9,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 200,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '単位だけ更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: 'kg',
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.quantity_unit).to eq('kg')
+        expect(item.line_total).to eq(200)
+        expect(receipt.total_amount).to eq(200)
+      end
+    end
+
+    it 'countable unitはquantity変更でline_totalを再計算する' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '個数商品',
+        price: 500,
+        quantity: 2,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_000,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '個数商品更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 500,
+              quantity: 3,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.line_total).to eq(1_500)
+        expect(receipt.total_amount).to eq(1_500)
+      end
+    end
+
+    it 'measurement unitはquantity変更でもline_totalを維持する' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '量り売り商品',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 4_320,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '量り売り更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 14_400,
+              quantity: '0.500',
+              quantity_unit: 'kg',
+              tax_rate: 10,
+              line_total: 4_320,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.quantity).to eq(BigDecimal('0.500'))
+        expect(item.line_total).to eq(4_320)
+        expect(receipt.total_amount).to eq(4_320)
       end
     end
 

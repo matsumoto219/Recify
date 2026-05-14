@@ -142,9 +142,9 @@ class ReceiptAmountService
   # -----------------------------
   def normalize_receipt(r)
     {
-      total_amount: fetch_value(r, :total_amount),
-      subtotal_amount: fetch_value(r, :subtotal_amount),
-      tax_amount: fetch_value(r, :tax_amount),
+      total_amount: to_i_or_nil(fetch_value(r, :total_amount)),
+      subtotal_amount: to_i_or_nil(fetch_value(r, :subtotal_amount)),
+      tax_amount: to_i_or_nil(fetch_value(r, :tax_amount)),
       tax_rate: fetch_value(r, :tax_rate)
     }
   end
@@ -157,11 +157,12 @@ class ReceiptAmountService
 
     {
       price: to_i_or_nil(price),
-      quantity: to_i_or_nil(quantity),
+      quantity: to_decimal_or_nil(quantity),
       original_line_total: to_i_or_nil(original_line_total),
       line_total: to_i_or_nil(line_total),
       discount_amount: to_i(fetch_value(i, :discount_amount)),
       discount_rate: fetch_value(i, :discount_rate),
+      quantity_unit: fetch_value(i, :quantity_unit),
       tax_rate: fetch_value(i, :tax_rate),
       amount_price_present: value_present?(price),
       amount_quantity_present: value_present?(quantity),
@@ -170,7 +171,7 @@ class ReceiptAmountService
   end
 
   def source_tax_details_for_external_tax
-    details_with_net_amount = @tax_details.select { |tax_detail| tax_detail[:net_amount].to_i.positive? }
+    details_with_net_amount = @tax_details.select { |tax_detail| to_i(tax_detail[:net_amount]).positive? }
     return details_with_net_amount if details_with_net_amount.present?
 
     @tax_details
@@ -178,9 +179,9 @@ class ReceiptAmountService
 
   def normalize_tax_detail(t)
     {
-      amount: fetch_value(t, :amount),
+      amount: to_i_or_nil(fetch_value(t, :amount)),
       rate: fetch_value(t, :rate),
-      net_amount: fetch_value(t, :net_amount),
+      net_amount: to_i_or_nil(fetch_value(t, :net_amount)),
       description: fetch_value(t, :description)
     }
   end
@@ -198,17 +199,15 @@ class ReceiptAmountService
   end
 
   def to_i(v)
-    return 0 if v.nil?
-    return v if v.is_a?(Integer)
-    v.to_f.round
-  rescue StandardError
-    0
+    Amounts::NumberParser.parse_amount(v)
   end
 
   def to_i_or_nil(value)
-    return nil unless value_present?(value)
+    Amounts::NumberParser.parse_amount_or_nil(value)
+  end
 
-    to_i(value)
+  def to_decimal_or_nil(value)
+    Amounts::NumberParser.parse_quantity_or_nil(value)
   end
 
   def value_present?(value)
