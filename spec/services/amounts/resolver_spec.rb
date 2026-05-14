@@ -68,6 +68,33 @@ RSpec.describe Amounts::Resolver do
     expect(result).to eq(computed)
   end
 
+  it 'does not treat measurement unit without line_total as present item data' do
+    result = resolve(
+      context: :manual,
+      items: [
+        { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil }
+      ]
+    )
+
+    expect(result).to eq(
+      subtotal: 1_000,
+      tax: 100,
+      total: 1_100,
+      tax_rate: BigDecimal('0.1')
+    )
+  end
+
+  it 'treats countable unit without line_total as present item data' do
+    result = resolve(
+      context: :manual,
+      items: [
+        { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '個', line_total: nil }
+      ]
+    )
+
+    expect(result).to eq(computed)
+  end
+
   it 'preserves receipt values in manual context when no items exist' do
     result = resolve(context: :manual, items: [])
 

@@ -38,6 +38,11 @@
   html_options = local_assigns.fetch(:html_options, {})
   unit_data = local_assigns.fetch(:unit_data, {})
   unit_aria_label = local_assigns.fetch(:unit_aria_label, "#{label}の単位")
+  normalized_unit_options = unit_options.dup
+  option_values = normalized_unit_options.map { |option| Array(option).last.to_s }
+  if selected_unit.present? && option_values.exclude?(selected_unit.to_s)
+    normalized_unit_options << [ selected_unit, selected_unit ]
+  end
 
   attribute_errors = Array(f.object&.errors&.[](quantity_attribute))
   has_error = attribute_errors.any?
@@ -125,7 +130,7 @@
     </div>
 
     <%= f.select unit_attribute,
-                 options_for_select(unit_options, selected_unit),
+                 options_for_select(normalized_unit_options, selected_unit),
                  {},
                  class: unit_select_classes,
                  data: unit_data,

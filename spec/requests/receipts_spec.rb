@@ -885,6 +885,29 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '未知quantity_unitの既存明細は現在値を選択肢として保持する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '未知単位商品',
+        price: 100,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: '束',
+        line_total: 30,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      quantity_unit_select = document.at_css('select[name$="[quantity_unit]"]')
+      selected_option = quantity_unit_select.at_css('option[selected]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(quantity_unit_select.css('option').map { |option| option['value'] }).to include('束')
+        expect(selected_option['value']).to eq('束')
+      end
+    end
+
     it '他人のレシート編集画面は取得できない' do
       other_user = create(:user, email: 'edit_other@example.com')
       other_receipt = create(:receipt, user: other_user, store_name: '他人編集', total_amount: 900, payment_method: 'cash', status: 'completed')
@@ -1220,6 +1243,45 @@ RSpec.describe 'Receipts', type: :request do
         expect(item.quantity).to eq(BigDecimal('0.500'))
         expect(item.line_total).to eq(4_320)
         expect(receipt.total_amount).to eq(4_320)
+      end
+    end
+
+    it '未知quantity_unitはそのままPATCHしても維持される' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '未知単位商品',
+        price: 100,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: '束',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 30,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '未知単位更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: '0.300',
+              quantity_unit: '束',
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.quantity_unit).to eq('束')
+        expect(item.line_total).to eq(30)
       end
     end
 

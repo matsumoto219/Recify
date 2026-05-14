@@ -207,5 +207,49 @@ RSpec.describe Amounts::ConsistencyChecker do
 
       expect(inconsistencies).not_to include(:tax_detail_mismatch)
     end
+
+    it 'does not mark item_total_mismatch for measurement unit without line_total' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 0,
+          tax_detail_total: 0
+        },
+        resolved: {
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+          tax_rate: BigDecimal('0.1')
+        },
+        item_total: 0,
+        tax_total: 0,
+        items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      expect(inconsistencies).not_to include(:item_total_mismatch)
+    end
+
+    it 'marks item_total_mismatch for countable unit when line_total conflicts with price times quantity' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 45,
+          tax_detail_total: 0
+        },
+        resolved: {
+          subtotal: 455,
+          tax: 45,
+          total: 500,
+          tax_rate: BigDecimal('0.1')
+        },
+        item_total: 500,
+        tax_total: 45,
+        items: [
+          { price: 300, quantity: 2, quantity_unit: '個', line_total: 500, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      expect(inconsistencies).to include(:item_total_mismatch)
+    end
   end
 end

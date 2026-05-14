@@ -252,6 +252,7 @@ module Amounts
     def item_line_total(item)
       line_total = fetch_value(item, :line_total)
       return to_i(line_total) if line_total_present?(item)
+      return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
 
       price = to_amount_decimal(fetch_value(item, :price))
       quantity = to_decimal(fetch_value(item, :quantity))
@@ -293,15 +294,15 @@ module Amounts
     def fetch_value(object, key)
       if object.respond_to?(:key?)
         return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
+        object[key.to_s] if object.key?(key.to_s)
       elsif object.respond_to?(:[])
         value = object[key]
         return value unless value.nil?
 
         string_value = object[key.to_s]
-        return string_value unless string_value.nil?
+        string_value unless string_value.nil?
       elsif object.respond_to?(key)
-        return object.public_send(key)
+        object.public_send(key)
       end
     end
 
