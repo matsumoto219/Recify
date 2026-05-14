@@ -30,7 +30,10 @@ module ReviewReasonSource
     tax_amount_mismatch
     tax_detail_mismatch
     tax_detail_rate_mismatch
+    tax_detail_incomplete
+    tax_detail_partial
     ocr_total_mismatch
+    zero_amount_item_incomplete
     discount_data_incomplete
     price_tax_inclusion_uncertain
     insufficient_data

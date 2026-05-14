@@ -88,8 +88,8 @@ module Amounts
     end
 
     def item_line_total(item)
-      line_total = to_i(item[:line_total])
-      return line_total if line_total.positive?
+      line_total = item[:line_total]
+      return to_i(line_total) if line_total_present?(item)
 
       price = to_i(item[:price])
       quantity = to_i(item[:quantity])
@@ -120,21 +120,18 @@ module Amounts
       return false if tax_detail_subtotal <= 0
       return false if tax_detail_total <= 0
 
-      return true if item_total.positive? && item_total == tax_detail_subtotal
+      return true if external_tax_description?
 
-      receipt_subtotal = to_i(@receipt[:subtotal_amount])
-      return true if receipt_subtotal.positive? && receipt_subtotal == tax_detail_subtotal
+      return false unless item_total.positive? && item_total == tax_detail_subtotal
 
       receipt_total = to_i(@receipt[:total_amount])
-      return true if receipt_total.positive? && receipt_total == tax_detail_subtotal + tax_detail_total
-
-      external_tax_description?
+      receipt_total.positive? && receipt_total == item_total + tax_detail_total
     end
 
     def external_tax_description?
       @tax_details.any? do |tax_detail|
         description = tax_detail[:description].to_s
-        description.include?("外税")
+        description.match?(/外税|税別|消費税別|別途消費税/)
       end
     end
 
@@ -306,6 +303,13 @@ module Amounts
 
     def blank?(value)
       value.nil? || value == ""
+    end
+
+    def line_total_present?(item)
+      flag = item[:amount_line_total_present]
+      return flag if [ true, false ].include?(flag)
+
+      !blank?(item[:line_total])
     end
   end
 end

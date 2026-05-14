@@ -152,6 +152,53 @@ RSpec.describe Amounts::Calculator do
       end
     end
 
+    it 'does not treat ordinary tax-included tax_details as external tax' do
+      result = calculate(
+        receipt: {
+          total_amount: 500,
+          subtotal_amount: 455,
+          tax_amount: 45,
+          tax_rate: BigDecimal('0.1')
+        },
+        items: [
+          { line_total: 500, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 455, amount: 45 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:external_tax]).to be(false)
+        expect(result[:subtotal]).to eq(455)
+        expect(result[:tax]).to eq(45)
+        expect(result[:total]).to eq(500)
+      end
+    end
+
+    it 'treats explicit external tax_details as external tax' do
+      result = calculate(
+        receipt: {
+          total_amount: 500
+        },
+        items: [
+          { line_total: 455, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 455, amount: 45, description: '外税 10%' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:external_tax]).to be(true)
+        expect(result[:subtotal]).to eq(455)
+        expect(result[:tax]).to eq(45)
+        expect(result[:total]).to eq(500)
+      end
+    end
+
     it 'prefers item calculation over conflicting tax_details in edit_save context when items exist' do
       result = calculate(
         items: [

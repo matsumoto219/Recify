@@ -16,6 +16,9 @@ module Amounts
     WARNING = %i[
       ocr_total_mismatch
       tax_detail_rate_mismatch
+      tax_detail_incomplete
+      tax_detail_partial
+      zero_amount_item_incomplete
       discount_data_incomplete
       price_tax_inclusion_uncertain
     ].freeze

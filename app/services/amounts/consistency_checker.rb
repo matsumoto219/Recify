@@ -29,11 +29,23 @@ module Amounts
         errors << :item_total_mismatch
       end
 
+      if item_line_total_mismatch?
+        errors << :item_total_mismatch
+      end
+
       if @tax_total > 0 && @tax_total.to_i != @resolved[:tax].to_i
         errors << :tax_amount_mismatch
       end
 
-      if tax_detail_total.positive? && item_tax_total.positive? && tax_detail_total != item_tax_total && !tax_details_match_rounding_candidate?
+      if tax_detail_incomplete?
+        errors << :tax_detail_incomplete
+      end
+
+      if tax_detail_partial?
+        errors << :tax_detail_partial
+      end
+
+      if tax_detail_mismatch?
         errors << :tax_detail_mismatch
       end
 
@@ -43,6 +55,10 @@ module Amounts
 
       if discount_data_incomplete?
         errors << :discount_data_incomplete
+      end
+
+      if zero_amount_item_incomplete?
+        errors << :zero_amount_item_incomplete
       end
 
       if @context == :analysis
@@ -78,6 +94,49 @@ module Amounts
       @item_total.to_i != expected_total.to_i
     end
 
+    def item_line_total_mismatch?
+      @items.any? { |item| item_line_total_conflicts_with_unit_total?(item) }
+    end
+
+    def item_line_total_conflicts_with_unit_total?(item)
+      line_total = original_line_total_for(item)
+      price = fetch_value(item, :price).to_i
+      quantity = fetch_value(item, :quantity).to_i
+
+      return false unless line_total.positive?
+      return false unless price.positive?
+      return false unless quantity.positive?
+
+      unit_total = price * quantity
+      return false if line_total == unit_total
+
+      tax_rate = normalize_rate(fetch_value(item, :tax_rate))
+      return true unless tax_rate.positive?
+
+      !tax_adjusted_line_total_candidates(unit_total, tax_rate).include?(line_total)
+    end
+
+    def original_line_total_for(item)
+      original_line_total = fetch_value(item, :original_line_total).to_i
+      return original_line_total if original_line_total.positive?
+
+      line_total = fetch_value(item, :line_total).to_i
+      discount_amount = fetch_value(item, :discount_amount).to_i
+      line_total + discount_amount
+    end
+
+    def tax_adjusted_line_total_candidates(amount, tax_rate)
+      %i[floor ceil round].flat_map do |rounding_mode|
+        tax_from_net = Amounts::Rounding.apply_rounding(BigDecimal(amount.to_s) * tax_rate, rounding_mode)
+        tax_from_gross = rounded_tax_from_gross(amount, tax_rate, rounding_mode)
+
+        [
+          amount + tax_from_net,
+          amount - tax_from_gross
+        ]
+      end.uniq
+    end
+
     def discount_data_incomplete?
       @items.any? do |item|
         discount_rate = normalize_rate(fetch_value(item, :discount_rate))
@@ -95,7 +154,20 @@ module Amounts
       @computed[:tax_detail_total].to_i
     end
 
+    def tax_detail_mismatch?
+      return false if tax_detail_incomplete?
+      return false if tax_detail_partial?
+
+      tax_detail_total.positive? &&
+        item_tax_total.positive? &&
+        tax_detail_total != item_tax_total &&
+        !tax_details_match_rounding_candidate?
+    end
+
     def tax_detail_rate_mismatch?
+      return false if tax_detail_incomplete?
+      return false if tax_detail_partial?
+
       source_groups = tax_details_by_rate(comparable_source_tax_details)
       generated_groups = tax_details_by_rate(@generated_tax_details)
 
@@ -119,6 +191,34 @@ module Amounts
       %i[floor ceil round].any? do |rounding_mode|
         rounding_candidate_tax_details(rounding_mode) == source_groups
       end
+    end
+
+    def tax_detail_incomplete?
+      comparable_source_tax_details.any? do |tax_detail|
+        tax_detail_has_any_value?(tax_detail) && !tax_detail_complete?(tax_detail)
+      end
+    end
+
+    def tax_detail_partial?
+      return false if tax_detail_incomplete?
+
+      receipt_tax_amount = fetch_value(@receipt, :tax_amount).to_i
+      return false unless receipt_tax_amount.positive?
+      return false unless tax_detail_total.positive?
+
+      tax_detail_total < receipt_tax_amount
+    end
+
+    def tax_detail_has_any_value?(tax_detail)
+      present?(fetch_value(tax_detail, :rate)) ||
+        present?(fetch_value(tax_detail, :net_amount)) ||
+        present?(fetch_value(tax_detail, :amount))
+    end
+
+    def tax_detail_complete?(tax_detail)
+      normalize_rate(fetch_value(tax_detail, :rate)).positive? &&
+        present?(fetch_value(tax_detail, :net_amount)) &&
+        present?(fetch_value(tax_detail, :amount))
     end
 
     def rounding_candidate_tax_details(rounding_mode)
@@ -148,8 +248,8 @@ module Amounts
     end
 
     def item_line_total(item)
-      line_total = fetch_value(item, :line_total).to_i
-      return line_total if line_total.positive?
+      line_total = fetch_value(item, :line_total)
+      return line_total.to_i if line_total_present?(item)
 
       price = fetch_value(item, :price).to_i
       quantity = fetch_value(item, :quantity).to_i
@@ -189,10 +289,17 @@ module Amounts
     end
 
     def fetch_value(object, key)
-      if object.respond_to?(:[])
-        object[key] || object[key.to_s]
+      if object.respond_to?(:key?)
+        return object[key] if object.key?(key)
+        return object[key.to_s] if object.key?(key.to_s)
+      elsif object.respond_to?(:[])
+        value = object[key]
+        return value unless value.nil?
+
+        string_value = object[key.to_s]
+        return string_value unless string_value.nil?
       elsif object.respond_to?(key)
-        object.public_send(key)
+        return object.public_send(key)
       end
     end
 
@@ -215,8 +322,8 @@ module Amounts
     end
 
     def insufficient_data?
-      # itemsが1件でもあればOK
-      has_items = @item_total.to_i > 0
+      # 金額情報を持つ明細があればOK。0円明細も明示値なら有効な明細として扱う。
+      has_items = @item_total.to_i > 0 || @items.any? { |item| item_amount_data_present?(item) }
 
       # tax_detailsやtotalなどの最低限データ
       has_tax_details = @computed[:tax_detail_total].to_i > 0
@@ -224,6 +331,43 @@ module Amounts
 
       # itemsが無く、かつ他の情報も弱い場合
       !has_items && !has_tax_details && !has_total
+    end
+
+    def zero_amount_item_incomplete?
+      @items.any? do |item|
+        explicit_zero_line_total?(item) &&
+          !value_was_present?(item, :price) &&
+          !value_was_present?(item, :quantity)
+      end
+    end
+
+    def item_amount_data_present?(item)
+      item_line_total(item).positive? || explicit_zero_amount_item?(item)
+    end
+
+    def explicit_zero_amount_item?(item)
+      explicit_zero_line_total?(item) || explicit_zero_price_total?(item)
+    end
+
+    def explicit_zero_line_total?(item)
+      line_total_present?(item) && fetch_value(item, :line_total).to_i.zero?
+    end
+
+    def explicit_zero_price_total?(item)
+      return false unless value_was_present?(item, :price)
+
+      fetch_value(item, :price).to_i.zero?
+    end
+
+    def line_total_present?(item)
+      value_was_present?(item, :line_total)
+    end
+
+    def value_was_present?(item, key)
+      flag = fetch_value(item, :"amount_#{key}_present")
+      return flag if [ true, false ].include?(flag)
+
+      present?(fetch_value(item, key))
     end
 
     def present?(v)

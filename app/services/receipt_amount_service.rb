@@ -150,14 +150,22 @@ class ReceiptAmountService
   end
 
   def normalize_item(i)
+    price = fetch_value(i, :price)
+    quantity = fetch_value(i, :quantity)
+    original_line_total = fetch_value(i, :original_line_total)
+    line_total = fetch_value(i, :line_total)
+
     {
-      price: to_i(fetch_value(i, :price)),
-      quantity: to_i(fetch_value(i, :quantity, 1)),
-      original_line_total: to_i(fetch_value(i, :original_line_total)),
-      line_total: to_i(fetch_value(i, :line_total)),
+      price: to_i_or_nil(price),
+      quantity: to_i_or_nil(quantity),
+      original_line_total: to_i_or_nil(original_line_total),
+      line_total: to_i_or_nil(line_total),
       discount_amount: to_i(fetch_value(i, :discount_amount)),
       discount_rate: fetch_value(i, :discount_rate),
-      tax_rate: fetch_value(i, :tax_rate)
+      tax_rate: fetch_value(i, :tax_rate),
+      amount_price_present: value_present?(price),
+      amount_quantity_present: value_present?(quantity),
+      amount_line_total_present: value_present?(line_total)
     }
   end
 
@@ -170,9 +178,10 @@ class ReceiptAmountService
 
   def normalize_tax_detail(t)
     {
-      amount: to_i(fetch_value(t, :amount)),
+      amount: fetch_value(t, :amount),
       rate: fetch_value(t, :rate),
-      net_amount: to_i(fetch_value(t, :net_amount))
+      net_amount: fetch_value(t, :net_amount),
+      description: fetch_value(t, :description)
     }
   end
 
@@ -194,5 +203,15 @@ class ReceiptAmountService
     v.to_f.round
   rescue StandardError
     0
+  end
+
+  def to_i_or_nil(value)
+    return nil unless value_present?(value)
+
+    to_i(value)
+  end
+
+  def value_present?(value)
+    !value.nil? && value != ""
   end
 end

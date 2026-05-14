@@ -51,8 +51,8 @@ module Amounts
     end
 
     def item_line_total(item)
-      line_total = to_i(fetch_value(item, :line_total))
-      return line_total if line_total.positive?
+      line_total_value = fetch_value(item, :line_total)
+      return to_i(line_total_value) if value_present?(line_total_value)
 
       price = to_i(fetch_value(item, :price))
       price * normalized_quantity_for(item)
@@ -72,6 +72,10 @@ module Amounts
 
     def to_i(value)
       value.to_s.delete(",").to_i
+    end
+
+    def value_present?(value)
+      !value.nil? && value != ""
     end
   end
 end

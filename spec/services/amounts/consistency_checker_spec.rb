@@ -79,6 +79,75 @@ RSpec.describe Amounts::ConsistencyChecker do
       expect(inconsistencies).to include(:tax_detail_mismatch)
     end
 
+    it 'marks incomplete tax_details as warning candidate without tax_detail_mismatch when net_amount is missing' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 9,
+          tax_detail_total: 9
+        },
+        resolved: {
+          subtotal: 99,
+          tax: 9,
+          total: 108,
+          tax_rate: BigDecimal('0.1')
+        },
+        item_total: 108,
+        tax_total: 9,
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        source_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: nil, amount: 9 }
+        ],
+        generated_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 99, amount: 9 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(inconsistencies).to include(:tax_detail_incomplete)
+        expect(inconsistencies).not_to include(:tax_detail_mismatch)
+      end
+    end
+
+    it 'marks partial tax_details as warning candidate without tax_detail_mismatch' do
+      inconsistencies = check(
+        computed: {
+          item_tax_total: 18,
+          tax_detail_total: 8
+        },
+        resolved: {
+          subtotal: 200,
+          tax: 18,
+          total: 218,
+          tax_rate: nil
+        },
+        item_total: 218,
+        tax_total: 18,
+        receipt: {
+          total_amount: 218,
+          subtotal_amount: 200,
+          tax_amount: 18
+        },
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 110, tax_rate: BigDecimal('0.1') }
+        ],
+        source_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 }
+        ],
+        generated_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 },
+          { rate: BigDecimal('0.1'), net_amount: 100, amount: 10 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(inconsistencies).to include(:tax_detail_partial)
+        expect(inconsistencies).not_to include(:tax_detail_mismatch)
+      end
+    end
+
     it 'does not mark mismatch when item calculation and tax_details match exactly' do
       inconsistencies = check(
         computed: {

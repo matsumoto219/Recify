@@ -23,6 +23,9 @@ RSpec.describe ReviewReasonSource do
       aggregate_failures do
         expect(described_class.source_for('total_mismatch')).to eq(:amount)
         expect(described_class.source_for(:tax_detail_mismatch)).to eq(:amount)
+        expect(described_class.source_for('tax_detail_incomplete')).to eq(:amount)
+        expect(described_class.source_for(:tax_detail_partial)).to eq(:amount)
+        expect(described_class.source_for('zero_amount_item_incomplete')).to eq(:amount)
         expect(described_class.source_for('price_tax_inclusion_uncertain')).to eq(:amount)
       end
     end
@@ -99,13 +102,19 @@ RSpec.describe ReviewReasonSource do
       result = described_class.warning_reasons_for_user([
         'ocr_low_confidence',
         'tax_detail_rate_mismatch',
+        'tax_detail_incomplete',
+        'tax_detail_partial',
+        'zero_amount_item_incomplete',
         'tax_detail_mismatch',
         'analysis_missing_keys'
       ])
 
       expect(result).to eq([
         'ocr_low_confidence',
-        'tax_detail_rate_mismatch'
+        'tax_detail_rate_mismatch',
+        'tax_detail_incomplete',
+        'tax_detail_partial',
+        'zero_amount_item_incomplete'
       ])
     end
   end

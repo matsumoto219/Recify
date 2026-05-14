@@ -16,6 +16,9 @@ RSpec.describe Amounts::MismatchSeverity do
       aggregate_failures do
         expect(described_class.severity(:ocr_total_mismatch)).to eq(:warning)
         expect(described_class.severity(:tax_detail_rate_mismatch)).to eq(:warning)
+        expect(described_class.severity(:tax_detail_incomplete)).to eq(:warning)
+        expect(described_class.severity(:tax_detail_partial)).to eq(:warning)
+        expect(described_class.severity(:zero_amount_item_incomplete)).to eq(:warning)
         expect(described_class.severity(:discount_data_incomplete)).to eq(:warning)
         expect(described_class.severity(:price_tax_inclusion_uncertain)).to eq(:warning)
       end
