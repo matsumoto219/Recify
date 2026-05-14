@@ -241,20 +241,24 @@
                     <div class="flex items-center gap-2 md:block">
                       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">数量</span>
                       <div class="flex-1 min-w-0 md:block">
-                      <%= render "shared/ui/number_field",
+                      <%= render "shared/ui/quantity_unit_number_field",
                                  f: item_form,
-                                 attribute: :quantity,
                                  label: "数量",
+                                 value: item.formatted_quantity_for_input,
+                                 selected_unit: item.quantity_unit.presence || ReceiptItem::DEFAULT_QUANTITY_UNIT,
+                                 unit_options: ReceiptItem.quantity_unit_options,
                                  show_label: false,
-                                 text_align: :center,
-                                 show_stepper_buttons: true,
-                                 stepper_button_class: "md:hidden",
                                  min: 0,
-                                 max: 9999,
-                                 step: 1,
-                                 size: :dense,
+                                 max: 9999.999,
+                                 step: 0.001,
+                                 decimal_precision: 3,
+                                 decimal_comma: true,
+                                 text_align: :center,
+                                 unit_select_variant: :compact_suffix,
                                  highlight_variant: (item.errors[:quantity].any? ? :error : nil),
                                  show_error_message: false,
+                                 unit_data: { receipt_form_target: "quantityUnitInput" },
+                                 unit_aria_label: "単位",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",
@@ -414,19 +418,22 @@
                     <div class="flex items-center gap-2 md:block">
                       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">数量</span>
                       <div class="flex-1 min-w-0 md:block">
-                      <%= render "shared/ui/number_field",
+                      <%= render "shared/ui/quantity_unit_number_field",
                                  f: item_form,
-                                 attribute: :quantity,
                                  label: "数量",
+                                 selected_unit: ReceiptItem::DEFAULT_QUANTITY_UNIT,
+                                 unit_options: ReceiptItem.quantity_unit_options,
                                  show_label: false,
-                                 text_align: :center,
-                                 show_stepper_buttons: true,
-                                 stepper_button_class: "md:hidden",
                                  min: 0,
-                                 max: 9999,
-                                 step: 1,
-                                 size: :dense,
+                                 max: 9999.999,
+                                 step: 0.001,
+                                 decimal_precision: 3,
+                                 decimal_comma: true,
+                                 text_align: :center,
+                                 unit_select_variant: :compact_suffix,
                                  show_error_message: false,
+                                 unit_data: { receipt_form_target: "quantityUnitInput" },
+                                 unit_aria_label: "単位",
                                  html_options: {
                                    data: {
                                      action: "input->receipt-form#recalculate",

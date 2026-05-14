@@ -557,6 +557,69 @@ RSpec.describe 'Receipts', type: :request do
       expect(response.body).to include('テスト店')
     end
 
+    it '明細数量をquantity_unit付きで表示し、unitが空なら個として表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '量り売り商品',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        needs_review: false
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '通常商品',
+        price: 100,
+        quantity: 2,
+        quantity_unit: nil,
+        line_total: 200,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('数量: 0.300 kg')
+        expect(response.body).to include('数量: 2 個')
+      end
+    end
+
+    it 'quantity_unit nil の既存明細は表示上個にfallbackする' do
+      receipt.receipt_items.create!(
+        confirmed_name: '単位なし商品',
+        price: 100,
+        quantity: 2,
+        quantity_unit: nil,
+        line_total: 200,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('数量: 2 個')
+      end
+    end
+
+    it 'quantity_unit が未知単位でもdetail表示でそのまま表示できる' do
+      receipt.receipt_items.create!(
+        confirmed_name: '未知単位商品',
+        price: 100,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: '束',
+        line_total: 30,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('数量: 0.300 束')
+      end
+    end
+
     it 'failedかつprocessing_error_codeがあるレシートは処理失敗カードを表示する' do
       receipt.update!(
         status: 'failed',
@@ -701,6 +764,125 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       expect(response).to have_http_status(:success)
+    end
+
+    it 'quantity_unitを編集できるselectを表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '量り売り商品',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('quantity_unit')
+        expect(response.body).to include('kg')
+        expect(response.body).to include('その他')
+      end
+    end
+
+    it '数量入力の初期表示では末尾ゼロを落とす' do
+      [
+        [ '整数1', BigDecimal('1.0'), '1' ],
+        [ '整数2', BigDecimal('2.0'), '2' ],
+        [ '小数1.5', BigDecimal('1.5'), '1.5' ],
+        [ '小数0.5', BigDecimal('0.5'), '0.5' ],
+        [ '小数0.300', BigDecimal('0.300'), '0.3' ]
+      ].each do |name, quantity, _expected_value|
+        receipt.receipt_items.create!(
+          confirmed_name: name,
+          price: 100,
+          quantity: quantity,
+          quantity_unit: '個',
+          line_total: 100,
+          needs_review: false
+        )
+      end
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      quantity_values = document.css('[data-receipt-form-target="quantityInput"]').map { |input| input['value'] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(quantity_values).to include('1', '2', '1.5', '0.5', '0.3')
+        expect(quantity_values).not_to include('1.0', '2.0')
+      end
+    end
+
+    it '数量入力だけdecimal commaを許可する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '量り売り商品',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      quantity_input = document.at_css('[data-receipt-form-target="quantityInput"]')
+      price_input = document.at_css('[data-receipt-form-target="priceInput"]')
+      quantity_field = quantity_input.ancestors.find { |node| node['data-controller'].to_s.split.include?('number-field') }
+      price_field = price_input.ancestors.find { |node| node['data-controller'].to_s.split.include?('number-field') }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(quantity_field['data-number-field-decimal-comma-value']).to eq('true')
+        expect(price_field['data-number-field-decimal-comma-value']).to be_nil
+      end
+    end
+
+    it '数量単位selectを再計算判定targetとして表示し、unit変更だけでは再計算しない' do
+      receipt.receipt_items.create!(
+        confirmed_name: '量り売り商品',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      quantity_unit_select = document.at_css('select[name$="[quantity_unit]"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(quantity_unit_select['data-receipt-form-target']).to eq('quantityUnitInput')
+        expect(quantity_unit_select['data-action']).to be_nil
+      end
+    end
+
+    it 'countable unitとmeasurement unitを選択肢として表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '単位確認商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 100,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      option_values = document.css('select[name$="[quantity_unit]"] option').map { |option| option['value'] }.uniq
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(option_values).to include('個', '点', '本', '袋', '枚', '台', '箱', 'セット')
+        expect(option_values).to include('kg', 'g', 'mg', 'L', 'ml', 'cc')
+      end
     end
 
     it '他人のレシート編集画面は取得できない' do

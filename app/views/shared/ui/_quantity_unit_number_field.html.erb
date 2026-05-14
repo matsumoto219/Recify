@@ -1,0 +1,140 @@
+<%# 数量 + 単位 一体型入力欄
+    必須locals:
+    - f: form builder
+    - label: ラベル文言
+
+    任意locals:
+    - quantity_attribute: 数量属性（default: :quantity）
+    - unit_attribute: 単位属性（default: :quantity_unit）
+    - value: 数量inputの表示値
+    - selected_unit: 選択中の単位
+    - unit_options: 単位select options
+    - min / max / step / decimal_precision / decimal_comma / inputmode
+    - show_label / highlight_variant / show_error_message
+    - text_align: :left / :center / :right（default: :right）
+    - unit_select_variant: :default / :compact_suffix（default: :default）
+    - input_class: 数量input用追加class
+    - html_options: 数量inputへ渡す追加HTML属性（例: data, aria）
+    - unit_data: 単位selectへ渡すdata属性
+    - unit_aria_label: 単位selectのaria-label %>
+<%
+  quantity_attribute = local_assigns.fetch(:quantity_attribute, :quantity)
+  unit_attribute = local_assigns.fetch(:unit_attribute, :quantity_unit)
+  value = local_assigns[:value]
+  selected_unit = local_assigns[:selected_unit]
+  unit_options = local_assigns.fetch(:unit_options, [])
+  min = local_assigns[:min]
+  max = local_assigns[:max]
+  step = local_assigns[:step]
+  decimal_precision = local_assigns[:decimal_precision]
+  decimal_comma = local_assigns.fetch(:decimal_comma, false)
+  inputmode = local_assigns.fetch(:inputmode, :decimal)
+  show_label = local_assigns.fetch(:show_label, true)
+  highlight_variant = (local_assigns[:highlight_variant].presence || :default).to_sym
+  show_error_message = local_assigns.fetch(:show_error_message, true)
+  text_align = (local_assigns[:text_align].presence || :right).to_sym
+  unit_select_variant = (local_assigns[:unit_select_variant].presence || :default).to_sym
+  input_class = local_assigns[:input_class]
+  html_options = local_assigns.fetch(:html_options, {})
+  unit_data = local_assigns.fetch(:unit_data, {})
+  unit_aria_label = local_assigns.fetch(:unit_aria_label, "#{label}の単位")
+
+  attribute_errors = Array(f.object&.errors&.[](quantity_attribute))
+  has_error = attribute_errors.any?
+  attribute_full_messages = Array(f.object&.errors&.full_messages_for(quantity_attribute))
+
+  wrapper_error_class = highlight_variant == :error || has_error ? "field-control-wrapper-error" : nil
+
+  text_align_class = case text_align
+                     when :left
+                       "text-left"
+                     when :center
+                       "text-center"
+                     else
+                       "text-right"
+                     end
+
+  input_spacing_class = case unit_select_variant
+                        when :compact_suffix
+                          "pr-20 md:pr-16"
+                        else
+                          "pr-24 md:pr-16"
+                        end
+
+  unit_select_variant_class = case unit_select_variant
+                              when :compact_suffix
+                                "md:absolute md:inset-y-0 md:right-0 md:w-16 md:border-l-0 md:bg-transparent md:pl-1 md:pr-4 md:text-xs md:text-right md:appearance-none"
+                              else
+                                "md:absolute md:inset-y-0 md:right-0 md:w-16 md:border-l-0 md:bg-transparent md:pl-1 md:pr-4 md:text-xs md:text-right"
+                              end
+
+  label_classes = "text-xs font-bold token-text-muted uppercase tracking-widest block px-1"
+  wrapper_classes = [
+    "relative group flex items-stretch overflow-hidden rounded-lg border field-control-wrapper",
+    wrapper_error_class
+  ].compact.join(" ")
+  input_classes = [
+    "w-full field-stepper-input transition-all outline-none border-0 focus:ring-0 rounded-none bg-transparent h-10 py-2 pl-3",
+    text_align_class,
+    input_spacing_class,
+    "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+    input_class
+  ].compact.join(" ")
+  unit_select_classes = [
+    "h-10 w-20 shrink-0 border-0 border-l token-border-soft bg-transparent px-2 text-sm font-medium token-text-base cursor-pointer focus:outline-none focus:ring-0",
+    unit_select_variant_class
+  ].join(" ")
+  error_classes = "px-1 text-xs token-text-error leading-relaxed"
+
+  field_options = {
+    value: value,
+    min: min,
+    max: max,
+    step: step,
+    inputmode: inputmode,
+    class: input_classes
+  }.compact.merge(html_options)
+
+  existing_data = field_options[:data] || {}
+  existing_action = existing_data[:action].presence
+  normalized_action = [
+    "compositionstart->number-field#startComposition",
+    "compositionend->number-field#finishComposition",
+    "input->number-field#normalize",
+    existing_action,
+    "blur->number-field#finishComposition"
+  ].compact.join(" ")
+  merged_data = existing_data.merge(action: normalized_action)
+  merged_field_options = field_options.merge(data: merged_data)
+
+  number_field_data = {
+    controller: "number-field",
+    number_field_decimal_precision_value: decimal_precision
+  }.compact
+  number_field_data[:number_field_decimal_comma_value] = true if decimal_comma
+%>
+
+<div class="space-y-2">
+  <% if show_label %>
+    <%= f.label quantity_attribute, label, class: label_classes %>
+  <% end %>
+
+  <%= tag.div class: wrapper_classes, data: number_field_data do %>
+    <div class="relative flex-1 min-w-0">
+      <%= f.text_field quantity_attribute, **merged_field_options %>
+    </div>
+
+    <%= f.select unit_attribute,
+                 options_for_select(unit_options, selected_unit),
+                 {},
+                 class: unit_select_classes,
+                 data: unit_data,
+                 aria: { label: unit_aria_label } %>
+  <% end %>
+
+  <% if has_error && show_error_message %>
+    <p class="<%= error_classes %>">
+      <%= attribute_full_messages.first %>
+    </p>
+  <% end %>
+</div>
