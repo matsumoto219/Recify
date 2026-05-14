@@ -151,6 +151,10 @@
                         <span class="mx-2">/</span>
                         <span>単価: ¥<%= number_with_delimiter(item.price) %></span>
                       <% end %>
+                      <% if (discount_label = receipt_item_discount_label(item)).present? %>
+                        <span class="mx-2">/</span>
+                        <span><%= discount_label %></span>
+                      <% end %>
                     </p>
                   </div>
                   <p class="font-bold token-text-base shrink-0 truncate" title="¥<%= number_with_delimiter(item.line_total.to_i) %>">¥<%= number_with_delimiter(item.line_total.to_i) %></p>

@@ -18,4 +18,17 @@ module ReceiptsHelper
   def receipt_image_accept
     "image/jpeg,image/png,image/bmp,image/tiff,image/heif,image/heic,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.heif,.heic"
   end
+
+  def receipt_item_discount_label(item)
+    discount_amount = item.discount_amount.to_i
+    return nil unless discount_amount.positive?
+
+    label = "#{t('receipts.show.discount')}: -¥#{number_with_delimiter(discount_amount)}"
+    original_line_total = item.original_line_total.to_i
+    return label unless original_line_total.positive?
+    return label if discount_amount > original_line_total
+
+    percentage = BigDecimal(discount_amount.to_s) * 100 / BigDecimal(original_line_total.to_s)
+    "#{label}（#{number_to_percentage(percentage.round, precision: 0)})"
+  end
 end

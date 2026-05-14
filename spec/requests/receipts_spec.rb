@@ -620,6 +620,69 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '割引明細では割引額と割引率を表示し、右端は割引後小計を維持する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '割引商品',
+        price: 310,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: 310,
+        discount_amount: 155,
+        line_total: 155,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('単価: ¥310')
+        expect(response.body).to include('割引: -¥155（50%）')
+        expect(response.body).to include('title="¥155"')
+      end
+    end
+
+    it 'original_line_total がない割引明細では割引率を表示しない' do
+      receipt.receipt_items.create!(
+        confirmed_name: '率なし割引商品',
+        price: 310,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: nil,
+        discount_amount: 155,
+        line_total: 155,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('割引: -¥155')
+        expect(response.body).not_to include('割引: -¥155（')
+      end
+    end
+
+    it 'discount_amount が 0 の明細では割引表示を出さない' do
+      receipt.receipt_items.create!(
+        confirmed_name: '通常商品',
+        price: 310,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: 310,
+        discount_amount: 0,
+        line_total: 310,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include('割引:')
+      end
+    end
+
     it 'failedかつprocessing_error_codeがあるレシートは処理失敗カードを表示する' do
       receipt.update!(
         status: 'failed',
