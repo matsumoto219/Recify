@@ -500,24 +500,13 @@ class ReceiptAnalysisService
   end
 
   def normalize_amount(value)
-    return nil if value.blank?
-    return value.to_i if value.is_a?(Numeric)
-
-    digits = value.to_s.scan(/\d+/).join
-    digits.present? ? digits.to_i : nil
+    Amounts::NumberParser.parse_amount_or_nil(value)
   end
 
   def normalize_quantity(value)
-    quantity = if value.blank?
-      1
-    elsif value.is_a?(Numeric)
-      value.to_i
-    else
-      extracted_quantity = value.to_s.scan(/\d+/).join
-      extracted_quantity.present? ? extracted_quantity.to_i : 1
-    end
+    quantity = Amounts::NumberParser.parse_quantity(value, default: BigDecimal("1"))
 
-    quantity.positive? ? quantity : 1
+    quantity.positive? ? quantity : BigDecimal("1")
   end
 
   def normalize_tax_rate(value)
@@ -560,8 +549,8 @@ class ReceiptAnalysisService
   end
 
   def extract_item_quantity(line)
-    quantity_match = line.to_s.match(/[x×](\d+)/i)
-    return quantity_match[1].to_i if quantity_match
+    quantity_match = line.to_s.match(/[x×]\s*(\d+(?:\.\d+)?)/i)
+    return BigDecimal(quantity_match[1]) if quantity_match
 
     1
   end
@@ -571,7 +560,7 @@ class ReceiptAnalysisService
     normalized_quantity = quantity.nil? ? extract_item_quantity(line) : normalize_quantity(quantity)
     return nil unless normalized_price
 
-    normalized_price * normalized_quantity
+    (BigDecimal(normalized_price.to_s) * normalize_quantity(normalized_quantity)).round(0).to_i
   end
 
   def apply_ocr_only_tax_rate_policy(items_attributes, amount_result)

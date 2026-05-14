@@ -30,7 +30,7 @@ class Ocr::ResponseParser
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
-        items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit / product_code は取得するが UI・分析では未活用
+        items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
         confidence_summary: extract_confidence_summary(parsed_response)
       },
       error_code: nil,
@@ -328,12 +328,12 @@ class Ocr::ResponseParser
   def extract_total_amount(parsed_response, lines)
     fields = extract_fields(parsed_response)
     total_amount = fields.dig("Total", "valueCurrency", "amount") || fields.dig("Total", "valueNumber")
-    return total_amount.to_i if total_amount.present?
+    return Amounts::NumberParser.parse_amount(total_amount) if total_amount.present?
 
     amount_candidates = lines.filter_map do |line|
       next unless line.match?(/合計|total|税込|現計/i)
 
-      digits = line.scan(/\d[\d,]*/).map { |value| value.delete(",\n").to_i }
+      digits = line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }
       digits.max if digits.any?
     end
 
@@ -378,7 +378,7 @@ class Ocr::ResponseParser
     amount_candidates = Array(lines).filter_map do |line|
       next unless line.match?(pattern)
 
-      digits = line.scan(/\d[\d,]*/).map { |value| value.delete(",\n").to_i }
+      digits = line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }
       digits.max if digits.any?
     end
 
@@ -543,7 +543,7 @@ class Ocr::ResponseParser
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
 
-    # NOTE: product_code / quantity_unit は保存されるが現状UI・ロジックで未使用
+    # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
     items.map.with_index do |item, index|
       value_object = item["valueObject"] || {}
 
@@ -657,11 +657,11 @@ class Ocr::ResponseParser
   def extract_discount_amount_from_line(line)
     return 0 unless line.match?(/[-−▲]/)
 
-    line.scan(/\d[\d,]*/).map { |value| value.delete(",").to_i }.max.to_i
+    line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }.max.to_i
   end
 
   def normalize_amount_for_discount(value)
-    value.to_s.delete(",").to_i
+    Amounts::NumberParser.parse_amount(value)
   end
 
   def build_error_result(error_code)

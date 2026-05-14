@@ -95,7 +95,7 @@ module Analysis
         end
 
         ai_items_present = normalized_ai_items.present?
-        # NOTE: quantity_unit / product_code は保存されるが、現状UI・分析では未活用
+        # NOTE: product_code は保存のみ。quantity_unit は編集/表示で利用する。
         source_items.each_with_index.map do |item, index|
           normalized_item = if item.respond_to?(:with_indifferent_access)
             item.with_indifferent_access
@@ -227,7 +227,7 @@ module Analysis
           ai_item = lookup_candidates.lazy.map { |idx| ai_items_by_index[idx] }.find(&:present?) || {}.with_indifferent_access
           merged_item = candidate_item.merge(ai_item.compact)
 
-          # NOTE: quantity_unit / product_code はOCR優先で保持するが、現状は保存のみで未活用
+          # NOTE: quantity_unit / product_code はOCR優先で保持する。
           merged_item.merge(
             suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
             category: ai_item[:category].presence || candidate_item[:category],
@@ -313,10 +313,10 @@ module Analysis
       end
 
       def extract_item_quantity(line)
-        quantity_match = line.to_s.match(/[x×](\d+)/i)
-        return quantity_match[1].to_i if quantity_match
+        quantity_match = line.to_s.match(/[x×]\s*(\d+(?:\.\d+)?)/i)
+        return BigDecimal(quantity_match[1]) if quantity_match
 
-        1
+        BigDecimal("1")
       end
 
       def detect_payment_method(candidates)
@@ -366,11 +366,7 @@ module Analysis
       end
 
       def normalize_amount(value)
-        return nil if value.blank?
-        return value.to_i if value.is_a?(Numeric)
-
-        digits = value.to_s.scan(/\d+/).join
-        digits.present? ? digits.to_i : nil
+        Amounts::NumberParser.parse_amount_or_nil(value)
       end
 
       def normalize_rate(value)
@@ -383,16 +379,9 @@ module Analysis
       end
 
       def normalize_quantity(value)
-        quantity = if value.blank?
-          1
-        elsif value.is_a?(Numeric)
-          value.to_i
-        else
-          extracted_quantity = value.to_s.scan(/\d+/).join
-          extracted_quantity.present? ? extracted_quantity.to_i : 1
-        end
+        quantity = Amounts::NumberParser.parse_quantity(value, default: BigDecimal("1"))
 
-        quantity.positive? ? quantity : 1
+        quantity.positive? ? quantity : BigDecimal("1")
       end
 
       def normalize_confidence(value)
@@ -410,7 +399,7 @@ module Analysis
       def extract_item_line_total(_line, price:, quantity:)
         return nil unless price
 
-        price * normalize_quantity(quantity)
+        (BigDecimal(price.to_s) * normalize_quantity(quantity)).round(0).to_i
       end
     end
   end

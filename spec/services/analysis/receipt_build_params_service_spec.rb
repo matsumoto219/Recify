@@ -88,6 +88,19 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '小数quantityとquantity_unitを保持する' do
+        ocr_result[:candidates][:items].first[:quantity] = 0.3
+        ocr_result[:candidates][:items].first[:quantity_unit] = 'kg'
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:quantity]).to eq(BigDecimal('0.3'))
+          expect(item[:quantity_unit]).to eq('kg')
+        end
+      end
+
       it 'paymentsが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
@@ -255,6 +268,23 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_items_attributes].first[:price]).to eq(180)
           expect(params[:receipt_payments_attributes].first[:amount]).to eq(1280)
           expect(params[:receipt_tax_details_attributes].first[:net_amount]).to eq(800)
+        end
+      end
+
+      it 'quantityだけはdecimal commaを小数として正規化する' do
+        ocr_result[:candidates][:items].first[:price] = '14,400円'
+        ocr_result[:candidates][:items].first[:quantity] = '0,300'
+        ocr_result[:candidates][:items].first[:quantity_unit] = 'kg'
+        ocr_result[:candidates][:items].first[:line_total] = nil
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:price]).to eq(14_400)
+          expect(item[:quantity]).to eq(BigDecimal('0.300'))
+          expect(item[:quantity_unit]).to eq('kg')
+          expect(item[:line_total]).to eq(4_320)
         end
       end
     end
