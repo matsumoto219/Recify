@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "raw_text": "預かりストア\n2026/04/15 12:00\n商品A 1102\n商品B 1102\n小計 2204\n合計 2,204\nお預かり 5,000\nお釣り 2,796\n現金",
+  "lines": [
+    "預かりストア",
+    "2026/04/15 12:00",
+    "商品A 1102",
+    "商品B 1102",
+    "小計 2204",
+    "合計 2,204",
+    "お預かり 5,000",
+    "お釣り 2,796",
+    "現金"
+  ],
+  "candidates": {
+    "store_name": "預かりストア",
+    "purchased_at_text": "2026/04/15 12:00",
+    "total_amount": 5000,
+    "subtotal_amount": 2204,
+    "country_region": "JP",
+    "payment_method_text": "現金",
+    "confidence_summary": {
+      "items_average": 0.95,
+      "overall": 0.95
+    },
+    "items": [
+      {
+        "raw_text": "商品A",
+        "price": 1102,
+        "quantity": 1,
+        "quantity_unit": "個",
+        "line_total": 1102,
+        "tax_rate": 10,
+        "confidence": 0.95
+      },
+      {
+        "raw_text": "商品B",
+        "price": 1102,
+        "quantity": 1,
+        "quantity_unit": "個",
+        "line_total": 1102,
+        "tax_rate": 10,
+        "confidence": 0.95
+      }
+    ],
+    "payments": [
+      { "method": "Cash", "amount": 5000 }
+    ],
+    "tax_details": []
+  },
+  "error_code": null,
+  "meta": {
+    "provider": "azure_document_intelligence",
+    "model_id": "prebuilt-receipt"
+  }
+}

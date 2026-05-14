@@ -328,16 +328,38 @@ class Ocr::ResponseParser
   def extract_total_amount(parsed_response, lines)
     fields = extract_fields(parsed_response)
     total_amount = fields.dig("Total", "valueCurrency", "amount") || fields.dig("Total", "valueNumber")
-    return Amounts::NumberParser.parse_amount(total_amount) if total_amount.present?
+    line_total_amount = extract_total_amount_from_lines(lines)
+    if total_amount.present?
+      parsed_total_amount = Amounts::NumberParser.parse_amount(total_amount)
+      return line_total_amount if settlement_amount?(parsed_total_amount, lines) && line_total_amount.present?
 
-    amount_candidates = lines.filter_map do |line|
-      next unless line.match?(/合計|total|税込|現計/i)
+      return parsed_total_amount
+    end
+
+    line_total_amount
+  end
+
+  def extract_total_amount_from_lines(lines)
+    amount_candidates = Array(lines).filter_map do |line|
+      next if settlement_line?(line)
+      next unless line.match?(/合計|小計|total|税込|現計/i)
 
       digits = line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }
       digits.max if digits.any?
     end
 
     amount_candidates.max
+  end
+
+  def settlement_amount?(amount, lines)
+    Array(lines).any? do |line|
+      settlement_line?(line) &&
+        line.scan(/\d[\d,]*/).any? { |value| Amounts::NumberParser.parse_amount(value) == amount }
+    end
+  end
+
+  def settlement_line?(line)
+    line.to_s.match?(/お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/)
   end
 
   def extract_subtotal_amount(parsed_response, lines)

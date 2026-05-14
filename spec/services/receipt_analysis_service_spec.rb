@@ -674,6 +674,21 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'Azure Totalがお預かり金額でも明細合計でtotalを補正する' do
+      amount = run_ocr_fixture('deposit_total_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.total_amount).to eq(2_204)
+        expect(receipt.total_amount).not_to eq(5_000)
+        expect(receipt.subtotal_amount).to eq(2_004)
+        expect(receipt.tax_amount).to eq(200)
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
     it 'tax_detailsと明細が矛盾するレシートはblocking mismatchでreview_neededにする' do
       amount = run_ocr_fixture('tax_detail_item_conflict_receipt')
 

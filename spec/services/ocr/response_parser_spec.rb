@@ -262,6 +262,31 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'Azure Totalがお預かり金額を指す場合は会計合計候補を優先する' do
+      deposit_response = raw_response.deep_dup
+      deposit_response['analyzeResult']['content'] = <<~TEXT
+        預かりストア
+        商品A 1102
+        商品B 1102
+        小計 2204
+        合計 2,204
+        お預かり 5,000
+        お釣り 2,796
+      TEXT
+      fields = deposit_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['Total'] = { 'valueCurrency' => { 'amount' => 5000 } }
+      fields['Subtotal'] = { 'valueCurrency' => { 'amount' => 2204 } }
+      fields.delete('TotalTax')
+
+      result = described_class.new(response: deposit_response).call
+
+      aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(result.dig(:candidates, :total_amount)).to eq(2_204)
+        expect(result.dig(:candidates, :total_amount)).not_to eq(5_000)
+      end
+    end
+
     it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
       broken_response = raw_response.deep_dup
       fields = broken_response.dig('analyzeResult', 'documents', 0, 'fields')
