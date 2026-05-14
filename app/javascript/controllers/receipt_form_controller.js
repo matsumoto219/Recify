@@ -7,6 +7,7 @@ export default class extends Controller {
     'itemRow',
     'destroyField',
     'quantityInput',
+    'quantityUnitInput',
     'priceInput',
     'taxRateInput',
     'lineTotalDisplay',
@@ -136,22 +137,24 @@ export default class extends Controller {
       if (row.style.display === 'none') return
 
       const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
+      const quantityUnitInput = row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const lineTotalDisplays = row.querySelectorAll('[data-receipt-form-target="lineTotalDisplay"]')
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
 
-      let quantity = this.clampNumber(parseFloat(quantityInput?.value) || 0, 0, 9999)
+      let quantity = this.clampNumber(this.parseDecimalInput(quantityInput?.value), 0, 9999)
       if (quantity <= 0) quantity = 1
-      const price = this.clampNumber(parseFloat(priceInput?.value) || 0, 0, 999999999)
+      const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, 999999999)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
+      const quantityUnit = quantityUnitInput?.value
 
       if (taxRatePercent > 0) {
         taxRates.add(taxRatePercent)
       }
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      let lineTotal = quantity * price
+      let lineTotal = this.lineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
       let tax = taxRatePercent > 0
         ? this.applyRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
         : 0
@@ -258,6 +261,26 @@ export default class extends Controller {
     }
   }
 
+  roundLineAmount (value) {
+    return Math.round(value)
+  }
+
+  lineTotalFor ({ quantity, price, quantityUnit, lineTotalInput }) {
+    if (this.recalculatesQuantityUnit(quantityUnit)) {
+      return this.roundLineAmount(quantity * price)
+    }
+
+    return this.parseIntegerInput(lineTotalInput?.value)
+  }
+
+  recalculatesQuantityUnit (unit) {
+    return this.countableQuantityUnits().includes(String(unit ?? '').trim())
+  }
+
+  countableQuantityUnits () {
+    return ['個', '点', '本', '袋', '枚', '台', '箱', 'セット']
+  }
+
   formatNumber (num) {
     return Math.floor(num).toLocaleString()
   }
@@ -265,6 +288,46 @@ export default class extends Controller {
   clampNumber (value, min, max) {
     if (Number.isNaN(value)) return min
     return Math.min(Math.max(value, min), max)
+  }
+
+  parseIntegerInput (value) {
+    const normalized = String(value ?? '')
+      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .replace(/[^0-9-]/g, '')
+      .replace(/(?!^)-/g, '')
+
+    const parsedValue = Number.parseInt(normalized, 10)
+    return Number.isNaN(parsedValue) ? 0 : parsedValue
+  }
+
+  parseDecimalInput (value) {
+    let normalized = String(value ?? '').replace(/[０-９]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+    )
+
+    normalized = normalized
+      .replace(/．/g, '.')
+      .replace(/－/g, '-')
+      .replace(/，/g, ',')
+
+    const commaCount = (normalized.match(/,/g) || []).length
+    if (!normalized.includes('.') && commaCount === 1) {
+      normalized = normalized.replace(',', '.')
+    } else {
+      normalized = normalized.replace(/,/g, '')
+    }
+
+    normalized = normalized
+      .replace(/[^0-9.-]/g, '')
+      .replace(/(?!^)-/g, '')
+
+    const parts = normalized.split('.')
+    if (parts.length > 2) {
+      normalized = parts[0] + '.' + parts.slice(1).join('')
+    }
+
+    const parsedValue = Number.parseFloat(normalized)
+    return Number.isNaN(parsedValue) ? 0 : parsedValue
   }
 
   animateAmount (target, nextValue) {
