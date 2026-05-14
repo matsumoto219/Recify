@@ -29,6 +29,7 @@ module ReceiptsHelper
     return label if discount_amount > original_line_total
 
     percentage = BigDecimal(discount_amount.to_s) * 100 / BigDecimal(original_line_total.to_s)
-    "#{label}（#{number_to_percentage(percentage.round, precision: 0)})"
+    formatted_percentage = number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)
+    "#{label}（#{formatted_percentage}%）"
   end
 end

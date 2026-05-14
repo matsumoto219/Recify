@@ -11,7 +11,7 @@ module Amounts
     end
 
     def call
-      item_result = Amounts::ItemTotalAggregator.new(items: @items).call
+      item_result = Amounts::ItemTotalAggregator.new(items: @items, rounding_mode: @rounding_mode).call
       @items = item_result[:items]
       item_total = item_result[:total]
       tax_detail_total = calculate_tax_detail_total

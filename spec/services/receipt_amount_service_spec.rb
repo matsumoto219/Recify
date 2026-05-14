@@ -403,6 +403,85 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'converts discount_rate into discount_amount using the current rounding mode' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 999,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_rate: BigDecimal('0.105'),
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual,
+        rounding_mode: :floor
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:original_line_total]).to eq(999)
+        expect(item[:discount_amount]).to eq(104)
+        expect(item[:line_total]).to eq(895)
+        expect(result[:resolved][:total]).to eq(895)
+      end
+    end
+
+    it 'converts 100 percent discount_rate into zero line_total' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 310,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_rate: 100,
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:original_line_total]).to eq(310)
+        expect(item[:discount_amount]).to eq(310)
+        expect(item[:line_total]).to eq(0)
+        expect(result[:resolved][:total]).to eq(0)
+      end
+    end
+
+    it 'infers discount_rate from OCR discount_amount when rate is missing' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 310,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 310,
+            discount_amount: 155,
+            line_total: 155,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :analysis
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:discount_amount]).to eq(155)
+        expect(item[:discount_rate]).to eq(BigDecimal('0.5'))
+        expect(item[:line_total]).to eq(155)
+      end
+    end
+
     it 'fills line_total from price multiplied by decimal quantity when line_total is nil' do
       result = call_service(
         receipt: {},

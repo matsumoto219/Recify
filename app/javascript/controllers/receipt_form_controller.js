@@ -9,6 +9,7 @@ export default class extends Controller {
     'quantityInput',
     'quantityUnitInput',
     'priceInput',
+    'discountRateInput',
     'taxRateInput',
     'lineTotalDisplay',
     'lineTotalTooltip',
@@ -139,6 +140,7 @@ export default class extends Controller {
       const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
       const quantityUnitInput = row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
+      const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const lineTotalDisplays = row.querySelectorAll('[data-receipt-form-target="lineTotalDisplay"]')
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
@@ -146,6 +148,7 @@ export default class extends Controller {
       let quantity = this.clampNumber(this.parseDecimalInput(quantityInput?.value), 0, 9999)
       if (quantity <= 0) quantity = 1
       const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, 999999999)
+      const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
       const quantityUnit = quantityUnitInput?.value
 
@@ -154,7 +157,7 @@ export default class extends Controller {
       }
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      let lineTotal = this.lineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
+      let lineTotal = this.lineTotalFor({ quantity, price, quantityUnit, discountRatePercent, lineTotalInput })
       let tax = taxRatePercent > 0
         ? this.applyRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
         : 0
@@ -265,12 +268,29 @@ export default class extends Controller {
     return Math.round(value)
   }
 
-  lineTotalFor ({ quantity, price, quantityUnit, lineTotalInput }) {
+  lineTotalFor ({ quantity, price, quantityUnit, discountRatePercent, lineTotalInput }) {
+    const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
+
+    return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
+  }
+
+  originalLineTotalFor ({ quantity, price, quantityUnit, lineTotalInput }) {
     if (this.recalculatesQuantityUnit(quantityUnit)) {
       return this.roundLineAmount(quantity * price)
     }
 
-    return this.parseIntegerInput(lineTotalInput?.value)
+    return this.originalLineTotalInputValue(lineTotalInput)
+  }
+
+  discountedLineTotalFor (originalLineTotal, discountRatePercent) {
+    if (discountRatePercent === null) return originalLineTotal
+
+    const discountAmount = this.applyRounding((originalLineTotal * discountRatePercent) / 100)
+    return Math.max(originalLineTotal - discountAmount, 0)
+  }
+
+  originalLineTotalInputValue (lineTotalInput) {
+    return this.parseIntegerInput(lineTotalInput?.dataset.originalLineTotal || lineTotalInput?.value)
   }
 
   recalculatesQuantityUnit (unit) {
@@ -328,6 +348,13 @@ export default class extends Controller {
 
     const parsedValue = Number.parseFloat(normalized)
     return Number.isNaN(parsedValue) ? 0 : parsedValue
+  }
+
+  parseDiscountRateInput (value) {
+    const rawValue = String(value ?? '').trim()
+    if (rawValue === '') return null
+
+    return this.parseDecimalInput(rawValue)
   }
 
   animateAmount (target, nextValue) {

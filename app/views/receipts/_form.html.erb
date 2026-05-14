@@ -192,7 +192,8 @@
               <div class="col-span-3">品名</div>
               <div class="col-span-2">数量</div>
               <div class="col-span-2">単価</div>
-              <div class="col-span-2">税率</div>
+              <div class="col-span-1">割引</div>
+              <div class="col-span-1">税率</div>
               <div class="col-span-2">カテゴリ</div>
               <div class="col-span-1"></div>
             </div>
@@ -297,7 +298,38 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2 md:col-span-2">
+                  <div class="col-span-2 md:col-span-1">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">割引</span>
+                      <div class="flex-1 min-w-0 md:block">
+                        <%= render "shared/ui/number_field",
+                                   f: item_form,
+                                   attribute: :discount_rate,
+                                   label: "割引率",
+                                   value: item.discount_rate_percentage_input,
+                                   step: 0.1,
+                                   decimal_precision: 1,
+                                   min: 0,
+                                   max: 100,
+                                   suffix: "%",
+                                   show_label: false,
+                                   text_align: :center,
+                                   show_stepper_buttons: true,
+                                   stepper_button_class: "md:hidden",
+                                   size: :dense,
+                                   highlight_variant: (item.errors[:discount_rate].any? ? :error : nil),
+                                   show_error_message: false,
+                                   html_options: {
+                                     data: {
+                                       action: "input->receipt-form#recalculate",
+                                       receipt_form_target: "discountRateInput"
+                                     }
+                                   } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2 md:col-span-1">
                     <div class="flex items-center gap-2 md:block">
                       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">税率</span>
                       <div class="flex-1 min-w-0 md:block">
@@ -376,7 +408,11 @@
                   </div>
 
                   <%= item_form.hidden_field :id %>
-                  <%= item_form.hidden_field :line_total, data: { receipt_form_target: "lineTotalInput" } %>
+                  <%= item_form.hidden_field :line_total,
+                        data: {
+                          receipt_form_target: "lineTotalInput",
+                          original_line_total: (item.original_line_total.presence || item.line_total.to_i)
+                        } %>
                   <%= item_form.hidden_field :needs_review %>
                   <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
                 </div>
@@ -471,7 +507,36 @@
                     </div>
                   </div>
 
-                  <div class="col-span-2 md:col-span-2">
+                  <div class="col-span-2 md:col-span-1">
+                    <div class="flex items-center gap-2 md:block">
+                      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">割引</span>
+                      <div class="flex-1 min-w-0 md:block">
+                        <%= render "shared/ui/number_field",
+                                   f: item_form,
+                                   attribute: :discount_rate,
+                                   label: "割引率",
+                                   step: 0.1,
+                                   decimal_precision: 1,
+                                   min: 0,
+                                   max: 100,
+                                   suffix: "%",
+                                   show_label: false,
+                                   text_align: :center,
+                                   show_stepper_buttons: true,
+                                   stepper_button_class: "md:hidden",
+                                   size: :dense,
+                                   show_error_message: false,
+                                   html_options: {
+                                     data: {
+                                       action: "input->receipt-form#recalculate",
+                                       receipt_form_target: "discountRateInput"
+                                     }
+                                   } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-span-2 md:col-span-1">
                     <div class="flex items-center gap-2 md:block">
                       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">税率</span>
                       <div class="flex-1 min-w-0 md:block">
@@ -546,7 +611,12 @@
                     </button>
                   </div>
 
-                  <%= item_form.hidden_field :line_total, value: 0, data: { receipt_form_target: "lineTotalInput" } %>
+                  <%= item_form.hidden_field :line_total,
+                        value: 0,
+                        data: {
+                          receipt_form_target: "lineTotalInput",
+                          original_line_total: 0
+                        } %>
                   <%= item_form.hidden_field :needs_review, value: false %>
                 </div>
               <% end %>

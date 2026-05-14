@@ -135,7 +135,29 @@ class ReceiptItem < ApplicationRecord
     decimal.to_s("F").sub(/\.?0+\z/, "")
   end
 
+  def discount_rate_percentage_input
+    rate = discount_rate.presence || inferred_discount_rate
+    return nil if rate.blank?
+
+    percentage = BigDecimal(rate.to_s) * 100
+    return percentage.to_i.to_s if percentage.frac.zero?
+
+    percentage.to_s("F").sub(/\.?0+\z/, "")
+  end
+
   def formatted_quantity_with_unit
     "#{formatted_quantity} #{quantity_unit_label}"
+  end
+
+  private
+
+  def inferred_discount_rate
+    discount = discount_amount.to_i
+    original_total = original_line_total.to_i
+    return nil unless discount.positive?
+    return nil unless original_total.positive?
+    return nil if discount > original_total
+
+    BigDecimal(discount.to_s) / BigDecimal(original_total.to_s)
   end
 end

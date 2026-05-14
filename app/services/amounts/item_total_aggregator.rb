@@ -1,7 +1,8 @@
 module Amounts
   class ItemTotalAggregator
-    def initialize(items:)
+    def initialize(items:, rounding_mode: :floor)
       @items = Array(items)
+      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
     end
 
     def call
@@ -18,8 +19,9 @@ module Amounts
     def normalized_items
       @items.map do |item|
         original_line_total = original_line_total_for(item)
-        discount_amount = to_i(fetch_value(item, :discount_amount))
-        discount_rate = fetch_value(item, :discount_rate)
+        submitted_discount_rate = normalize_discount_rate(fetch_value(item, :discount_rate))
+        discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
+        discount_rate = discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
 
         adjusted_line_total = [ original_line_total - discount_amount, 0 ].max
 
@@ -37,6 +39,11 @@ module Amounts
       original_line_total = to_i(fetch_value(item, :original_line_total))
       return original_line_total if original_line_total.positive?
 
+      if value_present?(fetch_value(item, :discount_rate))
+        unit_total = countable_unit_line_total(item)
+        return unit_total if unit_total.positive?
+      end
+
       item_line_total(item)
     end
 
@@ -53,10 +60,38 @@ module Amounts
     def item_line_total(item)
       line_total_value = fetch_value(item, :line_total)
       return to_i(line_total_value) if value_present?(line_total_value)
+
+      countable_unit_line_total(item)
+    end
+
+    def countable_unit_line_total(item)
       return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
 
       price = to_amount_decimal(fetch_value(item, :price))
       round_amount(price * normalized_quantity_for(item))
+    end
+
+    def discount_amount_for(item, original_line_total, submitted_discount_rate)
+      if !submitted_discount_rate.nil?
+        return 0 unless original_line_total.positive?
+
+        return Amounts::Rounding.apply_rounding(
+          BigDecimal(original_line_total.to_s) * submitted_discount_rate,
+          @rounding_mode
+        )
+      end
+
+      explicit_discount_amount = to_i(fetch_value(item, :discount_amount))
+      explicit_discount_amount.positive? ? explicit_discount_amount : 0
+    end
+
+    def discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
+      return submitted_discount_rate unless submitted_discount_rate.nil?
+      return nil unless discount_amount.positive?
+      return nil unless original_line_total.positive?
+      return nil if discount_amount > original_line_total
+
+      BigDecimal(discount_amount.to_s) / BigDecimal(original_line_total.to_s)
     end
 
     def normalized_quantity_for(item)
@@ -81,6 +116,15 @@ module Amounts
 
     def to_amount_decimal(value)
       BigDecimal(to_i(value).to_s)
+    end
+
+    def normalize_discount_rate(value)
+      return nil unless value_present?(value)
+
+      rate = BigDecimal(value.to_s.delete("%"))
+      rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      nil
     end
 
     def round_amount(value)
