@@ -237,6 +237,10 @@ class ReceiptAnalysisService
       ai_needs_review: ai_result[:needs_review],
       amount_needs_review: amount_result[:needs_review]
     )
+    items_attributes = apply_amount_item_totals(
+      params[:receipt_items_attributes],
+      amount_result.dig(:computed, :items)
+    )
 
     persist_result_full!(
       receipt_attributes: params[:receipt_attributes].merge(
@@ -246,13 +250,13 @@ class ReceiptAnalysisService
         review_reasons: review_reasons,
         ocr_completed_at: Time.current
       ),
-      items_attributes: params[:receipt_items_attributes],
+      items_attributes: items_attributes,
       payments_attributes: params[:receipt_payments_attributes],
       tax_details_attributes: amount_result[:tax_details]
     )
 
     Rails.logger.info(
-      "[ReceiptAnalysis] completed receipt_id=#{receipt.id} status=#{final_status} items=#{params[:receipt_items_attributes].size}"
+      "[ReceiptAnalysis] completed receipt_id=#{receipt.id} status=#{final_status} items=#{items_attributes.size}"
     )
 
     receipt
@@ -276,9 +280,9 @@ class ReceiptAnalysisService
       tax_rate: amount_result[:resolved][:tax_rate]
     )
 
-    items_attributes = apply_ocr_only_tax_rate_policy(
-      params[:receipt_items_attributes],
-      amount_result
+    items_attributes = apply_amount_item_totals(
+      apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
+      amount_result.dig(:computed, :items)
     )
 
     # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
@@ -332,9 +336,9 @@ class ReceiptAnalysisService
       tax_rate: amount_result[:resolved][:tax_rate]
     )
 
-    items_attributes = apply_ocr_only_tax_rate_policy(
-      params[:receipt_items_attributes],
-      amount_result
+    items_attributes = apply_amount_item_totals(
+      apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
+      amount_result.dig(:computed, :items)
     )
 
     # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
@@ -416,6 +420,25 @@ class ReceiptAnalysisService
     normalize_items_attributes(items_attributes).each_with_index do |item_attributes, index|
       receipt.receipt_items.create!(
         item_attributes.merge(position_index: item_attributes[:position_index] || index + 1)
+      )
+    end
+  end
+
+  def apply_amount_item_totals(items_attributes, calculated_items)
+    calculated_items = Array(calculated_items)
+    return items_attributes if calculated_items.empty?
+
+    Array(items_attributes).map.with_index do |item_attributes, index|
+      calculated_item = calculated_items[index]
+      next item_attributes if calculated_item.blank?
+
+      item_attributes.merge(
+        price: calculated_item[:price] || calculated_item["price"],
+        quantity: calculated_item[:quantity] || calculated_item["quantity"],
+        original_line_total: calculated_item[:original_line_total] || calculated_item["original_line_total"],
+        line_total: calculated_item[:line_total] || calculated_item["line_total"],
+        discount_amount: calculated_item[:discount_amount] || calculated_item["discount_amount"],
+        discount_rate: calculated_item[:discount_rate] || calculated_item["discount_rate"]
       )
     end
   end

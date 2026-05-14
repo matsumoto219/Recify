@@ -140,6 +140,7 @@ module Amounts
       return false unless tax_detail_subtotal.positive?
       return false unless tax_detail_total.positive?
       return true unless item_total.positive?
+      return false if tax_detail_subtotal + tax_detail_total < item_total
 
       return false unless @context == :analysis
 

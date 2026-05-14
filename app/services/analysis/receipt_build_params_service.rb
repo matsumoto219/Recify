@@ -106,8 +106,18 @@ module Analysis
           end
 
           raw_text = normalized_item[:raw_text].to_s
-          price = normalize_amount(normalized_item[:price])
           quantity = normalize_quantity(normalized_item[:quantity])
+          discount_amount = normalize_amount(normalized_item[:discount_amount])
+          explicit_original_line_total = normalize_amount(normalized_item[:original_line_total])
+          raw_line_total = normalize_amount(normalized_item[:line_total])
+          fallback_line_total = raw_line_total || extract_item_line_total(raw_text, price: normalize_amount(normalized_item[:price]), quantity:)
+          original_line_total = explicit_original_line_total || fallback_line_total
+          line_total = effective_line_total(
+            original_line_total: explicit_original_line_total,
+            fallback_line_total: fallback_line_total,
+            discount_amount: discount_amount
+          )
+          price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
 
           {
             # Azure Items[].Description / Name -> receipt_items.raw_text
@@ -118,8 +128,8 @@ module Analysis
             category: normalized_item[:category].presence || detect_category(raw_text),
             price: price,
             quantity: quantity,
-            original_line_total: normalize_amount(normalized_item[:original_line_total]),
-            discount_amount: normalize_amount(normalized_item[:discount_amount]),
+            original_line_total: original_line_total,
+            discount_amount: discount_amount,
             discount_rate: normalize_rate(normalized_item[:discount_rate]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit
             quantity_unit: normalized_item[:quantity_unit],
@@ -127,7 +137,7 @@ module Analysis
             product_code: normalized_item[:product_code],
             # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
             tax_rate: normalize_rate(normalized_item[:tax_rate]),
-            line_total: normalize_amount(normalized_item[:line_total]) || extract_item_line_total(raw_text, price:, quantity:),
+            line_total: line_total,
             needs_review: final_item_needs_review(normalized_item, ai_items_present: ai_items_present),
             review_reasons: normalize_review_reasons(normalized_item[:review_reasons]),
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
@@ -266,6 +276,27 @@ module Analysis
         Integer(value)
       rescue ArgumentError, TypeError
         nil
+      end
+
+      def effective_line_total(original_line_total:, fallback_line_total:, discount_amount:)
+        discount_amount = discount_amount.to_i
+        if original_line_total.present?
+          return [ original_line_total - discount_amount, 0 ].max
+        end
+
+        fallback_line_total
+      end
+
+      def infer_unit_price(original_line_total:, line_total:, quantity:)
+        total = original_line_total || line_total
+        return nil unless total
+
+        normalized_quantity = normalize_quantity(quantity)
+        return total if normalized_quantity == BigDecimal("1")
+
+        unit_price = BigDecimal(total.to_s) / normalized_quantity
+        integer_unit_price = unit_price.to_i
+        BigDecimal(integer_unit_price.to_s) == unit_price ? integer_unit_price : nil
       end
 
       def build_items_from_lines(lines)

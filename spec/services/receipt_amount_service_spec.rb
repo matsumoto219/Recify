@@ -226,7 +226,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { line_total: 1_100 }
+          { line_total: 1_090 }
         ],
         receipt_tax_details: [
           { rate: BigDecimal('0.08'), net_amount: 500, amount: 40 },
@@ -370,6 +370,35 @@ RSpec.describe ReceiptAmountService do
         expect(result[:computed][:items].first[:line_total]).to eq(500)
         expect(result[:resolved][:total]).to eq(500)
         expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'keeps discounted line_total derived from original_line_total minus discount_amount' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 300,
+            quantity: 2,
+            quantity_unit: '個',
+            original_line_total: 600,
+            discount_amount: 300,
+            line_total: 300,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :analysis
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:price]).to eq(300)
+        expect(item[:original_line_total]).to eq(600)
+        expect(item[:discount_amount]).to eq(300)
+        expect(item[:line_total]).to eq(300)
+        expect(result[:resolved][:total]).to eq(300)
         expect(result[:needs_review]).to be(false)
       end
     end
@@ -759,6 +788,36 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
+        expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'does not resolve total from partial tax_details when item_total is larger' do
+      result = call_service(
+        receipt: {
+          tax_rate: nil
+        },
+        receipt_items: [
+          { line_total: 130, tax_rate: BigDecimal('0.08') },
+          { line_total: 140, tax_rate: BigDecimal('0.08') },
+          { line_total: 300, tax_rate: BigDecimal('0.1') },
+          { line_total: 490, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21 },
+          { rate: BigDecimal('0.1'), net_amount: 300, amount: 30 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(1_110)
+        expect(result[:resolved][:total]).not_to eq(621)
+        expect(result[:resolved][:tax_rate]).to be_nil
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
         expect(result[:needs_review]).to be(false)
       end

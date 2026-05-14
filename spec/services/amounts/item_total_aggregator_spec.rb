@@ -54,6 +54,19 @@ RSpec.describe Amounts::ItemTotalAggregator do
     end
   end
 
+  it 'keeps original_line_total as the pre-discount row total and line_total as the discounted row total' do
+    result = aggregate([
+      { price: nil, quantity: 2, quantity_unit: '個', original_line_total: 600, discount_amount: 300, line_total: 300 }
+    ])
+
+    aggregate_failures do
+      expect(result[:total]).to eq(300)
+      expect(result[:items].first[:original_line_total]).to eq(600)
+      expect(result[:items].first[:discount_amount]).to eq(300)
+      expect(result[:items].first[:line_total]).to eq(300)
+    end
+  end
+
   it 'parses decimal comma quantity as decimal when filling line_total' do
     result = aggregate([
       { price: 14_400, quantity: '0,300', quantity_unit: '個', line_total: nil }

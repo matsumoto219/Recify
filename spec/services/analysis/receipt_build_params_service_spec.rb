@@ -368,6 +368,65 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    context 'price が欠けている場合' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            payment_method_text: 'Master',
+            items: [
+              {
+                raw_text: 'コーヒー',
+                price: nil,
+                quantity: 1,
+                original_line_total: 500,
+                discount_amount: nil,
+                line_total: 500
+              },
+              {
+                raw_text: 'サンド',
+                price: nil,
+                quantity: 2,
+                original_line_total: 600,
+                discount_amount: nil,
+                line_total: 600
+              },
+              {
+                raw_text: '割引サンド',
+                price: nil,
+                quantity: 2,
+                original_line_total: 600,
+                discount_amount: 300,
+                line_total: 300
+              }
+            ],
+            payments: [],
+            tax_details: []
+          },
+          lines: []
+        }
+      end
+
+      it '割引前行合計から税込単価を補完しline_totalは割引後で保持する' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.first[:price]).to eq(500)
+          expect(items.first[:original_line_total]).to eq(500)
+          expect(items.first[:line_total]).to eq(500)
+
+          expect(items.second[:price]).to eq(300)
+          expect(items.second[:original_line_total]).to eq(600)
+          expect(items.second[:line_total]).to eq(600)
+
+          expect(items.third[:price]).to eq(300)
+          expect(items.third[:original_line_total]).to eq(600)
+          expect(items.third[:discount_amount]).to eq(300)
+          expect(items.third[:line_total]).to eq(300)
+        end
+      end
+    end
+
     context 'quantity が空の場合' do
       let(:ocr_result) do
         {

@@ -116,7 +116,7 @@ RSpec.describe Amounts::Calculator do
     it 'prefers multiple tax_details in analysis context and keeps tax_rate nil' do
       result = calculate(
         items: [
-          { line_total: 1_100 }
+          { line_total: 1_090 }
         ],
         tax_details: [
           { rate: BigDecimal('0.08'), net_amount: 500, amount: 40 },
@@ -129,6 +129,30 @@ RSpec.describe Amounts::Calculator do
         expect(result[:subtotal]).to eq(1_000)
         expect(result[:tax]).to eq(90)
         expect(result[:total]).to eq(1_090)
+        expect(result[:tax_rate]).to be_nil
+      end
+    end
+
+    it 'does not use partial tax_details as the resolved total source when item_total is larger' do
+      result = calculate(
+        items: [
+          { line_total: 130, tax_rate: BigDecimal('0.08') },
+          { line_total: 140, tax_rate: BigDecimal('0.08') },
+          { line_total: 300, tax_rate: BigDecimal('0.1') },
+          { line_total: 490, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21 },
+          { rate: BigDecimal('0.1'), net_amount: 300, amount: 30 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:tax_details_primary]).to be(false)
+        expect(result[:total]).to eq(1_110)
+        expect(result[:total]).not_to eq(621)
         expect(result[:tax_rate]).to be_nil
       end
     end

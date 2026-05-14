@@ -287,6 +287,41 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '割引行を直前itemへ紐付けて割引後line_totalを返す' do
+      discount_response = raw_response.deep_dup
+      discount_response['analyzeResult']['content'] = <<~TEXT
+        割引ストア
+        対象商品
+        600
+        割引
+        -300
+        合計 300
+      TEXT
+      fields = discount_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['Total'] = { 'valueCurrency' => { 'amount' => 300 } }
+      fields['Items'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '対象商品' },
+              'Quantity' => { 'valueNumber' => 2 },
+              'TotalPrice' => { 'valueCurrency' => { 'amount' => 600 } }
+            },
+            'confidence' => 0.98
+          }
+        ]
+      }
+
+      result = described_class.new(response: discount_response).call
+      item = result.dig(:candidates, :items).first
+
+      aggregate_failures do
+        expect(item[:original_line_total]).to eq(600)
+        expect(item[:discount_amount]).to eq(300)
+        expect(item[:line_total]).to eq(300)
+      end
+    end
+
     it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
       broken_response = raw_response.deep_dup
       fields = broken_response.dig('analyzeResult', 'documents', 0, 'fields')

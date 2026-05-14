@@ -205,10 +205,11 @@ module Amounts
       return false if tax_detail_incomplete?
 
       receipt_tax_amount = to_i(fetch_value(@receipt, :tax_amount))
-      return false unless receipt_tax_amount.positive?
+      comparable_tax_amount = receipt_tax_amount.positive? ? receipt_tax_amount : item_tax_total
+      return false unless comparable_tax_amount.positive?
       return false unless tax_detail_total.positive?
 
-      tax_detail_total < receipt_tax_amount
+      tax_detail_total < comparable_tax_amount
     end
 
     def tax_detail_has_any_value?(tax_detail)
@@ -308,6 +309,7 @@ module Amounts
 
     def mixed_tax_inclusion_suspected?
       return false unless @context == :analysis
+      return true if tax_detail_partial? && mixed_tax_rate_items?
 
       ocr_total = to_i(@receipt[:total_amount])
       resolved_total = to_i(@resolved[:total])
@@ -322,6 +324,22 @@ module Amounts
 
       # どちらかでも起きていれば「混在の可能性」とみなす
       mismatch && tax_mismatch
+    end
+
+    def mixed_tax_rate_items?
+      has_taxable_item = false
+      has_non_taxable_item = false
+
+      @items.each do |item|
+        rate = normalize_rate(fetch_value(item, :tax_rate))
+        if rate.positive?
+          has_taxable_item = true
+        else
+          has_non_taxable_item = true
+        end
+      end
+
+      has_taxable_item && has_non_taxable_item
     end
 
     def insufficient_data?

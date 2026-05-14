@@ -209,6 +209,49 @@ RSpec.describe ReceiptAnalysisService do
       expect(item.product_code).to be_present
     end
 
+    it 'AI成功時に割引明細の単価と割引後line_totalを保存する' do
+      ocr_result = build_ocr_result(
+        candidates: {
+          total_amount: 300,
+          subtotal_amount: nil,
+          tax_amount: nil,
+          tip_amount: nil,
+          items: [
+            {
+              raw_text: '割引サンド',
+              price: nil,
+              quantity: 2,
+              quantity_unit: '個',
+              original_line_total: 600,
+              discount_amount: 300,
+              line_total: 300,
+              tax_rate: 10,
+              confidence: 0.98
+            }
+          ],
+          payments: [],
+          tax_details: []
+        }
+      )
+
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_success_result_for(ocr_result))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(item.price).to eq(300)
+        expect(item.quantity).to eq(BigDecimal('2'))
+        expect(item.original_line_total).to eq(600)
+        expect(item.discount_amount).to eq(300)
+        expect(item.line_total).to eq(300)
+        expect(receipt.total_amount).to eq(300)
+      end
+    end
+
     it '支払い情報が保存される' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)

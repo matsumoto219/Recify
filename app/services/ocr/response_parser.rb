@@ -568,6 +568,14 @@ class Ocr::ResponseParser
     # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
     items.map.with_index do |item, index|
       value_object = item["valueObject"] || {}
+      total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      discount_amount = discount_details_by_index.dig(index, :amount).to_i
+      original_line_total = discount_details_by_index.dig(index, :original_line_total).presence || total_price
+      line_total = if discount_amount.positive?
+        [ normalize_amount_for_discount(original_line_total) - discount_amount, 0 ].max
+      else
+        original_line_total
+      end
 
       {
         raw_text: value_object.dig("Description", "valueString") ||
@@ -577,9 +585,9 @@ class Ocr::ResponseParser
         quantity: value_object.dig("Quantity", "valueNumber"),
         quantity_unit: value_object.dig("QuantityUnit", "valueString"),
         product_code: value_object.dig("ProductCode", "valueString"),
-        line_total: value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber"),
-        original_line_total: value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber"),
-        discount_amount: discount_details_by_index.dig(index, :amount),
+        line_total: line_total,
+        original_line_total: original_line_total,
+        discount_amount: discount_amount.positive? ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
         confidence: item["confidence"]
       }
