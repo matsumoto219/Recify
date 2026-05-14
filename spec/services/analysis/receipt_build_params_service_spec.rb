@@ -225,6 +225,30 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(items.second[:line_total]).to eq(1100)
         end
       end
+
+      it 'comma付き金額を1円として誤読せずfallback明細を組み立てる' do
+        ocr_result[:lines] = [
+          'サンプルストア',
+          '商品A 1,234',
+          '商品B ¥4,320',
+          '商品C 1 234',
+          '合計 6788',
+          '現金'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.size).to eq(3)
+          expect(items.first[:price]).to eq(1_234)
+          expect(items.first[:line_total]).to eq(1_234)
+          expect(items.second[:price]).to eq(4_320)
+          expect(items.second[:line_total]).to eq(4_320)
+          expect(items.third[:price]).to eq(1)
+          expect(items.third[:line_total]).to eq(1)
+        end
+      end
     end
 
     context '文字列の数値が混在する場合' do

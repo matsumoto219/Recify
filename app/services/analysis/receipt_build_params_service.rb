@@ -306,10 +306,10 @@ module Analysis
       end
 
       def extract_item_price(line)
-        numbers = line.to_s.scan(/\d+/)
+        numbers = line.to_s.scan(/\d[\d,]*/)
         return nil if numbers.empty?
 
-        numbers.first.to_i
+        Amounts::NumberParser.parse_amount(numbers.first)
       end
 
       def extract_item_quantity(line)
