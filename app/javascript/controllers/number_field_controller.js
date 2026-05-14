@@ -4,7 +4,8 @@ import { Controller } from '@hotwired/stimulus'
 export default class extends Controller {
   static targets = ['input']
   static values = {
-    decimalPrecision: Number
+    decimalPrecision: Number,
+    decimalComma: { type: Boolean, default: false }
   }
 
   connect () {
@@ -96,7 +97,7 @@ export default class extends Controller {
 
     const input = this.inputTarget
     const step = Number.parseFloat(input.step || '1') || 1
-    const currentValue = Number.parseFloat(input.value || '0') || 0
+    const currentValue = Number.parseFloat(this.sanitizeNumericValue(input.value) || '0') || 0
     const nextValue = this.clampValue(currentValue + (step * delta), input)
 
     input.value = this.formatValue(nextValue, step)
@@ -146,7 +147,7 @@ export default class extends Controller {
     this.normalize(event)
 
     const input = event.target
-    const numericValue = Number.parseFloat(input.value)
+    const numericValue = Number.parseFloat(this.sanitizeNumericValue(input.value))
     if (!Number.isNaN(numericValue)) {
       input.value = this.formatValue(
         this.clampValue(numericValue, input),
@@ -160,27 +161,7 @@ export default class extends Controller {
     if (this.isComposing || event.isComposing) return
     const originalValue = input.value
 
-    // 全角数字 → 半角
-    let value = input.value.replace(/[０-９]/g, (s) =>
-      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
-    )
-
-    // 全角小数点・マイナス対応
-    value = value
-      .replace(/．/g, '.')
-      .replace(/－/g, '-')
-
-    // 数字・小数点・マイナス以外を除去
-    value = value.replace(/[^0-9.-]/g, '')
-
-    // マイナスは先頭のみ許可
-    value = value.replace(/(?!^)-/g, '')
-
-    // 小数点は1つだけ許可
-    const parts = value.split('.')
-    if (parts.length > 2) {
-      value = parts[0] + '.' + parts.slice(1).join('')
-    }
+    let value = this.sanitizeNumericValue(input.value)
 
     if (value !== '' && value !== '-' && value !== '.' && value !== '-.') {
       const isEditingDecimal = value.endsWith('.') || value === '-.'
@@ -197,5 +178,47 @@ export default class extends Controller {
       input.value = value
       input.dispatchEvent(new Event('input', { bubbles: true }))
     }
+  }
+
+  sanitizeNumericValue (inputValue) {
+    // 全角数字 → 半角
+    let value = String(inputValue || '').replace(/[０-９]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+    )
+
+    // 全角小数点・マイナス・カンマ対応
+    value = value
+      .replace(/．/g, '.')
+      .replace(/－/g, '-')
+      .replace(/，/g, ',')
+
+    value = this.normalizeComma(value)
+
+    // 数字・小数点・マイナス以外を除去
+    value = value.replace(/[^0-9.-]/g, '')
+
+    // マイナスは先頭のみ許可
+    value = value.replace(/(?!^)-/g, '')
+
+    // 小数点は1つだけ許可
+    const parts = value.split('.')
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('')
+    }
+
+    return value
+  }
+
+  normalizeComma (value) {
+    if (!this.decimalCommaValue) {
+      return value.replace(/,/g, '')
+    }
+
+    const commaCount = (value.match(/,/g) || []).length
+    if (!value.includes('.') && commaCount === 1) {
+      return value.replace(',', '.')
+    }
+
+    return value.replace(/,/g, '')
   }
 }

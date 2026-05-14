@@ -11,6 +11,7 @@
     - max: max属性
     - step: step属性
     - decimal_precision: ステッパー操作時の小数表示桁数（例: 1）
+    - decimal_comma: trueの場合、単一カンマを小数点として扱う（default: false）
     - inputmode: inputmode属性（default: :decimal）
     - autofocus: true/false
     - required: true/false
@@ -35,6 +36,7 @@
   max = local_assigns[:max]
   step = local_assigns[:step]
   decimal_precision = local_assigns[:decimal_precision]
+  decimal_comma = local_assigns.fetch(:decimal_comma, false)
   inputmode = local_assigns.fetch(:inputmode, :decimal)
   autofocus = local_assigns.fetch(:autofocus, false)
   required = local_assigns.fetch(:required, false)
@@ -127,6 +129,12 @@
     required: required,
     class: merged_input_class
   }.compact.merge(html_options)
+
+  number_field_data = {
+    controller: "number-field",
+    number_field_decimal_precision_value: decimal_precision
+  }.compact
+  number_field_data[:number_field_decimal_comma_value] = true if decimal_comma
 %>
 
 <div class="space-y-2">
@@ -134,7 +142,7 @@
     <%= f.label attribute, label, class: label_classes %>
   <% end %>
 
-  <%= tag.div class: wrapper_classes, data: { controller: "number-field", number_field_decimal_precision_value: decimal_precision }.compact do %>
+  <%= tag.div class: wrapper_classes, data: number_field_data do %>
     <% if show_stepper_buttons %>
       <button type="button"
               class="<%= stepper_button_classes %>"
