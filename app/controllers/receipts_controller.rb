@@ -205,9 +205,9 @@ class ReceiptsController < ApplicationController
 
   def apply_amount_calculation!(permitted, context:)
     result = ReceiptAmountService.call(
-      receipt: permitted,
+      receipt: amount_receipt(permitted, context),
       receipt_items: amount_receipt_items(permitted),
-      receipt_tax_details: [],
+      receipt_tax_details: amount_receipt_tax_details(context),
       context: context,
       tax_rounding_mode: :floor,
       discount_rounding_mode: :round
@@ -295,6 +295,36 @@ class ReceiptsController < ApplicationController
 
     items_attributes.values.reject do |item_attributes|
       ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+    end
+  end
+
+  def amount_receipt(permitted, context)
+    return permitted unless context == :edit_save
+    return permitted unless @receipt&.persisted?
+
+    existing_amounts = {
+      "subtotal_amount" => @receipt.subtotal_amount,
+      "tax_amount" => @receipt.tax_amount,
+      "total_amount" => @receipt.total_amount,
+      "tax_rate" => @receipt.tax_rate
+    }
+
+    existing_amounts.merge(permitted) do |_key, existing_value, permitted_value|
+      permitted_value.presence || existing_value
+    end
+  end
+
+  def amount_receipt_tax_details(context)
+    return [] unless context == :edit_save
+    return [] unless @receipt&.persisted?
+
+    @receipt.receipt_tax_details.map do |tax_detail|
+      {
+        rate: tax_detail.rate,
+        net_amount: tax_detail.net_amount,
+        amount: tax_detail.amount,
+        description: tax_detail.description
+      }
     end
   end
 

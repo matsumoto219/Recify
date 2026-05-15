@@ -78,6 +78,27 @@ class Receipt < ApplicationRecord
   before_validation :set_default_country_region
   before_validation :normalize_store_phone_number
 
+  def receipt_tax_basis_for_form
+    external_tax_basis_from_details? ? "external" : "internal"
+  end
+
+  def external_tax_basis_from_details?
+    complete_tax_details = receipt_tax_details.to_a.select do |tax_detail|
+      tax_detail.net_amount.to_i.positive? && tax_detail.amount.to_i.positive?
+    end
+    return false if complete_tax_details.blank?
+
+    detail_net_amount = complete_tax_details.sum { |tax_detail| tax_detail.net_amount.to_i }
+    detail_tax_amount = complete_tax_details.sum { |tax_detail| tax_detail.amount.to_i }
+    item_line_total = receipt_items.to_a.sum { |item| item.line_total.to_i }
+
+    item_line_total.positive? &&
+      detail_net_amount == item_line_total &&
+      subtotal_amount.to_i == detail_net_amount &&
+      tax_amount.to_i == detail_tax_amount &&
+      total_amount.to_i == detail_net_amount + detail_tax_amount
+  end
+
   # 拡張検索（AND検索対応）
   # --------------------------------------------------
   # スペース区切りでAND検索

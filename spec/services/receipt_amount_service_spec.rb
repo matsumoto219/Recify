@@ -539,6 +539,40 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'keeps external tax details authoritative in edit_save context when line totals are unchanged' do
+      result = call_service(
+        receipt: {
+          total_amount: 4_215,
+          subtotal_amount: 3_903,
+          tax_amount: 312,
+          tax_rate: BigDecimal('0.08')
+        },
+        receipt_items: [
+          { price: 108, quantity: 2, quantity_unit: '個', line_total: 216, tax_rate: BigDecimal('0.08') },
+          { price: 271, quantity: 1, quantity_unit: '個', original_line_total: 271, discount_amount: 136, discount_rate: BigDecimal('0.5'), line_total: 135, tax_rate: BigDecimal('0.08') },
+          { price: 3_552, quantity: 1, quantity_unit: '個', line_total: 3_552, tax_rate: BigDecimal('0.08') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 3_903, amount: 312, description: '8%対象' }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(
+          subtotal: 3_903,
+          tax: 312,
+          total: 4_215,
+          tax_rate: BigDecimal('0.08')
+        )
+        expect(result[:computed]).to include(
+          receipt_tax_basis: :external,
+          item_amount_basis: :tax_included
+        )
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
     it 'does not estimate calculation profile outside analysis context' do
       result = call_service(
         receipt: {},

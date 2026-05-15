@@ -986,6 +986,49 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it '外税tax_detailsと金額が整合するレシートではformにexternal basisを渡す' do
+      receipt.update!(
+        subtotal_amount: 3_903,
+        tax_amount: 312,
+        total_amount: 4_215,
+        tax_rate: BigDecimal('0.08')
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '外税商品A',
+        price: 108,
+        quantity: 2,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.08'),
+        line_total: 216,
+        needs_review: false
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '外税商品B',
+        price: 3_687,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.08'),
+        line_total: 3_687,
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.08'),
+        net_amount: 3_903,
+        amount: 312,
+        description: '8%対象'
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(form['data-receipt-form-receipt-tax-basis-value']).to eq('external')
+      end
+    end
+
     it 'quantity_unitを編集できるselectを表示する' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',
@@ -1510,6 +1553,82 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.tax_amount).to eq(19)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(item.line_total).to eq(216)
+      end
+    end
+
+    it '外税tax_detailsと整合する明細を保存しても外税のsubtotal tax totalとtax_detailsを維持する' do
+      receipt.update!(
+        store_name: '外税更新前',
+        subtotal_amount: 3_903,
+        tax_amount: 312,
+        total_amount: 4_215,
+        tax_rate: BigDecimal('0.08')
+      )
+      item_a = receipt.receipt_items.create!(
+        confirmed_name: '外税商品A',
+        price: 108,
+        quantity: 2,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.08'),
+        line_total: 216,
+        needs_review: false
+      )
+      item_b = receipt.receipt_items.create!(
+        confirmed_name: '外税商品B',
+        price: 3_687,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.08'),
+        line_total: 3_687,
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.08'),
+        net_amount: 3_903,
+        amount: 312,
+        description: '8%対象'
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '外税更新後',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item_a.id,
+              confirmed_name: item_a.confirmed_name,
+              price: 108,
+              quantity: 2,
+              quantity_unit: '個',
+              tax_rate: 8,
+              line_total: 216,
+              needs_review: false
+            },
+            '1' => {
+              id: item_b.id,
+              confirmed_name: item_b.confirmed_name,
+              price: 3_687,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 8,
+              line_total: 3_687,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.subtotal_amount).to eq(3_903)
+        expect(receipt.tax_amount).to eq(312)
+        expect(receipt.total_amount).to eq(4_215)
+        expect(tax_detail.net_amount).to eq(3_903)
+        expect(tax_detail.amount).to eq(312)
+        expect(tax_detail.rate).to eq(BigDecimal('0.08'))
       end
     end
 

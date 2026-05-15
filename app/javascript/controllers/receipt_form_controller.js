@@ -26,7 +26,8 @@ export default class extends Controller {
   static values = {
     nextIndex: Number,
     roundingMode: { type: String, default: 'floor' },
-    discountRoundingMode: { type: String, default: 'round' }
+    discountRoundingMode: { type: String, default: 'round' },
+    receiptTaxBasis: { type: String, default: 'internal' }
   }
 
   connect () {
@@ -172,6 +173,8 @@ export default class extends Controller {
     let taxSum = 0
     let total = 0
     const taxRates = new Set()
+    const externalTaxGroups = new Map()
+    const externalTax = this.usesExternalTax()
 
     this.itemRowTargets.forEach((row) => {
       // 削除済み（非表示）はスキップ
@@ -199,10 +202,19 @@ export default class extends Controller {
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
       const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
       let lineTotal = this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
-      let tax = taxRatePercent > 0
-        ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
-        : 0
-      let subtotal = lineTotal - tax
+      let tax = 0
+      let subtotal = lineTotal
+
+      if (externalTax) {
+        if (taxRatePercent > 0) {
+          externalTaxGroups.set(taxRatePercent, (externalTaxGroups.get(taxRatePercent) || 0) + lineTotal)
+        }
+      } else {
+        tax = taxRatePercent > 0
+          ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
+          : 0
+        subtotal = lineTotal - tax
+      }
 
       lineTotal = this.clampNumber(lineTotal, 0, 999999999)
       subtotal = this.clampNumber(subtotal, 0, 999999999)
@@ -220,6 +232,11 @@ export default class extends Controller {
 
       this.syncLineTotalState({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal })
     })
+
+    if (externalTax) {
+      taxSum = this.externalTaxTotal(externalTaxGroups)
+      total = subtotalSum + taxSum
+    }
 
     total = this.clampNumber(total, 0, 999999999)
     subtotalSum = this.clampNumber(subtotalSum, 0, 999999999)
@@ -308,6 +325,20 @@ export default class extends Controller {
 
   applyDiscountRounding (value) {
     return this.applyRounding(value, this.discountRoundingModeValue)
+  }
+
+  usesExternalTax () {
+    return this.receiptTaxBasisValue === 'external'
+  }
+
+  externalTaxTotal (taxGroups) {
+    let taxTotal = 0
+
+    taxGroups.forEach((groupLineTotal, taxRatePercent) => {
+      taxTotal += this.applyTaxRounding((groupLineTotal * taxRatePercent) / 100)
+    })
+
+    return taxTotal
   }
 
   roundLineAmount (value) {
