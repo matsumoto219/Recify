@@ -1199,6 +1199,37 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '既存の印字済みline_totalをdiscount_rate再計算で崩さないJS情報を持つ' do
+      receipt.receipt_items.create!(
+        confirmed_name: '印字済み割引商品',
+        price: 999,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: 999,
+        discount_rate: BigDecimal('0.105'),
+        discount_amount: 104,
+        line_total: 895,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      discount_rate_input = document.at_css('input[name$="[discount_rate]"]')
+      line_total_input = document.at_css('input[name$="[line_total]"]')
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_form_controller.js').read
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(discount_rate_input['value']).to eq('10.5')
+        expect(discount_rate_input['data-original-discount-rate']).to eq('10.5')
+        expect(line_total_input['value']).to eq('895')
+        expect(line_total_input['data-original-line-total']).to eq('999')
+        expect(controller_source).to include('shouldPreserveExistingLineTotal')
+        expect(controller_source).to include('discountRateWasEdited')
+      end
+    end
+
     it '数量入力だけdecimal commaを許可する' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',

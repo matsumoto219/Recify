@@ -198,7 +198,7 @@ export default class extends Controller {
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
       const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
-      let lineTotal = this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
+      let lineTotal = this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
       let tax = taxRatePercent > 0
         ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
         : 0
@@ -327,6 +327,42 @@ export default class extends Controller {
 
     const discountAmount = this.applyDiscountRounding((originalLineTotal * discountRatePercent) / 100)
     return Math.max(originalLineTotal - discountAmount, 0)
+  }
+
+  lineTotalFor ({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput }) {
+    if (this.shouldPreserveExistingLineTotal({ originalLineTotal, discountRateInput, lineTotalInput })) {
+      return this.lineTotalInputValue(lineTotalInput)
+    }
+
+    return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
+  }
+
+  shouldPreserveExistingLineTotal ({ originalLineTotal, discountRateInput, lineTotalInput }) {
+    if (!lineTotalInput) return false
+    if (this.discountRateWasEdited(discountRateInput)) return false
+
+    const persistedOriginalLineTotal = this.originalLineTotalInputValue(lineTotalInput)
+    if (originalLineTotal !== persistedOriginalLineTotal) return false
+
+    return String(lineTotalInput.value ?? '').trim() !== ''
+  }
+
+  discountRateWasEdited (discountRateInput) {
+    if (!discountRateInput) return false
+
+    return this.normalizedOptionalDecimalInput(discountRateInput.value) !==
+      this.normalizedOptionalDecimalInput(discountRateInput.dataset.originalDiscountRate)
+  }
+
+  normalizedOptionalDecimalInput (value) {
+    const rawValue = String(value ?? '').trim()
+    if (rawValue === '') return ''
+
+    return String(this.parseDecimalInput(rawValue))
+  }
+
+  lineTotalInputValue (lineTotalInput) {
+    return this.parseIntegerInput(lineTotalInput?.value)
   }
 
   originalLineTotalInputValue (lineTotalInput) {

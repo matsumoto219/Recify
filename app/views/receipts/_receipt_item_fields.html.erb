@@ -166,7 +166,8 @@
                        html_options: {
                          data: {
                            action: "input->receipt-form#recalculate",
-                           receipt_form_target: "discountRateInput"
+                           receipt_form_target: "discountRateInput",
+                           original_discount_rate: (new_record ? nil : item.discount_rate_percentage_input)
                          }
                        } %>
           </div>
