@@ -14,6 +14,9 @@ export default class extends Controller {
     'lineTotalDisplay',
     'lineTotalTooltip',
     'lineTotalInput',
+    'itemDetailsPanel',
+    'itemDetailsToggle',
+    'itemDetailsIcon',
     'totalAmount',
     'subtotalAmount',
     'taxAmount',
@@ -65,6 +68,26 @@ export default class extends Controller {
     }
 
     this.recalculate()
+  }
+
+  toggleItemDetails (event) {
+    event.preventDefault()
+
+    const toggle = event.currentTarget
+    const row = toggle.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return
+
+    const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
+    const icon = row.querySelector('[data-receipt-form-target="itemDetailsIcon"]')
+    if (!panel) return
+
+    const willOpen = panel.classList.contains('hidden')
+    panel.classList.toggle('hidden', !willOpen)
+    toggle.setAttribute('aria-expanded', String(willOpen))
+
+    if (icon) {
+      icon.classList.toggle('rotate-180', willOpen)
+    }
   }
 
   scheduleLineTotalTooltip (event) {

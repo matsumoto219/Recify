@@ -1043,9 +1043,26 @@ RSpec.describe 'Receipts', type: :request do
           lineTotalDisplay
           lineTotalTooltip
           destroyField
+          itemDetailsPanel
+          itemDetailsToggle
+          itemDetailsIcon
         ].each do |target|
           expect(document.css(%([data-receipt-form-target="#{target}"]))).to be_present
         end
+
+        item_details_toggle = item_row.at_css('[data-receipt-form-target="itemDetailsToggle"]')
+        item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+
+        expect(item_details_toggle['data-action']).to include('click->receipt-form#toggleItemDetails')
+        expect(item_details_toggle['aria-expanded']).to eq('false')
+        expect(item_details_panel['class']).to include('hidden')
+        expect(item_details_panel.at_css('[data-receipt-form-target="discountRateInput"]')).to be_present
+        expect(item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]')).to be_present
+        expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_present
+        expect(template_html).to include('data-receipt-form-target="itemDetailsToggle"')
+        expect(template_html).to include('data-receipt-form-target="itemDetailsPanel"')
+        expect(template_html).to include('data-receipt-form-target="itemDetailsIcon"')
+        expect(template_html).to include('click-&gt;receipt-form#toggleItemDetails')
 
         %w[
           quantityInput
