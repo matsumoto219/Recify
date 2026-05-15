@@ -114,6 +114,7 @@ class ReceiptAmountService
       tax_details_primary: calc[:tax_details_primary],
       tax_rounding_mode: active_tax_rounding_mode
     ).call
+    inconsistencies = (inconsistencies + Array(profile_estimation[:warnings])).uniq
 
     mismatch_codes = build_mismatch_codes(inconsistencies)
     mismatch_messages = build_mismatch_messages(inconsistencies)
@@ -125,6 +126,8 @@ class ReceiptAmountService
         tax: calc[:tax],
         total: calc[:total],
         tax_rate: calc[:tax_rate],
+        tax_basis: calc[:tax_basis],
+        item_basis: calc[:item_basis],
         items: calc[:items]
       },
       resolved: resolved,
@@ -132,7 +135,7 @@ class ReceiptAmountService
       inconsistencies: inconsistencies,
       mismatch_codes: mismatch_codes,
       mismatch_messages: mismatch_messages,
-      calculation_profile: profile_estimation[:applied_profile],
+      calculation_profile: profile_estimation[:profile],
       calculation_profile_score: profile_estimation[:score],
       calculation_profile_candidates: profile_estimation[:candidates]
     )
@@ -141,9 +144,19 @@ class ReceiptAmountService
   private
 
   def applicable_calculation_profile(profile_estimation)
+    profile = profile_estimation[:profile]
+
     profile_estimation.merge(
-      applied_profile: profile_estimation[:score].to_i.zero? ? profile_estimation[:profile] : nil
+      applied_profile: applicable_profile?(profile_estimation) ? profile : nil
     )
+  end
+
+  def applicable_profile?(profile_estimation)
+    profile = profile_estimation[:profile]
+    return false unless profile_estimation[:score].to_i.zero?
+    return false unless profile
+
+    profile[:item_basis] == :tax_included
   end
 
   def estimate_calculation_profile
@@ -171,7 +184,8 @@ class ReceiptAmountService
     {
       profile: nil,
       score: nil,
-      candidates: []
+      candidates: [],
+      warnings: []
     }
   end
 

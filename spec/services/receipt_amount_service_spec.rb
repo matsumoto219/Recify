@@ -562,6 +562,84 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'does not apply tax excluded calculation profiles to resolved amounts yet' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_101
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
+        expect(result[:computed]).to include(
+          subtotal: 1_000,
+          tax: 100,
+          total: 1_100,
+          item_basis: :tax_included
+        )
+        expect(result[:resolved]).to include(
+          subtotal: 1_000,
+          tax: 100,
+          total: 1_100
+        )
+      end
+    end
+
+    it 'returns calculation profile uncertainty as a warning without requiring review' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_101
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+        expect(result[:warning_mismatch_codes]).to include('CALCULATION_PROFILE_UNCERTAIN')
+        expect(result[:warning_reasons]).to include('calculation_profile_uncertain')
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
     it 'converts 100 percent discount_rate into zero line_total' do
       result = call_service(
         receipt: {},

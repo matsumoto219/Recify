@@ -36,6 +36,7 @@ module ReviewReasonSource
     zero_amount_item_incomplete
     discount_data_incomplete
     price_tax_inclusion_uncertain
+    calculation_profile_uncertain
     insufficient_data
   ].freeze
 

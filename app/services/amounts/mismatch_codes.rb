@@ -11,6 +11,7 @@ module Amounts
       tax_detail_partial: "TAX_DETAIL_PARTIAL",
       ocr_total_mismatch: "OCR_TOTAL_MISMATCH",
       price_tax_inclusion_uncertain: "PRICE_TAX_INCLUSION_UNCERTAIN",
+      calculation_profile_uncertain: "CALCULATION_PROFILE_UNCERTAIN",
       insufficient_data: "INSUFFICIENT_DATA",
       zero_amount_item_incomplete: "ZERO_AMOUNT_ITEM_INCOMPLETE",
       discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE"

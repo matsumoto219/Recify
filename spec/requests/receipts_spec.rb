@@ -840,6 +840,23 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '計算方式推定のwarningは完了状態のまま金額整合性として表示する' do
+      receipt.update!(
+        status: 'completed',
+        review_reasons: [ 'calculation_profile_uncertain' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('確認情報')
+        expect(response.body).to include('金額整合性')
+        expect(response.body).to include('計算方式を一意に推定できません')
+        expect(response.body).not_to include('要確認内容')
+      end
+    end
+
     it 'AI reasonのみのレシートはAI補完セクションとして表示する' do
       receipt.update!(
         status: 'review_needed',
