@@ -55,6 +55,10 @@ module Amounts
         errors << :tax_detail_rate_mismatch
       end
 
+      if same_rate_mixed_item_basis_uncertain?
+        errors << :calculation_profile_uncertain
+      end
+
       if discount_data_incomplete?
         errors << :discount_data_incomplete
       end
@@ -161,6 +165,7 @@ module Amounts
     def tax_detail_mismatch?
       return false if tax_detail_incomplete?
       return false if tax_detail_partial?
+      return false if same_rate_mixed_item_basis_uncertain?
 
       tax_detail_total.positive? &&
         item_tax_total.positive? &&
@@ -171,6 +176,7 @@ module Amounts
     def tax_detail_rate_mismatch?
       return false if tax_detail_incomplete?
       return false if tax_detail_partial?
+      return false if same_rate_mixed_item_basis_uncertain?
 
       source_groups = tax_details_by_rate(comparable_source_tax_details)
       generated_groups = tax_details_by_rate(@generated_tax_details)
@@ -283,6 +289,28 @@ module Amounts
         groups[rate][:amount] += to_i(fetch_value(tax_detail, :amount))
         groups[rate][:net_amount] += to_i(fetch_value(tax_detail, :net_amount))
       end
+    end
+
+    def same_rate_mixed_item_basis_uncertain?
+      return false unless @context == :analysis
+      return false if tax_detail_incomplete? || tax_detail_partial?
+
+      source_groups = tax_details_by_rate(comparable_source_tax_details)
+      return false unless source_groups.one?
+
+      rate, source_amounts = source_groups.first
+      item_rates = @items.filter_map do |item|
+        item_rate = normalize_rate(fetch_value(item, :tax_rate))
+        item_rate.positive? ? item_rate : nil
+      end.uniq
+      return false unless item_rates == [ rate ]
+
+      group_total = @items.sum do |item|
+        normalize_rate(fetch_value(item, :tax_rate)) == rate ? item_line_total(item) : 0
+      end
+      printed_gross = source_amounts[:net_amount] + source_amounts[:amount]
+
+      source_amounts[:net_amount] < group_total && group_total < printed_gross
     end
 
     def normalize_rate(value)

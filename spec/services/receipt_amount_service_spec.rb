@@ -720,6 +720,95 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'applies mixed calculation profile when tax rate group assignments exactly match printed amounts' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 350,
+          tax_amount: 28,
+          total_amount: 378
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 200, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 },
+          { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to include(item_basis: :mixed)
+        expect(result[:computed]).to include(
+          subtotal: 350,
+          tax: 28,
+          total: 378,
+          item_basis: :mixed
+        )
+        expect(result[:resolved]).to include(
+          subtotal: 350,
+          tax: 28,
+          total: 378
+        )
+        expect(result[:tax_details]).to include(
+          hash_including(rate: BigDecimal('0.08'), net_amount: 100, amount: 8),
+          hash_including(rate: BigDecimal('0.1'), net_amount: 200, amount: 20)
+        )
+        expect(result[:inconsistencies]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'does not apply mixed calculation profile when printed subtotal tax total are incomplete' do
+      result = call_service(
+        receipt: {
+          total_amount: 378
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 200, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 },
+          { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to include(item_basis: :mixed)
+        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+      end
+    end
+
+    it 'does not apply same-rate mixed candidates at P3 scope' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 200,
+          tax_amount: 20,
+          total_amount: 220
+        },
+        receipt_items: [
+          { line_total: 110, tax_rate: BigDecimal('0.1') },
+          { line_total: 100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
     it 'returns calculation profile uncertainty as a warning without requiring review' do
       result = call_service(
         receipt: {

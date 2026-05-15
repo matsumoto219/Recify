@@ -163,6 +163,60 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     expect(result[:warnings]).to include(:calculation_profile_uncertain)
   end
 
+  it 'selects mixed item basis with tax rate group assignments when groups match tax details exactly' do
+    result = estimate(
+      receipt: {
+        subtotal_amount: 350,
+        tax_amount: 28,
+        total_amount: 378
+      },
+      items: [
+        { line_total: 108, tax_rate: BigDecimal('0.08') },
+        { line_total: 200, tax_rate: BigDecimal('0.1') },
+        { line_total: 50, tax_rate: nil }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 },
+        { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+      ]
+    )
+
+    assignments = result[:profile][:item_basis_assignments]
+
+    aggregate_failures do
+      expect(result[:profile]).to include(item_basis: :mixed)
+      expect(result[:score]).to eq(0)
+      expect(result[:warnings]).to eq([])
+      expect(assignments).to include(
+        hash_including(tax_rate: BigDecimal('0.08'), basis: :tax_included, net_amount: 100, tax_amount: 8, gross_amount: 108),
+        hash_including(tax_rate: BigDecimal('0.1'), basis: :tax_excluded, net_amount: 200, tax_amount: 20, gross_amount: 220),
+        hash_including(tax_rate: BigDecimal('0'), basis: :non_taxable, net_amount: 50, tax_amount: 0, gross_amount: 50)
+      )
+    end
+  end
+
+  it 'warns when same-rate mixed items cannot be resolved at tax rate group level' do
+    result = estimate(
+      receipt: {
+        subtotal_amount: 200,
+        tax_amount: 20,
+        total_amount: 220
+      },
+      items: [
+        { line_total: 110, tax_rate: BigDecimal('0.1') },
+        { line_total: 100, tax_rate: BigDecimal('0.1') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:profile]).not_to include(item_basis: :mixed, item_basis_assignments: be_present)
+      expect(result[:warnings]).to include(:calculation_profile_uncertain)
+    end
+  end
+
   it 'does not warn when exact zero-score candidates differ only by inference metadata' do
     result = estimate(
       receipt: aeon_receipt,

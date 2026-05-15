@@ -49,6 +49,7 @@ module Amounts
     end
 
     def candidate_for(profile)
+      profile = profile_with_metadata(profile)
       calc = Amounts::Calculator.new(
         receipt: @receipt,
         items: @items,
@@ -56,7 +57,9 @@ module Amounts
         context: @context,
         tax_rounding_mode: profile[:tax_rounding_mode],
         discount_rounding_mode: profile[:discount_rounding_mode],
-        tax_basis: profile[:tax_basis]
+        tax_basis: profile[:tax_basis],
+        item_basis: profile[:item_basis],
+        item_basis_assignments: profile[:item_basis_assignments]
       ).call
 
       deltas = deltas_for(calc, profile)
@@ -90,11 +93,13 @@ module Amounts
         deltas[:item_line_total] * 40 +
         deltas[:discount] * 40 +
         deltas[:basis_relation] * 100 +
-        tax_basis_penalty(profile[:tax_basis]) +
+        tax_basis_penalty(profile) +
         item_basis_penalty(profile[:item_basis])
     end
 
-    def tax_basis_penalty(tax_basis)
+    def tax_basis_penalty(profile)
+      tax_basis = profile[:tax_basis]
+      return 25 if profile[:item_basis] == :mixed && tax_basis == :external && !explicit_external_tax_evidence?
       return 10_000 if tax_basis == :external && !external_tax_candidate_available?
 
       0
@@ -107,7 +112,7 @@ module Amounts
       when :tax_excluded
         explicit_external_tax_evidence? ? 0 : 25
       when :mixed
-        mixed_item_basis_suspected? ? 25 : 1_000
+        mixed_assignment_exact? ? 0 : (mixed_item_basis_suspected? ? 25 : 1_000)
       else
         1_000
       end
@@ -149,6 +154,10 @@ module Amounts
     end
 
     def generated_tax_details(calc, profile)
+      if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
+        return mixed_generated_tax_details(profile[:item_basis_assignments])
+      end
+
       if profile[:item_basis] == :tax_excluded
         generated = tax_excluded_tax_details(profile[:tax_rounding_mode])
         return generated if generated.present?
@@ -168,6 +177,10 @@ module Amounts
     end
 
     def profile_amounts(calc, profile)
+      if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
+        return mixed_amounts(profile[:item_basis_assignments])
+      end
+
       return tax_excluded_amounts(profile[:tax_rounding_mode]) if profile[:item_basis] == :tax_excluded
 
       {
@@ -208,6 +221,27 @@ module Amounts
       groups.values
     end
 
+    def mixed_generated_tax_details(assignments)
+      Array(assignments).filter_map do |assignment|
+        rate = normalize_rate(fetch_value(assignment, :tax_rate))
+        next if rate <= 0
+
+        {
+          rate: rate,
+          net_amount: to_i(fetch_value(assignment, :net_amount)),
+          amount: to_i(fetch_value(assignment, :tax_amount))
+        }
+      end
+    end
+
+    def mixed_amounts(assignments)
+      {
+        subtotal: Array(assignments).sum { |assignment| to_i(fetch_value(assignment, :net_amount)) },
+        tax: Array(assignments).sum { |assignment| to_i(fetch_value(assignment, :tax_amount)) },
+        total: Array(assignments).sum { |assignment| to_i(fetch_value(assignment, :gross_amount)) }
+      }
+    end
+
     def item_line_total_delta(calculated_items)
       Array(calculated_items).each_with_index.sum do |calculated_item, index|
         source_item = @items[index]
@@ -237,6 +271,8 @@ module Amounts
     end
 
     def basis_relation_delta(_calc, profile, amounts)
+      return 0 if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
+
       case profile[:tax_basis]
       when :external
         (source_item_total - to_i(amounts[:subtotal])).abs
@@ -362,14 +398,23 @@ module Amounts
       Array(values).map { |value| value.to_s.to_sym }.select { |value| ITEM_BASES.include?(value) }.presence || ITEM_BASES
     end
 
+    def profile_with_metadata(profile)
+      return profile unless profile[:item_basis] == :mixed
+
+      assignment = mixed_assignment_for(profile[:tax_rounding_mode])
+      return profile unless assignment[:exact]
+
+      profile.merge(item_basis_assignments: assignment[:assignments])
+    end
+
     def warnings_for(candidates)
-      calculation_profile_uncertain?(candidates) ? [ :calculation_profile_uncertain ] : []
+      calculation_profile_uncertain?(candidates) || mixed_assignment_uncertain?(candidates) ? [ :calculation_profile_uncertain ] : []
     end
 
     def calculation_profile_uncertain?(candidates)
       best = candidates.first
       return false unless best
-      return false if best[:score].to_i.zero?
+      return false if best[:score].to_i.zero? && !mixed_profile_missing_receipt_amounts?(best[:profile])
 
       alternative = candidates.find do |candidate|
         basis_changed?(best[:profile], candidate[:profile])
@@ -377,6 +422,51 @@ module Amounts
       return false unless alternative
 
       (alternative[:score].to_i - best[:score].to_i).abs <= UNCERTAIN_SCORE_GAP
+    end
+
+    def mixed_assignment_uncertain?(candidates)
+      return true if same_rate_mixed_assignment_uncertain?
+
+      best_score = candidates.first&.fetch(:score, nil).to_i
+
+      candidates.any? do |candidate|
+        next false if candidate[:score].to_i - best_score > UNCERTAIN_SCORE_GAP
+
+        profile = candidate[:profile]
+        next false unless profile[:item_basis] == :mixed
+        next false if profile[:item_basis_assignments].present?
+
+        mixed_assignment_for(profile[:tax_rounding_mode])[:ambiguous]
+      end
+    end
+
+    def same_rate_mixed_assignment_uncertain?
+      detail_groups = tax_details_by_rate(complete_tax_details)
+      return false unless detail_groups.one?
+
+      rate, detail = detail_groups.first
+      item_rates = @items.filter_map do |item|
+        item_rate = normalize_rate(fetch_value(item, :tax_rate))
+        item_rate.positive? ? item_rate : nil
+      end.uniq
+      return false unless item_rates == [ rate ]
+
+      group_total = @items.sum do |item|
+        normalize_rate(fetch_value(item, :tax_rate)) == rate ? source_item_line_total(item) : 0
+      end
+      printed_gross = detail[:net_amount] + detail[:amount]
+
+      detail[:net_amount] < group_total && group_total < printed_gross
+    end
+
+    def mixed_profile_missing_receipt_amounts?(profile)
+      profile[:item_basis] == :mixed && !receipt_amounts_complete?
+    end
+
+    def receipt_amounts_complete?
+      present?(fetch_value(@receipt, :subtotal_amount)) &&
+        present?(fetch_value(@receipt, :tax_amount)) &&
+        present?(fetch_value(@receipt, :total_amount))
     end
 
     def basis_changed?(left, right)
@@ -389,6 +479,91 @@ module Amounts
 
       rates = @items.map { |item| normalize_rate(fetch_value(item, :tax_rate)) }.uniq
       rates.include?(BigDecimal("0")) && rates.any?(&:positive?)
+    end
+
+    def mixed_assignment_exact?
+      ROUNDING_MODES.any? { |rounding_mode| mixed_assignment_for(rounding_mode)[:exact] }
+    end
+
+    def mixed_assignment_for(rounding_mode)
+      @mixed_assignment_cache ||= {}
+      @mixed_assignment_cache[rounding_mode] ||= build_mixed_assignment(rounding_mode)
+    end
+
+    def build_mixed_assignment(rounding_mode)
+      source_groups = @items.group_by { |item| normalize_rate(fetch_value(item, :tax_rate)) }
+      detail_groups = tax_details_by_rate(complete_tax_details)
+      assignments = []
+      ambiguous = false
+
+      source_groups.each do |rate, items|
+        group_total = items.sum { |item| source_item_line_total(item) }
+        next if group_total <= 0
+
+        if rate <= 0
+          assignments << {
+            tax_rate: BigDecimal("0"),
+            basis: :non_taxable,
+            net_amount: group_total,
+            tax_amount: 0,
+            gross_amount: group_total
+          }
+          next
+        end
+
+        detail = detail_groups[rate]
+        unless detail
+          ambiguous = true
+          next
+        end
+
+        included_tax = rounded_tax_from_gross(group_total, rate, rounding_mode)
+        included = {
+          tax_rate: rate,
+          basis: :tax_included,
+          net_amount: group_total - included_tax,
+          tax_amount: included_tax,
+          gross_amount: group_total
+        }
+
+        excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(group_total.to_s) * rate, rounding_mode)
+        excluded = {
+          tax_rate: rate,
+          basis: :tax_excluded,
+          net_amount: group_total,
+          tax_amount: excluded_tax,
+          gross_amount: group_total + excluded_tax
+        }
+
+        matches = [ included, excluded ].select do |candidate|
+          candidate[:net_amount] == detail[:net_amount] && candidate[:tax_amount] == detail[:amount]
+        end
+
+        if matches.one?
+          assignments << matches.first
+        else
+          ambiguous = true
+        end
+      end
+
+      source_positive_rates = source_groups.keys.select(&:positive?)
+      ambiguous = true unless (detail_groups.keys - source_positive_rates).empty?
+
+      basis_types = assignments.map { |assignment| assignment[:basis] }.uniq
+      exact = !ambiguous &&
+        assignments.any? &&
+        basis_types.many? &&
+        (basis_types & %i[tax_included tax_excluded]).any?
+
+      {
+        exact: exact,
+        ambiguous: ambiguous,
+        assignments: assignments
+      }
+    end
+
+    def rounded_tax_from_gross(gross_total, tax_rate, rounding_mode)
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), rounding_mode)
     end
 
     def normalize_rate(value)

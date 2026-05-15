@@ -2,13 +2,14 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto, item_basis: :tax_included)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto, item_basis: :tax_included, item_basis_assignments: nil)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
       @context = normalize_context(context)
       @tax_basis = normalize_tax_basis(tax_basis)
       @item_basis = normalize_item_basis(item_basis)
+      @item_basis_assignments = normalize_item_basis_assignments(item_basis_assignments)
       @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
         tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
       )
@@ -28,6 +29,30 @@ module Amounts
       tax_detail_total = calculate_tax_detail_total
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
+
+      if @item_basis == :mixed && @item_basis_assignments.present?
+        amounts = mixed_assignment_amounts
+        tax_details = mixed_assignment_tax_details
+        tax_rates = tax_details.filter_map { |tax_detail| normalize_tax_rate(tax_detail[:rate]) }.uniq
+
+        return {
+          item_total: amounts[:total],
+          item_tax_total: amounts[:tax],
+          tax_detail_total: amounts[:tax],
+          tax_total: amounts[:tax],
+          subtotal: amounts[:subtotal],
+          tax: amounts[:tax],
+          total: amounts[:total],
+          tax_rate: tax_rates.one? ? tax_rates.first : nil,
+          external_tax: false,
+          tax_details_primary: false,
+          tax_basis: @tax_basis == :external ? :external : :internal,
+          item_basis: :mixed,
+          item_basis_assignments: @item_basis_assignments,
+          tax_details: tax_details,
+          items: @items
+        }
+      end
 
       if @item_basis == :tax_excluded
         subtotal = item_total
@@ -138,6 +163,28 @@ module Amounts
 
       net_totals.sum do |rate, net_total|
         Amounts::Rounding.apply_rounding(BigDecimal(net_total.to_s) * rate, @tax_rounding_mode)
+      end
+    end
+
+    def mixed_assignment_amounts
+      {
+        subtotal: @item_basis_assignments.sum { |assignment| to_i(assignment[:net_amount]) },
+        tax: @item_basis_assignments.sum { |assignment| to_i(assignment[:tax_amount]) },
+        total: @item_basis_assignments.sum { |assignment| to_i(assignment[:gross_amount]) }
+      }
+    end
+
+    def mixed_assignment_tax_details
+      @item_basis_assignments.filter_map do |assignment|
+        rate = normalize_tax_rate(assignment[:tax_rate])
+        next if rate <= 0
+
+        {
+          description: "#{(rate * 100).to_i}%対象",
+          rate: rate,
+          net_amount: to_i(assignment[:net_amount]),
+          amount: to_i(assignment[:tax_amount])
+        }
       end
     end
 
@@ -375,7 +422,22 @@ module Amounts
 
     def normalize_item_basis(value)
       basis = value.to_s.to_sym
-      %i[tax_included tax_excluded].include?(basis) ? basis : :tax_included
+      %i[tax_included tax_excluded mixed].include?(basis) ? basis : :tax_included
+    end
+
+    def normalize_item_basis_assignments(assignments)
+      Array(assignments).filter_map do |assignment|
+        basis = assignment[:basis].to_s.to_sym
+        next unless %i[tax_included tax_excluded non_taxable].include?(basis)
+
+        {
+          tax_rate: normalize_tax_rate(assignment[:tax_rate]),
+          basis: basis,
+          net_amount: to_i(assignment[:net_amount]),
+          tax_amount: to_i(assignment[:tax_amount]),
+          gross_amount: to_i(assignment[:gross_amount])
+        }
+      end
     end
 
     def to_i(value)

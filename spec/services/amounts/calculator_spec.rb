@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::Calculator do
-  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, item_basis: nil, tax_basis: nil)
+  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, item_basis: nil, item_basis_assignments: nil, tax_basis: nil)
     kwargs = {
       receipt: receipt,
       items: items,
@@ -12,6 +12,7 @@ RSpec.describe Amounts::Calculator do
     kwargs[:tax_rounding_mode] = tax_rounding_mode if tax_rounding_mode
     kwargs[:discount_rounding_mode] = discount_rounding_mode if discount_rounding_mode
     kwargs[:item_basis] = item_basis if item_basis
+    kwargs[:item_basis_assignments] = item_basis_assignments if item_basis_assignments
     kwargs[:tax_basis] = tax_basis if tax_basis
 
     described_class.new(**kwargs).call
@@ -266,6 +267,33 @@ RSpec.describe Amounts::Calculator do
         expect(result[:total]).to eq(1_100)
         expect(result[:tax_basis]).to eq(:external)
         expect(result[:item_basis]).to eq(:tax_excluded)
+      end
+    end
+
+    it 'calculates mixed item basis from supplied tax rate group assignments' do
+      result = calculate(
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 200, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        item_basis: :mixed,
+        item_basis_assignments: [
+          { tax_rate: BigDecimal('0.08'), basis: :tax_included, net_amount: 100, tax_amount: 8, gross_amount: 108 },
+          { tax_rate: BigDecimal('0.1'), basis: :tax_excluded, net_amount: 200, tax_amount: 20, gross_amount: 220 },
+          { tax_rate: BigDecimal('0'), basis: :non_taxable, net_amount: 50, tax_amount: 0, gross_amount: 50 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(350)
+        expect(result[:tax]).to eq(28)
+        expect(result[:total]).to eq(378)
+        expect(result[:item_basis]).to eq(:mixed)
+        expect(result[:tax_details]).to include(
+          hash_including(rate: BigDecimal('0.08'), net_amount: 100, amount: 8),
+          hash_including(rate: BigDecimal('0.1'), net_amount: 200, amount: 20)
+        )
       end
     end
 
