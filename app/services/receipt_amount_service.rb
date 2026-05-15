@@ -57,6 +57,7 @@ class ReceiptAmountService
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
     active_tax_basis = active_profile[:tax_basis] || :auto
+    active_item_basis = active_profile[:item_basis] || :tax_included
 
     # --- 1) Calculator（純計算）
     calc = Amounts::Calculator.new(
@@ -66,7 +67,8 @@ class ReceiptAmountService
       context: @context,
       tax_rounding_mode: active_tax_rounding_mode,
       discount_rounding_mode: active_discount_rounding_mode,
-      tax_basis: active_tax_basis
+      tax_basis: active_tax_basis,
+      item_basis: active_item_basis
     ).call
 
     # --- 2) Resolver（最終値決定）
@@ -156,7 +158,143 @@ class ReceiptAmountService
     return false unless profile_estimation[:score].to_i.zero?
     return false unless profile
 
-    profile[:item_basis] == :tax_included
+    case profile[:item_basis]
+    when :tax_included
+      true
+    when :tax_excluded
+      tax_excluded_profile_applicable?(profile_estimation)
+    else
+      false
+    end
+  end
+
+  def tax_excluded_profile_applicable?(profile_estimation)
+    profile = profile_estimation[:profile]
+
+    return false unless @context == :analysis
+    return false unless profile[:tax_basis] == :external
+    return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
+    return false if same_score_conflicting_basis?(profile_estimation)
+    return false unless receipt_amounts_complete_and_consistent?
+    return false unless item_line_totals_complete?
+    return false unless complete_tax_details_available?
+    return false if tax_detail_incomplete?
+    return false if mixed_item_basis_suspected?
+    return false unless item_line_total_sum == tax_detail_net_amount
+    return false unless @receipt[:total_amount] == tax_detail_net_amount + tax_detail_tax_amount
+    return false unless external_tax_evidence?
+    return false unless safe_tax_rate_coverage?
+
+    true
+  end
+
+  def same_score_conflicting_basis?(profile_estimation)
+    score = profile_estimation[:score].to_i
+
+    Array(profile_estimation[:candidates]).any? do |candidate|
+      next false unless candidate[:score].to_i == score
+
+      profile = candidate[:profile]
+      profile[:item_basis] != :tax_excluded || profile[:tax_basis] != :external
+    end
+  end
+
+  def receipt_amounts_complete_and_consistent?
+    subtotal = @receipt[:subtotal_amount]
+    tax = @receipt[:tax_amount]
+    total = @receipt[:total_amount]
+
+    value_present?(subtotal) &&
+      value_present?(tax) &&
+      value_present?(total) &&
+      subtotal + tax == total
+  end
+
+  def item_line_totals_complete?
+    @items.present? && @items.all? { |item| item[:amount_line_total_present] == true }
+  end
+
+  def complete_tax_details_available?
+    complete_tax_details.present?
+  end
+
+  def tax_detail_incomplete?
+    @tax_details.any? do |tax_detail|
+      tax_detail_has_any_value?(tax_detail) && !tax_detail_complete?(tax_detail)
+    end
+  end
+
+  def tax_detail_has_any_value?(tax_detail)
+    value_present?(tax_detail[:rate]) ||
+      value_present?(tax_detail[:net_amount]) ||
+      value_present?(tax_detail[:amount])
+  end
+
+  def tax_detail_complete?(tax_detail)
+    normalize_rate(tax_detail[:rate]).positive? &&
+      value_present?(tax_detail[:net_amount]) &&
+      value_present?(tax_detail[:amount])
+  end
+
+  def complete_tax_details
+    @complete_tax_details ||= @tax_details.select { |tax_detail| tax_detail_complete?(tax_detail) }
+  end
+
+  def item_line_total_sum
+    @item_line_total_sum ||= @items.sum { |item| to_i(item[:line_total]) }
+  end
+
+  def tax_detail_net_amount
+    @tax_detail_net_amount ||= complete_tax_details.sum { |tax_detail| to_i(tax_detail[:net_amount]) }
+  end
+
+  def tax_detail_tax_amount
+    @tax_detail_tax_amount ||= complete_tax_details.sum { |tax_detail| to_i(tax_detail[:amount]) }
+  end
+
+  def external_tax_evidence?
+    external_tax_description? ||
+      (
+        item_line_total_sum == tax_detail_net_amount &&
+          @receipt[:total_amount] == tax_detail_net_amount + tax_detail_tax_amount
+      )
+  end
+
+  def external_tax_description?
+    @tax_details.any? do |tax_detail|
+      tax_detail[:description].to_s.match?(/外税|税別|消費税別|別途消費税/)
+    end
+  end
+
+  def safe_tax_rate_coverage?
+    item_rates = positive_item_tax_rates
+    detail_rates = positive_tax_detail_rates
+
+    return false if detail_rates.blank?
+    return true if item_rates.blank? && detail_rates.one?
+    return false if item_rates.blank?
+
+    (item_rates - detail_rates).empty?
+  end
+
+  def mixed_item_basis_suspected?
+    item_rates = @items.map { |item| normalize_rate(item[:tax_rate]) }.uniq
+
+    item_rates.include?(BigDecimal("0")) && item_rates.any?(&:positive?)
+  end
+
+  def positive_item_tax_rates
+    @items.filter_map do |item|
+      rate = normalize_rate(item[:tax_rate])
+      rate.positive? ? rate : nil
+    end.uniq
+  end
+
+  def positive_tax_detail_rates
+    complete_tax_details.filter_map do |tax_detail|
+      rate = normalize_rate(tax_detail[:rate])
+      rate.positive? ? rate : nil
+    end.uniq
   end
 
   def estimate_calculation_profile
@@ -277,6 +415,15 @@ class ReceiptAmountService
 
   def to_decimal_or_nil(value)
     Amounts::NumberParser.parse_quantity_or_nil(value)
+  end
+
+  def normalize_rate(value)
+    return BigDecimal("0") unless value_present?(value)
+
+    rate = BigDecimal(value.to_s.delete("%"))
+    rate > 1 ? rate / 100 : rate
+  rescue ArgumentError
+    BigDecimal("0")
   end
 
   def value_present?(value)

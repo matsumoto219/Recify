@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::Calculator do
-  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, item_basis: nil, tax_basis: nil)
     kwargs = {
       receipt: receipt,
       items: items,
@@ -11,6 +11,8 @@ RSpec.describe Amounts::Calculator do
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
     kwargs[:tax_rounding_mode] = tax_rounding_mode if tax_rounding_mode
     kwargs[:discount_rounding_mode] = discount_rounding_mode if discount_rounding_mode
+    kwargs[:item_basis] = item_basis if item_basis
+    kwargs[:tax_basis] = tax_basis if tax_basis
 
     described_class.new(**kwargs).call
   end
@@ -238,6 +240,32 @@ RSpec.describe Amounts::Calculator do
         expect(result[:subtotal]).to eq(455)
         expect(result[:tax]).to eq(45)
         expect(result[:total]).to eq(500)
+      end
+    end
+
+    it 'calculates tax excluded item basis from item line totals' do
+      result = calculate(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100
+        },
+        items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税 10%' }
+        ],
+        item_basis: :tax_excluded,
+        tax_basis: :external
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(1_000)
+        expect(result[:tax]).to eq(100)
+        expect(result[:total]).to eq(1_100)
+        expect(result[:tax_basis]).to eq(:external)
+        expect(result[:item_basis]).to eq(:tax_excluded)
       end
     end
 

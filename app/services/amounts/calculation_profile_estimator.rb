@@ -103,7 +103,7 @@ module Amounts
     def item_basis_penalty(item_basis)
       case item_basis
       when :tax_included
-        0
+        explicit_external_tax_evidence? ? 25 : 0
       when :tax_excluded
         explicit_external_tax_evidence? ? 0 : 25
       when :mixed

@@ -2,12 +2,13 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto, item_basis: :tax_included)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
       @context = normalize_context(context)
       @tax_basis = normalize_tax_basis(tax_basis)
+      @item_basis = normalize_item_basis(item_basis)
       @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
         tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
       )
@@ -27,6 +28,29 @@ module Amounts
       tax_detail_total = calculate_tax_detail_total
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
+
+      if @item_basis == :tax_excluded
+        subtotal = item_total
+        tax_total = calculate_tax_excluded_item_tax_total(fallback_tax_rate)
+        tax_rate = resolve_tax_rate(fallback_tax_rate)
+
+        return {
+          item_total: item_total,
+          item_tax_total: tax_total,
+          tax_detail_total: tax_detail_total,
+          tax_total: tax_total,
+          subtotal: subtotal,
+          tax: tax_total,
+          total: subtotal + tax_total,
+          tax_rate: tax_rate,
+          external_tax: true,
+          tax_details_primary: false,
+          tax_basis: :external,
+          item_basis: :tax_excluded,
+          items: @items
+        }
+      end
+
       external_tax = resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
       tax_details_primary = resolve_tax_details_primary(item_total, tax_detail_subtotal, tax_detail_total)
 
@@ -96,6 +120,24 @@ module Amounts
         next line_total if rate <= 0
 
         line_total - rounded_tax_from_gross(line_total, rate)
+      end
+    end
+
+    def calculate_tax_excluded_item_tax_total(fallback_tax_rate = BigDecimal("0"))
+      net_totals = @items.each_with_object({}) do |item, groups|
+        line_total = item_line_total(item)
+        next if line_total <= 0
+
+        rate = normalize_tax_rate(item[:tax_rate])
+        rate = fallback_tax_rate if rate <= 0
+        next if rate <= 0
+
+        groups[rate] ||= 0
+        groups[rate] += line_total
+      end
+
+      net_totals.sum do |rate, net_total|
+        Amounts::Rounding.apply_rounding(BigDecimal(net_total.to_s) * rate, @tax_rounding_mode)
       end
     end
 
@@ -329,6 +371,11 @@ module Amounts
     def normalize_tax_basis(value)
       basis = value.to_s.to_sym
       %i[auto internal external].include?(basis) ? basis : :auto
+    end
+
+    def normalize_item_basis(value)
+      basis = value.to_s.to_sym
+      %i[tax_included tax_excluded].include?(basis) ? basis : :tax_included
     end
 
     def to_i(value)

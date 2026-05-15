@@ -562,7 +562,89 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'does not apply tax excluded calculation profiles to resolved amounts yet' do
+    it 'does not estimate calculation profile in edit_save context' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to be_nil
+        expect(result[:calculation_profile_score]).to be_nil
+        expect(result[:calculation_profile_candidates]).to eq([])
+      end
+    end
+
+    it 'applies tax excluded calculation profile when strict external tax evidence is complete' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to include(
+          tax_basis: :external,
+          item_basis: :tax_excluded
+        )
+        expect(result[:computed]).to include(
+          subtotal: 1_000,
+          tax: 100,
+          total: 1_100,
+          item_basis: :tax_excluded
+        )
+        expect(result[:resolved]).to include(
+          subtotal: 1_000,
+          tax: 100,
+          total: 1_100
+        )
+        expect(result[:inconsistencies]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'does not apply tax excluded calculation profile when candidates are ambiguous' do
       result = call_service(
         receipt: {
           subtotal_amount: 1_000,
@@ -591,6 +673,7 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
+        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
         expect(result[:computed]).to include(
           subtotal: 1_000,
           tax: 100,
@@ -602,6 +685,38 @@ RSpec.describe ReceiptAmountService do
           tax: 100,
           total: 1_100
         )
+      end
+    end
+
+    it 'does not apply tax excluded calculation profile when printed subtotal tax total are incomplete' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
+        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:needs_review]).to be(false)
       end
     end
 
@@ -1105,6 +1220,9 @@ RSpec.describe ReceiptAmountService do
         expect(result[:resolved][:total]).to eq(1_110)
         expect(result[:resolved][:total]).not_to eq(621)
         expect(result[:resolved][:tax_rate]).to be_nil
+        expect(result[:computed][:item_basis]).to eq(:tax_included)
+        expect(result[:calculation_profile]).not_to include(item_basis: :tax_excluded)
+        expect(result[:calculation_profile_candidates].map { |candidate| candidate[:profile][:item_basis] }).to include(:mixed)
         expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
