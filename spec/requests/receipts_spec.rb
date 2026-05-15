@@ -1006,6 +1006,70 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '明細行とNEW_RECORDテンプレートのStimulus接続を維持する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '接続確認商品',
+        price: 310,
+        quantity: 1,
+        quantity_unit: '個',
+        discount_rate: BigDecimal('0.5'),
+        original_line_total: 310,
+        line_total: 155,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_row = document.at_css('[data-receipt-form-target="itemRow"]')
+      template = document.at_css('template[data-receipt-form-target="template"]')
+      template_html = template&.inner_html.to_s
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(item_row).to be_present
+        expect(item_row['data-action']).to include('mouseenter->receipt-form#scheduleLineTotalTooltip')
+        expect(item_row['data-action']).to include('mouseleave->receipt-form#hideLineTotalTooltip')
+        expect(item_row['data-action']).to include('focusin->receipt-form#hideLineTotalTooltipOnFocus')
+        expect(template_html).to include('NEW_RECORD')
+
+        %w[
+          quantityInput
+          quantityUnitInput
+          priceInput
+          discountRateInput
+          taxRateInput
+          lineTotalInput
+          lineTotalDisplay
+          lineTotalTooltip
+          destroyField
+        ].each do |target|
+          expect(document.css(%([data-receipt-form-target="#{target}"]))).to be_present
+        end
+
+        %w[
+          quantityInput
+          priceInput
+          discountRateInput
+          taxRateInput
+        ].each do |target|
+          input = item_row.at_css(%([data-receipt-form-target="#{target}"]))
+          expect(input['data-action']).to include('input->receipt-form#recalculate')
+        end
+
+        quantity_unit_select = item_row.at_css('[data-receipt-form-target="quantityUnitInput"]')
+        expect(quantity_unit_select['data-action']).to be_nil
+
+        line_total_input = item_row.at_css('[data-receipt-form-target="lineTotalInput"]')
+        expect(line_total_input['data-original-line-total']).to eq('310')
+        expect(template_html).to include('data-original-line-total="0"')
+
+        expect(item_row.at_css('[data-receipt-form-target="destroyField"]')).to be_present
+        expect(template_html).not_to include('data-receipt-form-target="destroyField"')
+        expect(document.css('[data-action="click->receipt-form#removeItem"]').size).to be >= 2
+      end
+    end
+
     it '数量入力の初期表示では末尾ゼロを落とす' do
       [
         [ '整数1', BigDecimal('1.0'), '1' ],
