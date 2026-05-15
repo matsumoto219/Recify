@@ -2,14 +2,14 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto, item_basis: :tax_included, item_basis_assignments: nil)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, receipt_tax_basis: :auto, item_amount_basis: :tax_included, item_amount_basis_assignments: nil)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
       @context = normalize_context(context)
-      @tax_basis = normalize_tax_basis(tax_basis)
-      @item_basis = normalize_item_basis(item_basis)
-      @item_basis_assignments = normalize_item_basis_assignments(item_basis_assignments)
+      @receipt_tax_basis = normalize_receipt_tax_basis(receipt_tax_basis)
+      @item_amount_basis = normalize_item_amount_basis(item_amount_basis)
+      @item_amount_basis_assignments = normalize_item_amount_basis_assignments(item_amount_basis_assignments)
       @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
         tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
       )
@@ -30,7 +30,7 @@ module Amounts
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
 
-      if @item_basis == :mixed && @item_basis_assignments.present?
+      if @item_amount_basis == :mixed && @item_amount_basis_assignments.present?
         amounts = mixed_assignment_amounts
         tax_details = mixed_assignment_tax_details
         tax_rates = tax_details.filter_map { |tax_detail| normalize_tax_rate(tax_detail[:rate]) }.uniq
@@ -46,15 +46,15 @@ module Amounts
           tax_rate: tax_rates.one? ? tax_rates.first : nil,
           external_tax: false,
           tax_details_primary: false,
-          tax_basis: @tax_basis == :external ? :external : :internal,
-          item_basis: :mixed,
-          item_basis_assignments: @item_basis_assignments,
+          receipt_tax_basis: @receipt_tax_basis == :external ? :external : :internal,
+          item_amount_basis: :mixed,
+          item_amount_basis_assignments: @item_amount_basis_assignments,
           tax_details: tax_details,
           items: @items
         }
       end
 
-      if @item_basis == :tax_excluded
+      if @item_amount_basis == :tax_excluded
         subtotal = item_total
         tax_total = calculate_tax_excluded_item_tax_total(fallback_tax_rate)
         tax_rate = resolve_tax_rate(fallback_tax_rate)
@@ -70,8 +70,8 @@ module Amounts
           tax_rate: tax_rate,
           external_tax: true,
           tax_details_primary: false,
-          tax_basis: :external,
-          item_basis: :tax_excluded,
+          receipt_tax_basis: :external,
+          item_amount_basis: :tax_excluded,
           items: @items
         }
       end
@@ -108,8 +108,8 @@ module Amounts
         tax_rate: tax_rate,
         external_tax: external_tax,
         tax_details_primary: tax_details_primary,
-        tax_basis: external_tax ? :external : :internal,
-        item_basis: :tax_included,
+        receipt_tax_basis: external_tax ? :external : :internal,
+        item_amount_basis: :tax_included,
         items: @items
       }
     end
@@ -168,14 +168,14 @@ module Amounts
 
     def mixed_assignment_amounts
       {
-        subtotal: @item_basis_assignments.sum { |assignment| to_i(assignment[:net_amount]) },
-        tax: @item_basis_assignments.sum { |assignment| to_i(assignment[:tax_amount]) },
-        total: @item_basis_assignments.sum { |assignment| to_i(assignment[:gross_amount]) }
+        subtotal: @item_amount_basis_assignments.sum { |assignment| to_i(assignment[:net_amount]) },
+        tax: @item_amount_basis_assignments.sum { |assignment| to_i(assignment[:tax_amount]) },
+        total: @item_amount_basis_assignments.sum { |assignment| to_i(assignment[:gross_amount]) }
       }
     end
 
     def mixed_assignment_tax_details
-      @item_basis_assignments.filter_map do |assignment|
+      @item_amount_basis_assignments.filter_map do |assignment|
         rate = normalize_tax_rate(assignment[:tax_rate])
         next if rate <= 0
 
@@ -231,7 +231,7 @@ module Amounts
     end
 
     def resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
-      case @tax_basis
+      case @receipt_tax_basis
       when :external
         tax_detail_subtotal.positive? && tax_detail_total.positive?
       when :internal
@@ -242,7 +242,7 @@ module Amounts
     end
 
     def resolve_tax_details_primary(item_total, tax_detail_subtotal, tax_detail_total)
-      return false unless @tax_basis == :auto
+      return false unless @receipt_tax_basis == :auto
 
       tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
     end
@@ -415,17 +415,17 @@ module Amounts
       %i[analysis edit_save manual].include?(context) ? context : :analysis
     end
 
-    def normalize_tax_basis(value)
+    def normalize_receipt_tax_basis(value)
       basis = value.to_s.to_sym
       %i[auto internal external].include?(basis) ? basis : :auto
     end
 
-    def normalize_item_basis(value)
+    def normalize_item_amount_basis(value)
       basis = value.to_s.to_sym
       %i[tax_included tax_excluded mixed].include?(basis) ? basis : :tax_included
     end
 
-    def normalize_item_basis_assignments(assignments)
+    def normalize_item_amount_basis_assignments(assignments)
       Array(assignments).filter_map do |assignment|
         basis = assignment[:basis].to_s.to_sym
         next unless %i[tax_included tax_excluded non_taxable].include?(basis)

@@ -3,20 +3,20 @@
 module Amounts
   class CalculationProfileEstimator
     ROUNDING_MODES = %i[floor round ceil].freeze
-    TAX_BASES = %i[internal external].freeze
-    ITEM_BASES = %i[tax_included tax_excluded mixed].freeze
-    ITEM_BASIS = :tax_included
+    RECEIPT_TAX_BASES = %i[internal external].freeze
+    ITEM_AMOUNT_BASES = %i[tax_included tax_excluded mixed].freeze
+    DEFAULT_ITEM_AMOUNT_BASIS = :tax_included
     UNCERTAIN_SCORE_GAP = 100
 
-    def initialize(receipt:, items:, tax_details:, context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, tax_bases: TAX_BASES, item_bases: ITEM_BASES)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, receipt_tax_bases: RECEIPT_TAX_BASES, item_amount_bases: ITEM_AMOUNT_BASES)
       @receipt = receipt
       @items = Array(items)
       @tax_details = Array(tax_details)
       @context = normalize_context(context)
       @tax_rounding_modes = normalize_rounding_modes(tax_rounding_modes, ROUNDING_MODES)
       @discount_rounding_modes = normalize_rounding_modes(discount_rounding_modes, ROUNDING_MODES)
-      @tax_bases = normalize_tax_bases(tax_bases)
-      @item_bases = normalize_item_bases(item_bases)
+      @receipt_tax_bases = normalize_receipt_tax_bases(receipt_tax_bases)
+      @item_amount_bases = normalize_item_amount_bases(item_amount_bases)
     end
 
     def call
@@ -38,12 +38,12 @@ module Amounts
     private
 
     def profiles
-      @tax_rounding_modes.product(@discount_rounding_modes, @tax_bases, @item_bases).map do |tax_rounding_mode, discount_rounding_mode, tax_basis, item_basis|
+      @tax_rounding_modes.product(@discount_rounding_modes, @receipt_tax_bases, @item_amount_bases).map do |tax_rounding_mode, discount_rounding_mode, receipt_tax_basis, item_amount_basis|
         {
           tax_rounding_mode: tax_rounding_mode,
           discount_rounding_mode: discount_rounding_mode,
-          tax_basis: tax_basis,
-          item_basis: item_basis
+          receipt_tax_basis: receipt_tax_basis,
+          item_amount_basis: item_amount_basis
         }
       end
     end
@@ -57,9 +57,9 @@ module Amounts
         context: @context,
         tax_rounding_mode: profile[:tax_rounding_mode],
         discount_rounding_mode: profile[:discount_rounding_mode],
-        tax_basis: profile[:tax_basis],
-        item_basis: profile[:item_basis],
-        item_basis_assignments: profile[:item_basis_assignments]
+        receipt_tax_basis: profile[:receipt_tax_basis],
+        item_amount_basis: profile[:item_amount_basis],
+        item_amount_basis_assignments: profile[:item_amount_basis_assignments]
       ).call
 
       deltas = deltas_for(calc, profile)
@@ -93,26 +93,26 @@ module Amounts
         deltas[:item_line_total] * 40 +
         deltas[:discount] * 40 +
         deltas[:basis_relation] * 100 +
-        tax_basis_penalty(profile) +
-        item_basis_penalty(profile[:item_basis])
+        receipt_tax_basis_penalty(profile) +
+        item_amount_basis_penalty(profile[:item_amount_basis])
     end
 
-    def tax_basis_penalty(profile)
-      tax_basis = profile[:tax_basis]
-      return 25 if profile[:item_basis] == :mixed && tax_basis == :external && !explicit_external_tax_evidence?
-      return 10_000 if tax_basis == :external && !external_tax_candidate_available?
+    def receipt_tax_basis_penalty(profile)
+      receipt_tax_basis = profile[:receipt_tax_basis]
+      return 25 if profile[:item_amount_basis] == :mixed && receipt_tax_basis == :external && !explicit_external_tax_evidence?
+      return 10_000 if receipt_tax_basis == :external && !external_tax_candidate_available?
 
       0
     end
 
-    def item_basis_penalty(item_basis)
-      case item_basis
+    def item_amount_basis_penalty(item_amount_basis)
+      case item_amount_basis
       when :tax_included
         explicit_external_tax_evidence? ? 25 : 0
       when :tax_excluded
         explicit_external_tax_evidence? ? 0 : 25
       when :mixed
-        mixed_assignment_exact? ? 0 : (mixed_item_basis_suspected? ? 25 : 1_000)
+        mixed_assignment_exact? ? 0 : (mixed_item_amount_basis_suspected? ? 25 : 1_000)
       else
         1_000
       end
@@ -123,8 +123,8 @@ module Amounts
 
       [
         candidate[:score],
-        tax_basis_priority(profile[:tax_basis]),
-        item_basis_priority(profile[:item_basis]),
+        receipt_tax_basis_priority(profile[:receipt_tax_basis]),
+        item_amount_basis_priority(profile[:item_amount_basis]),
         tax_rounding_priority(profile[:tax_rounding_mode]),
         discount_rounding_priority(profile[:discount_rounding_mode])
       ]
@@ -154,11 +154,11 @@ module Amounts
     end
 
     def generated_tax_details(calc, profile)
-      if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
-        return mixed_generated_tax_details(profile[:item_basis_assignments])
+      if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
+        return mixed_generated_tax_details(profile[:item_amount_basis_assignments])
       end
 
-      if profile[:item_basis] == :tax_excluded
+      if profile[:item_amount_basis] == :tax_excluded
         generated = tax_excluded_tax_details(profile[:tax_rounding_mode])
         return generated if generated.present?
       end
@@ -177,11 +177,11 @@ module Amounts
     end
 
     def profile_amounts(calc, profile)
-      if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
-        return mixed_amounts(profile[:item_basis_assignments])
+      if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
+        return mixed_amounts(profile[:item_amount_basis_assignments])
       end
 
-      return tax_excluded_amounts(profile[:tax_rounding_mode]) if profile[:item_basis] == :tax_excluded
+      return tax_excluded_amounts(profile[:tax_rounding_mode]) if profile[:item_amount_basis] == :tax_excluded
 
       {
         subtotal: calc[:subtotal],
@@ -271,9 +271,9 @@ module Amounts
     end
 
     def basis_relation_delta(_calc, profile, amounts)
-      return 0 if profile[:item_basis] == :mixed && profile[:item_basis_assignments].present?
+      return 0 if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
 
-      case profile[:tax_basis]
+      case profile[:receipt_tax_basis]
       when :external
         (source_item_total - to_i(amounts[:subtotal])).abs
       else
@@ -359,22 +359,22 @@ module Amounts
       item_rates.one? ? item_rates.first : BigDecimal("0")
     end
 
-    def tax_basis_priority(tax_basis)
+    def receipt_tax_basis_priority(receipt_tax_basis)
       if external_tax_preferred?
-        tax_basis == :external ? 0 : 1
+        receipt_tax_basis == :external ? 0 : 1
       else
-        tax_basis == :internal ? 0 : 1
+        receipt_tax_basis == :internal ? 0 : 1
       end
     end
 
-    def item_basis_priority(item_basis)
+    def item_amount_basis_priority(item_amount_basis)
       if explicit_external_tax_evidence?
-        return { tax_excluded: 0, tax_included: 1, mixed: 2 }.fetch(item_basis, 3)
+        return { tax_excluded: 0, tax_included: 1, mixed: 2 }.fetch(item_amount_basis, 3)
       end
 
-      return { mixed: 0, tax_included: 1, tax_excluded: 2 }.fetch(item_basis, 3) if mixed_item_basis_suspected?
+      return { mixed: 0, tax_included: 1, tax_excluded: 2 }.fetch(item_amount_basis, 3) if mixed_item_amount_basis_suspected?
 
-      { tax_included: 0, tax_excluded: 1, mixed: 2 }.fetch(item_basis, 3)
+      { tax_included: 0, tax_excluded: 1, mixed: 2 }.fetch(item_amount_basis, 3)
     end
 
     def tax_rounding_priority(tax_rounding_mode)
@@ -390,21 +390,21 @@ module Amounts
       modes.map { |value| Amounts::Rounding.normalize_rounding_mode(value) }.uniq
     end
 
-    def normalize_tax_bases(values)
-      Array(values).map { |value| value.to_s.to_sym }.select { |value| TAX_BASES.include?(value) }.presence || TAX_BASES
+    def normalize_receipt_tax_bases(values)
+      Array(values).map { |value| value.to_s.to_sym }.select { |value| RECEIPT_TAX_BASES.include?(value) }.presence || RECEIPT_TAX_BASES
     end
 
-    def normalize_item_bases(values)
-      Array(values).map { |value| value.to_s.to_sym }.select { |value| ITEM_BASES.include?(value) }.presence || ITEM_BASES
+    def normalize_item_amount_bases(values)
+      Array(values).map { |value| value.to_s.to_sym }.select { |value| ITEM_AMOUNT_BASES.include?(value) }.presence || ITEM_AMOUNT_BASES
     end
 
     def profile_with_metadata(profile)
-      return profile unless profile[:item_basis] == :mixed
+      return profile unless profile[:item_amount_basis] == :mixed
 
       assignment = mixed_assignment_for(profile[:tax_rounding_mode])
       return profile unless assignment[:exact]
 
-      profile.merge(item_basis_assignments: assignment[:assignments])
+      profile.merge(item_amount_basis_assignments: assignment[:assignments])
     end
 
     def warnings_for(candidates)
@@ -442,22 +442,22 @@ module Amounts
         next false if candidate[:score].to_i - best_score > UNCERTAIN_SCORE_GAP
 
         profile = candidate[:profile]
-        profile[:item_basis] == :mixed
+        profile[:item_amount_basis] == :mixed
       end
     end
 
     def tax_included_tax_excluded_close?(candidates)
-      included_score = best_score_for_item_basis(candidates, :tax_included)
-      excluded_score = best_score_for_item_basis(candidates, :tax_excluded)
+      included_score = best_score_for_item_amount_basis(candidates, :tax_included)
+      excluded_score = best_score_for_item_amount_basis(candidates, :tax_excluded)
 
       return false if included_score.nil? || excluded_score.nil?
 
       (included_score - excluded_score).abs <= UNCERTAIN_SCORE_GAP
     end
 
-    def best_score_for_item_basis(candidates, item_basis)
+    def best_score_for_item_amount_basis(candidates, item_amount_basis)
       candidates
-        .select { |candidate| candidate[:profile][:item_basis] == item_basis }
+        .select { |candidate| candidate[:profile][:item_amount_basis] == item_amount_basis }
         .map { |candidate| candidate[:score].to_i }
         .min
     end
@@ -482,7 +482,7 @@ module Amounts
     end
 
     def mixed_profile_missing_receipt_amounts?(profile)
-      profile[:item_basis] == :mixed && !receipt_amounts_complete?
+      profile[:item_amount_basis] == :mixed && !receipt_amounts_complete?
     end
 
     def receipt_amounts_complete?
@@ -492,10 +492,10 @@ module Amounts
     end
 
     def basis_changed?(left, right)
-      left[:item_basis] != right[:item_basis] || left[:tax_basis] != right[:tax_basis]
+      left[:item_amount_basis] != right[:item_amount_basis] || left[:receipt_tax_basis] != right[:receipt_tax_basis]
     end
 
-    def mixed_item_basis_suspected?
+    def mixed_item_amount_basis_suspected?
       return false unless source_item_total.positive?
       return true if tax_detail_subtotal.positive? && tax_detail_subtotal + tax_detail_total < source_item_total
 

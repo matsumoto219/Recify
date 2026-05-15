@@ -70,7 +70,7 @@ module Amounts
       end
 
       # 税抜/税込混在の可能性検知
-      if same_rate_mixed_item_basis_uncertain? || mixed_tax_inclusion_suspected?
+      if same_rate_mixed_item_amount_basis_uncertain? || mixed_tax_inclusion_suspected?
         errors << :price_tax_inclusion_uncertain
       end
 
@@ -161,7 +161,7 @@ module Amounts
     def tax_detail_mismatch?
       return false if tax_detail_incomplete?
       return false if tax_detail_partial?
-      return false if same_rate_mixed_item_basis_uncertain?
+      return false if same_rate_mixed_item_amount_basis_uncertain?
 
       tax_detail_total.positive? &&
         item_tax_total.positive? &&
@@ -172,7 +172,7 @@ module Amounts
     def tax_detail_rate_mismatch?
       return false if tax_detail_incomplete?
       return false if tax_detail_partial?
-      return false if same_rate_mixed_item_basis_uncertain?
+      return false if same_rate_mixed_item_amount_basis_uncertain?
 
       source_groups = tax_details_by_rate(comparable_source_tax_details)
       generated_groups = tax_details_by_rate(@generated_tax_details)
@@ -287,7 +287,7 @@ module Amounts
       end
     end
 
-    def same_rate_mixed_item_basis_uncertain?
+    def same_rate_mixed_item_amount_basis_uncertain?
       return false unless @context == :analysis
       return false if tax_detail_incomplete? || tax_detail_partial?
 

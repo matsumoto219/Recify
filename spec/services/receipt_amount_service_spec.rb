@@ -531,8 +531,8 @@ RSpec.describe ReceiptAmountService do
         expect(result[:calculation_profile]).to eq(
           tax_rounding_mode: :floor,
           discount_rounding_mode: :round,
-          tax_basis: :external,
-          item_basis: :tax_included
+          receipt_tax_basis: :external,
+          item_amount_basis: :tax_included
         )
         expect(result[:calculation_profile_score]).to eq(0)
         expect(result[:calculation_profile_candidates]).to be_present
@@ -625,14 +625,14 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:calculation_profile]).to include(
-          tax_basis: :external,
-          item_basis: :tax_excluded
+          receipt_tax_basis: :external,
+          item_amount_basis: :tax_excluded
         )
         expect(result[:computed]).to include(
           subtotal: 1_000,
           tax: 100,
           total: 1_100,
-          item_basis: :tax_excluded
+          item_amount_basis: :tax_excluded
         )
         expect(result[:resolved]).to include(
           subtotal: 1_000,
@@ -672,14 +672,14 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
+        expect(result[:calculation_profile]).to include(item_amount_basis: :tax_excluded)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
         expect(result[:computed]).to include(
           subtotal: 1_000,
           tax: 100,
           total: 1_100,
-          item_basis: :tax_included
+          item_amount_basis: :tax_included
         )
         expect(result[:resolved]).to include(
           subtotal: 1_000,
@@ -715,8 +715,8 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
-        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:calculation_profile]).to include(item_amount_basis: :tax_excluded)
+        expect(result[:computed]).to include(item_amount_basis: :tax_included)
         expect(result[:needs_review]).to be(false)
       end
     end
@@ -741,12 +741,12 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:calculation_profile]).to include(item_basis: :mixed)
+        expect(result[:calculation_profile]).to include(item_amount_basis: :mixed)
         expect(result[:computed]).to include(
           subtotal: 350,
           tax: 28,
           total: 378,
-          item_basis: :mixed
+          item_amount_basis: :mixed
         )
         expect(result[:resolved]).to include(
           subtotal: 350,
@@ -780,8 +780,8 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:calculation_profile]).to include(item_basis: :mixed)
-        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:calculation_profile]).to include(item_amount_basis: :mixed)
+        expect(result[:computed]).to include(item_amount_basis: :tax_included)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
       end
@@ -805,7 +805,7 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:computed]).to include(item_basis: :tax_included)
+        expect(result[:computed]).to include(item_amount_basis: :tax_included)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
         expect(result[:needs_review]).to be(false)
@@ -1312,9 +1312,9 @@ RSpec.describe ReceiptAmountService do
         expect(result[:resolved][:total]).to eq(1_110)
         expect(result[:resolved][:total]).not_to eq(621)
         expect(result[:resolved][:tax_rate]).to be_nil
-        expect(result[:computed][:item_basis]).to eq(:tax_included)
-        expect(result[:calculation_profile]).not_to include(item_basis: :tax_excluded)
-        expect(result[:calculation_profile_candidates].map { |candidate| candidate[:profile][:item_basis] }).to include(:mixed)
+        expect(result[:computed][:item_amount_basis]).to eq(:tax_included)
+        expect(result[:calculation_profile]).not_to include(item_amount_basis: :tax_excluded)
+        expect(result[:calculation_profile_candidates].map { |candidate| candidate[:profile][:item_amount_basis] }).to include(:mixed)
         expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)

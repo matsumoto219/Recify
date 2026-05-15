@@ -56,9 +56,9 @@ class ReceiptAmountService
     active_profile = profile_estimation[:applied_profile] || {}
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
-    active_tax_basis = active_profile[:tax_basis] || :auto
-    active_item_basis = active_profile[:item_basis] || :tax_included
-    active_item_basis_assignments = active_profile[:item_basis_assignments]
+    active_receipt_tax_basis = active_profile[:receipt_tax_basis] || :auto
+    active_item_amount_basis = active_profile[:item_amount_basis] || :tax_included
+    active_item_amount_basis_assignments = active_profile[:item_amount_basis_assignments]
 
     # --- 1) Calculator（純計算）
     calc = Amounts::Calculator.new(
@@ -68,9 +68,9 @@ class ReceiptAmountService
       context: @context,
       tax_rounding_mode: active_tax_rounding_mode,
       discount_rounding_mode: active_discount_rounding_mode,
-      tax_basis: active_tax_basis,
-      item_basis: active_item_basis,
-      item_basis_assignments: active_item_basis_assignments
+      receipt_tax_basis: active_receipt_tax_basis,
+      item_amount_basis: active_item_amount_basis,
+      item_amount_basis_assignments: active_item_amount_basis_assignments
     ).call
 
     # --- 2) Resolver（最終値決定）
@@ -83,7 +83,7 @@ class ReceiptAmountService
     ).call
 
     # --- 3) TaxDetailAggregator（税率別集計）
-    tax_details = if calc[:item_basis] == :mixed && Array(calc[:tax_details]).present?
+    tax_details = if calc[:item_amount_basis] == :mixed && Array(calc[:tax_details]).present?
       Array(calc[:tax_details]).map do |tax_detail|
         {
           description: tax_detail[:description],
@@ -139,8 +139,8 @@ class ReceiptAmountService
         tax: calc[:tax],
         total: calc[:total],
         tax_rate: calc[:tax_rate],
-        tax_basis: calc[:tax_basis],
-        item_basis: calc[:item_basis],
+        receipt_tax_basis: calc[:receipt_tax_basis],
+        item_amount_basis: calc[:item_amount_basis],
         items: calc[:items]
       },
       resolved: resolved,
@@ -169,7 +169,7 @@ class ReceiptAmountService
     return false unless profile_estimation[:score].to_i.zero?
     return false unless profile
 
-    case profile[:item_basis]
+    case profile[:item_amount_basis]
     when :tax_included
       true
     when :tax_excluded
@@ -185,14 +185,14 @@ class ReceiptAmountService
     profile = profile_estimation[:profile]
 
     return false unless @context == :analysis
-    return false unless profile[:tax_basis] == :external
+    return false unless profile[:receipt_tax_basis] == :external
     return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
-    return false if same_score_conflicting_basis?(profile_estimation, item_basis: :tax_excluded, tax_basis: :external)
+    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :tax_excluded, receipt_tax_basis: :external)
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
     return false unless complete_tax_details_available?
     return false if tax_detail_incomplete?
-    return false if mixed_item_basis_suspected?
+    return false if mixed_item_amount_basis_suspected?
     return false unless item_line_total_sum == tax_detail_net_amount
     return false unless @receipt[:total_amount] == tax_detail_net_amount + tax_detail_tax_amount
     return false unless external_tax_evidence?
@@ -203,12 +203,12 @@ class ReceiptAmountService
 
   def mixed_profile_applicable?(profile_estimation)
     profile = profile_estimation[:profile]
-    assignments = Array(profile[:item_basis_assignments])
+    assignments = Array(profile[:item_amount_basis_assignments])
 
     return false unless @context == :analysis
     return false if assignments.blank?
     return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
-    return false if same_score_conflicting_basis?(profile_estimation, item_basis: :mixed, tax_basis: profile[:tax_basis])
+    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :mixed, receipt_tax_basis: profile[:receipt_tax_basis])
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
     return false unless complete_tax_details_available?
@@ -221,14 +221,14 @@ class ReceiptAmountService
     true
   end
 
-  def same_score_conflicting_basis?(profile_estimation, item_basis:, tax_basis:)
+  def same_score_conflicting_basis?(profile_estimation, item_amount_basis:, receipt_tax_basis:)
     score = profile_estimation[:score].to_i
 
     Array(profile_estimation[:candidates]).any? do |candidate|
       next false unless candidate[:score].to_i == score
 
       profile = candidate[:profile]
-      profile[:item_basis] != item_basis || profile[:tax_basis] != tax_basis
+      profile[:item_amount_basis] != item_amount_basis || profile[:receipt_tax_basis] != receipt_tax_basis
     end
   end
 
@@ -356,7 +356,7 @@ class ReceiptAmountService
     end
   end
 
-  def mixed_item_basis_suspected?
+  def mixed_item_amount_basis_suspected?
     item_rates = @items.map { |item| normalize_rate(item[:tax_rate]) }.uniq
 
     item_rates.include?(BigDecimal("0")) && item_rates.any?(&:positive?)
