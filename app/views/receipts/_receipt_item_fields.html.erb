@@ -27,7 +27,7 @@
      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
   <div class="col-span-2 md:col-span-6 relative">
     <div class="flex items-center gap-2 md:block">
-      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">品名</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">品名</span>
       <div class="w-full min-w-0">
         <%= render "shared/ui/text_field",
                    f: item_form,
@@ -43,12 +43,25 @@
                    size: :dense,
                    html_options: { maxlength: 500, autocomplete: "off" } %>
       </div>
+
+      <button type="button"
+              class="receipt-form-item-mobile-name-toggle flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:hidden"
+              data-action="click->receipt-form#toggleItemDetails"
+              data-receipt-form-target="itemDetailsToggle"
+              aria-expanded="false"
+              aria-label="明細の詳細を表示">
+        <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
+      </button>
     </div>
   </div>
 
-  <div class="col-span-2 md:col-span-2">
+  <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 md:col-span-2">
+    <div class="receipt-form-item-mobile-detail-divider md:hidden">
+      <%= render "shared/ui/section_divider", class: "mb-3" %>
+    </div>
+
     <div class="flex items-center gap-2 md:block">
-      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">数量</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">数量</span>
       <div class="flex-1 min-w-0 md:block">
         <%= render "shared/ui/quantity_unit_number_field",
                    f: item_form,
@@ -78,9 +91,9 @@
     </div>
   </div>
 
-  <div class="col-span-2 md:col-span-2">
+  <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 md:col-span-2">
     <div class="flex items-center gap-2 md:block">
-      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">金額</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">金額</span>
       <div class="flex-1 min-w-0 md:block">
         <%= render "shared/ui/number_field",
                    f: item_form,
@@ -106,7 +119,7 @@
     </div>
   </div>
 
-  <div class="col-span-1 md:col-span-1 flex justify-start md:justify-center">
+  <div class="hidden md:col-span-1 md:flex md:justify-center">
     <button type="button"
             class="flex h-10 w-full items-center justify-center gap-1 rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:w-10"
             data-action="click->receipt-form#toggleItemDetails"
@@ -118,7 +131,7 @@
     </button>
   </div>
 
-  <div class="col-span-1 md:col-span-1 flex justify-end">
+  <div class="hidden md:col-span-1 md:flex md:justify-end">
     <button type="button"
             class="flex h-10 w-full shrink-0 items-center justify-center rounded-lg receipt-form-delete-button transition-colors md:w-10"
             data-action="click->receipt-form#removeItem"
@@ -128,7 +141,7 @@
   </div>
 
   <div class="col-span-2 md:col-span-12 hidden" data-receipt-form-target="itemDetailsPanel">
-    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 rounded-lg border token-border-soft receipt-form-item-row p-3">
+    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
       <div class="col-span-2 md:col-span-2">
         <div class="space-y-2">
           <p class="text-xs font-bold token-text-muted uppercase tracking-wider">割引率</p>
@@ -211,7 +224,7 @@
         </div>
       </div>
 
-      <div class="col-span-2 md:col-span-5 md:flex md:justify-end">
+      <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-5 md:flex md:justify-end">
         <div class="space-y-2">
           <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true">小計</p>
           <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
@@ -220,6 +233,24 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="receipt-form-item-mobile-summary col-span-2 md:hidden">
+    <%= render "shared/ui/section_divider", class: "mb-3" %>
+
+    <div class="flex items-center justify-between gap-3">
+      <div class="receipt-form-item-mobile-subtotal flex min-w-0 flex-1 items-center gap-2">
+        <span class="text-sm font-medium token-text-muted shrink-0">小計</span>
+        <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(line_total_value) %></span>
+      </div>
+
+      <button type="button"
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
+              data-action="click->receipt-form#removeItem"
+              aria-label="明細を削除">
+        <span class="material-symbols-outlined">delete</span>
+      </button>
     </div>
   </div>
 

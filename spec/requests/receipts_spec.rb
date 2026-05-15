@@ -1052,6 +1052,7 @@ RSpec.describe 'Receipts', type: :request do
 
         item_details_toggle = item_row.at_css('[data-receipt-form-target="itemDetailsToggle"]')
         item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+        mobile_summary = item_row.at_css('.receipt-form-item-mobile-summary')
 
         expect(item_details_toggle['data-action']).to include('click->receipt-form#toggleItemDetails')
         expect(item_details_toggle['aria-expanded']).to eq('false')
@@ -1065,6 +1066,23 @@ RSpec.describe 'Receipts', type: :request do
         expect(template_html).to include('data-receipt-form-target="itemDetailsIcon"')
         expect(template_html).to include('click-&gt;receipt-form#toggleItemDetails')
 
+        expect(mobile_summary).to be_present
+        expect(mobile_summary['class']).to include('md:hidden')
+        expect(mobile_summary.at_css('.section-divider-line')).to be_present
+        expect(mobile_summary.at_css('[data-action="click->receipt-form#removeItem"]')).to be_present
+        expect(mobile_summary.at_css('.receipt-form-item-mobile-subtotal [data-receipt-form-target="lineTotalDisplay"]')).to be_present
+        expect(mobile_summary.at_css('.receipt-form-item-mobile-subtotal')['class']).not_to include('border')
+        expect(item_row.at_css('.receipt-form-item-mobile-name-toggle[data-receipt-form-target="itemDetailsToggle"]')).to be_present
+        mobile_detail_divider = item_row.at_css('.receipt-form-item-mobile-detail-divider')
+        expect(mobile_detail_divider).to be_present
+        expect(mobile_detail_divider['class']).to include('md:hidden')
+        expect(mobile_detail_divider.at_css('.section-divider-line')).to be_present
+        expect(item_details_panel.at_css('.receipt-form-item-detail-subtotal')['class']).to include('hidden')
+        expect(item_details_panel.at_css('.receipt-form-item-detail-subtotal')['class']).to include('md:flex')
+        expect(template_html).to include('receipt-form-item-mobile-summary')
+        expect(template_html).to include('receipt-form-item-mobile-detail-divider')
+        expect(template_html.scan('receipt-form-item-mobile-detail-field').size).to eq(2)
+
         %w[
           quantityInput
           priceInput
@@ -1073,6 +1091,24 @@ RSpec.describe 'Receipts', type: :request do
         ].each do |target|
           input = item_row.at_css(%([data-receipt-form-target="#{target}"]))
           expect(input['data-action']).to include('input->receipt-form#recalculate')
+        end
+
+        quantity_wrapper = item_row.at_css('[data-receipt-form-target="quantityInput"]').ancestors.find { |node| node['class'].to_s.include?('receipt-form-item-mobile-detail-field') }
+        price_wrapper = item_row.at_css('[data-receipt-form-target="priceInput"]').ancestors.find { |node| node['class'].to_s.include?('receipt-form-item-mobile-detail-field') }
+
+        expect(quantity_wrapper).to be_present
+        expect(quantity_wrapper['class']).to include('md:col-span-2')
+        expect(price_wrapper).to be_present
+        expect(price_wrapper['class']).to include('md:col-span-2')
+
+        %w[
+          quantityInput
+          quantityUnitInput
+          priceInput
+          discountRateInput
+          taxRateInput
+        ].each do |target|
+          expect(item_row.css(%([data-receipt-form-target="#{target}"])).size).to eq(1)
         end
 
         quantity_unit_select = item_row.at_css('[data-receipt-form-target="quantityUnitInput"]')

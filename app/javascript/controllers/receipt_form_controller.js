@@ -78,16 +78,23 @@ export default class extends Controller {
     if (!row) return
 
     const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
-    const icon = row.querySelector('[data-receipt-form-target="itemDetailsIcon"]')
+    const toggles = row.querySelectorAll('[data-receipt-form-target="itemDetailsToggle"]')
+    const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
     if (!panel) return
 
     const willOpen = panel.classList.contains('hidden')
-    panel.classList.toggle('hidden', !willOpen)
-    toggle.setAttribute('aria-expanded', String(willOpen))
+    if (willOpen) this.hideLineTotalTooltipFor(row)
 
-    if (icon) {
+    panel.classList.toggle('hidden', !willOpen)
+    row.classList.toggle('receipt-form-item-details-open', willOpen)
+
+    toggles.forEach((toggle) => {
+      toggle.setAttribute('aria-expanded', String(willOpen))
+    })
+
+    icons.forEach((icon) => {
       icon.classList.toggle('rotate-180', willOpen)
-    }
+    })
   }
 
   scheduleLineTotalTooltip (event) {
@@ -95,6 +102,11 @@ export default class extends Controller {
     if (window.innerWidth < 1024) return
 
     const row = event.currentTarget
+    if (row.classList.contains('receipt-form-item-details-open')) {
+      this.hideLineTotalTooltipFor(row)
+      return
+    }
+
     const tooltip = this.lineTotalTooltipFor(row)
 
     if (!tooltip) return
@@ -120,6 +132,10 @@ export default class extends Controller {
   showLineTotalTooltipFor (row) {
     // lg未満は表示しない
     if (window.innerWidth < 1024) return
+    if (row?.classList.contains('receipt-form-item-details-open')) {
+      this.hideLineTotalTooltipFor(row)
+      return
+    }
 
     const tooltip = this.lineTotalTooltipFor(row)
 

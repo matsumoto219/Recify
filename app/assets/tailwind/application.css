@@ -912,6 +912,32 @@ body {
   background: var(--bg-elevated);
 }
 
+@media (width <= 767px) {
+  .receipt-form-item-mobile-detail {
+    display: none;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail {
+    display: block;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div {
+    display: block;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div > span {
+    display: block;
+    width: auto;
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (width >= 768px) {
+  .receipt-form-item-mobile-detail {
+    display: block;
+  }
+}
+
 .receipt-form-item-review-row {
   background: color-mix(
     in srgb,
