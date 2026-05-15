@@ -2,11 +2,12 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, tax_basis: :auto)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
       @context = normalize_context(context)
+      @tax_basis = normalize_tax_basis(tax_basis)
       @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
         tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
       )
@@ -26,8 +27,8 @@ module Amounts
       tax_detail_total = calculate_tax_detail_total
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
-      external_tax = external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
-      tax_details_primary = tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
+      external_tax = resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
+      tax_details_primary = resolve_tax_details_primary(item_total, tax_detail_subtotal, tax_detail_total)
 
       if external_tax || tax_details_primary
         item_subtotal = tax_detail_subtotal
@@ -58,6 +59,8 @@ module Amounts
         tax_rate: tax_rate,
         external_tax: external_tax,
         tax_details_primary: tax_details_primary,
+        tax_basis: external_tax ? :external : :internal,
+        item_basis: :tax_included,
         items: @items
       }
     end
@@ -136,6 +139,23 @@ module Amounts
 
       receipt_total = to_i(@receipt[:total_amount])
       receipt_total.positive? && receipt_total == item_total + tax_detail_total
+    end
+
+    def resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
+      case @tax_basis
+      when :external
+        tax_detail_subtotal.positive? && tax_detail_total.positive?
+      when :internal
+        false
+      else
+        external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
+      end
+    end
+
+    def resolve_tax_details_primary(item_total, tax_detail_subtotal, tax_detail_total)
+      return false unless @tax_basis == :auto
+
+      tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
     end
 
     def external_tax_description?
@@ -304,6 +324,11 @@ module Amounts
     def normalize_context(value)
       context = value.to_s.to_sym
       %i[analysis edit_save manual].include?(context) ? context : :analysis
+    end
+
+    def normalize_tax_basis(value)
+      basis = value.to_s.to_sym
+      %i[auto internal external].include?(basis) ? basis : :auto
     end
 
     def to_i(value)

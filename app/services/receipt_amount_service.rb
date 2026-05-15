@@ -24,7 +24,7 @@
 # }
 #
 class ReceiptAmountService
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
@@ -36,11 +36,13 @@ class ReceiptAmountService
     ).call
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @context = normalize_context(context)
+    @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
+    @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
     @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
       tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
     )
@@ -50,14 +52,21 @@ class ReceiptAmountService
   end
 
   def call
+    profile_estimation = applicable_calculation_profile(estimate_calculation_profile)
+    active_profile = profile_estimation[:applied_profile] || {}
+    active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
+    active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
+    active_tax_basis = active_profile[:tax_basis] || :auto
+
     # --- 1) Calculator（純計算）
     calc = Amounts::Calculator.new(
       receipt: @receipt,
       items: @items,
       tax_details: @tax_details,
       context: @context,
-      tax_rounding_mode: @tax_rounding_mode,
-      discount_rounding_mode: @discount_rounding_mode
+      tax_rounding_mode: active_tax_rounding_mode,
+      discount_rounding_mode: active_discount_rounding_mode,
+      tax_basis: active_tax_basis
     ).call
 
     # --- 2) Resolver（最終値決定）
@@ -85,7 +94,7 @@ class ReceiptAmountService
         fallback_tax_rate: calc[:tax_rate],
         fallback_net_amount: resolved[:subtotal],
         fallback_tax_amount: resolved[:tax],
-        rounding_mode: @tax_rounding_mode
+        rounding_mode: active_tax_rounding_mode
       ).call
     end
 
@@ -103,7 +112,7 @@ class ReceiptAmountService
       source_tax_details: @tax_details,
       generated_tax_details: tax_details,
       tax_details_primary: calc[:tax_details_primary],
-      tax_rounding_mode: @tax_rounding_mode
+      tax_rounding_mode: active_tax_rounding_mode
     ).call
 
     mismatch_codes = build_mismatch_codes(inconsistencies)
@@ -122,11 +131,49 @@ class ReceiptAmountService
       tax_details: tax_details,
       inconsistencies: inconsistencies,
       mismatch_codes: mismatch_codes,
-      mismatch_messages: mismatch_messages
+      mismatch_messages: mismatch_messages,
+      calculation_profile: profile_estimation[:applied_profile],
+      calculation_profile_score: profile_estimation[:score],
+      calculation_profile_candidates: profile_estimation[:candidates]
     )
   end
 
   private
+
+  def applicable_calculation_profile(profile_estimation)
+    profile_estimation.merge(
+      applied_profile: profile_estimation[:score].to_i.zero? ? profile_estimation[:profile] : nil
+    )
+  end
+
+  def estimate_calculation_profile
+    return empty_calculation_profile unless @context == :analysis
+
+    Amounts::CalculationProfileEstimator.new(
+      receipt: @receipt,
+      items: @items,
+      tax_details: @tax_details,
+      context: @context,
+      tax_rounding_modes: candidate_tax_rounding_modes,
+      discount_rounding_modes: candidate_discount_rounding_modes
+    ).call
+  end
+
+  def candidate_tax_rounding_modes
+    @tax_rounding_mode_explicit ? [ @tax_rounding_mode ] : Amounts::CalculationProfileEstimator::ROUNDING_MODES
+  end
+
+  def candidate_discount_rounding_modes
+    @discount_rounding_mode_explicit ? [ @discount_rounding_mode ] : Amounts::CalculationProfileEstimator::ROUNDING_MODES
+  end
+
+  def empty_calculation_profile
+    {
+      profile: nil,
+      score: nil,
+      candidates: []
+    }
+  end
 
   def normalize_context(value)
     context = value.to_s.to_sym

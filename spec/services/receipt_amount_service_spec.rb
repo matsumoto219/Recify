@@ -528,6 +528,37 @@ RSpec.describe ReceiptAmountService do
         )
         expect(result[:inconsistencies]).to eq([])
         expect(result[:needs_review]).to be(false)
+        expect(result[:calculation_profile]).to eq(
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round,
+          tax_basis: :external,
+          item_basis: :tax_included
+        )
+        expect(result[:calculation_profile_score]).to eq(0)
+        expect(result[:calculation_profile_candidates]).to be_present
+      end
+    end
+
+    it 'does not estimate calculation profile outside analysis context' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 999,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_rate: BigDecimal('0.105'),
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:calculation_profile]).to be_nil
+        expect(result[:calculation_profile_score]).to be_nil
+        expect(result[:calculation_profile_candidates]).to eq([])
       end
     end
 
