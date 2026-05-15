@@ -1059,6 +1059,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_details_panel.at_css('[data-receipt-form-target="discountRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_present
+        expect(item_details_panel.at_css('select[name$="[category]"]')).to be_present
         expect(template_html).to include('data-receipt-form-target="itemDetailsToggle"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsPanel"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsIcon"')
@@ -1206,6 +1207,23 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(quantity_unit_select['data-receipt-form-target']).to eq('quantityUnitInput')
         expect(quantity_unit_select['data-action']).to be_nil
+      end
+    end
+
+    it 'measurement unitへ変更後も後続再計算で新規明細の算出済み小計を保持できるJS同期を持つ' do
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      template_html = document.at_css('template[data-receipt-form-target="template"]')&.inner_html.to_s
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_form_controller.js').read
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(template_html).to include('data-original-line-total="0"')
+        expect(template_html).to include('data-receipt-form-target="quantityUnitInput"')
+        expect(template_html).not_to include('data-action="change-&gt;receipt-form#recalculate"')
+        expect(controller_source).to include('syncLineTotalState')
+        expect(controller_source).to include('lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)')
       end
     end
 

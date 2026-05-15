@@ -181,7 +181,8 @@ export default class extends Controller {
       }
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      let lineTotal = this.lineTotalFor({ quantity, price, quantityUnit, discountRatePercent, lineTotalInput })
+      const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
+      let lineTotal = this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
       let tax = taxRatePercent > 0
         ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
         : 0
@@ -201,10 +202,7 @@ export default class extends Controller {
         this.animateLineTotal(lineTotalDisplay, lineTotal, { withLabel })
       })
 
-      // hidden更新
-      if (lineTotalInput) {
-        lineTotalInput.value = lineTotal
-      }
+      this.syncLineTotalState({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal })
     })
 
     total = this.clampNumber(total, 0, 999999999)
@@ -300,12 +298,6 @@ export default class extends Controller {
     return Math.round(value)
   }
 
-  lineTotalFor ({ quantity, price, quantityUnit, discountRatePercent, lineTotalInput }) {
-    const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
-
-    return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
-  }
-
   originalLineTotalFor ({ quantity, price, quantityUnit, lineTotalInput }) {
     if (this.recalculatesQuantityUnit(quantityUnit)) {
       return this.roundLineAmount(quantity * price)
@@ -323,6 +315,16 @@ export default class extends Controller {
 
   originalLineTotalInputValue (lineTotalInput) {
     return this.parseIntegerInput(lineTotalInput?.dataset.originalLineTotal || lineTotalInput?.value)
+  }
+
+  syncLineTotalState ({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal }) {
+    if (!lineTotalInput) return
+
+    lineTotalInput.value = lineTotal
+
+    if (this.recalculatesQuantityUnit(quantityUnit)) {
+      lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)
+    }
   }
 
   recalculatesQuantityUnit (unit) {

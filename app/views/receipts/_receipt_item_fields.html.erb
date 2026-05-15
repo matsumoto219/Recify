@@ -25,7 +25,7 @@
 <div class="<%= row_class %>"
      data-receipt-form-target="itemRow"
      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
-  <div class="col-span-2 md:col-span-4 relative">
+  <div class="col-span-2 md:col-span-6 relative">
     <div class="flex items-center gap-2 md:block">
       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">品名</span>
       <div class="w-full min-w-0">
@@ -106,26 +106,6 @@
     </div>
   </div>
 
-  <div class="col-span-2 md:col-span-2">
-    <div class="flex items-center gap-2 md:block">
-      <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">カテゴリ</span>
-      <div class="flex-1 min-w-0 md:block">
-        <%= render "shared/ui/select_field",
-                   f: item_form,
-                   attribute: :category,
-                   label: "カテゴリ",
-                   options: ReceiptItem.category_options,
-                   selected: (new_record ? nil : item.category),
-                   include_blank: "未分類",
-                   show_label: false,
-                   select_wrapper_class: "w-full",
-                   size: :dense,
-                   highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
-                   show_error_message: false %>
-      </div>
-    </div>
-  </div>
-
   <div class="col-span-1 md:col-span-1 flex justify-start md:justify-center">
     <button type="button"
             class="flex h-10 w-full items-center justify-center gap-1 rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:w-10"
@@ -148,11 +128,11 @@
   </div>
 
   <div class="col-span-2 md:col-span-12 hidden" data-receipt-form-target="itemDetailsPanel">
-    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 rounded-lg border token-border-soft token-bg-input p-3">
+    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 rounded-lg border token-border-soft receipt-form-item-row p-3">
       <div class="col-span-2 md:col-span-2">
-        <div class="flex items-center gap-2 md:block">
-          <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">割引</span>
-          <div class="flex-1 min-w-0 md:block">
+        <div class="space-y-2">
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">割引率</p>
+          <div>
             <%= render "shared/ui/number_field",
                        f: item_form,
                        attribute: :discount_rate,
@@ -181,9 +161,9 @@
       </div>
 
       <div class="col-span-2 md:col-span-2">
-        <div class="flex items-center gap-2 md:block">
-          <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">税率</span>
-          <div class="flex-1 min-w-0 md:block">
+        <div class="space-y-2">
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">税率</p>
+          <div>
             <%= render "shared/ui/number_field",
                        f: item_form,
                        attribute: :tax_rate,
@@ -212,12 +192,34 @@
       </div>
 
       <div class="col-span-2 md:col-span-3">
-        <div class="rounded-lg border token-border-soft token-bg-card px-3 py-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">小計</p>
-          <p class="mt-1 text-lg font-bold token-text-base truncate" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(line_total_value) %></p>
+        <div class="space-y-2">
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">カテゴリ</p>
+          <div>
+            <%= render "shared/ui/select_field",
+                       f: item_form,
+                       attribute: :category,
+                       label: "カテゴリ",
+                       options: ReceiptItem.category_options,
+                       selected: (new_record ? nil : item.category),
+                       include_blank: "未分類",
+                       show_label: false,
+                       select_wrapper_class: "w-full",
+                       size: :dense,
+                       highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
+                       show_error_message: false %>
+          </div>
         </div>
       </div>
 
+      <div class="col-span-2 md:col-span-5 md:flex md:justify-end">
+        <div class="space-y-2">
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true">小計</p>
+          <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
+            <span class="text-sm font-medium token-text-muted shrink-0">小計</span>
+            <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(line_total_value) %></span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
