@@ -2,7 +2,7 @@
 
 module Amounts
   class ConsistencyChecker
-    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, items: [], item_count: 0, external_tax: false, source_tax_details: [], generated_tax_details: [], tax_details_primary: false, rounding_mode: :floor)
+    def initialize(computed:, resolved:, item_total:, tax_total:, receipt:, context:, items: [], item_count: 0, external_tax: false, source_tax_details: [], generated_tax_details: [], tax_details_primary: false, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil)
       @computed = computed
       @resolved = resolved
       @item_total = item_total
@@ -15,7 +15,9 @@ module Amounts
       @source_tax_details = Array(source_tax_details)
       @generated_tax_details = Array(generated_tax_details)
       @tax_details_primary = tax_details_primary
-      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
+      @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+        tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
+      )
     end
 
     def call

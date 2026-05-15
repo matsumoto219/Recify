@@ -248,10 +248,10 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(item.original_line_total).to eq(999)
-        expect(item.discount_amount).to eq(104)
+        expect(item.discount_amount).to eq(105)
         expect(item.discount_rate).to eq(BigDecimal('0.105'))
-        expect(item.line_total).to eq(895)
-        expect(receipt.total_amount).to eq(895)
+        expect(item.line_total).to eq(894)
+        expect(receipt.total_amount).to eq(894)
       end
     end
 

@@ -22,7 +22,8 @@ export default class extends Controller {
 
   static values = {
     nextIndex: Number,
-    roundingMode: { type: String, default: 'floor' }
+    roundingMode: { type: String, default: 'floor' },
+    discountRoundingMode: { type: String, default: 'round' }
   }
 
   connect () {
@@ -159,7 +160,7 @@ export default class extends Controller {
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
       let lineTotal = this.lineTotalFor({ quantity, price, quantityUnit, discountRatePercent, lineTotalInput })
       let tax = taxRatePercent > 0
-        ? this.applyRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
+        ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
         : 0
       let subtotal = lineTotal - tax
 
@@ -253,8 +254,8 @@ export default class extends Controller {
     return ['floor', 'ceil', 'round'].includes(value) ? value : 'floor'
   }
 
-  applyRounding (value) {
-    switch (this.normalizeRoundingMode(this.roundingModeValue)) {
+  applyRounding (value, roundingMode) {
+    switch (this.normalizeRoundingMode(roundingMode)) {
       case 'ceil':
         return Math.ceil(value)
       case 'round':
@@ -262,6 +263,14 @@ export default class extends Controller {
       default:
         return Math.floor(value)
     }
+  }
+
+  applyTaxRounding (value) {
+    return this.applyRounding(value, this.roundingModeValue)
+  }
+
+  applyDiscountRounding (value) {
+    return this.applyRounding(value, this.discountRoundingModeValue)
   }
 
   roundLineAmount (value) {
@@ -285,7 +294,7 @@ export default class extends Controller {
   discountedLineTotalFor (originalLineTotal, discountRatePercent) {
     if (discountRatePercent === null) return originalLineTotal
 
-    const discountAmount = this.applyRounding((originalLineTotal * discountRatePercent) / 100)
+    const discountAmount = this.applyDiscountRounding((originalLineTotal * discountRatePercent) / 100)
     return Math.max(originalLineTotal - discountAmount, 0)
   }
 

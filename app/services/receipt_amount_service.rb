@@ -24,22 +24,29 @@
 # }
 #
 class ReceiptAmountService
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: :floor)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_tax_details: receipt_tax_details,
       context: context,
-      rounding_mode: rounding_mode
+      rounding_mode: rounding_mode,
+      tax_rounding_mode: tax_rounding_mode,
+      discount_rounding_mode: discount_rounding_mode
     ).call
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: :floor)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @context = normalize_context(context)
-    @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
+    @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+      tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
+    )
+    @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+      discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
+    )
   end
 
   def call
@@ -49,7 +56,8 @@ class ReceiptAmountService
       items: @items,
       tax_details: @tax_details,
       context: @context,
-      rounding_mode: @rounding_mode
+      tax_rounding_mode: @tax_rounding_mode,
+      discount_rounding_mode: @discount_rounding_mode
     ).call
 
     # --- 2) Resolver（最終値決定）
@@ -77,7 +85,7 @@ class ReceiptAmountService
         fallback_tax_rate: calc[:tax_rate],
         fallback_net_amount: resolved[:subtotal],
         fallback_tax_amount: resolved[:tax],
-        rounding_mode: @rounding_mode
+        rounding_mode: @tax_rounding_mode
       ).call
     end
 
@@ -95,7 +103,7 @@ class ReceiptAmountService
       source_tax_details: @tax_details,
       generated_tax_details: tax_details,
       tax_details_primary: calc[:tax_details_primary],
-      rounding_mode: @rounding_mode
+      tax_rounding_mode: @tax_rounding_mode
     ).call
 
     mismatch_codes = build_mismatch_codes(inconsistencies)

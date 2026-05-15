@@ -2,16 +2,25 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: :floor)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
       @context = normalize_context(context)
-      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
+      @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+        tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
+      )
+      @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+        discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
+      )
     end
 
     def call
-      item_result = Amounts::ItemTotalAggregator.new(items: @items, rounding_mode: @rounding_mode).call
+      item_result = Amounts::ItemTotalAggregator.new(
+        items: @items,
+        context: @context,
+        discount_rounding_mode: @discount_rounding_mode
+      ).call
       @items = item_result[:items]
       item_total = item_result[:total]
       tax_detail_total = calculate_tax_detail_total
@@ -163,7 +172,7 @@ module Amounts
       # subtotal + tax_rate → tax を補完
       tax_rate = normalize_tax_rate(@receipt[:tax_rate])
       if to_i(subtotal).positive? && tax_rate.positive?
-        return apply_rounding(BigDecimal(subtotal.to_s) * tax_rate)
+        return Amounts::Rounding.apply_rounding(BigDecimal(subtotal.to_s) * tax_rate, @tax_rounding_mode)
       end
 
       # total fallback時に subtotal が無い（0）の場合は税額補完しない
@@ -289,7 +298,7 @@ module Amounts
     end
 
     def rounded_tax_from_gross(gross_total, tax_rate)
-      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), @rounding_mode)
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), @tax_rounding_mode)
     end
 
     def normalize_context(value)

@@ -1,8 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::ItemTotalAggregator do
-  def aggregate(items)
-    described_class.new(items: items).call
+  def aggregate(items, **options)
+    described_class.new(items: items, **options).call
   end
 
   it 'treats line_total as the authoritative row total when present' do
@@ -64,6 +64,70 @@ RSpec.describe Amounts::ItemTotalAggregator do
       expect(result[:items].first[:original_line_total]).to eq(600)
       expect(result[:items].first[:discount_amount]).to eq(300)
       expect(result[:items].first[:line_total]).to eq(300)
+    end
+  end
+
+  it 'preserves explicit discount_amount as authoritative in analysis context' do
+    result = aggregate(
+      [
+        {
+          quantity_unit: '個',
+          original_line_total: 271,
+          discount_amount: 136,
+          discount_rate: BigDecimal('0.5'),
+          line_total: 135
+        }
+      ],
+      context: :analysis,
+      discount_rounding_mode: :floor
+    )
+
+    aggregate_failures do
+      expect(result[:items].first[:discount_amount]).to eq(136)
+      expect(result[:items].first[:line_total]).to eq(135)
+    end
+  end
+
+  it 'uses discount_rate as authoritative in manual context with discount rounding' do
+    result = aggregate(
+      [
+        {
+          quantity_unit: '個',
+          original_line_total: 271,
+          discount_amount: 135,
+          discount_rate: BigDecimal('0.5'),
+          line_total: 136
+        }
+      ],
+      context: :manual,
+      discount_rounding_mode: :round
+    )
+
+    aggregate_failures do
+      expect(result[:items].first[:discount_amount]).to eq(136)
+      expect(result[:items].first[:line_total]).to eq(135)
+    end
+  end
+
+  it 'clears discount_amount when manual context submits blank discount_rate' do
+    result = aggregate(
+      [
+        {
+          quantity_unit: '個',
+          original_line_total: 310,
+          discount_amount: 155,
+          discount_rate: '',
+          line_total: 155
+        }
+      ],
+      context: :manual,
+      discount_rounding_mode: :round
+    )
+
+    aggregate_failures do
+      expect(result[:items].first[:discount_amount]).to eq(0)
+      expect(result[:items].first[:discount_rate]).to be_nil
+      expect(result[:items].first[:line_total]).to eq(310)
     end
   end
 

@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::Calculator do
-  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil)
+  def calculate(receipt: {}, items: [], tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     kwargs = {
       receipt: receipt,
       items: items,
@@ -9,6 +9,8 @@ RSpec.describe Amounts::Calculator do
       context: context
     }
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
+    kwargs[:tax_rounding_mode] = tax_rounding_mode if tax_rounding_mode
+    kwargs[:discount_rounding_mode] = discount_rounding_mode if discount_rounding_mode
 
     described_class.new(**kwargs).call
   end
@@ -89,6 +91,22 @@ RSpec.describe Amounts::Calculator do
       )
 
       expect(result[:tax]).to eq(100)
+    end
+
+    it 'fills tax from subtotal and tax_rate using tax rounding when item data is absent' do
+      result = calculate(
+        receipt: {
+          subtotal_amount: 999,
+          tax_rate: BigDecimal('0.1')
+        },
+        tax_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result[:subtotal]).to eq(999)
+        expect(result[:tax]).to eq(99)
+        expect(result[:total]).to eq(1_098)
+      end
     end
 
     it 'infers tax_rate from tax_amount divided by subtotal_amount' do

@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAmountService do
-  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], context: :analysis, rounding_mode: nil)
+  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     kwargs = {
       receipt: receipt,
       receipt_items: receipt_items,
@@ -9,6 +9,8 @@ RSpec.describe ReceiptAmountService do
       context: context
     }
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
+    kwargs[:tax_rounding_mode] = tax_rounding_mode if tax_rounding_mode
+    kwargs[:discount_rounding_mode] = discount_rounding_mode if discount_rounding_mode
 
     described_class.call(**kwargs)
   end
@@ -403,7 +405,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'converts discount_rate into discount_amount using the current rounding mode' do
+    it 'converts discount_rate into discount_amount using discount rounding in manual context' do
       result = call_service(
         receipt: {},
         receipt_items: [
@@ -416,17 +418,116 @@ RSpec.describe ReceiptAmountService do
             tax_rate: BigDecimal('0.1')
           }
         ],
-        context: :manual,
-        rounding_mode: :floor
+        context: :manual
       )
 
       item = result[:computed][:items].first
 
       aggregate_failures do
         expect(item[:original_line_total]).to eq(999)
-        expect(item[:discount_amount]).to eq(104)
-        expect(item[:line_total]).to eq(895)
-        expect(result[:resolved][:total]).to eq(895)
+        expect(item[:discount_amount]).to eq(105)
+        expect(item[:line_total]).to eq(894)
+        expect(result[:resolved][:total]).to eq(894)
+      end
+    end
+
+    it 'preserves OCR discount_amount in analysis context even when discount_rate is present' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 271,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 271,
+            discount_amount: 136,
+            discount_rate: BigDecimal('0.5'),
+            line_total: 135,
+            tax_rate: BigDecimal('0.08')
+          }
+        ],
+        context: :analysis,
+        tax_rounding_mode: :floor,
+        discount_rounding_mode: :floor
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:discount_amount]).to eq(136)
+        expect(item[:line_total]).to eq(135)
+      end
+    end
+
+    it 'keeps AEON-style OCR discount amounts authoritative in analysis context' do
+      result = call_service(
+        receipt: {
+          total_amount: 4_215,
+          subtotal_amount: 3_903,
+          tax_amount: 312,
+          tax_rate: BigDecimal('0.08')
+        },
+        receipt_items: [
+          {
+            price: 271,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 271,
+            discount_amount: 136,
+            discount_rate: BigDecimal('0.5'),
+            line_total: 135,
+            tax_rate: BigDecimal('0.08')
+          },
+          {
+            price: 489,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 489,
+            discount_amount: 245,
+            discount_rate: BigDecimal('0.5'),
+            line_total: 244,
+            tax_rate: BigDecimal('0.08')
+          },
+          {
+            price: 432,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 432,
+            discount_amount: 130,
+            discount_rate: BigDecimal('0.3'),
+            line_total: 302,
+            tax_rate: BigDecimal('0.08')
+          },
+          {
+            price: 3_222,
+            quantity: 1,
+            quantity_unit: '個',
+            original_line_total: 3_222,
+            discount_amount: 0,
+            line_total: 3_222,
+            tax_rate: BigDecimal('0.08')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.08'),
+            net_amount: 3_903,
+            amount: 312
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:computed][:items].sum { |item| item[:line_total] }).to eq(3_903)
+        expect(result[:resolved]).to include(
+          subtotal: 3_903,
+          tax: 312,
+          total: 4_215,
+          tax_rate: BigDecimal('0.08')
+        )
+        expect(result[:inconsistencies]).to eq([])
+        expect(result[:needs_review]).to be(false)
       end
     end
 

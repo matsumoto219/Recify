@@ -1,8 +1,11 @@
 module Amounts
   class ItemTotalAggregator
-    def initialize(items:, rounding_mode: :floor)
+    def initialize(items:, context: :analysis, rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
       @items = Array(items)
-      @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
+      @context = normalize_context(context)
+      @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
+        discount_rounding_mode || rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
+      )
     end
 
     def call
@@ -72,16 +75,20 @@ module Amounts
     end
 
     def discount_amount_for(item, original_line_total, submitted_discount_rate)
+      explicit_discount_amount = to_i(fetch_value(item, :discount_amount))
+      return explicit_discount_amount if analysis_context? && explicit_discount_amount.positive?
+
       if !submitted_discount_rate.nil?
         return 0 unless original_line_total.positive?
 
         return Amounts::Rounding.apply_rounding(
           BigDecimal(original_line_total.to_s) * submitted_discount_rate,
-          @rounding_mode
+          @discount_rounding_mode
         )
       end
 
-      explicit_discount_amount = to_i(fetch_value(item, :discount_amount))
+      return 0 if manual_input_context?
+
       explicit_discount_amount.positive? ? explicit_discount_amount : 0
     end
 
@@ -133,6 +140,19 @@ module Amounts
 
     def countable_quantity_unit?(unit)
       ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
+    end
+
+    def normalize_context(value)
+      context = value.to_s.to_sym
+      %i[analysis edit_save manual].include?(context) ? context : :analysis
+    end
+
+    def analysis_context?
+      @context == :analysis
+    end
+
+    def manual_input_context?
+      %i[edit_save manual].include?(@context)
     end
 
     def value_present?(value)

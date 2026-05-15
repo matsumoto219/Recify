@@ -252,6 +252,90 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'OCR印字済み割引額を優先してAEON型レシートの金額を壊さない' do
+      ocr_result = build_ocr_result(
+        candidates: {
+          total_amount: 4_215,
+          subtotal_amount: 3_903,
+          tax_amount: 312,
+          tip_amount: nil,
+          items: [
+            {
+              raw_text: '半額商品A',
+              price: 271,
+              quantity: 1,
+              quantity_unit: '個',
+              original_line_total: 271,
+              discount_amount: 136,
+              discount_rate: 50,
+              line_total: 135,
+              tax_rate: 8,
+              confidence: 0.98
+            },
+            {
+              raw_text: '半額商品B',
+              price: 489,
+              quantity: 1,
+              quantity_unit: '個',
+              original_line_total: 489,
+              discount_amount: 245,
+              discount_rate: 50,
+              line_total: 244,
+              tax_rate: 8,
+              confidence: 0.98
+            },
+            {
+              raw_text: '三割引商品',
+              price: 432,
+              quantity: 1,
+              quantity_unit: '個',
+              original_line_total: 432,
+              discount_amount: 130,
+              discount_rate: 30,
+              line_total: 302,
+              tax_rate: 8,
+              confidence: 0.98
+            },
+            {
+              raw_text: '通常商品',
+              price: 3_222,
+              quantity: 1,
+              quantity_unit: '個',
+              original_line_total: 3_222,
+              discount_amount: 0,
+              line_total: 3_222,
+              tax_rate: 8,
+              confidence: 0.98
+            }
+          ],
+          payments: [],
+          tax_details: [
+            {
+              description: '8%対象',
+              rate: 8,
+              net_amount: 3_903,
+              amount: 312
+            }
+          ]
+        }
+      )
+
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_success_result_for(ocr_result))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.receipt_items.sum(:line_total)).to eq(3_903)
+        expect(receipt.subtotal_amount).to eq(3_903)
+        expect(receipt.tax_amount).to eq(312)
+        expect(receipt.total_amount).to eq(4_215)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it '支払い情報が保存される' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)

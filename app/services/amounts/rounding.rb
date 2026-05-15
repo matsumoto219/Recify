@@ -4,6 +4,9 @@ module Amounts
   module Rounding
     module_function
 
+    TAX_DEFAULT_MODE = :floor
+    DISCOUNT_DEFAULT_MODE = :round
+
     def normalize_rounding_mode(value)
       mode = value.to_s.to_sym
       %i[floor ceil round].include?(mode) ? mode : :floor
@@ -14,7 +17,7 @@ module Amounts
       when :ceil
         value.ceil
       when :round
-        value.round
+        value.round(0, BigDecimal::ROUND_HALF_UP).to_i
       else
         value.floor
       end
