@@ -408,36 +408,58 @@ module Amounts
     end
 
     def warnings_for(candidates)
-      calculation_profile_uncertain?(candidates) || mixed_assignment_uncertain?(candidates) ? [ :calculation_profile_uncertain ] : []
+      warnings = []
+      warnings << :calculation_profile_uncertain if calculation_profile_uncertain?(candidates)
+      warnings << :price_tax_inclusion_uncertain if price_tax_inclusion_uncertain?(candidates)
+      warnings
     end
 
     def calculation_profile_uncertain?(candidates)
       best = candidates.first
       return false unless best
-      return false if best[:score].to_i.zero? && !mixed_profile_missing_receipt_amounts?(best[:profile])
 
-      alternative = candidates.find do |candidate|
+      candidates.any? do |candidate|
+        next false unless candidate[:score].to_i == best[:score].to_i
+
         basis_changed?(best[:profile], candidate[:profile])
       end
-      return false unless alternative
-
-      (alternative[:score].to_i - best[:score].to_i).abs <= UNCERTAIN_SCORE_GAP
     end
 
-    def mixed_assignment_uncertain?(candidates)
-      return true if same_rate_mixed_assignment_uncertain?
+    def price_tax_inclusion_uncertain?(candidates)
+      best = candidates.first
+      return false unless best
+      return false if best[:score].to_i.zero? && !mixed_profile_missing_receipt_amounts?(best[:profile])
 
+      same_rate_mixed_assignment_uncertain? ||
+        mixed_candidate_ranked_high?(candidates) ||
+        tax_included_tax_excluded_close?(candidates)
+    end
+
+    def mixed_candidate_ranked_high?(candidates)
       best_score = candidates.first&.fetch(:score, nil).to_i
 
       candidates.any? do |candidate|
         next false if candidate[:score].to_i - best_score > UNCERTAIN_SCORE_GAP
 
         profile = candidate[:profile]
-        next false unless profile[:item_basis] == :mixed
-        next false if profile[:item_basis_assignments].present?
-
-        mixed_assignment_for(profile[:tax_rounding_mode])[:ambiguous]
+        profile[:item_basis] == :mixed
       end
+    end
+
+    def tax_included_tax_excluded_close?(candidates)
+      included_score = best_score_for_item_basis(candidates, :tax_included)
+      excluded_score = best_score_for_item_basis(candidates, :tax_excluded)
+
+      return false if included_score.nil? || excluded_score.nil?
+
+      (included_score - excluded_score).abs <= UNCERTAIN_SCORE_GAP
+    end
+
+    def best_score_for_item_basis(candidates, item_basis)
+      candidates
+        .select { |candidate| candidate[:profile][:item_basis] == item_basis }
+        .map { |candidate| candidate[:score].to_i }
+        .min
     end
 
     def same_rate_mixed_assignment_uncertain?

@@ -673,7 +673,8 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:calculation_profile]).to include(item_basis: :tax_excluded)
-        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
         expect(result[:computed]).to include(
           subtotal: 1_000,
           tax: 100,
@@ -781,7 +782,8 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         expect(result[:calculation_profile]).to include(item_basis: :mixed)
         expect(result[:computed]).to include(item_basis: :tax_included)
-        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
       end
     end
 
@@ -804,12 +806,13 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:computed]).to include(item_basis: :tax_included)
-        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
         expect(result[:needs_review]).to be(false)
       end
     end
 
-    it 'returns calculation profile uncertainty as a warning without requiring review' do
+    it 'returns price tax inclusion uncertainty as a warning without requiring review' do
       result = call_service(
         receipt: {
           subtotal_amount: 1_000,
@@ -837,9 +840,9 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:warning_inconsistencies]).to include(:calculation_profile_uncertain)
-        expect(result[:warning_mismatch_codes]).to include('CALCULATION_PROFILE_UNCERTAIN')
-        expect(result[:warning_reasons]).to include('calculation_profile_uncertain')
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_mismatch_codes]).to include('PRICE_TAX_INCLUSION_UNCERTAIN')
+        expect(result[:warning_reasons]).to include('price_tax_inclusion_uncertain')
         expect(result[:needs_review]).to be(false)
       end
     end

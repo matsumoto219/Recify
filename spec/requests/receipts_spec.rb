@@ -857,6 +857,23 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '税込税抜判定のwarningは確認情報として補足文言を表示する' do
+      receipt.update!(
+        status: 'completed',
+        review_reasons: [ 'price_tax_inclusion_uncertain' ]
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('確認情報')
+        expect(response.body).to include('金額整合性')
+        expect(response.body).to include('一部明細の税込/税抜を自動判定できませんでした。必要に応じて金額をご確認ください。')
+        expect(response.body).not_to include('要確認内容')
+      end
+    end
+
     it 'AI reasonのみのレシートはAI補完セクションとして表示する' do
       receipt.update!(
         status: 'review_needed',

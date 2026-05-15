@@ -134,7 +134,7 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     end
   end
 
-  it 'returns calculation_profile_uncertain when close candidates use different bases' do
+  it 'returns price_tax_inclusion_uncertain instead of calculation_profile_uncertain when basis candidates are close but not tied' do
     result = estimate(
       receipt: {
         subtotal_amount: 1_000,
@@ -160,7 +160,10 @@ RSpec.describe Amounts::CalculationProfileEstimator do
       ]
     )
 
-    expect(result[:warnings]).to include(:calculation_profile_uncertain)
+    aggregate_failures do
+      expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
+      expect(result[:warnings]).not_to include(:calculation_profile_uncertain)
+    end
   end
 
   it 'selects mixed item basis with tax rate group assignments when groups match tax details exactly' do
@@ -213,7 +216,8 @@ RSpec.describe Amounts::CalculationProfileEstimator do
 
     aggregate_failures do
       expect(result[:profile]).not_to include(item_basis: :mixed, item_basis_assignments: be_present)
-      expect(result[:warnings]).to include(:calculation_profile_uncertain)
+      expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
+      expect(result[:warnings]).not_to include(:calculation_profile_uncertain)
     end
   end
 
@@ -225,6 +229,26 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     )
 
     expect(result[:warnings]).to eq([])
+  end
+
+  it 'treats same-score item or tax basis differences as calculation profile uncertainty' do
+    estimator = described_class.new(receipt: {}, items: [], tax_details: [], context: :analysis)
+    candidates = [
+      { score: 0, profile: { item_basis: :tax_included, tax_basis: :internal, tax_rounding_mode: :floor } },
+      { score: 0, profile: { item_basis: :tax_excluded, tax_basis: :internal, tax_rounding_mode: :floor } }
+    ]
+
+    expect(estimator.send(:calculation_profile_uncertain?, candidates)).to be(true)
+  end
+
+  it 'does not treat rounding-only ties as calculation profile uncertainty' do
+    estimator = described_class.new(receipt: {}, items: [], tax_details: [], context: :analysis)
+    candidates = [
+      { score: 0, profile: { item_basis: :tax_included, tax_basis: :internal, tax_rounding_mode: :floor } },
+      { score: 0, profile: { item_basis: :tax_included, tax_basis: :internal, tax_rounding_mode: :round } }
+    ]
+
+    expect(estimator.send(:calculation_profile_uncertain?, candidates)).to be(false)
   end
 
   it 'uses tax floor and discount round as tie-breakers' do

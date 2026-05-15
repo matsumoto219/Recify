@@ -55,10 +55,6 @@ module Amounts
         errors << :tax_detail_rate_mismatch
       end
 
-      if same_rate_mixed_item_basis_uncertain?
-        errors << :calculation_profile_uncertain
-      end
-
       if discount_data_incomplete?
         errors << :discount_data_incomplete
       end
@@ -74,7 +70,7 @@ module Amounts
       end
 
       # 税抜/税込混在の可能性検知
-      if mixed_tax_inclusion_suspected?
+      if same_rate_mixed_item_basis_uncertain? || mixed_tax_inclusion_suspected?
         errors << :price_tax_inclusion_uncertain
       end
 
