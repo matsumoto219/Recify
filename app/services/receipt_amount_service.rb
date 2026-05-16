@@ -53,7 +53,7 @@ class ReceiptAmountService
 
   def call
     profile_estimation = applicable_calculation_profile(estimate_calculation_profile)
-    active_profile = profile_estimation[:applied_profile] || {}
+    active_profile = profile_estimation.applied_profile || {}
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
     active_receipt_tax_basis = active_profile[:receipt_tax_basis] || :auto
@@ -127,7 +127,7 @@ class ReceiptAmountService
       tax_details_primary: calc[:tax_details_primary],
       tax_rounding_mode: active_tax_rounding_mode
     ).call
-    inconsistencies = (inconsistencies + Array(profile_estimation[:warnings])).uniq
+    inconsistencies = (inconsistencies + profile_estimation.warnings).uniq
 
     mismatch_codes = build_mismatch_codes(inconsistencies)
     mismatch_messages = build_mismatch_messages(inconsistencies)
@@ -148,25 +148,24 @@ class ReceiptAmountService
       inconsistencies: inconsistencies,
       mismatch_codes: mismatch_codes,
       mismatch_messages: mismatch_messages,
-      calculation_profile: profile_estimation[:profile],
-      calculation_profile_score: profile_estimation[:score],
-      calculation_profile_candidates: profile_estimation[:candidates]
+      calculation_profile: profile_estimation.profile,
+      calculation_profile_score: profile_estimation.score,
+      calculation_profile_candidates: profile_estimation.candidates
     )
   end
 
   private
 
   def applicable_calculation_profile(profile_estimation)
-    profile = profile_estimation[:profile]
+    profile_estimation = Amounts::CalculationProfileResult.wrap(profile_estimation)
+    profile = profile_estimation.profile
 
-    profile_estimation.merge(
-      applied_profile: applicable_profile?(profile_estimation) ? profile : nil
-    )
+    profile_estimation.with_applied_profile(applicable_profile?(profile_estimation) ? profile : nil)
   end
 
   def applicable_profile?(profile_estimation)
-    profile = profile_estimation[:profile]
-    return false unless profile_estimation[:score].to_i.zero?
+    profile = profile_estimation.profile
+    return false unless profile_estimation.score.to_i.zero?
     return false unless profile
 
     case profile[:item_amount_basis]
@@ -182,11 +181,11 @@ class ReceiptAmountService
   end
 
   def tax_excluded_profile_applicable?(profile_estimation)
-    profile = profile_estimation[:profile]
+    profile = profile_estimation.profile
 
     return false unless @context == :analysis
     return false unless profile[:receipt_tax_basis] == :tax_added_to_subtotal
-    return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
+    return false if profile_estimation.warnings.include?(:calculation_profile_uncertain)
     return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :line_total_as_net, receipt_tax_basis: :tax_added_to_subtotal)
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
@@ -202,12 +201,12 @@ class ReceiptAmountService
   end
 
   def mixed_profile_applicable?(profile_estimation)
-    profile = profile_estimation[:profile]
+    profile = profile_estimation.profile
     assignments = Array(profile[:item_amount_basis_assignments])
 
     return false unless @context == :analysis
     return false if assignments.blank?
-    return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
+    return false if profile_estimation.warnings.include?(:calculation_profile_uncertain)
     return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :mixed_by_tax_rate_group, receipt_tax_basis: profile[:receipt_tax_basis])
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
@@ -222,9 +221,9 @@ class ReceiptAmountService
   end
 
   def same_score_conflicting_basis?(profile_estimation, item_amount_basis:, receipt_tax_basis:)
-    score = profile_estimation[:score].to_i
+    score = profile_estimation.score.to_i
 
-    Array(profile_estimation[:candidates]).any? do |candidate|
+    profile_estimation.candidates.any? do |candidate|
       next false unless candidate[:score].to_i == score
 
       profile = candidate[:profile]
@@ -379,14 +378,16 @@ class ReceiptAmountService
   def estimate_calculation_profile
     return empty_calculation_profile unless @context == :analysis
 
-    Amounts::CalculationProfileEstimator.new(
-      receipt: @receipt,
-      items: @items,
-      tax_details: @tax_details,
-      context: @context,
-      tax_rounding_modes: candidate_tax_rounding_modes,
-      discount_rounding_modes: candidate_discount_rounding_modes
-    ).call
+    Amounts::CalculationProfileResult.wrap(
+      Amounts::CalculationProfileEstimator.new(
+        receipt: @receipt,
+        items: @items,
+        tax_details: @tax_details,
+        context: @context,
+        tax_rounding_modes: candidate_tax_rounding_modes,
+        discount_rounding_modes: candidate_discount_rounding_modes
+      ).call
+    )
   end
 
   def candidate_tax_rounding_modes
@@ -398,12 +399,7 @@ class ReceiptAmountService
   end
 
   def empty_calculation_profile
-    {
-      profile: nil,
-      score: nil,
-      candidates: [],
-      warnings: []
-    }
+    Amounts::CalculationProfileResult.new
   end
 
   def normalize_context(value)
