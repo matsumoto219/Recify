@@ -375,6 +375,47 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.processing_error_code).to eq("analysis_missing_keys")
     end
 
+    it 'AI失敗fallbackでもOCR由来の明細・税内訳・支払い情報を保存する' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      items = receipt.receipt_items.order(:position_index)
+      tax_detail = receipt.receipt_tax_details.first
+      payment = receipt.receipt_payments.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.processing_error_message).to be_nil
+        expect(receipt.store_name).to eq('サンプルストア')
+        expect(receipt.total_amount).to eq(1280)
+        expect(receipt.subtotal_amount).to eq(1164)
+        expect(receipt.tax_amount).to eq(116)
+        expect(receipt.review_reasons).to be_blank
+
+        expect(items.size).to eq(2)
+        expect(items.first.raw_text).to eq('コーヒー')
+        expect(items.first.line_total).to eq(180)
+        expect(items.first.quantity_unit).to eq('杯')
+        expect(items.second.raw_text).to eq('サンド')
+        expect(items.second.quantity).to eq(BigDecimal('2'))
+        expect(items.second.line_total).to eq(1100)
+
+        expect(receipt.receipt_tax_details.size).to eq(1)
+        expect(tax_detail.description).to eq('10%対象')
+        expect(tax_detail.net_amount).to eq(1164)
+        expect(tax_detail.amount).to eq(116)
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+
+        expect(receipt.receipt_payments.size).to eq(1)
+        expect(payment.method).to eq('CreditCard')
+        expect(payment.amount).to eq(1280)
+      end
+    end
+
     it 'system reason only is stored in processing_error_code and not review_reasons' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(

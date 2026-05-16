@@ -7,6 +7,63 @@ RSpec.describe 'Receipts', type: :request do
     Rack::Test::UploadedFile.new(image_path, 'image/jpeg')
   end
 
+  def upload_ocr_result(overrides = {})
+    {
+      success: true,
+      raw_text: "統合テストストア\nコーヒー 180\nサンド 550 x2\n合計 1280\nMaster",
+      lines: [
+        '統合テストストア',
+        'コーヒー 180',
+        'サンド 550 x2',
+        '合計 1280',
+        'Master'
+      ],
+      candidates: {
+        store_name: '統合テストストア',
+        total_amount: 1280,
+        subtotal_amount: 1164,
+        tax_amount: 116,
+        payment_method_text: 'Master',
+        country_region: 'JP',
+        items: [
+          {
+            raw_text: 'コーヒー',
+            price: 180,
+            quantity: 1,
+            quantity_unit: '杯',
+            line_total: 180,
+            tax_rate: 10,
+            confidence: 0.98
+          },
+          {
+            raw_text: 'サンド',
+            price: 550,
+            quantity: 2,
+            quantity_unit: '個',
+            line_total: 1100,
+            tax_rate: 10,
+            confidence: 0.97
+          }
+        ],
+        payments: [
+          { method: 'CreditCard', amount: 1280 }
+        ],
+        tax_details: [
+          { description: 'Sales Tax', amount: 116, rate: 10, net_amount: 1164 }
+        ]
+      }
+    }.deep_merge(overrides)
+  end
+
+  def failed_ai_result(error_code = 'analysis_missing_keys')
+    {
+      success: false,
+      error_code: error_code,
+      receipt_attributes: {},
+      receipt_items_attributes: []
+    }
+  end
+
   before do
     sign_in user
     allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_return({ error_category: 'ocr_error' })
@@ -285,6 +342,123 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(ReceiptAnalysisJob).to have_received(:perform_later).with(Receipt.order(:id).last.id)
+      end
+    end
+
+    it 'upload後のjob実行でOCR失敗ならfailedになり一覧/詳細/編集で導線を表示する' do
+      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        success: false,
+        error_code: 'ocr_timeout',
+        lines: []
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+      expect(receipt.status).to eq('processing')
+
+      ReceiptAnalysisJob.perform_now(receipt.id)
+      receipt.reload
+
+      aggregate_failures 'failed receipt state' do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ocr_timeout')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+
+      get receipts_path
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{receipt.id}")
+
+      aggregate_failures 'index failed card' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理失敗')
+        expect(response.body).to include('1件')
+        expect(card).to be_present
+        expect(card.text).to include('失敗')
+        expect(card.at_css("a[href='#{receipt_path(receipt, from: 'index')}']")).to be_present
+        expect(card.at_css("a[href='#{edit_receipt_path(receipt, from: 'index')}']")).to be_present
+      end
+
+      get receipt_path(receipt)
+
+      aggregate_failures 'show failed guidance' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include('OCR処理に失敗しました')
+        expect(response.body).to include('編集して修正')
+      end
+
+      get edit_receipt_path(receipt)
+
+      aggregate_failures 'edit failed guidance' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include('OCR処理に失敗しました')
+      end
+    end
+
+    it 'upload後のjob実行でOCR成功かつAI失敗ならOCR由来データを残してreview_needed導線を表示する' do
+      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptOcrService).to receive(:call).and_return(upload_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+      expect(receipt.status).to eq('processing')
+
+      ReceiptAnalysisJob.perform_now(receipt.id)
+      receipt.reload
+
+      aggregate_failures 'review_needed fallback state' do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.store_name).to eq('統合テストストア')
+        expect(receipt.total_amount).to eq(1280)
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.receipt_tax_details.count).to eq(1)
+        expect(receipt.receipt_payments.count).to eq(1)
+      end
+
+      get receipts_path
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{receipt.id}")
+
+      aggregate_failures 'index review card' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('要確認')
+        expect(card).to be_present
+        expect(card.at_css("a[href='#{receipt_path(receipt, from: 'index')}']")).to be_present
+        expect(card.at_css("a[href='#{edit_receipt_path(receipt, from: 'index')}']")).to be_present
+      end
+
+      get receipt_path(receipt)
+
+      aggregate_failures 'show fallback guidance' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に関する注意')
+        expect(response.body).to include('AI補完処理に失敗しました')
+      end
+
+      get edit_receipt_path(receipt)
+
+      aggregate_failures 'edit fallback guidance' do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に関する注意')
+        expect(response.body).to include('AI補完処理に失敗しました')
       end
     end
   end
