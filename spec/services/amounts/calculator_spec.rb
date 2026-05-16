@@ -257,16 +257,16 @@ RSpec.describe Amounts::Calculator do
         tax_details: [
           { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税 10%' }
         ],
-        item_amount_basis: :tax_excluded,
-        receipt_tax_basis: :external
+        item_amount_basis: :line_total_as_net,
+        receipt_tax_basis: :tax_added_to_subtotal
       )
 
       aggregate_failures do
         expect(result[:subtotal]).to eq(1_000)
         expect(result[:tax]).to eq(100)
         expect(result[:total]).to eq(1_100)
-        expect(result[:receipt_tax_basis]).to eq(:external)
-        expect(result[:item_amount_basis]).to eq(:tax_excluded)
+        expect(result[:receipt_tax_basis]).to eq(:tax_added_to_subtotal)
+        expect(result[:item_amount_basis]).to eq(:line_total_as_net)
       end
     end
 
@@ -277,7 +277,7 @@ RSpec.describe Amounts::Calculator do
           { line_total: 200, tax_rate: BigDecimal('0.1') },
           { line_total: 50, tax_rate: nil }
         ],
-        item_amount_basis: :mixed,
+        item_amount_basis: :mixed_by_tax_rate_group,
         item_amount_basis_assignments: [
           { tax_rate: BigDecimal('0.08'), basis: :tax_included, net_amount: 100, tax_amount: 8, gross_amount: 108 },
           { tax_rate: BigDecimal('0.1'), basis: :tax_excluded, net_amount: 200, tax_amount: 20, gross_amount: 220 },
@@ -289,7 +289,7 @@ RSpec.describe Amounts::Calculator do
         expect(result[:subtotal]).to eq(350)
         expect(result[:tax]).to eq(28)
         expect(result[:total]).to eq(378)
-        expect(result[:item_amount_basis]).to eq(:mixed)
+        expect(result[:item_amount_basis]).to eq(:mixed_by_tax_rate_group)
         expect(result[:tax_details]).to include(
           hash_including(rate: BigDecimal('0.08'), net_amount: 100, amount: 8),
           hash_including(rate: BigDecimal('0.1'), net_amount: 200, amount: 20)

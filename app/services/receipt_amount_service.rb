@@ -57,7 +57,7 @@ class ReceiptAmountService
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
     active_receipt_tax_basis = active_profile[:receipt_tax_basis] || :auto
-    active_item_amount_basis = active_profile[:item_amount_basis] || :tax_included
+    active_item_amount_basis = active_profile[:item_amount_basis] || :line_total_as_recorded
     active_item_amount_basis_assignments = active_profile[:item_amount_basis_assignments]
 
     # --- 1) Calculator（純計算）
@@ -83,7 +83,7 @@ class ReceiptAmountService
     ).call
 
     # --- 3) TaxDetailAggregator（税率別集計）
-    tax_details = if calc[:item_amount_basis] == :mixed && Array(calc[:tax_details]).present?
+    tax_details = if calc[:item_amount_basis] == :mixed_by_tax_rate_group && Array(calc[:tax_details]).present?
       Array(calc[:tax_details]).map do |tax_detail|
         {
           description: tax_detail[:description],
@@ -170,11 +170,11 @@ class ReceiptAmountService
     return false unless profile
 
     case profile[:item_amount_basis]
-    when :tax_included
+    when :line_total_as_recorded
       true
-    when :tax_excluded
+    when :line_total_as_net
       tax_excluded_profile_applicable?(profile_estimation)
-    when :mixed
+    when :mixed_by_tax_rate_group
       mixed_profile_applicable?(profile_estimation)
     else
       false
@@ -185,9 +185,9 @@ class ReceiptAmountService
     profile = profile_estimation[:profile]
 
     return false unless @context == :analysis
-    return false unless profile[:receipt_tax_basis] == :external
+    return false unless profile[:receipt_tax_basis] == :tax_added_to_subtotal
     return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
-    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :tax_excluded, receipt_tax_basis: :external)
+    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :line_total_as_net, receipt_tax_basis: :tax_added_to_subtotal)
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
     return false unless complete_tax_details_available?
@@ -208,7 +208,7 @@ class ReceiptAmountService
     return false unless @context == :analysis
     return false if assignments.blank?
     return false if Array(profile_estimation[:warnings]).include?(:calculation_profile_uncertain)
-    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :mixed, receipt_tax_basis: profile[:receipt_tax_basis])
+    return false if same_score_conflicting_basis?(profile_estimation, item_amount_basis: :mixed_by_tax_rate_group, receipt_tax_basis: profile[:receipt_tax_basis])
     return false unless receipt_amounts_complete_and_consistent?
     return false unless item_line_totals_complete?
     return false unless complete_tax_details_available?

@@ -85,8 +85,8 @@ RSpec.describe Amounts::CalculationProfileEstimator do
       expect(result[:profile]).to eq(
         tax_rounding_mode: :floor,
         discount_rounding_mode: :round,
-        receipt_tax_basis: :external,
-        item_amount_basis: :tax_included
+        receipt_tax_basis: :tax_added_to_subtotal,
+        item_amount_basis: :line_total_as_recorded
       )
       expect(result[:score]).to eq(0)
       expect(result[:candidates]).to be_present
@@ -122,14 +122,14 @@ RSpec.describe Amounts::CalculationProfileEstimator do
 
     aggregate_failures do
       expect(result[:profile]).to include(
-        receipt_tax_basis: :external,
-        item_amount_basis: :tax_excluded
+        receipt_tax_basis: :tax_added_to_subtotal,
+        item_amount_basis: :line_total_as_net
       )
       expect(result[:score]).to eq(0)
       expect(result[:candidates].map { |candidate| candidate[:profile][:item_amount_basis] }.uniq).to include(
-        :tax_included,
-        :tax_excluded,
-        :mixed
+        :line_total_as_recorded,
+        :line_total_as_net,
+        :mixed_by_tax_rate_group
       )
     end
   end
@@ -187,7 +187,7 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     assignments = result[:profile][:item_amount_basis_assignments]
 
     aggregate_failures do
-      expect(result[:profile]).to include(item_amount_basis: :mixed)
+      expect(result[:profile]).to include(item_amount_basis: :mixed_by_tax_rate_group)
       expect(result[:score]).to eq(0)
       expect(result[:warnings]).to eq([])
       expect(assignments).to include(
@@ -215,7 +215,7 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     )
 
     aggregate_failures do
-      expect(result[:profile]).not_to include(item_amount_basis: :mixed, item_amount_basis_assignments: be_present)
+      expect(result[:profile]).not_to include(item_amount_basis: :mixed_by_tax_rate_group, item_amount_basis_assignments: be_present)
       expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
       expect(result[:warnings]).not_to include(:calculation_profile_uncertain)
     end
@@ -234,8 +234,8 @@ RSpec.describe Amounts::CalculationProfileEstimator do
   it 'treats same-score item or tax basis differences as calculation profile uncertainty' do
     estimator = described_class.new(receipt: {}, items: [], tax_details: [], context: :analysis)
     candidates = [
-      { score: 0, profile: { item_amount_basis: :tax_included, receipt_tax_basis: :internal, tax_rounding_mode: :floor } },
-      { score: 0, profile: { item_amount_basis: :tax_excluded, receipt_tax_basis: :internal, tax_rounding_mode: :floor } }
+      { score: 0, profile: { item_amount_basis: :line_total_as_recorded, receipt_tax_basis: :total_includes_tax, tax_rounding_mode: :floor } },
+      { score: 0, profile: { item_amount_basis: :line_total_as_net, receipt_tax_basis: :total_includes_tax, tax_rounding_mode: :floor } }
     ]
 
     expect(estimator.send(:calculation_profile_uncertain?, candidates)).to be(true)
@@ -244,8 +244,8 @@ RSpec.describe Amounts::CalculationProfileEstimator do
   it 'does not treat rounding-only ties as calculation profile uncertainty' do
     estimator = described_class.new(receipt: {}, items: [], tax_details: [], context: :analysis)
     candidates = [
-      { score: 0, profile: { item_amount_basis: :tax_included, receipt_tax_basis: :internal, tax_rounding_mode: :floor } },
-      { score: 0, profile: { item_amount_basis: :tax_included, receipt_tax_basis: :internal, tax_rounding_mode: :round } }
+      { score: 0, profile: { item_amount_basis: :line_total_as_recorded, receipt_tax_basis: :total_includes_tax, tax_rounding_mode: :floor } },
+      { score: 0, profile: { item_amount_basis: :line_total_as_recorded, receipt_tax_basis: :total_includes_tax, tax_rounding_mode: :round } }
     ]
 
     expect(estimator.send(:calculation_profile_uncertain?, candidates)).to be(false)
@@ -269,7 +269,7 @@ RSpec.describe Amounts::CalculationProfileEstimator do
       expect(result[:profile]).to include(
         tax_rounding_mode: :floor,
         discount_rounding_mode: :round,
-        receipt_tax_basis: :external
+        receipt_tax_basis: :tax_added_to_subtotal
       )
     end
   end

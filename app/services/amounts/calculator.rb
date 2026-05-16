@@ -2,7 +2,7 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, receipt_tax_basis: :auto, item_amount_basis: :tax_included, item_amount_basis_assignments: nil)
+    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, receipt_tax_basis: :auto, item_amount_basis: :line_total_as_recorded, item_amount_basis_assignments: nil)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
@@ -30,7 +30,7 @@ module Amounts
       tax_detail_subtotal = calculate_tax_detail_subtotal
       fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
 
-      if @item_amount_basis == :mixed && @item_amount_basis_assignments.present?
+      if @item_amount_basis == :mixed_by_tax_rate_group && @item_amount_basis_assignments.present?
         amounts = mixed_assignment_amounts
         tax_details = mixed_assignment_tax_details
         tax_rates = tax_details.filter_map { |tax_detail| normalize_tax_rate(tax_detail[:rate]) }.uniq
@@ -46,15 +46,15 @@ module Amounts
           tax_rate: tax_rates.one? ? tax_rates.first : nil,
           external_tax: false,
           tax_details_primary: false,
-          receipt_tax_basis: @receipt_tax_basis == :external ? :external : :internal,
-          item_amount_basis: :mixed,
+          receipt_tax_basis: @receipt_tax_basis == :tax_added_to_subtotal ? :tax_added_to_subtotal : :total_includes_tax,
+          item_amount_basis: :mixed_by_tax_rate_group,
           item_amount_basis_assignments: @item_amount_basis_assignments,
           tax_details: tax_details,
           items: @items
         }
       end
 
-      if @item_amount_basis == :tax_excluded
+      if @item_amount_basis == :line_total_as_net
         subtotal = item_total
         tax_total = calculate_tax_excluded_item_tax_total(fallback_tax_rate)
         tax_rate = resolve_tax_rate(fallback_tax_rate)
@@ -70,8 +70,8 @@ module Amounts
           tax_rate: tax_rate,
           external_tax: true,
           tax_details_primary: false,
-          receipt_tax_basis: :external,
-          item_amount_basis: :tax_excluded,
+          receipt_tax_basis: :tax_added_to_subtotal,
+          item_amount_basis: :line_total_as_net,
           items: @items
         }
       end
@@ -108,8 +108,8 @@ module Amounts
         tax_rate: tax_rate,
         external_tax: external_tax,
         tax_details_primary: tax_details_primary,
-        receipt_tax_basis: external_tax ? :external : :internal,
-        item_amount_basis: :tax_included,
+        receipt_tax_basis: external_tax ? :tax_added_to_subtotal : :total_includes_tax,
+        item_amount_basis: :line_total_as_recorded,
         items: @items
       }
     end
@@ -232,9 +232,9 @@ module Amounts
 
     def resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
       case @receipt_tax_basis
-      when :external
+      when :tax_added_to_subtotal
         tax_detail_subtotal.positive? && tax_detail_total.positive?
-      when :internal
+      when :total_includes_tax
         false
       else
         external_tax_details?(item_total, tax_detail_subtotal, tax_detail_total)
@@ -417,12 +417,12 @@ module Amounts
 
     def normalize_receipt_tax_basis(value)
       basis = value.to_s.to_sym
-      %i[auto internal external].include?(basis) ? basis : :auto
+      %i[auto total_includes_tax tax_added_to_subtotal].include?(basis) ? basis : :auto
     end
 
     def normalize_item_amount_basis(value)
       basis = value.to_s.to_sym
-      %i[tax_included tax_excluded mixed].include?(basis) ? basis : :tax_included
+      %i[line_total_as_recorded line_total_as_net mixed_by_tax_rate_group].include?(basis) ? basis : :line_total_as_recorded
     end
 
     def normalize_item_amount_basis_assignments(assignments)

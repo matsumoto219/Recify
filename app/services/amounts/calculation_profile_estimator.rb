@@ -3,9 +3,9 @@
 module Amounts
   class CalculationProfileEstimator
     ROUNDING_MODES = %i[floor round ceil].freeze
-    RECEIPT_TAX_BASES = %i[internal external].freeze
-    ITEM_AMOUNT_BASES = %i[tax_included tax_excluded mixed].freeze
-    DEFAULT_ITEM_AMOUNT_BASIS = :tax_included
+    RECEIPT_TAX_BASES = %i[total_includes_tax tax_added_to_subtotal].freeze
+    ITEM_AMOUNT_BASES = %i[line_total_as_recorded line_total_as_net mixed_by_tax_rate_group].freeze
+    DEFAULT_ITEM_AMOUNT_BASIS = :line_total_as_recorded
     UNCERTAIN_SCORE_GAP = 100
 
     def initialize(receipt:, items:, tax_details:, context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, receipt_tax_bases: RECEIPT_TAX_BASES, item_amount_bases: ITEM_AMOUNT_BASES)
@@ -99,19 +99,19 @@ module Amounts
 
     def receipt_tax_basis_penalty(profile)
       receipt_tax_basis = profile[:receipt_tax_basis]
-      return 25 if profile[:item_amount_basis] == :mixed && receipt_tax_basis == :external && !explicit_external_tax_evidence?
-      return 10_000 if receipt_tax_basis == :external && !external_tax_candidate_available?
+      return 25 if profile[:item_amount_basis] == :mixed_by_tax_rate_group && receipt_tax_basis == :tax_added_to_subtotal && !explicit_external_tax_evidence?
+      return 10_000 if receipt_tax_basis == :tax_added_to_subtotal && !external_tax_candidate_available?
 
       0
     end
 
     def item_amount_basis_penalty(item_amount_basis)
       case item_amount_basis
-      when :tax_included
+      when :line_total_as_recorded
         explicit_external_tax_evidence? ? 25 : 0
-      when :tax_excluded
+      when :line_total_as_net
         explicit_external_tax_evidence? ? 0 : 25
-      when :mixed
+      when :mixed_by_tax_rate_group
         mixed_assignment_exact? ? 0 : (mixed_item_amount_basis_suspected? ? 25 : 1_000)
       else
         1_000
@@ -154,11 +154,11 @@ module Amounts
     end
 
     def generated_tax_details(calc, profile)
-      if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
+      if profile[:item_amount_basis] == :mixed_by_tax_rate_group && profile[:item_amount_basis_assignments].present?
         return mixed_generated_tax_details(profile[:item_amount_basis_assignments])
       end
 
-      if profile[:item_amount_basis] == :tax_excluded
+      if profile[:item_amount_basis] == :line_total_as_net
         generated = tax_excluded_tax_details(profile[:tax_rounding_mode])
         return generated if generated.present?
       end
@@ -177,11 +177,11 @@ module Amounts
     end
 
     def profile_amounts(calc, profile)
-      if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
+      if profile[:item_amount_basis] == :mixed_by_tax_rate_group && profile[:item_amount_basis_assignments].present?
         return mixed_amounts(profile[:item_amount_basis_assignments])
       end
 
-      return tax_excluded_amounts(profile[:tax_rounding_mode]) if profile[:item_amount_basis] == :tax_excluded
+      return tax_excluded_amounts(profile[:tax_rounding_mode]) if profile[:item_amount_basis] == :line_total_as_net
 
       {
         subtotal: calc[:subtotal],
@@ -271,10 +271,10 @@ module Amounts
     end
 
     def basis_relation_delta(_calc, profile, amounts)
-      return 0 if profile[:item_amount_basis] == :mixed && profile[:item_amount_basis_assignments].present?
+      return 0 if profile[:item_amount_basis] == :mixed_by_tax_rate_group && profile[:item_amount_basis_assignments].present?
 
       case profile[:receipt_tax_basis]
-      when :external
+      when :tax_added_to_subtotal
         (source_item_total - to_i(amounts[:subtotal])).abs
       else
         (source_item_total - to_i(amounts[:total])).abs
@@ -361,20 +361,20 @@ module Amounts
 
     def receipt_tax_basis_priority(receipt_tax_basis)
       if external_tax_preferred?
-        receipt_tax_basis == :external ? 0 : 1
+        receipt_tax_basis == :tax_added_to_subtotal ? 0 : 1
       else
-        receipt_tax_basis == :internal ? 0 : 1
+        receipt_tax_basis == :total_includes_tax ? 0 : 1
       end
     end
 
     def item_amount_basis_priority(item_amount_basis)
       if explicit_external_tax_evidence?
-        return { tax_excluded: 0, tax_included: 1, mixed: 2 }.fetch(item_amount_basis, 3)
+        return { line_total_as_net: 0, line_total_as_recorded: 1, mixed_by_tax_rate_group: 2 }.fetch(item_amount_basis, 3)
       end
 
-      return { mixed: 0, tax_included: 1, tax_excluded: 2 }.fetch(item_amount_basis, 3) if mixed_item_amount_basis_suspected?
+      return { mixed_by_tax_rate_group: 0, line_total_as_recorded: 1, line_total_as_net: 2 }.fetch(item_amount_basis, 3) if mixed_item_amount_basis_suspected?
 
-      { tax_included: 0, tax_excluded: 1, mixed: 2 }.fetch(item_amount_basis, 3)
+      { line_total_as_recorded: 0, line_total_as_net: 1, mixed_by_tax_rate_group: 2 }.fetch(item_amount_basis, 3)
     end
 
     def tax_rounding_priority(tax_rounding_mode)
@@ -399,7 +399,7 @@ module Amounts
     end
 
     def profile_with_metadata(profile)
-      return profile unless profile[:item_amount_basis] == :mixed
+      return profile unless profile[:item_amount_basis] == :mixed_by_tax_rate_group
 
       assignment = mixed_assignment_for(profile[:tax_rounding_mode])
       return profile unless assignment[:exact]
@@ -442,13 +442,13 @@ module Amounts
         next false if candidate[:score].to_i - best_score > UNCERTAIN_SCORE_GAP
 
         profile = candidate[:profile]
-        profile[:item_amount_basis] == :mixed
+        profile[:item_amount_basis] == :mixed_by_tax_rate_group
       end
     end
 
     def tax_included_tax_excluded_close?(candidates)
-      included_score = best_score_for_item_amount_basis(candidates, :tax_included)
-      excluded_score = best_score_for_item_amount_basis(candidates, :tax_excluded)
+      included_score = best_score_for_item_amount_basis(candidates, :line_total_as_recorded)
+      excluded_score = best_score_for_item_amount_basis(candidates, :line_total_as_net)
 
       return false if included_score.nil? || excluded_score.nil?
 
@@ -482,7 +482,7 @@ module Amounts
     end
 
     def mixed_profile_missing_receipt_amounts?(profile)
-      profile[:item_amount_basis] == :mixed && !receipt_amounts_complete?
+      profile[:item_amount_basis] == :mixed_by_tax_rate_group && !receipt_amounts_complete?
     end
 
     def receipt_amounts_complete?
