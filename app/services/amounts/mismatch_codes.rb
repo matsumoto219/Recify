@@ -9,6 +9,7 @@ module Amounts
       tax_detail_rate_mismatch: "TAX_DETAIL_RATE_MISMATCH",
       tax_detail_incomplete: "TAX_DETAIL_INCOMPLETE",
       tax_detail_partial: "TAX_DETAIL_PARTIAL",
+      item_tax_rate_group_uncertain: "ITEM_TAX_RATE_GROUP_UNCERTAIN",
       ocr_total_mismatch: "OCR_TOTAL_MISMATCH",
       price_tax_inclusion_uncertain: "PRICE_TAX_INCLUSION_UNCERTAIN",
       calculation_profile_uncertain: "CALCULATION_PROFILE_UNCERTAIN",

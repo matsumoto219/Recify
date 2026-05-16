@@ -21,6 +21,7 @@ RSpec.describe Amounts::MismatchSeverity do
         expect(described_class.severity(:zero_amount_item_incomplete)).to eq(:warning)
         expect(described_class.severity(:discount_data_incomplete)).to eq(:warning)
         expect(described_class.severity(:price_tax_inclusion_uncertain)).to eq(:warning)
+        expect(described_class.severity(:item_tax_rate_group_uncertain)).to eq(:warning)
       end
     end
 
@@ -31,7 +32,7 @@ RSpec.describe Amounts::MismatchSeverity do
 
   describe '.needs_review?' do
     it 'returns false for warning-only mismatches' do
-      expect(described_class.needs_review?([:ocr_total_mismatch, :tax_detail_rate_mismatch])).to be(false)
+      expect(described_class.needs_review?([:ocr_total_mismatch, :tax_detail_rate_mismatch, :item_tax_rate_group_uncertain])).to be(false)
     end
 
     it 'returns true when a blocking mismatch exists' do

@@ -55,6 +55,10 @@ module Amounts
         errors << :tax_detail_rate_mismatch
       end
 
+      if item_tax_rate_group_uncertain?
+        errors << :item_tax_rate_group_uncertain
+      end
+
       if discount_data_incomplete?
         errors << :discount_data_incomplete
       end
@@ -190,6 +194,19 @@ module Amounts
       end
     end
 
+    def item_tax_rate_group_uncertain?
+      return false unless @context == :analysis
+      return false if tax_detail_incomplete?
+      return false if tax_detail_partial?
+
+      source_rates = positive_tax_detail_rates
+      item_rates = positive_item_tax_rates
+
+      return false if source_rates.blank? || item_rates.blank?
+
+      source_rates.map(&:to_s).sort != item_rates.map(&:to_s).sort
+    end
+
     def tax_details_match_rounding_candidate?(source_groups = nil)
       source_groups ||= tax_details_by_rate(comparable_source_tax_details)
       return false if source_groups.blank? || @items.blank?
@@ -285,6 +302,20 @@ module Amounts
         groups[rate][:amount] += to_i(fetch_value(tax_detail, :amount))
         groups[rate][:net_amount] += to_i(fetch_value(tax_detail, :net_amount))
       end
+    end
+
+    def positive_tax_detail_rates
+      comparable_source_tax_details.filter_map do |tax_detail|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        rate.positive? && tax_detail_complete?(tax_detail) ? rate : nil
+      end.uniq
+    end
+
+    def positive_item_tax_rates
+      @items.filter_map do |item|
+        rate = normalize_rate(fetch_value(item, :tax_rate))
+        rate.positive? ? rate : nil
+      end.uniq
     end
 
     def same_rate_mixed_item_amount_basis_uncertain?

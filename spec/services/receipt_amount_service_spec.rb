@@ -1379,6 +1379,30 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'treats item tax rate group uncertainty as warning without blocking review' do
+      result = call_service(
+        receipt: {
+          total_amount: 108,
+          subtotal_amount: 99,
+          tax_amount: 9
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 99, amount: 9 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:warning_inconsistencies]).to include(:item_tax_rate_group_uncertain)
+        expect(result[:warning_reasons]).to include('item_tax_rate_group_uncertain')
+        expect(result[:blocking_inconsistencies]).not_to include(:item_tax_rate_group_uncertain)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
     it 'treats item net total plus tax_details as external tax when receipt total matches net plus tax' do
       result = call_service(
         receipt: {

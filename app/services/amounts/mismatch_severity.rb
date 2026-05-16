@@ -18,6 +18,7 @@ module Amounts
       tax_detail_rate_mismatch
       tax_detail_incomplete
       tax_detail_partial
+      item_tax_rate_group_uncertain
       zero_amount_item_incomplete
       discount_data_incomplete
       price_tax_inclusion_uncertain

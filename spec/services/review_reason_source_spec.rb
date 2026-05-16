@@ -28,6 +28,7 @@ RSpec.describe ReviewReasonSource do
         expect(described_class.source_for('zero_amount_item_incomplete')).to eq(:amount)
         expect(described_class.source_for('price_tax_inclusion_uncertain')).to eq(:amount)
         expect(described_class.source_for('calculation_profile_uncertain')).to eq(:amount)
+        expect(described_class.source_for('item_tax_rate_group_uncertain')).to eq(:amount)
       end
     end
 
@@ -107,6 +108,7 @@ RSpec.describe ReviewReasonSource do
         'tax_detail_partial',
         'zero_amount_item_incomplete',
         'calculation_profile_uncertain',
+        'item_tax_rate_group_uncertain',
         'item_tax_rate_uncertain',
         'tax_detail_mismatch',
         'analysis_missing_keys'
@@ -119,6 +121,7 @@ RSpec.describe ReviewReasonSource do
         'tax_detail_partial',
         'zero_amount_item_incomplete',
         'calculation_profile_uncertain',
+        'item_tax_rate_group_uncertain',
         'item_tax_rate_uncertain'
       ])
     end
