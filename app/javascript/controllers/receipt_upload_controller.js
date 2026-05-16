@@ -13,6 +13,10 @@ export default class extends Controller {
     'dropOverlay'
   ]
 
+  static values = {
+    ocrAvailable: { type: Boolean, default: true }
+  }
+
   connect () {
     this.selectedObjectUrl = null
   }
@@ -22,11 +26,15 @@ export default class extends Controller {
   }
 
   openCamera () {
+    if (!this.ocrAvailableValue) return
+
     this.libraryInputTarget.value = ''
     this.cameraInputTarget.click()
   }
 
   openLibrary () {
+    if (!this.ocrAvailableValue) return
+
     this.cameraInputTarget.value = ''
     this.libraryInputTarget.click()
   }
@@ -41,11 +49,15 @@ export default class extends Controller {
 
   handleDragEnter (event) {
     event.preventDefault()
+    if (!this.ocrAvailableValue) return
+
     this.showDropOverlay()
   }
 
   handleDragOver (event) {
     event.preventDefault()
+    if (!this.ocrAvailableValue) return
+
     event.dataTransfer.dropEffect = 'copy'
     this.showDropOverlay()
   }
@@ -61,6 +73,7 @@ export default class extends Controller {
   handleDrop (event) {
     event.preventDefault()
     this.hideDropOverlay()
+    if (!this.ocrAvailableValue) return
 
     const file = event.dataTransfer?.files?.[0]
     if (!file) return
@@ -83,12 +96,14 @@ export default class extends Controller {
   }
 
   previewFile (file) {
-    this.submitButtonTarget.disabled = !file
+    this.submitButtonTarget.disabled = !file || !this.ocrAvailableValue
 
     if (!file) {
       this.clearPreview()
       return
     }
+
+    if (!this.ocrAvailableValue) return
 
     if (!this.isImageFile(file)) {
       this.showFileError('画像ファイルを選択してください')

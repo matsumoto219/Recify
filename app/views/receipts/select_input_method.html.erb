@@ -1,3 +1,10 @@
+<%
+  ocr_state = (@ocr_state || {}).with_indifferent_access[:state].to_s
+  ai_state = (@ai_state || {}).with_indifferent_access[:state].to_s
+  ocr_down = ocr_state == "down"
+  ai_down = ai_state == "down"
+%>
+
 <section class="relative w-full max-w-4xl mx-auto space-y-10 md:space-y-12 px-4 md:px-0">
   <%= render "shared/ui/section_header",
     title: "登録方法を選択してください",
@@ -8,6 +15,22 @@
     responsive_align: :center,
     wrapper_class: "space-y-3 md:space-y-4 pt-2 md:pt-0" %>
 
+  <% if ocr_down || ai_down %>
+    <div class="space-y-3">
+      <% if ocr_down %>
+        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
+          OCR機能が一時停止中です。手動入力をご利用ください。
+        </div>
+      <% end %>
+
+      <% if ai_down %>
+        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
+          AI補完は一時停止中です。OCR結果をもとに確認・修正できます。
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
   <div class="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-8 px-0 md:px-4">
     <%= render "shared/ui/selection_card",
       path: new_upload_receipts_path,
@@ -17,7 +40,9 @@
       variant: :primary,
       desktop_badge: "Recommended",
       title_size: "text-[1.2rem] md:text-2xl",
-      description_size: "text-sm md:text-base" %>
+      description_size: "text-sm md:text-base",
+      disabled: ocr_down,
+      data: (ocr_down ? { service_disabled: "ocr" } : {}) %>
 
     <%= render "shared/ui/selection_card",
       path: new_receipt_path,

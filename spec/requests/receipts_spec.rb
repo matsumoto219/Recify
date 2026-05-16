@@ -75,6 +75,131 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
+  describe 'GET /receipts/select_input_method' do
+    it 'OCR down時は画像アップロード導線をdisabled表示し手動入力は有効にする' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get select_input_method_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(document.at_css('[data-service-disabled="ocr"]')).to be_present
+        expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+        expect(document.at_css('a[href="' + new_upload_receipts_path + '"]')).to be_nil
+      end
+    end
+
+    it 'AI down時は画像アップロード導線をdisabledにせず注意を表示する' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+
+      get select_input_method_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('AI補完は一時停止中です。OCR結果をもとに確認・修正できます。')
+        expect(document.at_css('a[href="' + new_upload_receipts_path + '"]')).to be_present
+        expect(document.at_css('[data-service-disabled="ocr"]')).to be_nil
+      end
+    end
+  end
+
+  describe 'GET /receipts/new_upload' do
+    it 'OCR down時は警告を表示しアップロード操作をdisabledにする' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="false"]')).to be_present
+        expect(document.css('button[disabled]').map(&:text).join).to include('カメラを起動')
+        expect(document.css('button[disabled]').map(&:text).join).to include('ファイルを選択')
+        expect(document.css('button[disabled]').map(&:text).join).to include('アップロードして登録')
+        expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+      end
+    end
+
+    it 'OCR degraded時はアップロード可能なまま注意を表示する' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'degraded' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('OCR解析に時間がかかる、または失敗する可能性があります。')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="true"]')).to be_present
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('カメラを起動')
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('ファイルを選択')
+      end
+    end
+
+    it 'AI down時はアップロード可能なまま注意を表示する' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('AI補完は一時停止中です。OCR結果をもとに確認・修正できます。')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="true"]')).to be_present
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('カメラを起動')
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('ファイルを選択')
+      end
+    end
+  end
+
+  describe 'POST /receipts/upload' do
+    it 'OCR down時はreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it 'AI down時でもuploadは止めず解析jobをenqueueする' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(Receipt.order(:id).last.id)
+      end
+    end
+  end
+
   describe 'POST /receipts' do
     let(:valid_params) do
       {

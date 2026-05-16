@@ -27,6 +27,7 @@ class ReceiptsController < ApplicationController
   end
 
   def select_input_method
+    set_external_service_states
   end
 
   def new
@@ -35,10 +36,20 @@ class ReceiptsController < ApplicationController
   end
 
   def new_upload
+    set_external_service_states
     @receipt = current_user.receipts.new
   end
 
   def upload
+    set_external_service_states
+
+    if ExternalServiceStatus.down?(:ocr)
+      @receipt = current_user.receipts.new
+      flash.now[:alert] = "OCR機能が一時停止中です。手動入力をご利用ください。"
+      render :new_upload, status: :unprocessable_content
+      return
+    end
+
     @receipt = current_user.receipts.new(upload_receipt_params)
     @receipt.status = "processing"
 
@@ -104,6 +115,11 @@ class ReceiptsController < ApplicationController
     return unless @receipt.processing?
 
     redirect_to receipts_path, alert: t("flash.receipts.processing")
+  end
+
+  def set_external_service_states
+    @ocr_state = ExternalServiceStatus.snapshot(:ocr)
+    @ai_state = ExternalServiceStatus.snapshot(:ai)
   end
 
   def upload_receipt_params

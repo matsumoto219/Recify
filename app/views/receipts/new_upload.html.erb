@@ -1,3 +1,13 @@
+<%
+  ocr_state = (@ocr_state || {}).with_indifferent_access[:state].to_s
+  ai_state = (@ai_state || {}).with_indifferent_access[:state].to_s
+  ocr_down = ocr_state == "down"
+  ocr_degraded = ocr_state == "degraded"
+  ai_down = ai_state == "down"
+  ai_degraded = ai_state == "degraded"
+  ocr_available = !ocr_down
+%>
+
 <section class="max-w-3xl mx-auto space-y-8 pb-28 md:pb-2">
   <%= render "shared/ui/section_header",
     title: "レシート画像をアップロード",
@@ -6,8 +16,33 @@
     align: :center,
     wrapper_class: "space-y-3" %>
 
+  <% if ocr_down || ocr_degraded || ai_down || ai_degraded %>
+    <div class="space-y-3">
+      <% if ocr_down %>
+        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
+          <p class="font-bold">OCR機能が一時停止中です。手動入力をご利用ください。</p>
+          <%= link_to "手動入力へ進む", new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
+        </div>
+      <% elsif ocr_degraded %>
+        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
+          OCR解析に時間がかかる、または失敗する可能性があります。
+        </div>
+      <% end %>
+
+      <% if ai_down %>
+        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
+          AI補完は一時停止中です。OCR結果をもとに確認・修正できます。
+        </div>
+      <% elsif ai_degraded %>
+        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
+          AI補完が不安定です。OCR結果をもとに確認・修正できます。
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
   <%= render "shared/ui/surface_card", padding: :md, class: "group" do %>
-    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit" } } do |form| %>
+    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit", receipt_upload_ocr_available_value: ocr_available } } do |form| %>
       <div class="space-y-6">
         <div>
           <p class="block text-sm font-medium token-text-base">レシート画像</p>
@@ -41,6 +76,7 @@
               icon: "camera_alt",
               full_width: true,
               type: "button",
+              disabled: ocr_down,
               data: { action: "receipt-upload#openCamera" } %>
 
             <%= render "shared/ui/button",
@@ -50,6 +86,7 @@
               icon: "folder_open",
               full_width: true,
               type: "button",
+              disabled: ocr_down,
               data: { action: "receipt-upload#openLibrary" } %>
           </div>
 
@@ -73,11 +110,13 @@
           accept: "image/*",
           capture: "environment",
           class: "hidden",
+          disabled: ocr_down,
           data: { receipt_upload_target: "cameraInput", action: "change->receipt-upload#previewCamera" } %>
 
         <%= form.file_field :image,
           accept: "image/*",
           class: "hidden",
+          disabled: ocr_down,
           data: { receipt_upload_target: "libraryInput", action: "change->receipt-upload#previewLibrary" } %>
       </div>
     <% end %>

@@ -6,6 +6,8 @@
   variant = local_assigns.fetch(:variant, :secondary).to_sym
   mobile_badge = local_assigns[:mobile_badge]
   desktop_badge = local_assigns[:desktop_badge]
+  disabled = local_assigns.fetch(:disabled, false)
+  data_attributes = local_assigns[:data] || {}
 
   title_size = local_assigns.fetch(:title_size, "text-[1.6rem] md:text-2xl")
   description_size = local_assigns.fetch(:description_size, "text-sm md:text-base")
@@ -14,7 +16,8 @@
 
   card_classes = [
     "group relative flex items-center p-5 md:p-10 selection-card rounded-xl transition-all duration-300 overflow-hidden text-left md:flex-col md:items-center md:text-center",
-    primary ? "ring-1 selection-card-primary" : "border selection-card-secondary"
+    primary ? "ring-1 selection-card-primary" : "border selection-card-secondary",
+    disabled ? "opacity-60 cursor-not-allowed" : nil
   ].join(" ")
 
   icon_wrapper_classes = [
@@ -28,7 +31,7 @@
   ].join(" ")
 %>
 
-<%= link_to path, class: card_classes do %>
+<% card_content = capture do %>
   <% if primary %>
     <div class="absolute inset-0 selection-card-primary-overlay opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"></div>
   <% end %>
@@ -61,5 +64,15 @@
     <div class="<%= desktop_badge_classes %>">
       <%= desktop_badge %>
     </div>
+  <% end %>
+<% end %>
+
+<% if disabled %>
+  <%= tag.div(class: card_classes, role: "link", aria: { disabled: "true" }, data: data_attributes) do %>
+    <%= card_content %>
+  <% end %>
+<% else %>
+  <%= link_to path, class: card_classes, data: data_attributes do %>
+    <%= card_content %>
   <% end %>
 <% end %>
