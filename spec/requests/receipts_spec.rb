@@ -481,6 +481,7 @@ RSpec.describe 'Receipts', type: :request do
           store_name: '',
           total_amount: nil,
           payment_method: 'cash',
+          memo: 'x' * 1001,
           status: 'uploaded'
         }
       }
@@ -493,6 +494,25 @@ RSpec.describe 'Receipts', type: :request do
 
       expect(response).to have_http_status(:redirect)
       expect(Receipt.order(:id).last.status).to eq('completed')
+    end
+
+    it 'redirect flashをnotice_surfaceのtoastとして描画する' do
+      post receipts_path, params: valid_params
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      flash = document.at_css('#flash')
+      notice_surface = flash.at_css('[data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(flash).to be_present
+        expect(notice_surface).to be_present
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
+        expect(notice_surface['data-notice-surface-max-visible-value']).to eq('3')
+        expect(notice_surface.at_css('button[data-action="click->notice-surface#close"]')).to be_present
+      end
     end
 
     it 'ログインユーザーに紐づいて作成される' do
@@ -573,6 +593,21 @@ RSpec.describe 'Receipts', type: :request do
       end.not_to change(Receipt, :count)
 
       expect([ 200, 422 ]).to include(response.status)
+    end
+
+    it 'flash.now alertの複数エラーをlist表示する' do
+      post receipts_path, params: invalid_params
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+      error_items = notice_surface.css('ul li')
+
+      aggregate_failures do
+        expect([ 200, 422 ]).to include(response.status)
+        expect(notice_surface).to be_present
+        expect(notice_surface['class']).to include('notice-surface-error')
+        expect(error_items.size).to be >= 2
+      end
     end
 
     it '明細あり作成時にsubtotal/tax/totalを再計算して保存する' do

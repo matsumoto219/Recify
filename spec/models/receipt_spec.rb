@@ -122,6 +122,51 @@ RSpec.describe Receipt, type: :model do
       receipt.update!(status: "completed")
     end
 
+    it 'completed/review_needed/failed のprocessing flashをshared/flashでbroadcastする' do
+      cases = [
+        {
+          status: "completed",
+          processing_error_code: nil,
+          flash_type: :notice,
+          message: "レシート解析が完了しました"
+        },
+        {
+          status: "review_needed",
+          processing_error_code: nil,
+          flash_type: :caution,
+          message: "レシート解析が完了しました。内容を確認してください"
+        },
+        {
+          status: "failed",
+          processing_error_code: "ocr_api_error",
+          flash_type: :alert,
+          message: I18n.t("receipts.processing_errors.ocr_error")
+        }
+      ]
+
+      cases.each do |entry|
+        receipt = build_stubbed(
+          :receipt,
+          user: user,
+          status: entry[:status],
+          processing_error_code: entry[:processing_error_code]
+        )
+
+        expect(receipt).to receive(:broadcast_replace_later_to).with(
+          [ user, :receipts ],
+          target: "flash",
+          partial: "shared/flash",
+          locals: {
+            flash_messages: {
+              entry[:flash_type] => [ entry[:message] ]
+            }
+          }
+        )
+
+        receipt.send(:broadcast_processing_flash)
+      end
+    end
+
     it 'total_amount更新時にsummary cardsをreplaceする' do
       receipt = create(:receipt, :completed, user: user)
 
