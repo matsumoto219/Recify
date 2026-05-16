@@ -1003,6 +1003,28 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it '明細削除確認設定がONならformにconfirm value trueを渡す' do
+      user.update!(receipt_item_delete_confirmation_enabled: true)
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
+    end
+
+    it '明細削除確認設定がOFFならformにconfirm value falseを渡す' do
+      user.update!(receipt_item_delete_confirmation_enabled: false)
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      expect(form['data-receipt-form-confirm-item-removal-value']).to eq('false')
+    end
+
     it '外税tax_detailsと金額が整合するレシートではformにexternal basisを渡す' do
       receipt.update!(
         subtotal_amount: 3_903,

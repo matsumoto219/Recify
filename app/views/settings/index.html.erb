@@ -185,8 +185,16 @@
               remote: true %>
 
         <%= render "shared/ui/toggle_switch",
-              label: "AI補完機能",
-              description: "商品名をAIが補完します。名称によっては補完されない場合があります。<br>補完内容は正確でない可能性があるため、内容を確認してください。".html_safe,
+              label: "明細削除の確認",
+              description: "レシート明細を削除する前に確認ダイアログを表示します",
+              checked: current_user.receipt_item_delete_confirmation_enabled,
+              name: "receipt_item_delete_confirmation_enabled",
+              url: settings_path,
+              remote: true %>
+
+        <%= render "shared/ui/toggle_switch",
+              label: "AI補完",
+              description: "商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください".html_safe,
               checked: current_user.product_name_ai_completion_enabled,
               name: "product_name_ai_completion_enabled",
               url: settings_path,
