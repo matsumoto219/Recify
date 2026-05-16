@@ -1,11 +1,11 @@
-<% if receipts.any? %>
-  <section class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5">
-    <% receipts.each do |receipt| %>
-      <%= render "shared/receipts/receipt_card", receipt: receipt %>
-    <% end %>
-  </section>
-<% else %>
-  <section class="flex flex-col items-center justify-center py-24 text-center">
+<section id="receipts-list-grid" class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5">
+  <% receipts.each do |receipt| %>
+    <%= render "shared/receipts/receipt_card", receipt: receipt %>
+  <% end %>
+</section>
+
+<% unless receipts.any? %>
+  <section id="receipts-empty-state" class="flex flex-col items-center justify-center py-24 text-center">
     <div class="w-24 h-24 mb-6 rounded-full token-bg-elevated flex items-center justify-center">
       <span class="material-symbols-outlined text-4xl empty-state-icon">search_off</span>
     </div>

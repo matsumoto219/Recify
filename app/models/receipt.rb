@@ -498,11 +498,31 @@ class Receipt < ApplicationRecord
     [ processing_flash_message ]
   end
 
+  after_create_commit :broadcast_receipt_card_prepend, if: :processing?
+  after_create_commit :broadcast_created_summary_cards_update
   after_update_commit :broadcast_receipt_card_update, if: :saved_change_to_status?
   after_update_commit :broadcast_summary_cards_update, if: :saved_change_to_status?
   after_update_commit :broadcast_processing_flash, if: :saved_change_to_status?
 
   private
+
+  def broadcast_receipt_card_prepend
+    broadcast_prepend_later_to(
+      [ user, :receipts ],
+      target: "receipts-list-grid",
+      partial: "shared/receipts/receipt_card",
+      locals: { receipt: self }
+    )
+
+    broadcast_remove_to(
+      [ user, :receipts ],
+      target: "receipts-empty-state"
+    )
+  end
+
+  def broadcast_created_summary_cards_update
+    broadcast_summary_cards_update
+  end
 
   def broadcast_receipt_card_update
     broadcast_replace_later_to(

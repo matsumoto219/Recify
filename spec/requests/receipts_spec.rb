@@ -36,6 +36,31 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'リアルタイム追加用のreceipts-list-gridを持つ' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css('#receipts-list')).to be_present
+        expect(document.at_css('#receipts-list-grid')).to be_present
+        expect(document.at_css('#receipts-empty-state')).to be_nil
+      end
+    end
+
+    it '空状態をreceipts-empty-stateとしてgridから分離する' do
+      user.receipts.destroy_all
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css('#receipts-list-grid')).to be_present
+        expect(document.at_css('#receipts-empty-state')).to be_present
+      end
+    end
+
     it '処理失敗件数をsummary cardに表示する' do
       create(:receipt, :failed, user: user)
       create(:receipt, :failed, user: user)
