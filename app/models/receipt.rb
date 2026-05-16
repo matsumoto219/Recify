@@ -27,6 +27,10 @@ class Receipt < ApplicationRecord
   MAX_FILE_SIZE = 20.megabytes
   MIN_IMAGE_DIMENSION = 100
   MAX_IMAGE_DIMENSION = 10_000
+  KPI_AMOUNT_STATUSES = %w[
+    completed
+    review_needed
+  ].freeze
 
   OCR_ERROR_CODES = %w[
     ocr_unreadable
@@ -77,6 +81,7 @@ class Receipt < ApplicationRecord
 
   before_validation :set_default_country_region
   before_validation :normalize_store_phone_number
+  before_update :mark_summary_broadcast_needed
 
   def receipt_tax_basis_for_form
     external_tax_basis_from_details? ? "external" : "internal"
@@ -315,19 +320,20 @@ class Receipt < ApplicationRecord
 
   def self.summary_for(user, scope: nil)
     receipts = scope || user.receipts
+    amount_receipts = receipts.where(status: KPI_AMOUNT_STATUSES)
     current_month_range = Time.current.beginning_of_month..Time.current.end_of_month
     previous_month = 1.month.ago
     previous_month_range = previous_month.beginning_of_month..previous_month.end_of_month
 
-    current_month_total = receipts.where(purchased_at: current_month_range).sum(:total_amount)
-    previous_month_total = receipts.where(purchased_at: previous_month_range).sum(:total_amount)
+    current_month_total = amount_receipts.where(purchased_at: current_month_range).sum(:total_amount)
+    previous_month_total = amount_receipts.where(purchased_at: previous_month_range).sum(:total_amount)
     monthly_change = monthly_change_summary(current_month_total, previous_month_total)
 
     {
       receipts_count: receipts.count,
       current_month_total: current_month_total,
       previous_month_total: previous_month_total,
-      overall_total: receipts.sum(:total_amount),
+      overall_total: amount_receipts.sum(:total_amount),
       processing_count: receipts.where(status: "processing").count,
       review_needed_count: receipts.where(status: "review_needed").count,
       failed_count: receipts.where(status: "failed").count,
@@ -501,10 +507,21 @@ class Receipt < ApplicationRecord
   after_create_commit :broadcast_receipt_card_prepend, if: :processing?
   after_create_commit :broadcast_created_summary_cards_update
   after_update_commit :broadcast_receipt_card_update, if: :saved_change_to_status?
-  after_update_commit :broadcast_summary_cards_update, if: :saved_change_to_status?
+  after_update_commit :broadcast_summary_cards_update_after_update, if: :summary_broadcast_needed?
   after_update_commit :broadcast_processing_flash, if: :saved_change_to_status?
+  after_destroy_commit :broadcast_summary_cards_update_after_destroy
 
   private
+
+  def mark_summary_broadcast_needed
+    @summary_broadcast_needed = will_save_change_to_status? ||
+      will_save_change_to_total_amount? ||
+      will_save_change_to_purchased_at?
+  end
+
+  def summary_broadcast_needed?
+    @summary_broadcast_needed == true
+  end
 
   def broadcast_receipt_card_prepend
     broadcast_prepend_later_to(
@@ -521,6 +538,14 @@ class Receipt < ApplicationRecord
   end
 
   def broadcast_created_summary_cards_update
+    broadcast_summary_cards_update
+  end
+
+  def broadcast_summary_cards_update_after_update
+    broadcast_summary_cards_update
+  end
+
+  def broadcast_summary_cards_update_after_destroy
     broadcast_summary_cards_update
   end
 
@@ -542,6 +567,8 @@ class Receipt < ApplicationRecord
       partial: "shared/receipts/summary_cards",
       locals: summary
     )
+  ensure
+    @summary_broadcast_needed = false
   end
 
   def broadcast_processing_flash

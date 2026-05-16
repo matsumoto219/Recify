@@ -1,21 +1,64 @@
 require 'rails_helper'
 
 RSpec.describe Receipt, type: :model do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe '.summary_for' do
-    it 'failed_countを返す' do
+    it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)
+      other_user = create(:user, email: 'summary-other@example.com')
       create(:receipt, :completed, user: user)
       create(:receipt, :processing, :with_image, user: user)
       create(:receipt, :review_needed, user: user)
       create(:receipt, :failed, user: user)
       create(:receipt, :failed, user: user)
+      create(:receipt, :failed, user: other_user)
 
       summary = described_class.summary_for(user)
 
       aggregate_failures do
+        expect(summary[:receipts_count]).to eq(5)
         expect(summary[:processing_count]).to eq(1)
         expect(summary[:review_needed_count]).to eq(1)
         expect(summary[:failed_count]).to eq(2)
+      end
+    end
+
+    it 'completed / review_needed のみを金額KPIに含める' do
+      user = create(:user)
+
+      create(:receipt, :completed, user:, total_amount: 1000)
+      create(:receipt, :review_needed, user:, total_amount: 2000)
+      create(:receipt, :processing, :with_image, user:, total_amount: 3000)
+      create(:receipt, :failed, user:, total_amount: 4000)
+
+      summary = described_class.summary_for(user)
+
+      aggregate_failures do
+        expect(summary[:current_month_total]).to eq(3000)
+        expect(summary[:overall_total]).to eq(3000)
+      end
+    end
+
+    it '今月/先月の金額差分を対象statusだけで計算する' do
+      user = create(:user)
+      current_month = Time.zone.local(2026, 5, 16, 12, 0, 0)
+      previous_month = Time.zone.local(2026, 4, 16, 12, 0, 0)
+
+      travel_to(current_month) do
+        create(:receipt, :completed, user:, total_amount: 2000, purchased_at: current_month)
+        create(:receipt, :review_needed, user:, total_amount: 1000, purchased_at: current_month)
+        create(:receipt, :failed, user:, total_amount: 9000, purchased_at: current_month)
+        create(:receipt, :completed, user:, total_amount: 1500, purchased_at: previous_month)
+
+        summary = described_class.summary_for(user)
+
+        aggregate_failures do
+          expect(summary[:current_month_total]).to eq(3000)
+          expect(summary[:previous_month_total]).to eq(1500)
+          expect(summary[:monthly_change_label]).to eq('先月比 +100%')
+          expect(summary[:monthly_change_icon]).to eq('trending_up')
+        end
       end
     end
   end
@@ -77,6 +120,30 @@ RSpec.describe Receipt, type: :model do
       expect(receipt).to receive(:broadcast_processing_flash).and_call_original
 
       receipt.update!(status: "completed")
+    end
+
+    it 'total_amount更新時にsummary cardsをreplaceする' do
+      receipt = create(:receipt, :completed, user: user)
+
+      expect(receipt).to receive(:broadcast_summary_cards_update).and_call_original
+
+      receipt.update!(total_amount: 2_000)
+    end
+
+    it 'purchased_at更新時にsummary cardsをreplaceする' do
+      receipt = create(:receipt, :completed, user: user)
+
+      expect(receipt).to receive(:broadcast_summary_cards_update).and_call_original
+
+      receipt.update!(purchased_at: 1.month.ago)
+    end
+
+    it 'destroy時にsummary cardsをreplaceする' do
+      receipt = create(:receipt, :completed, user: user)
+
+      expect(receipt).to receive(:broadcast_summary_cards_update).and_call_original
+
+      receipt.destroy!
     end
   end
 end
