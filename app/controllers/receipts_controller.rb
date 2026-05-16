@@ -92,6 +92,7 @@ class ReceiptsController < ApplicationController
     update_params = normalized_receipt_params.to_h
     clear_review_flags_for_edited_items!(update_params)
     apply_amount_calculation!(update_params, context: :edit_save)
+    clear_processing_error_after_manual_update!(update_params)
 
     if @receipt.update(update_params)
       redirect_to @receipt, notice: t("flash.receipts.update")
@@ -284,6 +285,14 @@ class ReceiptsController < ApplicationController
 
   def receipt_tax_detail_attributes(tax_details)
     destroy_existing_receipt_tax_details + build_receipt_tax_detail_attributes(tax_details)
+  end
+
+  def clear_processing_error_after_manual_update!(permitted)
+    return unless @receipt.has_processing_error?
+
+    permitted["processing_error_code"] = nil
+    permitted["processing_error_message"] = nil
+    permitted["status"] = "completed" if @receipt.failed?
   end
 
   def destroy_existing_receipt_tax_details

@@ -61,6 +61,50 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'failed receipt の一覧カードから詳細/編集へ進める' do
+      failed_receipt = create(:receipt, :failed, user: user)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{failed_receipt.id}")
+
+      aggregate_failures do
+        expect(card.at_css("a[href='#{receipt_path(failed_receipt, from: 'index')}']")).to be_present
+        expect(card.at_css("a[href='#{edit_receipt_path(failed_receipt, from: 'index')}']")).to be_present
+      end
+    end
+
+    it 'review_needed receipt の一覧カードから詳細/編集へ進める' do
+      review_receipt = create(:receipt, :review_needed, user: user)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{review_receipt.id}")
+
+      aggregate_failures do
+        expect(card.at_css("a[href='#{receipt_path(review_receipt, from: 'index')}']")).to be_present
+        expect(card.at_css("a[href='#{edit_receipt_path(review_receipt, from: 'index')}']")).to be_present
+      end
+    end
+
+    it 'processing receipt の一覧カードは詳細/編集リンクを無効表示にする' do
+      processing_receipt = create(:receipt, :processing, :with_image, user: user)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{processing_receipt.id}")
+
+      aggregate_failures do
+        expect(card.at_css("a[href='#{receipt_path(processing_receipt, from: 'index')}']")).to be_nil
+        expect(card.at_css("a[href='#{edit_receipt_path(processing_receipt, from: 'index')}']")).to be_nil
+        expect(card.text).to include('詳細')
+        expect(card.text).to include('編集')
+      end
+    end
+
     it '処理失敗件数をsummary cardに表示する' do
       create(:receipt, :failed, user: user)
       create(:receipt, :failed, user: user)
@@ -991,6 +1035,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include('OCR処理に失敗しました')
         expect(response.body).to include('OCR service timeout')
         expect(response.body).to include('手動編集で内容を修正できます')
+        expect(response.body).to include('編集して修正')
+        expect(response.body).to include(edit_receipt_path(receipt, from: 'show'))
       end
     end
 
@@ -1150,6 +1196,14 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
+    it 'processing receipt は詳細へ進めない' do
+      processing_receipt = create(:receipt, :processing, :with_image, user: user)
+
+      get receipt_path(processing_receipt)
+
+      expect(response).to redirect_to(receipts_path)
+    end
+
     context '未ログイン時' do
       before do
         sign_out user
@@ -1172,6 +1226,31 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       expect(response).to have_http_status(:success)
+    end
+
+    it 'failedかつprocessing_error_codeがあるレシートは編集画面にも処理失敗カードを表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'ocr_timeout',
+        processing_error_message: 'OCR service timeout'
+      )
+
+      get edit_receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include('OCR処理に失敗しました')
+        expect(response.body).to include('OCR service timeout')
+      end
+    end
+
+    it 'processing receipt は編集へ進めない' do
+      processing_receipt = create(:receipt, :processing, :with_image, user: user)
+
+      get edit_receipt_path(processing_receipt)
+
+      expect(response).to redirect_to(receipts_path)
     end
 
     it '明細削除確認設定がONならformにconfirm value trueを渡す' do
@@ -1787,6 +1866,44 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.status).to eq('review_needed')
         expect(ReceiptAnalysisService).not_to have_received(:call)
+      end
+    end
+
+    it 'failed receipt を手動編集保存するとcompletedに戻しprocessing errorを消す' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'ocr_timeout',
+        processing_error_message: 'OCR service timeout'
+      )
+
+      patch receipt_path(receipt), params: valid_update_params
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.status).to eq('completed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.processing_error_message).to be_nil
+      end
+    end
+
+    it 'review_needed receipt は手動編集保存してもstatusを維持しprocessing errorだけ消す' do
+      receipt.update!(
+        status: 'review_needed',
+        processing_error_code: 'ai_invalid_response',
+        processing_error_message: 'AI response invalid',
+        review_reasons: [ 'tax_detail_mismatch' ]
+      )
+
+      patch receipt_path(receipt), params: valid_update_params
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.processing_error_message).to be_nil
+        expect(receipt.review_reasons).to include('tax_detail_mismatch')
       end
     end
 

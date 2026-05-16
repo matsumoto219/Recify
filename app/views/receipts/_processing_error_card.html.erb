@@ -6,6 +6,7 @@
   title_class = strong_error ? "token-text-error" : "token-text-warning"
   box_class = strong_error ? "token-border-error-soft token-bg-error-soft" : "token-border-soft token-bg-warning-soft"
   title = strong_error ? t("receipts.processing_error_card.failed_title") : t("receipts.processing_error_card.attention_title")
+  edit_path = local_assigns[:edit_path]
 %>
 
 <%= render "shared/ui/surface_card", variant: card_variant, padding: :md do %>
@@ -27,6 +28,19 @@
         <div class="rounded-lg border <%= box_class %> px-3 py-2">
           <div class="mb-1 text-xs font-bold <%= title_class %>"><%= t("receipts.processing_error_card.details_label") %></div>
           <p class="text-sm token-text-base break-words"><%= receipt.processing_error_message %></p>
+        </div>
+      <% end %>
+
+      <% if edit_path.present? %>
+        <div>
+          <%= render "shared/ui/button",
+                as: :link,
+                href: edit_path,
+                label: t("receipts.processing_error_card.edit_action"),
+                icon: "edit",
+                variant: :secondary,
+                size: :compact,
+                radius: :lg %>
         </div>
       <% end %>
     </div>

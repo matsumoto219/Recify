@@ -44,7 +44,9 @@
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     <div class="order-2 lg:order-none lg:col-span-8 space-y-6">
       <% if @receipt.has_processing_error? %>
-        <%= render "receipts/processing_error_card", receipt: @receipt %>
+        <%= render "receipts/processing_error_card",
+              receipt: @receipt,
+              edit_path: edit_receipt_path(@receipt, from: edit_from) %>
       <% end %>
 
       <% if @receipt.has_blocking_review_notes? %>
