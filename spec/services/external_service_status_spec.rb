@@ -42,6 +42,45 @@ RSpec.describe ExternalServiceStatus do
     end
   end
 
+  describe '.due_for_check?' do
+    it 'monitoring false の場合は false を返す' do
+      expect(described_class.due_for_check?(:ocr)).to eq(false)
+    end
+
+    it 'next_check_at が未来の場合は false を返す' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+
+        expect(described_class.due_for_check?(:ocr)).to eq(false)
+      end
+    end
+
+    it 'monitoring true かつ next_check_at を過ぎている場合は true を返す' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
+        expect(described_class.due_for_check?(:ocr)).to eq(true)
+      end
+    end
+  end
+
+  describe '.services_due_for_check' do
+    it '期限を過ぎた monitoring service だけを返す' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
+        expect(described_class.services_due_for_check).to eq([ :ocr ])
+      end
+    end
+  end
+
   describe '.mark_failure!' do
     it '1回目の外部サービス系失敗では ok のまま' do
       travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
@@ -155,6 +194,51 @@ RSpec.describe ExternalServiceStatus do
           expect(snapshot[:state]).to eq('ok')
           expect(snapshot[:consecutive_failures]).to eq(1)
           expect(snapshot[:first_failed_at]).to be_present
+        end
+      end
+    end
+  end
+
+  describe '.mark_monitor_failure!' do
+    it 'degraded 状態を維持しながら next_check_at を次回へ進める' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
+        before_check = described_class.snapshot(:ocr)
+
+        described_class.mark_monitor_failure!(:ocr, error_code: 'ocr_timeout')
+        snapshot = described_class.snapshot(:ocr)
+
+        aggregate_failures do
+          expect(snapshot[:state]).to eq('degraded')
+          expect(snapshot[:monitoring]).to eq(true)
+          expect(snapshot[:last_error_code]).to eq('ocr_timeout')
+          expect(Time.zone.parse(snapshot[:next_check_at])).to be > Time.zone.parse(before_check[:next_check_at])
+        end
+      end
+    end
+
+    it 'down 状態を維持しながら next_check_at を次回へ進める' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
+        before_check = described_class.snapshot(:ocr)
+
+        described_class.mark_monitor_failure!(:ocr, error_code: 'external_service_unavailable')
+        snapshot = described_class.snapshot(:ocr)
+
+        aggregate_failures do
+          expect(snapshot[:state]).to eq('down')
+          expect(snapshot[:monitoring]).to eq(true)
+          expect(snapshot[:consecutive_successes]).to eq(0)
+          expect(Time.zone.parse(snapshot[:next_check_at])).to be > Time.zone.parse(before_check[:next_check_at])
         end
       end
     end

@@ -78,6 +78,26 @@ class ExternalServiceStatus
       write(service, data)
     end
 
+    def mark_monitor_failure!(service_name, error_code: "external_service_unavailable")
+      return unless external_error?(error_code)
+
+      service = normalize_service_name(service_name)
+      data = read(service)
+      now = current_time
+
+      data["consecutive_successes"] = 0
+      data["last_error_code"] = error_code
+      data["last_checked_at"] = now.iso8601
+
+      return write(service, data) unless data["monitoring"] == true
+
+      data["state"] = "degraded" unless data["state"] == "down"
+      data["monitoring"] = true
+      data["next_check_at"] = next_check_at_for(monitor_recovery_attempt_for(data), now).iso8601
+
+      write(service, data)
+    end
+
     def state(service_name)
       read(normalize_service_name(service_name))["state"]
     end
@@ -96,6 +116,18 @@ class ExternalServiceStatus
 
     def monitoring?(service_name)
       read(normalize_service_name(service_name))["monitoring"] == true
+    end
+
+    def due_for_check?(service_name)
+      data = read(normalize_service_name(service_name))
+      return false unless data["monitoring"] == true
+
+      next_check_at = parse_time(data["next_check_at"])
+      next_check_at.present? && next_check_at <= current_time
+    end
+
+    def services_due_for_check
+      SERVICES.select { |service| due_for_check?(service) }
     end
 
     def snapshot(service_name)
@@ -171,6 +203,12 @@ class ExternalServiceStatus
       end
 
       now + minutes.minutes
+    end
+
+    def monitor_recovery_attempt_for(data)
+      return 0 unless data["state"] == "down"
+
+      data["consecutive_successes"].to_i >= 1 ? 2 : 1
     end
 
     def parse_time(value)
