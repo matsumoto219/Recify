@@ -107,6 +107,7 @@ RSpec.describe ReviewReasonSource do
         'tax_detail_partial',
         'zero_amount_item_incomplete',
         'calculation_profile_uncertain',
+        'item_tax_rate_uncertain',
         'tax_detail_mismatch',
         'analysis_missing_keys'
       ])
@@ -117,7 +118,8 @@ RSpec.describe ReviewReasonSource do
         'tax_detail_incomplete',
         'tax_detail_partial',
         'zero_amount_item_incomplete',
-        'calculation_profile_uncertain'
+        'calculation_profile_uncertain',
+        'item_tax_rate_uncertain'
       ])
     end
   end
@@ -126,6 +128,7 @@ RSpec.describe ReviewReasonSource do
     it 'keeps user-facing blocking reasons only' do
       result = described_class.blocking_reasons_for_user([
         'ocr_low_confidence',
+        'item_tax_rate_uncertain',
         'item_name_uncertain',
         'tax_detail_mismatch',
         'analysis_missing_keys'

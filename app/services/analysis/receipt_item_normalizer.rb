@@ -7,6 +7,8 @@ module Analysis
       category
       needs_review
       tax_rate
+      tax_rate_confidence
+      tax_rate_reason
     ].freeze
 
     class << self
@@ -36,7 +38,9 @@ module Analysis
         suggested_name: normalize_string(normalized[:suggested_name]),
         category: normalize_string(normalized[:category]),
         needs_review: normalize_boolean(normalized[:needs_review]),
-        tax_rate: normalize_tax_rate(normalized[:tax_rate])
+        tax_rate: normalize_tax_rate(normalized[:tax_rate]),
+        tax_rate_confidence: normalize_confidence(normalized[:tax_rate_confidence]),
+        tax_rate_reason: normalize_string(normalized[:tax_rate_reason])
       }.compact
 
       return nil if result.empty?
@@ -80,6 +84,17 @@ module Analysis
 
       rate = BigDecimal(value.to_s.delete("%"))
       rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      nil
+    end
+
+    def normalize_confidence(value)
+      return nil if value.blank?
+
+      confidence = BigDecimal(value.to_s)
+      return nil if confidence.negative? || confidence > 1
+
+      confidence
     rescue ArgumentError
       nil
     end

@@ -184,6 +184,65 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(second_item[:needs_review]).to eq(true)
         end
       end
+
+      it 'tax_rate confidence が高い場合は warning reason を追加しない' do
+        ai_result[:receipt_items_attributes].first.merge!(
+          tax_rate: 0.1,
+          tax_rate_confidence: 0.9,
+          tax_rate_reason: 'standard_rate'
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:tax_rate]).to eq(BigDecimal('0.1'))
+          expect(item[:review_reasons]).not_to include('item_tax_rate_uncertain')
+          expect(item[:needs_review]).to eq(false)
+          expect(item).not_to have_key(:tax_rate_confidence)
+          expect(item).not_to have_key(:tax_rate_reason)
+        end
+      end
+
+      it 'tax_rate confidence が低い場合は review にせず warning reason を追加する' do
+        ai_result[:receipt_items_attributes].first.merge!(
+          tax_rate: 0.1,
+          tax_rate_confidence: 0.42,
+          tax_rate_reason: 'receipt_context_uncertain',
+          needs_review: true
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:tax_rate]).to eq(BigDecimal('0.1'))
+          expect(item[:review_reasons]).to include('item_tax_rate_uncertain')
+          expect(item[:needs_review]).to eq(false)
+          expect(item).not_to have_key(:tax_rate_confidence)
+          expect(item).not_to have_key(:tax_rate_reason)
+        end
+      end
+
+      it 'tax_rate が nil で confidence が低い場合は従来どおり要確認にする' do
+        ai_result[:receipt_items_attributes].first.merge!(
+          tax_rate: nil,
+          tax_rate_confidence: 0.35,
+          tax_rate_reason: 'tax_rate_not_visible',
+          needs_review: false
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:tax_rate]).to be_nil
+          expect(item[:review_reasons]).to include('item_tax_rate_uncertain')
+          expect(item[:needs_review]).to eq(true)
+          expect(item).not_to have_key(:tax_rate_confidence)
+          expect(item).not_to have_key(:tax_rate_reason)
+        end
+      end
     end
 
     context 'OCR itemsが空の場合' do

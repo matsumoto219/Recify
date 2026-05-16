@@ -55,7 +55,10 @@ module ReviewReasonSource
 
   WARNING_REASONS = (
     Amounts::MismatchSeverity::WARNING.map(&:to_s) +
-    %w[ocr_low_confidence]
+    %w[
+      ocr_low_confidence
+      item_tax_rate_uncertain
+    ]
   ).freeze
 
   SOURCES = %i[

@@ -48,9 +48,12 @@ RSpec.describe Ai::PromptTemplate do
       )
     end
 
-    it '確信が低い場合は tax_rate null と needs_review true にするよう指示する' do
+    it '確信が低い場合は confidence を低くし、tax_rate を安全に選べない場合は null と needs_review true にするよう指示する' do
       expect(user_prompt).to include(
-        'When confidence is low, return null for tax_rate and set needs_review = true.'
+        'When tax_rate confidence is low, lower tax_rate_confidence instead of guessing.'
+      )
+      expect(user_prompt).to include(
+        'When an item tax_rate cannot be selected safely, return null for tax_rate and set needs_review = true.'
       )
     end
 
@@ -60,12 +63,21 @@ RSpec.describe Ai::PromptTemplate do
       )
     end
 
-    it 'AI response parser / normalizer の item schema は変更しない' do
+    it 'tax_rate_confidence と tax_rate_reason の返却ルールを指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.')
+        expect(user_prompt).to include('tax_rate_reason MUST be a short enum-like string when returned.')
+        expect(user_prompt).to include('standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain')
+        expect(user_prompt).to include('tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.')
+      end
+    end
+
+    it 'AI response parser / normalizer の item schema に tax_rate metadata を許可する' do
       aggregate_failures do
         expect(system_prompt).to include('- tax_rate')
+        expect(system_prompt).to include('- tax_rate_confidence')
+        expect(system_prompt).to include('- tax_rate_reason')
         expect(system_prompt).to include('- needs_review')
-        expect(system_prompt).not_to include('tax_rate_reason')
-        expect(system_prompt).not_to include('tax_rate_confidence')
         expect(Analysis::ReceiptItemNormalizer::AI_ALLOWED_KEYS).to eq(%i[
           index
           position_index
@@ -73,6 +85,8 @@ RSpec.describe Ai::PromptTemplate do
           category
           needs_review
           tax_rate
+          tax_rate_confidence
+          tax_rate_reason
         ])
       end
     end

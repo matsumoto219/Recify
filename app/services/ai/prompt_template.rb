@@ -89,6 +89,8 @@ module Ai
         - suggested_name
         - category
         - tax_rate
+        - tax_rate_confidence
+        - tax_rate_reason
         - needs_review
 
         Allowed enum values:
@@ -180,10 +182,14 @@ module Ai
         - For items that may be non-taxable or zero-rated, determine tax_rate from receipt text, item name, raw_text, matched_content_lines, matched_filtered_content_lines, and nearby context.
         - Do not force uncertain item tax rates into common local rates such as 0.08 or 0.1.
         - tax_rate MUST be a decimal rate such as 0.01 or 0.1. Do NOT return percentage strings such as "1%" or "10%".
+        - tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.
+        - tax_rate_reason MUST be a short enum-like string when returned.
+        - tax_rate_reason SHOULD be one of: standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain.
+        - tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.
         - When the receipt has multiple tax rates, assign tax_rate to each item whenever supported by the receipt context.
         - When the receipt has a single clear tax rate, return that same tax_rate for each item.
-        - When an item's tax rate cannot be determined, return null for tax_rate and set needs_review = true.
-        - When confidence is low, return null for tax_rate and set needs_review = true.
+        - When tax_rate confidence is low, lower tax_rate_confidence instead of guessing.
+        - When an item tax_rate cannot be selected safely, return null for tax_rate and set needs_review = true.
         - needs_review: set true when the item name, category, or tax_rate remains uncertain.
         - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
 

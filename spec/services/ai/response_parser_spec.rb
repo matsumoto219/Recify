@@ -24,7 +24,10 @@ RSpec.describe Ai::ResponseParser do
               'index' => 0,
               'suggested_name' => 'ブレンドコーヒー',
               'category' => 'drink',
-              'needs_review' => false
+              'needs_review' => false,
+              'tax_rate' => 0.1,
+              'tax_rate_confidence' => 0.62,
+              'tax_rate_reason' => 'receipt_context_uncertain'
             },
             {
               'index' => 1,
@@ -58,7 +61,10 @@ RSpec.describe Ai::ResponseParser do
               index: 0,
               suggested_name: 'ブレンドコーヒー',
               category: 'drink',
-              needs_review: false
+              needs_review: false,
+              tax_rate: BigDecimal('0.1'),
+              tax_rate_confidence: BigDecimal('0.62'),
+              tax_rate_reason: 'receipt_context_uncertain'
             },
             {
               index: 1,

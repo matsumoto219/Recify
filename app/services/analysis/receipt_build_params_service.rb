@@ -1,5 +1,7 @@
 module Analysis
   class ReceiptBuildParamsService
+    TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
+
     class << self
       def call(ocr_result:, ai_result: nil)
         normalized_ocr_result = normalize_ocr_result(ocr_result)
@@ -118,6 +120,12 @@ module Analysis
             discount_amount: discount_amount
           )
           price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
+          tax_rate = normalize_rate(normalized_item[:tax_rate])
+          tax_rate_confidence = normalize_tax_rate_confidence(normalized_item[:tax_rate_confidence])
+          review_reasons = item_review_reasons(
+            normalized_item,
+            tax_rate_confidence:
+          )
 
           {
             # Azure Items[].Description / Name -> receipt_items.raw_text
@@ -136,10 +144,16 @@ module Analysis
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
-            tax_rate: normalize_rate(normalized_item[:tax_rate]),
+            tax_rate: tax_rate,
             line_total: line_total,
-            needs_review: final_item_needs_review(normalized_item, ai_items_present: ai_items_present),
-            review_reasons: normalize_review_reasons(normalized_item[:review_reasons]),
+            needs_review: final_item_needs_review(
+              normalized_item,
+              ai_items_present: ai_items_present,
+              tax_rate: tax_rate,
+              tax_rate_confidence: tax_rate_confidence,
+              review_reasons: review_reasons
+            ),
+            review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence])
           }
@@ -246,6 +260,8 @@ module Analysis
             quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
+            tax_rate_confidence: ai_item[:tax_rate_confidence],
+            tax_rate_reason: ai_item[:tax_rate_reason],
             original_line_total: candidate_item[:original_line_total],
             discount_amount: candidate_item[:discount_amount],
             discount_rate: candidate_item[:discount_rate],
@@ -254,11 +270,25 @@ module Analysis
         end
       end
 
-      def final_item_needs_review(normalized_item, ai_items_present:)
+      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:)
+        return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
+
+        if tax_rate.present? && tax_rate_confidence_low?(tax_rate_confidence)
+          remaining_reasons = Array(review_reasons) - [ "item_tax_rate_uncertain" ]
+          return false if remaining_reasons.empty?
+        end
+
         if normalized_item.key?(:needs_review)
           normalized_item[:needs_review]
         else
           ai_items_present ? false : true
+        end
+      end
+
+      def item_review_reasons(normalized_item, tax_rate_confidence:)
+        normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
+          reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
+          reasons.uniq!
         end
       end
 
@@ -421,6 +451,18 @@ module Analysis
         BigDecimal(value.to_s)
       rescue ArgumentError
         nil
+      end
+
+      def normalize_tax_rate_confidence(value)
+        confidence = normalize_confidence(value)
+        return nil if confidence.nil?
+        return nil if confidence.negative? || confidence > 1
+
+        confidence
+      end
+
+      def tax_rate_confidence_low?(confidence)
+        confidence.present? && confidence < TAX_RATE_CONFIDENCE_WARNING_THRESHOLD
       end
 
       def extract_item_name(line)
