@@ -221,6 +221,114 @@ RSpec.describe Amounts::CalculationProfileEstimator do
     end
   end
 
+  it 'adds item-level same-rate mixed assignment metadata when the assignment is exact and unique' do
+    result = estimate(
+      receipt: {
+        subtotal_amount: 200,
+        tax_amount: 20,
+        total_amount: 220
+      },
+      items: [
+        { line_total: 110, tax_rate: BigDecimal('0.1') },
+        { line_total: 100, tax_rate: BigDecimal('0.1') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+      ]
+    )
+
+    candidate = result[:candidates].find { |entry| entry[:same_rate_item_amount_basis_assignments].present? }
+
+    aggregate_failures do
+      expect(candidate).to be_present
+      expect(candidate[:same_rate_item_amount_basis_assignments]).to contain_exactly(
+        hash_including(
+          assignment_scope: :item,
+          item_indices: [0],
+          tax_rate: BigDecimal('0.1'),
+          basis: :tax_included,
+          net_amount: 100,
+          tax_amount: 10,
+          gross_amount: 110
+        ),
+        hash_including(
+          assignment_scope: :item,
+          item_indices: [1],
+          tax_rate: BigDecimal('0.1'),
+          basis: :tax_excluded,
+          net_amount: 100,
+          tax_amount: 10,
+          gross_amount: 110
+        )
+      )
+    end
+  end
+
+  it 'warns without item-level assignment metadata when same-rate mixed assignment is ambiguous' do
+    result = estimate(
+      receipt: {
+        subtotal_amount: 2,
+        tax_amount: 0,
+        total_amount: 2
+      },
+      items: [
+        { line_total: 1, tax_rate: BigDecimal('0.1') },
+        { line_total: 1, tax_rate: BigDecimal('0.1') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.1'), net_amount: 2, amount: 0 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:candidates]).not_to include(hash_including(:same_rate_item_amount_basis_assignments))
+      expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
+    end
+  end
+
+  it 'warns without item-level assignment metadata when no same-rate mixed assignment matches tax details' do
+    result = estimate(
+      receipt: {
+        subtotal_amount: 199,
+        tax_amount: 20,
+        total_amount: 219
+      },
+      items: [
+        { line_total: 110, tax_rate: BigDecimal('0.1') },
+        { line_total: 100, tax_rate: BigDecimal('0.1') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.1'), net_amount: 199, amount: 20 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:candidates]).not_to include(hash_including(:same_rate_item_amount_basis_assignments))
+      expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
+    end
+  end
+
+  it 'warns without item-level assignment metadata when same-rate mixed assignment search is capped' do
+    items = Array.new(21) { { line_total: 110, tax_rate: BigDecimal('0.1') } }
+
+    result = estimate(
+      receipt: {
+        subtotal_amount: 2_200,
+        tax_amount: 220,
+        total_amount: 2_420
+      },
+      items: items,
+      tax_details: [
+        { rate: BigDecimal('0.1'), net_amount: 2_200, amount: 220 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:candidates]).not_to include(hash_including(:same_rate_item_amount_basis_assignments))
+      expect(result[:warnings]).to include(:price_tax_inclusion_uncertain)
+    end
+  end
+
   it 'does not warn when exact zero-score candidates differ only by inference metadata' do
     result = estimate(
       receipt: aeon_receipt,

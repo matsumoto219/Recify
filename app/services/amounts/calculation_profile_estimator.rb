@@ -7,6 +7,8 @@ module Amounts
     ITEM_AMOUNT_BASES = %i[line_total_as_recorded line_total_as_net mixed_by_tax_rate_group].freeze
     DEFAULT_ITEM_AMOUNT_BASIS = :line_total_as_recorded
     UNCERTAIN_SCORE_GAP = 100
+    SAME_RATE_MIXED_MAX_ITEMS = 20
+    SAME_RATE_MIXED_MAX_STATES = 50_000
 
     def initialize(receipt:, items:, tax_details:, context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, receipt_tax_bases: RECEIPT_TAX_BASES, item_amount_bases: ITEM_AMOUNT_BASES)
       @receipt = receipt
@@ -64,11 +66,18 @@ module Amounts
 
       deltas = deltas_for(calc, profile)
 
-      {
+      candidate = {
         profile: profile,
         score: score_for(deltas, profile),
         deltas: deltas
       }
+
+      same_rate_assignment = same_rate_item_assignment_for(profile[:tax_rounding_mode])
+      if profile[:item_amount_basis] == :mixed_by_tax_rate_group && same_rate_assignment[:exact]
+        candidate[:same_rate_item_amount_basis_assignments] = same_rate_assignment[:assignments]
+      end
+
+      candidate
     end
 
     def deltas_for(calc, profile)
@@ -410,7 +419,7 @@ module Amounts
     def warnings_for(candidates)
       warnings = []
       warnings << :calculation_profile_uncertain if calculation_profile_uncertain?(candidates)
-      warnings << :price_tax_inclusion_uncertain if price_tax_inclusion_uncertain?(candidates)
+      warnings << :price_tax_inclusion_uncertain if price_tax_inclusion_uncertain?(candidates) || same_rate_item_assignment_warning?
       warnings
     end
 
@@ -512,6 +521,26 @@ module Amounts
       @mixed_assignment_cache[rounding_mode] ||= build_mixed_assignment(rounding_mode)
     end
 
+    def same_rate_item_assignment_for(rounding_mode)
+      @same_rate_item_assignment_cache ||= {}
+      @same_rate_item_assignment_cache[rounding_mode] ||= build_same_rate_item_assignment(rounding_mode)
+    end
+
+    def same_rate_item_assignment_warning?
+      results = @tax_rounding_modes.map { |rounding_mode| same_rate_item_assignment_for(rounding_mode) }
+      return false if results.any? { |result| same_rate_item_assignment_not_needed?(result) }
+      return false if results.any? { |result| result[:exact] }
+
+      results.any? { |result| result[:ambiguous] || result[:no_exact] || result[:search_limited] }
+    end
+
+    def same_rate_item_assignment_not_needed?(result)
+      !result[:exact] &&
+        !result[:ambiguous] &&
+        !result[:no_exact] &&
+        !result[:search_limited]
+    end
+
     def build_mixed_assignment(rounding_mode)
       source_groups = @items.group_by { |item| normalize_rate(fetch_value(item, :tax_rate)) }
       detail_groups = tax_details_by_rate(complete_tax_details)
@@ -539,25 +568,7 @@ module Amounts
           next
         end
 
-        included_tax = rounded_tax_from_gross(group_total, rate, rounding_mode)
-        included = {
-          tax_rate: rate,
-          basis: :tax_included,
-          net_amount: group_total - included_tax,
-          tax_amount: included_tax,
-          gross_amount: group_total
-        }
-
-        excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(group_total.to_s) * rate, rounding_mode)
-        excluded = {
-          tax_rate: rate,
-          basis: :tax_excluded,
-          net_amount: group_total,
-          tax_amount: excluded_tax,
-          gross_amount: group_total + excluded_tax
-        }
-
-        matches = [ included, excluded ].select do |candidate|
+        matches = group_level_basis_candidates(group_total, rate, rounding_mode).select do |candidate|
           candidate[:net_amount] == detail[:net_amount] && candidate[:tax_amount] == detail[:amount]
         end
 
@@ -581,6 +592,164 @@ module Amounts
         exact: exact,
         ambiguous: ambiguous,
         assignments: assignments
+      }
+    end
+
+    def build_same_rate_item_assignment(rounding_mode)
+      detail_groups = tax_details_by_rate(complete_tax_details)
+      return empty_same_rate_item_assignment unless detail_groups.present?
+
+      indexed_groups = @items.each_with_index.group_by do |item, _index|
+        normalize_rate(fetch_value(item, :tax_rate))
+      end
+      assignments = []
+      ambiguous = false
+      no_exact = false
+      search_limited = false
+
+      detail_groups.each do |rate, detail|
+        next unless rate.positive?
+
+        indexed_items = indexed_groups[rate] || []
+        next if indexed_items.size < 2
+
+        group_total = indexed_items.sum { |item, _index| source_item_line_total(item) }
+        next if group_total <= 0
+
+        group_matches = group_level_basis_candidates(group_total, rate, rounding_mode).select do |candidate|
+          candidate[:net_amount] == detail[:net_amount] && candidate[:tax_amount] == detail[:amount]
+        end
+        next if group_matches.one?
+
+        result = item_level_assignment_for(
+          indexed_items: indexed_items,
+          detail: detail,
+          rate: rate,
+          rounding_mode: rounding_mode
+        )
+
+        case result[:status]
+        when :exact
+          assignments.concat(result[:assignments])
+        when :ambiguous
+          ambiguous = true
+        when :search_limited
+          search_limited = true
+        else
+          no_exact = true
+        end
+      end
+
+      exact = assignments.present? && !ambiguous && !no_exact && !search_limited
+
+      {
+        exact: exact,
+        ambiguous: ambiguous,
+        no_exact: no_exact,
+        search_limited: search_limited,
+        assignments: exact ? assignments : []
+      }
+    end
+
+    def item_level_assignment_for(indexed_items:, detail:, rate:, rounding_mode:)
+      return { status: :search_limited, assignments: [] } if indexed_items.size > SAME_RATE_MIXED_MAX_ITEMS
+
+      target_net = detail[:net_amount]
+      target_tax = detail[:amount]
+      states = { [ 0, 0 ] => [ [] ] }
+
+      indexed_items.each do |item, index|
+        candidates = item_level_basis_candidates(item, index, rate, rounding_mode)
+        return { status: :no_exact, assignments: [] } if candidates.blank?
+
+        next_states = {}
+        states.each do |(net_sum, tax_sum), paths|
+          candidates.each do |candidate|
+            next_net = net_sum + candidate[:net_amount]
+            next_tax = tax_sum + candidate[:tax_amount]
+            next if next_net > target_net || next_tax > target_tax
+
+            key = [ next_net, next_tax ]
+            next_states[key] ||= []
+
+            paths.each do |path|
+              next_states[key] << (path + [ candidate ])
+              next_states[key] = next_states[key].first(2)
+            end
+          end
+        end
+
+        return { status: :search_limited, assignments: [] } if next_states.size > SAME_RATE_MIXED_MAX_STATES
+        return { status: :no_exact, assignments: [] } if next_states.blank?
+
+        states = next_states
+      end
+
+      matches = states[[ target_net, target_tax ]] || []
+      return { status: :exact, assignments: matches.first } if matches.one?
+      return { status: :ambiguous, assignments: [] } if matches.many?
+
+      { status: :no_exact, assignments: [] }
+    end
+
+    def group_level_basis_candidates(group_total, rate, rounding_mode)
+      included_tax = rounded_tax_from_gross(group_total, rate, rounding_mode)
+      excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(group_total.to_s) * rate, rounding_mode)
+
+      [
+        {
+          tax_rate: rate,
+          basis: :tax_included,
+          net_amount: group_total - included_tax,
+          tax_amount: included_tax,
+          gross_amount: group_total
+        },
+        {
+          tax_rate: rate,
+          basis: :tax_excluded,
+          net_amount: group_total,
+          tax_amount: excluded_tax,
+          gross_amount: group_total + excluded_tax
+        }
+      ]
+    end
+
+    def item_level_basis_candidates(item, index, rate, rounding_mode)
+      line_total = source_item_line_total(item)
+      return [] unless line_total.positive?
+
+      included_tax = rounded_tax_from_gross(line_total, rate, rounding_mode)
+      excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(line_total.to_s) * rate, rounding_mode)
+
+      [
+        {
+          assignment_scope: :item,
+          item_indices: [ index ],
+          tax_rate: rate,
+          basis: :tax_included,
+          net_amount: line_total - included_tax,
+          tax_amount: included_tax,
+          gross_amount: line_total
+        },
+        {
+          assignment_scope: :item,
+          item_indices: [ index ],
+          tax_rate: rate,
+          basis: :tax_excluded,
+          net_amount: line_total,
+          tax_amount: excluded_tax,
+          gross_amount: line_total + excluded_tax
+        }
+      ]
+    end
+
+    def empty_same_rate_item_assignment
+      {
+        exact: false,
+        ambiguous: false,
+        no_exact: false,
+        search_limited: false,
+        assignments: []
       }
     end
 

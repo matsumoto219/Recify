@@ -840,6 +840,14 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:computed]).to include(item_amount_basis: :line_total_as_recorded)
+        expect(result[:calculation_profile_candidates]).to include(
+          hash_including(
+            same_rate_item_amount_basis_assignments: contain_exactly(
+              hash_including(assignment_scope: :item, item_indices: [0], basis: :tax_included),
+              hash_including(assignment_scope: :item, item_indices: [1], basis: :tax_excluded)
+            )
+          )
+        )
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
         expect(result[:needs_review]).to be(false)
