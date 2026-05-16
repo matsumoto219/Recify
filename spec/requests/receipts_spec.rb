@@ -1113,12 +1113,14 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
       item_row = document.at_css('[data-receipt-form-target="itemRow"]')
       template = document.at_css('template[data-receipt-form-target="template"]')
       template_html = template&.inner_html.to_s
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
         expect(item_row).to be_present
         expect(item_row['data-action']).to include('mouseenter->receipt-form#scheduleLineTotalTooltip')
         expect(item_row['data-action']).to include('mouseleave->receipt-form#hideLineTotalTooltip')
