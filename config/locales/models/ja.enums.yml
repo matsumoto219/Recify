@@ -56,7 +56,7 @@ ja:
         zero_amount_item_incomplete: "0円明細の金額情報が一部不足しています"
         discount_data_incomplete: "割引情報が不完全です"
         ocr_total_mismatch: "OCRの合計金額と計算結果が一致していません"
-        price_tax_inclusion_uncertain: "一部明細の税込/税抜を自動判定できませんでした。必要に応じて金額をご確認ください。"
+        price_tax_inclusion_uncertain: "明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。"
         calculation_profile_uncertain: "計算方式を一意に推定できません"
         insufficient_data: "計算に必要なデータが不足しています"
         response_parse_failed: "解析結果の読み取りに失敗しました"

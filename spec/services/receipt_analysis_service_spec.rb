@@ -452,16 +452,16 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.status).to eq('review_needed')
     end
 
-    it 'warning mismatch only does not add amount review_reasons or review_needed status' do
+    it 'warning mismatch only stores amount warning review_reasons without review_needed status' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
       )
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
-          inconsistencies: [:ocr_total_mismatch],
+          inconsistencies: [:price_tax_inclusion_uncertain],
           blocking_inconsistencies: [],
-          warning_inconsistencies: [:ocr_total_mismatch]
+          warning_inconsistencies: [:price_tax_inclusion_uncertain]
         )
       )
 
@@ -470,7 +470,7 @@ RSpec.describe ReceiptAnalysisService do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
+        expect(receipt.review_reasons).to eq(['price_tax_inclusion_uncertain'])
       end
     end
 
@@ -516,16 +516,16 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
-    it 'mixed mismatch stores only blocking amount review_reasons' do
+    it 'mixed mismatch stores blocking and warning amount review_reasons' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
       )
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
-          inconsistencies: [:ocr_total_mismatch, :tax_detail_mismatch],
+          inconsistencies: [:price_tax_inclusion_uncertain, :tax_detail_mismatch],
           blocking_inconsistencies: [:tax_detail_mismatch],
-          warning_inconsistencies: [:ocr_total_mismatch]
+          warning_inconsistencies: [:price_tax_inclusion_uncertain]
         )
       )
 
@@ -534,7 +534,7 @@ RSpec.describe ReceiptAnalysisService do
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to eq(['tax_detail_mismatch'])
+        expect(receipt.review_reasons).to eq(['tax_detail_mismatch', 'price_tax_inclusion_uncertain'])
       end
     end
 
@@ -806,7 +806,7 @@ RSpec.describe ReceiptAnalysisService do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
+        expect(receipt.review_reasons).to include('ocr_total_mismatch', 'price_tax_inclusion_uncertain')
         expect(receipt.total_amount).to eq(2_204)
         expect(receipt.total_amount).not_to eq(5_000)
         expect(receipt.subtotal_amount).to eq(2_004)

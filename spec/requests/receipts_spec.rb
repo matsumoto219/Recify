@@ -869,7 +869,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('確認情報')
         expect(response.body).to include('金額整合性')
-        expect(response.body).to include('一部明細の税込/税抜を自動判定できませんでした。必要に応じて金額をご確認ください。')
+        expect(response.body).to include('明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。')
         expect(response.body).not_to include('要確認内容')
       end
     end
@@ -1046,6 +1046,38 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include('quantity_unit')
         expect(response.body).to include('kg')
         expect(response.body).to include('その他')
+      end
+    end
+
+    it 'receipt-level warningを編集画面の確認情報として表示し明細詳細パネルには出さない' do
+      receipt.update!(
+        status: 'completed',
+        review_reasons: [ 'price_tax_inclusion_uncertain' ]
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '通常商品',
+        price: 310,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 310,
+        needs_review: false,
+        review_reasons: []
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_name_input = document.at_css('input[value="通常商品"]')
+      item_row = item_name_input.ancestors.find { |node| node['data-receipt-form-target'].to_s == 'itemRow' }
+      item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('確認情報')
+        expect(response.body).to include('金額整合性')
+        expect(response.body).to include('明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。')
+        expect(response.body).not_to include('要確認内容')
+        expect(item_details_panel.at_css('.receipt-form-item-warning-notes')).to be_nil
       end
     end
 

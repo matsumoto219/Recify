@@ -470,7 +470,7 @@ class ReceiptAnalysisService
 
   def amount_review_reasons(amount_result)
     if amount_result.key?(:blocking_inconsistencies)
-      Array(amount_result[:blocking_inconsistencies])
+      (Array(amount_result[:blocking_inconsistencies]) + Array(amount_result[:warning_inconsistencies])).uniq
     else
       Array(amount_result[:inconsistencies])
     end

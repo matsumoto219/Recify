@@ -89,6 +89,12 @@
                 description: "保存前に以下の内容を確認してください。" %>
         <% end %>
 
+        <% if receipt.has_warning_notes? %>
+          <%= render "receipts/warning_notes_card",
+                receipt: receipt,
+                description: "以下の内容を確認してください。" %>
+        <% end %>
+
         <%= render "shared/ui/surface_card", padding: :md do %>
           <%= render "shared/ui/section_header",
                 title: "基本情報",
