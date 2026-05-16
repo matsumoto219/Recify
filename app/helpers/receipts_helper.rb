@@ -1,3 +1,7 @@
+# TODO: 明細行の表示状態判定を整理する。
+# needs_review / warning / validation error を view で直接判定せず、
+# :normal / :warning / :review / :error のような row variant に集約する。
+
 module ReceiptsHelper
   # 電話番号表示用（日本向けフォーマット）
   def display_phone_number(phone_number)
@@ -31,5 +35,15 @@ module ReceiptsHelper
     percentage = BigDecimal(discount_amount.to_s) * 100 / BigDecimal(original_line_total.to_s)
     formatted_percentage = number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)
     "#{label}（#{formatted_percentage}%）"
+  end
+
+  def receipt_item_warning_reason_codes(item)
+    ReviewReasonSource.warning_reasons_for_user(Array(item.review_reasons).map(&:to_s))
+  end
+
+  def receipt_item_warning_reason_labels(item)
+    receipt_item_warning_reason_codes(item).map do |reason|
+      t("enums.receipt_item.review_reason.#{reason}", default: reason.to_s.humanize)
+    end
   end
 end

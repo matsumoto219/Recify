@@ -56,7 +56,7 @@
       <% if @receipt.has_warning_notes? %>
         <%= render "receipts/warning_notes_card",
               receipt: @receipt,
-              description: "参考情報として確認してください。" %>
+              description: "以下の内容を確認してください。" %>
       <% end %>
 
       <%= render "shared/ui/surface_card", padding: :lg do %>

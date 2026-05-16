@@ -1,7 +1,15 @@
+<%#
+  NOTE:
+  この partial には最小限の locals のみ渡す。
+  warning / review / display 用の派生値は partial 内で計算する。
+  JS target / hidden field は itemRow 内に1セットだけ維持する。
+%>
+
 <%
   new_record = local_assigns.fetch(:new_record, false)
   item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || ""
   item_review_reason_codes = Array(item.review_reasons).map(&:to_s)
+  item_warning_reason_labels = new_record ? [] : receipt_item_warning_reason_labels(item)
   item_review_reason_includes = ->(*codes) { (item_review_reason_codes & codes.map(&:to_s)).any? }
   item_error_flags = {
     name: item_review_reason_includes.call("item_name_uncertain"),
@@ -235,6 +243,22 @@
         </div>
       </div>
     </div>
+
+    <% if item_warning_reason_labels.any? %>
+      <div class="receipt-form-item-warning-notes mt-3 rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
+        <div class="flex items-start gap-2">
+          <span class="material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
+          <div class="min-w-0">
+            <p class="text-sm font-bold token-text-warning">確認情報</p>
+            <ul class="mt-1 list-disc space-y-1 pl-5 text-sm token-text-base">
+              <% item_warning_reason_labels.each do |label| %>
+                <li><%= label %></li>
+              <% end %>
+            </ul>
+          </div>
+        </div>
+      </div>
+    <% end %>
   </div>
 
   <div class="receipt-form-item-mobile-summary col-span-2 md:hidden">

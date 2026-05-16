@@ -1167,6 +1167,37 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '明細のwarning reasonを詳細パネル内の確認情報として表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: 'warning確認商品',
+        price: 0,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 0,
+        needs_review: false,
+        review_reasons: [ 'zero_amount_item_incomplete' ]
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_name_input = document.at_css('input[value="warning確認商品"]')
+      item_row = item_name_input.ancestors.find { |node| node['data-receipt-form-target'].to_s == 'itemRow' }
+      item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+      warning_block = item_details_panel.at_css('.receipt-form-item-warning-notes')
+      template_html = document.at_css('template[data-receipt-form-target="template"]')&.inner_html.to_s
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(item_row['class']).not_to include('receipt-form-item-review-row')
+        expect(warning_block).to be_present
+        expect(warning_block.text).to include('確認情報')
+        expect(warning_block.text).to include('0円明細の金額情報が一部不足しています')
+        expect(template_html).not_to include('receipt-form-item-warning-notes')
+        expect(template_html).not_to include('0円明細の金額情報が一部不足しています')
+      end
+    end
+
     it '数量入力の初期表示では末尾ゼロを落とす' do
       [
         [ '整数1', BigDecimal('1.0'), '1' ],
