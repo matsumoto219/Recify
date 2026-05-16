@@ -913,6 +913,22 @@ body {
 }
 
 @media (width <= 767px) {
+  .quantity-unit-number-field-mobile-center {
+    position: relative;
+  }
+
+  .quantity-unit-number-field-mobile-center input {
+    padding-left: 5rem;
+    padding-right: 5rem;
+  }
+
+  .quantity-unit-number-field-mobile-center select {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 5rem;
+  }
+
   .receipt-form-item-mobile-detail {
     display: none;
   }
