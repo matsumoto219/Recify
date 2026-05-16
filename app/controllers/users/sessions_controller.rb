@@ -22,7 +22,7 @@ class Users::SessionsController < Devise::SessionsController
       flash.now[:alert] = I18n.t("devise.failure.invalid", authentication_keys: resource_class.authentication_keys.join("/")).strip
       clean_up_passwords(resource)
       set_minimum_password_length
-      respond_with resource, status: :unprocessable_entity
+      respond_with resource, status: :unprocessable_content
     end
   end
 

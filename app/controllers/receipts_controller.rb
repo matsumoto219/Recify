@@ -52,7 +52,7 @@ class ReceiptsController < ApplicationController
         "[ReceiptUpload] failed user_id=#{current_user.id} errors=#{@receipt.errors.full_messages.join(', ')}"
       )
       flash.now[:alert] = @receipt.errors.full_messages
-      render :new_upload, status: :unprocessable_entity
+      render :new_upload, status: :unprocessable_content
     end
   end
 
@@ -69,7 +69,7 @@ class ReceiptsController < ApplicationController
       redirect_to receipts_path, notice: t("flash.receipts.create")
     else
       flash.now[:alert] = @receipt.errors.full_messages
-      render :new, status: :unprocessable_entity
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -85,7 +85,7 @@ class ReceiptsController < ApplicationController
       redirect_to @receipt, notice: t("flash.receipts.update")
     else
       flash.now[:alert] = @receipt.errors.full_messages
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 

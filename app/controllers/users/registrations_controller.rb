@@ -37,7 +37,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
-      render failure_template, status: :unprocessable_entity
+      render failure_template, status: :unprocessable_content
       return
     end
 
@@ -62,7 +62,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
-      render failure_template, status: :unprocessable_entity
+      render failure_template, status: :unprocessable_content
     end
   end
 

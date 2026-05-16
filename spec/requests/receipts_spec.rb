@@ -342,7 +342,7 @@ RSpec.describe 'Receipts', type: :request do
         }
       end.not_to change(Receipt, :count)
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it 'measurement unitの小数quantityとquantity_unitを保存し、明示line_totalを維持する' do

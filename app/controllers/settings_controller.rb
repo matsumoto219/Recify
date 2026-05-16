@@ -39,7 +39,7 @@ class SettingsController < ApplicationController
             ok: false,
             message: "設定の保存に失敗しました",
             errors: current_user.errors.full_messages
-          }, status: :unprocessable_entity
+          }, status: :unprocessable_content
         end
 
         format.turbo_stream do
