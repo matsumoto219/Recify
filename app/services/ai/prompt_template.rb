@@ -175,10 +175,15 @@ module Ai
         #{user_item_name_rules}
         - category: choose only from the allowed categories.
         - tax_rate: return the item's consumption tax rate only when it can be determined from tax.tax_details, tax.tax_context_lines, item raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content.
+        - Use country_region in meta as a reference for local tax rules when determining item tax_rate.
+        - Do not assume tax rules for a specific country or region when country_region is missing or unclear.
+        - For items that may be non-taxable or zero-rated, determine tax_rate from receipt text, item name, raw_text, matched_content_lines, matched_filtered_content_lines, and nearby context.
+        - Do not force uncertain item tax rates into common local rates such as 0.08 or 0.1.
         - tax_rate MUST be a decimal rate such as 0.01 or 0.1. Do NOT return percentage strings such as "1%" or "10%".
         - When the receipt has multiple tax rates, assign tax_rate to each item whenever supported by the receipt context.
         - When the receipt has a single clear tax rate, return that same tax_rate for each item.
         - When an item's tax rate cannot be determined, return null for tax_rate and set needs_review = true.
+        - When confidence is low, return null for tax_rate and set needs_review = true.
         - needs_review: set true when the item name, category, or tax_rate remains uncertain.
         - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
 
