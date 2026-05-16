@@ -36,6 +36,26 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '処理失敗件数をsummary cardに表示する' do
+      create(:receipt, :failed, user: user)
+      create(:receipt, :failed, user: user)
+
+      get receipts_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理失敗')
+        expect(response.body).to include('2件')
+      end
+    end
+
+    it 'upload/processing flashの翻訳が存在する' do
+      aggregate_failures do
+        expect(I18n.t('flash.receipts.enqueued')).not_to match(/translation missing/i)
+        expect(I18n.t('flash.receipts.processing')).not_to match(/translation missing/i)
+      end
+    end
+
     context '未ログイン時' do
       before do
         sign_out user
@@ -945,6 +965,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include('処理に失敗しました')
         expect(response.body).to include('OCR処理に失敗しました')
         expect(response.body).to include('OCR service timeout')
+        expect(response.body).to include('手動編集で内容を修正できます')
       end
     end
 

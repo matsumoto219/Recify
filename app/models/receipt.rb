@@ -330,6 +330,7 @@ class Receipt < ApplicationRecord
       overall_total: receipts.sum(:total_amount),
       processing_count: receipts.where(status: "processing").count,
       review_needed_count: receipts.where(status: "review_needed").count,
+      failed_count: receipts.where(status: "failed").count,
       monthly_change_label: monthly_change[:label],
       monthly_change_icon: monthly_change[:icon],
       monthly_change_icon_class: monthly_change[:icon_class]

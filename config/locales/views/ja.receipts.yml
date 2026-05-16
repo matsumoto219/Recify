@@ -26,6 +26,7 @@ ja:
       failed_title: 処理に失敗しました
       attention_title: 処理に関する注意
       details_label: 補足
+      manual_edit_hint: 手動編集で内容を修正できます。
     review_reason_sources:
       ai: AI補完
       ocr: OCR品質

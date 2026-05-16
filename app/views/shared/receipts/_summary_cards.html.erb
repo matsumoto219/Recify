@@ -1,5 +1,5 @@
 <section id="receipts_summary"
-  class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10"
+  class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10"
   data-controller="receipt-summary"
   data-receipt-summary-storage-key-value="receiptAmountMode">
   <%= render "shared/receipts/summary_card",
@@ -53,11 +53,23 @@
     title: "要確認",
     value: "#{review_needed_count}件",
     subtext: review_needed_count.positive? ? "手動確認待ち" : "確認待ちはありません",
-    accent: :error,
+    accent: :warning,
     value_data: {
       receipt_summary_target: "summaryValue",
       summary_key: "review_needed_count",
       raw_value: review_needed_count,
+      suffix: "件"
+    } %>
+
+  <%= render "shared/receipts/summary_card",
+    title: "処理失敗",
+    value: "#{failed_count}件",
+    subtext: failed_count.positive? ? "手動修正が必要" : "失敗したレシートはありません",
+    accent: :error,
+    value_data: {
+      receipt_summary_target: "summaryValue",
+      summary_key: "failed_count",
+      raw_value: failed_count,
       suffix: "件"
     } %>
 </section>

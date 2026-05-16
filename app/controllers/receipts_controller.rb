@@ -18,6 +18,7 @@ class ReceiptsController < ApplicationController
     @overall_total = summary[:overall_total]
     @processing_count = summary[:processing_count]
     @review_needed_count = summary[:review_needed_count]
+    @failed_count = summary[:failed_count]
     @monthly_change_label = summary[:monthly_change_label]
     @monthly_change_icon = summary[:monthly_change_icon]
     @monthly_change_icon_class = summary[:monthly_change_icon_class]
