@@ -139,6 +139,44 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '検索結果は作成日時の降順を維持しsummaryも検索scopeに合わせる' do
+      older_receipt = create(
+        :receipt,
+        user: user,
+        store_name: '検索順ストア',
+        total_amount: 100,
+        status: 'completed',
+        created_at: 2.days.ago
+      )
+      newer_receipt = create(
+        :receipt,
+        user: user,
+        store_name: '検索順ストア',
+        total_amount: 200,
+        status: 'review_needed',
+        created_at: 1.hour.ago
+      )
+      create(
+        :receipt,
+        user: user,
+        store_name: '検索順ストア',
+        total_amount: 300,
+        status: 'failed',
+        created_at: 30.minutes.ago
+      )
+
+      get receipts_path(q: '検索順ストア')
+
+      document = Nokogiri::HTML(response.body)
+      card_ids = document.css('#receipts-list-grid > [id^="receipt_"]').map { |node| node['id'] }
+
+      aggregate_failures do
+        expect(card_ids.index("receipt_#{newer_receipt.id}")).to be < card_ids.index("receipt_#{older_receipt.id}")
+        expect(document.at_css('#receipts-page-header').text).to include('3件')
+        expect(document.at_css('#receipts_summary').text).to include('¥300')
+      end
+    end
+
     it '2ページ目ではcreate prepend専用streamを購読しない' do
       create_list(:receipt, 21, user: user, status: 'completed')
 

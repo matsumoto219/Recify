@@ -63,6 +63,29 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe '.search' do
+    it 'subquery用途のmatching idsには既存orderを持ち込まない' do
+      sql = described_class.order(created_at: :desc).search('コーヒー').to_sql
+
+      aggregate_failures do
+        expect(sql).to include('ORDER BY "receipts"."created_at" DESC')
+        expect(sql.scan(/ORDER BY/).size).to eq(1)
+      end
+    end
+  end
+
+  describe 'query indexes' do
+    it 'receipts index / KPI / status count 用の複合indexを持つ' do
+      indexes = ActiveRecord::Base.connection.indexes(:receipts)
+
+      aggregate_failures do
+        expect(indexes).to include(have_attributes(columns: %w[user_id created_at]))
+        expect(indexes).to include(have_attributes(columns: %w[user_id status]))
+        expect(indexes).to include(have_attributes(columns: %w[user_id status purchased_at]))
+      end
+    end
+  end
+
   describe 'broadcasts' do
     let(:user) { create(:user) }
 

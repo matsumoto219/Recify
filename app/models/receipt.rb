@@ -133,7 +133,7 @@ class Receipt < ApplicationRecord
     tokens.each do |token|
       q = "%#{sanitize_sql_like(token)}%"
 
-      matching_ids = left_joins(:receipt_items).where(
+      matching_ids = left_joins(:receipt_items).unscope(:order).where(
         "receipts.store_name ILIKE :q OR receipts.memo ILIKE :q OR receipt_items.confirmed_name ILIKE :q OR receipt_items.suggested_name ILIKE :q OR receipt_items.raw_text ILIKE :q",
         q: q
       ).select(:id)
