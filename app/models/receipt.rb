@@ -525,14 +525,14 @@ class Receipt < ApplicationRecord
 
   def broadcast_receipt_card_prepend
     broadcast_prepend_later_to(
-      [ user, :receipts ],
+      [ user, :receipts, :index_first_page ],
       target: "receipts-list-grid",
       partial: "shared/receipts/receipt_card",
       locals: { receipt: self }
     )
 
     broadcast_remove_to(
-      [ user, :receipts ],
+      [ user, :receipts, :index_first_page ],
       target: "receipts-empty-state"
     )
   end

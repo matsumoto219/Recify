@@ -61,10 +61,10 @@ export default class extends Controller {
   }
 
   async performSearch (input) {
-    const list = document.getElementById('receipts-list')
+    const results = document.getElementById('receipts-results')
     const pageHeader = document.getElementById('receipts-page-header')
     const summary = document.getElementById('receipts-summary')
-    if (!input || !list) return
+    if (!input || !results) return
 
     const query = input.value.trim()
 
@@ -87,12 +87,12 @@ export default class extends Controller {
       const html = await response.text()
       const parser = new DOMParser()
       const doc = parser.parseFromString(html, 'text/html')
-      const newList = doc.querySelector('#receipts-list')
+      const newResults = doc.querySelector('#receipts-results')
       const newPageHeader = doc.querySelector('#receipts-page-header')
       const newSummary = doc.querySelector('#receipts-summary')
 
-      if (newList) {
-        list.innerHTML = newList.innerHTML
+      if (newResults) {
+        results.innerHTML = newResults.innerHTML
       }
 
       if (pageHeader && newPageHeader) {

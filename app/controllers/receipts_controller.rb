@@ -9,9 +9,13 @@ class ReceiptsController < ApplicationController
   def index
     @query = normalize_search_query(params[:q])
     log_suspicious_search_query(@query) if suspicious_search_query?(@query)
-    @receipts = current_user.receipts.order(created_at: :desc)
-    @receipts = @receipts.search(@query) if @query.present?
-    summary = Receipt.summary_for(current_user, scope: @receipts)
+    receipts_scope = current_user.receipts.order(created_at: :desc)
+    receipts_scope = receipts_scope.search(@query) if @query.present?
+
+    @pagy, @receipts = pagy(:offset, receipts_scope, limit: 20)
+    return if redirect_to_canonical_receipts_page_if_needed
+
+    summary = Receipt.summary_for(current_user, scope: receipts_scope)
 
     @receipts_count = summary[:receipts_count]
     @current_month_total = summary[:current_month_total]
@@ -122,6 +126,28 @@ class ReceiptsController < ApplicationController
   def set_external_service_states
     @ocr_state = ExternalServiceStatus.snapshot(:ocr)
     @ai_state = ExternalServiceStatus.snapshot(:ai)
+  end
+
+  def redirect_to_canonical_receipts_page_if_needed
+    return false unless @pagy.count.positive?
+
+    page_key = @pagy.options.fetch(:page_key, "page").to_s
+    requested_page = params[page_key]
+    return false if requested_page.blank?
+
+    canonical_page = canonical_receipts_page(requested_page)
+    return false if canonical_page.blank?
+
+    redirect_to receipts_path(request.query_parameters.merge(page_key => canonical_page))
+    true
+  end
+
+  def canonical_receipts_page(requested_page)
+    requested_page_number = Integer(requested_page, exception: false)
+    return 1 if requested_page_number.blank? || requested_page_number < 1
+    return @pagy.last if @pagy.page > @pagy.last
+
+    nil
   end
 
   def upload_receipt_params

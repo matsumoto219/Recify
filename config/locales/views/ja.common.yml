@@ -10,3 +10,9 @@ ja:
     save: 保存
     create: 登録する
     update: 更新する
+    pagination:
+      label: ページネーション
+      previous: 前のページ
+      next: 次のページ
+      page: "%{page}ページ目へ"
+      end_of_archive: End of Archive

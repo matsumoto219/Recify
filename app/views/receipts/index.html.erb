@@ -44,10 +44,23 @@
     monthly_change_icon_class: @monthly_change_icon_class %>
 </div>
 
-<div id="receipts-list">
-  <%= render "receipts/receipts_list",
-    receipts: @receipts,
-    query: @query %>
-</div>
+<div id="receipts-results">
+  <% if @query.blank? && @pagy.page == 1 %>
+    <%= turbo_stream_from [current_user, :receipts, :index_first_page] %>
+  <% end %>
 
-<%= render "shared/ui/section_divider", variant: :gradient, label: "End of Archive", class: "mt-20 mb-8" %>
+  <div id="receipts-list">
+    <%= render "receipts/receipts_list",
+      receipts: @receipts,
+      query: @query %>
+  </div>
+
+  <%= render "shared/ui/pagination", pagy: @pagy %>
+
+  <% if @pagy.count.positive? && @pagy.page == @pagy.last %>
+    <%= render "shared/ui/section_divider",
+      variant: :gradient,
+      label: t("common.pagination.end_of_archive"),
+      class: "mt-20 mb-8" %>
+  <% end %>
+</div>

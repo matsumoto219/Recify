@@ -77,13 +77,13 @@ RSpec.describe Receipt, type: :model do
       receipt = build_stubbed(:receipt, :processing, user: user)
 
       expect(receipt).to receive(:broadcast_prepend_later_to).with(
-        [ user, :receipts ],
+        [ user, :receipts, :index_first_page ],
         target: "receipts-list-grid",
         partial: "shared/receipts/receipt_card",
         locals: { receipt: receipt }
       )
       expect(receipt).to receive(:broadcast_remove_to).with(
-        [ user, :receipts ],
+        [ user, :receipts, :index_first_page ],
         target: "receipts-empty-state"
       )
 

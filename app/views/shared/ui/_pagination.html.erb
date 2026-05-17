@@ -1,0 +1,64 @@
+<%# Pagy v43.x: avoid calling protected series directly; build the displayed page list from public page/last values. %>
+<% pagy = local_assigns.fetch(:pagy) %>
+<% page_key = pagy.options.fetch(:page_key, "page") %>
+<% page_url = ->(page) { url_for(request.query_parameters.merge(page_key => page, only_path: true)) } %>
+<% current_page = pagy.page %>
+<% last_page = pagy.last %>
+<% visible_pages = ([1, last_page, current_page - 1, current_page, current_page + 1].select { |page| page.between?(1, last_page) }).uniq.sort %>
+<% page_items = visible_pages.each_with_object([]) do |page, items| %>
+  <% items << :gap if items.any? && page > items.last.to_i + 1 %>
+  <% items << page %>
+<% end %>
+
+<% if last_page > 1 %>
+  <nav class="max-w-full overflow-x-auto no-scrollbar px-1 mt-8 mb-4" aria-label="<%= t("common.pagination.label") %>">
+    <div class="mx-auto flex min-w-max items-center justify-center gap-1 sm:gap-2">
+      <% previous_page = pagy.previous %>
+
+      <% if previous_page %>
+        <%= link_to page_url.call(previous_page),
+          class: "flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
+          aria: { label: t("common.pagination.previous") } do %>
+          <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+        <% end %>
+      <% else %>
+        <span class="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= t("common.pagination.previous") %>">
+          <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+        </span>
+      <% end %>
+
+      <div class="flex shrink-0 items-center gap-1">
+        <% page_items.each do |item| %>
+          <% if item == :gap %>
+            <span class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center token-text-subtle" aria-hidden="true">
+              ...
+            </span>
+          <% elsif item == current_page %>
+            <span class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-brand-strong token-text-on-brand font-bold shadow-[var(--shadow-card)] flex items-center justify-center" aria-current="page">
+              <%= item %>
+            </span>
+          <% else %>
+            <%= link_to item,
+              page_url.call(item),
+              class: "w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors font-medium border token-border-soft flex items-center justify-center",
+              aria: { label: t("common.pagination.page", page: item) } %>
+          <% end %>
+        <% end %>
+      </div>
+
+      <% next_page = pagy.next %>
+
+      <% if next_page %>
+        <%= link_to page_url.call(next_page),
+          class: "flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
+          aria: { label: t("common.pagination.next") } do %>
+          <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+        <% end %>
+      <% else %>
+        <span class="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= t("common.pagination.next") %>">
+          <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+        </span>
+      <% end %>
+    </div>
+  </nav>
+<% end %>

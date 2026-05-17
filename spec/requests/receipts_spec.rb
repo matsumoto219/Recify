@@ -97,11 +97,70 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
 
       aggregate_failures do
-        expect(document.at_css('#receipts-list')).to be_present
-        expect(document.at_css('#receipts-list-grid')).to be_present
-        expect(document.at_css('#receipts-empty-state')).to be_nil
+        expect(results).to be_present
+        expect(results.at_css('#receipts-list')).to be_present
+        expect(results.at_css('#receipts-list-grid')).to be_present
+        expect(results.at_css('#receipts-empty-state')).to be_nil
+      end
+    end
+
+    it '非検索の1ページ目ではcreate prepend専用streamも購読する' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
+
+      aggregate_failures do
+        expect(document.css('turbo-cable-stream-source').size).to eq(2)
+        expect(results.css('turbo-cable-stream-source').size).to eq(1)
+      end
+    end
+
+    it '検索結果ではcreate prepend専用streamを購読しない' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+
+      expect(document.css('turbo-cable-stream-source').size).to eq(1)
+    end
+
+    it '検索結果が1ページ分の場合はresults内にpaginationを表示しない' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
+
+      aggregate_failures do
+        expect(results.at_css('#receipts-list')).to be_present
+        expect(results.at_css('nav[aria-label]')).to be_nil
+      end
+    end
+
+    it '2ページ目ではcreate prepend専用streamを購読しない' do
+      create_list(:receipt, 21, user: user, status: 'completed')
+
+      get receipts_path(page: 2)
+
+      document = Nokogiri::HTML(response.body)
+
+      expect(document.css('turbo-cable-stream-source').size).to eq(1)
+    end
+
+    it 'pagination と End of Archive をリアルタイム検索更新用results内に含める' do
+      create_list(:receipt, 21, user: user, status: 'completed')
+
+      get receipts_path(page: 2)
+
+      document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
+
+      aggregate_failures do
+        expect(results.at_css('#receipts-list')).to be_present
+        expect(results.at_css('nav[aria-label="' + I18n.t('common.pagination.label') + '"]')).to be_present
+        expect(results.text).to include(I18n.t('common.pagination.end_of_archive'))
       end
     end
 
@@ -115,7 +174,51 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(document.at_css('#receipts-list-grid')).to be_present
         expect(document.at_css('#receipts-empty-state')).to be_present
+        expect(response.body).not_to include(I18n.t('common.pagination.end_of_archive'))
       end
+    end
+
+    it '検索0件ではEnd of Archiveを表示しない' do
+      get receipts_path(q: '一致しない検索語')
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css('#receipts-empty-state')).to be_present
+        expect(response.body).not_to include(I18n.t('common.pagination.end_of_archive'))
+      end
+    end
+
+    it '範囲外pageは最終ページへredirectする' do
+      create_list(:receipt, 21, user: user, status: 'completed')
+
+      get receipts_path(page: 999)
+
+      expect(response).to redirect_to(receipts_path(page: 2))
+    end
+
+    it '検索結果の範囲外pageはqueryを維持して最終ページへredirectする' do
+      get receipts_path(q: my_receipt.store_name, page: 2)
+
+      expect(response).to redirect_to(receipts_path(q: my_receipt.store_name, page: 1))
+    end
+
+    it '検索0件では範囲外pageでもredirectしない' do
+      get receipts_path(q: '一致しない検索語', page: 999)
+
+      expect(response).to have_http_status(:success)
+    end
+
+    it 'page=0は1ページ目へredirectする' do
+      get receipts_path(page: 0)
+
+      expect(response).to redirect_to(receipts_path(page: 1))
+    end
+
+    it '不正なpageは1ページ目へredirectする' do
+      get receipts_path(page: 'abc')
+
+      expect(response).to redirect_to(receipts_path(page: 1))
     end
 
     it 'failed receipt の一覧カードから詳細/編集へ進める' do
