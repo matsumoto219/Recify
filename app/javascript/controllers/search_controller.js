@@ -7,12 +7,15 @@ export default class extends Controller {
     this.handleOutsideTap = this.handleOutsideTap.bind(this)
     this.close()
     this.debounceTimer = null
+    this.searchAbortController = null
+    this.searchSequence = 0
     document.addEventListener('pointerdown', this.handleOutsideTap)
   }
 
   disconnect () {
     document.removeEventListener('pointerdown', this.handleOutsideTap)
     clearTimeout(this.debounceTimer)
+    this.abortCurrentSearch()
   }
 
   open () {
@@ -66,6 +69,13 @@ export default class extends Controller {
     const summary = document.getElementById('receipts-summary')
     if (!input || !results) return
 
+    const searchSequence = this.searchSequence + 1
+    this.searchSequence = searchSequence
+    this.abortCurrentSearch()
+
+    const abortController = new AbortController()
+    this.searchAbortController = abortController
+
     const query = input.value.trim()
 
     const url = new URL(window.location.href)
@@ -80,21 +90,33 @@ export default class extends Controller {
       const response = await fetch(url, {
         headers: {
           Accept: 'text/html'
-        }
+        },
+        signal: abortController.signal
       })
 
-      if (!response.ok) return
+      if (!this.isLatestSearch(searchSequence, abortController)) return
+
+      if (!response.ok) {
+        this.showSearchErrorNotice()
+        return
+      }
 
       const html = await response.text()
+
+      if (!this.isLatestSearch(searchSequence, abortController)) return
+
       const parser = new DOMParser()
       const doc = parser.parseFromString(html, 'text/html')
       const newResults = doc.querySelector('#receipts-results')
       const newPageHeader = doc.querySelector('#receipts-page-header')
       const newSummary = doc.querySelector('#receipts-summary')
 
-      if (newResults) {
-        results.innerHTML = newResults.innerHTML
+      if (!newResults) {
+        this.showSearchErrorNotice()
+        return
       }
+
+      results.innerHTML = newResults.innerHTML
 
       if (pageHeader && newPageHeader) {
         pageHeader.innerHTML = newPageHeader.innerHTML
@@ -105,8 +127,97 @@ export default class extends Controller {
       }
 
       window.history.replaceState(window.history.state, '', url)
+      this.removeSearchErrorNotice()
     } catch (error) {
+      if (error.name === 'AbortError') return
+      if (!this.isLatestSearch(searchSequence, abortController)) return
+
+      this.showSearchErrorNotice()
       console.error('Search failed:', error)
+    } finally {
+      if (this.searchAbortController === abortController) {
+        this.searchAbortController = null
+      }
+    }
+  }
+
+  abortCurrentSearch () {
+    if (!this.searchAbortController) return
+
+    this.searchAbortController.abort()
+    this.searchAbortController = null
+  }
+
+  isLatestSearch (searchSequence, abortController) {
+    return this.searchSequence === searchSequence && this.searchAbortController === abortController
+  }
+
+  showSearchErrorNotice () {
+    const flash = document.getElementById('flash')
+    if (!flash) return
+
+    this.removeSearchErrorNotice()
+
+    const container = document.createElement('div')
+    container.id = 'search-error-toast-container'
+    container.className = 'fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm'
+
+    const notice = document.createElement('div')
+    notice.id = 'search-error-toast'
+    notice.className = 'pointer-events-auto notice-glass notice-surface notice-surface-error p-4 flex gap-3 items-center opacity-0 translate-x-full transition-all duration-300 ease-out'
+    notice.setAttribute('role', 'alert')
+    notice.setAttribute('aria-live', 'polite')
+    notice.setAttribute('data-controller', 'notice-surface')
+    notice.setAttribute('data-notice-surface-animation-value', 'slide_right')
+    notice.setAttribute('data-notice-surface-auto-dismiss-value', 'true')
+    notice.setAttribute('data-notice-surface-auto-dismiss-delay-value', '7000')
+    notice.setAttribute('data-notice-surface-max-visible-value', '3')
+
+    const iconWrapper = document.createElement('div')
+    iconWrapper.className = 'flex-shrink-0 w-8 h-8 rounded-lg token-state-error-soft flex items-center justify-center'
+
+    const icon = document.createElement('span')
+    icon.className = 'material-symbols-outlined text-[20px]'
+    icon.style.fontVariationSettings = "'FILL' 1"
+    icon.setAttribute('aria-hidden', 'true')
+    icon.textContent = 'error'
+    iconWrapper.appendChild(icon)
+
+    const content = document.createElement('div')
+    content.className = 'flex-1 min-w-0'
+
+    const title = document.createElement('p')
+    title.className = 'text-base font-bold token-text-base leading-tight mb-1'
+    title.textContent = 'エラー'
+
+    const message = document.createElement('p')
+    message.className = 'min-w-0 max-w-full text-xs token-text-muted leading-relaxed break-words whitespace-pre-wrap'
+    message.textContent = '検索結果を更新できませんでした。通信状況を確認してもう一度お試しください。'
+
+    content.append(title, message)
+
+    const closeButton = document.createElement('button')
+    closeButton.type = 'button'
+    closeButton.className = 'material-symbols-outlined text-[18px] opacity-70 hover:opacity-100'
+    closeButton.setAttribute('aria-label', '閉じる')
+    closeButton.setAttribute('data-action', 'click->notice-surface#close')
+    closeButton.textContent = 'close'
+
+    notice.append(iconWrapper, content, closeButton)
+    container.appendChild(notice)
+    flash.appendChild(container)
+  }
+
+  removeSearchErrorNotice () {
+    const toastContainer = document.getElementById('search-error-toast-container')
+    const notice = document.getElementById('search-error-toast')
+    const container = notice?.parentElement
+
+    notice?.remove()
+    toastContainer?.remove()
+
+    if (container?.childElementCount === 0) {
+      container.remove()
     }
   }
 }
