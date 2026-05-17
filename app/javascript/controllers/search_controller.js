@@ -74,6 +74,7 @@ export default class extends Controller {
     } else {
       url.searchParams.delete('q')
     }
+    url.searchParams.delete('page')
 
     try {
       const response = await fetch(url, {
@@ -102,6 +103,8 @@ export default class extends Controller {
       if (summary && newSummary) {
         summary.innerHTML = newSummary.innerHTML
       }
+
+      window.history.replaceState(window.history.state, '', url)
     } catch (error) {
       console.error('Search failed:', error)
     }

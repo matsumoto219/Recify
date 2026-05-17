@@ -127,6 +127,26 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.css('turbo-cable-stream-source').size).to eq(1)
     end
 
+    it 'q parameter を検索フォームの値として保持する' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+
+      expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
+    end
+
+    it '空のq parameterでは通常一覧を表示する' do
+      get receipts_path(q: '')
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
+        expect(document.at_css('#receipts-page-header').text).to include('1件')
+        expect(document.css('turbo-cable-stream-source').size).to eq(2)
+      end
+    end
+
     it '検索結果が1ページ分の場合はresults内にpaginationを表示しない' do
       get receipts_path(q: my_receipt.store_name)
 
