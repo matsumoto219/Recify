@@ -1,0 +1,9 @@
+<% content_for :title, t("errors.not_found.page_title") %>
+
+<%= render "errors/error_page",
+  status_code: 404,
+  icon: "travel_explore",
+  title: t("errors.not_found.title"),
+  description: t("errors.not_found.description"),
+  primary_label: t("errors.not_found.primary_cta"),
+  primary_path: receipts_path %>

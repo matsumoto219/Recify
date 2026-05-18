@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html data-theme="system">
+  <head>
+    <title><%= content_for(:title) || t("errors.layout.title") %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
+    <meta name="application-name" content="Recify">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#e8e9ff">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+  </head>
+
+  <body class="token-bg-page min-h-screen token-text-base">
+    <%= render "shared/ui/ambient_background" %>
+
+    <div class="relative z-10 flex min-h-screen flex-col">
+      <%= yield %>
+
+      <footer class="px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-4 md:px-12">
+        <div class="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left">
+          <p class="text-sm font-bold tracking-[0.2em] token-text-base">
+            <%= t("common.app_name") %>
+          </p>
+          <p class="text-xs token-text-muted">
+            <%= t("errors.layout.copyright") %>
+          </p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

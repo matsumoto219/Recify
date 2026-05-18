@@ -1,0 +1,63 @@
+<%
+  status_code = local_assigns.fetch(:status_code)
+  icon = local_assigns.fetch(:icon)
+  title = local_assigns.fetch(:title)
+  description = local_assigns.fetch(:description)
+  primary_label = local_assigns.fetch(:primary_label)
+  primary_path = local_assigns.fetch(:primary_path)
+  secondary_label = local_assigns[:secondary_label]
+  secondary_path = local_assigns[:secondary_path]
+%>
+
+<main class="flex flex-1 items-center justify-center px-6 py-12 md:py-16">
+  <div class="w-full max-w-lg">
+    <%= render "shared/ui/surface_card",
+      padding: :responsive,
+      shadow_variant: :indigo,
+      class: "text-center glass-panel token-border-glass border" do %>
+      <div class="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full token-bg-card-subtle token-border-soft border surface-card-shadow">
+        <span class="material-symbols-outlined text-4xl token-text-brand" aria-hidden="true">
+          <%= icon %>
+        </span>
+      </div>
+
+      <div class="space-y-4">
+        <h1 class="text-2xl font-bold tracking-normal token-text-base md:text-[1.75rem] md:leading-9">
+          <%= title %>
+        </h1>
+
+        <p class="mx-auto max-w-sm text-sm leading-7 token-text-muted md:text-base">
+          <%= description %>
+        </p>
+      </div>
+
+      <div class="mt-10 flex flex-col gap-3">
+        <%= render "shared/ui/button",
+          as: :link,
+          href: primary_path,
+          label: primary_label,
+          variant: :primary,
+          size: :lg,
+          full_width: true,
+          icon: "arrow_back" %>
+
+        <% if secondary_label.present? && secondary_path.present? %>
+          <%= render "shared/ui/button",
+            as: :link,
+            href: secondary_path,
+            label: secondary_label,
+            variant: :secondary,
+            size: :lg,
+            full_width: true,
+            icon: "refresh",
+            class: "error-page-secondary-button",
+            data: { turbo: false } %>
+        <% end %>
+      </div>
+
+      <p class="mt-8 font-mono text-xs token-text-muted">
+        <%= t("errors.error_code", status_code: status_code) %>
+      </p>
+    <% end %>
+  </div>
+</main>

@@ -1,4 +1,5 @@
 require_relative "boot"
+require_relative "../lib/recify/error_page_static_bypass"
 
 require "rails/all"
 
@@ -24,6 +25,8 @@ module Recify
     config.time_zone = "Tokyo"
     config.i18n.default_locale = :ja
     config.i18n.load_path += Dir[Rails.root.join("config/locales/**/*.yml")]
+    config.exceptions_app = routes
+    config.middleware.insert_before ActionDispatch::Static, Recify::ErrorPageStaticBypass
     # config.eager_load_paths << Rails.root.join("extras")
   end
 end

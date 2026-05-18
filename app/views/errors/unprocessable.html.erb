@@ -1,0 +1,9 @@
+<% content_for :title, t("errors.unprocessable.page_title") %>
+
+<%= render "errors/error_page",
+  status_code: 422,
+  icon: "error",
+  title: t("errors.unprocessable.title"),
+  description: t("errors.unprocessable.description"),
+  primary_label: t("errors.unprocessable.primary_cta"),
+  primary_path: receipts_path %>

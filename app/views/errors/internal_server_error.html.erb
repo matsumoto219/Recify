@@ -1,0 +1,12 @@
+<% content_for :title, t("errors.internal_server_error.page_title") %>
+<% reload_path = request.env["action_dispatch.original_fullpath"].presence || request.fullpath %>
+
+<%= render "errors/error_page",
+  status_code: 500,
+  icon: "cloud_off",
+  title: t("errors.internal_server_error.title"),
+  description: t("errors.internal_server_error.description"),
+  primary_label: t("errors.internal_server_error.primary_cta"),
+  primary_path: receipts_path,
+  secondary_label: t("errors.internal_server_error.secondary_cta"),
+  secondary_path: reload_path %>

@@ -1268,6 +1268,10 @@ body {
   background: var(--bg-floating);
 }
 
+.error-page-secondary-button:hover {
+  filter: none;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--text-base);
