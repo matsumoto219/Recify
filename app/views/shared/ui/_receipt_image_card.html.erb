@@ -1,6 +1,6 @@
 <%
   receipt = local_assigns.fetch(:receipt)
-  title = local_assigns.fetch(:title, "画像プレビュー")
+  title = local_assigns.fetch(:title, t("shared.receipt_image_card.default_title"))
   form_builder = local_assigns[:form_builder]
   show_toggle = local_assigns.fetch(:show_toggle, false)
   show_modal = local_assigns.fetch(:show_modal, false)
@@ -8,7 +8,7 @@
   show_upload = local_assigns.fetch(:show_upload, false)
   initially_open = local_assigns.fetch(:initially_open, false)
   keep_image_enabled = local_assigns.fetch(:keep_image_enabled, true)
-  empty_message = local_assigns.fetch(:empty_message, "画像なし")
+  empty_message = local_assigns.fetch(:empty_message, t("shared.receipt_image_card.empty"))
   helper_text = local_assigns[:helper_text]
   accept = local_assigns[:accept]
   preview_width_class = local_assigns.fetch(:preview_width_class, "w-[220px]")
@@ -17,7 +17,7 @@
   enable_controller = show_toggle || show_modal || show_upload
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}").html_safe : "" %>>
+<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}").html_safe : "" %>>
   <%= render "shared/ui/surface_card", padding: :sm do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
@@ -32,8 +32,8 @@
           aria-expanded="false"
           data-receipt-image-card-target="toggleButton">
           <div>
-            <p class="text-sm font-semibold field-text">画像を表示</p>
-            <p class="text-xs token-text-muted mt-1">コンパクト表示で確認できます</p>
+            <p class="text-sm font-semibold field-text"><%= t("shared.receipt_image_card.show_image") %></p>
+            <p class="text-xs token-text-muted mt-1"><%= t("shared.receipt_image_card.show_image_hint") %></p>
           </div>
           <span
             class="material-symbols-outlined navigation-link transition-transform"
@@ -52,7 +52,7 @@
           <% if show_modal %>
             <% preview_options[:type] = "button" %>
             <% preview_options[:data] = { action: "click->receipt-image-card#openModal" } %>
-            <% preview_options[:aria] = { label: "画像を全体表示" } %>
+            <% preview_options[:aria] = { label: t("shared.receipt_image_card.full_preview_aria") } %>
           <% end %>
           <%= content_tag preview_tag, **preview_options do %>
             <%= image_tag receipt.image,
@@ -75,7 +75,7 @@
                   download: receipt.image.filename.to_s,
                   class: "inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
               <span class="material-symbols-outlined text-sm">download</span>
-              ダウンロード
+              <%= t("shared.receipt_image_card.download") %>
             <% end %>
           </div>
         <% end %>
@@ -94,8 +94,8 @@
         <%# TODO: keep_image 設定に応じた画像なしUIは専用カメラUI仕様確定後に再調整する %>
         <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
-          <p>画像は保存されていません</p>
-          <p class="mt-2 text-xs token-text-muted">画像を保存しない設定のため、プレビューは表示されません</p>
+          <p><%= t("shared.receipt_image_card.unsaved_empty") %></p>
+          <p class="mt-2 text-xs token-text-muted"><%= t("shared.receipt_image_card.unsaved_hint") %></p>
         </div>
       <% end %>
     <% end %>
@@ -115,24 +115,24 @@
           <div class="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-xl drop-overlay-surface"
                data-receipt-image-card-target="dropOverlay">
             <div class="rounded-full border drop-overlay-chip px-4 py-2 text-sm font-semibold">
-              ドロップして画像をアップロード
+              <%= t("shared.receipt_image_card.drop_upload") %>
             </div>
           </div>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="min-w-0">
-              <p class="text-sm font-semibold field-text">レシートをアップロード</p>
-              <p class="mt-1 text-xs token-text-muted">画像を選択するか、このカードにドラッグ&ドロップ</p>
+              <p class="text-sm font-semibold field-text"><%= t("shared.receipt_image_card.upload_title") %></p>
+              <p class="mt-1 text-xs token-text-muted"><%= t("shared.receipt_image_card.upload_hint") %></p>
               <p class="mt-2 truncate text-xs token-text-muted"
                  data-receipt-image-card-target="fileName"
-                 data-initial-label="<%= has_image ? "現在の画像" : "ファイル未選択" %>">
-                <%= has_image ? "現在の画像" : "ファイル未選択" %>
+                 data-initial-label="<%= has_image ? t("shared.receipt_image_card.current_image") : t("shared.receipt_image_card.file_not_selected") %>">
+                <%= has_image ? t("shared.receipt_image_card.current_image") : t("shared.receipt_image_card.file_not_selected") %>
               </p>
             </div>
 
             <%= form_builder.label :image, class: "shrink-0 cursor-pointer" do %>
               <%= render "shared/ui/button",
                          as: :content,
-                         label: "画像を選択",
+                         label: t("shared.receipt_image_card.select_image"),
                          icon: "upload_file",
                          size: :sm %>
             <% end %>
@@ -141,7 +141,7 @@
 
         <p class="hidden text-xs token-text-error"
            data-receipt-image-card-target="uploadError">
-          画像ファイルを選択してください
+          <%= t("shared.receipt_image_card.invalid_image") %>
         </p>
 
         <% if helper_text.present? %>
@@ -176,7 +176,7 @@
               class="absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 rounded-full floating-action-button transition-colors"
               data-receipt-image-card-modal-part="close"
               data-action="click->receipt-image-card#closeModal"
-              aria-label="全体プレビューを閉じる">
+              aria-label="<%= t("shared.receipt_image_card.close_preview_aria") %>">
               <span class="material-symbols-outlined">close</span>
             </button>
             <%= image_tag receipt.image,

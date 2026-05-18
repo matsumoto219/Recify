@@ -1,0 +1,51 @@
+ja:
+  shared:
+    amount_summary_card:
+      default_title: Total Amount
+      unset: 未設定
+      subtotal: 税抜金額
+      tax_amount: 税額
+      tax_rate: 税率
+      tax_details: 税率別内訳
+      tax_rate_unset: 税率未設定
+      target: 対象
+      tax_included: 税込
+    receipt_image_card:
+      default_title: 画像プレビュー
+      empty: 画像なし
+      show_image: 画像を表示
+      show_image_hint: コンパクト表示で確認できます
+      full_preview_aria: 画像を全体表示
+      download: ダウンロード
+      unsaved_empty: 画像は保存されていません
+      unsaved_hint: 画像を保存しない設定のため、プレビューは表示されません
+      drop_upload: ドロップして画像をアップロード
+      upload_title: レシートをアップロード
+      upload_hint: 画像を選択するか、このカードにドラッグ&ドロップ
+      current_image: 現在の画像
+      file_not_selected: ファイル未選択
+      select_image: 画像を選択
+      invalid_image: 画像ファイルを選択してください
+      close_preview_aria: 全体プレビューを閉じる
+      js:
+        unselected: 未選択
+        empty_file: ファイル未選択
+    notice_surface:
+      titles:
+        success: 成功
+        caution: 注意
+        warning: 警告
+        error: エラー
+        info: 通知
+      close_label: 閉じる
+    service_status:
+      ok: 利用可能
+      degraded: 不安定
+      down: 停止中
+      unknown: 不明
+    setting_status:
+      active: 有効
+      inactive: 未設定
+      pending: 設定中
+      warning: 注意
+      unknown: 不明

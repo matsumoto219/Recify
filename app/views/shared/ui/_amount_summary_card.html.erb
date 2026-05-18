@@ -1,5 +1,5 @@
 <%
-  title = local_assigns.fetch(:title, "Total Amount")
+  title = local_assigns.fetch(:title, t("shared.amount_summary_card.default_title"))
   amount = local_assigns.fetch(:amount, 0)
   currency_prefix = local_assigns.fetch(:currency_prefix, "¥")
   icon = local_assigns.fetch(:icon, "payments")
@@ -7,7 +7,8 @@
   tax_amount = local_assigns[:tax_amount]
   tax_rate = local_assigns[:tax_rate]
   tax_rate_summary = local_assigns[:tax_rate_summary]
-  tax_rate_display = tax_rate_summary.presence || tax_rate.presence || "未設定"
+  unset_label = t("shared.amount_summary_card.unset")
+  tax_rate_display = tax_rate_summary.presence || tax_rate.presence || unset_label
   subtotal_target = local_assigns[:subtotal_target]
   tax_amount_target = local_assigns[:tax_amount_target]
   tax_rate_target = local_assigns[:tax_rate_target]
@@ -32,36 +33,36 @@
   <%= render "shared/ui/section_divider", class: "mt-6 mb-4" %>
   <div class="space-y-3">
     <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70">税抜金額</span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal.present? ? subtotal : "未設定" %>" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal.present? ? subtotal : "未設定" %></span>
+      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal.present? ? subtotal : unset_label %>" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal.present? ? subtotal : unset_label %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70">税額</span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount.present? ? tax_amount : "未設定" %>" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount.present? ? tax_amount : "未設定" %></span>
+      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_amount") %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount.present? ? tax_amount : unset_label %>" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount.present? ? tax_amount : unset_label %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70">税率</span>
+      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_rate") %></span>
       <span class="min-w-0 truncate font-medium text-right" title="<%= tax_rate_display %>" <%= %(data-receipt-form-target="#{tax_rate_target}").html_safe if tax_rate_target.present? %>><%= tax_rate_display %></span>
     </div>
 
     <% if tax_details.size > 1 %>
       <%= render "shared/ui/section_divider", class: "mt-4 mb-3" %>
       <div class="space-y-2">
-        <p class="truncate text-xs font-bold uppercase tracking-widest opacity-70" title="税率別内訳">税率別内訳</p>
+        <p class="truncate text-xs font-bold uppercase tracking-widest opacity-70" title="<%= t("shared.amount_summary_card.tax_details") %>"><%= t("shared.amount_summary_card.tax_details") %></p>
         <% tax_details.each do |tax_detail| %>
           <% rate = tax_detail.respond_to?(:rate) ? tax_detail.rate : tax_detail[:rate] || tax_detail["rate"] %>
           <% net_amount = tax_detail.respond_to?(:net_amount) ? tax_detail.net_amount : tax_detail[:net_amount] || tax_detail["net_amount"] %>
           <% amount = tax_detail.respond_to?(:amount) ? tax_detail.amount : tax_detail[:amount] || tax_detail["amount"] %>
-          <% rate_label = rate.present? ? "#{number_with_precision(rate.to_d * 100, precision: 1, strip_insignificant_zeros: true)}%" : "税率未設定" %>
+          <% rate_label = rate.present? ? "#{number_with_precision(rate.to_d * 100, precision: 1, strip_insignificant_zeros: true)}%" : t("shared.amount_summary_card.tax_rate_unset") %>
 
           <div class="rounded-lg amount-summary-detail-surface px-3 py-2 text-xs space-y-1">
             <div class="flex min-w-0 justify-between gap-4 font-medium">
-              <span class="min-w-0 truncate" title="<%= rate_label %>対象"><%= rate_label %>対象</span>
-              <span class="shrink-0 truncate text-right" title="税額 <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>">税額 <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %></span>
+              <span class="min-w-0 truncate" title="<%= rate_label %><%= t("shared.amount_summary_card.target") %>"><%= rate_label %><%= t("shared.amount_summary_card.target") %></span>
+              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_amount") %> <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>"><%= t("shared.amount_summary_card.tax_amount") %> <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %></span>
             </div>
             <div class="flex min-w-0 justify-between gap-4 opacity-70">
-              <span class="min-w-0 truncate" title="税抜 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %>">税抜 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %></span>
-              <span class="shrink-0 truncate text-right" title="税込 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %>">税込 <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %></span>
+              <span class="min-w-0 truncate" title="<%= t("shared.amount_summary_card.subtotal") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %>"><%= t("shared.amount_summary_card.subtotal") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %></span>
+              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_included") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %>"><%= t("shared.amount_summary_card.tax_included") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %></span>
             </div>
           </div>
         <% end %>

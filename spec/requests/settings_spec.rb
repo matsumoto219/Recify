@@ -48,6 +48,17 @@ RSpec.describe 'Settings', type: :request do
         expect(document.css('[data-avatar-image]')).to be_present
       end
     end
+
+    it 'shared status badges use locale labels' do
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('shared.service_status.ok'))
+        expect(response.body).to include(I18n.t('shared.setting_status.inactive'))
+      end
+    end
   end
 
   describe 'GET /settings/account' do

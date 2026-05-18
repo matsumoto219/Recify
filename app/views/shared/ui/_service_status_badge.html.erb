@@ -54,10 +54,10 @@
   <% else %>
     <span class="text-sm font-medium <%= state_config[:text_color] %>">
       <%= case state
-          when :ok then "利用可能"
-          when :degraded then "不安定"
-          when :down then "停止中"
-          else "不明"
+          when :ok then t("shared.service_status.ok")
+          when :degraded then t("shared.service_status.degraded")
+          when :down then t("shared.service_status.down")
+          else t("shared.service_status.unknown")
           end %>
     </span>
   <% end %>

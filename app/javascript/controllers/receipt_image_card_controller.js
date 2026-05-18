@@ -3,7 +3,11 @@ import { Controller } from '@hotwired/stimulus'
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
   static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError']
-  static values = { initiallyOpen: Boolean }
+  static values = {
+    initiallyOpen: Boolean,
+    unselectedLabel: { type: String, default: 'Unselected' },
+    emptyFileLabel: { type: String, default: 'No file selected' }
+  }
 
   connect () {
     this.isOpen = this.initiallyOpenValue
@@ -64,7 +68,7 @@ export default class extends Controller {
   updateFileName (fileName) {
     if (!this.hasFileNameTarget) return
 
-    this.fileNameTarget.textContent = fileName || '未選択'
+    this.fileNameTarget.textContent = fileName || this.unselectedLabelValue
   }
 
   showUploadError () {
@@ -86,7 +90,7 @@ export default class extends Controller {
     if (initial) {
       this.fileNameTarget.textContent = initial
     } else {
-      this.fileNameTarget.textContent = 'ファイル未選択'
+      this.fileNameTarget.textContent = this.emptyFileLabelValue
     }
   }
 

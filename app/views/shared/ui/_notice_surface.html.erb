@@ -8,35 +8,35 @@
         variant_class: "notice-surface-success",
         icon_class: "token-state-success-soft",
         icon: "check_circle",
-        title: "成功"
+        title: t("shared.notice_surface.titles.success")
       }
     when "caution", "ai_caution", "ocr_caution", "caution_box"
       {
         variant_class: "notice-surface-warning",
         icon_class: "token-state-warning-soft",
         icon: "info",
-        title: "注意"
+        title: t("shared.notice_surface.titles.caution")
       }
     when "warning", "ai_warning", "ocr_warning", "warning_box"
       {
         variant_class: "notice-surface-warning",
         icon_class: "token-state-warning-soft",
         icon: "warning",
-        title: "警告"
+        title: t("shared.notice_surface.titles.warning")
       }
     when "alert", "error", "ai_error", "ocr_error", "image_error", "error_box", "alert_box"
       {
         variant_class: "notice-surface-error",
         icon_class: "token-state-error-soft",
         icon: "error",
-        title: "エラー"
+        title: t("shared.notice_surface.titles.error")
       }
     else
       {
         variant_class: "notice-surface-info",
         icon_class: "notice-icon-info",
         icon: "info",
-        title: "通知"
+        title: t("shared.notice_surface.titles.info")
       }
     end
 
@@ -127,7 +127,7 @@
     <button
       type="button"
       class="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100"
-      aria-label="閉じる"
+      aria-label="<%= t("shared.notice_surface.close_label") %>"
       data-action="click->notice-surface#close">close</button>
   <% end %>
 </div>

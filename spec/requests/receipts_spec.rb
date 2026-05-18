@@ -922,6 +922,8 @@ RSpec.describe 'Receipts', type: :request do
         expect([ 200, 422 ]).to include(response.status)
         expect(notice_surface).to be_present
         expect(notice_surface['class']).to include('notice-surface-error')
+        expect(notice_surface.text).to include(I18n.t('shared.notice_surface.titles.error'))
+        expect(notice_surface.at_css('button[aria-label="' + I18n.t('shared.notice_surface.close_label') + '"]')).to be_present
         expect(error_items.size).to be >= 2
       end
     end
@@ -1779,6 +1781,20 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+      end
+    end
+
+    it 'receipt image cardにJS用文言をdata属性で渡す' do
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      image_card = document.at_css('[data-controller~="receipt-image-card"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(image_card).to be_present
+        expect(image_card['data-receipt-image-card-unselected-label-value']).to eq(I18n.t('shared.receipt_image_card.js.unselected'))
+        expect(image_card['data-receipt-image-card-empty-file-label-value']).to eq(I18n.t('shared.receipt_image_card.js.empty_file'))
       end
     end
 
