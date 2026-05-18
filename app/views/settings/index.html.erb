@@ -13,14 +13,10 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
           <div class="relative flex shrink-0 flex-col items-center gap-2">
-            <div class="w-20 h-20 rounded-full overflow-hidden border-2 token-border-brand-soft token-bg-elevated flex items-center justify-center token-text-brand text-xl font-bold">
-              <% if current_user.respond_to?(:avatar) && current_user.avatar.attached? && current_user.avatar.blob&.persisted? %>
-                <%= image_tag current_user.avatar, class: "w-full h-full object-cover" %>
-              <% else %>
-                <% display_name = (current_user.name.presence || current_user.email).to_s %>
-                <%= display_name[0,1]&.upcase || "U" %>
-              <% end %>
-            </div>
+            <%= render "shared/ui/avatar",
+                  user: current_user,
+                  size: 80,
+                  class: "border-2 token-border-brand-soft" %>
             <span class="inline-flex w-fit shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:hidden">
               <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
             </span>

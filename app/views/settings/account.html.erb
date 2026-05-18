@@ -16,23 +16,13 @@
       <div class="space-y-6 p-8">
         <div class="flex flex-col md:flex-row items-center gap-6 min-w-0" data-controller="avatar-preview">
           <div class="relative group">
-            <% display_name = (form_resource.name.presence || form_resource.email).to_s %>
-            <% fallback_text = display_name[0,1]&.upcase || "U" %>
-            <% persisted_avatar_url = if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted?
-                                        url_for(form_resource.avatar)
-                                      end %>
-            <div class="w-24 h-24 rounded-full token-bg-floating flex items-center justify-center text-3xl font-bold token-text-brand border-2 token-border-brand-soft avatar-preview-surface transition-transform duration-300 group-hover:scale-105 overflow-hidden">
-              <img
-                src="<%= persisted_avatar_url %>"
-                alt="プロフィール画像プレビュー"
-                class="w-full h-full object-cover <%= persisted_avatar_url.present? ? '' : 'hidden' %>"
-                data-avatar-preview-target="image"
-                data-persisted-url="<%= persisted_avatar_url %>">
-              <span
-                class="<%= persisted_avatar_url.present? ? 'hidden' : '' %>"
-                data-avatar-preview-target="fallback"
-                data-default-text="<%= fallback_text %>"><%= fallback_text %></span>
-            </div>
+            <%= render "shared/ui/avatar",
+                  user: form_resource,
+                  size: 96,
+                  preview: true,
+                  alt: "プロフィール画像プレビュー",
+                  background_class: "token-bg-floating",
+                  class: "border-2 token-border-brand-soft avatar-preview-surface transition-transform duration-300 group-hover:scale-105" %>
           </div>
 
           <div class="text-center md:text-left w-full min-w-0">

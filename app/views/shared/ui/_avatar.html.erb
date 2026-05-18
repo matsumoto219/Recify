@@ -1,0 +1,58 @@
+<%
+  user = local_assigns.fetch(:user)
+  size = local_assigns.fetch(:size, 40).to_i
+  extra_classes = local_assigns[:class]
+  background_class = local_assigns.fetch(:background_class, "token-bg-elevated")
+  preview = local_assigns.fetch(:preview, false)
+  alt = local_assigns.fetch(:alt, "プロフィール画像")
+
+  display_name = (user&.name.presence || user&.email).to_s
+  fallback_text = display_name[0, 1]&.upcase || "U"
+  avatar_attached = user.respond_to?(:avatar) && user.avatar.attached? && user.avatar.blob&.persisted?
+  variant_size = size <= 64 ? 64 : 160
+  avatar_source = avatar_attached ? user.avatar.variant(resize_to_fill: [ variant_size, variant_size ]) : nil
+  avatar_url = avatar_source ? url_for(avatar_source) : ""
+
+  font_size_class =
+    if size <= 40
+      "text-xs"
+    elsif size <= 80
+      "text-xl"
+    else
+      "text-3xl"
+    end
+
+  avatar_classes = [
+    "rounded-full overflow-hidden flex items-center justify-center token-text-brand font-bold",
+    background_class,
+    font_size_class,
+    extra_classes
+  ].compact.join(" ")
+%>
+
+<div
+  class="<%= avatar_classes %>"
+  style="width: <%= size %>px; height: <%= size %>px;"
+  data-avatar>
+  <% if preview %>
+    <img
+      src="<%= avatar_url %>"
+      alt="<%= alt %>"
+      class="w-full h-full object-cover <%= avatar_url.present? ? '' : 'hidden' %>"
+      data-avatar-preview-target="image"
+      data-persisted-url="<%= avatar_url %>"
+      data-avatar-image>
+  <% elsif avatar_source.present? %>
+    <%= image_tag avatar_source,
+          alt: alt,
+          class: "w-full h-full object-cover",
+          data: { avatar_image: true } %>
+  <% end %>
+
+  <% if preview || avatar_source.blank? %>
+    <span
+      class="<%= avatar_source.present? ? 'hidden' : '' %>"
+      data-avatar-fallback
+      <% if preview %>data-avatar-preview-target="fallback" data-default-text="<%= fallback_text %>"<% end %>><%= fallback_text %></span>
+  <% end %>
+</div>
