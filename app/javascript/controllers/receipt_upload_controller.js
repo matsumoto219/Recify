@@ -14,7 +14,9 @@ export default class extends Controller {
   ]
 
   static values = {
-    ocrAvailable: { type: Boolean, default: true }
+    ocrAvailable: { type: Boolean, default: true },
+    invalidImageMessage: { type: String, default: 'Please select an image file.' },
+    emptyFileMessage: { type: String, default: 'No image selected yet.' }
   }
 
   connect () {
@@ -79,7 +81,7 @@ export default class extends Controller {
     if (!file) return
 
     if (!this.isImageFile(file)) {
-      this.showFileError('画像ファイルを選択してください')
+      this.showFileError(this.invalidImageMessageValue)
       return
     }
 
@@ -106,7 +108,7 @@ export default class extends Controller {
     if (!this.ocrAvailableValue) return
 
     if (!this.isImageFile(file)) {
-      this.showFileError('画像ファイルを選択してください')
+      this.showFileError(this.invalidImageMessageValue)
       return
     }
 
@@ -145,7 +147,7 @@ export default class extends Controller {
     this.previewTarget.src = ''
     this.previewWrapperTarget.classList.add('hidden')
     this.emptyStateTarget.classList.remove('hidden')
-    this.fileNameTarget.textContent = '画像はまだ選択されていません'
+    this.fileNameTarget.textContent = this.emptyFileMessageValue
   }
 
   revokePreviewUrl () {

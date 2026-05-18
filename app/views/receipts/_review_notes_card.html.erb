@@ -11,7 +11,7 @@
 
     <div class="min-w-0 flex-1 space-y-4">
       <div>
-        <h3 class="text-base font-bold token-text-error">要確認内容</h3>
+        <h3 class="text-base font-bold token-text-error"><%= t("receipts.review_notes_card.title") %></h3>
         <p class="mt-1 text-sm token-text-muted"><%= description %></p>
       </div>
 
@@ -28,10 +28,10 @@
 
       <% if review_items.any? %>
         <div class="rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-          <div class="mb-1 text-xs font-bold token-text-error">明細</div>
+          <div class="mb-1 text-xs font-bold token-text-error"><%= t("receipts.review_notes_card.item_label") %></div>
           <ul class="space-y-2 text-sm token-text-base break-words">
             <% review_items.each do |review_item| %>
-              <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || "名称未設定" %>
+              <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || t("receipts.review_notes_card.item_name_missing") %>
               <li>
                 <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
                 <% if review_item.review_reason_labels.any? %>
@@ -41,7 +41,7 @@
                     <% end %>
                   </ul>
                 <% else %>
-                  <p class="mt-1 text-xs token-text-muted">明細内容を確認してください。</p>
+                  <p class="mt-1 text-xs token-text-muted"><%= t("receipts.review_notes_card.item_default_message") %></p>
                 <% end %>
               </li>
             <% end %>

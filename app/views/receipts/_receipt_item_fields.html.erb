@@ -35,16 +35,16 @@
      data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
   <div class="col-span-2 md:col-span-6 relative">
     <div class="flex items-center gap-2 md:block">
-      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">品名</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.name") %></span>
       <div class="w-full min-w-0">
         <%= render "shared/ui/text_field",
                    f: item_form,
                    attribute: :confirmed_name,
-                   label: "品名",
+                   label: t("receipts.item_fields.name"),
                    value: (new_record ? nil : item_name),
                    icon: nil,
                    with_icon: false,
-                   placeholder: "品名を入力",
+                   placeholder: t("receipts.item_fields.name_placeholder"),
                    show_label: false,
                    highlight_variant: (item.needs_review && item_error_flags[:name] ? :error : nil),
                    show_error_message: false,
@@ -57,7 +57,7 @@
               data-action="click->receipt-form#toggleItemDetails"
               data-receipt-form-target="itemDetailsToggle"
               aria-expanded="false"
-              aria-label="明細の詳細を表示">
+              aria-label="<%= t("receipts.item_fields.details_aria") %>">
         <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
       </button>
     </div>
@@ -69,11 +69,11 @@
     </div>
 
     <div class="flex items-center gap-2 md:block">
-      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">数量</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.quantity") %></span>
       <div class="flex-1 min-w-0 md:block">
         <%= render "shared/ui/quantity_unit_number_field",
                    f: item_form,
-                   label: "数量",
+                   label: t("receipts.item_fields.quantity"),
                    value: (new_record ? nil : item.formatted_quantity_for_input),
                    selected_unit: selected_unit,
                    unit_options: ReceiptItem.quantity_unit_options,
@@ -88,7 +88,7 @@
                    highlight_variant: (item.errors[:quantity].any? ? :error : nil),
                    show_error_message: false,
                    unit_data: { receipt_form_target: "quantityUnitInput" },
-                   unit_aria_label: "単位",
+                   unit_aria_label: t("receipts.item_fields.unit"),
                    html_options: {
                      data: {
                        action: "input->receipt-form#recalculate",
@@ -101,12 +101,12 @@
 
   <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 md:col-span-2">
     <div class="flex items-center gap-2 md:block">
-      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0">金額</span>
+      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.amount") %></span>
       <div class="flex-1 min-w-0 md:block">
         <%= render "shared/ui/number_field",
                    f: item_form,
                    attribute: :price,
-                   label: "単価",
+                   label: t("receipts.item_fields.unit_price"),
                    show_label: false,
                    text_align: :center,
                    show_stepper_buttons: true,
@@ -133,8 +133,8 @@
             data-action="click->receipt-form#toggleItemDetails"
             data-receipt-form-target="itemDetailsToggle"
             aria-expanded="false"
-            aria-label="明細の詳細を表示">
-      <span class="text-xs font-bold md:sr-only">詳細</span>
+            aria-label="<%= t("receipts.item_fields.details_aria") %>">
+      <span class="text-xs font-bold md:sr-only"><%= t("receipts.item_fields.details") %></span>
       <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
     </button>
   </div>
@@ -143,7 +143,7 @@
     <button type="button"
             class="flex h-10 w-full shrink-0 items-center justify-center rounded-lg receipt-form-delete-button transition-colors md:w-10"
             data-action="click->receipt-form#removeItem"
-            aria-label="明細を削除">
+            aria-label="<%= t("receipts.item_fields.remove_aria") %>">
       <span class="material-symbols-outlined">delete</span>
     </button>
   </div>
@@ -152,12 +152,12 @@
     <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
       <div class="col-span-2 md:col-span-2">
         <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">割引率</p>
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
           <div>
             <%= render "shared/ui/number_field",
                        f: item_form,
                        attribute: :discount_rate,
-                       label: "割引率",
+                       label: t("receipts.item_fields.discount_rate"),
                        value: (new_record ? nil : item.discount_rate_percentage_input),
                        step: 0.1,
                        decimal_precision: 1,
@@ -184,12 +184,12 @@
 
       <div class="col-span-2 md:col-span-2">
         <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">税率</p>
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.tax_rate") %></p>
           <div>
             <%= render "shared/ui/number_field",
                        f: item_form,
                        attribute: :tax_rate,
-                       label: "税率",
+                       label: t("receipts.item_fields.tax_rate"),
                        value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
                        step: 0.1,
                        decimal_precision: 1,
@@ -215,15 +215,15 @@
 
       <div class="col-span-2 md:col-span-3">
         <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider">カテゴリ</p>
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.category") %></p>
           <div>
             <%= render "shared/ui/select_field",
                        f: item_form,
                        attribute: :category,
-                       label: "カテゴリ",
+                       label: t("receipts.item_fields.category"),
                        options: ReceiptItem.category_options,
                        selected: (new_record ? nil : item.category),
-                       include_blank: "未分類",
+                       include_blank: t("receipts.item_fields.uncategorized"),
                        show_label: false,
                        select_wrapper_class: "w-full",
                        size: :dense,
@@ -235,9 +235,9 @@
 
       <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-5 md:flex md:justify-end">
         <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true">小計</p>
+          <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true"><%= t("receipts.item_fields.subtotal") %></p>
           <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
-            <span class="text-sm font-medium token-text-muted shrink-0">小計</span>
+            <span class="text-sm font-medium token-text-muted shrink-0"><%= t("receipts.item_fields.subtotal") %></span>
             <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(line_total_value) %></span>
           </div>
         </div>
@@ -249,7 +249,7 @@
         <div class="flex items-start gap-2">
           <span class="material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
           <div class="min-w-0">
-            <p class="text-sm font-bold token-text-warning">確認情報</p>
+            <p class="text-sm font-bold token-text-warning"><%= t("receipts.item_fields.warning_title") %></p>
             <ul class="mt-1 list-disc space-y-1 pl-5 text-sm token-text-base">
               <% item_warning_reason_labels.each do |label| %>
                 <li><%= label %></li>
@@ -266,21 +266,21 @@
 
     <div class="flex items-center justify-between gap-3">
       <div class="receipt-form-item-mobile-subtotal flex min-w-0 flex-1 items-center gap-2">
-        <span class="text-sm font-medium token-text-muted shrink-0">小計</span>
+        <span class="text-sm font-medium token-text-muted shrink-0"><%= t("receipts.item_fields.subtotal") %></span>
         <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay">¥<%= number_with_delimiter(line_total_value) %></span>
       </div>
 
       <button type="button"
               class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
               data-action="click->receipt-form#removeItem"
-              aria-label="明細を削除">
+              aria-label="<%= t("receipts.item_fields.remove_aria") %>">
         <span class="material-symbols-outlined">delete</span>
       </button>
     </div>
   </div>
 
   <div class="pointer-events-none absolute right-0 top-full mt-2 z-20 hidden lg:block rounded-lg border token-border-soft token-bg-input px-3 py-1.5 text-sm font-medium token-text-base receipt-form-line-total-tooltip opacity-0 transition-opacity duration-150" data-receipt-form-target="lineTotalTooltip">
-    <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="小計 ¥<%= number_with_delimiter(line_total_value) %>">小計 ¥<%= number_with_delimiter(line_total_value) %></span>
+    <span class="truncate" data-receipt-form-target="lineTotalDisplay" title="<%= t("receipts.item_fields.subtotal") %> ¥<%= number_with_delimiter(line_total_value) %>"><%= t("receipts.item_fields.subtotal") %> ¥<%= number_with_delimiter(line_total_value) %></span>
   </div>
 
   <% unless new_record %>

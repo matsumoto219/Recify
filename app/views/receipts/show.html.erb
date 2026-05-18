@@ -2,19 +2,19 @@
   <%
     item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
-                         "未設定"
+                         t("receipts.common.unset")
                        elsif item_tax_rates.one?
                          "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
                        else
-                         "複数税率"
+                         t("receipts.common.multiple_tax_rates")
                        end
     edit_from = params[:from].to_s == "index" ? "index" : "show"
   %>
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
     <%= render "shared/ui/section_header",
-          title: t(".title"),
+          title: t("receipts.show.title"),
           title_size: "text-3xl md:text-4xl",
-          breadcrumb_label: "レシート一覧",
+          breadcrumb_label: t("receipts.show.breadcrumb_index"),
           breadcrumb_path: receipts_path %>
 
     <div class="flex items-center gap-3">
@@ -52,13 +52,13 @@
       <% if @receipt.has_blocking_review_notes? %>
         <%= render "receipts/review_notes_card",
               receipt: @receipt,
-              description: "確認が必要な項目があります。" %>
+              description: t("receipts.show.review_description") %>
       <% end %>
 
       <% if @receipt.has_warning_notes? %>
         <%= render "receipts/warning_notes_card",
               receipt: @receipt,
-              description: "以下の内容を確認してください。" %>
+              description: t("receipts.show.warning_description") %>
       <% end %>
 
       <%= render "shared/ui/surface_card", padding: :lg do %>
@@ -68,9 +68,9 @@
               <span class="material-symbols-outlined token-text-on-brand text-3xl" style="font-size: 32px;">shopping_bag</span>
             </div>
             <div class="min-w-0">
-              <p class="text-xs font-bold token-text-brand uppercase tracking-widest mb-1">Store Information</p>
-              <h2 class="text-2xl font-bold token-text-base truncate"><%= @receipt.store_name.presence || "店舗名なし" %></h2>
-              <p class="truncate text-sm token-text-muted mt-1" title="<%= @receipt.store_address.presence || "住所未登録" %>"><%= @receipt.store_address.presence || "住所未登録" %></p>
+              <p class="text-xs font-bold token-text-brand uppercase tracking-widest mb-1"><%= t("receipts.show.store_information") %></p>
+              <h2 class="text-2xl font-bold token-text-base truncate"><%= @receipt.store_name.presence || t("receipts.show.store_name_missing") %></h2>
+              <p class="truncate text-sm token-text-muted mt-1" title="<%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %>"><%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %></p>
 
               <!-- mobile only: ID + status -->
               <div class="flex items-center justify-between mt-2 md:hidden gap-3">
@@ -94,44 +94,44 @@
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-6 py-6 border-y token-border-soft">
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t(".purchased_at") %></p>
-            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at.to_date, format: :default) : "未設定" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.purchased_at") %></p>
+            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at.to_date, format: :default) : t("receipts.common.unset") %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">時刻</p>
-            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at, format: :short).split.last : "未設定" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.purchased_time") %></p>
+            <p class="font-semibold token-text-base"><%= @receipt.purchased_at ? l(@receipt.purchased_at, format: :short).split.last : t("receipts.common.unset") %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t(".payment_method") %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.payment_method") %></p>
             <p class="font-semibold token-text-base flex items-center min-w-0">
               <span class="material-symbols-outlined text-sm mr-1">payments</span>
-              <% payment_method_text = @receipt.payment_method_label.presence || "未設定" %>
+              <% payment_method_text = @receipt.payment_method_label.presence || t("receipts.common.unset") %>
               <span class="min-w-0 truncate" title="<%= payment_method_text %>"><%= payment_method_text %></span>
             </p>
           </div>
 
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">電話番号</p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.phone_number") %></p>
             <p class="truncate font-semibold token-text-base" title="<%= display_phone_number(@receipt.display_store_phone_number) %>"><%= display_phone_number(@receipt.display_store_phone_number) %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">画像保存</p>
-            <p class="font-semibold token-text-base"><%= @receipt.image.attached? ? "あり" : "なし" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.image_saved") %></p>
+            <p class="font-semibold token-text-base"><%= @receipt.image.attached? ? t("receipts.common.yes") : t("receipts.common.no") %></p>
           </div>
 
           <div>
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1">OCR完了</p>
-            <p class="font-semibold token-text-base"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : "未完了" %></p>
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider mb-1"><%= t("receipts.show.ocr_completed") %></p>
+            <p class="font-semibold token-text-base"><%= @receipt.respond_to?(:ocr_completed_at) && @receipt.ocr_completed_at ? l(@receipt.ocr_completed_at, format: :short) : t("receipts.show.ocr_incomplete") %></p>
           </div>
         </div>
 
         <div class="mt-8">
           <div class="flex items-center justify-between mb-4 gap-4">
-            <h3 class="text-sm font-bold token-text-base">明細一覧</h3>
-            <span class="text-xs token-text-muted"><%= @receipt.receipt_items.count %>件</span>
+            <h3 class="text-sm font-bold token-text-base"><%= t("receipts.show.items_title") %></h3>
+            <span class="text-xs token-text-muted"><%= @receipt.receipt_items.count %><%= t("receipts.common.count_suffix") %></span>
           </div>
 
           <% if @receipt.receipt_items.any? %>
@@ -140,18 +140,18 @@
                 <div class="flex justify-between items-center py-3 token-hover-bg-card-subtle rounded-lg px-3 transition-colors gap-4">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
-                      <p class="font-medium token-text-base truncate"><%= item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || "商品名なし" %></p>
+                      <p class="font-medium token-text-base truncate"><%= item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || t("receipts.show.item_name_missing") %></p>
                       <% if item.needs_review %>
-                        <span class="px-2 py-0.5 rounded-full token-state-warning-soft text-[10px] font-bold">要確認</span>
+                        <span class="px-2 py-0.5 rounded-full token-state-warning-soft text-[10px] font-bold"><%= t("receipts.show.item_needs_review") %></span>
                       <% end %>
                     </div>
                     <p class="text-xs token-text-muted mt-1 break-words">
-                      <span>カテゴリ: <%= item.category_label.presence || "未分類" %></span>
+                      <span><%= t("receipts.show.item_category") %>: <%= item.category_label.presence || t("receipts.item_fields.uncategorized") %></span>
                       <span class="mx-2">/</span>
-                      <span>数量: <%= item.formatted_quantity_with_unit %></span>
+                      <span><%= t("receipts.show.item_quantity") %>: <%= item.formatted_quantity_with_unit %></span>
                       <% if item.price.present? %>
                         <span class="mx-2">/</span>
-                        <span>単価: ¥<%= number_with_delimiter(item.price) %></span>
+                        <span><%= t("receipts.show.item_unit_price") %>: ¥<%= number_with_delimiter(item.price) %></span>
                       <% end %>
                       <% if (discount_label = receipt_item_discount_label(item)).present? %>
                         <span class="mx-2">/</span>
@@ -168,7 +168,7 @@
                 - 空状態文言を I18n 化
                 - 手動登録導線や編集導線を追加する %>
             <div class="rounded-xl border border-dashed token-border-soft p-8 text-center token-text-muted">
-              明細はありません
+              <%= t("receipts.show.item_empty") %>
             </div>
           <% end %>
         </div>
@@ -177,11 +177,11 @@
       <%= render "shared/ui/surface_card", padding: :lg do %>
         <div class="flex items-center mb-4">
           <span class="material-symbols-outlined token-text-brand mr-2">notes</span>
-          <h3 class="text-sm font-bold token-text-base uppercase tracking-wider"><%= t(".memo") %></h3>
+          <h3 class="text-sm font-bold token-text-base uppercase tracking-wider"><%= t("receipts.show.memo") %></h3>
         </div>
         <%# TODO: メモ表示の本実装調整
             - 本実装時は文言を I18n 化し、空状態デザインも統一する %>
-        <div class="token-text-muted leading-relaxed border-l-4 token-border-brand-soft pl-4 min-h-12 break-words whitespace-pre-wrap"><%= @receipt.memo.presence || "メモはありません" %></div>
+        <div class="token-text-muted leading-relaxed border-l-4 token-border-brand-soft pl-4 min-h-12 break-words whitespace-pre-wrap"><%= @receipt.memo.presence || t("receipts.show.memo_empty") %></div>
       <% end %>
     </div>
 
@@ -192,9 +192,9 @@
               title: "Total Amount",
               amount: @receipt.total_amount,
               icon: "payments",
-              subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : "未設定",
-              tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : "未設定",
-              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : "未設定"),
+              subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : t("receipts.common.unset"),
+              tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : t("receipts.common.unset"),
+              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : t("receipts.common.unset")),
               tax_rate_summary: tax_rate_summary,
               tax_details: @receipt.receipt_tax_details.order(:rate) %>
       </div>
@@ -202,12 +202,12 @@
       <%# TODO: keep_image 設定連動（user設定 or receiptカラム） %>
       <%= render "shared/ui/receipt_image_card",
             receipt: @receipt,
-            title: "画像プレビュー",
+            title: t("receipts.show.image_preview"),
             show_toggle: true,
             show_modal: true,
             show_download: true,
             keep_image_enabled: true,
-            empty_message: "画像なし" %>
+            empty_message: t("receipts.show.image_empty") %>
     </div>
   </div>
 </section>

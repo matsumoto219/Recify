@@ -29,7 +29,10 @@ export default class extends Controller {
     discountRoundingMode: { type: String, default: 'round' },
     confirmItemRemoval: { type: Boolean, default: true },
     confirmItemRemovalMessage: { type: String, default: 'Delete this item?' },
-    receiptTaxBasis: { type: String, default: 'internal' }
+    receiptTaxBasis: { type: String, default: 'internal' },
+    subtotalLabel: { type: String, default: 'Subtotal' },
+    unsetLabel: { type: String, default: 'Unset' },
+    multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' }
   }
 
   connect () {
@@ -275,7 +278,7 @@ export default class extends Controller {
 
     const render = (value) => {
       const amountText = `¥${this.formatNumber(value)}`
-      const text = withLabel ? `小計 ${amountText}` : amountText
+      const text = withLabel ? `${this.subtotalLabelValue} ${amountText}` : amountText
 
       target.textContent = text
       target.title = text
@@ -531,8 +534,8 @@ export default class extends Controller {
   }
 
   formatTaxRateSummary (taxRates) {
-    if (taxRates.size === 0) return '未設定'
-    if (taxRates.size > 1) return '複数税率'
+    if (taxRates.size === 0) return this.unsetLabelValue
+    if (taxRates.size > 1) return this.multipleTaxRatesLabelValue
 
     const [taxRate] = Array.from(taxRates)
     return `${this.formatTaxRate(taxRate)}%`

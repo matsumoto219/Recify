@@ -7,8 +7,8 @@
 
 <section class="relative w-full max-w-4xl mx-auto space-y-10 md:space-y-12 px-4 md:px-0">
   <%= render "shared/ui/section_header",
-    title: "登録方法を選択してください",
-    subtitle: "新しいレシートをどの方法で登録しますか？",
+    title: t("receipts.select_input_method.title"),
+    subtitle: t("receipts.select_input_method.subtitle"),
     title_size: "text-[1.6rem] md:text-3xl",
     subtitle_size: "text-[15px] md:text-lg",
     align: :left,
@@ -25,7 +25,7 @@
 
       <% if ai_down %>
         <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          AI補完は一時停止中です。OCR結果をもとに確認・修正できます。
+          <%= t("receipts.select_input_method.ai_down") %>
         </div>
       <% end %>
     </div>
@@ -34,11 +34,11 @@
   <div class="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-8 px-0 md:px-4">
     <%= render "shared/ui/selection_card",
       path: new_upload_receipts_path,
-      title: "画像から登録",
-      description: "AIがレシートを自動解析します",
+      title: t("receipts.select_input_method.upload.title"),
+      description: t("receipts.select_input_method.upload.description"),
       icon: "photo_camera",
       variant: :primary,
-      desktop_badge: "Recommended",
+      desktop_badge: t("receipts.select_input_method.upload.badge"),
       title_size: "text-[1.2rem] md:text-2xl",
       description_size: "text-sm md:text-base",
       disabled: ocr_down,
@@ -46,11 +46,11 @@
 
     <%= render "shared/ui/selection_card",
       path: new_receipt_path,
-      title: "手動で入力",
-      description: "詳細を自分で入力します",
+      title: t("receipts.select_input_method.manual.title"),
+      description: t("receipts.select_input_method.manual.description"),
       icon: "edit_note",
       variant: :secondary,
-      desktop_badge: "Custom Entry",
+      desktop_badge: t("receipts.select_input_method.manual.badge"),
       title_size: "text-[1.2rem] md:text-2xl",
       description_size: "text-sm md:text-base" %>
   </div>
@@ -58,10 +58,10 @@
   <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-8 mb-6" %>
   <div class="flex flex-col items-center text-center">
     <p class="text-sm token-text-muted mb-2 leading-relaxed">
-      画像の解析に失敗した場合は、手動入力に切り替えられます。
+      <%= t("receipts.select_input_method.footer.fallback") %>
     </p>
     <p class="text-xs token-text-subtle leading-relaxed">
-      保存前に内容を確認・修正できます。
+      <%= t("receipts.select_input_method.footer.confirmation") %>
     </p>
   </div>
 </section>

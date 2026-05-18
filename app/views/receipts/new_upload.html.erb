@@ -10,8 +10,8 @@
 
 <section class="max-w-3xl mx-auto space-y-8 pb-28 md:pb-2">
   <%= render "shared/ui/section_header",
-    title: "レシート画像をアップロード",
-    subtitle: "アップロード後は解析キューに追加され、一覧画面で処理状況を確認できます",
+    title: t("receipts.new_upload.title"),
+    subtitle: t("receipts.new_upload.subtitle"),
     title_size: "text-2xl",
     align: :center,
     wrapper_class: "space-y-3" %>
@@ -21,48 +21,57 @@
       <% if ocr_down %>
         <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
           <p class="font-bold"><%= t("flash.receipts.ocr_unavailable") %></p>
-          <%= link_to "手動入力へ進む", new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
+          <%= link_to t("receipts.new_upload.manual_link"), new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
         </div>
       <% elsif ocr_degraded %>
         <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
-          OCR解析に時間がかかる、または失敗する可能性があります。
+          <%= t("receipts.new_upload.ocr_degraded") %>
         </div>
       <% end %>
 
       <% if ai_down %>
         <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          AI補完は一時停止中です。OCR結果をもとに確認・修正できます。
+          <%= t("receipts.new_upload.ai_down") %>
         </div>
       <% elsif ai_degraded %>
         <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          AI補完が不安定です。OCR結果をもとに確認・修正できます。
+          <%= t("receipts.new_upload.ai_degraded") %>
         </div>
       <% end %>
     </div>
   <% end %>
 
   <%= render "shared/ui/surface_card", padding: :md, class: "group" do %>
-    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: { multipart: true, data: { controller: "receipt-upload", action: "submit->receipt-upload#disableSubmit", receipt_upload_ocr_available_value: ocr_available } } do |form| %>
+    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
+          multipart: true,
+          data: {
+            controller: "receipt-upload",
+            action: "submit->receipt-upload#disableSubmit",
+            receipt_upload_ocr_available_value: ocr_available,
+            receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
+            receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file")
+          }
+        } do |form| %>
       <div class="space-y-6">
         <div>
-          <p class="block text-sm font-medium token-text-base">レシート画像</p>
+          <p class="block text-sm font-medium token-text-base"><%= t("receipts.new_upload.image_label") %></p>
 
           <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed upload-dropzone px-6 py-10 text-center transition-colors"
                data-receipt-upload-target="dropzone"
                data-action="dragenter->receipt-upload#handleDragEnter dragover->receipt-upload#handleDragOver dragleave->receipt-upload#handleDragLeave drop->receipt-upload#handleDrop">
             <div class="flex flex-col items-center gap-4" data-receipt-upload-target="emptyState">
               <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
-              <p class="text-base font-medium token-text-base">レシートを撮影または選択</p>
+              <p class="text-base font-medium token-text-base"><%= t("receipts.new_upload.empty_title") %></p>
               <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
             </div>
 
             <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
-              <img src="" alt="選択したレシート画像のプレビュー" class="h-full w-full object-contain" data-receipt-upload-target="preview">
+              <img src="" alt="<%= t("receipts.new_upload.preview_alt") %>" class="h-full w-full object-contain" data-receipt-upload-target="preview">
             </div>
 
             <div class="pointer-events-none hidden absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl token-bg-card/90 backdrop-blur-sm" data-receipt-upload-target="dropOverlay">
               <span class="material-symbols-outlined text-5xl token-text-brand">upload_file</span>
-              <p class="text-sm font-medium token-text-base">ここに画像をドロップ</p>
+              <p class="text-sm font-medium token-text-base"><%= t("receipts.new_upload.drop_here") %></p>
             </div>
           </div>
         </div>
@@ -70,7 +79,7 @@
         <section class="flex flex-col gap-4">
           <div class="grid grid-cols-2 gap-4">
             <%= render "shared/ui/button",
-              label: "カメラを起動",
+              label: t("receipts.new_upload.buttons.camera"),
               variant: :secondary,
               size: :md,
               icon: "camera_alt",
@@ -80,7 +89,7 @@
               data: { action: "receipt-upload#openCamera" } %>
 
             <%= render "shared/ui/button",
-              label: "ファイルを選択",
+              label: t("receipts.new_upload.buttons.library"),
               variant: :secondary,
               size: :md,
               icon: "folder_open",
@@ -91,17 +100,17 @@
           </div>
 
           <p class="text-xs text-center token-text-muted" data-receipt-upload-target="fileName">
-            画像はまだ選択されていません
+            <%= t("receipts.new_upload.file_empty") %>
           </p>
 
           <%= render "shared/ui/button",
-            label: "アップロードして登録",
+            label: t("receipts.new_upload.buttons.upload"),
             variant: :primary,
             size: :lg,
             type: "submit",
             full_width: true,
             disabled: true,
-            disable_with: "アップロード中...",
+            disable_with: t("receipts.new_upload.buttons.uploading"),
             icon: "cloud_upload",
             data: { receipt_upload_target: "submitButton" } %>
         </section>
@@ -125,12 +134,12 @@
   <footer class="text-center space-y-6">
     <div class="flex items-center justify-center gap-2 text-sm token-text-muted token-bg-card-subtle py-2 px-4 rounded-full w-fit mx-auto">
       <span class="material-symbols-outlined text-sm token-text-brand">info</span>
-      アップロード後は解析キューに追加されます
+      <%= t("receipts.new_upload.queued_hint") %>
     </div>
 
     <%= render "shared/ui/navigation_link",
       path: select_input_method_receipts_path,
-      text: "戻る",
+      text: t("receipts.new_upload.back"),
       arrow: :left %>
   </footer>
 </section>

@@ -8,15 +8,18 @@
                   "receipt-form-rounding-mode-value": "floor",
                   "receipt-form-confirm-item-removal-value": current_user.receipt_item_delete_confirmation_enabled,
                   "receipt-form-confirm-item-removal-message-value": t("receipts.form.confirm_item_removal"),
-                  "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form
+                  "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form,
+                  "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
+                  "receipt-form-unset-label-value": t("receipts.common.unset"),
+                  "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates")
                 }
               } do |f| %>
 
-  <% page_title = receipt.persisted? ? "レシート編集" : "レシート登録" %>
-  <% page_description = receipt.persisted? ? "内容を確認・修正して保存してください" : "内容を入力して保存してください" %>
+  <% page_title = receipt.persisted? ? t("receipts.form.titles.edit") : t("receipts.form.titles.new") %>
+  <% page_description = receipt.persisted? ? t("receipts.form.descriptions.edit") : t("receipts.form.descriptions.new") %>
   <% cancel_path = receipt.persisted? ? receipt_path(receipt) : receipts_path %>
   <% from_index = receipt.persisted? && params[:from].to_s == "index" %>
-  <% breadcrumb_label = receipt.persisted? ? (from_index ? "レシート一覧" : "レシート詳細") : nil %>
+  <% breadcrumb_label = receipt.persisted? ? (from_index ? t("receipts.form.breadcrumbs.index") : t("receipts.form.breadcrumbs.show")) : nil %>
   <% breadcrumb_path = receipt.persisted? ? (from_index ? receipts_path : receipt_path(receipt)) : nil %>
   <% total_amount_value = receipt.total_amount.to_i %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
@@ -32,7 +35,7 @@
                        elsif item_tax_rates.one?
                          "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
                        else
-                         "複数税率"
+                         t("receipts.common.multiple_tax_rates")
                        end
     tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : nil
 
@@ -48,7 +51,7 @@
   %>
   <% content_for :mobile_bottom_actions do %>
     <%= render "shared/ui/button",
-          label: "保存",
+          label: t("receipts.form.buttons.save"),
           type: "submit",
           form: form_dom_id,
           full_width: true,
@@ -69,13 +72,13 @@
         <%= render "shared/ui/button",
               as: :link,
               href: cancel_path,
-              label: "キャンセル",
+              label: t("receipts.form.buttons.cancel"),
               variant: :secondary,
               size: :compact,
               radius: :xl %>
 
         <%= render "shared/ui/button",
-              label: "保存",
+              label: t("receipts.form.buttons.save"),
               type: "submit",
               size: :compact,
               radius: :xl,
@@ -92,18 +95,18 @@
         <% if receipt.has_blocking_review_notes? %>
           <%= render "receipts/review_notes_card",
                 receipt: receipt,
-                description: "保存前に以下の内容を確認してください。" %>
+                description: t("receipts.form.review.blocking_description") %>
         <% end %>
 
         <% if receipt.has_warning_notes? %>
           <%= render "receipts/warning_notes_card",
                 receipt: receipt,
-                description: "以下の内容を確認してください。" %>
+                description: t("receipts.form.review.warning_description") %>
         <% end %>
 
         <%= render "shared/ui/surface_card", padding: :md do %>
           <%= render "shared/ui/section_header",
-                title: "基本情報",
+                title: t("receipts.form.sections.basic_info"),
                 icon: "info",
                 class: "mb-6" %>
 
@@ -111,9 +114,9 @@
             <%= render "shared/ui/text_field",
                        f: f,
                        attribute: :store_name,
-                       label: "店舗名",
+                       label: t("receipts.form.fields.store_name"),
                        icon: "storefront",
-                       placeholder: "店舗名を入力",
+                       placeholder: t("receipts.form.fields.store_name_placeholder"),
                        highlight_variant: (error_flags[:store_name] ? :error : nil),
                        size: :regular,
                        html_options: { maxlength: 100, autocomplete: "organization" } %>
@@ -121,17 +124,17 @@
             <%= render "shared/ui/select_field",
                        f: f,
                        attribute: :payment_method,
-                       label: "支払い方法",
+                       label: t("receipts.form.fields.payment_method"),
                        options: Receipt.payment_method_options,
                        selected: f.object.payment_method,
-                       include_blank: "選択してください",
+                       include_blank: t("receipts.form.fields.payment_method_blank"),
                        highlight_variant: (error_flags[:payment_method] ? :error : nil),
                        size: :regular %>
 
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_on]",
                        id: "receipt_purchased_on",
-                       label: "購入日",
+                       label: t("receipts.form.fields.purchased_on"),
                        type: :date,
                        value: receipt.purchased_at&.in_time_zone&.to_date,
                        icon: "calendar_today",
@@ -142,7 +145,7 @@
             <%= render "shared/ui/datetime_field",
                        name: "receipt[purchased_time]",
                        id: "receipt_purchased_time",
-                       label: "時刻",
+                       label: t("receipts.form.fields.purchased_time"),
                        type: :time,
                        value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
                        icon: "schedule",
@@ -153,11 +156,11 @@
               <%= render "shared/ui/text_field",
                          f: f,
                          attribute: :store_phone_number,
-                         label: "電話番号",
+                         label: t("receipts.form.fields.store_phone_number"),
                          value: receipt.display_store_phone_number,
                          icon: "call",
                          field_type: :telephone_field,
-                         placeholder: "例: 03-1234-5678",
+                         placeholder: t("receipts.form.fields.store_phone_number_placeholder"),
                          highlight_variant: (error_flags[:store_phone_number] ? :error : nil),
                          size: :regular,
                          html_options: {
@@ -172,9 +175,9 @@
               <%= render "shared/ui/text_field",
                          f: f,
                          attribute: :store_address,
-                         label: "店舗住所",
+                         label: t("receipts.form.fields.store_address"),
                          icon: "location_on",
-                         placeholder: "店舗住所を入力",
+                         placeholder: t("receipts.form.fields.store_address_placeholder"),
                          highlight_variant: (error_flags[:store_address] ? :error : nil),
                          size: :regular,
                          html_options: { maxlength: 255, autocomplete: "street-address" } %>
@@ -185,17 +188,17 @@
         <%= render "shared/ui/surface_card", class: "overflow-hidden" do %>
           <div class="p-6 border-b token-border-soft">
             <%= render "shared/ui/section_header",
-                  title: "明細一覧",
+                  title: t("receipts.form.sections.items"),
                   icon: "receipt_long" %>
           </div>
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
               <!-- NOTE: labels are short, no change needed but reserved for future -->
-              <div class="col-span-6">品名</div>
-              <div class="col-span-2">数量</div>
-              <div class="col-span-2">単価</div>
-              <div class="col-span-1">詳細</div>
+              <div class="col-span-6"><%= t("receipts.form.item_columns.name") %></div>
+              <div class="col-span-2"><%= t("receipts.form.item_columns.quantity") %></div>
+              <div class="col-span-2"><%= t("receipts.form.item_columns.unit_price") %></div>
+              <div class="col-span-1"><%= t("receipts.form.item_columns.details") %></div>
               <div class="col-span-1"></div>
             </div>
 
@@ -212,7 +215,7 @@
                     data-action="click->receipt-form#addItem"
                     class="w-full mt-4 py-3 border-2 border-dashed token-border-strong rounded-xl token-text-muted token-hover-text-brand token-hover-border-brand transition-all flex items-center justify-center gap-2 font-medium">
               <span class="material-symbols-outlined">add_circle</span>
-              明細追加
+              <%= t("receipts.form.buttons.add_item") %>
             </button>
 
             <template data-receipt-form-target="template">
@@ -228,15 +231,15 @@
 
         <%= render "shared/ui/surface_card", padding: :md do %>
           <%= render "shared/ui/section_header",
-                title: "メモ",
+                title: t("receipts.form.sections.memo"),
                 icon: "notes",
                 class: "mb-4" %>
 
           <%= render "shared/ui/textarea_field",
                      f: f,
                      attribute: :memo,
-                     label: "メモ",
-                     placeholder: "用途や補足があれば入力してください",
+                     label: t("receipts.form.fields.memo"),
+                     placeholder: t("receipts.form.fields.memo_placeholder"),
                      show_label: false,
                      rows: 4,
                      size: :tall,
@@ -249,8 +252,8 @@
               title: "Total Amount",
               amount: total_amount_value,
               icon: "payments",
-              subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : "未設定"),
-              tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : "未設定"),
+              subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : t("receipts.common.unset")),
+              tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : t("receipts.common.unset")),
               tax_rate: tax_rate_value,
               tax_rate_summary: tax_rate_summary,
               subtotal_target: "subtotalAmount",
@@ -259,14 +262,14 @@
 
         <%= render "shared/ui/receipt_image_card",
               receipt: receipt,
-              title: "画像プレビュー",
+              title: t("receipts.form.image.title"),
               form_builder: f,
               show_toggle: true,
               show_upload: true,
               show_modal: true,
               initially_open: true,
-              empty_message: "画像を選択してください",
-              helper_text: "対応フォーマット:\nJPG / PNG / BMP / TIFF / HEIF / HEIC",
+              empty_message: t("receipts.form.image.empty"),
+              helper_text: t("receipts.form.image.helper"),
               accept: receipt_image_accept %>
       </div>
     </div>

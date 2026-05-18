@@ -466,6 +466,24 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it '主要文言をlocale経由で描画しJS用文言をform data属性へ渡す' do
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('receipts.form.titles.new'))
+        expect(response.body).to include(I18n.t('receipts.form.sections.basic_info'))
+        expect(response.body).to include(I18n.t('receipts.form.buttons.add_item'))
+        expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
+        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
+        expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+      end
+    end
+
     it '手動登録モードでも画面を取得できる' do
       get new_receipt_path, params: { mode: 'manual' }
 
@@ -486,6 +504,21 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'GET /receipts/select_input_method' do
+    it '登録方法選択画面の主要文言をlocale経由で描画する' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get select_input_method_receipts_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('receipts.select_input_method.title'))
+        expect(response.body).to include(I18n.t('receipts.select_input_method.upload.title'))
+        expect(response.body).to include(I18n.t('receipts.select_input_method.manual.title'))
+      end
+    end
+
     it 'OCR down時は画像アップロード導線をdisabled表示し手動入力は有効にする' do
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
@@ -521,6 +554,25 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'GET /receipts/new_upload' do
+    it 'アップロード画面の主要文言をlocale経由で描画しJS用文言をdata属性へ渡す' do
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      upload_root = document.at_css('[data-controller~="receipt-upload"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('receipts.new_upload.title'))
+        expect(response.body).to include(I18n.t('receipts.new_upload.buttons.upload'))
+        expect(upload_root['data-receipt-upload-invalid-image-message-value']).to eq(I18n.t('receipts.new_upload.js.invalid_image'))
+        expect(upload_root['data-receipt-upload-empty-file-message-value']).to eq(I18n.t('receipts.new_upload.js.empty_file'))
+      end
+    end
+
     it 'OCR down時は警告を表示しアップロード操作をdisabledにする' do
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
@@ -1361,6 +1413,18 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it '詳細画面の主要文言をlocale経由で描画する' do
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('receipts.show.title'))
+        expect(response.body).to include(I18n.t('receipts.show.store_information'))
+        expect(response.body).to include(I18n.t('receipts.show.items_title'))
+      end
+    end
+
     it 'レスポンスにレシート情報が含まれる' do
       get receipt_path(receipt)
 
@@ -1699,6 +1763,23 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       expect(response).to have_http_status(:success)
+    end
+
+    it '編集画面の主要文言をlocale経由で描画しJS用文言をform data属性へ渡す' do
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('receipts.form.titles.edit'))
+        expect(response.body).to include(I18n.t('receipts.form.buttons.save'))
+        expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
+        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
+        expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+      end
     end
 
     it 'receipt_type UIを表示せず電話番号と店舗住所の入力欄は維持する' do

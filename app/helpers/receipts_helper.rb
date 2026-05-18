@@ -5,7 +5,7 @@
 module ReceiptsHelper
   # 電話番号表示用（日本向けフォーマット）
   def display_phone_number(phone_number)
-    return "未登録" if phone_number.blank?
+    return t("receipts.common.unregistered") if phone_number.blank?
 
     normalized = phone_number.to_s
 
