@@ -63,6 +63,88 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe '.category_summary_for' do
+    def create_item(receipt, category:, line_total:, name: '商品')
+      receipt.receipt_items.create!(
+        raw_text: name,
+        confirmed_name: name,
+        category: category,
+        quantity: 1,
+        price: line_total,
+        line_total: line_total,
+        position_index: receipt.receipt_items.count + 1
+      )
+    end
+
+    it 'completed / review_needed の明細だけカテゴリ別に金額と件数を集計する' do
+      user = create(:user)
+      completed = create(:receipt, :completed, user:)
+      review_needed = create(:receipt, :review_needed, user:)
+      processing = create(:receipt, :processing, :with_image, user:)
+      failed = create(:receipt, :failed, user:)
+
+      create_item(completed, category: 'food', line_total: 500)
+      create_item(completed, category: 'food', line_total: 700)
+      create_item(review_needed, category: 'drink', line_total: 300)
+      create_item(processing, category: 'food', line_total: 9_999)
+      create_item(failed, category: 'drink', line_total: 9_999)
+
+      summary = described_class.category_summary_for(user)
+
+      aggregate_failures do
+        expect(summary).to include(
+          hash_including(category: 'food', label: '食品', total_amount: 1200, item_count: 2),
+          hash_including(category: 'drink', label: '飲料', total_amount: 300, item_count: 1)
+        )
+        expect(summary.map { |entry| entry[:total_amount] }.sum).to eq(1500)
+      end
+    end
+
+    it 'user scopeを適用する' do
+      user = create(:user)
+      other_user = create(:user)
+      receipt = create(:receipt, :completed, user:)
+      other_receipt = create(:receipt, :completed, user: other_user)
+
+      create_item(receipt, category: 'food', line_total: 500)
+      create_item(other_receipt, category: 'food', line_total: 10_000)
+
+      summary = described_class.category_summary_for(user)
+
+      expect(summary).to contain_exactly(hash_including(category: 'food', total_amount: 500, item_count: 1))
+    end
+
+    it 'nil / blank category は uncategorized として扱い、other は other のまま扱う' do
+      user = create(:user)
+      receipt = create(:receipt, :completed, user:)
+
+      create_item(receipt, category: nil, line_total: 100)
+      create_item(receipt, category: '', line_total: 200)
+      create_item(receipt, category: 'other', line_total: 300)
+
+      summary = described_class.category_summary_for(user)
+
+      aggregate_failures do
+        expect(summary).to include(hash_including(category: 'uncategorized', label: '未分類', total_amount: 300, item_count: 2))
+        expect(summary).to include(hash_including(category: 'other', label: 'その他', total_amount: 300, item_count: 1))
+      end
+    end
+
+    it '検索scope内で集計できる' do
+      user = create(:user)
+      coffee_receipt = create(:receipt, :completed, user:, store_name: 'コーヒーストア')
+      grocery_receipt = create(:receipt, :completed, user:, store_name: '食品ストア')
+
+      create_item(coffee_receipt, category: 'drink', line_total: 450, name: 'コーヒー')
+      create_item(grocery_receipt, category: 'food', line_total: 800, name: 'パン')
+
+      scope = user.receipts.search('コーヒー')
+      summary = described_class.category_summary_for(user, scope:)
+
+      expect(summary).to contain_exactly(hash_including(category: 'drink', total_amount: 450, item_count: 1))
+    end
+  end
+
   describe '.search' do
     it 'subquery用途のmatching idsには既存orderを持ち込まない' do
       sql = described_class.order(created_at: :desc).search('コーヒー').to_sql

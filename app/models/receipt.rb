@@ -352,6 +352,30 @@ class Receipt < ApplicationRecord
     }
   end
 
+  def self.category_summary_for(user, scope: nil)
+    receipts = (scope || user.receipts).where(user_id: user.id).reorder(nil)
+    category_expression = Arel.sql("COALESCE(NULLIF(receipt_items.category, ''), 'uncategorized')")
+
+    rows = receipts
+      .where(status: KPI_AMOUNT_STATUSES)
+      .joins(:receipt_items)
+      .group(category_expression)
+      .pluck(
+        category_expression,
+        Arel.sql("COALESCE(SUM(receipt_items.line_total), 0)"),
+        Arel.sql("COUNT(receipt_items.id)")
+      )
+
+    rows.map do |category, total_amount, item_count|
+      {
+        category: category,
+        label: category_summary_label(category),
+        total_amount: total_amount.to_i,
+        item_count: item_count.to_i
+      }
+    end.sort_by { |entry| [ -entry[:total_amount], entry[:label] ] }
+  end
+
   def self.monthly_change_summary(current_month_total, previous_month_total)
     current_total = current_month_total.to_i
     previous_total = previous_month_total.to_i
@@ -383,6 +407,12 @@ class Receipt < ApplicationRecord
         icon_class: "token-text-muted"
       }
     end
+  end
+
+  def self.category_summary_label(category)
+    return "未分類" if category == "uncategorized"
+
+    I18n.t("enums.receipt_item.category.#{category}", default: category)
   end
 
   def self.payment_method_options

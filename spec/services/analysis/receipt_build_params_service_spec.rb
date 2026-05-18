@@ -185,6 +185,22 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AIが未知カテゴリを返した場合はカテゴリ未設定かつ確認対象にする' do
+        ai_result[:receipt_items_attributes].first.merge!(
+          category: 'unknown_category',
+          needs_review: false
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to be_nil
+          expect(item[:needs_review]).to eq(true)
+          expect(item[:review_reasons]).to include('item_category_uncertain')
+        end
+      end
+
       it 'tax_rate confidence が高い場合は warning reason を追加しない' do
         ai_result[:receipt_items_attributes].first.merge!(
           tax_rate: 0.1,

@@ -120,11 +120,15 @@ module Analysis
             discount_amount: discount_amount
           )
           price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
+          raw_category = normalized_item[:category].presence
+          category = normalize_category(raw_category)
+          category_invalid = raw_category.present? && category.nil?
           tax_rate = normalize_rate(normalized_item[:tax_rate])
           tax_rate_confidence = normalize_tax_rate_confidence(normalized_item[:tax_rate_confidence])
           review_reasons = item_review_reasons(
             normalized_item,
-            tax_rate_confidence:
+            tax_rate_confidence:,
+            category_invalid:
           )
 
           {
@@ -133,7 +137,7 @@ module Analysis
             suggested_name: normalized_item[:suggested_name].presence || extract_item_name(raw_text),
             # NOTE: AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
             confirmed_name: normalized_item[:confirmed_name],
-            category: normalized_item[:category].presence || detect_category(raw_text),
+            category: category_invalid ? nil : (category || detect_category(raw_text)),
             price: price,
             quantity: quantity,
             original_line_total: original_line_total,
@@ -151,7 +155,8 @@ module Analysis
               ai_items_present: ai_items_present,
               tax_rate: tax_rate,
               tax_rate_confidence: tax_rate_confidence,
-              review_reasons: review_reasons
+              review_reasons: review_reasons,
+              category_invalid: category_invalid
             ),
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
@@ -270,7 +275,8 @@ module Analysis
         end
       end
 
-      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:)
+      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_invalid:)
+        return true if category_invalid
         return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
 
         if tax_rate.present? && tax_rate_confidence_low?(tax_rate_confidence)
@@ -285,8 +291,9 @@ module Analysis
         end
       end
 
-      def item_review_reasons(normalized_item, tax_rate_confidence:)
+      def item_review_reasons(normalized_item, tax_rate_confidence:, category_invalid: false)
         normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
+          reasons << "item_category_uncertain" if category_invalid
           reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
           reasons.uniq!
         end
@@ -437,6 +444,13 @@ module Analysis
         rate > 1 ? rate / 100 : rate
       rescue ArgumentError
         nil
+      end
+
+      def normalize_category(value)
+        category = value.to_s.strip
+        return nil if category.blank?
+
+        ReceiptItem::CATEGORIES.include?(category) ? category : nil
       end
 
       def normalize_quantity(value)
