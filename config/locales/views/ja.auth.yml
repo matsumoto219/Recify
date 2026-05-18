@@ -1,0 +1,80 @@
+ja:
+  auth:
+    sessions:
+      title: ログイン
+      subtitle: Recify にログインしてレシート管理を続けましょう
+      form_title: ログインフォーム
+      fields:
+        email: メールアドレス
+        email_placeholder: メールアドレスを入力
+        password: パスワード
+        password_placeholder: パスワードを入力
+      forgot_password: パスワードをお忘れですか？
+      remember_me: ログイン状態を保持する
+      submit: ログイン
+      submitting: ログイン中...
+      sign_up:
+        aria_label: 新規登録案内
+        prompt: アカウントをお持ちではありませんか？
+        link: 新規登録
+      divider: または
+      guest:
+        title: ゲストログイン
+        button: ゲストとして試す
+        description_line1: 一部機能をすぐに体験できます。
+        description_line2: 一定期間利用がない場合、データは自動的に削除されます。
+    registrations:
+      new:
+        title: 新規登録
+        subtitle: Recifyを始めましょう
+        form_title: 新規登録フォーム
+        fields:
+          email: メールアドレス
+          password: パスワード
+          password_confirmation: パスワード確認
+          minimum_password_length: "%{count}文字以上"
+        submit: 登録する
+        submitting: 登録中...
+        terms:
+          aria_label: 規約同意案内
+          prefix: 登録することで、Recifyの
+          terms: 利用規約
+          connector: および
+          privacy: プライバシーポリシー
+          suffix: に同意したものとみなされます。
+        login:
+          aria_label: ログイン案内
+          prompt: すでにアカウントをお持ちですか？
+        login_link: ログインへ
+      edit:
+        title: アカウント情報変更
+        subtitle: メールアドレスやパスワードを変更できます。
+        form_title: アカウント情報変更フォーム
+        pending_reconfirmation: "確認待ちメールアドレス: %{email}"
+        fields:
+          email: メールアドレス
+          password: 新しいパスワード
+          password_placeholder: 変更しない場合は空欄
+          password_confirmation: 新しいパスワード（確認用）
+          password_confirmation_placeholder: 確認用にもう一度入力
+          current_password: 現在のパスワード
+          current_password_placeholder: 現在のパスワードを入力
+          minimum_password_length: "%{count}文字以上"
+        current_password_required: 変更内容を保存するには現在のパスワードが必要です
+        buttons:
+          save: 変更を保存
+          saving: 保存中...
+          security_settings: セキュリティ設定へ
+          settings_top: 設定トップへ
+        settings_hint: ※ 詳細な設定やセキュリティ管理は設定画面からも行えます。
+    passwords:
+      new:
+        title: パスワード再設定
+        subtitle: 登録したメールアドレスを入力してください
+        form_title: パスワード再設定フォーム
+        fields:
+          email: メールアドレス
+        buttons:
+          submit: 再設定メールを送信
+          submitting: 送信中...
+        back_to_login: ログインに戻る
