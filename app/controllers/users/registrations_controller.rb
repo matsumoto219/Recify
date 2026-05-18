@@ -46,6 +46,13 @@ class Users::RegistrationsController < Devise::RegistrationsController
         update_resource(resource, account_update_params)
       else
         profile_params = account_update_params.except(:current_password, :password, :password_confirmation)
+        if avatar_storage_quota_exceeded?(resource, profile_params[:avatar])
+          resource.errors.add(:avatar, :storage_quota_exceeded)
+          flash.now[:alert] = t("flash.storage.quota_exceeded")
+          render failure_template, status: :unprocessable_content
+          return
+        end
+
         resource_updated = resource.update_without_password(profile_params)
         resource.avatar.purge if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present? && resource.avatar.attached?
         resource_updated
@@ -97,6 +104,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
   def password_update_request?
     account_update_params[:password].present? ||
       account_update_params[:password_confirmation].present?
+  end
+
+  def avatar_storage_quota_exceeded?(resource, uploaded_avatar)
+    return false if uploaded_avatar.blank?
+
+    excluding_blob = resource.avatar.blob if resource.avatar.attached?
+
+    !resource.storage_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
   end
 
   def remove_avatar_requested?

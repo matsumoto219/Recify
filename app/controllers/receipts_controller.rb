@@ -55,6 +55,14 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    if storage_quota_exceeded_for?(uploaded_receipt_image)
+      @receipt = current_user.receipts.new
+      @receipt.errors.add(:image, :storage_quota_exceeded)
+      flash.now[:alert] = t("flash.storage.quota_exceeded")
+      render :new_upload, status: :unprocessable_content
+      return
+    end
+
     @receipt = current_user.receipts.new(upload_receipt_params)
     @receipt.status = "processing"
 
@@ -93,6 +101,13 @@ class ReceiptsController < ApplicationController
   end
 
   def update
+    if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
+      @receipt.errors.add(:image, :storage_quota_exceeded)
+      flash.now[:alert] = t("flash.storage.quota_exceeded")
+      render :edit, status: :unprocessable_content
+      return
+    end
+
     update_params = normalized_receipt_params.to_h
     clear_review_flags_for_edited_items!(update_params)
     apply_amount_calculation!(update_params, context: :edit_save)
@@ -152,6 +167,19 @@ class ReceiptsController < ApplicationController
 
   def upload_receipt_params
     params.require(:receipt).permit(:image)
+  end
+
+  def uploaded_receipt_image
+    params.dig(:receipt, :image)
+  end
+
+  def existing_receipt_image_blob
+    @receipt.image.blob if @receipt&.image&.attached?
+  end
+
+  def storage_quota_exceeded_for?(uploaded_file, excluding_blob: nil)
+    uploaded_file.present? &&
+      !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
   end
 
   def receipt_params

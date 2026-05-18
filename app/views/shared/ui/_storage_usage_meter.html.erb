@@ -1,0 +1,62 @@
+<%
+  usage = local_assigns.fetch(:usage)
+  compact = local_assigns.fetch(:compact, false)
+  context = local_assigns.fetch(:context, "default")
+  title = local_assigns.fetch(:title, t("shared.storage_usage.title"))
+  used_label = format_storage_size(usage.used_bytes)
+  limit_label = format_storage_size(usage.limit_bytes)
+  remaining_label = format_storage_size([usage.remaining_bytes, 0].max)
+  percentage = storage_usage_meter_percentage(usage)
+  fill_color = storage_usage_meter_color(usage)
+  state_text_class = storage_usage_state_text_class(usage)
+  settings_context = !compact && context.to_s == "settings"
+%>
+
+<div
+  class="space-y-2"
+  data-storage-usage-meter
+  data-storage-usage-context="<%= context %>"
+  data-storage-usage-state="<%= usage.state %>">
+  <% if compact %>
+    <p class="text-[0.75rem] token-text-muted"><%= title %></p>
+  <% elsif settings_context %>
+    <div class="space-y-1">
+      <p class="text-[0.75rem] token-text-muted"><%= title %></p>
+      <div class="flex flex-wrap items-baseline gap-2">
+        <span data-storage-usage-used class="text-2xl font-bold <%= state_text_class %>"><%= used_label %></span>
+        <span data-storage-usage-limit class="text-sm token-text-muted">/ <%= limit_label %></span>
+      </div>
+    </div>
+  <% else %>
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-[0.75rem] token-text-muted"><%= title %></p>
+      <p class="text-[0.6875rem] font-semibold <%= state_text_class %>">
+        <%= t("shared.storage_usage.amount", used: used_label, limit: limit_label) %>
+      </p>
+    </div>
+  <% end %>
+
+  <div class="h-1.5 w-full token-bg-page rounded-full overflow-hidden" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= percentage.round %>" aria-label="<%= title %>">
+    <div
+      class="h-full rounded-full transition-[width]"
+      style="width: <%= percentage %>%; background: <%= fill_color %>;"></div>
+  </div>
+
+  <% if compact %>
+    <p class="text-right text-[0.6875rem] font-semibold <%= state_text_class %>">
+      <%= t("shared.storage_usage.amount", used: used_label, limit: limit_label) %>
+    </p>
+  <% else %>
+    <div class="flex flex-col gap-2">
+      <p class="text-xs token-text-muted">
+        <%= t("shared.storage_usage.remaining", size: remaining_label) %>
+      </p>
+
+      <% unless usage.state == :normal %>
+        <div class="rounded-lg border px-3 py-2 text-xs leading-relaxed <%= storage_usage_state_box_class(usage) %>">
+          <%= t("shared.storage_usage.messages.#{usage.state}") %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</div>

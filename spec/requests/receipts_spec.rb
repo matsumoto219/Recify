@@ -176,6 +176,36 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'sidebarに実ストレージ使用量を表示する' do
+      user.update!(storage_limit_bytes: 10.megabytes)
+      my_receipt.image.attach(
+        io: StringIO.new('a' * 1.megabyte),
+        filename: 'receipt-storage.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      meter = document.at_css('#desktop-sidebar [data-storage-usage-meter]')
+
+      aggregate_failures do
+        expect(meter).to be_present
+        expect(meter.text).to include('1MB / 10MB')
+      end
+    end
+
+    it 'sidebarのストレージ使用量0は単位なしで表示する' do
+      user.update!(storage_limit_bytes: 1.gigabyte)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      meter = document.at_css('#desktop-sidebar [data-storage-usage-meter]')
+
+      expect(meter.text).to include('0 / 1GB')
+    end
+
     it 'receipt cardのfallback/action文言をlocale経由で描画する' do
       my_receipt.update_columns(store_name: nil, purchased_at: nil)
       processing_receipt = create(:receipt, :processing, :with_image, user: user, store_name: nil)
@@ -628,6 +658,24 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'POST /receipts/upload' do
+    it 'ストレージ上限超過時はreceiptを作成せず解析jobもenqueueしない' do
+      user.update!(storage_limit_bytes: 1)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
     it 'OCR down時はreceiptを作成せず解析jobもenqueueしない' do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
@@ -2446,6 +2494,44 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.status).to eq('review_needed')
         expect(ReceiptAnalysisService).not_to have_received(:call)
         expect(receipt.processing_error_code).to be_nil
+      end
+    end
+
+    it '画像差し替え時は既存blob分を差し引いて容量判定する' do
+      receipt.image.attach(uploaded_image)
+      user.update!(storage_limit_bytes: receipt.image.blob.byte_size)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え容量OK',
+          total_amount: 2200,
+          payment_method: 'cash',
+          image: Rack::Test::UploadedFile.new(image_path, 'image/jpeg')
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.image).to be_attached
+      end
+    end
+
+    it '画像差し替え時に容量上限を超える場合は更新しない' do
+      user.update!(storage_limit_bytes: 1)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え容量NG',
+          total_amount: 2200,
+          payment_method: 'cash',
+          image: uploaded_image
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+        expect(receipt.reload.store_name).to eq('更新前')
       end
     end
 

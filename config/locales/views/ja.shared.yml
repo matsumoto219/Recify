@@ -14,6 +14,13 @@ ja:
       increment_aria: "%{label}を増やす"
     quantity_unit_number_field:
       unit_aria: "%{label}の単位"
+    storage_usage:
+      title: ストレージ使用量
+      amount: "%{used} / %{limit}"
+      remaining: "残り %{size}"
+      messages:
+        warning: ストレージ残量が少なくなっています。
+        error: ストレージ残量が不足しています。画像を追加するには空き容量を確保してください。
     amount_summary_card:
       default_title: Total Amount
       unset: 未設定

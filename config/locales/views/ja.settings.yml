@@ -13,6 +13,7 @@ ja:
         security: セキュリティ
         appearance: 外観
         usage: 利用設定
+        storage: ストレージ
         account_actions: アカウント操作
       services:
         ocr: OCRサービス

@@ -21,7 +21,6 @@
       active: current_page?(select_input_method_receipts_path) %>
   </nav>
 
-  <!-- ダミー　本実装予定 -->
   <div class="mt-auto">
     <div class="flex flex-col gap-1 mb-4">
       <%= render "shared/sidebar_nav_item",
@@ -35,11 +34,11 @@
 
     <div class="px-4">
       <div class="hidden xl:block token-bg-elevated rounded-xl p-4 border token-border-soft">
-        <p class="text-[0.75rem] token-text-muted mb-2"><%= t("dashboard.nav.storage_usage") %></p>
-        <div class="h-1.5 w-full token-bg-page rounded-full overflow-hidden">
-          <div class="h-full sidebar-brand-bg w-[65%]"></div>
-        </div>
-        <p class="text-right text-[0.6875rem] mt-2 token-text-brand">6.5GB / 10GB</p>
+        <%= render "shared/ui/storage_usage_meter",
+              usage: current_user.storage_usage,
+              title: t("dashboard.nav.storage_usage"),
+              context: "sidebar",
+              compact: true %>
       </div>
     </div>
   </div>

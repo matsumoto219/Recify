@@ -7,6 +7,8 @@ ja:
     settings:
       update_success: 設定を更新しました
       update_failure: 設定の保存に失敗しました
+    storage:
+      quota_exceeded: ストレージ容量の上限を超えるため、ファイルをアップロードできません。
     receipts:
       create: レシートを登録しました
       update: レシートを更新しました

@@ -3,6 +3,8 @@ ja:
     attributes:
       receipt:
         image: "画像"
+      user:
+        avatar: "プロフィール画像"
 
     errors:
       models:
@@ -15,6 +17,11 @@ ja:
               file_too_large: "ファイルサイズは20MB以下にしてください"
               image_too_small: "画像サイズが小さすぎます（100px以上にしてください）"
               image_too_large: "画像サイズが大きすぎます（10000px以下にしてください）"
+              storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
+        user:
+          attributes:
+            avatar:
+              storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
         receipt_item:
           attributes:
             tax_rate:

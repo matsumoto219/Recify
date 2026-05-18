@@ -76,6 +76,56 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('shared.setting_status.inactive'))
       end
     end
+
+    it 'settingsに実ストレージ使用量を表示する' do
+      user.update!(storage_limit_bytes: 10.megabytes)
+      user.avatar.attach(
+        io: StringIO.new('a' * 1.megabyte),
+        filename: 'avatar-storage.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      meter = document.at_css('[data-storage-usage-meter][data-storage-usage-context="settings"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(meter).to be_present
+        expect(meter.text.squish).to include('1MB / 10MB')
+        expect(meter.at_css('[data-storage-usage-used]').text).to eq('1MB')
+        expect(meter.at_css('[data-storage-usage-used]')['class']).to include('text-2xl')
+        expect(meter.at_css('[data-storage-usage-used]')['class']).to include('font-bold')
+        expect(meter.at_css('[data-storage-usage-limit]').text.squish).to eq('/ 10MB')
+        expect(meter.at_css('[data-storage-usage-limit]')['class']).to include('text-sm')
+        expect(meter.at_css('[data-storage-usage-limit]')['class']).to include('token-text-muted')
+        expect(meter.text).to include(I18n.t('shared.storage_usage.remaining', size: '9MB'))
+      end
+    end
+
+    it 'settingsのカード順を維持する' do
+      get settings_path
+      document = Nokogiri::HTML(response.body)
+      cards = document.css('section[data-controller~="settings"] > div.space-y-6 > section')
+
+      ordered_labels = [
+        I18n.t('settings.index.user.edit_profile'),
+        I18n.t('settings.index.sections.security'),
+        I18n.t('settings.index.sections.system_status'),
+        I18n.t('settings.index.sections.storage'),
+        I18n.t('settings.index.sections.appearance'),
+        I18n.t('settings.index.sections.usage'),
+        I18n.t('settings.index.sections.account_actions')
+      ]
+
+      aggregate_failures do
+        expect(cards.size).to be >= ordered_labels.size
+        ordered_labels.each_with_index do |label, index|
+          expect(cards[index].text).to include(label)
+        end
+      end
+    end
   end
 
   describe 'GET /settings/account' do
@@ -188,6 +238,44 @@ RSpec.describe 'Settings', type: :request do
     ensure
       large_file&.close
       large_file&.unlink
+    end
+
+    it 'ストレージ上限超過時はavatarを保存しない' do
+      user.update!(storage_limit_bytes: 1)
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: user.name,
+                avatar: avatar_upload
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.avatar).not_to be_attached
+        expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+      end
+    end
+
+    it 'avatar差し替え時は既存blob分を差し引いて容量判定する' do
+      user.avatar.attach(avatar_upload)
+      user.update!(storage_limit_bytes: user.avatar.blob.byte_size)
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: user.name,
+                avatar: Rack::Test::UploadedFile.new(avatar_path, 'image/jpeg')
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_path)
+        expect(user.reload.avatar).to be_attached
+      end
     end
 
     it 'remove_avatar=1 purges avatar' do
