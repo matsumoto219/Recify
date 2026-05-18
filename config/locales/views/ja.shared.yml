@@ -1,5 +1,19 @@
 ja:
   shared:
+    avatar:
+      default_alt: プロフィール画像
+    footer:
+      terms: 利用規約
+      privacy: プライバシーポリシー
+    notifications:
+      unread_aria: 未読
+    section_header:
+      breadcrumb_aria: パンくずリスト
+    number_field:
+      decrement_aria: "%{label}を減らす"
+      increment_aria: "%{label}を増やす"
+    quantity_unit_number_field:
+      unit_aria: "%{label}の単位"
     amount_summary_card:
       default_title: Total Amount
       unset: 未設定

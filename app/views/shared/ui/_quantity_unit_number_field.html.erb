@@ -37,7 +37,7 @@
   input_class = local_assigns[:input_class]
   html_options = local_assigns.fetch(:html_options, {})
   unit_data = local_assigns.fetch(:unit_data, {})
-  unit_aria_label = local_assigns.fetch(:unit_aria_label, "#{label}の単位")
+  unit_aria_label = local_assigns.fetch(:unit_aria_label, t("shared.quantity_unit_number_field.unit_aria", label: label))
   normalized_unit_options = unit_options.dup
   option_values = normalized_unit_options.map { |option| Array(option).last.to_s }
   if selected_unit.present? && option_values.exclude?(selected_unit.to_s)

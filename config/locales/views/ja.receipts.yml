@@ -5,6 +5,7 @@ ja:
       unregistered: 未登録
       multiple_tax_rates: 複数税率
       count_suffix: 件
+      total_amount_title: Total Amount
       "yes": あり
       "no": なし
     index:

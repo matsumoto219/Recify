@@ -4,7 +4,7 @@
   extra_classes = local_assigns[:class]
   background_class = local_assigns.fetch(:background_class, "token-bg-elevated")
   preview = local_assigns.fetch(:preview, false)
-  alt = local_assigns.fetch(:alt, "プロフィール画像")
+  alt = local_assigns.fetch(:alt, t("shared.avatar.default_alt"))
 
   display_name = (user&.name.presence || user&.email).to_s
   fallback_text = display_name[0, 1]&.upcase || "U"

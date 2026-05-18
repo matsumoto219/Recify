@@ -57,10 +57,12 @@ RSpec.describe 'Settings', type: :request do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
+      avatar_images = document.css('[data-avatar-image]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(document.css('[data-avatar-image]')).to be_present
+        expect(avatar_images).to be_present
+        expect(avatar_images.map { |image| image['alt'] }).to all(eq(I18n.t('shared.avatar.default_alt')))
       end
     end
 

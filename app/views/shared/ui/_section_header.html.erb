@@ -86,7 +86,7 @@
 
 <div class="<%= header_classes %>">
   <% if breadcrumb_label.present? %>
-    <nav aria-label="パンくずリスト" class="<%= breadcrumb_wrapper_class %>">
+    <nav aria-label="<%= t("shared.section_header.breadcrumb_aria") %>" class="<%= breadcrumb_wrapper_class %>">
       <% if breadcrumb_path.present? %>
         <%= link_to breadcrumb_label, breadcrumb_path, class: breadcrumb_link_class %>
       <% else %>

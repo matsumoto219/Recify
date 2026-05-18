@@ -62,6 +62,7 @@ RSpec.describe 'Notifications', type: :request do
         expect(motion['class']).to include('transition-opacity')
         expect(dropdown.at_css('.notification-dropdown-panel')).to be_present
         expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include(I18n.t('notifications.dropdown.view_all')))
+        expect(dropdown.at_css(%([aria-label="#{I18n.t('shared.notifications.unread_aria')}"]))).to be_present
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')
       end

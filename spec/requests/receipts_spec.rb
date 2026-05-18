@@ -1424,6 +1424,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.show.title'))
         expect(response.body).to include(I18n.t('receipts.show.store_information'))
         expect(response.body).to include(I18n.t('receipts.show.items_title'))
+        expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
       end
     end
 
@@ -1778,6 +1779,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(I18n.t('receipts.form.titles.edit'))
         expect(response.body).to include(I18n.t('receipts.form.buttons.save'))
+        expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
+        expect(document.at_css(%(nav[aria-label="#{I18n.t('shared.section_header.breadcrumb_aria')}"]))).to be_present
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
@@ -2066,6 +2069,9 @@ RSpec.describe 'Receipts', type: :request do
 
         quantity_unit_select = item_row.at_css('[data-receipt-form-target="quantityUnitInput"]')
         expect(quantity_unit_select['data-action']).to be_nil
+        expect(quantity_unit_select['aria-label']).to eq(I18n.t('receipts.item_fields.unit'))
+        expect(item_row.at_css(%(button[aria-label="#{I18n.t('shared.number_field.decrement_aria', label: I18n.t('receipts.item_fields.unit_price'))}"]))).to be_present
+        expect(item_row.at_css(%(button[aria-label="#{I18n.t('shared.number_field.increment_aria', label: I18n.t('receipts.item_fields.unit_price'))}"]))).to be_present
 
         line_total_input = item_row.at_css('[data-receipt-form-target="lineTotalInput"]')
         expect(line_total_input['data-original-line-total']).to eq('310')

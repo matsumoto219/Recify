@@ -189,7 +189,7 @@
       <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
       <div class="order-first lg:order-none">
         <%= render "shared/ui/amount_summary_card",
-              title: "Total Amount",
+              title: t("receipts.common.total_amount_title"),
               amount: @receipt.total_amount,
               icon: "payments",
               subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : t("receipts.common.unset"),
