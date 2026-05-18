@@ -114,7 +114,7 @@ RSpec.describe 'Receipts', type: :request do
       results = document.at_css('#receipts-results')
 
       aggregate_failures do
-        expect(document.css('turbo-cable-stream-source').size).to eq(2)
+        expect(document.css('turbo-cable-stream-source').size).to eq(3)
         expect(results.css('turbo-cable-stream-source').size).to eq(1)
       end
     end
@@ -124,7 +124,7 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
 
-      expect(document.css('turbo-cable-stream-source').size).to eq(1)
+      expect(document.css('turbo-cable-stream-source').size).to eq(2)
     end
 
     it 'q parameter を検索フォームの値として保持する' do
@@ -143,7 +143,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
         expect(document.at_css('#receipts-page-header').text).to include('1件')
-        expect(document.css('turbo-cable-stream-source').size).to eq(2)
+        expect(document.css('turbo-cable-stream-source').size).to eq(3)
       end
     end
 
@@ -204,7 +204,7 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
 
-      expect(document.css('turbo-cable-stream-source').size).to eq(1)
+      expect(document.css('turbo-cable-stream-source').size).to eq(2)
     end
 
     it 'pagination と End of Archive をリアルタイム検索更新用results内に含める' do

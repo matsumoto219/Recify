@@ -1,0 +1,15 @@
+<%
+  count = unread_count.to_i
+  label = count > 99 ? "99+" : count.to_s
+%>
+
+<span id="notifications_unread_badge">
+  <% if count.positive? %>
+    <span
+      class="absolute -right-1 -top-1 min-w-5 rounded-full token-state-error-soft px-1.5 py-0.5 text-center text-[0.65rem] font-bold leading-none"
+      aria-label="未読通知 <%= count %>件"
+      data-notifications-unread-badge>
+      <%= label %>
+    </span>
+  <% end %>
+</span>

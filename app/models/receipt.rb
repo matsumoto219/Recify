@@ -31,6 +31,15 @@ class Receipt < ApplicationRecord
     completed
     review_needed
   ].freeze
+  NOTIFICATION_SOURCE_STATUSES = %w[
+    uploaded
+    processing
+  ].freeze
+  STATUS_NOTIFICATION_KINDS = {
+    "completed" => "receipt_completed",
+    "review_needed" => "receipt_review_needed",
+    "failed" => "receipt_failed"
+  }.freeze
 
   OCR_ERROR_CODES = %w[
     ocr_unreadable
@@ -509,6 +518,7 @@ class Receipt < ApplicationRecord
   after_update_commit :broadcast_receipt_card_update, if: :saved_change_to_status?
   after_update_commit :broadcast_summary_cards_update_after_update, if: :summary_broadcast_needed?
   after_update_commit :broadcast_processing_flash, if: :saved_change_to_status?
+  after_update_commit :create_status_notification, if: :status_notification_needed?
   after_destroy_commit :broadcast_summary_cards_update_after_destroy
 
   private
@@ -593,5 +603,50 @@ class Receipt < ApplicationRecord
         }
       }
     )
+  end
+
+  def status_notification_needed?
+    return false unless saved_change_to_status?
+
+    previous_status, current_status = saved_change_to_status
+
+    NOTIFICATION_SOURCE_STATUSES.include?(previous_status) &&
+      STATUS_NOTIFICATION_KINDS.key?(current_status)
+  end
+
+  def create_status_notification
+    user.notifications.create!(
+      kind: STATUS_NOTIFICATION_KINDS.fetch(status),
+      notifiable: self,
+      title: status_notification_title,
+      body: status_notification_body,
+      action_path: Rails.application.routes.url_helpers.receipt_path(self),
+      metadata: {
+        receipt_id: id,
+        status: status
+      }
+    )
+  end
+
+  def status_notification_title
+    case status
+    when "completed"
+      "レシート解析が完了しました"
+    when "review_needed"
+      "レシートの確認が必要です"
+    when "failed"
+      "レシート解析に失敗しました"
+    end
+  end
+
+  def status_notification_body
+    case status
+    when "completed"
+      "#{store_name.presence || 'レシート'}を確認できます。"
+    when "review_needed"
+      "#{store_name.presence || 'レシート'}の内容を確認してください。"
+    when "failed"
+      processing_flash_message || "#{store_name.presence || 'レシート'}の解析に失敗しました。"
+    end
   end
 end

@@ -5,6 +5,7 @@ class User < ApplicationRecord
          :recoverable, :rememberable, :validatable
 
   has_many :receipts, dependent: :destroy
+  has_many :notifications, dependent: :destroy
 
   has_one_attached :avatar
 

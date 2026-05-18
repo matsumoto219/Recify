@@ -145,6 +145,64 @@ RSpec.describe Receipt, type: :model do
       receipt.update!(status: "completed")
     end
 
+    it 'processingからcompletedになった時に永続通知を作成する' do
+      receipt = create(:receipt, :processing, :with_image, user: user, store_name: '完了ストア')
+
+      expect {
+        receipt.update!(status: 'completed')
+      }.to change(user.notifications, :count).by(1)
+
+      notification = user.notifications.last
+
+      aggregate_failures do
+        expect(notification.kind).to eq('receipt_completed')
+        expect(notification.notifiable).to eq(receipt)
+        expect(notification.action_path).to eq("/receipts/#{receipt.id}")
+        expect(notification.title).to include('完了')
+      end
+    end
+
+    it 'uploadedからreview_neededになった時に永続通知を作成する' do
+      receipt = create(:receipt, status: 'uploaded', user: user)
+
+      expect {
+        receipt.update!(status: 'review_needed')
+      }.to change(user.notifications, :count).by(1)
+
+      expect(user.notifications.last.kind).to eq('receipt_review_needed')
+    end
+
+    it 'processingからfailedになった時に永続通知を作成する' do
+      receipt = create(:receipt, :processing, :with_image, user: user)
+
+      expect {
+        receipt.update!(status: 'failed', processing_error_code: 'ocr_api_error')
+      }.to change(user.notifications, :count).by(1)
+
+      notification = user.notifications.last
+
+      aggregate_failures do
+        expect(notification.kind).to eq('receipt_failed')
+        expect(notification.body).to be_present
+      end
+    end
+
+    it 'failedからcompletedに手動復旧しても永続通知を作成しない' do
+      receipt = create(:receipt, :failed, user: user)
+
+      expect {
+        receipt.update!(status: 'completed', processing_error_code: nil)
+      }.not_to change(user.notifications, :count)
+    end
+
+    it 'status変更なしでは永続通知を作成しない' do
+      receipt = create(:receipt, :completed, user: user)
+
+      expect {
+        receipt.update!(store_name: '更新後ストア')
+      }.not_to change(user.notifications, :count)
+    end
+
     it 'completed/review_needed/failed のprocessing flashをshared/flashでbroadcastする' do
       cases = [
         {

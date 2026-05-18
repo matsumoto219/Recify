@@ -13,19 +13,17 @@
       aria-label="検索">
       <span class="material-symbols-outlined">search</span>
     </button>
-    <%# TODO: 通知機能（未実装）
-        想定ユースケース:
-        - OCR処理完了通知
-        - 要確認レシートの発生通知
-        - エラー（読み取り失敗）通知
-        - ストレージ上限に近づいた警告
-        - 未読件数のバッジ表示（赤丸）
-        実装時はNotificationモデル + 既読管理 + バッジ表示を追加 %>
-    <button type="button" class="token-text-muted header-text-hover transition-colors" aria-label="通知">
-      <span class="material-symbols-outlined">notifications</span>
-    </button>
-
     <% if user_signed_in? %>
+      <%= turbo_stream_from [current_user, :notifications] %>
+
+      <%= link_to notifications_path,
+        class: "relative token-text-muted header-text-hover transition-colors",
+        aria: { label: "通知" } do %>
+        <span class="material-symbols-outlined">notifications</span>
+        <%= render "shared/notifications/badge",
+          unread_count: current_user.notifications.unread.count %>
+      <% end %>
+
       <div class="flex items-center gap-3 border-l token-border-glass pl-4 md:pl-6">
         <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
           <p class="truncate text-xs font-bold token-text-base" title="<%= current_user.name.presence || current_user.email %>">

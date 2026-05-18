@@ -1,0 +1,28 @@
+<section class="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+  <%= render "shared/ui/section_header",
+    title: "通知",
+    title_suffix: "#{@unread_count}件未読",
+    title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
+    subtitle: "通知内容を後から確認できます。",
+    title_size: "text-2xl",
+    subtitle_size: "text-sm",
+    wrapper_class: "mt-1" %>
+
+  <% if @unread_count.positive? %>
+    <%= button_to "すべて既読",
+      read_all_notifications_path,
+      method: :patch,
+      class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-4 py-2 text-sm font-semibold token-text-base transition-colors cursor-pointer" %>
+  <% end %>
+</section>
+
+<section class="space-y-3">
+  <% if @notifications.any? %>
+    <%= render @notifications %>
+  <% else %>
+    <div class="token-bg-card token-border-soft rounded-lg border p-8 text-center">
+      <p class="text-sm font-semibold token-text-base">通知はまだありません</p>
+      <p class="mt-2 text-xs token-text-muted">通知内容はここに表示されます。</p>
+    </div>
+  <% end %>
+</section>

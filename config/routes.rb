@@ -28,6 +28,16 @@ Rails.application.routes.draw do
     end
   end
 
+  resources :notifications, only: [ :index ] do
+    member do
+      patch :read
+    end
+
+    collection do
+      patch :read_all
+    end
+  end
+
   # アカウント設定
   get "/settings", to: "settings#index", as: :settings
   get "/settings/account", to: "settings#account", as: :settings_account
