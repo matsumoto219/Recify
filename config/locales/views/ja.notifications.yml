@@ -1,0 +1,29 @@
+ja:
+  notifications:
+    index:
+      title: 通知
+      unread_suffix: "%{count}件未読"
+      subtitle: 通知内容を後から確認できます。
+      mark_all_as_read: すべて既読
+    empty:
+      title: 新しい通知はありません
+      description: 通知内容はここに表示されます。
+    dropdown:
+      title: 通知
+      view_all: すべて見る
+    item:
+      mark_as_read: 既読にする
+      open: 開く
+    badge:
+      unread_label: "未読通知 %{count}件"
+    receipts:
+      default_subject: レシート
+      completed:
+        title: レシート解析が完了しました
+        body: "%{subject}を確認できます。"
+      review_needed:
+        title: レシートの確認が必要です
+        body: "%{subject}の内容を確認してください。"
+      failed:
+        title: 処理失敗
+        body: "%{subject}の解析に失敗しました。"

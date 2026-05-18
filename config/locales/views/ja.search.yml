@@ -1,0 +1,6 @@
+ja:
+  search:
+    realtime:
+      error_title: エラー
+      error_message: 検索結果を更新できませんでした。通信状況を確認してもう一度お試しください。
+      close_label: 閉じる

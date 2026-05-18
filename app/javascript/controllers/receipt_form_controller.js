@@ -28,6 +28,7 @@ export default class extends Controller {
     roundingMode: { type: String, default: 'floor' },
     discountRoundingMode: { type: String, default: 'round' },
     confirmItemRemoval: { type: Boolean, default: true },
+    confirmItemRemovalMessage: { type: String, default: 'Delete this item?' },
     receiptTaxBasis: { type: String, default: 'internal' }
   }
 
@@ -58,7 +59,7 @@ export default class extends Controller {
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
     if (!row) return
 
-    if (this.confirmItemRemovalValue && !window.confirm('この明細を削除しますか？')) return
+    if (this.confirmItemRemovalValue && !window.confirm(this.confirmItemRemovalMessageValue)) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="destroyField"]')
 

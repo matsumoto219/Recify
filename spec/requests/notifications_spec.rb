@@ -61,7 +61,7 @@ RSpec.describe 'Notifications', type: :request do
         expect(motion['class']).to include('transition-transform')
         expect(motion['class']).to include('transition-opacity')
         expect(dropdown.at_css('.notification-dropdown-panel')).to be_present
-        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
+        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include(I18n.t('notifications.dropdown.view_all')))
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')
       end
@@ -75,13 +75,23 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(dropdown).to be_present
-        expect(dropdown.text).to include('新しい通知はありません')
-        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
+        expect(dropdown.text).to include(I18n.t('notifications.empty.title'))
+        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include(I18n.t('notifications.dropdown.view_all')))
       end
     end
   end
 
   describe 'GET /notifications' do
+    it '通知がない場合は統一されたempty stateを表示する' do
+      get notifications_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('notifications.empty.title'))
+        expect(response.body).to include(I18n.t('notifications.empty.description'))
+      end
+    end
+
     it '自分の通知だけを表示する' do
       create(:notification, user:, title: '自分の通知', body: '確認できます')
       create(:notification, user: create(:user), title: '他人の通知')

@@ -4,7 +4,12 @@
   <!-- サイドバー（デスクトップ用） -->
   <%= render "shared/sidebar" %>
 
-  <div class="relative z-10 md:ml-20 xl:ml-64 flex flex-col min-h-screen w-full" data-controller="search">
+  <div
+    class="relative z-10 md:ml-20 xl:ml-64 flex flex-col min-h-screen w-full"
+    data-controller="search"
+    data-search-error-title-value="<%= t("search.realtime.error_title") %>"
+    data-search-error-message-value="<%= t("search.realtime.error_message") %>"
+    data-search-error-close-label-value="<%= t("search.realtime.close_label") %>">
     <!-- ヘッダー（上部固定ナビ） -->
     <%= render "shared/header" %>
     <%= render "shared/mobile_search_overlay" %>

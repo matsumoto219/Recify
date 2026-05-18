@@ -3,6 +3,12 @@ import { Controller } from '@hotwired/stimulus'
 export default class extends Controller {
   static targets = ['panel', 'input', 'toggle']
 
+  static values = {
+    errorTitle: { type: String, default: 'Error' },
+    errorMessage: { type: String, default: 'Unable to update search results. Please try again.' },
+    errorCloseLabel: { type: String, default: 'Close' }
+  }
+
   connect () {
     this.handleOutsideTap = this.handleOutsideTap.bind(this)
     this.handleKeydown = this.handleKeydown.bind(this)
@@ -212,18 +218,18 @@ export default class extends Controller {
 
     const title = document.createElement('p')
     title.className = 'text-base font-bold token-text-base leading-tight mb-1'
-    title.textContent = 'エラー'
+    title.textContent = this.errorTitleValue
 
     const message = document.createElement('p')
     message.className = 'min-w-0 max-w-full text-xs token-text-muted leading-relaxed break-words whitespace-pre-wrap'
-    message.textContent = '検索結果を更新できませんでした。通信状況を確認してもう一度お試しください。'
+    message.textContent = this.errorMessageValue
 
     content.append(title, message)
 
     const closeButton = document.createElement('button')
     closeButton.type = 'button'
     closeButton.className = 'material-symbols-outlined text-[18px] opacity-70 hover:opacity-100'
-    closeButton.setAttribute('aria-label', '閉じる')
+    closeButton.setAttribute('aria-label', this.errorCloseLabelValue)
     closeButton.setAttribute('data-action', 'click->notice-surface#close')
     closeButton.textContent = 'close'
 

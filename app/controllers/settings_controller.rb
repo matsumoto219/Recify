@@ -15,11 +15,13 @@ class SettingsController < ApplicationController
 
   def update
     if current_user.update(settings_params)
+      message = t("flash.settings.update_success")
+
       respond_to do |format|
         format.json do
           render json: {
             ok: true,
-            message: "設定を更新しました",
+            message: message,
             push_notification_enabled: current_user.push_notification_enabled,
             product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled,
             receipt_item_delete_confirmation_enabled: current_user.receipt_item_delete_confirmation_enabled,
@@ -28,22 +30,24 @@ class SettingsController < ApplicationController
         end
 
         format.turbo_stream do
-          flash.now[:notice] = "設定を更新しました"
+          flash.now[:notice] = message
           render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
         end
       end
     else
+      message = t("flash.settings.update_failure")
+
       respond_to do |format|
         format.json do
           render json: {
             ok: false,
-            message: "設定の保存に失敗しました",
+            message: message,
             errors: current_user.errors.full_messages
           }, status: :unprocessable_content
         end
 
         format.turbo_stream do
-          flash.now[:alert] = "設定の保存に失敗しました"
+          flash.now[:alert] = message
           render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
         end
       end

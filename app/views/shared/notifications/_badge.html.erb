@@ -7,7 +7,7 @@
   <% if count.positive? %>
     <span
       class="absolute -right-1 -top-1 min-w-5 rounded-full token-state-error-soft px-1.5 py-0.5 text-center text-[0.65rem] font-bold leading-none"
-      aria-label="未読通知 <%= count %>件"
+      aria-label="<%= t("notifications.badge.unread_label", count: count) %>"
       data-notifications-unread-badge>
       <%= label %>
     </span>

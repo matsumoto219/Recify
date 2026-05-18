@@ -29,12 +29,12 @@
 
     <div class="flex shrink-0 items-center gap-2">
       <% if unread %>
-        <%= button_to "既読にする",
+        <%= button_to t("notifications.item.mark_as_read"),
           read_notification_path(notification),
           method: :patch,
           class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-base transition-colors cursor-pointer" %>
       <% elsif notification.action_path.present? %>
-        <%= link_to "開く",
+        <%= link_to t("notifications.item.open"),
           notification.action_path,
           class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-base transition-colors" %>
       <% end %>

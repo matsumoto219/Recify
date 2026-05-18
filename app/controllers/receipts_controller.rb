@@ -50,7 +50,7 @@ class ReceiptsController < ApplicationController
 
     if ExternalServiceStatus.down?(:ocr)
       @receipt = current_user.receipts.new
-      flash.now[:alert] = "OCR機能が一時停止中です。手動入力をご利用ください。"
+      flash.now[:alert] = t("flash.receipts.ocr_unavailable")
       render :new_upload, status: :unprocessable_content
       return
     end

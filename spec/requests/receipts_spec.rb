@@ -135,6 +135,19 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
+    it 'realtime search error文言をdata属性で渡す' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      search_controller = document.at_css('[data-controller~="search"]')
+
+      aggregate_failures do
+        expect(search_controller['data-search-error-title-value']).to eq(I18n.t('search.realtime.error_title'))
+        expect(search_controller['data-search-error-message-value']).to eq(I18n.t('search.realtime.error_message'))
+        expect(search_controller['data-search-error-close-label-value']).to eq(I18n.t('search.realtime.close_label'))
+      end
+    end
+
     it 'mobile search panel is rendered outside the glass header' do
       get receipts_path(q: my_receipt.store_name)
 
@@ -408,7 +421,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(document.at_css('[data-service-disabled="ocr"]')).to be_present
         expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
         expect(document.at_css('a[href="' + new_upload_receipts_path + '"]')).to be_nil
@@ -443,7 +456,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(document.at_css('[data-receipt-upload-ocr-available-value="false"]')).to be_present
         expect(document.css('button[disabled]').map(&:text).join).to include('カメラを起動')
         expect(document.css('button[disabled]').map(&:text).join).to include('ファイルを選択')
@@ -500,7 +513,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include('OCR機能が一時停止中です。手動入力をご利用ください。')
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -567,7 +580,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures 'show failed guidance' do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
         expect(response.body).to include('編集して修正')
       end
@@ -576,7 +589,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures 'edit failed guidance' do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
       end
     end
@@ -1416,7 +1429,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
         expect(response.body).to include('OCR service timeout')
         expect(response.body).to include('手動編集で内容を修正できます')
@@ -1638,7 +1651,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
         expect(response.body).to include('OCR service timeout')
       end
@@ -1660,7 +1673,10 @@ RSpec.describe 'Receipts', type: :request do
       document = Nokogiri::HTML(response.body)
       form = document.at_css('[data-controller~="receipt-form"]')
 
-      expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
+      aggregate_failures do
+        expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
+        expect(form['data-receipt-form-confirm-item-removal-message-value']).to eq(I18n.t('receipts.form.confirm_item_removal'))
+      end
     end
 
     it '明細削除確認設定がOFFならformにconfirm value falseを渡す' do

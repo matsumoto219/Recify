@@ -20,7 +20,7 @@
     <div class="space-y-3">
       <% if ocr_down %>
         <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
-          <p class="font-bold">OCR機能が一時停止中です。手動入力をご利用ください。</p>
+          <p class="font-bold"><%= t("flash.receipts.ocr_unavailable") %></p>
           <%= link_to "手動入力へ進む", new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
         </div>
       <% elsif ocr_degraded %>

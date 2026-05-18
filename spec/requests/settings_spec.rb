@@ -59,6 +59,8 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(document.at_css('[data-controller~="avatar-preview"]')).to be_present
+        expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-invalid-type-message-value']).to eq(I18n.t('settings.account.avatar.validation.invalid_type'))
+        expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-file-too-large-message-value']).to eq(I18n.t('settings.account.avatar.validation.file_too_large'))
         expect(document.at_css('input[type="file"][name="user[avatar]"]')).to be_present
         expect(document.at_css('input[type="file"][name="user[avatar]"]')['accept']).to eq('image/png,image/jpeg,image/webp')
       end
@@ -167,7 +169,38 @@ RSpec.describe 'Settings', type: :request do
         expect(stream).to be_present
         expect(stream['action']).to eq('update')
         expect(notice_surface).to be_present
+        expect(stream.text).to include(I18n.t('flash.settings.update_success'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
+      end
+    end
+
+    it 'JSON更新成功時にlocale経由のmessageを返す' do
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'message' => I18n.t('flash.settings.update_success')
+        )
+      end
+    end
+
+    it 'JSON更新失敗時にlocale経由のmessageを返す' do
+      allow_any_instance_of(User).to receive(:update).and_return(false)
+
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body).to include(
+          'ok' => false,
+          'message' => I18n.t('flash.settings.update_failure')
+        )
       end
     end
 

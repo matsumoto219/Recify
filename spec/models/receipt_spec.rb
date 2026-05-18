@@ -291,13 +291,13 @@ RSpec.describe Receipt, type: :model do
           status: "completed",
           processing_error_code: nil,
           flash_type: :notice,
-          message: "レシート解析が完了しました"
+          message: I18n.t("flash.receipts.analysis_completed")
         },
         {
           status: "review_needed",
           processing_error_code: nil,
           flash_type: :caution,
-          message: "レシート解析が完了しました。内容を確認してください"
+          message: I18n.t("flash.receipts.analysis_review_needed")
         },
         {
           status: "failed",

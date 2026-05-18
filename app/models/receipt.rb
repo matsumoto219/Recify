@@ -614,11 +614,11 @@ class Receipt < ApplicationRecord
   def broadcast_processing_flash
     flash_type, message = case status
     when "completed"
-                            [ :notice, "レシート解析が完了しました" ]
+                            [ :notice, I18n.t("flash.receipts.analysis_completed") ]
     when "review_needed"
-                            [ :caution, "レシート解析が完了しました。内容を確認してください" ]
+                            [ :caution, I18n.t("flash.receipts.analysis_review_needed") ]
     when "failed"
-                            [ :alert, processing_flash_message || "レシート解析に失敗しました" ]
+                            [ :alert, processing_flash_message || I18n.t("flash.receipts.analysis_failed") ]
     else
                             return
     end
@@ -661,22 +661,24 @@ class Receipt < ApplicationRecord
   def status_notification_title
     case status
     when "completed"
-      "レシート解析が完了しました"
+      I18n.t("notifications.receipts.completed.title")
     when "review_needed"
-      "レシートの確認が必要です"
+      I18n.t("notifications.receipts.review_needed.title")
     when "failed"
-      "レシート解析に失敗しました"
+      I18n.t("notifications.receipts.failed.title")
     end
   end
 
   def status_notification_body
+    subject = store_name.presence || I18n.t("notifications.receipts.default_subject")
+
     case status
     when "completed"
-      "#{store_name.presence || 'レシート'}を確認できます。"
+      I18n.t("notifications.receipts.completed.body", subject: subject)
     when "review_needed"
-      "#{store_name.presence || 'レシート'}の内容を確認してください。"
+      I18n.t("notifications.receipts.review_needed.body", subject: subject)
     when "failed"
-      processing_flash_message || "#{store_name.presence || 'レシート'}の解析に失敗しました。"
+      processing_flash_message || I18n.t("notifications.receipts.failed.body", subject: subject)
     end
   end
 end

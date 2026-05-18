@@ -11,6 +11,11 @@ export default class extends Controller {
     'errorText'
   ]
 
+  static values = {
+    invalidTypeMessage: { type: String, default: 'Please select a PNG, JPG, or WebP image.' },
+    fileTooLargeMessage: { type: String, default: 'Please select an image up to 5MB.' }
+  }
+
   connect () {
     this.objectUrl = null
     this.persistedImageUrl = this.hasImageTarget ? this.imageTarget.dataset.persistedUrl || '' : ''
@@ -84,12 +89,12 @@ export default class extends Controller {
   validateFile (file) {
     const allowedTypes = ['image/png', 'image/jpeg', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
-      return 'PNG / JPG / WebP形式の画像を選択してください。'
+      return this.invalidTypeMessageValue
     }
 
     const maxBytes = 5 * 1024 * 1024
     if (file.size > maxBytes) {
-      return '画像サイズは5MB以下にしてください。'
+      return this.fileTooLargeMessageValue
     }
 
     return null

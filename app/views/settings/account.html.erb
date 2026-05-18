@@ -14,7 +14,11 @@
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, html: { multipart: true } do |f| %>
       <%= hidden_field_tag :update_context, "account" %>
       <div class="space-y-6 p-8">
-        <div class="flex flex-col md:flex-row items-center gap-6 min-w-0" data-controller="avatar-preview">
+        <div
+          class="flex flex-col md:flex-row items-center gap-6 min-w-0"
+          data-controller="avatar-preview"
+          data-avatar-preview-invalid-type-message-value="<%= t("settings.account.avatar.validation.invalid_type") %>"
+          data-avatar-preview-file-too-large-message-value="<%= t("settings.account.avatar.validation.file_too_large") %>">
           <div class="relative group">
             <%= render "shared/ui/avatar",
                   user: form_resource,

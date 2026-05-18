@@ -17,13 +17,15 @@ ja:
       status: ステータス
       memo: メモ
       discount: 割引
+    form:
+      confirm_item_removal: この明細を削除しますか？
     processing_errors:
       image_error: 画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。
       ai_error: AI補完処理に失敗しました。画像を変更して再試行するか、OCR結果をもとに手動修正してください。
       system_error: 処理に失敗しました。時間をおいて再試行するか、手動で修正してください。
     processing_error_card:
-      failed_title: 処理に失敗しました
+      failed_title: 処理失敗
       attention_title: 処理に関する注意
       details_label: 補足
       manual_edit_hint: 手動編集で内容を修正できます。

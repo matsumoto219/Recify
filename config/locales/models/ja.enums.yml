@@ -52,7 +52,7 @@ ja:
         tax_detail_mismatch: "税内訳と明細の税額が一致していません"
         tax_detail_rate_mismatch: "税率ごとの内訳が一致していません"
         tax_detail_incomplete: "税内訳の一部が不足しています"
-        tax_detail_partial: "税内訳が一部のみ取得された可能性があります"
+        tax_detail_partial: "税内訳が一部しか取得できていない可能性があります"
         item_tax_rate_group_uncertain: "明細の税率割当と税内訳が一致しない可能性があります。必要に応じて明細ごとの税率をご確認ください。"
         zero_amount_item_incomplete: "0円明細の金額情報が一部不足しています"
         discount_data_incomplete: "割引情報が不完全です"

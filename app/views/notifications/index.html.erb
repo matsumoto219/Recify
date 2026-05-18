@@ -1,15 +1,15 @@
 <section class="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
   <%= render "shared/ui/section_header",
-    title: "通知",
-    title_suffix: "#{@unread_count}件未読",
+    title: t("notifications.index.title"),
+    title_suffix: t("notifications.index.unread_suffix", count: @unread_count),
     title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
-    subtitle: "通知内容を後から確認できます。",
+    subtitle: t("notifications.index.subtitle"),
     title_size: "text-2xl",
     subtitle_size: "text-sm",
     wrapper_class: "mt-1" %>
 
   <% if @unread_count.positive? %>
-    <%= button_to "すべて既読",
+    <%= button_to t("notifications.index.mark_all_as_read"),
       read_all_notifications_path,
       method: :patch,
       class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-4 py-2 text-sm font-semibold token-text-base transition-colors cursor-pointer" %>
@@ -21,8 +21,8 @@
     <%= render @notifications %>
   <% else %>
     <div class="token-bg-card token-border-soft rounded-lg border p-8 text-center">
-      <p class="text-sm font-semibold token-text-base">通知はまだありません</p>
-      <p class="mt-2 text-xs token-text-muted">通知内容はここに表示されます。</p>
+      <p class="text-sm font-semibold token-text-base"><%= t("notifications.empty.title") %></p>
+      <p class="mt-2 text-xs token-text-muted"><%= t("notifications.empty.description") %></p>
     </div>
   <% end %>
 </section>
