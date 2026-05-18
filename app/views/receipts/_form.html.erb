@@ -148,34 +148,24 @@
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
                        size: :regular %>
 
-            <%= render "shared/ui/text_field",
-                       f: f,
-                       attribute: :store_phone_number,
-                       label: "電話番号",
-                       value: receipt.display_store_phone_number,
-                       icon: "call",
-                       field_type: :telephone_field,
-                       placeholder: "例: 03-1234-5678",
-                       highlight_variant: (error_flags[:store_phone_number] ? :error : nil),
-                       size: :regular,
-                       html_options: {
-                         inputmode: "tel",
-                         pattern: "[0-9\\-]*",
-                         maxlength: 20,
-                         autocomplete: "tel"
-                       } %>
-
-            <!-- TODO: AIにレシート種別判定ロジックを追加する -->
-            <%= render "shared/ui/select_field",
-                       f: f,
-                       attribute: :receipt_type,
-                       label: "レシート種別",
-                       options: [["未定義", ""]],
-                       selected: nil,
-                       include_blank: "未対応",
-                       size: :regular,
-                       select_class: "opacity-60 cursor-not-allowed",
-                       html_options: { disabled: true } %>
+            <div class="md:col-span-2">
+              <%= render "shared/ui/text_field",
+                         f: f,
+                         attribute: :store_phone_number,
+                         label: "電話番号",
+                         value: receipt.display_store_phone_number,
+                         icon: "call",
+                         field_type: :telephone_field,
+                         placeholder: "例: 03-1234-5678",
+                         highlight_variant: (error_flags[:store_phone_number] ? :error : nil),
+                         size: :regular,
+                         html_options: {
+                           inputmode: "tel",
+                           pattern: "[0-9\\-]*",
+                           maxlength: 20,
+                           autocomplete: "tel"
+                         } %>
+            </div>
 
             <div class="md:col-span-2">
               <%= render "shared/ui/text_field",

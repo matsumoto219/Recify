@@ -1598,6 +1598,20 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it 'receipt_type UIを表示せず電話番号と店舗住所の入力欄は維持する' do
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include('レシート種別')
+        expect(document.at_css('select[name="receipt[receipt_type]"]')).to be_nil
+        expect(document.at_css('input[name="receipt[store_phone_number]"]')).to be_present
+        expect(document.at_css('input[name="receipt[store_address]"]')).to be_present
+      end
+    end
+
     it 'failedかつprocessing_error_codeがあるレシートは編集画面にも処理失敗カードを表示する' do
       receipt.update!(
         status: 'failed',
