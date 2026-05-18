@@ -41,18 +41,21 @@ export default class extends Controller {
     const panel = this.panelElement()
     if (!panel) return
 
+    const surface = this.surfaceElement(panel)
+    const motion = this.motionElement(panel)
     this.clearCloseTimer()
     this.cancelOpenFrame()
+    surface?.classList.remove(...CLOSED_CLASSES)
     panel.classList.remove('hidden')
     this.buttonTarget?.setAttribute('aria-expanded', 'true')
 
     if (this.prefersReducedMotion()) {
-      panel.classList.remove(...CLOSED_CLASSES)
+      motion?.classList.remove(...CLOSED_CLASSES)
       return
     }
 
     this.openFrame = requestAnimationFrame(() => {
-      panel.classList.remove(...CLOSED_CLASSES)
+      motion?.classList.remove(...CLOSED_CLASSES)
       this.openFrame = null
     })
   }
@@ -61,18 +64,24 @@ export default class extends Controller {
     const panel = this.panelElement()
     if (!panel) return
 
+    const surface = this.surfaceElement(panel)
+    const motion = this.motionElement(panel)
     this.clearCloseTimer()
     this.cancelOpenFrame()
     this.buttonTarget?.setAttribute('aria-expanded', 'false')
 
-    panel.classList.add(...CLOSED_CLASSES)
-
     if (!animated || this.prefersReducedMotion() || panel.classList.contains('hidden')) {
+      motion?.classList.add(...CLOSED_CLASSES)
+      surface?.classList.remove(...CLOSED_CLASSES)
       panel.classList.add('hidden')
       return
     }
 
+    surface?.classList.add(...CLOSED_CLASSES)
+
     this.closeTimer = setTimeout(() => {
+      motion?.classList.add(...CLOSED_CLASSES)
+      surface?.classList.remove(...CLOSED_CLASSES)
       panel.classList.add('hidden')
       this.closeTimer = null
     }, CLOSE_DURATION_MS)
@@ -127,5 +136,13 @@ export default class extends Controller {
     if (!panelId) return null
 
     return document.getElementById(panelId)
+  }
+
+  motionElement (panel) {
+    return panel?.querySelector('[data-notification-dropdown-motion]') || panel
+  }
+
+  surfaceElement (panel) {
+    return panel?.querySelector('[data-notification-dropdown-surface]') || panel
   }
 }

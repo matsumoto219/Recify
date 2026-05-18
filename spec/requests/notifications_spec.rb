@@ -45,16 +45,21 @@ RSpec.describe 'Notifications', type: :request do
 
       document = Nokogiri::HTML(response.body)
       dropdown = document.at_css('#notifications-dropdown')
+      surface = dropdown.at_css('[data-notification-dropdown-surface]')
+      motion = dropdown.at_css('[data-notification-dropdown-motion]')
       titles = dropdown.css('[data-notification-dropdown-item-title]').map(&:text).map(&:strip)
 
       aggregate_failures do
         expect(dropdown).to be_present
         expect(dropdown['class']).to include('hidden')
-        expect(dropdown['class']).to include('opacity-0')
-        expect(dropdown['class']).to include('-translate-y-2')
-        expect(dropdown['class']).to include('notification-dropdown-motion')
-        expect(dropdown['class']).to include('transition-transform')
-        expect(dropdown['class']).to include('transition-opacity')
+        expect(surface).to be_present
+        expect(surface['class']).to include('notification-dropdown-motion')
+        expect(motion).to be_present
+        expect(motion['class']).to include('opacity-0')
+        expect(motion['class']).to include('-translate-y-2')
+        expect(motion['class']).to include('notification-dropdown-motion')
+        expect(motion['class']).to include('transition-transform')
+        expect(motion['class']).to include('transition-opacity')
         expect(dropdown.at_css('.notification-dropdown-panel')).to be_present
         expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
