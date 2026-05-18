@@ -113,6 +113,53 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'payment_method_text が空の場合は Payments[] から credit_card を推定する' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: 'VISA Credit', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+          expect(params[:receipt_payments_attributes].first[:method]).to eq('VISA Credit')
+        end
+      end
+
+      it 'payment_method_text が空の場合は Payments[] から cash を推定する' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+      end
+
+      it 'payment_method_text が強い場合は Payments[] より優先する' do
+        ocr_result[:candidates][:payment_method_text] = 'PayPay'
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+      end
+
+      it '未知の Payments[] は payment_method を無理に埋めない' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '不明な支払い', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to be_nil
+      end
+
       it 'tax_detailsが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 

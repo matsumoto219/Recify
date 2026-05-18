@@ -388,15 +388,14 @@ module Analysis
       end
 
       def detect_payment_method(candidates)
-        # NOTE: 最終方針は Payments[].Method を第一候補、payment_method_text を fallback 補助にする。
-        # NOTE: ただし現在はテスト段階のため、structured payments は常に「未採用」扱いにしている。
-        # NOTE: Payments 側の実レシートサンプルが揃ったら `usable_payment_method_from_payments?` を有効化する。
-        payment_method_from_payments = detect_payment_method_from_payments(candidates[:payments])
-        return payment_method_from_payments if usable_payment_method_from_payments?(payment_method_from_payments)
+        # NOTE: OCR fieldの payment_method_text は支払い文脈が強い場合に優先し、
+        # Payments[].Method はAI失敗 / OCR-only時の次点fallbackとして使う。
+        detected_from_text = normalize_detected_payment_method(
+          Analysis::ReceiptFallbackPatterns.detect_payment_method(candidates[:payment_method_text])
+        )
+        return detected_from_text if detected_from_text.present?
 
-        # NOTE: 現在はこちらが主力。Payments[].Method が空 / 不正 / 未採用の場合のみ使う fallback。
-        detected = Analysis::ReceiptFallbackPatterns.detect_payment_method(candidates[:payment_method_text])
-        detected == "other" ? nil : detected
+        detect_payment_method_from_payments(candidates[:payments])
       end
 
       def detect_payment_method_from_payments(payments)
@@ -406,17 +405,15 @@ module Analysis
           next if method_text.blank?
 
           detected = Analysis::ReceiptFallbackPatterns.detect_payment_method(method_text)
-          return nil if detected == "other"
-          return detected if detected.present?
+          normalized_detected = normalize_detected_payment_method(detected)
+          return normalized_detected if normalized_detected.present?
         end
 
         nil
       end
 
-      def usable_payment_method_from_payments?(detected_method)
-        # NOTE: テスト段階のため、Payments[].Method は常に未採用扱いにして fallback の動作を確認する。
-        # NOTE: 本採用時は `detected_method.present?` 等に切り替えて structured payments を優先する。
-        false
+      def normalize_detected_payment_method(detected_method)
+        detected_method == "other" ? nil : detected_method.presence
       end
 
       def detect_category(text)

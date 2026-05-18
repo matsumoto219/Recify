@@ -416,6 +416,36 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'AI失敗fallbackではpayment_method_textが空でもPayments[]からpayment_methodを推定する' do
+      ocr_result = build_ocr_result(
+        raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\n合計 1280",
+        lines: [
+          'サンプルストア',
+          '2026/04/02 12:34',
+          'コーヒー 180',
+          '合計 1280'
+        ],
+        candidates: {
+          payment_method_text: nil,
+          payments: [
+            { method: '現金', amount: 1280 }
+          ]
+        }
+      )
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.payment_method).to eq('cash')
+        expect(receipt.receipt_payments.first.method).to eq('現金')
+      end
+    end
+
     it 'system reason only is stored in processing_error_code and not review_reasons' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(
