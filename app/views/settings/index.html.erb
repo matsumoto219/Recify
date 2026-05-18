@@ -3,13 +3,17 @@
   data-controller="settings"
   data-action="segmented-control:success->settings#applySegmentedControlSetting">
   <%= render "shared/ui/section_header",
-        title: "設定",
-        subtitle: "アカウント情報やセキュリティ設定を管理できます",
+        title: t("settings.index.title"),
+        subtitle: t("settings.index.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <div class="space-y-6">
     <%= render "shared/ui/surface_card", hoverable: true, padding: :md do %>
+      <%
+        user_status_label = current_user.guest? ? t("settings.index.user.guest") : t("settings.index.user.registered")
+        user_name_label = current_user.name.presence || t("settings.index.user.name_missing")
+      %>
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
           <div class="relative flex shrink-0 flex-col items-center gap-2">
@@ -18,17 +22,17 @@
                   size: 80,
                   class: "border-2 token-border-brand-soft" %>
             <span class="inline-flex w-fit shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:hidden">
-              <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
+              <%= user_status_label %>
             </span>
           </div>
 
           <div class="min-w-0 w-0 flex-1 overflow-hidden space-y-1">
             <div class="grid min-w-0 max-w-full grid-cols-1 gap-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-3">
               <div class="min-w-0 flex-1 overflow-hidden">
-                <h2 class="block max-w-full truncate text-lg font-semibold token-text-base" title="<%= current_user.name.presence || "ユーザー名未設定" %>"><%= current_user.name.presence || "ユーザー名未設定" %></h2>
+                <h2 class="block max-w-full truncate text-lg font-semibold token-text-base" title="<%= user_name_label %>"><%= user_name_label %></h2>
               </div>
               <span class="hidden w-fit self-start shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:inline-flex md:self-auto">
-                <%= current_user.guest? ? "ゲストユーザー" : "本登録ユーザー" %>
+                <%= user_status_label %>
               </span>
             </div>
             <p class="text-sm token-text-muted truncate min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14) %></p>
@@ -39,7 +43,7 @@
           <%= render "shared/ui/button",
                 as: :link,
                 href: settings_account_path,
-                label: "プロフィールを編集",
+                label: t("settings.index.user.edit_profile"),
                 variant: :secondary,
                 size: :compact,
                 full_width: true,
@@ -51,7 +55,7 @@
     <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "monitoring",
-            title: "システム状態",
+            title: t("settings.index.sections.system_status"),
             class: "mb-6" %>
 
       <div class="space-y-3">
@@ -60,11 +64,11 @@
         <%# 表示更新は Turbo Streams または polling でリアルタイム反映する想定 %>
         <%# 例: state: @ocr_service_status.state.to_sym %>
         <%= render "shared/ui/service_status_badge",
-              label: "OCRサービス",
+              label: t("settings.index.services.ocr"),
               state: @ocr_state %>
 
         <%= render "shared/ui/service_status_badge",
-              label: "AIサービス",
+              label: t("settings.index.services.ai"),
               state: @ai_state %>
       </div>
     <% end %>
@@ -72,7 +76,7 @@
     <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "shield",
-            title: "セキュリティ",
+            title: t("settings.index.sections.security"),
             class: "mb-6" %>
 
       <div class="space-y-4">
@@ -80,7 +84,7 @@
           <%= render "shared/ui/button",
                 as: :link,
                 href: settings_security_path(anchor: "email"),
-                label: "メールアドレス変更",
+                label: t("settings.index.security.email"),
                 variant: :secondary,
                 full_width: true,
                 class: "px-4 text-left",
@@ -90,7 +94,7 @@
           <%= render "shared/ui/button",
                 as: :link,
                 href: settings_security_path(anchor: "password"),
-                label: "パスワード変更",
+                label: t("settings.index.security.password"),
                 variant: :secondary,
                 full_width: true,
                 class: "px-4 text-left",
@@ -104,7 +108,7 @@
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined token-text-muted text-sm">info</span>
-              <span class="token-text-muted">2要素認証 (2FA)</span>
+              <span class="token-text-muted"><%= t("settings.index.security.two_factor") %></span>
             </div>
             <%= render "shared/ui/setting_status_badge",
                   state: :inactive,
@@ -116,7 +120,7 @@
           <div class="flex items-center justify-between text-sm">
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined token-text-muted text-sm">info</span>
-              <span class="token-text-muted">Passkey 設定</span>
+              <span class="token-text-muted"><%= t("settings.index.security.passkey") %></span>
             </div>
             <%= render "shared/ui/setting_status_badge",
                   state: :inactive,
@@ -125,7 +129,7 @@
           </div>
 
           <p class="text-[11px] token-text-subtle leading-relaxed">
-            ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨します。
+            <%= t("settings.index.security.hint") %>
           </p>
         </div>
       </div>
@@ -134,14 +138,14 @@
     <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "palette",
-            title: "外観",
+            title: t("settings.index.sections.appearance"),
             class: "mb-6" %>
 
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold token-text-base">表示テーマ</h3>
+          <h3 class="text-sm font-semibold token-text-base"><%= t("settings.index.appearance.theme_label") %></h3>
           <p class="text-xs token-text-muted leading-relaxed">
-            アプリケーションの見た目を設定します
+            <%= t("settings.index.appearance.theme_description") %>
           </p>
         </div>
 
@@ -153,44 +157,44 @@
               remote: true,
               size: :sm,
               options: [
-                { label: "自動", value: "system", icon: "brightness_auto" },
-                { label: "ライト", value: "light", icon: "light_mode" },
-                { label: "ダーク", value: "dark", icon: "dark_mode" }
+                { label: t("settings.index.appearance.theme_options.system"), value: "system", icon: "brightness_auto" },
+                { label: t("settings.index.appearance.theme_options.light"), value: "light", icon: "light_mode" },
+                { label: t("settings.index.appearance.theme_options.dark"), value: "dark", icon: "dark_mode" }
               ] %>
       </div>
 
       <p class="text-[11px] token-text-subtle leading-relaxed mt-3">
-        ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
+        <%= t("settings.index.appearance.theme_hint") %>
       </p>
     <% end %>
 
     <%= render "shared/ui/surface_card", padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "settings",
-            title: "利用設定",
+            title: t("settings.index.sections.usage"),
             class: "mb-6" %>
 
       <div class="space-y-6">
         <%# TODO: 通知配信そのものは未実装。ここでは利用設定トグルの保存動作のみ提供する %>
         <%= render "shared/ui/toggle_switch",
-              label: "プッシュ通知",
-              description: "レシート処理の完了や要確認項目を通知します",
+              label: t("settings.index.usage.push_notification.label"),
+              description: t("settings.index.usage.push_notification.description"),
               checked: current_user.push_notification_enabled,
               name: "push_notification_enabled",
               url: settings_path,
               remote: true %>
 
         <%= render "shared/ui/toggle_switch",
-              label: "明細削除の確認",
-              description: "レシート明細を削除する前に確認ダイアログを表示します",
+              label: t("settings.index.usage.receipt_item_delete_confirmation.label"),
+              description: t("settings.index.usage.receipt_item_delete_confirmation.description"),
               checked: current_user.receipt_item_delete_confirmation_enabled,
               name: "receipt_item_delete_confirmation_enabled",
               url: settings_path,
               remote: true %>
 
         <%= render "shared/ui/toggle_switch",
-              label: "AI補完",
-              description: "商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください".html_safe,
+              label: t("settings.index.usage.product_name_ai_completion.label"),
+              description: t("settings.index.usage.product_name_ai_completion.description_html").html_safe,
               checked: current_user.product_name_ai_completion_enabled,
               name: "product_name_ai_completion_enabled",
               url: settings_path,
@@ -206,7 +210,7 @@
           padding: :md do %>
       <%= render "shared/ui/section_header",
             icon: "delete",
-            title: "アカウント操作",
+            title: t("settings.index.sections.account_actions"),
             variant: :danger,
             class: "mb-6" %>
 
@@ -214,11 +218,11 @@
         <div class="flex flex-col sm:flex-row gap-4">
           <%= button_to user_registration_path,
                         method: :delete,
-                        data: { turbo_confirm: "退会すると、アカウントに紐づくすべてのデータが削除されます。\nこの操作は取り消すことができませんのでご注意ください。\n必要なレシートは事前にダウンロードすることをおすすめします。\n\n本当にアカウントを削除してもよろしいですか？" },
+                        data: { turbo_confirm: t("settings.index.danger.confirm") },
                         class: "contents" do %>
             <%= render "shared/ui/button",
                   as: :content,
-                  label: "退会",
+                  label: t("settings.index.danger.delete_account"),
                   variant: :danger,
                   size: :compact %>
           <% end %>
@@ -227,7 +231,7 @@
         <div class="flex items-start gap-2 pt-2">
           <span class="material-symbols-outlined token-text-error text-sm mt-0.5">warning</span>
           <p class="text-xs token-text-error-muted leading-relaxed">
-            退会するとアカウントに紐づくデータが削除されます。この操作は取り消すことができませんのでご注意ください。
+            <%= t("settings.index.danger.hint") %>
           </p>
         </div>
       </div>

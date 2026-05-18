@@ -1,7 +1,97 @@
 ja:
   settings:
+    index:
+      title: 設定
+      subtitle: アカウント情報やセキュリティ設定を管理できます
+      user:
+        guest: ゲストユーザー
+        registered: 本登録ユーザー
+        name_missing: ユーザー名未設定
+        edit_profile: プロフィールを編集
+      sections:
+        system_status: システム状態
+        security: セキュリティ
+        appearance: 外観
+        usage: 利用設定
+        account_actions: アカウント操作
+      services:
+        ocr: OCRサービス
+        ai: AIサービス
+      security:
+        email: メールアドレス変更
+        password: パスワード変更
+        two_factor: 2要素認証 (2FA)
+        passkey: Passkey 設定
+        hint: ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨します。
+      appearance:
+        theme_label: 表示テーマ
+        theme_description: アプリケーションの見た目を設定します
+        theme_options:
+          system: 自動
+          light: ライト
+          dark: ダーク
+        theme_hint: ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
+      usage:
+        push_notification:
+          label: プッシュ通知
+          description: レシート処理の完了や要確認項目を通知します
+        receipt_item_delete_confirmation:
+          label: 明細削除の確認
+          description: レシート明細を削除する前に確認ダイアログを表示します
+        product_name_ai_completion:
+          label: AI補完
+          description_html: 商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください
+      danger:
+        delete_account: 退会
+        confirm: |-
+          退会すると、アカウントに紐づくすべてのデータが削除されます。
+          この操作は取り消すことができませんのでご注意ください。
+          必要なレシートは事前にダウンロードすることをおすすめします。
+
+          本当にアカウントを削除してもよろしいですか？
+        hint: 退会するとアカウントに紐づくデータが削除されます。この操作は取り消すことができませんのでご注意ください。
     account:
+      title: プロフィール
+      subtitle: ユーザー情報を編集できます
       avatar:
+        preview_alt: プロフィール画像プレビュー
+        title: プロフィール写真
+        description: PNG / JPG / WebP を設定できます(5MB以下)
+        remove_label: 現在のプロフィール画像を削除する
+        remove_description: 保存すると画像は削除され、初期アイコン表示に戻ります。
         validation:
           invalid_type: PNG / JPG / WebP形式の画像を選択してください。
           file_too_large: 画像サイズは5MB以下にしてください。
+      fields:
+        name: ユーザー名
+        name_placeholder: 任意のユーザー名を入力
+      buttons:
+        cancel: キャンセル
+        save: 変更を保存
+        saving: 保存中...
+    security:
+      title: セキュリティ
+      subtitle: アカウントの安全性を管理します
+      email:
+        title: メールアドレス
+        current: 現在のメールアドレス
+        change_unavailable: 変更する（未対応）
+        description: メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。
+      password:
+        title: パスワード変更
+        current: 現在のパスワード
+        new: 新しいパスワード
+        confirmation: 確認用パスワード
+        hint: 安全のため、定期的にパスワードを変更してください。
+        save: パスワードを保存
+        saving: 保存中...
+      auth:
+        two_factor:
+          title: 2要素認証 (2FA)
+          subtitle: 認証アプリを使用して、セキュリティを強化します。
+          action: 有効化する（未対応）
+        passkey:
+          title: パスキー
+          subtitle: 指紋や顔認証で安全にログインできます。
+          action: 登録する（未対応）
+      footer: セキュリティ設定を変更した際、確認メールが送信される場合があります。不審な操作があれば速やかにパスワードを変更してください。

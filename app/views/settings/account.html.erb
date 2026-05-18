@@ -1,7 +1,7 @@
 <section class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "shared/ui/section_header",
-        title: "プロフィール",
-        subtitle: "ユーザー情報を編集できます",
+        title: t("settings.account.title"),
+        subtitle: t("settings.account.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base",
         class: "px-4 md:px-0" %>
@@ -24,14 +24,14 @@
                   user: form_resource,
                   size: 96,
                   preview: true,
-                  alt: "プロフィール画像プレビュー",
+                  alt: t("settings.account.avatar.preview_alt"),
                   background_class: "token-bg-floating",
                   class: "border-2 token-border-brand-soft avatar-preview-surface transition-transform duration-300 group-hover:scale-105" %>
           </div>
 
           <div class="text-center md:text-left w-full min-w-0">
-            <h2 class="truncate text-lg font-semibold token-text-base mb-1" title="プロフィール写真">プロフィール写真</h2>
-            <p class="text-xs token-text-muted mb-4 break-words">PNG / JPG / WebP を設定できます(5MB以下)</p>
+            <h2 class="truncate text-lg font-semibold token-text-base mb-1" title="<%= t("settings.account.avatar.title") %>"><%= t("settings.account.avatar.title") %></h2>
+            <p class="text-xs token-text-muted mb-4 break-words"><%= t("settings.account.avatar.description") %></p>
             <%= f.file_field :avatar,
                   class: "block w-full text-sm avatar-file-input file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
                   accept: "image/png,image/jpeg,image/webp",
@@ -52,8 +52,8 @@
                         action: "change->avatar-preview#toggleRemove"
                       } %>
                 <span class="space-y-1 min-w-0">
-                  <span class="block text-sm font-medium token-text-base">現在のプロフィール画像を削除する</span>
-                  <span class="block text-xs token-text-muted leading-relaxed">保存すると画像は削除され、初期アイコン表示に戻ります。</span>
+                  <span class="block text-sm font-medium token-text-base"><%= t("settings.account.avatar.remove_label") %></span>
+                  <span class="block text-xs token-text-muted leading-relaxed"><%= t("settings.account.avatar.remove_description") %></span>
                 </span>
               </label>
             <% end %>
@@ -75,10 +75,10 @@
         <%= render "shared/ui/text_field",
               f: f,
               attribute: :name,
-              label: "ユーザー名",
+              label: t("settings.account.fields.name"),
               icon: "person",
               field_type: :text_field,
-              placeholder: "任意のユーザー名を入力",
+              placeholder: t("settings.account.fields.name_placeholder"),
               autocomplete: "name",
               with_icon: true,
               highlight_variant: :default,
@@ -93,7 +93,7 @@
         <%= render "shared/ui/button",
               as: :link,
               href: settings_path,
-              label: "キャンセル",
+              label: t("settings.account.buttons.cancel"),
               variant: :secondary,
               class: "px-8 py-3" %>
 
@@ -101,10 +101,10 @@
             - 更新成功時：settingsページへリダイレクト
             - 更新失敗時：エラーメッセージ表示 %>
         <%= render "shared/ui/button",
-              label: "変更を保存",
+              label: t("settings.account.buttons.save"),
               variant: :primary,
               type: "submit",
-              disable_with: "保存中...",
+              disable_with: t("settings.account.buttons.saving"),
               class: "px-10 py-3 font-bold" %>
       </div>
     <% end %>

@@ -17,9 +17,24 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('明細削除の確認')
-        expect(response.body).to include('レシート明細を削除する前に確認ダイアログを表示します')
+        expect(response.body).to include(I18n.t('settings.index.usage.receipt_item_delete_confirmation.label'))
+        expect(response.body).to include(I18n.t('settings.index.usage.receipt_item_delete_confirmation.description'))
         expect(document.at_css('input[name="receipt_item_delete_confirmation_enabled"]')).to be_present
+      end
+    end
+
+    it 'renders settings index copy through locale keys' do
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('settings.index.title'))
+        expect(response.body).to include(I18n.t('settings.index.sections.system_status'))
+        expect(response.body).to include(I18n.t('settings.index.sections.security'))
+        expect(response.body).to include(I18n.t('settings.index.sections.appearance'))
+        expect(response.body).to include(I18n.t('settings.index.sections.usage'))
+        expect(response.body).to include(I18n.t('settings.index.danger.delete_account'))
       end
     end
 
@@ -74,6 +89,35 @@ RSpec.describe 'Settings', type: :request do
         expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-file-too-large-message-value']).to eq(I18n.t('settings.account.avatar.validation.file_too_large'))
         expect(document.at_css('input[type="file"][name="user[avatar]"]')).to be_present
         expect(document.at_css('input[type="file"][name="user[avatar]"]')['accept']).to eq('image/png,image/jpeg,image/webp')
+      end
+    end
+
+    it 'renders account copy through locale keys' do
+      get settings_account_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('settings.account.title'))
+        expect(response.body).to include(I18n.t('settings.account.avatar.title'))
+        expect(response.body).to include(I18n.t('settings.account.fields.name'))
+        expect(response.body).to include(I18n.t('settings.account.buttons.save'))
+      end
+    end
+  end
+
+  describe 'GET /settings/security' do
+    it 'renders security copy through locale keys' do
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('settings.security.title'))
+        expect(response.body).to include(I18n.t('settings.security.email.title'))
+        expect(response.body).to include(I18n.t('settings.security.password.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.two_factor.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.passkey.title'))
       end
     end
   end

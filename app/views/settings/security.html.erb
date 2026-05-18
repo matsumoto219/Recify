@@ -8,8 +8,8 @@
   data-security-scroll-scroll-to-password-value="<%= security_form_error %>">
   <!-- START: settings/security page header -->
   <%= render "shared/ui/section_header",
-        title: "セキュリティ",
-        subtitle: "アカウントの安全性を管理します",
+        title: t("settings.security.title"),
+        subtitle: t("settings.security.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base",
         class: "px-4 md:px-0" %>
@@ -26,13 +26,13 @@
       <%= render "shared/ui/surface_card", padding: :responsive do %>
         <%= render "shared/ui/section_header",
               icon: "mail",
-              title: "メールアドレス",
+              title: t("settings.security.email.title"),
               title_size: "text-xl",
               class: "mb-4" %>
 
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 token-bg-card-subtle border token-border-soft p-4 rounded-lg min-w-0">
           <div class="min-w-0">
-            <p class="text-xs token-text-muted mb-1">現在のメールアドレス</p>
+            <p class="text-xs token-text-muted mb-1"><%= t("settings.security.email.current") %></p>
             <p class="truncate token-text-base font-medium min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 25, local_max_length_mobile: 15, domain_max_length_mobile: 16) %></p>
           </div>
 
@@ -42,7 +42,7 @@
               - 変更確認メール送信 %>
           <div class="shrink-0 flex justify-end md:block">
             <%= render "shared/ui/button",
-                  label: "変更する（未対応）",
+                  label: t("settings.security.email.change_unavailable"),
                   variant: :secondary,
                   size: :md,
                   disabled: true,
@@ -50,7 +50,7 @@
           </div>
         </div>
 
-        <p class="mt-4 text-sm token-text-subtle break-words">メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。</p>
+        <p class="mt-4 text-sm token-text-subtle break-words"><%= t("settings.security.email.description") %></p>
       <% end %>
     </div>
     <!-- END: settings/security email card -->
@@ -60,7 +60,7 @@
       <%= render "shared/ui/surface_card", padding: :responsive do %>
         <%= render "shared/ui/section_header",
               icon: "lock",
-              title: "パスワード変更",
+              title: t("settings.security.password.title"),
               title_size: "text-xl",
               class: "mb-6" %>
 
@@ -77,7 +77,7 @@
             <%= render "shared/ui/text_field",
                   f: f,
                   attribute: :current_password,
-                  label: "現在のパスワード",
+                  label: t("settings.security.password.current"),
                   icon: "lock",
                   field_type: :password_field,
                   placeholder: "••••••••",
@@ -95,7 +95,7 @@
               <%= render "shared/ui/text_field",
                     f: f,
                     attribute: :password,
-                    label: "新しいパスワード",
+                    label: t("settings.security.password.new"),
                     icon: "password",
                     field_type: :password_field,
                     placeholder: "••••••••",
@@ -111,7 +111,7 @@
               <%= render "shared/ui/text_field",
                     f: f,
                     attribute: :password_confirmation,
-                    label: "確認用パスワード",
+                    label: t("settings.security.password.confirmation"),
                     icon: "password",
                     field_type: :password_field,
                     placeholder: "••••••••",
@@ -133,15 +133,15 @@
                 - 強度バー（弱/中/強）
                 - 最低文字数や記号チェック %>
 
-            <p class="text-sm token-text-subtle">安全のため、定期的にパスワードを変更してください。</p>
+            <p class="text-sm token-text-subtle"><%= t("settings.security.password.hint") %></p>
             <div class="pt-2 flex justify-end">
               <%= render "shared/ui/button",
-                    label: "パスワードを保存",
+                    label: t("settings.security.password.save"),
                     variant: :primary,
                     size: :compact,
                     weight: :bold,
                     type: "submit",
-                    disable_with: "保存中..." %>
+                    disable_with: t("settings.security.password.saving") %>
             </div>
           </div>
         <% end %>
@@ -160,8 +160,8 @@
             <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
-                title: "2要素認証 (2FA)",
-                subtitle: "認証アプリを使用して、セキュリティを強化します。",
+                title: t("settings.security.auth.two_factor.title"),
+                subtitle: t("settings.security.auth.two_factor.subtitle"),
                 title_size: "text-lg",
                 subtitle_size: "text-sm",
                 class: "mb-6" %>
@@ -172,7 +172,7 @@
             - シークレット保存
             - 有効/無効切り替え %>
         <%= render "shared/ui/button",
-              label: "有効化する（未対応）",
+              label: t("settings.security.auth.two_factor.action"),
               variant: :secondary,
               size: :compact,
               full_width: true,
@@ -189,8 +189,8 @@
             <%= render "shared/ui/setting_status_badge", state: :inactive %>
           </div>
           <%= render "shared/ui/section_header",
-                title: "パスキー",
-                subtitle: "指紋や顔認証で安全にログインできます。",
+                title: t("settings.security.auth.passkey.title"),
+                subtitle: t("settings.security.auth.passkey.subtitle"),
                 title_size: "text-lg",
                 subtitle_size: "text-sm",
                 class: "mb-6" %>
@@ -201,7 +201,7 @@
             - デバイス管理
             - ログイン連携 %>
         <%= render "shared/ui/button",
-              label: "登録する（未対応）",
+              label: t("settings.security.auth.passkey.action"),
               variant: :secondary,
               size: :compact,
               full_width: true,
@@ -219,7 +219,7 @@
     <div class="flex items-start gap-3 token-text-subtle text-xs">
       <span class="material-symbols-outlined text-sm mt-0.5">info</span>
       <p class="break-words">
-        セキュリティ設定を変更した際、確認メールが送信される場合があります。不審な操作があれば速やかにパスワードを変更してください。
+        <%= t("settings.security.footer") %>
       </p>
     </div>
   </footer>
