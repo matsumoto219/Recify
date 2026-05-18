@@ -19,9 +19,49 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(document.at_css('a[aria-label="通知"]')).to be_present
+        expect(document.at_css('[data-controller="notification-dropdown"]')).to be_present
+        expect(document.at_css('button[aria-label="通知"][aria-haspopup="dialog"][aria-expanded="false"]')).to be_present
         expect(badge).to be_present
         expect(badge.text).to include('2')
+      end
+    end
+
+    it '通知dropdownに最新5件だけ表示し、通知一覧への導線を出す' do
+      6.times do |index|
+        create(
+          :notification,
+          user:,
+          title: "通知#{index + 1}",
+          body: "本文#{index + 1}",
+          created_at: index.minutes.ago
+        )
+      end
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      dropdown = document.at_css('#notifications-dropdown')
+      titles = dropdown.css('[data-notification-dropdown-item-title]').map(&:text).map(&:strip)
+
+      aggregate_failures do
+        expect(dropdown).to be_present
+        expect(dropdown['class']).to include('hidden')
+        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
+        expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
+        expect(titles).not_to include('通知6')
+      end
+    end
+
+    it '通知がない場合はdropdownにempty stateを表示する' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      dropdown = document.at_css('#notifications-dropdown')
+
+      aggregate_failures do
+        expect(dropdown).to be_present
+        expect(dropdown.text).to include('新しい通知はありません')
+        expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
       end
     end
   end

@@ -1,0 +1,51 @@
+<%
+  unread = notification.unread?
+  action_path = notification.action_path.to_s
+  item_path = action_path.start_with?("/") ? action_path : notifications_path
+
+  icon_config =
+    case notification.kind
+    when "receipt_completed"
+      { icon: "check_circle", class: "token-state-success-soft" }
+    when "receipt_review_needed"
+      { icon: "warning", class: "token-state-warning-soft" }
+    when "receipt_failed"
+      { icon: "error", class: "token-state-error-soft" }
+    else
+      { icon: "notifications", class: "notice-icon-info" }
+    end
+
+  item_classes = [
+    "flex gap-3 border-b token-border-glass px-4 py-3 text-left transition-colors",
+    "token-hover-bg-card-subtle",
+    unread ? "token-brand-soft-bg" : nil
+  ].compact.join(" ")
+%>
+
+<%= link_to item_path, class: item_classes do %>
+  <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full <%= icon_config[:class] %>">
+    <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= icon_config[:icon] %></span>
+  </div>
+
+  <div class="min-w-0 flex-1">
+    <div class="flex items-start gap-2">
+      <p class="min-w-0 flex-1 truncate text-[13px] font-semibold token-text-base" data-notification-dropdown-item-title>
+        <%= notification.title %>
+      </p>
+
+      <% if unread %>
+        <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full token-state-error-soft" aria-label="未読"></span>
+      <% end %>
+    </div>
+
+    <% if notification.body.present? %>
+      <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed token-text-muted">
+        <%= notification.body %>
+      </p>
+    <% end %>
+
+    <p class="mt-1 text-[10px] token-text-subtle">
+      <%= l(notification.created_at, format: :short) %>
+    </p>
+  </div>
+<% end %>

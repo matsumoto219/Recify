@@ -16,13 +16,29 @@
     <% if user_signed_in? %>
       <%= turbo_stream_from [current_user, :notifications] %>
 
-      <%= link_to notifications_path,
-        class: "relative token-text-muted header-text-hover transition-colors",
-        aria: { label: "通知" } do %>
-        <span class="material-symbols-outlined">notifications</span>
-        <%= render "shared/notifications/badge",
-          unread_count: current_user.notifications.unread.count %>
-      <% end %>
+      <div class="relative" data-controller="notification-dropdown">
+        <button type="button"
+          class="relative inline-flex token-text-muted header-text-hover transition-colors"
+          aria-label="通知"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="notifications-dropdown"
+          data-notification-dropdown-target="button"
+          data-action="notification-dropdown#toggle">
+          <span class="material-symbols-outlined">notifications</span>
+          <%= render "shared/notifications/badge",
+            unread_count: current_user.notifications.unread.count %>
+        </button>
+
+        <div id="notifications-dropdown"
+          class="hidden fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top)+0.75rem)] z-50 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-96 sm:max-w-[calc(100vw-2rem)]"
+          role="dialog"
+          aria-label="通知"
+          data-notification-dropdown-target="panel">
+          <%= render "shared/notifications/dropdown",
+            notifications: current_user.notifications.recent.limit(5) %>
+        </div>
+      </div>
 
       <div class="flex items-center gap-3 border-l token-border-glass pl-4 md:pl-6">
         <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
