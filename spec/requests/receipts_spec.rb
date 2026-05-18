@@ -135,6 +135,21 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
+    it 'mobile search panel is rendered outside the glass header' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+      header = document.at_css('#dashboard-header')
+      mobile_panel = document.at_css('#mobile-search-panel')
+
+      aggregate_failures do
+        expect(mobile_panel).to be_present
+        expect(mobile_panel.ancestors).not_to include(header)
+        expect(header.at_css('.search-panel-mobile')).to be_nil
+        expect(mobile_panel.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
+      end
+    end
+
     it '空のq parameterでは通常一覧を表示する' do
       get receipts_path(q: '')
 

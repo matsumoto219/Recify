@@ -1,19 +1,25 @@
 import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
-  static targets = ['panel', 'input']
+  static targets = ['panel', 'input', 'toggle']
 
   connect () {
     this.handleOutsideTap = this.handleOutsideTap.bind(this)
+    this.handleKeydown = this.handleKeydown.bind(this)
+    this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.close()
     this.debounceTimer = null
     this.searchAbortController = null
     this.searchSequence = 0
     document.addEventListener('pointerdown', this.handleOutsideTap)
+    document.addEventListener('keydown', this.handleKeydown)
+    document.addEventListener('turbo:before-cache', this.handleBeforeCache)
   }
 
   disconnect () {
     document.removeEventListener('pointerdown', this.handleOutsideTap)
+    document.removeEventListener('keydown', this.handleKeydown)
+    document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     clearTimeout(this.debounceTimer)
     this.abortCurrentSearch()
   }
@@ -22,6 +28,7 @@ export default class extends Controller {
     if (!this.hasPanelTarget) return
 
     this.panelTarget.classList.remove('hidden')
+    this.syncToggle(true)
 
     if (this.hasInputTarget) {
       requestAnimationFrame(() => this.inputTarget.focus())
@@ -32,6 +39,7 @@ export default class extends Controller {
     if (!this.hasPanelTarget) return
 
     this.panelTarget.classList.add('hidden')
+    this.syncToggle(false)
   }
 
   toggle () {
@@ -50,6 +58,16 @@ export default class extends Controller {
     if (this.panelTarget.contains(event.target)) return
     if (event.target.closest("[data-action~='search#toggle']")) return
 
+    this.close()
+  }
+
+  handleKeydown (event) {
+    if (event.key !== 'Escape') return
+
+    this.close()
+  }
+
+  handleBeforeCache () {
     this.close()
   }
 
@@ -150,6 +168,12 @@ export default class extends Controller {
 
   isLatestSearch (searchSequence, abortController) {
     return this.searchSequence === searchSequence && this.searchAbortController === abortController
+  }
+
+  syncToggle (expanded) {
+    if (!this.hasToggleTarget) return
+
+    this.toggleTarget.setAttribute('aria-expanded', String(expanded))
   }
 
   showSearchErrorNotice () {

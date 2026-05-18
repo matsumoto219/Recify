@@ -226,6 +226,11 @@ body {
  * Direct `backdrop-filter: var(...)` declarations are dropped during
  * Tailwind v4 build output in this project environment.
  * Use Tailwind backdrop utilities instead.
+ *
+ * Overlay/popover/dropdown glass surfaces should not be rendered as
+ * descendants of another backdrop-filter surface such as `.header-glass`.
+ * Put them in a layout sibling/fixed overlay layer so browsers can sample
+ * the page behind the panel reliably.
  */
 
 .glass-panel {
@@ -772,7 +777,7 @@ body {
 .search-panel-mobile {
   background: color-mix(
     in srgb,
-    var(--bg-card-subtle) 95%,
+    var(--bg-card-subtle) 82%,
     transparent
   );
   border-color: var(--floating-glass-border);

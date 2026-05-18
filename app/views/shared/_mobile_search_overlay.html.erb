@@ -1,0 +1,11 @@
+<%# Keep glass overlays outside header-glass to avoid nested backdrop-filter sampling issues. %>
+<div
+  id="mobile-search-panel"
+  class="hidden fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top)+0.75rem)] z-50 sm:hidden"
+  data-search-target="panel">
+  <%= render "shared/search_box",
+    variant: :mobile,
+    placeholder: "レシートを検索...",
+    input_data: { search_target: "input" },
+    close_action: "search#close" %>
+</div>

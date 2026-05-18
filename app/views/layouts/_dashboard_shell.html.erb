@@ -4,9 +4,10 @@
   <!-- サイドバー（デスクトップ用） -->
   <%= render "shared/sidebar" %>
 
-  <div class="relative z-10 md:ml-20 xl:ml-64 flex flex-col min-h-screen w-full">
+  <div class="relative z-10 md:ml-20 xl:ml-64 flex flex-col min-h-screen w-full" data-controller="search">
     <!-- ヘッダー（上部固定ナビ） -->
     <%= render "shared/header" %>
+    <%= render "shared/mobile_search_overlay" %>
     <%= render "shared/notifications/dropdown_overlay" if user_signed_in? %>
 
     <!-- メインコンテンツ（各ページの内容が入る） -->
