@@ -56,7 +56,7 @@ RSpec.describe Receipt, type: :model do
         aggregate_failures do
           expect(summary[:current_month_total]).to eq(3000)
           expect(summary[:previous_month_total]).to eq(1500)
-          expect(summary[:monthly_change_label]).to eq('先月比 +100%')
+          expect(summary[:monthly_change_label]).to eq(I18n.t('dashboard.summary.amount.monthly_change', value: '+100'))
           expect(summary[:monthly_change_icon]).to eq('trending_up')
         end
       end

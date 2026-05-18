@@ -11,13 +11,13 @@
     <%= render "shared/sidebar_nav_item",
       path: receipts_path,
       icon: "receipt_long",
-      label: "レシート一覧",
+      label: t("dashboard.nav.receipts"),
       active: current_page?(receipts_path) %>
 
     <%= render "shared/sidebar_nav_item",
       path: select_input_method_receipts_path,
       icon: "add_circle",
-      label: "レシート登録",
+      label: t("dashboard.nav.new_receipt"),
       active: current_page?(select_input_method_receipts_path) %>
   </nav>
 
@@ -27,7 +27,7 @@
       <%= render "shared/sidebar_nav_item",
         path: settings_path,
         icon: "settings",
-        label: "設定",
+        label: t("dashboard.nav.settings"),
         active: current_page?(settings_path) %>
 
       <%# TODO: 問い合わせ導線をここに追加（設定と同グループに配置） %>
@@ -35,7 +35,7 @@
 
     <div class="px-4">
       <div class="hidden xl:block token-bg-elevated rounded-xl p-4 border token-border-soft">
-        <p class="text-[0.75rem] token-text-muted mb-2">ストレージ使用量</p>
+        <p class="text-[0.75rem] token-text-muted mb-2"><%= t("dashboard.nav.storage_usage") %></p>
         <div class="h-1.5 w-full token-bg-page rounded-full overflow-hidden">
           <div class="h-full sidebar-brand-bg w-[65%]"></div>
         </div>

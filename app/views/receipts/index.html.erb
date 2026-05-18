@@ -2,19 +2,19 @@
 <section id="receipts-page-header" class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
   <% if @query.present? %>
     <%= render "shared/ui/section_header",
-      title: "検索結果",
-      title_suffix: "#{@receipts_count}件",
+      title: t("dashboard.index.search_results_title"),
+      title_suffix: t("dashboard.count", count: @receipts_count),
       title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
-      subtitle: "「#{@query}」の検索結果です。",
+      subtitle: t("dashboard.index.search_results_subtitle", query: @query),
       title_size: "text-2xl",
       subtitle_size: "text-sm",
       wrapper_class: "mt-1" %>
   <% else %>
     <%= render "shared/ui/section_header",
       title: t(".title"),
-      title_suffix: "#{@receipts_count}件",
+      title_suffix: t("dashboard.count", count: @receipts_count),
       title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
-      subtitle: "最新のレシートを一覧で確認できます。",
+      subtitle: t("dashboard.index.default_subtitle"),
       title_size: "text-2xl",
       subtitle_size: "text-sm",
       wrapper_class: "mt-1" %>
@@ -22,7 +22,7 @@
 
   <div class="w-full flex justify-end md:w-auto md:block">
     <%= render "shared/ui/button",
-      label: "レシート登録",
+      label: t("dashboard.nav.new_receipt"),
       as: :link,
       href: select_input_method_receipts_path,
       variant: :primary,

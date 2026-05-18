@@ -1,0 +1,47 @@
+ja:
+  dashboard:
+    count: "%{count}件"
+    index:
+      default_subtitle: 最新のレシートを一覧で確認できます。
+      search_results_title: 検索結果
+      search_results_subtitle: "「%{query}」の検索結果です。"
+    nav:
+      receipts: レシート一覧
+      new_receipt: レシート登録
+      settings: 設定
+      mobile_receipts: 一覧
+      mobile_new_receipt: 登録
+      mobile_settings: 設定
+      storage_usage: ストレージ使用量
+    header:
+      search_label: 検索
+      notifications_label: 通知
+      logout_confirm: ログアウトしますか？
+    search:
+      placeholder: レシートを検索...
+      close_label: 検索を閉じる
+    summary:
+      count_suffix: 件
+      total_count:
+        title: 総件数
+        subtext: 保存済みレシート
+      amount:
+        current_month_title: 今月の合計
+        overall_title: 合計金額
+        overall_subtext: 累計の合計金額
+        monthly_change_prefix: 先月比
+        monthly_change: "先月比 %{value}%"
+        no_previous_month: 先月データなし
+        toggle: 切替
+      processing:
+        title: 処理中
+        active: 解析キュー処理中
+        empty: 処理中のレシートはありません
+      review_needed:
+        title: 要確認
+        active: 手動確認待ち
+        empty: 確認待ちはありません
+      failed:
+        title: 処理失敗
+        active: 手動修正が必要
+        empty: 失敗したレシートはありません

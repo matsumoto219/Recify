@@ -1,5 +1,5 @@
 <%
-  placeholder = local_assigns.fetch(:placeholder, "レシートを検索")
+  placeholder = local_assigns.fetch(:placeholder, t("dashboard.search.placeholder"))
   wrapper_class = local_assigns[:wrapper_class]
   input_class = local_assigns[:input_class]
   input_data = local_assigns.fetch(:input_data, {})
@@ -31,7 +31,7 @@
   <div class="relative overflow-hidden rounded-lg">
     <button type="submit"
       class="absolute left-3 top-0 z-10 flex h-10 items-center search-icon-button transition-colors"
-      aria-label="検索">
+      aria-label="<%= t("dashboard.header.search_label") %>">
       <span class="material-symbols-outlined text-[20px] leading-none">search</span>
     </button>
 
@@ -51,7 +51,7 @@
       <button type="button"
         class="absolute right-5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full search-close-button transition-colors"
         data-action="<%= close_action %>"
-        aria-label="検索を閉じる">
+        aria-label="<%= t("dashboard.search.close_label") %>">
         <span class="material-symbols-outlined text-[18px]">close</span>
       </button>
     <% end %>

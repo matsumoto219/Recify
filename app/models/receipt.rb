@@ -381,7 +381,7 @@ class Receipt < ApplicationRecord
     previous_total = previous_month_total.to_i
 
     return {
-      label: "先月データなし",
+      label: I18n.t("dashboard.summary.amount.no_previous_month"),
       icon: "trending_flat",
       icon_class: "token-text-muted"
     } if previous_total.zero?
@@ -390,19 +390,19 @@ class Receipt < ApplicationRecord
 
     if change_rate.positive?
       {
-        label: "先月比 +#{change_rate}%",
+        label: I18n.t("dashboard.summary.amount.monthly_change", value: "+#{change_rate}"),
         icon: "trending_up",
         icon_class: "token-text-error"
       }
     elsif change_rate.negative?
       {
-        label: "先月比 #{change_rate}%",
+        label: I18n.t("dashboard.summary.amount.monthly_change", value: change_rate.to_s),
         icon: "trending_down",
         icon_class: "token-text-success"
       }
     else
       {
-        label: "先月比 ±0%",
+        label: I18n.t("dashboard.summary.amount.monthly_change", value: "±0"),
         icon: "trending_flat",
         icon_class: "token-text-muted"
       }
@@ -614,13 +614,13 @@ class Receipt < ApplicationRecord
   def broadcast_processing_flash
     flash_type, message = case status
     when "completed"
-                            [ :notice, I18n.t("flash.receipts.analysis_completed") ]
+      [ :notice, I18n.t("flash.receipts.analysis_completed") ]
     when "review_needed"
-                            [ :caution, I18n.t("flash.receipts.analysis_review_needed") ]
+      [ :caution, I18n.t("flash.receipts.analysis_review_needed") ]
     when "failed"
-                            [ :alert, processing_flash_message || I18n.t("flash.receipts.analysis_failed") ]
+      [ :alert, processing_flash_message || I18n.t("flash.receipts.analysis_failed") ]
     else
-                            return
+      return
     end
 
     broadcast_replace_later_to(

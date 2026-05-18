@@ -2,7 +2,7 @@
   <div class="flex items-center gap-4 flex-1 min-w-0">
     <div class="hidden sm:block max-w-md w-full">
       <%= render "shared/search_box",
-        placeholder: "レシートを検索..." %>
+        placeholder: t("dashboard.search.placeholder") %>
     </div>
   </div>
 
@@ -13,7 +13,7 @@
       data-search-target="toggle"
       aria-controls="mobile-search-panel"
       aria-expanded="false"
-      aria-label="検索">
+      aria-label="<%= t("dashboard.header.search_label") %>">
       <span class="material-symbols-outlined">search</span>
     </button>
     <% if user_signed_in? %>
@@ -22,7 +22,7 @@
       <div data-controller="notification-dropdown">
         <button type="button"
           class="relative inline-flex token-text-muted notification-icon-hover transition-colors"
-          aria-label="通知"
+          aria-label="<%= t("dashboard.header.notifications_label") %>"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="notifications-dropdown"
@@ -49,11 +49,11 @@
         <%= link_to destroy_user_session_path,
           data: {
             turbo_method: :delete,
-            turbo_confirm: "ログアウトしますか？"
+            turbo_confirm: t("dashboard.header.logout_confirm")
           },
           class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] token-text-muted header-text-error-hover transition-colors ml-1 rounded-md" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span class="hidden sm:inline">ログアウト</span>
+          <span class="hidden sm:inline"><%= t("common.logout") %></span>
         <% end %>
       </div>
     <% else %>

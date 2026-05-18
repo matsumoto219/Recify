@@ -148,6 +148,81 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '一覧dashboard/header/nav文言とsummary controller用文言をlocale経由で描画する' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      summary = document.at_css('#receipts_summary')
+      header = document.at_css('#dashboard-header')
+
+      aggregate_failures do
+        expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
+        expect(document.at_css('#receipts-page-header').text).to include(I18n.t('dashboard.index.default_subtitle'))
+        expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.receipts'))
+        expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
+        expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))
+        expect(header.at_css('input[name="q"]')['placeholder']).to eq(I18n.t('dashboard.search.placeholder'))
+        expect(header.at_css('[data-search-target="toggle"]')['aria-label']).to eq(I18n.t('dashboard.header.search_label'))
+        expect(header.at_css('[data-notification-dropdown-target="button"]')['aria-label']).to eq(I18n.t('dashboard.header.notifications_label'))
+        expect(summary.text).to include(I18n.t('dashboard.summary.total_count.title'))
+        expect(summary.text).to include(I18n.t('dashboard.summary.amount.current_month_title'))
+        expect(summary.text).to include(I18n.t('dashboard.summary.processing.title'))
+        expect(summary.text).to include(I18n.t('dashboard.summary.review_needed.title'))
+        expect(summary.text).to include(I18n.t('dashboard.summary.failed.title'))
+        expect(summary['data-receipt-summary-monthly-label-value']).to eq(I18n.t('dashboard.summary.amount.current_month_title'))
+        expect(summary['data-receipt-summary-overall-label-value']).to eq(I18n.t('dashboard.summary.amount.overall_title'))
+        expect(summary['data-receipt-summary-change-label-value']).to eq(I18n.t('dashboard.summary.amount.monthly_change_prefix'))
+        expect(summary['data-receipt-summary-count-suffix-value']).to eq(I18n.t('dashboard.summary.count_suffix'))
+      end
+    end
+
+    it 'receipt cardのfallback/action文言をlocale経由で描画する' do
+      my_receipt.update_columns(store_name: nil, purchased_at: nil)
+      processing_receipt = create(:receipt, :processing, :with_image, user: user, store_name: nil)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      completed_card = document.at_css("#receipt_#{my_receipt.id}")
+      processing_card = document.at_css("#receipt_#{processing_receipt.id}")
+
+      aggregate_failures do
+        expect(completed_card.text).to include(I18n.t('receipt_cards.fallback.store_name'))
+        expect(completed_card.text).to include(I18n.t('receipt_cards.fallback.purchased_at'))
+        expect(completed_card.text).to include(I18n.t('receipt_cards.labels.total_amount'))
+        expect(completed_card.text).to include(I18n.t('receipt_cards.actions.show'))
+        expect(completed_card.text).to include(I18n.t('receipt_cards.actions.edit'))
+        expect(processing_card.text).to include(I18n.t('receipt_cards.fallback.processing_store_name'))
+        expect(processing_card.text).to include(I18n.t('receipt_cards.fallback.processing_description'))
+      end
+    end
+
+    it 'receipt listのempty state文言をlocale経由で描画する' do
+      user.receipts.destroy_all
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      empty_state = document.at_css('#receipts-empty-state')
+
+      aggregate_failures 'default empty state' do
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.default.title'))
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.default.description'))
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.default.action'))
+      end
+
+      get receipts_path(q: '一致しない検索語')
+
+      document = Nokogiri::HTML(response.body)
+      empty_state = document.at_css('#receipts-empty-state')
+
+      aggregate_failures 'search empty state' do
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.search.title'))
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.search.description_suffix'))
+        expect(empty_state.text).to include(I18n.t('receipt_cards.empty.search.back_to_index'))
+      end
+    end
+
     it 'mobile search panel is rendered outside the glass header' do
       get receipts_path(q: my_receipt.store_name)
 
@@ -346,8 +421,8 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(card.at_css("a[href='#{receipt_path(processing_receipt, from: 'index')}']")).to be_nil
         expect(card.at_css("a[href='#{edit_receipt_path(processing_receipt, from: 'index')}']")).to be_nil
-        expect(card.text).to include('詳細')
-        expect(card.text).to include('編集')
+        expect(card.text).to include(I18n.t('receipt_cards.actions.show'))
+        expect(card.text).to include(I18n.t('receipt_cards.actions.edit'))
       end
     end
 
@@ -359,8 +434,8 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理失敗')
-        expect(response.body).to include('2件')
+        expect(response.body).to include(I18n.t('dashboard.summary.failed.title'))
+        expect(response.body).to include(I18n.t('dashboard.count', count: 2))
       end
     end
 
@@ -568,8 +643,8 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures 'index failed card' do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('処理失敗')
-        expect(response.body).to include('1件')
+        expect(response.body).to include(I18n.t('dashboard.summary.failed.title'))
+        expect(response.body).to include(I18n.t('dashboard.count', count: 1))
         expect(card).to be_present
         expect(card.text).to include('失敗')
         expect(card.at_css("a[href='#{receipt_path(receipt, from: 'index')}']")).to be_present

@@ -2,7 +2,13 @@ import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
   static targets = ['label', 'value', 'subtext', 'summaryValue']
-  static values = { storageKey: String }
+  static values = {
+    storageKey: String,
+    monthlyLabel: String,
+    overallLabel: String,
+    changeLabel: String,
+    countSuffix: String
+  }
 
   connect () {
     const stored = sessionStorage.getItem(this.storageKeyValue)
@@ -28,7 +34,7 @@ export default class extends Controller {
     if (!this.hasLabelTarget || !this.hasValueTarget || !this.hasSubtextTarget) return
 
     if (this.isMonthly) {
-      this.labelTarget.innerText = '今月の合計'
+      this.labelTarget.innerText = this.monthlyLabel()
       this.valueTarget.innerText = this.formatCurrency(this.currentMonthRawValue())
       this.updateSubtext(
         this.subtextTarget.dataset.monthlyText,
@@ -36,7 +42,7 @@ export default class extends Controller {
         this.subtextTarget.dataset.monthlyIconClass
       )
     } else {
-      this.labelTarget.innerText = '合計金額'
+      this.labelTarget.innerText = this.overallLabel()
       this.valueTarget.innerText = this.formatCurrency(this.overallRawValue())
       this.updateSubtext(
         this.subtextTarget.dataset.overallText,
@@ -97,7 +103,11 @@ export default class extends Controller {
   }
 
   extractChangeRate (text) {
-    const match = text.match(/先月比\s*([+\-±]?)(\d+)%/)
+    const changeLabel = this.changeLabel()
+    if (!changeLabel) return NaN
+
+    const pattern = new RegExp(`${this.escapeRegExp(changeLabel)}\\s*([+\\-±]?)(\\d+)%`)
+    const match = text.match(pattern)
     if (!match) return NaN
 
     const sign = match[1]
@@ -116,18 +126,14 @@ export default class extends Controller {
   durationForNumber (element, from, to) {
     const diff = Math.abs((to || 0) - (from || 0))
 
-    // type inference
     if (element === this.valueTarget) {
-      // currency
       return Math.min(900, Math.max(650, 300 + Math.log10(diff + 1) * 120))
     }
 
-    // counts (件)
-    if ((element.dataset.suffix || '') === '件') {
+    if ((element.dataset.suffix || '') === this.countSuffix()) {
       return Math.min(700, Math.max(350, 250 + Math.log10(diff + 1) * 100))
     }
 
-    // fallback
     return 500
   }
 
@@ -137,10 +143,32 @@ export default class extends Controller {
   }
 
   formatChangeRate (value) {
-    if (value > 0) return `先月比 +${value}%`
-    if (value < 0) return `先月比 ${value}%`
+    const changeLabel = this.changeLabel()
 
-    return '先月比 ±0%'
+    if (value > 0) return `${changeLabel} +${value}%`
+    if (value < 0) return `${changeLabel} ${value}%`
+
+    return `${changeLabel} ±0%`
+  }
+
+  monthlyLabel () {
+    return this.monthlyLabelValue || this.labelTarget?.innerText || ''
+  }
+
+  overallLabel () {
+    return this.overallLabelValue || this.labelTarget?.innerText || ''
+  }
+
+  changeLabel () {
+    return this.changeLabelValue || ''
+  }
+
+  countSuffix () {
+    return this.countSuffixValue || ''
+  }
+
+  escapeRegExp (value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   applyIconClass (iconElement, iconClass) {

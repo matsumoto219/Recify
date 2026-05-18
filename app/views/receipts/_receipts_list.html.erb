@@ -11,17 +11,17 @@
     </div>
 
     <% if defined?(query) && query.present? %>
-      <h2 class="text-lg font-bold token-text-base mb-2">検索結果が見つかりません</h2>
+      <h2 class="text-lg font-bold token-text-base mb-2"><%= t("receipt_cards.empty.search.title") %></h2>
       <p class="token-text-muted text-sm mb-6">
-        「<span class="token-text-brand"><%= query %></span>」に一致するレシートはありません。
+        <%= t("receipt_cards.empty.search.description_prefix") %><span class="token-text-brand"><%= query %></span><%= t("receipt_cards.empty.search.description_suffix") %>
       </p>
-      <%= link_to "一覧に戻る", receipts_path,
+      <%= link_to t("receipt_cards.empty.search.back_to_index"), receipts_path,
         class: "text-sm token-text-brand hover:underline" %>
     <% else %>
-      <h2 class="text-lg font-bold token-text-base mb-2">レシートがありません</h2>
-      <p class="token-text-muted text-sm mb-8">最初のレシートを登録しましょう。</p>
+      <h2 class="text-lg font-bold token-text-base mb-2"><%= t("receipt_cards.empty.default.title") %></h2>
+      <p class="token-text-muted text-sm mb-8"><%= t("receipt_cards.empty.default.description") %></p>
       <%= render "shared/ui/button",
-        label: "今すぐ登録する",
+        label: t("receipt_cards.empty.default.action"),
         as: :link,
         href: select_input_method_receipts_path,
         variant: :secondary,

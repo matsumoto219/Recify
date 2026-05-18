@@ -1,0 +1,22 @@
+ja:
+  receipt_cards:
+    fallback:
+      processing_store_name: 解析中のレシート
+      store_name: 店舗名なし
+      processing_description: 解析完了後に表示されます
+      purchased_at: 日時未設定
+    labels:
+      total_amount: 合計金額
+    actions:
+      show: 詳細
+      edit: 編集
+    empty:
+      search:
+        title: 検索結果が見つかりません
+        description_prefix: "「"
+        description_suffix: "」に一致するレシートはありません。"
+        back_to_index: 一覧に戻る
+      default:
+        title: レシートがありません
+        description: 最初のレシートを登録しましょう。
+        action: 今すぐ登録する

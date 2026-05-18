@@ -3,9 +3,9 @@
   status_label = local_assigns[:status_label] || (receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status)
   processing = receipt.status.to_s == "processing"
   display_store_name = if processing
-                         receipt.store_name.presence || "解析中のレシート"
+                         receipt.store_name.presence || t("receipt_cards.fallback.processing_store_name")
                        else
-                         receipt.store_name.presence || "店舗名なし"
+                         receipt.store_name.presence || t("receipt_cards.fallback.store_name")
                        end
 
   card_classes = [
@@ -46,7 +46,7 @@
         </h2>
 
         <p class="truncate text-[0.75rem] token-text-muted">
-          <%= processing ? "解析完了後に表示されます" : (receipt.purchased_at ? l(receipt.purchased_at, format: :short) : "日時未設定") %>
+          <%= processing ? t("receipt_cards.fallback.processing_description") : (receipt.purchased_at ? l(receipt.purchased_at, format: :short) : t("receipt_cards.fallback.purchased_at")) %>
         </p>
       </div>
     </div>
@@ -58,7 +58,7 @@
 
   <div class="flex justify-between items-end mt-2 gap-4">
     <div class="min-w-0 flex-1">
-      <p class="text-[0.6875rem] token-text-muted mb-1">合計金額</p>
+      <p class="text-[0.6875rem] token-text-muted mb-1"><%= t("receipt_cards.labels.total_amount") %></p>
       <% if processing %>
         <div class="mt-2 h-7 w-24 rounded receipt-card-skeleton"></div>
       <% else %>
@@ -70,11 +70,11 @@
 
     <div class="flex shrink-0 items-center gap-3 text-sm">
       <% if processing %>
-        <span class="token-text-subtle cursor-not-allowed">詳細</span>
-        <span class="receipt-card-disabled-brand cursor-not-allowed">編集</span>
+        <span class="token-text-subtle cursor-not-allowed"><%= t("receipt_cards.actions.show") %></span>
+        <span class="receipt-card-disabled-brand cursor-not-allowed"><%= t("receipt_cards.actions.edit") %></span>
       <% else %>
-        <%= link_to "詳細", receipt_path(receipt, from: "index"), class: "token-text-muted receipt-card-link-hover transition-colors" %>
-        <%= link_to "編集", edit_receipt_path(receipt, from: "index"), class: "token-text-brand hover:opacity-80 transition-opacity" %>
+        <%= link_to t("receipt_cards.actions.show"), receipt_path(receipt, from: "index"), class: "token-text-muted receipt-card-link-hover transition-colors" %>
+        <%= link_to t("receipt_cards.actions.edit"), edit_receipt_path(receipt, from: "index"), class: "token-text-brand hover:opacity-80 transition-opacity" %>
       <% end %>
     </div>
   </div>
