@@ -2,7 +2,7 @@
   notifications = Array(local_assigns.fetch(:notifications, []))
 %>
 
-<div class="glass-panel flex max-h-[min(70vh,28rem)] w-full flex-col overflow-hidden rounded-2xl token-text-base">
+<div class="glass-panel notification-dropdown-panel flex max-h-[min(70vh,28rem)] w-full flex-col overflow-hidden rounded-2xl token-text-base">
   <div class="flex items-center justify-between border-b token-border-glass px-4 py-3">
     <h3 class="text-sm font-bold token-text-base">通知</h3>
   </div>
@@ -17,7 +17,7 @@
         <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full notice-icon-info">
           <span class="material-symbols-outlined text-[20px]" aria-hidden="true">notifications</span>
         </div>
-        <p class="mt-3 text-sm font-semibold token-text-base">通知はありません</p>
+        <p class="mt-3 text-sm font-semibold token-text-base">新しい通知はありません</p>
         <p class="mt-1 text-xs token-text-muted">通知内容はここに表示されます。</p>
       </div>
     <% end %>

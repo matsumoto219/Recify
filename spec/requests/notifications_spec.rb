@@ -21,6 +21,7 @@ RSpec.describe 'Notifications', type: :request do
         expect(response).to have_http_status(:success)
         expect(document.at_css('[data-controller="notification-dropdown"]')).to be_present
         expect(document.at_css('button[aria-label="通知"][aria-haspopup="dialog"][aria-expanded="false"]')).to be_present
+        expect(document.at_css('header #notifications-dropdown')).to be_nil
         expect(badge).to be_present
         expect(badge.text).to include('2')
       end
@@ -46,6 +47,7 @@ RSpec.describe 'Notifications', type: :request do
       aggregate_failures do
         expect(dropdown).to be_present
         expect(dropdown['class']).to include('hidden')
+        expect(dropdown.at_css('.notification-dropdown-panel')).to be_present
         expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include('すべて見る'))
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')

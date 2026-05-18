@@ -241,6 +241,10 @@ body {
   @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
 }
 
+.notification-dropdown-panel {
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+}
+
 /* ===== Ambient Background Utilities ===== */
 .ambient-background {
   display: none;
