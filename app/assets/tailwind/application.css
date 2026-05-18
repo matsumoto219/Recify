@@ -250,6 +250,11 @@ body {
   background: color-mix(in srgb, var(--bg-card) 82%, transparent);
 }
 
+.notification-dropdown-motion {
+  transition-property: opacity, transform, translate;
+  will-change: opacity, transform, translate;
+}
+
 /* ===== Ambient Background Utilities ===== */
 .ambient-background {
   display: none;
@@ -340,6 +345,10 @@ body {
 
 .header-text-hover:hover {
   color: var(--text-base);
+}
+
+.notification-icon-hover:hover {
+  color: var(--brand-primary);
 }
 
 .header-text-error-hover:hover {
