@@ -425,7 +425,8 @@ RSpec.describe ReceiptAnalysisService do
         receipt_items_attributes: [],
         meta: {
           document_type: 'development_note',
-          rejection_reason: 'not_receipt'
+          rejection_reason: 'memo',
+          is_receipt_confidence: 0.92
         }
       }
 

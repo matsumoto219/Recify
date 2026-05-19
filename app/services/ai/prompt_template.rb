@@ -67,6 +67,7 @@ module Ai
 
         Top-level keys (exactly these):
         - is_receipt
+        - is_receipt_confidence
         - document_type
         - rejection_reason
         - store
@@ -107,6 +108,9 @@ module Ai
         review_reasons:
         #{allowed_review_reasons.join(", ")}
 
+        Allowed rejection_reason values:
+        #{allowed_rejection_reasons.join(", ")}
+
         You MUST NOT output keys or enum values outside of the above definitions.
       PROMPT
     end
@@ -118,9 +122,15 @@ module Ai
         - Prioritize document-type classification before completing OCR candidate values.
         - Advertisements, development notes, general documents, text-only memos, and product lists without checkout/payment context are not receipts.
         - If the document is clearly not a receipt, invoice, or purchase proof, set is_receipt = false.
+        - is_receipt_confidence MUST be a number between 0.0 and 1.0 when returned.
+        - Higher confidence means closer to 1.0.
+        - Use is_receipt = false only when confidence is high.
         - When is_receipt = false, return document_type and rejection_reason when they can be stated briefly; otherwise return null.
+        - When is_receipt = false, rejection_reason MUST be one of the allowed rejection_reason values.
+        - Do NOT output free-form rejection_reason values outside the allowed list.
         - When is_receipt = false, still return store = {}, purchase = {}, payment = {}, items = [], needs_review = false, and review_reasons = [].
         - If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.
+        - If uncertain, keep is_receipt = true, set needs_review = true, and use low-to-medium is_receipt_confidence.
 
         For store:
         - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
@@ -301,6 +311,22 @@ module Ai
         item_tax_rate_uncertain
         ocr_unreadable
         ocr_low_confidence
+      ]
+    end
+
+    def allowed_rejection_reasons
+      %w[
+        no_text
+        memo
+        article
+        screenshot
+        presentation
+        poster
+        shopping_list
+        menu
+        code_snippet
+        unknown_document
+        other
       ]
     end
   end

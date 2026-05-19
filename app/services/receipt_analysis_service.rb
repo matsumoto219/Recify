@@ -73,7 +73,7 @@ class ReceiptAnalysisService
       save_ai_result!(ocr_result, ai_result)
     elsif ai_not_receipt?(ai_result)
       Rails.logger.warn(
-        "[ReceiptAnalysis] ai_not_receipt receipt_id=#{receipt.id} document_type=#{ai_result.dig(:meta, :document_type)} rejection_reason=#{ai_result.dig(:meta, :rejection_reason)}"
+        "[ReceiptAnalysis] ai_not_receipt receipt_id=#{receipt.id} document_type=#{ai_result.dig(:meta, :document_type)} rejection_reason=#{ai_result.dig(:meta, :rejection_reason)} confidence=#{ai_result.dig(:meta, :is_receipt_confidence)}"
       )
       fail_receipt!("ai_not_receipt", ai_not_receipt_message(ai_result))
     else

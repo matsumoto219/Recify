@@ -75,6 +75,7 @@ RSpec.describe Ai::PromptTemplate do
     it 'AI response parser / normalizer の item schema に tax_rate metadata を許可する' do
       aggregate_failures do
         expect(system_prompt).to include('- is_receipt')
+        expect(system_prompt).to include('- is_receipt_confidence')
         expect(system_prompt).to include('- document_type')
         expect(system_prompt).to include('- rejection_reason')
         expect(system_prompt).to include('- tax_rate')
@@ -100,6 +101,24 @@ RSpec.describe Ai::PromptTemplate do
         expect(user_prompt).to include('Advertisements, development notes, general documents, text-only memos, and product lists without checkout/payment context are not receipts.')
         expect(user_prompt).to include('If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.')
         expect(user_prompt).to include('Prioritize document-type classification before completing OCR candidate values.')
+      end
+    end
+
+    it 'not receipt の rejection_reason 許可リストを指示する' do
+      aggregate_failures do
+        expect(system_prompt).to include('Allowed rejection_reason values:')
+        expect(system_prompt).to include('no_text, memo, article, screenshot, presentation, poster, shopping_list, menu, code_snippet, unknown_document, other')
+        expect(user_prompt).to include('When is_receipt = false, rejection_reason MUST be one of the allowed rejection_reason values.')
+        expect(user_prompt).to include('Do NOT output free-form rejection_reason values outside the allowed list.')
+      end
+    end
+
+    it 'is_receipt_confidence の返却ルールを指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('is_receipt_confidence MUST be a number between 0.0 and 1.0 when returned.')
+        expect(user_prompt).to include('Higher confidence means closer to 1.0.')
+        expect(user_prompt).to include('Use is_receipt = false only when confidence is high.')
+        expect(user_prompt).to include('If uncertain, keep is_receipt = true, set needs_review = true, and use low-to-medium is_receipt_confidence.')
       end
     end
   end

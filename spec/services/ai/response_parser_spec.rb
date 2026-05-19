@@ -80,11 +80,29 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it 'is_receipt true のconfidenceをmetaに保持する' do
+        payload['is_receipt_confidence'] = 0.55
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(true)
+          expect(result[:meta]).to eq(provider: :openai, is_receipt_confidence: 0.55)
+        end
+      end
+
+      it 'is_receipt_confidence missing は nil として許容する' do
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).not_to have_key(:is_receipt_confidence)
+      end
+
       it 'is_receipt false の場合は ai_not_receipt error result を返す' do
         payload.merge!(
           'is_receipt' => false,
+          'is_receipt_confidence' => 0.92,
           'document_type' => 'development_note',
-          'rejection_reason' => 'not_receipt',
+          'rejection_reason' => 'memo',
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -103,9 +121,104 @@ RSpec.describe Ai::ResponseParser do
           expect(result[:receipt_items_attributes]).to eq([])
           expect(result[:meta]).to eq(
             provider: :openai,
+            is_receipt_confidence: 0.92,
             document_type: 'development_note',
-            rejection_reason: 'not_receipt'
+            rejection_reason: 'memo'
           )
+        end
+      end
+
+      it 'is_receipt_confidence が1を超える場合は1.0に丸める' do
+        payload['is_receipt_confidence'] = 1.2
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).to include(is_receipt_confidence: 1.0)
+      end
+
+      it 'is_receipt_confidence が0未満の場合は0.0に丸める' do
+        payload['is_receipt_confidence'] = -0.2
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).to include(is_receipt_confidence: 0.0)
+      end
+
+      it 'is_receipt_confidence が非数値の場合は nil として許容する' do
+        payload['is_receipt_confidence'] = 'high'
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).not_to have_key(:is_receipt_confidence)
+      end
+
+      it 'is_receipt false で screenshot reason を保持する' do
+        payload.merge!(
+          'is_receipt' => false,
+          'document_type' => 'screenshot',
+          'rejection_reason' => 'screenshot',
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        )
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ai_not_receipt')
+          expect(result[:meta]).to include(rejection_reason: 'screenshot')
+        end
+      end
+
+      it 'is_receipt false で未知reasonは unknown_document に丸める' do
+        payload.merge!(
+          'is_receipt' => false,
+          'document_type' => 'unknown',
+          'rejection_reason' => 'not_receipt',
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        )
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).to include(rejection_reason: 'unknown_document')
+      end
+
+      it 'is_receipt false でblank reasonは unknown_document に丸める' do
+        payload.merge!(
+          'is_receipt' => false,
+          'document_type' => 'unknown',
+          'rejection_reason' => ' ',
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        )
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:meta]).to include(rejection_reason: 'unknown_document')
+      end
+
+      it 'is_receipt true では rejection_reason があってもsuccess側に影響しない' do
+        payload['rejection_reason'] = 'memo'
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(true)
+          expect(result[:error_code]).to be_nil
+          expect(result[:meta]).to eq(provider: :openai)
         end
       end
 

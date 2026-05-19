@@ -94,7 +94,7 @@ RSpec.describe ReceiptAiEnrichmentService do
           receipt_items_attributes: [],
           meta: {
             document_type: 'development_note',
-            rejection_reason: 'not_receipt'
+            rejection_reason: 'memo'
           }
         }
 

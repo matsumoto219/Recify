@@ -32,6 +32,20 @@ module Ai
       ocr_low_confidence
     ].freeze
 
+    ALLOWED_REJECTION_REASONS = %w[
+      no_text
+      memo
+      article
+      screenshot
+      presentation
+      poster
+      shopping_list
+      menu
+      code_snippet
+      unknown_document
+      other
+    ].freeze
+
     class << self
       def parse(payload, provider:, meta: {})
         new(payload, provider:, meta:).parse
@@ -58,7 +72,7 @@ module Ai
         receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(normalized_payload["items"]),
         needs_review: normalized_payload["needs_review"] == true,
         review_reasons: normalize_review_reasons(normalized_payload["review_reasons"]),
-        meta: build_meta
+        meta: build_meta(normalized_payload)
       )
     rescue Ai::Errors::ProviderError
       raise
@@ -212,10 +226,15 @@ module Ai
       section.deep_stringify_keys
     end
 
-    def build_meta
-      {
+    def build_meta(normalized_payload = nil)
+      normalized_meta = {
         provider: provider
-      }.merge(meta.deep_symbolize_keys).compact
+      }.merge(meta.deep_symbolize_keys)
+
+      confidence = normalize_is_receipt_confidence(normalized_payload&.fetch("is_receipt_confidence", nil))
+      normalized_meta[:is_receipt_confidence] = confidence unless confidence.nil?
+
+      normalized_meta.compact
     end
 
     def not_receipt_result(normalized_payload)
@@ -223,11 +242,28 @@ module Ai
         error_code: "ai_not_receipt",
         needs_review: false,
         review_reasons: [],
-        meta: build_meta.merge(
+        meta: build_meta(normalized_payload).merge(
           document_type: normalized_payload["document_type"],
-          rejection_reason: normalized_payload["rejection_reason"]
+          rejection_reason: normalize_rejection_reason(normalized_payload["rejection_reason"])
         ).compact
       )
+    end
+
+    def normalize_is_receipt_confidence(value)
+      return nil if value.nil?
+      return nil if value.respond_to?(:blank?) && value.blank?
+
+      confidence = Float(value)
+      confidence.clamp(0.0, 1.0)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def normalize_rejection_reason(value)
+      normalized = value.to_s.strip
+      return normalized if ALLOWED_REJECTION_REASONS.include?(normalized)
+
+      "unknown_document"
     end
 
     def error_meta(error)
