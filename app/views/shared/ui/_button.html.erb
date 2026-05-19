@@ -24,16 +24,16 @@
   variant_classes = case variant
                     # Elevated surface button
                     when :secondary
-                      "btn-secondary border hover:brightness-110"
+                      "btn-secondary border"
                     # Transparent ghost button
                     when :ghost
-                      "btn-ghost border hover:brightness-110"
+                      "btn-ghost border"
                     # Error state button
                     when :danger
-                      "btn-danger border border-transparent hover:brightness-110"
+                      "btn-danger border border-transparent"
                     # Primary CTA button
                     else
-                      "btn-primary border-none hover:brightness-110 overflow-hidden"
+                      "btn-primary border-none overflow-hidden"
                     end
 
   size_classes = case size
