@@ -74,6 +74,9 @@ RSpec.describe Ai::PromptTemplate do
 
     it 'AI response parser / normalizer の item schema に tax_rate metadata を許可する' do
       aggregate_failures do
+        expect(system_prompt).to include('- is_receipt')
+        expect(system_prompt).to include('- document_type')
+        expect(system_prompt).to include('- rejection_reason')
         expect(system_prompt).to include('- tax_rate')
         expect(system_prompt).to include('- tax_rate_confidence')
         expect(system_prompt).to include('- tax_rate_reason')
@@ -88,6 +91,15 @@ RSpec.describe Ai::PromptTemplate do
           tax_rate_confidence
           tax_rate_reason
         ])
+      end
+    end
+
+    it 'レシートではない画像の判定ルールを指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('First decide whether the document can be treated as a receipt, invoice, or purchase proof.')
+        expect(user_prompt).to include('Advertisements, development notes, general documents, text-only memos, and product lists without checkout/payment context are not receipts.')
+        expect(user_prompt).to include('If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.')
+        expect(user_prompt).to include('Prioritize document-type classification before completing OCR candidate values.')
       end
     end
   end

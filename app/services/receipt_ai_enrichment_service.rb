@@ -31,7 +31,7 @@ class ReceiptAiEnrichmentService
     )
     result = client.call(input)
 
-    if result[:success]
+    if ai_service_healthy_result?(result)
       ExternalServiceStatus.mark_success!(:ai)
     else
       ExternalServiceStatus.mark_failure!(:ai, error_code: result[:error_code])
@@ -63,6 +63,10 @@ class ReceiptAiEnrichmentService
   private
 
   attr_reader :ocr_result, :ai_name_completion_enabled, :client
+
+  def ai_service_healthy_result?(result)
+    result[:success] || result[:error_code].to_s == "ai_not_receipt"
+  end
 
   def validate_ocr_result!
     raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless ocr_result.is_a?(Hash)

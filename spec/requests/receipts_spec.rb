@@ -1710,6 +1710,24 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'AIがnot receiptと判定したレシートは処理失敗カードに認識失敗文言を表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'ai_not_receipt',
+        processing_error_message: 'development_note / not_receipt'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(response.body).to include(I18n.t('receipts.processing_error_codes.ai_not_receipt'))
+        expect(response.body).to include('development_note / not_receipt')
+        expect(response.body).to include(edit_receipt_path(receipt, from: 'show'))
+      end
+    end
+
     it 'warningのみのレシートは完了状態のまま確認情報として表示する' do
       receipt.update!(
         status: 'completed',

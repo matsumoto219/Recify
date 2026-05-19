@@ -1,6 +1,9 @@
 module Ai
   class ResponseParser
     REQUIRED_KEYS = %w[
+      is_receipt
+      document_type
+      rejection_reason
       store
       purchase
       payment
@@ -44,8 +47,11 @@ module Ai
     def parse
       normalized_payload = normalize_payload(payload)
       validate_payload!(normalized_payload)
+      validate_document_classification!(normalized_payload)
       validate_items!(normalized_payload)
       validate_values!(normalized_payload)
+
+      return not_receipt_result(normalized_payload) unless normalized_payload["is_receipt"]
 
       Ai::ResultTemplate.success(
         receipt_attributes: normalize_receipt_attributes(normalized_payload),
@@ -117,6 +123,20 @@ module Ai
       validate_section_values!(normalized_payload["payment"], %w[payment_method])
     end
 
+    def validate_document_classification!(normalized_payload)
+      is_receipt = normalized_payload["is_receipt"]
+      unless is_receipt == true || is_receipt == false
+        raise Ai::Errors::ProviderError.new(
+          message: "is_receipt must be a boolean",
+          error_code: "analysis_value_invalid",
+          provider: provider
+        )
+      end
+
+      validate_nullable_string!(normalized_payload["document_type"], "document_type")
+      validate_nullable_string!(normalized_payload["rejection_reason"], "rejection_reason")
+    end
+
     def validate_needs_review!(value)
       return if value == true || value == false
 
@@ -132,6 +152,16 @@ module Ai
 
       raise Ai::Errors::ProviderError.new(
         message: "review_reasons must be an Array",
+        error_code: "analysis_value_invalid",
+        provider: provider
+      )
+    end
+
+    def validate_nullable_string!(value, key)
+      return if value.nil? || value.is_a?(String)
+
+      raise Ai::Errors::ProviderError.new(
+        message: "#{key} must be a String or nil",
         error_code: "analysis_value_invalid",
         provider: provider
       )
@@ -186,6 +216,18 @@ module Ai
       {
         provider: provider
       }.merge(meta.deep_symbolize_keys).compact
+    end
+
+    def not_receipt_result(normalized_payload)
+      Ai::ResultTemplate.error(
+        error_code: "ai_not_receipt",
+        needs_review: false,
+        review_reasons: [],
+        meta: build_meta.merge(
+          document_type: normalized_payload["document_type"],
+          rejection_reason: normalized_payload["rejection_reason"]
+        ).compact
+      )
     end
 
     def error_meta(error)

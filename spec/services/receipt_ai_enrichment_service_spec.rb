@@ -84,6 +84,31 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'ai_timeout')
         end
       end
+
+      it 'AIがnot receiptと正常判定した場合はfailureを記録しない' do
+        not_receipt_result = {
+          success: false,
+          error_code: 'ai_not_receipt',
+          needs_review: false,
+          receipt_attributes: {},
+          receipt_items_attributes: [],
+          meta: {
+            document_type: 'development_note',
+            rejection_reason: 'not_receipt'
+          }
+        }
+
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(not_receipt_result)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result).to eq(not_receipt_result)
+          expect(ExternalServiceStatus).to have_received(:mark_success!).with(:ai)
+          expect(ExternalServiceStatus).not_to have_received(:mark_failure!)
+        end
+      end
     end
 
     context '入力検証エラー' do

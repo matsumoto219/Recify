@@ -416,6 +416,35 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'AIがnot receiptと判定した場合はOCR fallback保存せずfailedにする' do
+      not_receipt_result = {
+        success: false,
+        error_code: 'ai_not_receipt',
+        needs_review: false,
+        receipt_attributes: {},
+        receipt_items_attributes: [],
+        meta: {
+          document_type: 'development_note',
+          rejection_reason: 'not_receipt'
+        }
+      }
+
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(not_receipt_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt')
+        expect(receipt.processing_error_message).to be_present
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.receipt_payments).to be_empty
+        expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
     it 'AI down時はAI呼び出しを行わずOCR-only fallbackでreview_neededにする' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)

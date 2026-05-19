@@ -8,6 +8,9 @@ RSpec.describe Ai::ResponseParser do
     context '正常系' do
       let(:payload) do
         {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {
             'store_name' => 'AI補正ストア',
             'store_address' => '東京都渋谷区1-2-3',
@@ -77,6 +80,35 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it 'is_receipt false の場合は ai_not_receipt error result を返す' do
+        payload.merge!(
+          'is_receipt' => false,
+          'document_type' => 'development_note',
+          'rejection_reason' => 'not_receipt',
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        )
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ai_not_receipt')
+          expect(result[:needs_review]).to eq(false)
+          expect(result[:receipt_attributes]).to eq({})
+          expect(result[:receipt_items_attributes]).to eq([])
+          expect(result[:meta]).to eq(
+            provider: :openai,
+            document_type: 'development_note',
+            rejection_reason: 'not_receipt'
+          )
+        end
+      end
+
       it 'promptで許可しているreview_reasonsを保持する' do
         payload['review_reasons'] = [
           'item_tax_rate_uncertain',
@@ -123,6 +155,9 @@ RSpec.describe Ai::ResponseParser do
     context '必須キー不足' do
       it 'store が無い場合は ProviderError(analysis_missing_keys) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'purchase' => {},
           'payment' => {},
           'items' => [],
@@ -142,9 +177,34 @@ RSpec.describe Ai::ResponseParser do
 
       it 'items が無い場合は ProviderError(analysis_missing_keys) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
+          'needs_review' => false,
+          'review_reasons' => []
+        }
+
+        expect do
+          described_class.parse(payload, provider: provider, meta: meta)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('analysis_missing_keys')
+            expect(error.provider).to eq(provider)
+          end
+        }
+      end
+
+      it 'is_receipt が無い場合は ProviderError(analysis_missing_keys) を送出する' do
+        payload = {
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
           'needs_review' => false,
           'review_reasons' => []
         }
@@ -163,6 +223,9 @@ RSpec.describe Ai::ResponseParser do
     context 'items 不正' do
       it 'items が Array でない場合は ProviderError(analysis_items_invalid) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -183,6 +246,9 @@ RSpec.describe Ai::ResponseParser do
 
       it 'item が Hash でない場合は ProviderError(analysis_items_invalid) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -203,8 +269,34 @@ RSpec.describe Ai::ResponseParser do
     end
 
     context '値不正' do
+      it 'is_receipt が boolean でない場合は ProviderError(analysis_value_invalid) を送出する' do
+        payload = {
+          'is_receipt' => 'yes',
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        }
+
+        expect do
+          described_class.parse(payload, provider: provider, meta: meta)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('analysis_value_invalid')
+            expect(error.provider).to eq(provider)
+          end
+        }
+      end
+
       it 'needs_review が boolean でない場合は ProviderError(analysis_value_invalid) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -225,6 +317,9 @@ RSpec.describe Ai::ResponseParser do
 
       it 'review_reasons が Array でない場合は ProviderError(analysis_value_invalid) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -245,6 +340,9 @@ RSpec.describe Ai::ResponseParser do
 
       it 'store が Hash でない場合は ProviderError(analysis_value_invalid) を送出する' do
         payload = {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => 'invalid',
           'purchase' => {},
           'payment' => {},
@@ -283,6 +381,9 @@ RSpec.describe Ai::ResponseParser do
     context 'ProviderError' do
       let(:payload) do
         {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},
@@ -311,6 +412,9 @@ RSpec.describe Ai::ResponseParser do
     context '予期しない例外' do
       let(:payload) do
         {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
           'store' => {},
           'purchase' => {},
           'payment' => {},

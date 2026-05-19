@@ -71,6 +71,11 @@ class ReceiptAnalysisService
 
     if ai_result[:success]
       save_ai_result!(ocr_result, ai_result)
+    elsif ai_not_receipt?(ai_result)
+      Rails.logger.warn(
+        "[ReceiptAnalysis] ai_not_receipt receipt_id=#{receipt.id} document_type=#{ai_result.dig(:meta, :document_type)} rejection_reason=#{ai_result.dig(:meta, :rejection_reason)}"
+      )
+      fail_receipt!("ai_not_receipt", ai_not_receipt_message(ai_result))
     else
       save_fallback_result!(ocr_result, ai_result[:error_code].presence || "ai_invalid_response")
     end
@@ -161,7 +166,10 @@ class ReceiptAnalysisService
     if symbolized[:success] == false
       return {
         success: false,
-        error_code: symbolized[:error_code].presence || "ai_invalid_response"
+        error_code: symbolized[:error_code].presence || "ai_invalid_response",
+        needs_review: symbolized[:needs_review],
+        review_reasons: Array(symbolized[:review_reasons]),
+        meta: normalize_ai_meta(symbolized[:meta])
       }
     end
 
@@ -181,8 +189,15 @@ class ReceiptAnalysisService
       receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
       receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(
         symbolized[:receipt_items_attributes]
-      )
+      ),
+      meta: normalize_ai_meta(symbolized[:meta])
     }
+  end
+
+  def normalize_ai_meta(meta)
+    return {} unless meta.is_a?(Hash)
+
+    meta.deep_symbolize_keys
   end
 
   def unreadable_ocr?(ocr_result)
@@ -203,6 +218,15 @@ class ReceiptAnalysisService
 
   def receipt_structure_missing?(receipt_signal)
     !receipt_signal.receipt_like?
+  end
+
+  def ai_not_receipt?(ai_result)
+    ai_result[:error_code].to_s == "ai_not_receipt"
+  end
+
+  def ai_not_receipt_message(ai_result)
+    meta = ai_result[:meta].is_a?(Hash) ? ai_result[:meta].symbolize_keys : {}
+    [ meta[:document_type], meta[:rejection_reason] ].compact_blank.join(" / ").presence || "ai_not_receipt"
   end
 
   def low_quality_ocr?(ocr_result, receipt_attributes:)

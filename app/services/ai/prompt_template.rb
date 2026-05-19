@@ -66,6 +66,9 @@ module Ai
         Output schema constraints (STRICT):
 
         Top-level keys (exactly these):
+        - is_receipt
+        - document_type
+        - rejection_reason
         - store
         - purchase
         - payment
@@ -110,6 +113,15 @@ module Ai
 
     def user_prompt
       <<~PROMPT
+        For document classification:
+        - First decide whether the document can be treated as a receipt, invoice, or purchase proof.
+        - Prioritize document-type classification before completing OCR candidate values.
+        - Advertisements, development notes, general documents, text-only memos, and product lists without checkout/payment context are not receipts.
+        - If the document is clearly not a receipt, invoice, or purchase proof, set is_receipt = false.
+        - When is_receipt = false, return document_type and rejection_reason when they can be stated briefly; otherwise return null.
+        - When is_receipt = false, still return store = {}, purchase = {}, payment = {}, items = [], needs_review = false, and review_reasons = [].
+        - If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.
+
         For store:
         - store_name: prefer OCR store_name. Use filtered_content only when OCR is blank or clearly wrong.
         - If store_candidates are present, choose the most appropriate store_name from store_candidates and supporting filtered_content.
