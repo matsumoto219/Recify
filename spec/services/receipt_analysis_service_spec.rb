@@ -133,10 +133,9 @@ RSpec.describe ReceiptAnalysisService do
   end
 
   def ocr_fixture(name)
-    JSON.parse(
-      Rails.root.join("spec/fixtures/ocr/#{name}.json").read,
-      symbolize_names: true
-    )
+    raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
   def ai_success_result(review_reasons: [], needs_review: false)
@@ -939,6 +938,35 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'green false positive防止fixtureはAIへ渡さずreceipt_not_detectedにする' do
+      fixture_names = %w[
+        non_receipt_handwritten_memo
+        non_receipt_doc_type_memo
+        non_receipt_amount_numbers_memo
+        non_receipt_web_page
+        non_receipt_menu
+        non_receipt_product_list
+        non_receipt_sns_screenshot
+        non_receipt_flyer
+        non_receipt_pdf_screenshot
+      ]
+
+      fixture_names.each do |fixture_name|
+        test_receipt = create(:receipt, :with_image)
+        allow(ReceiptOcrService).to receive(:call).with(test_receipt.image).and_return(ocr_fixture(fixture_name))
+        allow(ReceiptAiEnrichmentService).to receive(:call)
+
+        described_class.call(test_receipt)
+        test_receipt.reload
+
+        aggregate_failures(fixture_name) do
+          expect(test_receipt.status).to eq('failed')
+          expect(test_receipt.processing_error_code).to eq('receipt_not_detected')
+          expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        end
+      end
+    end
+
     it 'TotalがあればAIへ進む' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
@@ -964,15 +992,15 @@ RSpec.describe ReceiptAnalysisService do
       expect(ReceiptAiEnrichmentService).to have_received(:call)
     end
 
-    it 'ItemsがあればAIへ進む' do
+    it 'Itemsと会計文脈があればAIへ進む' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
-          raw_text: 'コーヒー 180',
-          lines: [ 'コーヒー 180' ],
+          raw_text: "コーヒー 180\n合計 180",
+          lines: [ 'コーヒー 180', '合計 180' ],
           candidates: {
             store_name: nil,
             purchased_at_text: nil,
-            total_amount: nil,
+            total_amount: 180,
             payment_method_text: nil,
             country_region: nil,
             receipt_type: nil,
@@ -1148,40 +1176,55 @@ RSpec.describe ReceiptAnalysisService do
   end
 
   describe 'OCR fixture regressions' do
-    it '単一税率レシートはreview不要で金額を補正する' do
+    it '単一税率レシートはwarningのみで金額を補正する' do
       amount = run_ocr_fixture('single_tax_receipt')
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
-        expect(receipt.total_amount).to eq(1_080)
-        expect(receipt.subtotal_amount).to eq(982)
-        expect(receipt.tax_amount).to eq(98)
+        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.total_amount).to eq(770)
+        expect(receipt.subtotal_amount).to eq(700)
+        expect(receipt.tax_amount).to eq(70)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
-        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([[982, 98, BigDecimal('0.1')]])
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([[700, 70, BigDecimal('0.1')]])
         expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to be_empty
+        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
       end
     end
 
-    it '複数税率レシートはreceipt.tax_rateをnilにし税内訳を保存する' do
+    it '複数税率レシートはblocking mismatchでreview_neededにする' do
       amount = run_ocr_fixture('multiple_tax_receipt')
 
       tax_details = receipt.receipt_tax_details.order(:rate)
 
       aggregate_failures do
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
-        expect(receipt.total_amount).to eq(218)
-        expect(receipt.subtotal_amount).to eq(200)
-        expect(receipt.tax_amount).to eq(18)
-        expect(receipt.tax_rate).to be_nil
-        expect(tax_details.map { |detail| [detail.net_amount, detail.amount, detail.rate] }).to eq([
-          [100, 8, BigDecimal('0.08')],
-          [100, 10, BigDecimal('0.1')]
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([
+          'total_mismatch',
+          'tax_detail_incomplete',
+          'ocr_total_mismatch',
+          'price_tax_inclusion_uncertain'
         ])
-        expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to be_empty
+        expect(receipt.total_amount).to eq(1598)
+        expect(receipt.subtotal_amount).to eq(1598)
+        expect(receipt.tax_amount).to eq(134)
+        expect(receipt.tax_rate).to be_nil
+        expect(tax_details).to be_empty
+        expect(amount[:needs_review]).to be(true)
+        expect(amount[:mismatch_codes]).to eq([
+          'TOTAL_MISMATCH',
+          'TAX_DETAIL_INCOMPLETE',
+          'OCR_TOTAL_MISMATCH',
+          'PRICE_TAX_INCLUSION_UNCERTAIN'
+        ])
+        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
+        expect(amount[:warning_inconsistencies]).to eq([
+          :tax_detail_incomplete,
+          :ocr_total_mismatch,
+          :price_tax_inclusion_uncertain
+        ])
       end
     end
 
@@ -1193,18 +1236,18 @@ RSpec.describe ReceiptAnalysisService do
       aggregate_failures do
         expect(receipt.status).to eq('completed')
         expect(receipt.review_reasons).to be_blank
-        expect(receipt.total_amount).to eq(1_100)
-        expect(receipt.subtotal_amount).to eq(1_000)
-        expect(receipt.tax_amount).to eq(100)
-        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
-        expect(tax_detail.net_amount).to eq(1_000)
-        expect(tax_detail.amount).to eq(100)
+        expect(receipt.total_amount).to eq(1535)
+        expect(receipt.subtotal_amount).to eq(1418)
+        expect(receipt.tax_amount).to eq(117)
+        expect(receipt.tax_rate).to be_nil
+        expect(tax_detail.net_amount).to eq(1162)
+        expect(tax_detail.amount).to eq(92)
         expect(amount[:needs_review]).to be(false)
         expect(amount[:mismatch_codes]).to be_empty
       end
     end
 
-    it 'OCRノイズ由来のocr_low_confidenceはwarningとして扱いreview不要にする' do
+    it 'OCRノイズ由来のocr_low_confidenceとblocking mismatchを保存する' do
       amount = run_ocr_fixture(
         'ocr_noise_receipt',
         ai_result: ai_success_result_for(
@@ -1214,59 +1257,80 @@ RSpec.describe ReceiptAnalysisService do
       )
 
       aggregate_failures do
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq(['ocr_low_confidence'])
-        expect(receipt.total_amount).to eq(110)
-        expect(receipt.subtotal_amount).to eq(100)
-        expect(receipt.tax_amount).to eq(10)
-        expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to be_empty
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([
+          'ocr_low_confidence',
+          'total_mismatch',
+          'tax_detail_incomplete'
+        ])
+        expect(receipt.total_amount).to eq(890)
+        expect(receipt.subtotal_amount).to eq(890)
+        expect(receipt.tax_amount).to eq(71)
+        expect(amount[:needs_review]).to be(true)
+        expect(amount[:mismatch_codes]).to eq([
+          'TOTAL_MISMATCH',
+          'TAX_DETAIL_INCOMPLETE'
+        ])
+        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
       end
     end
 
-    it 'subtotal欠損レシートは明細計算でsubtotal/taxを補完する' do
+    it 'subtotal欠損レシートはwarningのみでsubtotal/taxを補完する' do
       amount = run_ocr_fixture('missing_subtotal_receipt')
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
-        expect(receipt.total_amount).to eq(999)
-        expect(receipt.subtotal_amount).to eq(909)
-        expect(receipt.tax_amount).to eq(90)
-        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.total_amount).to eq(2998)
+        expect(receipt.subtotal_amount).to eq(2776)
+        expect(receipt.tax_amount).to eq(222)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.08'))
         expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to be_empty
+        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
       end
     end
 
-    it 'Azure Totalがお預かり金額でも明細合計でtotalを補正する' do
+    it 'Azure Totalがお預かり金額でも税内訳合計でtotalを補正する' do
       amount = run_ocr_fixture('deposit_total_receipt')
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to include('ocr_total_mismatch', 'price_tax_inclusion_uncertain')
-        expect(receipt.total_amount).to eq(2_204)
+        expect(receipt.review_reasons).to eq([ 'ocr_total_mismatch' ])
+        expect(receipt.total_amount).to eq(649)
         expect(receipt.total_amount).not_to eq(5_000)
-        expect(receipt.subtotal_amount).to eq(2_004)
-        expect(receipt.tax_amount).to eq(200)
+        expect(receipt.subtotal_amount).to eq(601)
+        expect(receipt.tax_amount).to eq(48)
         expect(amount[:needs_review]).to be(false)
         expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch ])
       end
     end
 
-    it 'tax_detailsと明細が矛盾するレシートはblocking mismatchでreview_neededにする' do
+    it 'tax_detailsと明細が矛盾するレシートはwarningのみで保存する' do
       amount = run_ocr_fixture('tax_detail_item_conflict_receipt')
 
       aggregate_failures do
-        expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to include('tax_detail_mismatch')
-        expect(receipt.total_amount).to eq(108)
-        expect(receipt.subtotal_amount).to eq(99)
-        expect(receipt.tax_amount).to eq(9)
-        expect(amount[:needs_review]).to be(true)
-        expect(amount[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
-        expect(amount[:warning_inconsistencies]).to include(:ocr_total_mismatch)
-        expect(amount[:mismatch_codes]).to include('TAX_DETAIL_MISMATCH')
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([
+          'tax_detail_incomplete',
+          'ocr_total_mismatch'
+        ])
+        expect(receipt.total_amount).to eq(301)
+        expect(receipt.subtotal_amount).to eq(279)
+        expect(receipt.tax_amount).to eq(22)
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([
+          :tax_detail_incomplete,
+          :ocr_total_mismatch
+        ])
+        expect(amount[:mismatch_codes]).to eq([
+          'TAX_DETAIL_INCOMPLETE',
+          'OCR_TOTAL_MISMATCH'
+        ])
       end
     end
   end

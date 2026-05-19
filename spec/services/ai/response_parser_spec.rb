@@ -174,6 +174,34 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it 'not receipt の代表的なrejection_reason分類を保持する' do
+        %w[screenshot menu shopping_list memo article poster unknown_document].each do |reason|
+          payload.merge!(
+            'is_receipt' => false,
+            'is_receipt_confidence' => 0.91,
+            'document_type' => reason,
+            'rejection_reason' => reason,
+            'store' => {},
+            'purchase' => {},
+            'payment' => {},
+            'items' => [],
+            'needs_review' => false,
+            'review_reasons' => []
+          )
+
+          result = described_class.parse(payload, provider: provider, meta: meta)
+
+          aggregate_failures(reason) do
+            expect(result[:success]).to eq(false)
+            expect(result[:error_code]).to eq('ai_not_receipt')
+            expect(result[:meta]).to include(
+              rejection_reason: reason,
+              is_receipt_confidence: 0.91
+            )
+          end
+        end
+      end
+
       it 'is_receipt false で未知reasonは unknown_document に丸める' do
         payload.merge!(
           'is_receipt' => false,

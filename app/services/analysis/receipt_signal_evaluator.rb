@@ -2,8 +2,10 @@ module Analysis
   class ReceiptSignalEvaluator
     PASSING_SCORE = 5
 
-    Result = Struct.new(:text_present, :score, :reasons, :strong_signal, keyword_init: true) do
+    Result = Struct.new(:text_present, :score, :reasons, :strong_signal, :non_receipt_context, keyword_init: true) do
       def receipt_like?
+        return false if non_receipt_context
+
         strong_signal || score >= PASSING_SCORE
       end
     end
@@ -23,7 +25,8 @@ module Analysis
         text_present: text_present?,
         score: score,
         reasons: reasons,
-        strong_signal: strong_signal?
+        strong_signal: strong_signal?,
+        non_receipt_context: non_receipt_context?
       )
     end
 
@@ -34,8 +37,8 @@ module Analysis
     def score
       @score ||= begin
         value = 0
-        value += 5 if positive_total_amount?
-        value += 5 if valid_items?
+        value += total_amount_score
+        value += valid_items_score
         value += 3 if tax_details?
         value += 2 if payments?
         value += 3 if receipt_amount_context_line?
@@ -66,13 +69,16 @@ module Analysis
         values << :address if address_signal?
         values << :registration_number if registration_number_signal?
         values << :doc_type_receipt if receipt_doc_type?
+        values << :non_receipt_context if non_receipt_context?
         values.uniq
       end
     end
 
     def strong_signal?
-      positive_total_amount? ||
-        valid_items? ||
+      return false if non_receipt_context?
+
+      total_amount_receipt_context? ||
+        valid_items_receipt_context? ||
         (receipt_word? && receipt_amount_context_line?) ||
         dated_money_like_item_lines?
     end
@@ -89,8 +95,43 @@ module Analysis
       amount.present? && amount.positive?
     end
 
+    def total_amount_score
+      return 0 unless positive_total_amount?
+
+      total_amount_receipt_context? ? 5 : 2
+    end
+
+    def total_amount_receipt_context?
+      positive_total_amount? &&
+        (
+          receipt_amount_context_line? ||
+          receipt_word? ||
+          payments? ||
+          payment_method_text? ||
+          tax_details?
+        )
+    end
+
     def valid_items?
       valid_items.any?
+    end
+
+    def valid_items_score
+      return 0 unless valid_items?
+
+      valid_items_receipt_context? ? 5 : [ valid_items.size, 3 ].min
+    end
+
+    def valid_items_receipt_context?
+      valid_items? &&
+        (
+          total_amount_receipt_context? ||
+          receipt_word? ||
+          tax_details? ||
+          payments? ||
+          payment_method_text? ||
+          receipt_amount_context_line?
+        )
     end
 
     def valid_items
@@ -176,7 +217,7 @@ module Analysis
 
     def address_signal?
       candidates[:store_address].present? ||
-        text_lines.any? { |line| line.match?(/〒|都|道|府|県|市|区|町|丁目|番地/) }
+        text_lines.any? { |line| line.match?(/〒|東京都|北海道|(?:京都|大阪)府|.{1,8}[県市区町村]|丁目|番地/) }
     end
 
     def registration_number_signal?
@@ -189,6 +230,180 @@ module Analysis
 
     def dated_money_like_item_lines?
       money_like_item_lines_count >= 2 && purchased_at_signal?
+    end
+
+    def non_receipt_context?
+      household_budget_context? ||
+        marketing_web_page_context? ||
+        menu_or_catalog_context? ||
+        social_post_context? ||
+        flyer_context? ||
+        pdf_document_context?
+    end
+
+    def household_budget_context?
+      return false if receipt_word?
+
+      keywords = %w[収入 支出 固定支出 変動支出 貯金 生活費 残金 家賃 サブスク 目標貯金]
+      normalized_text = text_lines.join("\n")
+
+      keywords.count { |keyword| normalized_text.include?(keyword) } >= 4
+    end
+
+    def marketing_web_page_context?
+      return false if receipt_word? || payments? || payment_method_text? || tax_details?
+
+      patterns = [
+        %r{https?://}i,
+        /www\./i,
+        /\.(?:jp|com|net|org)(?:\/|\b)/i,
+        /ホーム/,
+        /メニュー/,
+        /お知らせ/,
+        /アクセス/,
+        /ご予約/,
+        /販売期間/,
+        /all rights reserved/i,
+        /copyright/i
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) } >= 3
+    end
+
+    def menu_or_catalog_context?
+      return false if receipt_word? || tax_details? || payments?
+
+      menu_context_score >= 3 || catalog_context_score >= 4
+    end
+
+    def social_post_context?
+      return false if receipt_word? || tax_details? || payments?
+
+      social_context_score >= 4
+    end
+
+    def flyer_context?
+      return false if receipt_word? || tax_details? || payments? || payment_method_text?
+
+      flyer_context_score >= 5
+    end
+
+    def pdf_document_context?
+      return false if tax_details? || payments? || payment_method_text?
+
+      pdf_document_context_score >= 4
+    end
+
+    def menu_context_score
+      patterns = [
+        /\bmenu\b/i,
+        /メニュー/,
+        /dinner/i,
+        /lunch/i,
+        /appetizer/i,
+        /前菜/,
+        /main/i,
+        /メイン/,
+        /set menu/i,
+        /セットメニュー/,
+        /dessert/i,
+        /drink/i
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) }
+    end
+
+    def catalog_context_score
+      patterns = [
+        /商品一覧/,
+        /商品画像/,
+        /商品名/,
+        /商品コード/,
+        /カテゴリー/,
+        /特徴/,
+        /希望小売価格/,
+        /在庫状況/,
+        /おすすめ/,
+        /レビュー/,
+        /送料無料/,
+        /会員限定/,
+        /ランキング/,
+        /人気商品/,
+        /商品説明/
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) }
+    end
+
+    def social_context_score
+      patterns = [
+        /x\.com/i,
+        /@\w+/,
+        /#\S+/,
+        /ポスト/,
+        /投稿/,
+        /返信/,
+        /コメント/,
+        /シェア/,
+        /フォロー/,
+        /いいね/,
+        /表示/,
+        /grok/i
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) }
+    end
+
+    def flyer_context_score
+      patterns = [
+        /チラシ/,
+        /広告/,
+        /セール/,
+        /キャンペーン/,
+        /大特価/,
+        /特価/,
+        /週末限定/,
+        /期間限定/,
+        /お買い得/,
+        /まとめ買い/,
+        /セール開催/,
+        /会員募集中/,
+        /日替り特価/,
+        /ご来店ください/,
+        /ご用意しました/,
+        /入会金/,
+        /年会費/
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) }
+    end
+
+    def pdf_document_context_score
+      patterns = [
+        /\.pdf/i,
+        /\/users\//i,
+        /操作マニュアル/,
+        /マニュアル/,
+        /第\d+(?:\.\d+)?版/,
+        /はじめに/,
+        /基本の流れ/,
+        /画面の説明/,
+        /本文/,
+        /章/,
+        /ページ/,
+        /アップロード/,
+        /ocr/i,
+        /ai/i,
+        /ファイル/
+      ]
+      normalized_text = text_lines.join("\n")
+
+      patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def text_lines

@@ -1,12 +1,26 @@
 require 'rails_helper'
 
 RSpec.describe Analysis::ReceiptSignalEvaluator do
+  GREEN_NON_RECEIPT_FIXTURES = %w[
+    non_receipt_doc_type_memo
+    non_receipt_handwritten_memo
+    non_receipt_amount_numbers_memo
+    non_receipt_web_page
+    non_receipt_menu
+    non_receipt_product_list
+    non_receipt_sns_screenshot
+    non_receipt_flyer
+    non_receipt_pdf_screenshot
+  ].freeze
+
   def evaluate(overrides = {})
     described_class.call(base_ocr_result.deep_merge(overrides))
   end
 
   def fixture_result(name)
-    JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read).deep_symbolize_keys
+    raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
   let(:base_ocr_result) do
@@ -33,7 +47,7 @@ RSpec.describe Analysis::ReceiptSignalEvaluator do
     }
   end
 
-  it 'total_amount単独で通過する' do
+  it 'total_amountと合計行があれば通過する' do
     result = evaluate(
       raw_text: '合計 1280',
       lines: [ '合計 1280' ],
@@ -49,7 +63,22 @@ RSpec.describe Analysis::ReceiptSignalEvaluator do
     end
   end
 
-  it 'valid items単独で通過する' do
+  it 'total_amountだけでは通過しない' do
+    result = evaluate(
+      raw_text: '売上目標 1280',
+      lines: [ '売上目標 1280' ],
+      candidates: { total_amount: 1280 }
+    )
+
+    aggregate_failures do
+      expect(result.text_present).to eq(true)
+      expect(result.reasons).to include(:total_amount)
+      expect(result.strong_signal).to eq(false)
+      expect(result.receipt_like?).to eq(false)
+    end
+  end
+
+  it 'valid items単独では通過しない' do
     result = evaluate(
       raw_text: 'コーヒー 180',
       lines: [ 'コーヒー 180' ],
@@ -61,8 +90,26 @@ RSpec.describe Analysis::ReceiptSignalEvaluator do
     )
 
     aggregate_failures do
-      expect(result.score).to be >= 5
       expect(result.reasons).to include(:valid_items)
+      expect(result.strong_signal).to eq(false)
+      expect(result.receipt_like?).to eq(false)
+    end
+  end
+
+  it 'valid itemsと会計文脈があれば通過する' do
+    result = evaluate(
+      raw_text: "コーヒー 180\n合計 180",
+      lines: [ 'コーヒー 180', '合計 180' ],
+      candidates: {
+        total_amount: 180,
+        items: [
+          { raw_text: 'コーヒー', line_total: 180 }
+        ]
+      }
+    )
+
+    aggregate_failures do
+      expect(result.reasons).to include(:valid_items, :receipt_amount_context_line)
       expect(result.strong_signal).to eq(true)
       expect(result.receipt_like?).to eq(true)
     end
@@ -183,5 +230,83 @@ RSpec.describe Analysis::ReceiptSignalEvaluator do
       expect(result.reasons).to include(:doc_type_receipt)
       expect(result.receipt_like?).to eq(false)
     end
+  end
+
+  it 'green false positive防止fixtureはreceipt_likeにならない' do
+    GREEN_NON_RECEIPT_FIXTURES.each do |fixture_name|
+      result = described_class.call(fixture_result(fixture_name))
+
+      aggregate_failures(fixture_name) do
+        expect(result.text_present).to eq(true)
+        expect(result.receipt_like?).to eq(false)
+      end
+    end
+  end
+
+  it '通常レシートfixtureは引き続きreceipt_likeとして扱う' do
+    result = described_class.call(fixture_result('single_tax_receipt'))
+
+    aggregate_failures do
+      expect(result.text_present).to eq(true)
+      expect(result.receipt_like?).to eq(true)
+    end
+  end
+
+  it 'itemsが多い通常レシートfixtureは引き続きreceipt_likeとして扱う' do
+    %w[long_receipt duplicate_line_receipt discount_heavy_receipt].each do |fixture_name|
+      result = described_class.call(fixture_result(fixture_name))
+
+      aggregate_failures(fixture_name) do
+        expect(result.text_present).to eq(true)
+        expect(result.receipt_like?).to eq(true)
+      end
+    end
+  end
+
+  it '短いレシートはfalse negativeにしない' do
+    result = evaluate(
+      raw_text: "レシート\n合計 320",
+      lines: [ 'レシート', '合計 320' ],
+      candidates: {
+        items: [],
+        payments: [],
+        tax_details: []
+      }
+    )
+
+    aggregate_failures do
+      expect(result.reasons).to include(:receipt_word, :receipt_amount_context_line)
+      expect(result.receipt_like?).to eq(true)
+    end
+  end
+
+  it '合計だけの短いレシートはfalse negativeにしない' do
+    result = evaluate(
+      raw_text: '合計 980',
+      lines: [ '合計 980' ],
+      candidates: { total_amount: 980 }
+    )
+
+    expect(result.receipt_like?).to eq(true)
+  end
+
+  it '領収書金額だけの短いレシートはfalse negativeにしない' do
+    result = evaluate(
+      raw_text: '領収書 980円',
+      lines: [ '領収書 980円' ],
+      candidates: { total_amount: 980 }
+    )
+
+    expect(result.receipt_like?).to eq(true)
+  end
+
+  it '税込金額だけの短いレシートはfalse negativeにしない' do
+    result = evaluate(
+      raw_text: '税込 980',
+      lines: [ '税込 980' ],
+      candidates: { total_amount: 980 }
+    )
+
+    expect(result.receipt_like?).to eq(true)
   end
 end
