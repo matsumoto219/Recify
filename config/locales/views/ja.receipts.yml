@@ -161,6 +161,9 @@ ja:
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。
       ai_error: AI補完処理に失敗しました。画像を変更して再試行するか、OCR結果をもとに手動修正してください。
       system_error: 処理に失敗しました。時間をおいて再試行するか、手動で修正してください。
+    processing_error_codes:
+      no_text_detected: 画像から文字を読み取れませんでした。
+      receipt_not_detected: レシートを認識できませんでした。
     processing_error_card:
       failed_title: 処理失敗
       attention_title: 処理に関する注意

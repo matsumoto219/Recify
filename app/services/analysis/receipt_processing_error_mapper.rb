@@ -14,6 +14,8 @@ module Analysis
     # 内部エラーコード → ユーザー向けカテゴリ
     ERROR_CATEGORY_MAPPING = {
       # OCR系
+      "no_text_detected" => "image_error",
+      "receipt_not_detected" => "image_error",
       "ocr_unreadable" => "image_error",
       "ocr_timeout" => "ocr_error",
       "ocr_api_error" => "ocr_error",

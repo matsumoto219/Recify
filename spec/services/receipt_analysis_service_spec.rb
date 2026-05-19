@@ -722,6 +722,214 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'OCR成功でもraw_text/linesが空なら no_text_detected でfailedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: '',
+          lines: [],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('no_text_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it '文字はあるが主要receipt signalsが不足する場合は receipt_not_detected でfailedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: 'これはレシートではない文書です',
+          lines: [ 'これはレシートではない文書です' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it 'CountryRegionとReceiptTypeだけではreceipt_not_detectedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: '旅行メモ',
+          lines: [ '旅行メモ' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: 'JP',
+            receipt_type: 'Meal',
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it 'docTypeがreceipt系でも主要fields不足ならreceipt_not_detectedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: 'メモ画像',
+          lines: [ 'メモ画像' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          },
+          meta: {
+            doc_type: 'receipt.retailMeal',
+            confidence_summary: {
+              items_average: nil,
+              overall: 0.95
+            }
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it 'TotalがあればAIへ進む' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: '合計 1280',
+          lines: [ '合計 1280' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: 1280,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+
+      expect(ReceiptAiEnrichmentService).to have_received(:call)
+    end
+
+    it 'ItemsがあればAIへ進む' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: 'コーヒー 180',
+          lines: [ 'コーヒー 180' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [
+              {
+                raw_text: 'コーヒー',
+                line_total: 180,
+                confidence: 0.95
+              }
+            ],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+
+      expect(ReceiptAiEnrichmentService).to have_received(:call)
+    end
+
+    it 'receipt語と金額らしき行があればAIへ進む' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: "領収書\n合計 1280",
+          lines: [ '領収書', '合計 1280' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+
+      expect(ReceiptAiEnrichmentService).to have_received(:call)
+    end
+
     it '想定外例外時は unexpected_error で failed にし AnalysisError を送出する' do
       allow(ReceiptOcrService).to receive(:call).and_raise(StandardError, 'unexpected boom')
 

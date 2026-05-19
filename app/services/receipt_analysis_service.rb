@@ -38,9 +38,19 @@ class ReceiptAnalysisService
       return fail_receipt!(ocr_result[:error_code].presence || "ocr_api_error")
     end
 
+    if no_text_detected?(ocr_result)
+      Rails.logger.warn("[ReceiptAnalysis] no_text_detected receipt_id=#{receipt.id}")
+      return fail_receipt!("no_text_detected")
+    end
+
     if unreadable_ocr?(ocr_result)
       Rails.logger.warn("[ReceiptAnalysis] ocr_unreadable receipt_id=#{receipt.id}")
       return fail_receipt!("ocr_unreadable")
+    end
+
+    if receipt_structure_missing?(ocr_result)
+      Rails.logger.warn("[ReceiptAnalysis] receipt_not_detected receipt_id=#{receipt.id}")
+      return fail_receipt!("receipt_not_detected")
     end
 
     unless ai_enabled?
@@ -173,18 +183,71 @@ class ReceiptAnalysisService
 
   def unreadable_ocr?(ocr_result)
     candidates = ocr_candidates(ocr_result)
-    raw_text = ocr_result[:raw_text].to_s
-    items = Array(candidates[:items])
     overall_confidence = candidates.dig(:confidence_summary, :overall)
     # TODO: 実レスポンスで confidence_summary の配置を再確認する。
     # 現在は candidates 配下を参照しているが、meta 配下に入る可能性もあるため、
     # API実レスポンス確認後に参照先を一本化する。
 
-    return true if raw_text.blank?
-    return true if items.blank? && candidates[:store_name].blank? && candidates[:total_amount].blank?
     return true if overall_confidence.present? && overall_confidence.to_f < UNREADABLE_CONFIDENCE_THRESHOLD
 
     false
+  end
+
+  def no_text_detected?(ocr_result)
+    ocr_text_lines(ocr_result).blank? &&
+      ocr_result[:raw_text].to_s.strip.blank? &&
+      ocr_result[:content].to_s.strip.blank?
+  end
+
+  def receipt_structure_missing?(ocr_result)
+    !receipt_structure_present?(ocr_result)
+  end
+
+  def receipt_structure_present?(ocr_result)
+    candidates = ocr_candidates(ocr_result)
+
+    return true if candidates[:total_amount].present?
+    return true if Array(candidates[:items]).present?
+    return true if candidates[:purchased_at_text].present?
+    return true if candidates[:payment_method_text].present?
+    return true if Array(candidates[:payments]).present?
+    return true if Array(candidates[:tax_details]).present?
+
+    receipt_keyword_with_amount?(ocr_result)
+  end
+
+  def receipt_keyword_with_amount?(ocr_result)
+    lines = ocr_text_lines(ocr_result)
+    return false if lines.blank?
+
+    lines.any? { |line| receipt_amount_context_line?(line) } ||
+      (lines.any? { |line| receipt_document_keyword?(line) } && lines.any? { |line| money_like_line?(line) })
+  end
+
+  def ocr_text_lines(ocr_result)
+    lines = Array(ocr_result[:lines]).map { |line| line.to_s.strip }.reject(&:blank?)
+    return lines if lines.present?
+
+    [ ocr_result[:content], ocr_result[:raw_text] ].flat_map do |text|
+      text.to_s.lines.map(&:strip)
+    end.reject(&:blank?)
+  end
+
+  def receipt_amount_context_line?(line)
+    normalized = line.to_s
+    normalized.match?(/(領収書|レシート|receipt|合計|小計|消費税|税額|お預かり|預り|お釣り|釣銭|支払|決済).*\d/i)
+  end
+
+  def receipt_document_keyword?(line)
+    line.to_s.match?(/領収書|レシート|receipt/i)
+  end
+
+  def money_like_line?(line)
+    normalized = line.to_s
+    return true if normalized.match?(/[¥￥]\s*\d/)
+    return true if normalized.match?(/\d[\d,]*\s*円/)
+
+    normalized.match?(/(合計|小計|消費税|税額|お預かり|預り|お釣り|釣銭|支払|決済).*\d/i)
   end
 
   def low_quality_ocr?(ocr_result, receipt_attributes:)

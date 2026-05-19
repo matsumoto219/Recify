@@ -532,8 +532,11 @@ class Receipt < ApplicationRecord
     return nil unless has_processing_error?
 
     I18n.t(
-      "receipts.processing_errors.#{error_category}",
-      default: I18n.t("receipts.processing_errors.system_error")
+      "receipts.processing_error_codes.#{processing_error_code}",
+      default: I18n.t(
+        "receipts.processing_errors.#{error_category}",
+        default: I18n.t("receipts.processing_errors.system_error")
+      )
     )
   end
 
