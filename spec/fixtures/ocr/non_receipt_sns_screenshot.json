@@ -1,0 +1,15 @@
+{
+  "status": "succeeded",
+  "createdDateTime": "2026-06-03T00:00:00Z",
+  "lastUpdatedDateTime": "2026-06-03T00:00:00Z",
+  "analyzeResult": {
+    "apiVersion": "2024-11-30",
+    "modelId": "prebuilt-receipt",
+    "stringIndexType": "utf16CodeUnit",
+    "content": "Synthetic Social Feed\nsocial.example\n@example_cafe\n投稿\n【お知らせ】\nサンプルカフェからのお知らせです。\n新しい季節メニューを紹介します。\n#サンプル #お知らせ\n返信\nコメント\nシェア\nフォロー\nいいね\n表示\nSynthetic fixture — not affiliated with any platform.",
+    "pages": [],
+    "styles": [],
+    "documents": [],
+    "contentFormat": "text"
+  }
+}

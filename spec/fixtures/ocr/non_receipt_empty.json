@@ -1,39 +1,31 @@
 {
-  "success": true,
-  "raw_text": "",
-  "lines": [],
-  "candidates": {
-    "store_name": null,
-    "store_address": null,
-    "store_phone_number": null,
-    "purchased_at_text": null,
-    "total_amount": null,
-    "subtotal_amount": null,
-    "tax_amount": null,
-    "tax_rate": null,
-    "tip_amount": null,
-    "country_region": null,
-    "receipt_type": null,
-    "payments": [],
-    "tax_details": [],
-    "payment_method_text": null,
-    "items": [],
-    "confidence_summary": {
-      "merchant_name": null,
-      "purchased_at": null,
-      "total_amount": null,
-      "subtotal_amount": null,
-      "tax_amount": null,
-      "tax_rate": null,
-      "items_average": null,
-      "overall": null
-    }
-  },
-  "error_code": null,
-  "meta": {
-    "provider": "azure_document_intelligence",
-    "model_id": "prebuilt-receipt",
-    "doc_type": null,
-    "raw_response_included": false
-  }
+	"status": "succeeded",
+	"createdDateTime": "2026-05-19T11:32:40Z",
+	"lastUpdatedDateTime": "2026-05-19T11:32:40Z",
+	"analyzeResult": {
+		"apiVersion": "2024-11-30",
+		"modelId": "prebuilt-receipt",
+		"stringIndexType": "utf16CodeUnit",
+		"content": "",
+		"pages": [
+			{
+				"pageNumber": 1,
+				"angle": 0,
+				"width": 337,
+				"height": 356,
+				"unit": "pixel",
+				"words": [],
+				"lines": [],
+				"spans": [
+					{
+						"offset": 0,
+						"length": 0
+					}
+				]
+			}
+		],
+		"styles": [],
+		"documents": [],
+		"contentFormat": "text"
+	}
 }
