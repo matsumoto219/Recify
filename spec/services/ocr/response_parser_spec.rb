@@ -21,6 +21,7 @@ RSpec.describe Ocr::ResponseParser do
           TEXT
           'documents' => [
             {
+              'docType' => 'receipt.retailMeal',
               'fields' => {
                 'MerchantName' => { 'valueString' => 'サンプルストア' },
                 'MerchantAddress' => { 'valueString' => '東京都渋谷区1-2-3' },
@@ -118,6 +119,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:country_region]).to eq('JP')
         expect(candidates[:receipt_type]).to eq('Meal')
         expect(candidates[:payment_method_text]).to eq('master')
+        expect(result.dig(:meta, :doc_type)).to eq('receipt.retailMeal')
       end
 
       aggregate_failures do

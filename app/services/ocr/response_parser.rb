@@ -37,6 +37,7 @@ class Ocr::ResponseParser
       meta: {
         provider: provider,
         model_id: extract_model_id(parsed_response),
+        doc_type: extract_doc_type(parsed_response),
         raw_response_included: false
       }
     }
@@ -136,6 +137,10 @@ class Ocr::ResponseParser
 
   def extract_model_id(parsed_response)
     extract_analyze_result(parsed_response)["modelId"]
+  end
+
+  def extract_doc_type(parsed_response)
+    extract_document(parsed_response)["docType"]
   end
 
   def normalize_response(value)

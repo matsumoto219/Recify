@@ -849,6 +849,66 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'purchased_at_textだけではscore不足としてreceipt_not_detectedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: '2026/04/02 12:34',
+          lines: [ '2026/04/02 12:34' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: '2026/04/02 12:34',
+            total_amount: nil,
+            payment_method_text: nil,
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it 'payment_method_textだけではscore不足としてreceipt_not_detectedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(
+          raw_text: 'VISA',
+          lines: [ 'VISA' ],
+          candidates: {
+            store_name: nil,
+            purchased_at_text: nil,
+            total_amount: nil,
+            payment_method_text: 'VISA',
+            country_region: nil,
+            receipt_type: nil,
+            items: [],
+            payments: [],
+            tax_details: []
+          }
+        )
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
     it 'TotalがあればAIへ進む' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(
