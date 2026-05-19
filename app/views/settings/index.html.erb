@@ -1,6 +1,8 @@
 <section
   class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
-  data-controller="settings"
+  data-controller="settings service-status-polling"
+  data-service-status-polling-status-url-value="<%= external_services_status_path %>"
+  data-service-status-polling-interval-value="30000"
   data-action="segmented-control:success->settings#applySegmentedControlSetting">
   <%= render "shared/ui/section_header",
         title: t("settings.index.title"),
@@ -122,16 +124,17 @@
 
       <div class="space-y-3">
         <%# TODO: 本実装では ExternalServiceStatus から状態を取得する %>
-        <%# v0.5: 監視ジョブ（ExternalServiceStatus + 定期APIチェック）と連携し、状態を自動更新する %>
-        <%# 表示更新は Turbo Streams または polling でリアルタイム反映する想定 %>
-        <%# 例: state: @ocr_service_status.state.to_sym %>
-        <%= render "shared/ui/service_status_badge",
-              label: t("settings.index.services.ocr"),
-              state: @ocr_state %>
+        <div data-service-status-polling-target="serviceBadge" data-service="ocr">
+          <%= render "shared/ui/service_status_badge",
+                label: t("settings.index.services.ocr"),
+                state: @ocr_state %>
+        </div>
 
-        <%= render "shared/ui/service_status_badge",
-              label: t("settings.index.services.ai"),
-              state: @ai_state %>
+        <div data-service-status-polling-target="serviceBadge" data-service="ai">
+          <%= render "shared/ui/service_status_badge",
+                label: t("settings.index.services.ai"),
+                state: @ai_state %>
+        </div>
       </div>
     <% end %>
 

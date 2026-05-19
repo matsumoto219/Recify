@@ -5,7 +5,11 @@
   ai_down = ai_state == "down"
 %>
 
-<section class="relative w-full max-w-4xl mx-auto space-y-10 md:space-y-12 px-4 md:px-0">
+<section
+  class="relative w-full max-w-4xl mx-auto space-y-10 md:space-y-12 px-4 md:px-0"
+  data-controller="service-status-polling"
+  data-service-status-polling-status-url-value="<%= external_services_status_path %>"
+  data-service-status-polling-interval-value="30000">
   <%= render "shared/ui/section_header",
     title: t("receipts.select_input_method.title"),
     subtitle: t("receipts.select_input_method.subtitle"),
@@ -15,21 +19,21 @@
     responsive_align: :center,
     wrapper_class: "space-y-3 md:space-y-4 pt-2 md:pt-0" %>
 
-  <% if ocr_down || ai_down %>
-    <div class="space-y-3">
-      <% if ocr_down %>
-        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
-          <%= t("flash.receipts.ocr_unavailable") %>
-        </div>
-      <% end %>
-
-      <% if ai_down %>
-        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          <%= t("receipts.select_input_method.ai_down") %>
-        </div>
-      <% end %>
+  <div class="space-y-3">
+    <div
+      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless ocr_down %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ocr_down">
+      <%= t("flash.receipts.ocr_unavailable") %>
     </div>
-  <% end %>
+
+    <div
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_down %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ai_down">
+      <%= t("receipts.select_input_method.ai_down") %>
+    </div>
+  </div>
 
   <div class="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-8 px-0 md:px-4">
     <%= render "shared/ui/selection_card",
@@ -42,7 +46,10 @@
       title_size: "text-[1.2rem] md:text-2xl",
       description_size: "text-sm md:text-base",
       disabled: ocr_down,
-      data: (ocr_down ? { service_disabled: "ocr" } : {}) %>
+      data: {
+        service_status_polling_target: "ocrGatedLink",
+        enabled_href: new_upload_receipts_path
+      }.merge(ocr_down ? { service_disabled: "ocr" } : {}) %>
 
     <%= render "shared/ui/selection_card",
       path: new_receipt_path,

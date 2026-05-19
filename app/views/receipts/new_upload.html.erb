@@ -8,7 +8,11 @@
   ocr_available = !ocr_down
 %>
 
-<section class="max-w-3xl mx-auto space-y-8 pb-28 md:pb-2">
+<section
+  class="max-w-3xl mx-auto space-y-8 pb-28 md:pb-2"
+  data-controller="service-status-polling"
+  data-service-status-polling-status-url-value="<%= external_services_status_path %>"
+  data-service-status-polling-interval-value="30000">
   <%= render "shared/ui/section_header",
     title: t("receipts.new_upload.title"),
     subtitle: t("receipts.new_upload.subtitle"),
@@ -16,30 +20,36 @@
     align: :center,
     wrapper_class: "space-y-3" %>
 
-  <% if ocr_down || ocr_degraded || ai_down || ai_degraded %>
-    <div class="space-y-3">
-      <% if ocr_down %>
-        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
-          <p class="font-bold"><%= t("flash.receipts.ocr_unavailable") %></p>
-          <%= link_to t("receipts.new_upload.manual_link"), new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
-        </div>
-      <% elsif ocr_degraded %>
-        <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning">
-          <%= t("receipts.new_upload.ocr_degraded") %>
-        </div>
-      <% end %>
-
-      <% if ai_down %>
-        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          <%= t("receipts.new_upload.ai_down") %>
-        </div>
-      <% elsif ai_degraded %>
-        <div class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base">
-          <%= t("receipts.new_upload.ai_degraded") %>
-        </div>
-      <% end %>
+  <div class="space-y-3">
+    <div
+      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless ocr_down %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ocr_down">
+      <p class="font-bold"><%= t("flash.receipts.ocr_unavailable") %></p>
+      <%= link_to t("receipts.new_upload.manual_link"), new_receipt_path, class: "mt-2 inline-flex text-sm font-bold token-text-warning underline" %>
     </div>
-  <% end %>
+
+    <div
+      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless ocr_degraded %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ocr_degraded">
+      <%= t("receipts.new_upload.ocr_degraded") %>
+    </div>
+
+    <div
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_down %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ai_down">
+      <%= t("receipts.new_upload.ai_down") %>
+    </div>
+
+    <div
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_degraded %>"
+      data-service-status-polling-target="serviceNotice"
+      data-service-notice-key="ai_degraded">
+      <%= t("receipts.new_upload.ai_degraded") %>
+    </div>
+  </div>
 
   <%= render "shared/ui/surface_card", padding: :md, class: "group" do %>
     <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
@@ -47,6 +57,7 @@
           data: {
             controller: "receipt-upload",
             action: "submit->receipt-upload#disableSubmit",
+            service_status_polling_target: "uploadRoot",
             receipt_upload_ocr_available_value: ocr_available,
             receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
             receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file")
@@ -86,7 +97,10 @@
               full_width: true,
               type: "button",
               disabled: ocr_down,
-              data: { action: "receipt-upload#openCamera" } %>
+              data: {
+                action: "receipt-upload#openCamera",
+                service_status_polling_target: "uploadControl"
+              } %>
 
             <%= render "shared/ui/button",
               label: t("receipts.new_upload.buttons.library"),
@@ -96,7 +110,10 @@
               full_width: true,
               type: "button",
               disabled: ocr_down,
-              data: { action: "receipt-upload#openLibrary" } %>
+              data: {
+                action: "receipt-upload#openLibrary",
+                service_status_polling_target: "uploadControl"
+              } %>
           </div>
 
           <p class="text-xs text-center token-text-muted" data-receipt-upload-target="fileName">
@@ -112,7 +129,10 @@
             disabled: true,
             disable_with: t("receipts.new_upload.buttons.uploading"),
             icon: "cloud_upload",
-            data: { receipt_upload_target: "submitButton" } %>
+            data: {
+              receipt_upload_target: "submitButton",
+              service_status_polling_target: "uploadSubmit"
+            } %>
         </section>
 
         <%= form.file_field :image,
@@ -120,13 +140,21 @@
           capture: "environment",
           class: "hidden",
           disabled: ocr_down,
-          data: { receipt_upload_target: "cameraInput", action: "change->receipt-upload#previewCamera" } %>
+          data: {
+            receipt_upload_target: "cameraInput",
+            service_status_polling_target: "uploadControl",
+            action: "change->receipt-upload#previewCamera"
+          } %>
 
         <%= form.file_field :image,
           accept: "image/*",
           class: "hidden",
           disabled: ocr_down,
-          data: { receipt_upload_target: "libraryInput", action: "change->receipt-upload#previewLibrary" } %>
+          data: {
+            receipt_upload_target: "libraryInput",
+            service_status_polling_target: "uploadControl",
+            action: "change->receipt-upload#previewLibrary"
+          } %>
       </div>
     <% end %>
   <% end %>
