@@ -4,6 +4,9 @@ ja:
       receipt:
         image: "画像"
       user:
+        email: "メールアドレス"
+        password: "パスワード"
+        password_confirmation: "パスワード確認"
         avatar: "プロフィール画像"
 
     errors:
@@ -20,7 +23,17 @@ ja:
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
         user:
           attributes:
+            email:
+              blank: "を入力してください"
+              invalid: "を確認してください"
+            password:
+              blank: "を入力してください"
+              invalid: "を確認してください"
+            password_confirmation:
+              blank: "を入力してください"
             avatar:
+              invalid_content_type: "はPNG/JPEG/WebP形式でアップロードしてください"
+              file_too_large: "は5MB以下にしてください"
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
         receipt_item:
           attributes:

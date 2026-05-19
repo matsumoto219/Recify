@@ -125,7 +125,7 @@ RSpec.describe Receipt, type: :model do
       summary = described_class.category_summary_for(user)
 
       aggregate_failures do
-        expect(summary).to include(hash_including(category: 'uncategorized', label: '未分類', total_amount: 300, item_count: 2))
+        expect(summary).to include(hash_including(category: 'uncategorized', label: I18n.t('receipts.item_fields.uncategorized'), total_amount: 300, item_count: 2))
         expect(summary).to include(hash_including(category: 'other', label: 'その他', total_amount: 300, item_count: 1))
       end
     end

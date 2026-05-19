@@ -25,7 +25,7 @@ class User < ApplicationRecord
     create!(
       email: "guest_#{SecureRandom.hex(8)}@example.com",
       password: SecureRandom.urlsafe_base64(12),
-      name: "ゲストユーザー",
+      name: "GUEST USER",
       guest: true
     )
   end
@@ -48,7 +48,7 @@ class User < ApplicationRecord
     return unless avatar.attached?
 
     unless avatar.content_type.in?([ "image/png", "image/jpeg", "image/webp" ])
-      errors.add(:avatar, "はPNG/JPEG/WebP形式でアップロードしてください")
+      errors.add(:avatar, :invalid_content_type)
     end
   end
 
@@ -56,7 +56,7 @@ class User < ApplicationRecord
     return unless avatar.attached?
 
     if avatar.blob.byte_size > 5.megabytes
-      errors.add(:avatar, "は5MB以下にしてください")
+      errors.add(:avatar, :file_too_large)
     end
   end
 end

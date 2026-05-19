@@ -40,13 +40,13 @@ class Users::SessionsController < Devise::SessionsController
     if email_value.blank?
       resource.errors.add(:email, :blank)
     else
-      resource.errors.add(:email, "を確認してください")
+      resource.errors.add(:email, :invalid)
     end
 
     if password_value.blank?
       resource.errors.add(:password, :blank)
     else
-      resource.errors.add(:password, "を確認してください")
+      resource.errors.add(:password, :invalid)
     end
   end
 

@@ -15,7 +15,49 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.sessions.fields.email'))
         expect(response.body).to include(I18n.t('auth.sessions.forgot_password'))
         expect(response.body).to include(I18n.t('auth.sessions.guest.button'))
+        expect(response.body).to include(I18n.t('shared.footer.terms'))
+        expect(response.body).to include(I18n.t('shared.footer.privacy'))
         expect(guest_form).to be_present
+      end
+    end
+
+    it 'invalid sign in shows locale-backed field errors' do
+      post user_session_path,
+        params: {
+          user: {
+            email: 'missing@example.com',
+            password: 'wrong-password'
+          }
+        }
+
+      email_error = "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.invalid')}"
+      password_error = "#{I18n.t('activerecord.attributes.user.password')}#{I18n.t('activerecord.errors.models.user.attributes.password.invalid')}"
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(email_error)
+        expect(response.body).to include(password_error)
+      end
+    end
+
+    it 'blank sign in shows locale-backed blank errors' do
+      post user_session_path,
+        params: {
+          user: {
+            email: '',
+            password: ''
+          }
+        }
+
+      email_error = "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.blank')}"
+      password_error = "#{I18n.t('activerecord.attributes.user.password')}#{I18n.t('activerecord.errors.models.user.attributes.password.blank')}"
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(email_error)
+        expect(response.body).to include(password_error)
       end
     end
   end

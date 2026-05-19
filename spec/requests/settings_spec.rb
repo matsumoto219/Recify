@@ -208,7 +208,7 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(user.reload.avatar).not_to be_attached
-        expect(response.body).to include('PNG/JPEG/WebP形式')
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.avatar.invalid_content_type'))
       end
     ensure
       invalid_file&.close
@@ -233,7 +233,7 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(user.reload.avatar).not_to be_attached
-        expect(response.body).to include('5MB以下')
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.avatar.file_too_large'))
       end
     ensure
       large_file&.close
@@ -294,6 +294,30 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(settings_path)
         expect(user.reload.avatar).not_to be_attached
+      end
+    end
+  end
+
+  describe 'PATCH /users security' do
+    it 'blank password update shows locale-backed field errors' do
+      patch user_registration_path,
+            params: {
+              update_context: 'security',
+              user: {
+                current_password: 'password',
+                password: '',
+                password_confirmation: ''
+              }
+            }
+
+      password_error = "#{I18n.t('activerecord.attributes.user.password')}#{I18n.t('activerecord.errors.models.user.attributes.password.blank')}"
+      confirmation_error = "#{I18n.t('activerecord.attributes.user.password_confirmation')}#{I18n.t('activerecord.errors.models.user.attributes.password_confirmation.blank')}"
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(password_error)
+        expect(response.body).to include(confirmation_error)
       end
     end
   end

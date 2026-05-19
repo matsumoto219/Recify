@@ -32,8 +32,8 @@ class Users::RegistrationsController < Devise::RegistrationsController
     failure_template = security_update ? "settings/security" : "settings/account"
 
     if security_update && password_change_blank?
-      resource.errors.add(:password, "を入力してください")
-      resource.errors.add(:password_confirmation, "を入力してください")
+      resource.errors.add(:password, :blank)
+      resource.errors.add(:password_confirmation, :blank)
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)

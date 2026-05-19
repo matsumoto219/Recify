@@ -1,6 +1,36 @@
 require 'rails_helper'
 
 RSpec.describe User, type: :model do
+  describe 'avatar validation' do
+    it 'invalid content type uses locale-backed error message' do
+      user = build(:user)
+      user.avatar.attach(
+        io: StringIO.new('not an image'),
+        filename: 'avatar.txt',
+        content_type: 'text/plain'
+      )
+
+      expect(user).not_to be_valid
+
+      expected_message = "#{I18n.t('activerecord.attributes.user.avatar')}#{I18n.t('activerecord.errors.models.user.attributes.avatar.invalid_content_type')}"
+      expect(user.errors.full_messages_for(:avatar)).to include(expected_message)
+    end
+
+    it 'oversized avatar uses locale-backed error message' do
+      user = build(:user)
+      user.avatar.attach(
+        io: StringIO.new('0' * (5.megabytes + 1)),
+        filename: 'avatar.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      expect(user).not_to be_valid
+
+      expected_message = "#{I18n.t('activerecord.attributes.user.avatar')}#{I18n.t('activerecord.errors.models.user.attributes.avatar.file_too_large')}"
+      expect(user.errors.full_messages_for(:avatar)).to include(expected_message)
+    end
+  end
+
   describe 'storage_limit_bytes validation' do
     it '0以下は不正にする' do
       user = build(:user, storage_limit_bytes: 0)

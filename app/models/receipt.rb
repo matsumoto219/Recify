@@ -410,7 +410,7 @@ class Receipt < ApplicationRecord
   end
 
   def self.category_summary_label(category)
-    return "未分類" if category == "uncategorized"
+    return I18n.t("receipts.item_fields.uncategorized") if category == "uncategorized"
 
     I18n.t("enums.receipt_item.category.#{category}", default: category)
   end

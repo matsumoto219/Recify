@@ -1,4 +1,7 @@
 ja:
+  devise:
+    failure:
+      invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
     guest_sessions:
       create:
