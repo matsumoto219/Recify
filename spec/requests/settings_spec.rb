@@ -23,6 +23,19 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '通知設定toggleを表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.usage.push_notification.label'))
+        expect(response.body).to include(I18n.t('settings.index.usage.push_notification.description'))
+        expect(document.at_css('input[name="push_notification_enabled"]')).to be_present
+      end
+    end
+
     it 'renders settings index copy through locale keys' do
       get settings_path
 
@@ -343,6 +356,45 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '通知OFFなら設定保存成功のTurbo flashを表示しない' do
+      user.update!(push_notification_enabled: false)
+
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+      stream = document.at_css('turbo-stream[target="flash"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+        expect(stream).to be_present
+        expect(stream.at_css('[data-controller~="notice-surface"]')).to be_nil
+        expect(stream.text).not_to include(I18n.t('flash.settings.update_success'))
+      end
+    end
+
+    it '通知OFFでも設定保存失敗のTurbo flashは表示する' do
+      user.update!(push_notification_enabled: false)
+
+      patch settings_path,
+            params: { user: { theme_preference: 'neon' } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+      stream = document.at_css('turbo-stream[target="flash"]')
+      notice_surface = stream.at_css('[data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+        expect(stream).to be_present
+        expect(notice_surface).to be_present
+        expect(stream.text).to include(I18n.t('flash.settings.update_failure'))
+      end
+    end
+
     it 'JSON更新成功時にlocale経由のmessageを返す' do
       patch settings_path,
             params: { user: { theme_preference: 'dark' } },
@@ -384,6 +436,38 @@ RSpec.describe 'Settings', type: :request do
         expect(response.parsed_body).to include(
           'ok' => true,
           'receipt_item_delete_confirmation_enabled' => false
+        )
+      end
+    end
+
+    it 'updates push notification setting to false' do
+      patch settings_path,
+            params: { user: { push_notification_enabled: false } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.push_notification_enabled).to be(false)
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'push_notification_enabled' => false
+        )
+      end
+    end
+
+    it 'updates push notification setting to true' do
+      user.update!(push_notification_enabled: false)
+
+      patch settings_path,
+            params: { user: { push_notification_enabled: true } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.push_notification_enabled).to be(true)
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'push_notification_enabled' => true
         )
       end
     end

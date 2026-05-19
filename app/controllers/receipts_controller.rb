@@ -70,7 +70,7 @@ class ReceiptsController < ApplicationController
       Rails.logger.info("[ReceiptAnalysis] enqueue receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{@receipt.image.attached?}")
       ReceiptAnalysisJob.perform_later(@receipt.id)
 
-      redirect_to receipts_path, notice: t("flash.receipts.enqueued")
+      redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
     else
       Rails.logger.warn(
         "[ReceiptUpload] failed user_id=#{current_user.id} errors=#{@receipt.errors.full_messages.join(', ')}"
@@ -90,7 +90,7 @@ class ReceiptsController < ApplicationController
     @receipt.status = "completed"
 
     if @receipt.save
-      redirect_to receipts_path, notice: t("flash.receipts.create")
+      redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content
@@ -114,7 +114,7 @@ class ReceiptsController < ApplicationController
     clear_processing_error_after_manual_update!(update_params)
 
     if @receipt.update(update_params)
-      redirect_to @receipt, notice: t("flash.receipts.update")
+      redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
       flash.now[:alert] = @receipt.errors.full_messages
       render :edit, status: :unprocessable_content
@@ -123,7 +123,7 @@ class ReceiptsController < ApplicationController
 
   def destroy
     @receipt.destroy
-    redirect_to receipts_path, notice: t("flash.receipts.destroy")
+    redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.destroy"))
   end
 
   private
@@ -141,6 +141,12 @@ class ReceiptsController < ApplicationController
   def set_external_service_states
     @ocr_state = ExternalServiceStatus.snapshot(:ocr)
     @ai_state = ExternalServiceStatus.snapshot(:ai)
+  end
+
+  def temporary_notice_options(message)
+    return {} unless current_user&.push_notification_enabled?
+
+    { notice: message }
   end
 
   def redirect_to_canonical_receipts_page_if_needed

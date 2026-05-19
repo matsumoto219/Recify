@@ -140,7 +140,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.boolean "guest"
     t.string "name"
     t.boolean "product_name_ai_completion_enabled", default: false, null: false
-    t.boolean "push_notification_enabled", default: false, null: false
+    t.boolean "push_notification_enabled", default: true, null: false
     t.boolean "receipt_item_delete_confirmation_enabled", default: true, null: false
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"

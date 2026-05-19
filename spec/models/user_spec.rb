@@ -1,6 +1,14 @@
 require 'rails_helper'
 
 RSpec.describe User, type: :model do
+  describe 'defaults' do
+    it 'push_notification_enabled は初期値trueにする' do
+      user = create(:user)
+
+      expect(user.push_notification_enabled).to be(true)
+    end
+  end
+
   describe 'avatar validation' do
     it 'invalid content type uses locale-backed error message' do
       user = build(:user)

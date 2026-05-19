@@ -227,6 +227,17 @@ RSpec.describe Receipt, type: :model do
       receipt.update!(status: "completed")
     end
 
+    it '通知OFFでもcard / summary broadcastは維持し、processing flashだけ呼ばない' do
+      user.update!(push_notification_enabled: false)
+      receipt = create(:receipt, :processing, :with_image, user: user)
+
+      expect(receipt).to receive(:broadcast_receipt_card_update).and_call_original
+      expect(receipt).to receive(:broadcast_summary_cards_update).and_call_original
+      expect(receipt).not_to receive(:broadcast_processing_flash)
+
+      receipt.update!(status: "completed")
+    end
+
     it 'processingからcompletedになった時に永続通知を作成する' do
       receipt = create(:receipt, :processing, :with_image, user: user, store_name: '完了ストア')
 
@@ -242,6 +253,17 @@ RSpec.describe Receipt, type: :model do
         expect(notification.action_path).to eq("/receipts/#{receipt.id}")
         expect(notification.title).to include('完了')
       end
+    end
+
+    it '通知OFFでも永続Notificationは作成する' do
+      user.update!(push_notification_enabled: false)
+      receipt = create(:receipt, :processing, :with_image, user: user, store_name: '通知OFFストア')
+
+      expect {
+        receipt.update!(status: 'completed')
+      }.to change(user.notifications, :count).by(1)
+
+      expect(user.notifications.last.kind).to eq('receipt_completed')
     end
 
     it 'uploadedからreview_neededになった時に永続通知を作成する' do
@@ -375,6 +397,15 @@ RSpec.describe Receipt, type: :model do
 
         receipt.send(:broadcast_processing_flash)
       end
+    end
+
+    it '通知OFFではprocessing flashをbroadcastしない' do
+      user.update!(push_notification_enabled: false)
+      receipt = build_stubbed(:receipt, user: user, status: "completed")
+
+      expect(receipt).not_to receive(:broadcast_replace_later_to)
+
+      receipt.send(:broadcast_processing_flash)
     end
 
     it 'total_amount更新時にsummary cardsをreplaceする' do

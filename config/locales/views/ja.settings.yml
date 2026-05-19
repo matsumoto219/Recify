@@ -34,7 +34,7 @@ ja:
         theme_hint: ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
       usage:
         push_notification:
-          label: プッシュ通知
+          label: 通知
           description: レシート処理の完了や要確認項目を通知します
         receipt_item_delete_confirmation:
           label: 明細削除の確認

@@ -547,7 +547,7 @@ class Receipt < ApplicationRecord
   after_create_commit :broadcast_created_summary_cards_update
   after_update_commit :broadcast_receipt_card_update, if: :saved_change_to_status?
   after_update_commit :broadcast_summary_cards_update_after_update, if: :summary_broadcast_needed?
-  after_update_commit :broadcast_processing_flash, if: :saved_change_to_status?
+  after_update_commit :broadcast_processing_flash, if: :processing_flash_notification_needed?
   after_update_commit :create_status_notification, if: :status_notification_needed?
   after_destroy_commit :broadcast_summary_cards_update_after_destroy
 
@@ -612,6 +612,8 @@ class Receipt < ApplicationRecord
   end
 
   def broadcast_processing_flash
+    return unless user&.push_notification_enabled?
+
     flash_type, message = case status
     when "completed"
       [ :notice, I18n.t("flash.receipts.analysis_completed") ]
@@ -642,6 +644,10 @@ class Receipt < ApplicationRecord
 
     NOTIFICATION_SOURCE_STATUSES.include?(previous_status) &&
       STATUS_NOTIFICATION_KINDS.key?(current_status)
+  end
+
+  def processing_flash_notification_needed?
+    saved_change_to_status? && user&.push_notification_enabled?
   end
 
   def create_status_notification

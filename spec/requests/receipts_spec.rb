@@ -709,6 +709,25 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '通知OFFならupload enqueueのredirect flashを表示しない' do
+      user.update!(push_notification_enabled: false)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+
+      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_nil
+        expect(response.body).not_to include(I18n.t('flash.receipts.enqueued'))
+      end
+    end
+
     it 'upload後のjob実行でOCR失敗ならfailedになり一覧/詳細/編集で導線を表示する' do
       allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
@@ -911,6 +930,21 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '通知OFFなら手動作成成功のredirect flashを表示しない' do
+      user.update!(push_notification_enabled: false)
+
+      post receipts_path, params: valid_params
+
+      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_nil
+        expect(response.body).not_to include(I18n.t('flash.receipts.create'))
+      end
+    end
+
     it 'ログインユーザーに紐づいて作成される' do
       post receipts_path, params: valid_params
 
@@ -1005,6 +1039,22 @@ RSpec.describe 'Receipts', type: :request do
         expect(notice_surface.text).to include(I18n.t('shared.notice_surface.titles.error'))
         expect(notice_surface.at_css('button[aria-label="' + I18n.t('shared.notice_surface.close_label') + '"]')).to be_present
         expect(error_items.size).to be >= 2
+      end
+    end
+
+    it '通知OFFでもvalidation errorは表示する' do
+      user.update!(push_notification_enabled: false)
+
+      post receipts_path, params: invalid_params
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface).to be_present
+        expect(notice_surface['class']).to include('notice-surface-error')
+        expect(notice_surface.text).to include(I18n.t('shared.notice_surface.titles.error'))
       end
     end
 
@@ -2477,6 +2527,21 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '通知OFFなら更新成功のredirect flashを表示しない' do
+      user.update!(push_notification_enabled: false)
+
+      patch receipt_path(receipt), params: valid_update_params
+
+      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_nil
+        expect(response.body).not_to include(I18n.t('flash.receipts.update'))
+      end
+    end
+
     it '不正なパラメータでは更新できない' do
       patch receipt_path(receipt), params: invalid_update_params
       receipt.reload
@@ -3038,6 +3103,21 @@ RSpec.describe 'Receipts', type: :request do
       end.to change(Receipt, :count).by(-1)
 
       expect(response).to redirect_to(receipts_path)
+    end
+
+    it '通知OFFなら削除成功のredirect flashを表示しない' do
+      user.update!(push_notification_enabled: false)
+
+      delete receipt_path(receipt)
+
+      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_nil
+        expect(response.body).not_to include(I18n.t('flash.receipts.destroy'))
+      end
     end
 
     it '他人のレシートは削除できない' do
