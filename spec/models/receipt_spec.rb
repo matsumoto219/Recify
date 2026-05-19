@@ -269,6 +269,53 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it '同じreceipt + same kind の永続通知は重複作成しない' do
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      existing_notification = create(
+        :notification,
+        user: user,
+        kind: 'receipt_failed',
+        notifiable: receipt,
+        action_path: "/receipts/#{receipt.id}",
+        metadata: { receipt_id: receipt.id, status: 'failed' }
+      )
+
+      expect {
+        receipt.update!(status: 'failed', processing_error_code: 'ocr_api_error')
+      }.not_to change(user.notifications, :count)
+
+      expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt)).to contain_exactly(existing_notification)
+    end
+
+    it 'processing -> failed を複数回試しても receipt_failed 通知は1件に抑える' do
+      receipt = create(:receipt, :processing, :with_image, user: user)
+
+      receipt.update!(status: 'failed', processing_error_code: 'ocr_api_error')
+      receipt.update!(status: 'processing')
+
+      expect {
+        receipt.update!(status: 'failed', processing_error_code: 'ocr_timeout')
+      }.not_to change { user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count }
+
+      expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count).to eq(1)
+    end
+
+    it 'review_needed と failed は別kindとして共存できる' do
+      receipt = create(:receipt, :processing, :with_image, user: user)
+
+      receipt.update!(status: 'review_needed')
+      receipt.update!(status: 'processing')
+
+      expect {
+        receipt.update!(status: 'failed', processing_error_code: 'ocr_api_error')
+      }.to change(user.notifications, :count).by(1)
+
+      expect(user.notifications.where(notifiable: receipt).pluck(:kind)).to contain_exactly(
+        'receipt_review_needed',
+        'receipt_failed'
+      )
+    end
+
     it 'failedからcompletedに手動復旧しても永続通知を作成しない' do
       receipt = create(:receipt, :failed, user: user)
 

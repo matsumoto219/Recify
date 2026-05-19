@@ -645,17 +645,18 @@ class Receipt < ApplicationRecord
   end
 
   def create_status_notification
-    user.notifications.create!(
+    user.notifications.create_or_find_by!(
       kind: STATUS_NOTIFICATION_KINDS.fetch(status),
-      notifiable: self,
-      title: status_notification_title,
-      body: status_notification_body,
-      action_path: Rails.application.routes.url_helpers.receipt_path(self),
-      metadata: {
+      notifiable: self
+    ) do |notification|
+      notification.title = status_notification_title
+      notification.body = status_notification_body
+      notification.action_path = Rails.application.routes.url_helpers.receipt_path(self)
+      notification.metadata = {
         receipt_id: id,
         status: status
       }
-    )
+    end
   end
 
   def status_notification_title

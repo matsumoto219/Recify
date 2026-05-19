@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_18_200157) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -56,6 +56,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_18_200157) do
     t.bigint "user_id", null: false
     t.index ["notifiable_type", "notifiable_id"], name: "index_notifications_on_notifiable"
     t.index ["user_id", "kind", "created_at"], name: "index_notifications_on_user_id_and_kind_and_created_at"
+    t.index ["user_id", "kind", "notifiable_type", "notifiable_id"], name: "index_notifications_on_user_kind_notifiable_unique", unique: true, where: "((notifiable_type IS NOT NULL) AND (notifiable_id IS NOT NULL))"
     t.index ["user_id", "read_at", "created_at"], name: "index_notifications_on_user_id_and_read_at_and_created_at"
     t.index ["user_id"], name: "index_notifications_on_user_id"
   end

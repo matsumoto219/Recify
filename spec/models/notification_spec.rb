@@ -14,6 +14,46 @@ RSpec.describe Notification, type: :model do
     end
   end
 
+  describe 'query indexes' do
+    it 'receipt通知用の重複防止unique indexを持つ' do
+      indexes = ActiveRecord::Base.connection.indexes(:notifications)
+      index = indexes.find { |candidate| candidate.name == 'index_notifications_on_user_kind_notifiable_unique' }
+
+      aggregate_failures do
+        expect(index).to be_present
+        expect(index.columns).to eq(%w[user_id kind notifiable_type notifiable_id])
+        expect(index.unique).to be(true)
+        expect(index.where).to include('notifiable_type IS NOT NULL')
+        expect(index.where).to include('notifiable_id IS NOT NULL')
+      end
+    end
+  end
+
+  describe 'uniqueness' do
+    it '同じuser/kind/notifiableの通知はDBで重複作成できない' do
+      receipt = create(:receipt, :completed)
+      timestamp = Time.current
+      attributes = {
+        user_id: receipt.user_id,
+        kind: 'receipt_completed',
+        notifiable_type: 'Receipt',
+        notifiable_id: receipt.id,
+        title: 'レシート解析が完了しました',
+        body: 'レシートを確認できます。',
+        action_path: "/receipts/#{receipt.id}",
+        metadata: { receipt_id: receipt.id, status: 'completed' },
+        created_at: timestamp,
+        updated_at: timestamp
+      }
+
+      described_class.insert_all!([ attributes ])
+
+      expect {
+        described_class.insert_all!([ attributes.merge(created_at: timestamp + 1.second, updated_at: timestamp + 1.second) ])
+      }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+  end
+
   describe 'scopes' do
     it 'unread/read/recent を返す' do
       user = create(:user)
