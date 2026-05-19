@@ -772,6 +772,7 @@ RSpec.describe 'Receipts', type: :request do
     it 'upload後のjob実行でOCR成功かつAI失敗ならOCR由来データを残してreview_needed導線を表示する' do
       allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrService).to receive(:call).and_return(upload_ocr_result)
@@ -823,6 +824,37 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('処理に関する注意')
         expect(response.body).to include('AI補完処理に失敗しました')
+      end
+    end
+
+    it 'upload後のjob実行でAI downならAI呼び出しをskipしてOCR由来データを残す' do
+      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ReceiptOcrService).to receive(:call).and_return(upload_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+      expect(receipt.status).to eq('processing')
+
+      ReceiptAnalysisJob.perform_now(receipt.id)
+      receipt.reload
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_unavailable')
+        expect(receipt.store_name).to eq('統合テストストア')
+        expect(receipt.total_amount).to eq(1280)
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.receipt_tax_details.count).to eq(1)
+        expect(receipt.receipt_payments.count).to eq(1)
       end
     end
   end

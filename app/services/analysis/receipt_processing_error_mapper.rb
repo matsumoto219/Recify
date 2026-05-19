@@ -25,6 +25,7 @@ module Analysis
 
       # AI系
       "ai_timeout" => "ai_error",
+      "ai_unavailable" => "ai_error",
       "ai_invalid_response" => "ai_error",
       "analysis_missing_keys" => "ai_error",
 

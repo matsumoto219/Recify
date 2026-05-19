@@ -48,6 +48,11 @@ class ReceiptAnalysisService
       return save_ocr_only_result!(ocr_result)
     end
 
+    unless ai_available?
+      Rails.logger.info("[ReceiptAnalysis] ai_down_ocr_only receipt_id=#{receipt.id}")
+      return save_fallback_result!(ocr_result, "ai_unavailable")
+    end
+
     ai_result = run_ai_enrichment(ocr_result)
 
     if ai_result[:success]
@@ -96,6 +101,10 @@ class ReceiptAnalysisService
     ActiveModel::Type::Boolean.new.cast(
       ENV.fetch(AI_ENABLED_ENV_KEY, "true")
     )
+  end
+
+  def ai_available?
+    !ExternalServiceStatus.down?(:ai)
   end
 
   def run_ai_enrichment(ocr_result)

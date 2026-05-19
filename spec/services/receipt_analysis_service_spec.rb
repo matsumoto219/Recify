@@ -416,6 +416,51 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'AI down時はAI呼び出しを行わずOCR-only fallbackでreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+      expect(ReceiptAiEnrichmentService).not_to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      items = receipt.receipt_items.order(:position_index)
+      tax_detail = receipt.receipt_tax_details.first
+      payment = receipt.receipt_payments.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_unavailable')
+        expect(receipt.processing_error_message).to be_nil
+        expect(receipt.store_name).to eq('サンプルストア')
+        expect(receipt.total_amount).to eq(1280)
+
+        expect(items.size).to eq(2)
+        expect(items.first.raw_text).to eq('コーヒー')
+        expect(items.second.raw_text).to eq('サンド')
+
+        expect(receipt.receipt_tax_details.size).to eq(1)
+        expect(tax_detail.net_amount).to eq(1164)
+        expect(tax_detail.amount).to eq(116)
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+
+        expect(receipt.receipt_payments.size).to eq(1)
+        expect(payment.method).to eq('CreditCard')
+        expect(payment.amount).to eq(1280)
+      end
+    end
+
+    it 'AI degraded時は従来どおりAI呼び出しを試す' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+      allow(ExternalServiceStatus).to receive(:degraded?).with(:ai).and_return(true)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+
+      expect(ReceiptAiEnrichmentService).to have_received(:call)
+    end
+
     it 'AI失敗fallbackではpayment_method_textが空でもPayments[]からpayment_methodを推定する' do
       ocr_result = build_ocr_result(
         raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\n合計 1280",
@@ -628,6 +673,30 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('ocr_timeout')
         expect(receipt.ocr_completed_at).to be_present
+      end
+    end
+
+    it 'OCR失敗時はAI downでもOCR失敗としてfailedになる' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        {
+          success: false,
+          raw_text: '',
+          lines: [],
+          candidates: { items: [], payments: [], tax_details: [] },
+          error_code: 'ocr_timeout',
+          meta: {}
+        }
+      )
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ocr_timeout')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
       end
     end
 
