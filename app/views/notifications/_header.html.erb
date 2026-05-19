@@ -1,0 +1,21 @@
+<%
+  unread_count = local_assigns.fetch(:unread_count, 0).to_i
+%>
+
+<section id="notifications_index_header" class="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+  <%= render "shared/ui/section_header",
+    title: t("notifications.index.title"),
+    title_suffix: t("notifications.index.unread_suffix", count: unread_count),
+    title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
+    subtitle: t("notifications.index.subtitle"),
+    title_size: "text-2xl",
+    subtitle_size: "text-sm",
+    wrapper_class: "mt-1" %>
+
+  <% if unread_count.positive? %>
+    <%= button_to t("notifications.index.mark_all_as_read"),
+      read_all_notifications_path,
+      method: :patch,
+      class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-4 py-2 text-sm font-semibold token-text-base transition-colors cursor-pointer" %>
+  <% end %>
+</section>

@@ -1,0 +1,14 @@
+<%
+  notifications = Array(local_assigns.fetch(:notifications, []))
+%>
+
+<section id="notifications_list" class="space-y-3">
+  <% if notifications.any? %>
+    <%= render notifications %>
+  <% else %>
+    <div class="token-bg-card token-border-soft rounded-lg border p-8 text-center">
+      <p class="text-sm font-semibold token-text-base"><%= t("notifications.empty.title") %></p>
+      <p class="mt-2 text-xs token-text-muted"><%= t("notifications.empty.description") %></p>
+    </div>
+  <% end %>
+</section>

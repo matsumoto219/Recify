@@ -18,6 +18,7 @@ class NotificationsController < ApplicationController
       read_at: Time.current,
       updated_at: Time.current
     )
+    Notification.broadcast_realtime_surfaces_for(current_user)
 
     redirect_to notifications_path
   end

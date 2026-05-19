@@ -1,0 +1,31 @@
+<%
+  notifications = Array(local_assigns.fetch(:notifications, []))
+%>
+
+<div id="notifications_dropdown_content">
+  <div class="flex items-center justify-between border-b token-border-glass px-4 py-3">
+    <h3 class="text-sm font-bold token-text-base"><%= t("notifications.dropdown.title") %></h3>
+  </div>
+
+  <div class="max-h-80 overflow-y-auto">
+    <% if notifications.any? %>
+      <%= render partial: "shared/notifications/dropdown_item",
+        collection: notifications,
+        as: :notification %>
+    <% else %>
+      <div class="px-4 py-8 text-center">
+        <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full notice-icon-info">
+          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">notifications</span>
+        </div>
+        <p class="mt-3 text-sm font-semibold token-text-base"><%= t("notifications.empty.title") %></p>
+        <p class="mt-1 text-xs token-text-muted"><%= t("notifications.empty.description") %></p>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="border-t token-border-glass px-3 py-3 text-center">
+    <%= link_to t("notifications.dropdown.view_all"),
+      notifications_path,
+      class: "inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-bold token-text-brand header-text-hover transition-colors" %>
+  </div>
+</div>

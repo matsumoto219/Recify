@@ -49,18 +49,59 @@ RSpec.describe Notification, type: :model do
   end
 
   describe 'broadcasts' do
-    it '作成時に未読badgeをreplaceする' do
+    it '作成時に永続通知UIをreplaceする' do
       user = create(:user)
-      notification = build_stubbed(:notification, user:)
 
-      expect(notification).to receive(:broadcast_replace_later_to).with(
-        [ user, :notifications ],
-        target: 'notifications_unread_badge',
-        partial: 'shared/notifications/badge',
-        locals: { unread_count: user.notifications.unread.count }
-      )
+      expect(described_class).to receive(:broadcast_realtime_surfaces_for).with(user)
 
-      notification.send(:broadcast_unread_badge)
+      create(:notification, user:)
+    end
+
+    it '既読状態更新時に永続通知UIをreplaceする' do
+      notification = create(:notification, read_at: nil)
+
+      expect(described_class).to receive(:broadcast_realtime_surfaces_for).with(notification.user)
+
+      notification.update!(read_at: Time.current)
+    end
+
+    it 'badge / dropdown / index header / list をreplaceする' do
+      user = create(:user)
+      create(:notification, user:, read_at: nil)
+
+      allow(Turbo::StreamsChannel).to receive(:broadcast_replace_later_to)
+
+      described_class.broadcast_realtime_surfaces_for(user)
+
+      aggregate_failures do
+        expect(Turbo::StreamsChannel).to have_received(:broadcast_replace_later_to).with(
+          [ user, :notifications ],
+          target: 'notifications_unread_badge',
+          partial: 'shared/notifications/badge',
+          locals: { unread_count: 1 }
+        )
+
+        expect(Turbo::StreamsChannel).to have_received(:broadcast_replace_later_to).with(
+          [ user, :notifications ],
+          target: 'notifications_dropdown_content',
+          partial: 'shared/notifications/dropdown_content',
+          locals: { notifications: user.notifications.recent.limit(5).to_a }
+        )
+
+        expect(Turbo::StreamsChannel).to have_received(:broadcast_replace_later_to).with(
+          [ user, :notifications ],
+          target: 'notifications_index_header',
+          partial: 'notifications/header',
+          locals: { unread_count: 1 }
+        )
+
+        expect(Turbo::StreamsChannel).to have_received(:broadcast_replace_later_to).with(
+          [ user, :notifications ],
+          target: 'notifications_list',
+          partial: 'notifications/list',
+          locals: { notifications: user.notifications.recent.limit(50).to_a }
+        )
+      end
     end
   end
 end

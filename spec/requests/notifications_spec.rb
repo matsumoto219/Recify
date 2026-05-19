@@ -51,6 +51,7 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(dropdown).to be_present
+        expect(dropdown.at_css('#notifications_dropdown_content')).to be_present
         expect(dropdown['class']).to include('hidden')
         expect(surface).to be_present
         expect(surface['class']).to include('notification-dropdown-motion')
@@ -76,6 +77,7 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(dropdown).to be_present
+        expect(dropdown.at_css('#notifications_dropdown_content')).to be_present
         expect(dropdown.text).to include(I18n.t('notifications.empty.title'))
         expect(dropdown.at_css('a[href="/notifications"]')).to have_attributes(text: include(I18n.t('notifications.dropdown.view_all')))
       end
@@ -86,8 +88,12 @@ RSpec.describe 'Notifications', type: :request do
     it '通知がない場合は統一されたempty stateを表示する' do
       get notifications_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(document.at_css('#notifications_index_header')).to be_present
+        expect(document.at_css('#notifications_list')).to be_present
         expect(response.body).to include(I18n.t('notifications.empty.title'))
         expect(response.body).to include(I18n.t('notifications.empty.description'))
       end
@@ -98,9 +104,12 @@ RSpec.describe 'Notifications', type: :request do
       create(:notification, user: create(:user), title: '他人の通知')
 
       get notifications_path
+      document = Nokogiri::HTML(response.body)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(document.at_css('#notifications_index_header')).to be_present
+        expect(document.at_css('#notifications_list')).to be_present
         expect(response.body).to include('自分の通知')
         expect(response.body).to include('確認できます')
         expect(response.body).not_to include('他人の通知')
@@ -140,6 +149,8 @@ RSpec.describe 'Notifications', type: :request do
     it '自分の未読通知だけを一括既読化する' do
       create_list(:notification, 2, user:, read_at: nil)
       other_notification = create(:notification, user: create(:user), read_at: nil)
+
+      expect(Notification).to receive(:broadcast_realtime_surfaces_for).with(user).and_call_original
 
       patch read_all_notifications_path
 
