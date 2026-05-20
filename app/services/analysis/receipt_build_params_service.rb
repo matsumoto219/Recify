@@ -13,16 +13,22 @@ module Analysis
         normalized_ocr_result = normalize_ocr_result(ocr_result)
         candidates = normalize_candidates(normalized_ocr_result)
         normalized_ai_result = normalize_ai_result(ai_result)
+        receipt_attributes = build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes])
+        receipt_items_attributes = build_receipt_items_attributes(candidates, normalized_lines(normalized_ocr_result), normalized_ai_result[:receipt_items_attributes])
+        receipt_payments_attributes = build_receipt_payments_attributes(candidates)
+        receipt_tax_details_attributes = build_receipt_tax_details_attributes(candidates)
+
+        apply_single_tax_detail_rate_to_items(receipt_items_attributes, receipt_tax_details_attributes)
 
         {
           # OCR/AI内部形式 -> receipts 保存用attributes
-          receipt_attributes: build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes]),
+          receipt_attributes: receipt_attributes,
           # OCR/AI内部形式 -> receipt_items 保存用attributes
-          receipt_items_attributes: build_receipt_items_attributes(candidates, normalized_lines(normalized_ocr_result), normalized_ai_result[:receipt_items_attributes]),
+          receipt_items_attributes: receipt_items_attributes,
           # NOTE: 現状は Payments[] 自体の取得率が低く、保存されても UI では未使用
-          receipt_payments_attributes: build_receipt_payments_attributes(candidates),
+          receipt_payments_attributes: receipt_payments_attributes,
           # NOTE: 税詳細は保存対象だが、現状は主に保持目的で UI では未使用
-          receipt_tax_details_attributes: build_receipt_tax_details_attributes(candidates)
+          receipt_tax_details_attributes: receipt_tax_details_attributes
         }
       end
 
@@ -201,6 +207,23 @@ module Analysis
             net_amount: normalize_amount(normalized_tax_detail[:net_amount])
           }.compact
         end
+      end
+
+      def apply_single_tax_detail_rate_to_items(items, tax_details)
+        return unless items.present?
+        return unless items.all? { |item| item[:tax_rate].nil? }
+
+        rates = Array(tax_details).filter_map do |tax_detail|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount]).to_i
+          next unless rate&.positive?
+          next unless amount.positive?
+
+          rate
+        end.uniq
+        return unless rates.one?
+
+        items.each { |item| item[:tax_rate] = rates.first }
       end
 
       def normalize_receipt_attributes(attributes)

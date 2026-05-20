@@ -2,6 +2,12 @@ require 'rails_helper'
 
 RSpec.describe Analysis::ReceiptBuildParamsService do
   describe '.call' do
+    def ocr_fixture(name)
+      raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+      Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+    end
+
     let(:ocr_result) do
       {
         candidates: {
@@ -173,6 +179,75 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(tax[:net_amount]).to eq(800)
         end
       end
+
+      it '単一税率のpositive tax_detailsがある場合はitem tax_rateを補完する' do
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        tax_rates = params[:receipt_items_attributes].map { |item| item[:tax_rate] }
+
+        expect(tax_rates).to contain_exactly(BigDecimal('0.1'), BigDecimal('0.1'))
+      end
+
+      it '既存item tax_rateが1つでもある場合は補完しない' do
+        ocr_result[:candidates][:items].first[:tax_rate] = 8
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.first[:tax_rate]).to eq(BigDecimal('0.08'))
+          expect(items.second[:tax_rate]).to be_nil
+        end
+      end
+
+      it '複数税率のtax_detailsではitem tax_rateを補完しない' do
+        ocr_result[:candidates][:tax_details] = [
+          { description: '8%対象', amount: 40, rate: 8, net_amount: 500 },
+          { description: '10%対象', amount: 50, rate: 10, net_amount: 500 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'tax amountが0の場合はitem tax_rateを補完しない' do
+        ocr_result[:candidates][:tax_details] = [
+          { description: '8%対象', amount: 0, rate: 8, net_amount: 500 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'tax_rateが0の場合はitem tax_rateを補完しない' do
+        ocr_result[:candidates][:tax_details] = [
+          { description: '0%対象', amount: 80, rate: 0, net_amount: 500 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'tax_rateがnilの場合はitem tax_rateを補完しない' do
+        ocr_result[:candidates][:tax_details] = [
+          { description: '税額', amount: 80, rate: nil, net_amount: 500 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'tax_detailsが空の場合はitem tax_rateを補完しない' do
+        ocr_result[:candidates][:tax_details] = []
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
     end
 
     context 'AI結果ありの場合' do
@@ -299,12 +374,38 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         item = params[:receipt_items_attributes].first
 
         aggregate_failures do
-          expect(item[:tax_rate]).to be_nil
+          expect(item[:tax_rate]).to eq(BigDecimal('0.1'))
           expect(item[:review_reasons]).to include('item_tax_rate_uncertain')
           expect(item[:needs_review]).to eq(true)
           expect(item).not_to have_key(:tax_rate_confidence)
           expect(item).not_to have_key(:tax_rate_reason)
         end
+      end
+    end
+
+    context '実OCR fixtureからtax_rateを補完する場合' do
+      it 'single_tax_receipt は単一税率で補完される' do
+        params = described_class.call(ocr_result: ocr_fixture('single_tax_receipt'), ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(eq(BigDecimal('0.1')))
+      end
+
+      it 'zero_tax_receipt は0税額なので補完されない' do
+        params = described_class.call(ocr_result: ocr_fixture('zero_tax_receipt'), ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'multiple_tax_receipt は複数税率なので補完されない' do
+        params = described_class.call(ocr_result: ocr_fixture('multiple_tax_receipt'), ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+
+      it 'external_tax_receipt は複数税率なので補完されない' do
+        params = described_class.call(ocr_result: ocr_fixture('external_tax_receipt'), ai_result: nil)
+
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
       end
     end
 
