@@ -848,6 +848,28 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'OCRが外部サービス利用不可の場合は error_code を保って failed になる' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        {
+          success: false,
+          raw_text: '',
+          lines: [],
+          candidates: { items: [], payments: [], tax_details: [] },
+          error_code: 'external_service_unavailable',
+          meta: {}
+        }
+      )
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('external_service_unavailable')
+        expect(receipt.ocr_completed_at).to be_present
+      end
+    end
+
     it 'OCR失敗時はAI downでもOCR失敗としてfailedになる' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         {

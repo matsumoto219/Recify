@@ -357,6 +357,8 @@ RSpec.describe ExternalServiceStatus do
 
     it '対象外エラーでは false を返す' do
       expect(described_class.external_error?('ocr_unreadable')).to eq(false)
+      expect(described_class.external_error?('input_invalid')).to eq(false)
+      expect(described_class.external_error?('image_corrupted')).to eq(false)
       expect(described_class.external_error?('ai_invalid_response')).to eq(false)
       expect(described_class.external_error?(nil)).to eq(false)
     end

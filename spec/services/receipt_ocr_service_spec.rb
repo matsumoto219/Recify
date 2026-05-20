@@ -111,7 +111,7 @@ RSpec.describe ReceiptOcrService do
       end
     end
 
-    context 'OcrError が発生した場合' do
+    context 'ReceiptOcrService::OcrError が発生した場合' do
       it 'error_code を保ったまま失敗結果を返す' do
         allow(client).to receive(:call).and_raise(ReceiptOcrService::OcrError.new('ocr_api_error', 'api failed'))
 
@@ -122,6 +122,68 @@ RSpec.describe ReceiptOcrService do
           expect(result[:error_code]).to eq('ocr_api_error')
           expect(result.dig(:meta, :provider)).to eq(provider)
           expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_api_error')
+        end
+      end
+    end
+
+    context 'Ocr::Client の例外が発生した場合' do
+      it '429などの外部サービス利用不可を external_service_unavailable として返す' do
+        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('external_service_unavailable'))
+
+        result = described_class.call(image, provider: provider)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('external_service_unavailable')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_unavailable')
+        end
+      end
+
+      it '408やpolling timeoutを ocr_timeout として返す' do
+        allow(client).to receive(:call).and_raise(Ocr::OcrTimeoutError.new('ocr_timeout'))
+
+        result = described_class.call(image, provider: provider)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ocr_timeout')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_timeout')
+        end
+      end
+
+      it '401/403を external_service_auth_error として返す' do
+        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('external_service_auth_error'))
+
+        result = described_class.call(image, provider: provider)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('external_service_auth_error')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_auth_error')
+        end
+      end
+
+      it 'invalid response は既存のOCR APIエラーへ正規化する' do
+        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('ocr_invalid_response'))
+
+        result = described_class.call(image, provider: provider)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ocr_api_error')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_api_error')
+        end
+      end
+
+      it '入力不正は外部サービス障害ではない error_code のまま返す' do
+        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('input_invalid'))
+
+        result = described_class.call(image, provider: provider)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('input_invalid')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'input_invalid')
         end
       end
     end

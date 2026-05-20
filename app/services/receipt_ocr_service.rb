@@ -1,4 +1,9 @@
 class ReceiptOcrService
+  CLIENT_ERROR_CODE_MAPPING = {
+    "ocr_invalid_response" => "ocr_api_error",
+    "ocr_failed" => "ocr_api_error"
+  }.freeze
+
   class OcrError < StandardError
     attr_reader :error_code
 
@@ -37,10 +42,10 @@ class ReceiptOcrService
       ExternalServiceStatus.mark_failure!(:ocr, error_code: parsed[:error_code])
       parsed
     end
-  rescue OcrError => e
-    Rails.logger.error("[OCR] ocr_error code=#{e.error_code}")
-    ExternalServiceStatus.mark_failure!(:ocr, error_code: e.error_code)
-    build_error_result(e.error_code)
+  rescue Ocr::OcrTimeoutError => e
+    handle_ocr_error(e)
+  rescue Ocr::OcrError, OcrError => e
+    handle_ocr_error(e)
   rescue Timeout::Error
     Rails.logger.error("[OCR] timeout")
     ExternalServiceStatus.mark_failure!(:ocr, error_code: "ocr_timeout")
@@ -63,6 +68,26 @@ class ReceiptOcrService
     unless image&.attached?
       raise OcrError.new("image_missing", "画像が添付されていません")
     end
+  end
+
+  def handle_ocr_error(error)
+    error_code = normalized_ocr_error_code(error)
+
+    Rails.logger.error("[OCR] ocr_error code=#{error_code} class=#{error.class}")
+    ExternalServiceStatus.mark_failure!(:ocr, error_code: error_code)
+    build_error_result(error_code)
+  end
+
+  def normalized_ocr_error_code(error)
+    raw_code =
+      if error.respond_to?(:error_code)
+        error.error_code
+      else
+        error.message
+      end
+
+    code = raw_code.to_s.presence || "ocr_api_error"
+    CLIENT_ERROR_CODE_MAPPING.fetch(code, code)
   end
 
   def build_error_result(error_code)
