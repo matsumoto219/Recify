@@ -228,7 +228,7 @@ export default class extends Controller {
 
     const closeButton = document.createElement('button')
     closeButton.type = 'button'
-    closeButton.className = 'material-symbols-outlined text-[18px] opacity-70 hover:opacity-100'
+    closeButton.className = 'material-symbols-outlined cursor-pointer text-[18px] opacity-70 hover:opacity-100'
     closeButton.setAttribute('aria-label', this.errorCloseLabelValue)
     closeButton.setAttribute('data-action', 'click->notice-surface#close')
     closeButton.textContent = 'close'

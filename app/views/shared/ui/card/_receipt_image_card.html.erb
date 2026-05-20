@@ -37,7 +37,7 @@
       <% if show_toggle %>
         <button
           type="button"
-          class="w-full rounded-lg border image-preview-surface image-preview-surface-hover px-4 py-3 flex items-center justify-between transition-colors text-left"
+          class="w-full cursor-pointer rounded-lg border image-preview-surface image-preview-surface-hover px-4 py-3 flex items-center justify-between transition-colors text-left"
           data-action="click->receipt-image-card#toggle"
           aria-expanded="false"
           data-receipt-image-card-target="toggleButton">
@@ -198,7 +198,7 @@
           <div class="rounded-2xl overflow-hidden border image-modal-surface relative">
             <button
               type="button"
-              class="absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 rounded-full floating-action-button transition-colors"
+              class="absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 cursor-pointer rounded-full floating-action-button transition-colors"
               data-receipt-image-card-modal-part="close"
               data-action="click->receipt-image-card#closeModal"
               aria-label="<%= t("shared.receipt_image_card.close_preview_aria") %>">
