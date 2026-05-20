@@ -11,14 +11,14 @@
     edit_from = params[:from].to_s == "index" ? "index" : "show"
   %>
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-    <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/section_header",
           title: t("receipts.show.title"),
           title_size: "text-3xl md:text-4xl",
           breadcrumb_label: t("receipts.show.breadcrumb_index"),
           breadcrumb_path: receipts_path %>
 
     <div class="flex items-center gap-3">
-      <%= render "shared/ui/button",
+      <%= render "shared/ui/actions/button",
             as: :link,
             href: receipt_path(@receipt),
             variant: :secondary,
@@ -31,7 +31,7 @@
               turbo_confirm: t("common.confirm_delete")
             } %>
 
-      <%= render "shared/ui/button",
+      <%= render "shared/ui/actions/button",
             as: :link,
             href: edit_receipt_path(@receipt, from: edit_from),
             label: t("common.edit"),
@@ -61,7 +61,7 @@
               description: t("receipts.show.warning_description") %>
       <% end %>
 
-      <%= render "shared/ui/surface_card", padding: :lg do %>
+      <%= render "shared/ui/layout/surface_card", padding: :lg do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
             <div class="h-14 w-14 token-bg-brand-strong rounded-xl flex items-center justify-center mr-4 shrink-0">
@@ -75,7 +75,7 @@
               <!-- mobile only: ID + status -->
               <div class="flex items-center justify-between mt-2 md:hidden gap-3">
                 <p class="text-xs token-text-muted truncate" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
-                <%= render "shared/ui/receipt_status_badge",
+                <%= render "shared/ui/badge/receipt_status_badge",
                       status: @receipt.status,
                       label: @receipt.status_label,
                       size: :md %>
@@ -84,7 +84,7 @@
           </div>
 
           <div class="hidden md:block text-right shrink-0">
-            <%= render "shared/ui/receipt_status_badge",
+            <%= render "shared/ui/badge/receipt_status_badge",
                   status: @receipt.status,
                   label: @receipt.status_label,
                   size: :md %>
@@ -174,7 +174,7 @@
         </div>
       <% end %>
 
-      <%= render "shared/ui/surface_card", padding: :lg do %>
+      <%= render "shared/ui/layout/surface_card", padding: :lg do %>
         <div class="flex items-center mb-4">
           <span class="material-symbols-outlined token-text-brand mr-2">notes</span>
           <h3 class="text-sm font-bold token-text-base uppercase tracking-wider"><%= t("receipts.show.memo") %></h3>
@@ -188,7 +188,7 @@
     <div class="order-1 lg:order-none lg:col-span-4 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
       <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
       <div class="order-first lg:order-none">
-        <%= render "shared/ui/amount_summary_card",
+        <%= render "shared/ui/card/amount_summary_card",
               title: t("receipts.common.total_amount_title"),
               amount: @receipt.total_amount,
               icon: "payments",
@@ -200,7 +200,7 @@
       </div>
 
       <%# TODO: keep_image 設定連動（user設定 or receiptカラム） %>
-      <%= render "shared/ui/receipt_image_card",
+      <%= render "shared/ui/card/receipt_image_card",
             receipt: @receipt,
             title: t("receipts.show.image_preview"),
             show_toggle: true,

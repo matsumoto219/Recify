@@ -16,7 +16,7 @@
   wrapper_class = local_assigns[:class]
 %>
 
-<%= render "shared/ui/surface_card",
+<%= render "shared/ui/layout/surface_card",
       shadow_variant: :indigo,
       padding: :lg,
       class: ["relative overflow-hidden amount-summary-surface", wrapper_class].compact.join(" ") do %>
@@ -30,7 +30,7 @@
     <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>
   </h2>
 
-  <%= render "shared/ui/section_divider", class: "mt-6 mb-4" %>
+  <%= render "shared/ui/layout/section_divider", class: "mt-6 mb-4" %>
   <div class="space-y-3">
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
@@ -46,7 +46,7 @@
     </div>
 
     <% if tax_details.size > 1 %>
-      <%= render "shared/ui/section_divider", class: "mt-4 mb-3" %>
+      <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
       <div class="space-y-2">
         <p class="truncate text-xs font-bold uppercase tracking-widest opacity-70" title="<%= t("shared.amount_summary_card.tax_details") %>"><%= t("shared.amount_summary_card.tax_details") %></p>
         <% tax_details.each do |tax_detail| %>

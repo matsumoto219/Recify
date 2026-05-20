@@ -1,10 +1,10 @@
 <main class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
-  <%= render "shared/ui/ambient_background" %>
+  <%= render "shared/ui/layout/ambient_background" %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="login-page-title">
-      <%= render "shared/ui/icon" %>
-      <%= render "shared/ui/section_header",
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
             title: t("auth.sessions.title"),
             subtitle: t("auth.sessions.subtitle"),
             title_id: "login-page-title",
@@ -14,7 +14,7 @@
             spacing_class: "space-y-3" %>
     </section>
 
-    <%= render "shared/ui/surface_card", title_id: "login-form-title" do %>
+    <%= render "shared/ui/layout/surface_card", title_id: "login-form-title" do %>
       <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
         <h2 id="login-form-title" class="sr-only"><%= t("auth.sessions.form_title") %></h2>
 
@@ -24,7 +24,7 @@
             - flashとの役割分離を整理%>
 
         <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-          <%= render "shared/ui/text_field",
+          <%= render "shared/ui/form/text_field",
                 f: f,
                 attribute: :email,
                 label: t("auth.sessions.fields.email"),
@@ -43,7 +43,7 @@
               <%= link_to t("auth.sessions.forgot_password"), new_password_path(resource_name), class: "text-xs token-text-brand hover:token-text-base transition-colors whitespace-nowrap" %>
             </div>
 
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                   f: f,
                   attribute: :password,
                   label: t("auth.sessions.fields.password"),
@@ -64,7 +64,7 @@
           <% end %>
 
           <div class="space-y-4">
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                   label: t("auth.sessions.submit"),
                   type: "submit",
                   variant: :primary,
@@ -83,7 +83,7 @@
           </p>
         </section>
 
-        <%= render "shared/ui/section_divider", variant: :gradient, label: t("auth.sessions.divider"), class: "mt-8 mb-8" %>
+        <%= render "shared/ui/layout/section_divider", variant: :gradient, label: t("auth.sessions.divider"), class: "mt-8 mb-8" %>
 
         <section class="space-y-4" aria-labelledby="guest-login-title">
           <h3 id="guest-login-title" class="sr-only"><%= t("auth.sessions.guest.title") %></h3>
@@ -91,7 +91,7 @@
           <%= button_to guest_sign_in_path,
                         method: :post,
                         class: "w-full border-0 bg-transparent p-0 cursor-pointer" do %>
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                   as: :content,
                   label: t("auth.sessions.guest.button"),
                   variant: :secondary,

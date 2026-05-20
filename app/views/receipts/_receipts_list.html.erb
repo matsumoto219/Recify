@@ -20,7 +20,7 @@
     <% else %>
       <h2 class="text-lg font-bold token-text-base mb-2"><%= t("receipt_cards.empty.default.title") %></h2>
       <p class="token-text-muted text-sm mb-8"><%= t("receipt_cards.empty.default.description") %></p>
-      <%= render "shared/ui/button",
+      <%= render "shared/ui/actions/button",
         label: t("receipt_cards.empty.default.action"),
         as: :link,
         href: select_input_method_receipts_path,

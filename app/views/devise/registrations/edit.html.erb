@@ -4,7 +4,7 @@
   <div class="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
     <section class="w-full max-w-[560px] space-y-8" aria-labelledby="edit-registration-title">
       <div class="space-y-5 text-center">
-        <%= render "shared/ui/section_header",
+        <%= render "shared/ui/layout/section_header",
               title: t("auth.registrations.edit.title"),
               subtitle: t("auth.registrations.edit.subtitle"),
               title_id: "edit-registration-title",
@@ -14,7 +14,7 @@
               spacing_class: "space-y-3" %>
       </div>
 
-      <%= render "shared/ui/surface_card", title_id: "edit-registration-title" do %>
+      <%= render "shared/ui/layout/surface_card", title_id: "edit-registration-title" do %>
         <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
           <h2 class="sr-only"><%= t("auth.registrations.edit.form_title") %></h2>
 
@@ -22,7 +22,7 @@
                       as: resource_name,
                       url: registration_path(resource_name),
                       html: { method: :put, class: "space-y-5" }) do |f| %>
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                       f: f,
                       attribute: :email,
                       label: t("auth.registrations.edit.fields.email"),
@@ -42,9 +42,9 @@
               </div>
             <% end %>
 
-            <%= render "shared/ui/section_divider", class: "mt-8 mb-8" %>
+            <%= render "shared/ui/layout/section_divider", class: "mt-8 mb-8" %>
 
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                       f: f,
                       attribute: :password,
                       label: t("auth.registrations.edit.fields.password"),
@@ -63,7 +63,7 @@
               </p>
             <% end %>
 
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                       f: f,
                       attribute: :password_confirmation,
                       label: t("auth.registrations.edit.fields.password_confirmation"),
@@ -76,7 +76,7 @@
                       label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                       error_message_class: "px-1 text-xs leading-relaxed" %>
 
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                       f: f,
                       attribute: :current_password,
                       label: t("auth.registrations.edit.fields.current_password"),
@@ -91,7 +91,7 @@
 
             <p class="px-1 text-xs token-text-muted"><%= t("auth.registrations.edit.current_password_required") %></p>
 
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                       label: t("auth.registrations.edit.buttons.save"),
                       type: "submit",
                       variant: :primary,
@@ -108,7 +108,7 @@
 
           <div class="space-y-5 pt-2">
             <div class="space-y-3">
-              <%= render "shared/ui/button",
+              <%= render "shared/ui/actions/button",
                         as: :link,
                         href: settings_security_path,
                         label: t("auth.registrations.edit.buttons.security_settings"),
@@ -116,7 +116,7 @@
                         size: :md,
                         full_width: true %>
 
-              <%= render "shared/ui/button",
+              <%= render "shared/ui/actions/button",
                         as: :link,
                         href: settings_path,
                         label: t("auth.registrations.edit.buttons.settings_top"),

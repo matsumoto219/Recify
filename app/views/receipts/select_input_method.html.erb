@@ -10,7 +10,7 @@
   data-controller="service-status-polling"
   data-service-status-polling-status-url-value="<%= external_services_status_path %>"
   data-service-status-polling-interval-value="30000">
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
     title: t("receipts.select_input_method.title"),
     subtitle: t("receipts.select_input_method.subtitle"),
     title_size: "text-[1.6rem] md:text-3xl",
@@ -36,7 +36,7 @@
   </div>
 
   <div class="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-8 px-0 md:px-4">
-    <%= render "shared/ui/selection_card",
+    <%= render "shared/ui/card/selection_card",
       path: new_upload_receipts_path,
       title: t("receipts.select_input_method.upload.title"),
       description: t("receipts.select_input_method.upload.description"),
@@ -51,7 +51,7 @@
         enabled_href: new_upload_receipts_path
       }.merge(ocr_down ? { service_disabled: "ocr" } : {}) %>
 
-    <%= render "shared/ui/selection_card",
+    <%= render "shared/ui/card/selection_card",
       path: new_receipt_path,
       title: t("receipts.select_input_method.manual.title"),
       description: t("receipts.select_input_method.manual.description"),
@@ -62,7 +62,7 @@
       description_size: "text-sm md:text-base" %>
   </div>
 
-  <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-8 mb-6" %>
+  <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-8 mb-6" %>
   <div class="flex flex-col items-center text-center">
     <p class="text-sm token-text-muted mb-2 leading-relaxed">
       <%= t("receipts.select_input_method.footer.fallback") %>

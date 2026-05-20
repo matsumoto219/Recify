@@ -26,7 +26,7 @@
         <% end %>
       <% end %>
 
-      <%= render "shared/ui/notice_surface",
+      <%= render "shared/ui/feedback/notice_surface",
                  notice_type: type,
                  message: (messages.first if messages.one?),
                  body: body_content,

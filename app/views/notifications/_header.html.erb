@@ -3,7 +3,7 @@
 %>
 
 <section id="notifications_index_header" class="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
     title: t("notifications.index.title"),
     title_suffix: t("notifications.index.unread_suffix", count: unread_count),
     title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",

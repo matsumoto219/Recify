@@ -13,7 +13,7 @@
   data-controller="service-status-polling"
   data-service-status-polling-status-url-value="<%= external_services_status_path %>"
   data-service-status-polling-interval-value="30000">
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
     title: t("receipts.new_upload.title"),
     subtitle: t("receipts.new_upload.subtitle"),
     title_size: "text-2xl",
@@ -51,7 +51,7 @@
     </div>
   </div>
 
-  <%= render "shared/ui/surface_card", padding: :md, class: "group" do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "group" do %>
     <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
           multipart: true,
           data: {
@@ -92,7 +92,7 @@
 
         <section class="flex flex-col gap-4">
           <div class="grid grid-cols-2 gap-4">
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
               label: t("receipts.new_upload.buttons.camera"),
               variant: :secondary,
               size: :md,
@@ -105,7 +105,7 @@
                 service_status_polling_target: "uploadControl"
               } %>
 
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
               label: t("receipts.new_upload.buttons.library"),
               variant: :secondary,
               size: :md,
@@ -123,7 +123,7 @@
             <%= t("receipts.new_upload.file_empty") %>
           </p>
 
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
             label: t("receipts.new_upload.buttons.upload"),
             variant: :primary,
             size: :lg,
@@ -168,7 +168,7 @@
       <%= t("receipts.new_upload.queued_hint") %>
     </div>
 
-    <%= render "shared/ui/navigation_link",
+    <%= render "shared/ui/navigation/navigation_link",
       path: select_input_method_receipts_path,
       text: t("receipts.new_upload.back"),
       arrow: :left %>

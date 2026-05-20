@@ -2,7 +2,7 @@
   warning_groups = ReviewReasonSource.group_by_source(receipt.warning_review_reason_codes).select { |_source, reasons| reasons.any? }
 %>
 
-<%= render "shared/ui/surface_card", padding: :md do %>
+<%= render "shared/ui/layout/surface_card", padding: :md do %>
   <div class="flex items-start gap-3">
     <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-state-warning-soft">
       <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">info</span>

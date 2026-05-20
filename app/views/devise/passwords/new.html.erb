@@ -1,10 +1,10 @@
 <main class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
-  <%= render "shared/ui/ambient_background" %>
+  <%= render "shared/ui/layout/ambient_background" %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="password-reset-page-title">
-      <%= render "shared/ui/icon" %>
-      <%= render "shared/ui/section_header",
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
             title: t("auth.passwords.new.title"),
             subtitle: t("auth.passwords.new.subtitle"),
             title_id: "password-reset-page-title",
@@ -14,13 +14,13 @@
             spacing_class: "space-y-3" %>
     </section>
 
-    <%= render "shared/ui/surface_card", title_id: "password-reset-form-title" do %>
+    <%= render "shared/ui/layout/surface_card", title_id: "password-reset-form-title" do %>
       <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
         <h2 id="password-reset-form-title" class="sr-only"><%= t("auth.passwords.new.form_title") %></h2>
 
         <%= form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
 
-          <%= render "shared/ui/text_field",
+          <%= render "shared/ui/form/text_field",
                 f: f,
                 attribute: :email,
                 label: t("auth.passwords.new.fields.email"),
@@ -34,7 +34,7 @@
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
                 label: t("auth.passwords.new.buttons.submit"),
                 type: "submit",
                 variant: :primary,
@@ -45,9 +45,9 @@
                 disable_with: t("auth.passwords.new.buttons.submitting") %>
         <% end %>
 
-        <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
+        <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
 
-        <%= render "shared/ui/navigation_link",
+        <%= render "shared/ui/navigation/navigation_link",
               path: new_session_path(resource_name),
               text: t("auth.passwords.new.back_to_login"),
               arrow: :left %>

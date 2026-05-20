@@ -1,7 +1,7 @@
 <%= turbo_stream_from [current_user, :receipts] %>
 <section id="receipts-page-header" class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
   <% if @query.present? %>
-    <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/section_header",
       title: t("dashboard.index.search_results_title"),
       title_suffix: t("dashboard.count", count: @receipts_count),
       title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
@@ -10,7 +10,7 @@
       subtitle_size: "text-sm",
       wrapper_class: "mt-1" %>
   <% else %>
-    <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/section_header",
       title: t(".title"),
       title_suffix: t("dashboard.count", count: @receipts_count),
       title_suffix_class: "token-brand-soft-bg token-text-brand font-normal",
@@ -21,7 +21,7 @@
   <% end %>
 
   <div class="w-full flex justify-end md:w-auto md:block">
-    <%= render "shared/ui/button",
+    <%= render "shared/ui/actions/button",
       label: t("dashboard.nav.new_receipt"),
       as: :link,
       href: select_input_method_receipts_path,
@@ -55,10 +55,10 @@
       query: @query %>
   </div>
 
-  <%= render "shared/ui/pagination", pagy: @pagy %>
+  <%= render "shared/ui/navigation/pagination", pagy: @pagy %>
 
   <% if @pagy.count.positive? && @pagy.page == @pagy.last %>
-    <%= render "shared/ui/section_divider",
+    <%= render "shared/ui/layout/section_divider",
       variant: :gradient,
       label: t("common.pagination.end_of_archive"),
       class: "mt-20 mb-8" %>

@@ -37,7 +37,7 @@
     <div class="flex items-center gap-2 md:block">
       <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.name") %></span>
       <div class="w-full min-w-0">
-        <%= render "shared/ui/text_field",
+        <%= render "shared/ui/form/text_field",
                    f: item_form,
                    attribute: :confirmed_name,
                    label: t("receipts.item_fields.name"),
@@ -65,13 +65,13 @@
 
   <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 md:col-span-2">
     <div class="receipt-form-item-mobile-detail-divider md:hidden">
-      <%= render "shared/ui/section_divider", class: "mb-3" %>
+      <%= render "shared/ui/layout/section_divider", class: "mb-3" %>
     </div>
 
     <div class="flex items-center gap-2 md:block">
       <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.quantity") %></span>
       <div class="flex-1 min-w-0 md:block">
-        <%= render "shared/ui/quantity_unit_number_field",
+        <%= render "shared/ui/form/quantity_unit_number_field",
                    f: item_form,
                    label: t("receipts.item_fields.quantity"),
                    value: (new_record ? nil : item.formatted_quantity_for_input),
@@ -103,7 +103,7 @@
     <div class="flex items-center gap-2 md:block">
       <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.amount") %></span>
       <div class="flex-1 min-w-0 md:block">
-        <%= render "shared/ui/number_field",
+        <%= render "shared/ui/form/number_field",
                    f: item_form,
                    attribute: :price,
                    label: t("receipts.item_fields.unit_price"),
@@ -154,7 +154,7 @@
         <div class="space-y-2">
           <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
           <div>
-            <%= render "shared/ui/number_field",
+            <%= render "shared/ui/form/number_field",
                        f: item_form,
                        attribute: :discount_rate,
                        label: t("receipts.item_fields.discount_rate"),
@@ -186,7 +186,7 @@
         <div class="space-y-2">
           <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.tax_rate") %></p>
           <div>
-            <%= render "shared/ui/number_field",
+            <%= render "shared/ui/form/number_field",
                        f: item_form,
                        attribute: :tax_rate,
                        label: t("receipts.item_fields.tax_rate"),
@@ -217,7 +217,7 @@
         <div class="space-y-2">
           <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.category") %></p>
           <div>
-            <%= render "shared/ui/select_field",
+            <%= render "shared/ui/form/select_field",
                        f: item_form,
                        attribute: :category,
                        label: t("receipts.item_fields.category"),
@@ -262,7 +262,7 @@
   </div>
 
   <div class="receipt-form-item-mobile-summary col-span-2 md:hidden">
-    <%= render "shared/ui/section_divider", class: "mb-3" %>
+    <%= render "shared/ui/layout/section_divider", class: "mb-3" %>
 
     <div class="flex items-center justify-between gap-3">
       <div class="receipt-form-item-mobile-subtotal flex min-w-0 flex-1 items-center gap-2">

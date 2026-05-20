@@ -34,7 +34,7 @@
 
     <div class="px-4">
       <div class="hidden xl:block token-bg-elevated rounded-xl p-4 border token-border-soft">
-        <%= render "shared/ui/storage_usage_meter",
+        <%= render "shared/ui/status/storage_usage_meter",
               usage: current_user.storage_usage,
               title: t("dashboard.nav.storage_usage"),
               context: "sidebar",

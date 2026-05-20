@@ -9,7 +9,7 @@
   edit_path = local_assigns[:edit_path]
 %>
 
-<%= render "shared/ui/surface_card", variant: card_variant, padding: :md do %>
+<%= render "shared/ui/layout/surface_card", variant: card_variant, padding: :md do %>
   <div class="flex items-start gap-3">
     <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full <%= icon_class %>">
       <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;"><%= icon %></span>
@@ -33,7 +33,7 @@
 
       <% if edit_path.present? %>
         <div>
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
                 as: :link,
                 href: edit_path,
                 label: t("receipts.processing_error_card.edit_action"),

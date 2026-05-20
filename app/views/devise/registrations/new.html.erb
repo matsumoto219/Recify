@@ -1,10 +1,10 @@
 <main class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
-  <%= render "shared/ui/ambient_background" %>
+  <%= render "shared/ui/layout/ambient_background" %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="registration-page-title">
-      <%= render "shared/ui/icon" %>
-      <%= render "shared/ui/section_header",
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
             title: t("auth.registrations.new.title"),
             subtitle: t("auth.registrations.new.subtitle"),
             title_id: "registration-page-title",
@@ -14,12 +14,12 @@
             spacing_class: "space-y-3" %>
     </section>
 
-    <%= render "shared/ui/surface_card", title_id: "registration-form-title" do %>
+    <%= render "shared/ui/layout/surface_card", title_id: "registration-form-title" do %>
       <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
         <h2 id="registration-form-title" class="sr-only"><%= t("auth.registrations.new.form_title") %></h2>
 
         <%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "space-y-6" }) do |f| %>
-          <%= render "shared/ui/text_field",
+          <%= render "shared/ui/form/text_field",
                 f: f,
                 attribute: :email,
                 label: t("auth.registrations.new.fields.email"),
@@ -39,7 +39,7 @@
                 <p class="text-[11px] token-text-subtle mr-1"><%= t("auth.registrations.new.fields.minimum_password_length", count: @minimum_password_length) %></p>
               <% end %>
             </div>
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                   f: f,
                   attribute: :password,
                   label: t("auth.registrations.new.fields.password"),
@@ -52,7 +52,7 @@
                   error_message_class: "px-1 text-xs leading-relaxed" %>
           </div>
 
-          <%= render "shared/ui/text_field",
+          <%= render "shared/ui/form/text_field",
                 f: f,
                 attribute: :password_confirmation,
                 label: t("auth.registrations.new.fields.password_confirmation"),
@@ -65,7 +65,7 @@
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
           <div class="pt-4">
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                   label: t("auth.registrations.new.submit"),
                   type: "submit",
                   variant: :primary,
@@ -88,13 +88,13 @@
           </p>
         </section>
 
-        <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
+        <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
         <section class="text-center space-y-3" aria-label="<%= t("auth.registrations.new.login.aria_label") %>">
           <p class="text-sm token-text-muted">
             <%= t("auth.registrations.new.login.prompt") %>
           </p>
 
-          <%= render "shared/ui/navigation_link",
+          <%= render "shared/ui/navigation/navigation_link",
                 path: new_session_path(resource_name),
                 text: t("auth.registrations.new.login_link"),
                 arrow: :right %>

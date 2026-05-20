@@ -4,14 +4,14 @@
   data-service-status-polling-status-url-value="<%= external_services_status_path %>"
   data-service-status-polling-interval-value="30000"
   data-action="segmented-control:success->settings#applySegmentedControlSetting">
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
         title: t("settings.index.title"),
         subtitle: t("settings.index.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <div class="space-y-6">
-    <%= render "shared/ui/surface_card", hoverable: true, padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", hoverable: true, padding: :md do %>
       <%
         user_status_label = current_user.guest? ? t("settings.index.user.guest") : t("settings.index.user.registered")
         user_name_label = current_user.name.presence || t("settings.index.user.name_missing")
@@ -19,7 +19,7 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
           <div class="relative flex shrink-0 flex-col items-center gap-2">
-            <%= render "shared/ui/avatar",
+            <%= render "shared/ui/miscellaneous/avatar",
                   user: current_user,
                   size: 80,
                   class: "border-2 token-border-brand-soft" %>
@@ -42,7 +42,7 @@
         </div>
 
         <div class="w-full mt-2 md:mt-0 md:w-auto md:shrink-0">
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
                 as: :link,
                 href: settings_account_path,
                 label: t("settings.index.user.edit_profile"),
@@ -54,15 +54,15 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", padding: :md do %>
-      <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
             icon: "shield",
             title: t("settings.index.sections.security"),
             class: "mb-6" %>
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-3">
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
                 as: :link,
                 href: settings_security_path(anchor: "email"),
                 label: t("settings.index.security.email"),
@@ -72,7 +72,7 @@
                 trailing_icon: "chevron_right",
                 trailing_icon_animated: true %>
 
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
                 as: :link,
                 href: settings_security_path(anchor: "password"),
                 label: t("settings.index.security.password"),
@@ -83,7 +83,7 @@
                 trailing_icon_animated: true %>
         </div>
 
-        <%= render "shared/ui/section_divider" %>
+        <%= render "shared/ui/layout/section_divider" %>
         <div class="space-y-3">
           <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
           <div class="flex items-center justify-between text-sm">
@@ -91,7 +91,7 @@
               <span class="material-symbols-outlined token-text-muted text-sm">info</span>
               <span class="token-text-muted"><%= t("settings.index.security.two_factor") %></span>
             </div>
-            <%= render "shared/ui/setting_status_badge",
+            <%= render "shared/ui/badge/setting_status_badge",
                   state: :inactive,
                   variant: :text,
                   size: :lg %>
@@ -103,7 +103,7 @@
               <span class="material-symbols-outlined token-text-muted text-sm">info</span>
               <span class="token-text-muted"><%= t("settings.index.security.passkey") %></span>
             </div>
-            <%= render "shared/ui/setting_status_badge",
+            <%= render "shared/ui/badge/setting_status_badge",
                   state: :inactive,
                   variant: :text,
                   size: :lg %>
@@ -116,8 +116,8 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", padding: :md do %>
-      <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
             icon: "monitoring",
             title: t("settings.index.sections.system_status"),
             class: "mb-6" %>
@@ -125,33 +125,33 @@
       <div class="space-y-3">
         <%# TODO: 本実装では ExternalServiceStatus から状態を取得する %>
         <div data-service-status-polling-target="serviceBadge" data-service="ocr">
-          <%= render "shared/ui/service_status_badge",
+          <%= render "shared/ui/badge/service_status_badge",
                 label: t("settings.index.services.ocr"),
                 state: @ocr_state %>
         </div>
 
         <div data-service-status-polling-target="serviceBadge" data-service="ai">
-          <%= render "shared/ui/service_status_badge",
+          <%= render "shared/ui/badge/service_status_badge",
                 label: t("settings.index.services.ai"),
                 state: @ai_state %>
         </div>
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card", padding: :md do %>
-      <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
             icon: "database",
             title: t("settings.index.sections.storage"),
             class: "mb-6" %>
 
-      <%= render "shared/ui/storage_usage_meter",
+      <%= render "shared/ui/status/storage_usage_meter",
             usage: current_user.storage_usage,
             context: "settings",
             compact: false %>
     <% end %>
 
-    <%= render "shared/ui/surface_card", padding: :md do %>
-      <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
             icon: "palette",
             title: t("settings.index.sections.appearance"),
             class: "mb-6" %>
@@ -164,7 +164,7 @@
           </p>
         </div>
 
-        <%= render "shared/ui/segmented_control",
+        <%= render "shared/ui/form/segmented_control",
               name: "theme_preference",
               value: current_user.theme_preference,
               url: settings_path,
@@ -183,15 +183,15 @@
       </p>
     <% end %>
 
-    <%= render "shared/ui/surface_card", padding: :md do %>
-      <%= render "shared/ui/section_header",
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
             icon: "settings",
             title: t("settings.index.sections.usage"),
             class: "mb-6" %>
 
       <div class="space-y-6">
         <%# TODO: 通知配信そのものは未実装。ここでは利用設定トグルの保存動作のみ提供する %>
-        <%= render "shared/ui/toggle_switch",
+        <%= render "shared/ui/form/toggle_switch",
               label: t("settings.index.usage.push_notification.label"),
               description: t("settings.index.usage.push_notification.description"),
               checked: current_user.push_notification_enabled,
@@ -199,7 +199,7 @@
               url: settings_path,
               remote: true %>
 
-        <%= render "shared/ui/toggle_switch",
+        <%= render "shared/ui/form/toggle_switch",
               label: t("settings.index.usage.receipt_item_delete_confirmation.label"),
               description: t("settings.index.usage.receipt_item_delete_confirmation.description"),
               checked: current_user.receipt_item_delete_confirmation_enabled,
@@ -207,7 +207,7 @@
               url: settings_path,
               remote: true %>
 
-        <%= render "shared/ui/toggle_switch",
+        <%= render "shared/ui/form/toggle_switch",
               label: t("settings.index.usage.product_name_ai_completion.label"),
               description: t("settings.index.usage.product_name_ai_completion.description_html").html_safe,
               checked: current_user.product_name_ai_completion_enabled,
@@ -219,11 +219,11 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/surface_card",
+    <%= render "shared/ui/layout/surface_card",
           variant: :danger,
           shadow_variant: :danger,
           padding: :md do %>
-      <%= render "shared/ui/section_header",
+      <%= render "shared/ui/layout/section_header",
             icon: "delete",
             title: t("settings.index.sections.account_actions"),
             variant: :danger,
@@ -235,7 +235,7 @@
                         method: :delete,
                         data: { turbo_confirm: t("settings.index.danger.confirm") },
                         class: "contents" do %>
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                   as: :content,
                   label: t("settings.index.danger.delete_account"),
                   variant: :danger,

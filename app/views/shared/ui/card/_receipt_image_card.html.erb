@@ -23,7 +23,7 @@
 %>
 
 <div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
-  <%= render "shared/ui/surface_card", padding: :sm do %>
+  <%= render "shared/ui/layout/surface_card", padding: :sm do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
     </p>
@@ -135,7 +135,7 @@
             </div>
 
             <%= form_builder.label :image, class: "shrink-0 cursor-pointer" do %>
-              <%= render "shared/ui/button",
+              <%= render "shared/ui/actions/button",
                          as: :content,
                          label: t("shared.receipt_image_card.select_image"),
                          icon: "upload_file",

@@ -7,7 +7,7 @@
   data-controller="security-scroll"
   data-security-scroll-scroll-to-password-value="<%= security_form_error %>">
   <!-- START: settings/security page header -->
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
         title: t("settings.security.title"),
         subtitle: t("settings.security.subtitle"),
         title_size: "text-3xl",
@@ -23,8 +23,8 @@
   <!-- START: settings/security email card -->
   <div class="space-y-6">
     <div id="email" class="scroll-mt-24">
-      <%= render "shared/ui/surface_card", padding: :responsive do %>
-        <%= render "shared/ui/section_header",
+      <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+        <%= render "shared/ui/layout/section_header",
               icon: "mail",
               title: t("settings.security.email.title"),
               title_size: "text-xl",
@@ -41,7 +41,7 @@
               - 再認証（current_password）を必須化
               - 変更確認メール送信 %>
           <div class="shrink-0 flex justify-end md:block">
-            <%= render "shared/ui/button",
+            <%= render "shared/ui/actions/button",
                   label: t("settings.security.email.change_unavailable"),
                   variant: :secondary,
                   size: :md,
@@ -57,8 +57,8 @@
 
     <!-- START: settings/security password card -->
     <div id="password" class="scroll-mt-24">
-      <%= render "shared/ui/surface_card", padding: :responsive do %>
-        <%= render "shared/ui/section_header",
+      <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+        <%= render "shared/ui/layout/section_header",
               icon: "lock",
               title: t("settings.security.password.title"),
               title_size: "text-xl",
@@ -74,7 +74,7 @@
               - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
               - パスワードが画面に残らないようにする %>
           <div class="space-y-6">
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                   f: f,
                   attribute: :current_password,
                   label: t("settings.security.password.current"),
@@ -92,7 +92,7 @@
                   input_wrapper_class: "" %>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <%= render "shared/ui/text_field",
+              <%= render "shared/ui/form/text_field",
                     f: f,
                     attribute: :password,
                     label: t("settings.security.password.new"),
@@ -108,7 +108,7 @@
                     error_message_class: "px-0",
                     input_wrapper_class: "" %>
 
-              <%= render "shared/ui/text_field",
+              <%= render "shared/ui/form/text_field",
                     f: f,
                     attribute: :password_confirmation,
                     label: t("settings.security.password.confirmation"),
@@ -135,7 +135,7 @@
 
             <p class="text-sm token-text-subtle"><%= t("settings.security.password.hint") %></p>
             <div class="pt-2 flex justify-end">
-              <%= render "shared/ui/button",
+              <%= render "shared/ui/actions/button",
                     label: t("settings.security.password.save"),
                     variant: :primary,
                     size: :compact,
@@ -153,13 +153,13 @@
     <!-- START: settings/security auth options grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- START: settings/security 2fa card -->
-      <%= render "shared/ui/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+      <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
-            <%= render "shared/ui/setting_status_badge", state: :inactive %>
+            <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
           </div>
-          <%= render "shared/ui/section_header",
+          <%= render "shared/ui/layout/section_header",
                 title: t("settings.security.auth.two_factor.title"),
                 subtitle: t("settings.security.auth.two_factor.subtitle"),
                 title_size: "text-lg",
@@ -171,7 +171,7 @@
             - QRコード生成
             - シークレット保存
             - 有効/無効切り替え %>
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               label: t("settings.security.auth.two_factor.action"),
               variant: :secondary,
               size: :compact,
@@ -182,13 +182,13 @@
       <!-- END: settings/security 2fa card -->
 
       <!-- START: settings/security passkey card -->
-      <%= render "shared/ui/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+      <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
         <div>
           <div class="flex items-center justify-between mb-4">
             <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
-            <%= render "shared/ui/setting_status_badge", state: :inactive %>
+            <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
           </div>
-          <%= render "shared/ui/section_header",
+          <%= render "shared/ui/layout/section_header",
                 title: t("settings.security.auth.passkey.title"),
                 subtitle: t("settings.security.auth.passkey.subtitle"),
                 title_size: "text-lg",
@@ -200,7 +200,7 @@
             - credential登録
             - デバイス管理
             - ログイン連携 %>
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               label: t("settings.security.auth.passkey.action"),
               variant: :secondary,
               size: :compact,
@@ -214,7 +214,7 @@
   <!-- END: settings/security auth options grid -->
 
   <!-- START: settings/security notice -->
-  <%= render "shared/ui/section_divider", variant: :gradient, class: "mt-6 mb-4" %>
+  <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-6 mb-4" %>
   <footer>
     <div class="flex items-start gap-3 token-text-subtle text-xs">
       <span class="material-symbols-outlined text-sm mt-0.5">info</span>

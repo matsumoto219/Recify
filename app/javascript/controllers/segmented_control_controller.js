@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 
-// Controls the sliding indicator position for shared/ui/segmented_control.
+// Controls the sliding indicator position for shared/ui/form/segmented_control.
 // Optionally sends the selected value to a remote endpoint when remoteValue is true.
 export default class extends Controller {
   static targets = ['input']

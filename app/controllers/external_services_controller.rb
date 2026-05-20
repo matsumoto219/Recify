@@ -66,7 +66,7 @@ class ExternalServicesController < ApplicationController
 
   def service_status_badge_html(service, state)
     render_to_string(
-      partial: "shared/ui/service_status_badge",
+      partial: "shared/ui/badge/service_status_badge",
       formats: [ :html ],
       locals: {
         label: t("settings.index.services.#{service}"),

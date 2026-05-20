@@ -1,12 +1,12 @@
 <section class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2">
-  <%= render "shared/ui/section_header",
+  <%= render "shared/ui/layout/section_header",
         title: t("settings.account.title"),
         subtitle: t("settings.account.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base",
         class: "px-4 md:px-0" %>
 
-  <%= render "shared/ui/surface_card", padding: :responsive do %>
+  <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
     <%
       form_resource = defined?(resource) && resource.present? ? resource : current_user
       form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
@@ -20,7 +20,7 @@
           data-avatar-preview-invalid-type-message-value="<%= t("settings.account.avatar.validation.invalid_type") %>"
           data-avatar-preview-file-too-large-message-value="<%= t("settings.account.avatar.validation.file_too_large") %>">
           <div class="relative group">
-            <%= render "shared/ui/avatar",
+            <%= render "shared/ui/miscellaneous/avatar",
                   user: form_resource,
                   size: 96,
                   preview: true,
@@ -67,12 +67,12 @@
         </div>
       </div>
 
-      <%= render "shared/ui/section_divider" %>
+      <%= render "shared/ui/layout/section_divider" %>
       <div class="space-y-6 -mx-8 px-8 py-8 min-w-0">
         <%# TODO: ユーザー名更新を有効化
             - devise_parameter_sanitizerで :name を許可
             - バリデーション（任意：文字数制限など）を追加 %>
-        <%= render "shared/ui/text_field",
+        <%= render "shared/ui/form/text_field",
               f: f,
               attribute: :name,
               label: t("settings.account.fields.name"),
@@ -90,7 +90,7 @@
       </div>
 
       <div class="account-form-footer -mx-8 -mb-8 px-8 py-6 flex flex-col-reverse md:flex-row justify-end gap-3">
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               as: :link,
               href: settings_path,
               label: t("settings.account.buttons.cancel"),
@@ -100,7 +100,7 @@
         <%# TODO: 更新後の挙動
             - 更新成功時：settingsページへリダイレクト
             - 更新失敗時：エラーメッセージ表示 %>
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               label: t("settings.account.buttons.save"),
               variant: :primary,
               type: "submit",

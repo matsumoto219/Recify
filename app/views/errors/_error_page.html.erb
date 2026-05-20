@@ -12,7 +12,7 @@
 
 <main class="flex flex-1 items-center justify-center px-6 py-12 md:py-16">
   <div class="w-full max-w-lg">
-    <%= render "shared/ui/surface_card",
+    <%= render "shared/ui/layout/surface_card",
       padding: :responsive,
       shadow_variant: :indigo,
       class: "text-center glass-panel token-border-glass border" do %>
@@ -33,7 +33,7 @@
       </div>
 
       <div class="mt-10 flex flex-col gap-3">
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
           as: :link,
           href: primary_path,
           label: primary_label,
@@ -43,7 +43,7 @@
           icon: "arrow_back" %>
 
         <% if secondary_label.present? && secondary_path.present? %>
-          <%= render "shared/ui/button",
+          <%= render "shared/ui/actions/button",
             as: :link,
             href: secondary_path,
             label: secondary_label,

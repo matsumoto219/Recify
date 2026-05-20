@@ -20,7 +20,7 @@
   ].compact.join(" ")
 %>
 
-<%= render "shared/ui/surface_card",
+<%= render "shared/ui/layout/surface_card",
   id: dom_id(receipt),
   padding: :card,
   class: card_classes,
@@ -51,7 +51,7 @@
       </div>
     </div>
 
-    <%= render "shared/ui/receipt_status_badge",
+    <%= render "shared/ui/badge/receipt_status_badge",
       status: receipt.status,
       label: status_label %>
   </div>

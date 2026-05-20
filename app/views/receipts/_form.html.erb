@@ -50,7 +50,7 @@
     }
   %>
   <% content_for :mobile_bottom_actions do %>
-    <%= render "shared/ui/button",
+    <%= render "shared/ui/actions/button",
           label: t("receipts.form.buttons.save"),
           type: "submit",
           form: form_dom_id,
@@ -61,7 +61,7 @@
 
   <section class="max-w-7xl mx-auto px-0 md:px-4 py-2 md:pb-2">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-      <%= render "shared/ui/section_header",
+      <%= render "shared/ui/layout/section_header",
             title: page_title,
             subtitle: page_description,
             title_size: "text-3xl md:text-4xl",
@@ -69,7 +69,7 @@
             breadcrumb_path: breadcrumb_path %>
 
       <div class="hidden md:flex items-center gap-3">
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               as: :link,
               href: cancel_path,
               label: t("receipts.form.buttons.cancel"),
@@ -77,7 +77,7 @@
               size: :compact,
               radius: :xl %>
 
-        <%= render "shared/ui/button",
+        <%= render "shared/ui/actions/button",
               label: t("receipts.form.buttons.save"),
               type: "submit",
               size: :compact,
@@ -104,14 +104,14 @@
                 description: t("receipts.form.review.warning_description") %>
         <% end %>
 
-        <%= render "shared/ui/surface_card", padding: :md do %>
-          <%= render "shared/ui/section_header",
+        <%= render "shared/ui/layout/surface_card", padding: :md do %>
+          <%= render "shared/ui/layout/section_header",
                 title: t("receipts.form.sections.basic_info"),
                 icon: "info",
                 class: "mb-6" %>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <%= render "shared/ui/text_field",
+            <%= render "shared/ui/form/text_field",
                        f: f,
                        attribute: :store_name,
                        label: t("receipts.form.fields.store_name"),
@@ -121,7 +121,7 @@
                        size: :regular,
                        html_options: { maxlength: 100, autocomplete: "organization" } %>
 
-            <%= render "shared/ui/select_field",
+            <%= render "shared/ui/form/select_field",
                        f: f,
                        attribute: :payment_method,
                        label: t("receipts.form.fields.payment_method"),
@@ -131,7 +131,7 @@
                        highlight_variant: (error_flags[:payment_method] ? :error : nil),
                        size: :regular %>
 
-            <%= render "shared/ui/datetime_field",
+            <%= render "shared/ui/form/datetime_field",
                        name: "receipt[purchased_on]",
                        id: "receipt_purchased_on",
                        label: t("receipts.form.fields.purchased_on"),
@@ -142,7 +142,7 @@
                        error_message: receipt.errors.full_messages_for(:purchased_at).first,
                        size: :regular %>
 
-            <%= render "shared/ui/datetime_field",
+            <%= render "shared/ui/form/datetime_field",
                        name: "receipt[purchased_time]",
                        id: "receipt_purchased_time",
                        label: t("receipts.form.fields.purchased_time"),
@@ -153,7 +153,7 @@
                        size: :regular %>
 
             <div class="md:col-span-2">
-              <%= render "shared/ui/text_field",
+              <%= render "shared/ui/form/text_field",
                          f: f,
                          attribute: :store_phone_number,
                          label: t("receipts.form.fields.store_phone_number"),
@@ -172,7 +172,7 @@
             </div>
 
             <div class="md:col-span-2">
-              <%= render "shared/ui/text_field",
+              <%= render "shared/ui/form/text_field",
                          f: f,
                          attribute: :store_address,
                          label: t("receipts.form.fields.store_address"),
@@ -185,9 +185,9 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/surface_card", class: "overflow-hidden" do %>
+        <%= render "shared/ui/layout/surface_card", class: "overflow-hidden" do %>
           <div class="p-6 border-b token-border-soft">
-            <%= render "shared/ui/section_header",
+            <%= render "shared/ui/layout/section_header",
                   title: t("receipts.form.sections.items"),
                   icon: "receipt_long" %>
           </div>
@@ -229,13 +229,13 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/surface_card", padding: :md do %>
-          <%= render "shared/ui/section_header",
+        <%= render "shared/ui/layout/surface_card", padding: :md do %>
+          <%= render "shared/ui/layout/section_header",
                 title: t("receipts.form.sections.memo"),
                 icon: "notes",
                 class: "mb-4" %>
 
-          <%= render "shared/ui/textarea_field",
+          <%= render "shared/ui/form/textarea_field",
                      f: f,
                      attribute: :memo,
                      label: t("receipts.form.fields.memo"),
@@ -248,7 +248,7 @@
       </div>
 
       <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start">
-        <%= render "shared/ui/amount_summary_card",
+        <%= render "shared/ui/card/amount_summary_card",
               title: t("receipts.common.total_amount_title"),
               amount: total_amount_value,
               icon: "payments",
@@ -260,7 +260,7 @@
               tax_amount_target: "taxAmount",
               tax_rate_target: "taxRateSummary" %>
 
-        <%= render "shared/ui/receipt_image_card",
+        <%= render "shared/ui/card/receipt_image_card",
               receipt: receipt,
               title: t("receipts.form.image.title"),
               form_builder: f,
