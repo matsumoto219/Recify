@@ -3,20 +3,20 @@ ja:
     layout:
       title: Recify
       copyright: © 2026 Recify
+    common:
+      signed_in_primary_cta: レシート一覧へ戻る
+      signed_out_primary_cta: ログインへ戻る
     error_code: "Error Code: %{status_code}"
     not_found:
       page_title: ページが見つかりません
       title: ページが見つかりません
       description: お探しのページは移動または削除された可能性があります。レシート一覧から目的の情報をもう一度お探しください。
-      primary_cta: レシート一覧へ戻る
     unprocessable:
       page_title: 処理できませんでした
       title: 処理できませんでした
       description: リクエストを処理できませんでした。入力内容を確認して、もう一度お試しください。
-      primary_cta: レシート一覧へ戻る
     internal_server_error:
       page_title: 予期しないエラーが発生しました
       title: 予期しないエラーが発生しました
       description: システムで問題が発生しました。時間を置いて再度お試しいただくか、レシート一覧へ戻ってください。
-      primary_cta: レシート一覧へ戻る
       secondary_cta: 再読み込み

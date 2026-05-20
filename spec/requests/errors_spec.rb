@@ -14,7 +14,7 @@ RSpec.describe 'Error pages', type: :request do
     Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = original_show_detailed_exceptions
   end
 
-  def expect_error_page(status_code:, icon:, title:, primary_cta:, secondary_cta: nil)
+  def expect_error_page(status_code:, icon:, title:, primary_cta:, primary_href:, secondary_cta: nil)
     document = Nokogiri::HTML(response.body)
 
     aggregate_failures do
@@ -24,7 +24,7 @@ RSpec.describe 'Error pages', type: :request do
       expect(document.at_css('.material-symbols-outlined').text).to include(icon)
       expect(document.text).to include(title)
       expect(document.text).to include("Error Code: #{Rack::Utils.status_code(status_code)}")
-      expect(document.at_css('a[href="' + receipts_path + '"]')).to have_attributes(text: include(primary_cta))
+      expect(document.at_css('a[href="' + primary_href + '"]')).to have_attributes(text: include(primary_cta))
       expect(document.text).to include(secondary_cta) if secondary_cta.present?
       expect(document.text).to include('Recify')
       expect(document.text).to include('© 2026 Recify')
@@ -40,7 +40,8 @@ RSpec.describe 'Error pages', type: :request do
         status_code: :not_found,
         icon: 'travel_explore',
         title: I18n.t('errors.not_found.title'),
-        primary_cta: I18n.t('errors.not_found.primary_cta')
+        primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
+        primary_href: new_user_session_path
       )
     end
 
@@ -51,7 +52,8 @@ RSpec.describe 'Error pages', type: :request do
         status_code: :unprocessable_content,
         icon: 'error',
         title: I18n.t('errors.unprocessable.title'),
-        primary_cta: I18n.t('errors.unprocessable.primary_cta')
+        primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
+        primary_href: new_user_session_path
       )
     end
 
@@ -62,8 +64,66 @@ RSpec.describe 'Error pages', type: :request do
         status_code: :internal_server_error,
         icon: 'cloud_off',
         title: I18n.t('errors.internal_server_error.title'),
-        primary_cta: I18n.t('errors.internal_server_error.primary_cta'),
+        primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
+        primary_href: new_user_session_path,
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
+      )
+    end
+
+    it 'ログイン済みならGET /404はレシート一覧へ戻す' do
+      sign_in create(:user)
+
+      get '/404'
+
+      expect_error_page(
+        status_code: :not_found,
+        icon: 'travel_explore',
+        title: I18n.t('errors.not_found.title'),
+        primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+        primary_href: receipts_path
+      )
+    end
+
+    it 'ログイン済みならGET /422はレシート一覧へ戻す' do
+      sign_in create(:user)
+
+      get '/422'
+
+      expect_error_page(
+        status_code: :unprocessable_content,
+        icon: 'error',
+        title: I18n.t('errors.unprocessable.title'),
+        primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+        primary_href: receipts_path
+      )
+    end
+
+    it 'ログイン済みならGET /500はレシート一覧へ戻す' do
+      sign_in create(:user)
+
+      get '/500'
+
+      expect_error_page(
+        status_code: :internal_server_error,
+        icon: 'cloud_off',
+        title: I18n.t('errors.internal_server_error.title'),
+        primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+        primary_href: receipts_path,
+        secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
+      )
+    end
+
+    it 'guestログイン時もGET /404はレシート一覧へ戻す' do
+      sign_in create(:user, guest: true)
+
+      get '/404'
+
+      expect_error_page(
+        status_code: :not_found,
+        icon: 'travel_explore',
+        title: I18n.t('errors.not_found.title'),
+        primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+        primary_href: receipts_path
       )
     end
   end
@@ -75,7 +135,8 @@ RSpec.describe 'Error pages', type: :request do
       status_code: :not_found,
       icon: 'travel_explore',
       title: I18n.t('errors.not_found.title'),
-      primary_cta: I18n.t('errors.not_found.primary_cta')
+      primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
+      primary_href: new_user_session_path
     )
   end
 
@@ -91,7 +152,8 @@ RSpec.describe 'Error pages', type: :request do
       status_code: :not_found,
       icon: 'travel_explore',
       title: I18n.t('errors.not_found.title'),
-      primary_cta: I18n.t('errors.not_found.primary_cta')
+      primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+      primary_href: receipts_path
     )
   end
 
@@ -107,7 +169,8 @@ RSpec.describe 'Error pages', type: :request do
       status_code: :not_found,
       icon: 'travel_explore',
       title: I18n.t('errors.not_found.title'),
-      primary_cta: I18n.t('errors.not_found.primary_cta')
+      primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+      primary_href: receipts_path
     )
   end
 
@@ -123,7 +186,8 @@ RSpec.describe 'Error pages', type: :request do
       status_code: :not_found,
       icon: 'travel_explore',
       title: I18n.t('errors.not_found.title'),
-      primary_cta: I18n.t('errors.not_found.primary_cta')
+      primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
+      primary_href: receipts_path
     )
   end
 
