@@ -29,6 +29,7 @@ module Analysis
       "ai_timeout" => "ai_error",
       "ai_unavailable" => "ai_error",
       "ai_not_receipt" => "image_error",
+      "ai_not_receipt_uncertain" => "image_error",
       "ai_invalid_response" => "ai_error",
       "analysis_missing_keys" => "ai_error",
 

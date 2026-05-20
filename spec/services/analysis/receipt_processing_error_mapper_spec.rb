@@ -29,6 +29,15 @@ RSpec.describe Analysis::ReceiptProcessingErrorMapper do
       )
     end
 
+    it 'AIのnot receipt判定が不確かな場合も画像エラーとして変換する' do
+      result = described_class.map("ai_not_receipt_uncertain")
+
+      expect(result).to eq(
+        error_code: "ai_not_receipt_uncertain",
+        error_category: "image_error"
+      )
+    end
+
     it '画像エラーを正しく変換する' do
       result = described_class.map("image_missing")
 

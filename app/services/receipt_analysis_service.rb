@@ -75,7 +75,7 @@ class ReceiptAnalysisService
       Rails.logger.warn(
         "[ReceiptAnalysis] ai_not_receipt receipt_id=#{receipt.id} document_type=#{ai_result.dig(:meta, :document_type)} rejection_reason=#{ai_result.dig(:meta, :rejection_reason)} confidence=#{ai_result.dig(:meta, :is_receipt_confidence)}"
       )
-      fail_receipt!("ai_not_receipt", ai_not_receipt_message(ai_result))
+      handle_ai_not_receipt!(ocr_result, ai_result, receipt_signal)
     else
       save_fallback_result!(ocr_result, ai_result[:error_code].presence || "ai_invalid_response")
     end
@@ -227,6 +227,47 @@ class ReceiptAnalysisService
   def ai_not_receipt_message(ai_result)
     meta = ai_result[:meta].is_a?(Hash) ? ai_result[:meta].symbolize_keys : {}
     [ meta[:document_type], meta[:rejection_reason] ].compact_blank.join(" / ").presence || "ai_not_receipt"
+  end
+
+  def handle_ai_not_receipt!(ocr_result, ai_result, receipt_signal)
+    if ai_not_receipt_should_fail?(ai_result, receipt_signal)
+      fail_receipt!("ai_not_receipt", ai_not_receipt_message(ai_result))
+    else
+      Rails.logger.warn(
+        "[ReceiptAnalysis] ai_not_receipt_uncertain receipt_id=#{receipt.id} score=#{receipt_signal.score} reasons=#{receipt_signal.reasons.join(',')}"
+      )
+      save_fallback_result!(ocr_result, "ai_not_receipt_uncertain")
+    end
+  end
+
+  def ai_not_receipt_should_fail?(ai_result, receipt_signal)
+    confidence = ai_receipt_confidence(ai_result)
+    return false if confidence.blank? || confidence < 0.5
+    return false if ocr_strong_receipt_evidence?(receipt_signal)
+
+    true
+  end
+
+  def ai_receipt_confidence(ai_result)
+    meta = ai_result[:meta].is_a?(Hash) ? ai_result[:meta].symbolize_keys : {}
+    value = meta[:is_receipt_confidence]
+    return nil if value.blank?
+
+    Float(value)
+  rescue ArgumentError, TypeError
+    nil
+  end
+
+  def ocr_strong_receipt_evidence?(receipt_signal)
+    reasons = Array(receipt_signal.reasons).map(&:to_sym)
+
+    return true if reasons.include?(:tax_details)
+    return true if reasons.include?(:payments)
+    return true if reasons.include?(:receipt_amount_context_line)
+    return true if reasons.include?(:receipt_word) && reasons.include?(:receipt_amount_context_line)
+
+    reasons.include?(:valid_items) &&
+      (reasons & %i[total_amount payments payment_method_text tax_details receipt_amount_context_line]).any?
   end
 
   def low_quality_ocr?(ocr_result, receipt_attributes:)

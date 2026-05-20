@@ -165,6 +165,7 @@ ja:
       no_text_detected: 画像から文字を読み取れませんでした。
       receipt_not_detected: レシートを認識できませんでした。
       ai_not_receipt: レシートを認識できませんでした。
+      ai_not_receipt_uncertain: AI判定とOCR結果に差があるため、内容を確認してください。
     processing_error_card:
       failed_title: 処理失敗
       attention_title: 処理に関する注意

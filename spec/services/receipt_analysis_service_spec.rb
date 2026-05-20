@@ -108,6 +108,56 @@ RSpec.describe ReceiptAnalysisService do
     }
   end
 
+  def ai_not_receipt_result(confidence: 0.92, rejection_reason: 'memo')
+    meta = {
+      document_type: 'development_note',
+      rejection_reason: rejection_reason
+    }
+    meta[:is_receipt_confidence] = confidence unless confidence.nil?
+
+    {
+      success: false,
+      error_code: 'ai_not_receipt',
+      needs_review: false,
+      receipt_attributes: {},
+      receipt_items_attributes: [],
+      meta: meta
+    }
+  end
+
+  def weak_receipt_like_ocr_result
+    build_ocr_result(
+      raw_text: "サンプルストア\n2026/04/02 12:34\nTEL 03-1234-5678\n東京都港区芝1-1-1\nコーヒー\nサンド\nケーキ",
+      lines: [
+        'サンプルストア',
+        '2026/04/02 12:34',
+        'TEL 03-1234-5678',
+        '東京都港区芝1-1-1',
+        'コーヒー',
+        'サンド',
+        'ケーキ'
+      ],
+      candidates: {
+        store_name: 'サンプルストア',
+        store_address: '東京都港区芝1-1-1',
+        store_phone_number: '03-1234-5678',
+        purchased_at_text: '2026/04/02 12:34',
+        total_amount: nil,
+        tip_amount: nil,
+        country_region: 'JP',
+        receipt_type: nil,
+        payment_method_text: nil,
+        items: [
+          { raw_text: 'コーヒー', line_total: 180, confidence: 0.95 },
+          { raw_text: 'サンド', line_total: 550, confidence: 0.95 },
+          { raw_text: 'ケーキ', line_total: 320, confidence: 0.95 }
+        ],
+        payments: [],
+        tax_details: []
+      }
+    )
+  end
+
   def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
     {
       resolved: {
@@ -415,22 +465,9 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
-    it 'AIがnot receiptと判定した場合はOCR fallback保存せずfailedにする' do
-      not_receipt_result = {
-        success: false,
-        error_code: 'ai_not_receipt',
-        needs_review: false,
-        receipt_attributes: {},
-        receipt_items_attributes: [],
-        meta: {
-          document_type: 'development_note',
-          rejection_reason: 'memo',
-          is_receipt_confidence: 0.92
-        }
-      }
-
-      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(not_receipt_result)
+    it 'AI not_receipt confidence高かつOCR強証拠なしの場合はOCR fallback保存せずfailedにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(weak_receipt_like_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.92))
 
       described_class.call(receipt)
       receipt.reload
@@ -442,6 +479,79 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.receipt_items).to be_empty
         expect(receipt.receipt_payments).to be_empty
         expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
+    it 'AI not_receipt confidence高でもOCR強証拠があればOCR fallback保存でreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.92))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt_uncertain')
+        expect(receipt.processing_error_message).to be_nil
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.receipt_payments.count).to eq(1)
+        expect(receipt.receipt_tax_details.count).to eq(1)
+      end
+    end
+
+    it 'AI not_receipt confidence中程度でOCR強証拠があればOCR fallback保存でreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.65))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt_uncertain')
+        expect(receipt.receipt_items.count).to eq(2)
+      end
+    end
+
+    it 'AI not_receipt confidence中程度でOCR強証拠なしの場合はfailedにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(weak_receipt_like_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.65))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'AI not_receipt confidence missing の場合はOCR fallback保存でreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(weak_receipt_like_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: nil))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt_uncertain')
+        expect(receipt.receipt_items.count).to eq(3)
+      end
+    end
+
+    it 'AI not_receipt confidence低の場合はOCR fallback保存でreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(weak_receipt_like_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.3))
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_not_receipt_uncertain')
+        expect(receipt.receipt_items.count).to eq(3)
       end
     end
 
