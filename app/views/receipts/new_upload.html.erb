@@ -62,8 +62,8 @@
             receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
             receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file"),
             receipt_upload_quota_exceeded_message_value: t("receipts.new_upload.js.quota_exceeded"),
-            receipt_upload_max_file_count_value: Receipts::BatchUploadService::MAX_FILES,
-            receipt_upload_max_file_count_message_value: t("receipts.new_upload.js.max_files", max: Receipts::BatchUploadService::MAX_FILES),
+            receipt_upload_max_file_count_value: ReceiptBatchUploadService::MAX_FILES,
+            receipt_upload_max_file_count_message_value: t("receipts.new_upload.js.max_files", max: ReceiptBatchUploadService::MAX_FILES),
             receipt_upload_selected_files_message_value: t("receipts.new_upload.js.selected_files"),
             receipt_upload_storage_used_bytes_value: current_user.storage_used_bytes,
             receipt_upload_storage_limit_bytes_value: current_user.storage_limit_bytes
@@ -80,7 +80,7 @@
               <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
               <p class="text-base font-medium token-text-base"><%= t("receipts.new_upload.empty_title") %></p>
               <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
-              <p class="text-xs token-text-subtle"><%= t("receipts.new_upload.multiple_hint", max: Receipts::BatchUploadService::MAX_FILES) %></p>
+              <p class="text-xs token-text-subtle"><%= t("receipts.new_upload.multiple_hint", max: ReceiptBatchUploadService::MAX_FILES) %></p>
             </div>
 
             <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
@@ -127,7 +127,7 @@
             <%= t("receipts.new_upload.file_empty") %>
           </p>
           <p class="text-xs text-center token-text-subtle">
-            <%= t("receipts.new_upload.multiple_hint", max: Receipts::BatchUploadService::MAX_FILES) %>
+            <%= t("receipts.new_upload.multiple_hint", max: ReceiptBatchUploadService::MAX_FILES) %>
           </p>
 
           <%= render "shared/ui/actions/button",
