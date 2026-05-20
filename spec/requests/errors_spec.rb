@@ -38,6 +38,10 @@ RSpec.describe 'Error pages', type: :request do
     messages
   end
 
+  def error_support_id_text(request_id)
+    I18n.t('errors.internal_server_error.support_id', request_id: request_id)
+  end
+
   describe 'direct error routes' do
     it 'GET /404 はRecify error layoutで表示される' do
       get '/404'
@@ -49,6 +53,7 @@ RSpec.describe 'Error pages', type: :request do
         primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
         primary_href: new_user_session_path
       )
+      expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
     end
 
     it 'GET /422 はRecify error layoutで表示される' do
@@ -61,10 +66,12 @@ RSpec.describe 'Error pages', type: :request do
         primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
         primary_href: new_user_session_path
       )
+      expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
     end
 
     it 'GET /500 はRecify error layoutで表示される' do
       get '/500'
+      request_id = request.request_id
 
       expect_error_page(
         status_code: :internal_server_error,
@@ -74,6 +81,7 @@ RSpec.describe 'Error pages', type: :request do
         primary_href: new_user_session_path,
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
       )
+      expect(response.body).to include(error_support_id_text(request_id))
     end
 
     it 'ログイン済みならGET /404はレシート一覧へ戻す' do
@@ -108,6 +116,7 @@ RSpec.describe 'Error pages', type: :request do
       sign_in create(:user)
 
       get '/500'
+      request_id = request.request_id
 
       expect_error_page(
         status_code: :internal_server_error,
@@ -117,6 +126,7 @@ RSpec.describe 'Error pages', type: :request do
         primary_href: receipts_path,
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
       )
+      expect(response.body).to include(error_support_id_text(request_id))
     end
 
     it 'guestログイン時もGET /404はレシート一覧へ戻す' do
@@ -198,13 +208,18 @@ RSpec.describe 'Error pages', type: :request do
       messages = capture_error_page_logs(:error)
       allow_any_instance_of(HomeController).to receive(:index).and_raise(RuntimeError, 'intentional failure for log')
 
-      get root_path
+      get root_path(token: 'secret')
+      request_id = request.request_id
 
       aggregate_failures do
         expect(response).to have_http_status(:internal_server_error)
         expect(messages.join("\n")).to include('[ErrorPage] status=500 path=/')
+        expect(messages.join("\n")).to include("request_id=#{request_id}")
+        expect(response.body).to include(error_support_id_text(request_id))
         expect(messages.join("\n")).to include('exception_class=RuntimeError')
         expect(messages.join("\n")).to include('exception_message=intentional failure for log')
+        expect(response.body).not_to include('intentional failure for log')
+        expect(response.body).not_to include('token=secret')
       end
     end
   end
@@ -219,6 +234,7 @@ RSpec.describe 'Error pages', type: :request do
       primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
       primary_href: new_user_session_path
     )
+    expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
   end
 
   it '他ユーザーのreceipt参照はbranded 404になる' do

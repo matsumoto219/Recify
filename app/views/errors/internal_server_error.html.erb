@@ -1,5 +1,5 @@
 <% content_for :title, t("errors.internal_server_error.page_title") %>
-<% reload_path = request.env["action_dispatch.original_fullpath"].presence || request.fullpath %>
+<% reload_path = (request.env["action_dispatch.original_path"].presence || request.path).to_s.split("?").first.presence || request.path %>
 
 <%= render "errors/error_page",
   status_code: 500,
@@ -9,4 +9,5 @@
   primary_label: error_primary_label,
   primary_path: error_primary_path,
   secondary_label: t("errors.internal_server_error.secondary_cta"),
-  secondary_path: reload_path %>
+  secondary_path: reload_path,
+  support_message: t("errors.internal_server_error.support_id", request_id: request.request_id) %>
