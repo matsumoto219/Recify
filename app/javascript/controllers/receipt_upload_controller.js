@@ -48,6 +48,9 @@ export default class extends Controller {
     invalidImageMessage: { type: String, default: 'Please select an image file.' },
     emptyFileMessage: { type: String, default: 'No image selected yet.' },
     quotaExceededMessage: { type: String, default: 'Storage quota exceeded.' },
+    maxFileCount: { type: Number, default: 5 },
+    maxFileCountMessage: { type: String, default: 'Too many files selected.' },
+    selectedFilesMessage: { type: String, default: '%{count} files selected: %{files}' },
     storageUsedBytes: { type: Number, default: 0 },
     storageLimitBytes: { type: Number, default: 0 }
   }
@@ -75,11 +78,11 @@ export default class extends Controller {
   }
 
   previewCamera () {
-    this.previewFile(this.cameraInputTarget.files?.[0])
+    this.previewFiles(this.cameraInputTarget.files, { single: true })
   }
 
   previewLibrary () {
-    this.previewFile(this.libraryInputTarget.files?.[0])
+    this.previewFiles(this.libraryInputTarget.files)
   }
 
   handleDragEnter (event) {
@@ -110,57 +113,74 @@ export default class extends Controller {
     this.hideDropOverlay()
     if (!this.ocrAvailableValue) return
 
-    const file = event.dataTransfer?.files?.[0]
-    if (!file) return
-
-    if (!this.isImageFile(file)) {
-      this.showFileError(this.invalidImageMessageValue)
-      return
-    }
-
-    if (this.exceedsStorageQuota(file)) {
-      this.showFileError(this.quotaExceededMessageValue)
-      return
-    }
+    const files = Array.from(event.dataTransfer?.files || [])
+    if (files.length === 0) return
+    if (!this.validateFiles(files)) return
 
     const dataTransfer = new DataTransfer()
-    dataTransfer.items.add(file)
+    files.forEach((file) => dataTransfer.items.add(file))
     this.libraryInputTarget.files = dataTransfer.files
     this.cameraInputTarget.value = ''
 
-    this.previewFile(file)
+    this.previewFiles(this.libraryInputTarget.files)
   }
 
   disableSubmit () {
     this.submitButtonTarget.disabled = true
   }
 
-  previewFile (file) {
-    this.submitButtonTarget.disabled = !file || !this.ocrAvailableValue
+  previewFiles (fileList, { single = false } = {}) {
+    const files = Array.from(fileList || [])
+    const selectedFiles = single ? files.slice(0, 1) : files
+    this.submitButtonTarget.disabled = selectedFiles.length === 0 || !this.ocrAvailableValue
 
-    if (!file) {
+    if (selectedFiles.length === 0) {
       this.clearPreview()
       return
     }
 
     if (!this.ocrAvailableValue) return
+    if (!this.validateFiles(selectedFiles)) return
 
-    if (!this.isImageFile(file)) {
-      this.showFileError(this.invalidImageMessageValue)
-      return
-    }
+    this.showPreview(selectedFiles)
+  }
 
-    if (this.exceedsStorageQuota(file)) {
-      this.showFileError(this.quotaExceededMessageValue)
-      return
-    }
+  showPreview (files) {
+    const previewFile = files[0]
 
     this.revokePreviewUrl()
-    this.selectedObjectUrl = URL.createObjectURL(file)
+    this.selectedObjectUrl = URL.createObjectURL(previewFile)
     this.previewTarget.src = this.selectedObjectUrl
     this.previewWrapperTarget.classList.remove('hidden')
     this.emptyStateTarget.classList.add('hidden')
-    this.fileNameTarget.textContent = file.name
+    this.fileNameTarget.textContent = this.selectedFilesText(files)
+  }
+
+  validateFiles (files) {
+    if (files.length > this.maxFileCountValue) {
+      this.showFileError(this.maxFileCountMessageValue)
+      return false
+    }
+
+    if (files.some((file) => !this.isImageFile(file))) {
+      this.showFileError(this.invalidImageMessageValue)
+      return false
+    }
+
+    if (this.exceedsStorageQuota(files)) {
+      this.showFileError(this.quotaExceededMessageValue)
+      return false
+    }
+
+    return true
+  }
+
+  selectedFilesText (files) {
+    if (files.length === 1) return files[0].name
+
+    return this.selectedFilesMessageValue
+      .replace('%{count}', files.length)
+      .replace('%{files}', files.map((file) => file.name).join(', '))
   }
 
   showDropOverlay () {
@@ -187,10 +207,11 @@ export default class extends Controller {
     return isAllowedReceiptImageFile(file)
   }
 
-  exceedsStorageQuota (file) {
-    if (!file || this.storageLimitBytesValue <= 0) return false
+  exceedsStorageQuota (files) {
+    if (this.storageLimitBytesValue <= 0) return false
 
-    return this.storageUsedBytesValue + file.size > this.storageLimitBytesValue
+    const totalSize = Array.from(files || []).reduce((sum, file) => sum + file.size, 0)
+    return this.storageUsedBytesValue + totalSize > this.storageLimitBytesValue
   }
 
   clearPreview () {

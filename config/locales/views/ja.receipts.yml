@@ -146,6 +146,7 @@ ja:
       preview_alt: 選択したレシート画像のプレビュー
       drop_here: ここに画像をドロップ
       file_empty: 画像はまだ選択されていません
+      multiple_hint: "ライブラリ選択とドラッグ＆ドロップは複数選択可・最大%{max}件"
       queued_hint: アップロード後は解析キューに追加されます
       back: 戻る
       buttons:
@@ -157,6 +158,13 @@ ja:
         invalid_image: JPG, PNG, BMP, TIFF, HEIF, HEIC形式の画像を選択してください
         empty_file: 画像はまだ選択されていません
         quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
+        max_files: "アップロードできる画像は最大%{max}件です"
+        selected_files: "%{count}件選択: %{files}"
+    batch_upload:
+      errors:
+        empty: 画像を選択してください
+        too_many: "アップロードできる画像は最大%{max}件です"
+        quota_exceeded: 選択した画像の合計サイズがストレージ容量の上限を超えています。
     processing_errors:
       image_error: 画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。

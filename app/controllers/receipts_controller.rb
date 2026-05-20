@@ -55,6 +55,11 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    if batch_upload_requested?
+      handle_batch_upload
+      return
+    end
+
     if storage_quota_exceeded_for?(uploaded_receipt_image)
       @receipt = current_user.receipts.new
       @receipt.errors.add(:image, :storage_quota_exceeded)
@@ -176,8 +181,34 @@ class ReceiptsController < ApplicationController
     params.require(:receipt).permit(:image)
   end
 
+  def batch_upload_requested?
+    uploaded_receipt_images.any?
+  end
+
+  def uploaded_receipt_images
+    Array(params.dig(:receipt, :images)).compact_blank
+  end
+
   def uploaded_receipt_image
     params.dig(:receipt, :image)
+  end
+
+  def handle_batch_upload
+    result = Receipts::BatchUploadService.call(
+      user: current_user,
+      files: uploaded_receipt_images
+    )
+    @receipt = current_user.receipts.new
+
+    if result.success?
+      redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.batch_enqueued", count: result.count))
+    else
+      Rails.logger.warn(
+        "[ReceiptBatchUpload] failed user_id=#{current_user.id} errors=#{result.errors.join(', ')}"
+      )
+      flash.now[:alert] = result.errors
+      render :new_upload, status: :unprocessable_content, formats: :html
+    end
   end
 
   def existing_receipt_image_blob

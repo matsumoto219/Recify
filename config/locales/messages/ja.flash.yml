@@ -17,6 +17,7 @@ ja:
       update: レシートを更新しました
       destroy: レシートを削除しました
       enqueued: レシート画像をアップロードしました。解析が完了するまでお待ちください。
+      batch_enqueued: "%{count}件のレシート画像をアップロードしました。解析が完了するまでお待ちください。"
       processing: このレシートは解析中です。完了後に確認できます。
       ocr_unavailable: 解析機能は一時停止中です。手動入力をご利用ください。
       analysis_completed: レシート解析が完了しました

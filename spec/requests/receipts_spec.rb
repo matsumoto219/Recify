@@ -7,6 +7,10 @@ RSpec.describe 'Receipts', type: :request do
     Rack::Test::UploadedFile.new(image_path, 'image/jpeg')
   end
 
+  def uploaded_receipt_fixture(filename = 'receipt_sample.jpg', content_type = 'image/jpeg')
+    Rack::Test::UploadedFile.new(Rails.root.join('spec/fixtures/files', filename), content_type)
+  end
+
   def upload_ocr_result(overrides = {})
     {
       success: true,
@@ -592,7 +596,8 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       upload_root = document.at_css('[data-controller~="receipt-upload"]')
-      image_inputs = document.css('input[type="file"][name="receipt[image]"]')
+      camera_input = document.at_css('input[type="file"][name="receipt[image]"]')
+      library_input = document.at_css('input[type="file"][name="receipt[images][]"]')
       expected_accept = %w[
         image/jpeg image/png image/bmp image/tiff image/heif image/heic
         .jpg .jpeg .png .bmp .tif .tiff .heif .heic
@@ -608,8 +613,15 @@ RSpec.describe 'Receipts', type: :request do
         expect(upload_root['data-receipt-upload-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
         expect(upload_root['data-receipt-upload-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
         expect(upload_root['data-receipt-upload-quota-exceeded-message-value']).to eq(I18n.t('receipts.new_upload.js.quota_exceeded'))
-        expect(image_inputs.size).to eq(2)
-        expect(image_inputs.map { |input| input['accept'] }).to all(eq(expected_accept))
+        expect(upload_root['data-receipt-upload-max-file-count-value']).to eq(Receipts::BatchUploadService::MAX_FILES.to_s)
+        expect(upload_root['data-receipt-upload-max-file-count-message-value']).to eq(I18n.t('receipts.new_upload.js.max_files', max: Receipts::BatchUploadService::MAX_FILES))
+        expect(upload_root['data-receipt-upload-selected-files-message-value']).to eq(I18n.t('receipts.new_upload.js.selected_files'))
+        expect(response.body).to include(I18n.t('receipts.new_upload.multiple_hint', max: Receipts::BatchUploadService::MAX_FILES))
+        expect(camera_input['accept']).to eq(expected_accept)
+        expect(camera_input['capture']).to eq('environment')
+        expect(camera_input['multiple']).to be_nil
+        expect(library_input['accept']).to eq(expected_accept)
+        expect(library_input['multiple']).to eq('multiple')
       end
     end
 
@@ -668,6 +680,118 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'POST /receipts/upload' do
+    it '単一camera uploadはreceipt[image]で従来通り成功する' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt).to be_processing
+        expect(receipt.image).to be_attached
+        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(receipt.id)
+      end
+    end
+
+    it 'library複数uploadで1ファイルごとにreceiptを作成し解析jobをenqueueする' do
+      files = [
+        uploaded_receipt_fixture,
+        uploaded_receipt_fixture('single_tax_receipt.png', 'image/png'),
+        uploaded_receipt_fixture('multiple_tax_receipt.png', 'image/png')
+      ]
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.to change(Receipt, :count).by(3)
+
+      created_receipts = Receipt.order(:id).last(3)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(created_receipts).to all(be_processing)
+        expect(created_receipts).to all(satisfy { |receipt| receipt.image.attached? })
+        created_receipts.each do |receipt|
+          expect(ReceiptAnalysisJob).to have_received(:perform_later).with(receipt.id)
+        end
+      end
+    end
+
+    it '複数uploadが6件以上ならreceiptを作成せず解析jobもenqueueしない' do
+      files = Array.new(6) { uploaded_receipt_fixture }
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.batch_upload.errors.too_many', max: Receipts::BatchUploadService::MAX_FILES))
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '複数uploadにinvalid fileが混ざるとall-or-nothingでreceiptを作成しない' do
+      invalid_file = Rack::Test::UploadedFile.new(
+        Tempfile.create([ 'invalid-receipt-upload', '.txt' ]).tap { |file| file.write('dummy'); file.rewind }.path,
+        'text/plain'
+      )
+      files = [
+        uploaded_receipt_fixture,
+        invalid_file
+      ]
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '複数uploadの合計サイズが残り容量を超えるとreceiptを作成せず解析jobもenqueueしない' do
+      files = [
+        uploaded_receipt_fixture,
+        uploaded_receipt_fixture
+      ]
+      user.update!(storage_limit_bytes: files.first.size + 1)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.batch_upload.errors.quota_exceeded'))
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
     it 'ストレージ上限超過時はreceiptを作成せず解析jobもenqueueしない' do
       user.update!(storage_limit_bytes: 1)
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
