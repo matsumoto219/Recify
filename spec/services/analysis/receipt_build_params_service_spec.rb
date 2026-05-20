@@ -166,6 +166,119 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to be_nil
       end
 
+      it 'Payments[] が複数件ある場合も全件保存する' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 500 },
+          { method: 'VISA Credit', amount: 780 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: '現金', amount: 500),
+            include(method: 'VISA Credit', amount: 780)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+        end
+      end
+
+      it 'point + credit では point を代表値にせず credit_card を選ぶ' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: 'WAON POINT', amount: 280 },
+          { method: 'JCB', amount: 1000 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+      end
+
+      it 'coupon + cash では coupon を代表値にせず cash を選ぶ' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: 'クーポン', amount: 100 },
+          { method: '現金', amount: 1180 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+      end
+
+      it 'coupon + credit では coupon を代表値にせず credit_card を選ぶ' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: 'クーポン', amount: 100 },
+          { method: 'MasterCard', amount: 1180 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+      end
+
+      it '商品券 + cash では商品券を代表値にせず cash を選ぶ' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '商品券', amount: 500 },
+          { method: '現金', amount: 780 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+      end
+
+      it 'pointのみでは payment_method を無理に埋めない' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: 'ポイント利用', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to be_nil
+      end
+
+      it '商品券のみでは payment_method を無理に埋めない' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '商品券', amount: 1280 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to be_nil
+      end
+
+      it '複数の実決済手段では固定優先順位で代表値を選ぶ' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 300 },
+          { method: 'Suica', amount: 400 },
+          { method: 'PayPay', amount: 580 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+      end
+
+      it 'OCR payment_method_text がある場合は複合 Payments[] より優先する' do
+        ocr_result[:candidates][:payment_method_text] = 'PayPay'
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 500 },
+          { method: 'VISA Credit', amount: 780 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+      end
+
       it 'tax_detailsが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
@@ -284,6 +397,18 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:country_region]).to eq('JP')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
         end
+      end
+
+      it 'AI payment_method は OCR field や Payments[] より優先される' do
+        ocr_result[:candidates][:payment_method_text] = 'Master'
+        ocr_result[:candidates][:payments] = [
+          { method: '現金', amount: 500 },
+          { method: 'VISA Credit', amount: 780 }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
       end
 
       it 'AI補完で明細名とカテゴリを上書きしてもAzure由来のquantity_unitとproduct_codeを保持する' do

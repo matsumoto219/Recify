@@ -7,6 +7,8 @@ module Analysis
     FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
     FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
     FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
+    PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
+    NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
 
     class << self
       def call(ocr_result:, ai_result: nil)
@@ -455,17 +457,17 @@ module Analysis
       end
 
       def detect_payment_method_from_payments(payments)
-        Array(payments).each do |payment|
+        detected_methods = Array(payments).filter_map do |payment|
           normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
           method_text = normalized_payment[:method]
           next if method_text.blank?
+          next if method_text.match?(NON_REPRESENTATIVE_PAYMENT_PATTERN)
 
           detected = Analysis::ReceiptFallbackPatterns.detect_payment_method(method_text)
-          normalized_detected = normalize_detected_payment_method(detected)
-          return normalized_detected if normalized_detected.present?
+          normalize_detected_payment_method(detected)
         end
 
-        nil
+        PAYMENT_METHOD_REPRESENTATIVE_PRIORITY.find { |method| detected_methods.include?(method) }
       end
 
       def normalize_detected_payment_method(detected_method)
