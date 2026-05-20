@@ -1979,6 +1979,54 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'スマホ詳細ではエラーカードを金額サマリーと店舗情報より先に表示する' do
+      receipt.image.attach(uploaded_image)
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'ocr_timeout',
+        processing_error_message: 'OCR service timeout'
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      alerts = document.at_css('#receipt-detail-alerts')
+      sidebar = document.at_css('#receipt-detail-sidebar')
+      main = document.at_css('#receipt-detail-main')
+      image_card = document.at_css('[data-controller~="receipt-image-card"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(alerts.text).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(alerts['class']).to include('order-1')
+        expect(alerts['class']).to include('md:order-2')
+        expect(sidebar['class']).to include('order-2')
+        expect(sidebar['class']).to include('md:order-1')
+        expect(main['class']).to include('order-3')
+        expect(main['class']).to include('md:order-3')
+        expect(alerts['class']).to include('lg:col-span-8')
+        expect(main['class']).to include('lg:col-span-8')
+        expect(sidebar['class']).to include('lg:col-start-9')
+        expect(sidebar.text).to include(I18n.t('receipts.common.total_amount_title'))
+        expect(main.text).to include(I18n.t('receipts.show.store_information'))
+        expect(image_card['data-receipt-image-card-initially-open-value']).to eq('true')
+        expect(image_card['data-receipt-image-card-collapse-on-mobile-value']).to eq('true')
+      end
+    end
+
+    it 'エラーなし詳細ではエラー領域を描画しない' do
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('#receipt-detail-alerts')).to be_nil
+        expect(document.at_css('#receipt-detail-sidebar')).to be_present
+        expect(document.at_css('#receipt-detail-main')).to be_present
+      end
+    end
+
     it 'AIがnot receiptと判定したレシートは処理失敗カードに認識失敗文言を表示する' do
       receipt.update!(
         status: 'failed',

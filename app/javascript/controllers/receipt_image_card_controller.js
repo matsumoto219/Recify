@@ -20,6 +20,8 @@ const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
   '.heic'
 ]
 
+const MOBILE_MEDIA_QUERY = '(max-width: 767px)'
+
 function isAllowedReceiptImageFile (file) {
   if (!file) return false
 
@@ -35,6 +37,7 @@ export default class extends Controller {
   static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
   static values = {
     initiallyOpen: Boolean,
+    collapseOnMobile: Boolean,
     unselectedLabel: { type: String, default: 'Unselected' },
     emptyFileLabel: { type: String, default: 'No file selected' },
     quotaExceededMessage: { type: String, default: 'Storage quota exceeded.' },
@@ -44,7 +47,7 @@ export default class extends Controller {
   }
 
   connect () {
-    this.isOpen = this.initiallyOpenValue
+    this.isOpen = this.initiallyOpenValue && !this.shouldCollapseInitiallyForMobile()
     this.objectUrl = null
     this.dragDepth = 0
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
@@ -68,6 +71,10 @@ export default class extends Controller {
     this.unlockBodyScroll()
     this.revokeObjectUrl()
     document.removeEventListener('keydown', this.handleKeydown)
+  }
+
+  shouldCollapseInitiallyForMobile () {
+    return this.collapseOnMobileValue && window.matchMedia && window.matchMedia(MOBILE_MEDIA_QUERY).matches
   }
 
   previewSelectedImage (event) {

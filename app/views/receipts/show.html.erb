@@ -9,6 +9,7 @@
                          t("receipts.common.multiple_tax_rates")
                        end
     edit_from = params[:from].to_s == "index" ? "index" : "show"
+    has_alert_cards = @receipt.has_processing_error? || @receipt.has_blocking_review_notes? || @receipt.has_warning_notes?
   %>
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
     <%= render "shared/ui/layout/section_header",
@@ -42,25 +43,29 @@
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-    <div class="order-2 lg:order-none lg:col-span-8 space-y-6">
-      <% if @receipt.has_processing_error? %>
-        <%= render "receipts/processing_error_card",
-              receipt: @receipt,
-              edit_path: edit_receipt_path(@receipt, from: edit_from) %>
-      <% end %>
+    <% if has_alert_cards %>
+      <div id="receipt-detail-alerts" class="order-1 md:order-2 lg:order-none lg:col-span-8 space-y-6">
+        <% if @receipt.has_processing_error? %>
+          <%= render "receipts/processing_error_card",
+                receipt: @receipt,
+                edit_path: edit_receipt_path(@receipt, from: edit_from) %>
+        <% end %>
 
-      <% if @receipt.has_blocking_review_notes? %>
-        <%= render "receipts/review_notes_card",
-              receipt: @receipt,
-              description: t("receipts.show.review_description") %>
-      <% end %>
+        <% if @receipt.has_blocking_review_notes? %>
+          <%= render "receipts/review_notes_card",
+                receipt: @receipt,
+                description: t("receipts.show.review_description") %>
+        <% end %>
 
-      <% if @receipt.has_warning_notes? %>
-        <%= render "receipts/warning_notes_card",
-              receipt: @receipt,
-              description: t("receipts.show.warning_description") %>
-      <% end %>
+        <% if @receipt.has_warning_notes? %>
+          <%= render "receipts/warning_notes_card",
+                receipt: @receipt,
+                description: t("receipts.show.warning_description") %>
+        <% end %>
+      </div>
+    <% end %>
 
+    <div id="receipt-detail-main" class="order-3 md:order-3 lg:order-none lg:col-span-8 space-y-6">
       <%= render "shared/ui/layout/surface_card", padding: :lg do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
@@ -185,7 +190,7 @@
       <% end %>
     </div>
 
-    <div class="order-1 lg:order-none lg:col-span-4 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
+    <div id="receipt-detail-sidebar" class="order-2 md:order-1 lg:order-none lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:row-span-2 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
       <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
       <div class="order-first lg:order-none">
         <%= render "shared/ui/card/amount_summary_card",
@@ -207,6 +212,7 @@
             show_modal: true,
             show_download: true,
             initially_open: true,
+            collapse_on_mobile: true,
             keep_image_enabled: true,
             empty_message: t("receipts.show.image_empty") %>
     </div>

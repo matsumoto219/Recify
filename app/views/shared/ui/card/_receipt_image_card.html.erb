@@ -7,6 +7,7 @@
   show_download = local_assigns.fetch(:show_download, false)
   show_upload = local_assigns.fetch(:show_upload, false)
   initially_open = local_assigns.fetch(:initially_open, false)
+  collapse_on_mobile = local_assigns.fetch(:collapse_on_mobile, false)
   keep_image_enabled = local_assigns.fetch(:keep_image_enabled, true)
   empty_message = local_assigns.fetch(:empty_message, t("shared.receipt_image_card.empty"))
   helper_text = local_assigns[:helper_text]
@@ -26,7 +27,7 @@
   quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
+<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
   <%= render "shared/ui/layout/surface_card", padding: :sm do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
