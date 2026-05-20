@@ -1,5 +1,13 @@
+<%
+  hide_on_mobile = local_assigns.fetch(:hide_on_mobile, false)
+  summary_classes = [
+    hide_on_mobile ? "hidden md:grid" : "grid",
+    "grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 mb-10"
+  ].join(" ")
+%>
+
 <section id="receipts_summary"
-  class="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 mb-10"
+  class="<%= summary_classes %>"
   data-controller="receipt-summary"
   data-receipt-summary-storage-key-value="receiptAmountMode"
   data-receipt-summary-monthly-label-value="<%= t("dashboard.summary.amount.current_month_title") %>"

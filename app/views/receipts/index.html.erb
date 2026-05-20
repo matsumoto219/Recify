@@ -1,4 +1,11 @@
 <%= turbo_stream_from [current_user, :receipts] %>
+<%
+  searching = @query.present?
+  page_header_action_classes = [
+    "w-full justify-end md:w-auto md:block",
+    searching ? "hidden md:block" : "flex"
+  ].join(" ")
+%>
 <section id="receipts-page-header" class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
   <% if @query.present? %>
     <%= render "shared/ui/layout/section_header",
@@ -20,7 +27,7 @@
       wrapper_class: "mt-1" %>
   <% end %>
 
-  <div class="w-full flex justify-end md:w-auto md:block">
+  <div class="<%= page_header_action_classes %>">
     <%= render "shared/ui/actions/button",
       label: t("dashboard.nav.new_receipt"),
       as: :link,
@@ -41,7 +48,8 @@
     failed_count: @failed_count,
     monthly_change_label: @monthly_change_label,
     monthly_change_icon: @monthly_change_icon,
-    monthly_change_icon_class: @monthly_change_icon_class %>
+    monthly_change_icon_class: @monthly_change_icon_class,
+    hide_on_mobile: searching %>
 </div>
 
 <div id="receipts-results">

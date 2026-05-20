@@ -160,6 +160,7 @@ RSpec.describe 'Receipts', type: :request do
       summary_cards = summary.xpath('./section')
       total_count_card = summary_cards.find { |card| card.text.include?(I18n.t('dashboard.summary.total_count.title')) }
       header = document.at_css('#dashboard-header')
+      page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
@@ -175,14 +176,37 @@ RSpec.describe 'Receipts', type: :request do
         expect(summary.text).to include(I18n.t('dashboard.summary.processing.title'))
         expect(summary.text).to include(I18n.t('dashboard.summary.review_needed.title'))
         expect(summary.text).to include(I18n.t('dashboard.summary.failed.title'))
+        expect(summary['class'].split).to include('grid')
+        expect(summary['class'].split).not_to include('hidden')
         expect(summary['class']).to include('md:grid-cols-4')
         expect(summary['class']).to include('xl:grid-cols-5')
         expect(total_count_card['class']).to include('hidden')
         expect(total_count_card['class']).to include('xl:block')
+        expect(page_header_action['class'].split).to include('flex')
+        expect(page_header_action['class'].split).not_to include('hidden')
         expect(summary['data-receipt-summary-monthly-label-value']).to eq(I18n.t('dashboard.summary.amount.current_month_title'))
         expect(summary['data-receipt-summary-overall-label-value']).to eq(I18n.t('dashboard.summary.amount.overall_title'))
         expect(summary['data-receipt-summary-change-label-value']).to eq(I18n.t('dashboard.summary.amount.monthly_change_prefix'))
         expect(summary['data-receipt-summary-count-suffix-value']).to eq(I18n.t('dashboard.summary.count_suffix'))
+      end
+    end
+
+    it 'スマホ検索結果ではsummaryとページヘッダー登録ボタンだけを非表示にする' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+      summary = document.at_css('#receipts_summary')
+      page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
+      mobile_bottom_nav_action = document.at_css("#mobile-bottom-nav a[href='#{select_input_method_receipts_path}']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(summary['class'].split).to include('hidden')
+        expect(summary['class'].split).to include('md:grid')
+        expect(page_header_action['class'].split).to include('hidden')
+        expect(page_header_action['class'].split).to include('md:block')
+        expect(mobile_bottom_nav_action).to be_present
+        expect(mobile_bottom_nav_action.text).to include(I18n.t('dashboard.nav.mobile_new_receipt'))
       end
     end
 
@@ -282,10 +306,16 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path(q: '')
 
       document = Nokogiri::HTML(response.body)
+      summary = document.at_css('#receipts_summary')
+      page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
         expect(document.at_css('#receipts-page-header').text).to include('1件')
+        expect(summary['class'].split).to include('grid')
+        expect(summary['class'].split).not_to include('hidden')
+        expect(page_header_action['class'].split).to include('flex')
+        expect(page_header_action['class'].split).not_to include('hidden')
         expect(document.css('turbo-cable-stream-source').size).to eq(3)
       end
     end
