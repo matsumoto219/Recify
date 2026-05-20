@@ -427,7 +427,7 @@ RSpec.describe Receipt, type: :model do
         expect(receipt).to receive(:broadcast_append_later_to).with(
           [ user, :receipts ],
           target: "toast-stream",
-          partial: "shared/toast_notice",
+          partial: "shared/ui/feedback/toast_notice",
           locals: {
             notice_type: entry[:flash_type],
             message: entry[:message]

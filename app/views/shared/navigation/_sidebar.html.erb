@@ -8,13 +8,13 @@
   </div>
 
   <nav class="flex-1 space-y-1 px-0">
-    <%= render "shared/sidebar_nav_item",
+    <%= render "shared/navigation/sidebar_nav_item",
       path: receipts_path,
       icon: "receipt_long",
       label: t("dashboard.nav.receipts"),
       active: current_page?(receipts_path) %>
 
-    <%= render "shared/sidebar_nav_item",
+    <%= render "shared/navigation/sidebar_nav_item",
       path: select_input_method_receipts_path,
       icon: "add_circle",
       label: t("dashboard.nav.new_receipt"),
@@ -23,7 +23,7 @@
 
   <div class="mt-auto">
     <div class="flex flex-col gap-1 mb-4">
-      <%= render "shared/sidebar_nav_item",
+      <%= render "shared/navigation/sidebar_nav_item",
         path: settings_path,
         icon: "settings",
         label: t("dashboard.nav.settings"),

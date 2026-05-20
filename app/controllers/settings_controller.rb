@@ -31,7 +31,7 @@ class SettingsController < ApplicationController
 
         format.turbo_stream do
           flash.now[:notice] = message if current_user.push_notification_enabled?
-          render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
+          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash")
         end
       end
     else
@@ -48,7 +48,7 @@ class SettingsController < ApplicationController
 
         format.turbo_stream do
           flash.now[:alert] = message
-          render turbo_stream: turbo_stream.update("flash", partial: "shared/flash")
+          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash")
         end
       end
     end

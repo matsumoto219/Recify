@@ -3,7 +3,7 @@
   id="mobile-search-panel"
   class="hidden fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top)+0.75rem)] z-50 sm:hidden"
   data-search-target="panel">
-  <%= render "shared/search_box",
+  <%= render "shared/search/search_box",
     variant: :mobile,
     placeholder: t("dashboard.search.placeholder"),
     input_data: { search_target: "input" },

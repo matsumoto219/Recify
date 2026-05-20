@@ -2,7 +2,7 @@
   <%= render "shared/ui/layout/ambient_background" %>
 
   <!-- サイドバー（デスクトップ用） -->
-  <%= render "shared/sidebar" %>
+  <%= render "shared/navigation/sidebar" %>
 
   <div
     class="relative z-10 md:ml-20 xl:ml-64 flex flex-col min-h-screen w-full"
@@ -12,7 +12,7 @@
     data-search-error-close-label-value="<%= t("search.realtime.close_label") %>">
     <!-- ヘッダー（上部固定ナビ） -->
     <%= render "shared/header" %>
-    <%= render "shared/mobile_search_overlay" %>
+    <%= render "shared/search/mobile_search_overlay" %>
     <%= render "shared/notifications/dropdown_overlay" if user_signed_in? %>
 
     <!-- メインコンテンツ（各ページの内容が入る） -->
@@ -27,4 +27,4 @@
 </div>
 
 <!-- モバイル用下部ナビゲーション -->
-<%= render "shared/mobile_bottom_nav" %>
+<%= render "shared/navigation/mobile_bottom_nav" %>

@@ -631,7 +631,7 @@ class Receipt < ApplicationRecord
     broadcast_append_later_to(
       [ user, :receipts ],
       target: "toast-stream",
-      partial: "shared/toast_notice",
+      partial: "shared/ui/feedback/toast_notice",
       locals: {
         notice_type: flash_type,
         message: message

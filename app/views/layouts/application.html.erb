@@ -31,7 +31,7 @@
 
   <body data-theme-preference="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
     <div id="flash">
-      <%= render "shared/flash" %>
+      <%= render "shared/ui/feedback/flash" %>
     </div>
     <div id="toast-stream" class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm"></div>
 
