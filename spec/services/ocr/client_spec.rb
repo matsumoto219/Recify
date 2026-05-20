@@ -56,6 +56,10 @@ RSpec.describe Ocr::Client do
     connection
   end
 
+  before do
+    allow(client).to receive(:retry_jitter_delay).and_return(0.0)
+  end
+
   describe '#call' do
     before do
       allow(client).to receive(:submit_request).and_return(operation_location)
@@ -115,6 +119,75 @@ RSpec.describe Ocr::Client do
         expect(result).to eq(operation_location)
         expect(connection).to have_received(:post).twice
         expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it '429のRetry-After秒数をretry delayとして優先する' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 429, headers: { 'Retry-After' => '3' }),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(3.0).once
+      end
+    end
+
+    it '不正なRetry-Afterは通常backoffへfallbackする' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 429, headers: { 'Retry-After' => 'later' }),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it 'Retry-Afterがない場合はjitterを加算する' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 429),
+        accepted_response
+      )
+      allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(0.75).once
+      end
+    end
+
+    it 'Retry-Afterが上限を超える場合はcapする' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 429, headers: { 'Retry-After' => '30' }),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(10.0).once
       end
     end
 
@@ -349,7 +422,7 @@ RSpec.describe Ocr::Client do
   end
 
   describe '#handle_response_status!' do
-    let(:response) { instance_double(Faraday::Response, status: status) }
+    let(:response) { instance_double(Faraday::Response, status: status, headers: {}) }
 
     subject(:handle_status) { client.send(:handle_response_status!, response) }
 

@@ -1,6 +1,7 @@
 require "net/http"
 require "uri"
 require "json"
+require "time"
 
 module Ai
   module Providers
@@ -12,6 +13,7 @@ module Ai
         DEFAULT_READ_TIMEOUT = 30
         MAX_RETRIES = 2
         BASE_RETRY_DELAY = 1.0
+        MAX_RETRY_DELAY = 10.0
 
         def call(input)
           body = RequestBuilder.build(input)
@@ -63,7 +65,8 @@ module Ai
             raise Ai::Errors::RateLimitError.new(
               message: "OpenAI API rate limit error: #{response.code}",
               error_code: "ai_api_error",
-              provider: PROVIDER_NAME
+              provider: PROVIDER_NAME,
+              retry_after: retry_after_from_response(response)
             )
           end
 
@@ -71,7 +74,8 @@ module Ai
             raise Ai::Errors::ProviderError.new(
               message: "OpenAI API retryable server error: #{response.code}",
               error_code: "ai_api_error",
-              provider: PROVIDER_NAME
+              provider: PROVIDER_NAME,
+              retry_after: retry_after_from_response(response)
             )
           end
 
@@ -96,7 +100,7 @@ module Ai
             raise unless retryable_error?(e)
             raise if attempts > MAX_RETRIES
 
-            sleep(retry_delay_for(attempts))
+            sleep(retry_delay_for(attempts, e))
             retry
           end
         end
@@ -126,8 +130,52 @@ module Ai
           response.code.to_i >= 500
         end
 
-        def retry_delay_for(attempt)
+        def retry_delay_for(attempt, error = nil)
+          retry_after = retry_after_for(error)
+          return cap_retry_delay(retry_after) if retry_after
+
+          cap_retry_delay(exponential_retry_delay(attempt) + retry_jitter_delay)
+        end
+
+        def exponential_retry_delay(attempt)
           BASE_RETRY_DELAY * (2**(attempt - 1))
+        end
+
+        def retry_jitter_delay
+          rand * BASE_RETRY_DELAY
+        end
+
+        def retry_after_for(error)
+          return unless error.respond_to?(:retry_after)
+
+          error.retry_after
+        end
+
+        def retry_after_from_response(response)
+          value = response["Retry-After"]
+          return if value.blank?
+
+          parse_retry_after(value)
+        end
+
+        def parse_retry_after(value)
+          raw_value = value.to_s.strip
+          return if raw_value.blank?
+
+          if raw_value.match?(/\A\d+(?:\.\d+)?\z/)
+            return cap_retry_delay(raw_value.to_f)
+          end
+
+          delay = Time.httpdate(raw_value) - Time.current
+          return if delay.negative?
+
+          cap_retry_delay(delay)
+        rescue ArgumentError
+          nil
+        end
+
+        def cap_retry_delay(delay)
+          [ delay.to_f, MAX_RETRY_DELAY ].min
         end
 
         def headers

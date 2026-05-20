@@ -1,5 +1,6 @@
 require "faraday"
 require "json"
+require "time"
 
 module Ocr
   class Client
@@ -16,6 +17,7 @@ module Ocr
     MAX_POLL = 10
     MAX_RETRIES = 2
     BASE_RETRY_DELAY = 0.5
+    MAX_RETRY_DELAY = 10.0
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethod" ].freeze
 
@@ -140,10 +142,11 @@ module Ocr
         raise unless retryable_error?(e, retry_timeouts:)
         raise if attempts > MAX_RETRIES
 
+        retry_delay = retry_delay_for(attempts, e)
         Rails.logger.warn(
-          "[OCR::Client] retry operation=#{operation} attempt=#{attempts} error_code=#{error_code_for(e)} class=#{e.class}"
+          "[OCR::Client] retry operation=#{operation} attempt=#{attempts} delay=#{retry_delay} error_code=#{error_code_for(e)} class=#{e.class}"
         )
-        sleep(retry_delay_for(attempts))
+        sleep(retry_delay)
         retry
       end
     end
@@ -163,8 +166,29 @@ module Ocr
       end
     end
 
-    def retry_delay_for(attempt)
+    def retry_delay_for(attempt, error = nil)
+      retry_after = retry_after_for(error)
+      return cap_retry_delay(retry_after) if retry_after
+
+      cap_retry_delay(exponential_retry_delay(attempt) + retry_jitter_delay)
+    end
+
+    def exponential_retry_delay(attempt)
       BASE_RETRY_DELAY * (2**(attempt - 1))
+    end
+
+    def retry_jitter_delay
+      rand * BASE_RETRY_DELAY
+    end
+
+    def retry_after_for(error)
+      return unless error.respond_to?(:retry_after)
+
+      error.retry_after
+    end
+
+    def cap_retry_delay(delay)
+      [ delay.to_f, MAX_RETRY_DELAY ].min
     end
 
     def error_code_for(error)
@@ -226,7 +250,43 @@ module Ocr
         "[OCR::Client] bad response status=#{res.status} error_code=#{error_code}"
       )
 
-      raise(error_code == "ocr_timeout" ? OcrTimeoutError : OcrError, error_code)
+      retry_after = retryable_response_status?(res.status) ? retry_after_from_headers(res.headers) : nil
+      error_class = error_code == "ocr_timeout" ? OcrTimeoutError : OcrError
+      raise error_class.new(error_code, retry_after:)
+    end
+
+    def retryable_response_status?(status)
+      status == 408 || status == 429 || status.between?(500, 599)
+    end
+
+    def retry_after_from_headers(headers)
+      value = retry_after_header_value(headers)
+      return if value.blank?
+
+      parse_retry_after(value)
+    end
+
+    def retry_after_header_value(headers)
+      return unless headers
+
+      header = headers.find { |key, _value| key.to_s.casecmp("retry-after").zero? }
+      header&.last
+    end
+
+    def parse_retry_after(value)
+      raw_value = value.to_s.strip
+      return if raw_value.blank?
+
+      if raw_value.match?(/\A\d+(?:\.\d+)?\z/)
+        return cap_retry_delay(raw_value.to_f)
+      end
+
+      delay = Time.httpdate(raw_value) - Time.current
+      return if delay.negative?
+
+      cap_retry_delay(delay)
+    rescue ArgumentError
+      nil
     end
 
     def endpoint
@@ -248,6 +308,21 @@ module Ocr
     end
   end
 
-  class OcrError < StandardError; end
-  class OcrTimeoutError < StandardError; end
+  class OcrError < StandardError
+    attr_reader :retry_after
+
+    def initialize(message = nil, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
+
+  class OcrTimeoutError < StandardError
+    attr_reader :retry_after
+
+    def initialize(message = nil, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
 end

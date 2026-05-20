@@ -13,6 +13,10 @@ RSpec.describe Ai::Providers::Openai::Client do
     }
   end
 
+  before do
+    allow(client).to receive(:retry_jitter_delay).and_return(0.0)
+  end
+
   describe '#call' do
     it 'RequestBuilder.build → post_request → ResponseParser.parse の順で呼び結果を返す' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
@@ -47,6 +51,85 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(client).to have_received(:post_request).with(request_body).twice
         expect(client).to have_received(:sleep).once
         expect(result).to eq(parsed_response)
+      end
+    end
+
+    it 'RateLimitErrorのRetry-After秒数をretry delayとして優先する' do
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      call_count = 0
+      allow(client).to receive(:post_request).with(request_body) do
+        call_count += 1
+        if call_count == 1
+          raise Ai::Errors::RateLimitError.new(
+            message: 'rate limited',
+            error_code: 'ai_api_error',
+            retry_after: 3.0
+          )
+        end
+
+        { 'id' => 'resp_retry_after' }
+      end
+      allow(Ai::Providers::Openai::ResponseParser)
+        .to receive(:parse).with({ 'id' => 'resp_retry_after' }).and_return(parsed_response)
+      allow(client).to receive(:sleep)
+
+      result = client.call(input)
+
+      aggregate_failures do
+        expect(result).to eq(parsed_response)
+        expect(client).to have_received(:post_request).with(request_body).twice
+        expect(client).to have_received(:sleep).with(3.0).once
+      end
+    end
+
+    it 'Retry-Afterがない場合はjitterを加算する' do
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      call_count = 0
+      allow(client).to receive(:post_request).with(request_body) do
+        call_count += 1
+        raise Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error') if call_count == 1
+
+        { 'id' => 'resp_jitter' }
+      end
+      allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+      allow(Ai::Providers::Openai::ResponseParser)
+        .to receive(:parse).with({ 'id' => 'resp_jitter' }).and_return(parsed_response)
+      allow(client).to receive(:sleep)
+
+      result = client.call(input)
+
+      aggregate_failures do
+        expect(result).to eq(parsed_response)
+        expect(client).to have_received(:post_request).with(request_body).twice
+        expect(client).to have_received(:sleep).with(1.25).once
+      end
+    end
+
+    it 'Retry-Afterが上限を超える場合はcapする' do
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      call_count = 0
+      allow(client).to receive(:post_request).with(request_body) do
+        call_count += 1
+        if call_count == 1
+          raise Ai::Errors::RateLimitError.new(
+            message: 'rate limited',
+            error_code: 'ai_api_error',
+            retry_after: 30.0
+          )
+        end
+
+        { 'id' => 'resp_cap' }
+      end
+      allow(Ai::Providers::Openai::ResponseParser)
+        .to receive(:parse).with({ 'id' => 'resp_cap' }).and_return(parsed_response)
+      allow(client).to receive(:sleep)
+
+      result = client.call(input)
+
+      aggregate_failures do
+        expect(result).to eq(parsed_response)
+        expect(client).to have_received(:post_request).with(request_body).twice
+        expect(client).to have_received(:sleep).with(10.0).once
       end
     end
 
@@ -161,6 +244,7 @@ RSpec.describe Ai::Providers::Openai::Client do
       allow(response).to receive(:is_a?) do |klass|
         klass == Net::HTTPSuccess && code.start_with?('2')
       end
+      allow(response).to receive(:[]).with('Retry-After').and_return(nil)
     end
 
     it '200系なら parse_response_body の結果を返す' do
@@ -208,6 +292,18 @@ RSpec.describe Ai::Providers::Openai::Client do
         client.send(:post_request, request_body)
       end.to raise_error(Ai::Errors::RateLimitError) { |error|
         expect(error.message).to include('OpenAI API rate limit error: 429')
+      }
+    end
+
+    it '429 の Retry-After を RateLimitError に保持する' do
+      allow(response).to receive(:code).and_return('429')
+      allow(response).to receive(:body).and_return('{"error":"rate limited"}')
+      allow(response).to receive(:[]).with('Retry-After').and_return('4')
+
+      expect do
+        client.send(:post_request, request_body)
+      end.to raise_error(Ai::Errors::RateLimitError) { |error|
+        expect(error.retry_after).to eq(4.0)
       }
     end
 
