@@ -10,7 +10,7 @@ ja:
     not_found:
       page_title: ページが見つかりません
       title: ページが見つかりません
-      description: お探しのページは移動または削除された可能性があります。レシート一覧から目的の情報をもう一度お探しください。
+      description: お探しのページは移動または削除された可能性があります。
     unprocessable:
       page_title: 処理できませんでした
       title: 処理できませんでした
