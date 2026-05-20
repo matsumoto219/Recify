@@ -39,7 +39,24 @@ RSpec.describe 'Error pages', type: :request do
   end
 
   def error_support_id_text(request_id)
-    I18n.t('errors.internal_server_error.support_id', request_id: request_id)
+    "#{I18n.t('errors.internal_server_error.support_id_label')}: #{request_id}"
+  end
+
+  def expect_support_id(request_id)
+    document = Nokogiri::HTML(response.body)
+    support_id = document.at_css('[data-error-support-id]')
+
+    aggregate_failures do
+      expect(document.text).to include(I18n.t('errors.internal_server_error.support_message'))
+      expect(support_id).to be_present
+      if request_id.present?
+        expect(support_id.text.squish).to eq(error_support_id_text(request_id))
+      else
+        expect(support_id.text.squish).to match(/\A#{I18n.t('errors.internal_server_error.support_id_label')}: \S+\z/)
+      end
+      expect(support_id['class']).to include('font-mono')
+      expect(support_id['class']).to include('break-all')
+    end
   end
 
   describe 'direct error routes' do
@@ -81,7 +98,7 @@ RSpec.describe 'Error pages', type: :request do
         primary_href: new_user_session_path,
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
       )
-      expect(response.body).to include(error_support_id_text(request_id))
+      expect_support_id(request_id)
     end
 
     it 'ログイン済みならGET /404はレシート一覧へ戻す' do
@@ -126,7 +143,7 @@ RSpec.describe 'Error pages', type: :request do
         primary_href: receipts_path,
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
       )
-      expect(response.body).to include(error_support_id_text(request_id))
+      expect_support_id(request_id)
     end
 
     it 'guestログイン時もGET /404はレシート一覧へ戻す' do
@@ -215,7 +232,7 @@ RSpec.describe 'Error pages', type: :request do
         expect(response).to have_http_status(:internal_server_error)
         expect(messages.join("\n")).to include('[ErrorPage] status=500 path=/')
         expect(messages.join("\n")).to include("request_id=#{request_id}")
-        expect(response.body).to include(error_support_id_text(request_id))
+        expect_support_id(request_id)
         expect(messages.join("\n")).to include('exception_class=RuntimeError')
         expect(messages.join("\n")).to include('exception_message=intentional failure for log')
         expect(response.body).not_to include('intentional failure for log')

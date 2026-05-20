@@ -8,6 +8,7 @@
   secondary_label = local_assigns[:secondary_label]
   secondary_path = local_assigns[:secondary_path]
   support_message = local_assigns[:support_message]
+  support_id = local_assigns[:support_id]
 %>
 
 <main class="flex flex-1 items-center justify-center px-6 py-12 md:py-16">
@@ -59,10 +60,20 @@
         <%= t("errors.error_code", status_code: status_code) %>
       </p>
 
-      <% if support_message.present? %>
-        <p class="mt-3 text-xs leading-6 token-text-muted">
-          <%= support_message %>
-        </p>
+      <% if support_message.present? || support_id.present? %>
+        <div class="mt-3 text-center">
+          <% if support_message.present? %>
+            <p class="mx-auto max-w-sm text-xs leading-6 token-text-muted">
+              <%= support_message %>
+            </p>
+          <% end %>
+
+          <% if support_id.present? %>
+            <p class="mt-2 font-mono text-[0.6875rem] leading-5 token-text-muted break-all" data-error-support-id>
+              <%= t("errors.internal_server_error.support_id_label") %>: <%= support_id %>
+            </p>
+          <% end %>
+        </div>
       <% end %>
     <% end %>
   </div>
