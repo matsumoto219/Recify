@@ -1,0 +1,6409 @@
+{
+	"status": "succeeded",
+	"createdDateTime": "2026-05-20T21:53:04Z",
+	"lastUpdatedDateTime": "2026-05-20T21:53:04Z",
+	"analyzeResult": {
+		"apiVersion": "2024-11-30",
+		"modelId": "prebuilt-receipt",
+		"stringIndexType": "utf16CodeUnit",
+		"content": "ウェイトマート 渋谷中央店\n東京都渋谷区道玄坂2-5-1\nTEL : 03-5678-1234\n2026年5月14日(木) 18:42\nレジ:03\n担当:サトウ\n取引No:000987654\n領収証\n外8\n黒毛和牛こま切れ\n(¥1,480/100g\n342g)\n¥5,061\n外8\n若鶏もも肉\n(¥980/kg\n1.25kg)\n¥1,225\n外8\nサーモン刺身\n(¥3,280/kg\n0.184kg)\n¥603\n外8\nオリーブオイル\n(¥1,200/L\n0.75L)\n¥900\n外8\nミネラルウォーター\n(¥120/500ml\n1500ml)\n¥360\n外8\nエナジードリンク\n(¥980/1000cc\n250cc)\n¥245\n外8\n液体洗剤 詰替\n(¥1.8/g\n850g)\n¥1,530\n外8\nサプリメント粉末\n(¥0.9/mg\n1200mg)\n¥1,080\n小計\n¥11,004\n8%対象額\n¥11,004\n内消費税等(8%)\n¥815\n合計(税込)\n¥11,004\nクレジットカード\n¥11,004\nお釣り\n¥0\n※外8は軽減税率(8%)対象商品です。",
+		"pages": [
+			{
+				"pageNumber": 1,
+				"angle": -0.15770000219345093,
+				"width": 1024,
+				"height": 1536,
+				"unit": "pixel",
+				"words": [
+					{
+						"content": "ウ",
+						"polygon": [
+							242,
+							81,
+							270,
+							81,
+							270,
+							121,
+							243,
+							121
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 0,
+							"length": 1
+						}
+					},
+					{
+						"content": "ェ",
+						"polygon": [
+							276,
+							81,
+							308,
+							80,
+							308,
+							121,
+							276,
+							121
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 1,
+							"length": 1
+						}
+					},
+					{
+						"content": "イ",
+						"polygon": [
+							314,
+							80,
+							340,
+							80,
+							340,
+							121,
+							314,
+							121
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 2,
+							"length": 1
+						}
+					},
+					{
+						"content": "ト",
+						"polygon": [
+							352,
+							80,
+							378,
+							80,
+							378,
+							120,
+							352,
+							120
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 3,
+							"length": 1
+						}
+					},
+					{
+						"content": "マ",
+						"polygon": [
+							395,
+							80,
+							421,
+							79,
+							421,
+							120,
+							395,
+							120
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 4,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							432,
+							79,
+							459,
+							79,
+							459,
+							120,
+							433,
+							120
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 5,
+							"length": 1
+						}
+					},
+					{
+						"content": "ト",
+						"polygon": [
+							476,
+							79,
+							509,
+							78,
+							509,
+							119,
+							476,
+							120
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 6,
+							"length": 1
+						}
+					},
+					{
+						"content": "渋",
+						"polygon": [
+							554,
+							77,
+							583,
+							77,
+							583,
+							119,
+							555,
+							119
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 8,
+							"length": 1
+						}
+					},
+					{
+						"content": "谷",
+						"polygon": [
+							594,
+							77,
+							620,
+							77,
+							621,
+							119,
+							594,
+							119
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 9,
+							"length": 1
+						}
+					},
+					{
+						"content": "中",
+						"polygon": [
+							632,
+							76,
+							658,
+							76,
+							658,
+							118,
+							632,
+							119
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 10,
+							"length": 1
+						}
+					},
+					{
+						"content": "央",
+						"polygon": [
+							670,
+							76,
+							701,
+							76,
+							702,
+							118,
+							670,
+							118
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 11,
+							"length": 1
+						}
+					},
+					{
+						"content": "店",
+						"polygon": [
+							707,
+							76,
+							749,
+							76,
+							749,
+							118,
+							708,
+							118
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 12,
+							"length": 1
+						}
+					},
+					{
+						"content": "東",
+						"polygon": [
+							319,
+							138,
+							338,
+							138,
+							338,
+							167,
+							319,
+							168
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 14,
+							"length": 1
+						}
+					},
+					{
+						"content": "京",
+						"polygon": [
+							350,
+							138,
+							369,
+							138,
+							369,
+							167,
+							350,
+							167
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 15,
+							"length": 1
+						}
+					},
+					{
+						"content": "都",
+						"polygon": [
+							381,
+							138,
+							399,
+							138,
+							399,
+							167,
+							381,
+							167
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 16,
+							"length": 1
+						}
+					},
+					{
+						"content": "渋",
+						"polygon": [
+							411,
+							137,
+							430,
+							137,
+							430,
+							167,
+							411,
+							167
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 17,
+							"length": 1
+						}
+					},
+					{
+						"content": "谷",
+						"polygon": [
+							438,
+							137,
+							456,
+							137,
+							456,
+							166,
+							438,
+							166
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 18,
+							"length": 1
+						}
+					},
+					{
+						"content": "区",
+						"polygon": [
+							468,
+							137,
+							487,
+							137,
+							487,
+							166,
+							468,
+							166
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 19,
+							"length": 1
+						}
+					},
+					{
+						"content": "道",
+						"polygon": [
+							499,
+							136,
+							517,
+							136,
+							517,
+							166,
+							499,
+							166
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 20,
+							"length": 1
+						}
+					},
+					{
+						"content": "玄",
+						"polygon": [
+							529,
+							136,
+							548,
+							136,
+							548,
+							165,
+							529,
+							165
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 21,
+							"length": 1
+						}
+					},
+					{
+						"content": "坂",
+						"polygon": [
+							556,
+							136,
+							578,
+							136,
+							578,
+							165,
+							556,
+							165
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 22,
+							"length": 1
+						}
+					},
+					{
+						"content": "2-5-1",
+						"polygon": [
+							583,
+							136,
+							666,
+							135,
+							666,
+							163,
+							583,
+							164
+						],
+						"confidence": 0.977,
+						"span": {
+							"offset": 23,
+							"length": 5
+						}
+					},
+					{
+						"content": "TEL",
+						"polygon": [
+							358,
+							176,
+							410,
+							175,
+							410,
+							203,
+							358,
+							203
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 29,
+							"length": 3
+						}
+					},
+					{
+						"content": ":",
+						"polygon": [
+							422,
+							175,
+							427,
+							175,
+							427,
+							203,
+							422,
+							203
+						],
+						"confidence": 0.946,
+						"span": {
+							"offset": 33,
+							"length": 1
+						}
+					},
+					{
+						"content": "03-5678-1234",
+						"polygon": [
+							440,
+							175,
+							643,
+							173,
+							643,
+							200,
+							440,
+							202
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 35,
+							"length": 12
+						}
+					},
+					{
+						"content": "2026",
+						"polygon": [
+							159,
+							236,
+							225,
+							235,
+							225,
+							264,
+							159,
+							264
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 48,
+							"length": 4
+						}
+					},
+					{
+						"content": "年",
+						"polygon": [
+							229,
+							235,
+							256,
+							234,
+							256,
+							264,
+							229,
+							264
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 52,
+							"length": 1
+						}
+					},
+					{
+						"content": "5",
+						"polygon": [
+							270,
+							234,
+							285,
+							234,
+							286,
+							263,
+							270,
+							263
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 53,
+							"length": 1
+						}
+					},
+					{
+						"content": "月",
+						"polygon": [
+							286,
+							234,
+							305,
+							234,
+							305,
+							263,
+							286,
+							263
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 54,
+							"length": 1
+						}
+					},
+					{
+						"content": "14",
+						"polygon": [
+							313,
+							234,
+							350,
+							233,
+							350,
+							263,
+							313,
+							263
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 55,
+							"length": 2
+						}
+					},
+					{
+						"content": "日",
+						"polygon": [
+							351,
+							233,
+							373,
+							233,
+							373,
+							262,
+							351,
+							263
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 57,
+							"length": 1
+						}
+					},
+					{
+						"content": "(",
+						"polygon": [
+							394,
+							233,
+							404,
+							233,
+							404,
+							262,
+							394,
+							262
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 58,
+							"length": 1
+						}
+					},
+					{
+						"content": "木",
+						"polygon": [
+							404,
+							233,
+							423,
+							232,
+							423,
+							262,
+							404,
+							262
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 59,
+							"length": 1
+						}
+					},
+					{
+						"content": ")",
+						"polygon": [
+							431,
+							232,
+							442,
+							232,
+							442,
+							262,
+							431,
+							262
+						],
+						"confidence": 0.99,
+						"span": {
+							"offset": 60,
+							"length": 1
+						}
+					},
+					{
+						"content": "18:42",
+						"polygon": [
+							458,
+							232,
+							538,
+							232,
+							538,
+							260,
+							458,
+							261
+						],
+						"confidence": 0.987,
+						"span": {
+							"offset": 62,
+							"length": 5
+						}
+					},
+					{
+						"content": "レ",
+						"polygon": [
+							162,
+							275,
+							177,
+							275,
+							177,
+							302,
+							162,
+							302
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 68,
+							"length": 1
+						}
+					},
+					{
+						"content": "ジ",
+						"polygon": [
+							184,
+							275,
+							202,
+							274,
+							202,
+							302,
+							184,
+							302
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 69,
+							"length": 1
+						}
+					},
+					{
+						"content": ":03",
+						"polygon": [
+							213,
+							274,
+							272,
+							274,
+							272,
+							302,
+							213,
+							302
+						],
+						"confidence": 0.983,
+						"span": {
+							"offset": 70,
+							"length": 3
+						}
+					},
+					{
+						"content": "担",
+						"polygon": [
+							320,
+							272,
+							343,
+							272,
+							343,
+							301,
+							320,
+							301
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 74,
+							"length": 1
+						}
+					},
+					{
+						"content": "当",
+						"polygon": [
+							351,
+							272,
+							370,
+							272,
+							370,
+							300,
+							351,
+							301
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 75,
+							"length": 1
+						}
+					},
+					{
+						"content": ":",
+						"polygon": [
+							381,
+							272,
+							396,
+							272,
+							396,
+							300,
+							381,
+							300
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 76,
+							"length": 1
+						}
+					},
+					{
+						"content": "サ",
+						"polygon": [
+							410,
+							271,
+							430,
+							272,
+							430,
+							300,
+							410,
+							300
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 77,
+							"length": 1
+						}
+					},
+					{
+						"content": "ト",
+						"polygon": [
+							438,
+							271,
+							460,
+							271,
+							460,
+							300,
+							438,
+							300
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 78,
+							"length": 1
+						}
+					},
+					{
+						"content": "ウ",
+						"polygon": [
+							467,
+							271,
+							490,
+							271,
+							490,
+							300,
+							467,
+							300
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 79,
+							"length": 1
+						}
+					},
+					{
+						"content": "取",
+						"polygon": [
+							160,
+							314,
+							178,
+							314,
+							178,
+							343,
+							160,
+							343
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 81,
+							"length": 1
+						}
+					},
+					{
+						"content": "引",
+						"polygon": [
+							186,
+							314,
+							204,
+							314,
+							204,
+							342,
+							186,
+							343
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 82,
+							"length": 1
+						}
+					},
+					{
+						"content": "No:000987654",
+						"polygon": [
+							219,
+							314,
+							446,
+							311,
+							446,
+							339,
+							219,
+							342
+						],
+						"confidence": 0.898,
+						"span": {
+							"offset": 83,
+							"length": 12
+						}
+					},
+					{
+						"content": "領",
+						"polygon": [
+							437,
+							358,
+							467,
+							358,
+							467,
+							395,
+							438,
+							395
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 96,
+							"length": 1
+						}
+					},
+					{
+						"content": "収",
+						"polygon": [
+							472,
+							358,
+							501,
+							358,
+							501,
+							395,
+							472,
+							395
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 97,
+							"length": 1
+						}
+					},
+					{
+						"content": "証",
+						"polygon": [
+							516,
+							358,
+							553,
+							358,
+							553,
+							394,
+							516,
+							395
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 98,
+							"length": 1
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							161,
+							416,
+							180,
+							416,
+							180,
+							444,
+							161,
+							445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 100,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							188,
+							416,
+							208,
+							416,
+							208,
+							444,
+							188,
+							444
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 101,
+							"length": 1
+						}
+					},
+					{
+						"content": "黒",
+						"polygon": [
+							247,
+							415,
+							271,
+							415,
+							271,
+							444,
+							247,
+							444
+						],
+						"confidence": 0.982,
+						"span": {
+							"offset": 103,
+							"length": 1
+						}
+					},
+					{
+						"content": "毛",
+						"polygon": [
+							279,
+							415,
+							297,
+							414,
+							297,
+							443,
+							279,
+							443
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 104,
+							"length": 1
+						}
+					},
+					{
+						"content": "和",
+						"polygon": [
+							305,
+							414,
+							324,
+							414,
+							324,
+							443,
+							305,
+							443
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 105,
+							"length": 1
+						}
+					},
+					{
+						"content": "牛",
+						"polygon": [
+							336,
+							414,
+							354,
+							414,
+							354,
+							443,
+							336,
+							443
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 106,
+							"length": 1
+						}
+					},
+					{
+						"content": "こ",
+						"polygon": [
+							362,
+							414,
+							387,
+							414,
+							387,
+							442,
+							362,
+							443
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 107,
+							"length": 1
+						}
+					},
+					{
+						"content": "ま",
+						"polygon": [
+							393,
+							414,
+							411,
+							413,
+							411,
+							442,
+							393,
+							442
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 108,
+							"length": 1
+						}
+					},
+					{
+						"content": "切",
+						"polygon": [
+							415,
+							413,
+							438,
+							413,
+							438,
+							442,
+							415,
+							442
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 109,
+							"length": 1
+						}
+					},
+					{
+						"content": "れ",
+						"polygon": [
+							446,
+							413,
+							475,
+							413,
+							475,
+							442,
+							446,
+							442
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 110,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥1,480/100g",
+						"polygon": [
+							249,
+							453,
+							447,
+							453,
+							447,
+							483,
+							249,
+							483
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 112,
+							"length": 12
+						}
+					},
+					{
+						"content": "342g)",
+						"polygon": [
+							486,
+							451,
+							565,
+							451,
+							565,
+							482,
+							486,
+							480
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 125,
+							"length": 5
+						}
+					},
+					{
+						"content": "¥5,061",
+						"polygon": [
+							708,
+							449,
+							810,
+							448,
+							810,
+							476,
+							708,
+							477
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 131,
+							"length": 6
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							161,
+							498,
+							180,
+							498,
+							180,
+							526,
+							161,
+							526
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 138,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							188,
+							498,
+							208,
+							498,
+							208,
+							526,
+							188,
+							526
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 139,
+							"length": 1
+						}
+					},
+					{
+						"content": "若",
+						"polygon": [
+							247,
+							496,
+							270,
+							496,
+							271,
+							525,
+							247,
+							525
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 141,
+							"length": 1
+						}
+					},
+					{
+						"content": "鶏",
+						"polygon": [
+							275,
+							496,
+							297,
+							496,
+							297,
+							525,
+							275,
+							525
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 142,
+							"length": 1
+						}
+					},
+					{
+						"content": "も",
+						"polygon": [
+							305,
+							496,
+							324,
+							496,
+							324,
+							525,
+							306,
+							525
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 143,
+							"length": 1
+						}
+					},
+					{
+						"content": "も",
+						"polygon": [
+							332,
+							496,
+							351,
+							496,
+							351,
+							525,
+							332,
+							525
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 144,
+							"length": 1
+						}
+					},
+					{
+						"content": "肉",
+						"polygon": [
+							359,
+							496,
+							388,
+							496,
+							388,
+							525,
+							359,
+							525
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 145,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥980/kg",
+						"polygon": [
+							249,
+							535,
+							380,
+							535,
+							380,
+							566,
+							249,
+							565
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 147,
+							"length": 8
+						}
+					},
+					{
+						"content": "1.25kg)",
+						"polygon": [
+							422,
+							533,
+							529,
+							533,
+							529,
+							564,
+							422,
+							563
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 156,
+							"length": 7
+						}
+					},
+					{
+						"content": "¥1,225",
+						"polygon": [
+							708,
+							531,
+							814,
+							530,
+							814,
+							558,
+							708,
+							559
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 164,
+							"length": 6
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							161,
+							579,
+							180,
+							580,
+							180,
+							607,
+							161,
+							608
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 171,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							188,
+							579,
+							208,
+							579,
+							208,
+							607,
+							188,
+							607
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 172,
+							"length": 1
+						}
+					},
+					{
+						"content": "サ",
+						"polygon": [
+							248,
+							578,
+							267,
+							578,
+							267,
+							606,
+							248,
+							606
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 174,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							272,
+							578,
+							290,
+							578,
+							290,
+							606,
+							272,
+							606
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 175,
+							"length": 1
+						}
+					},
+					{
+						"content": "モ",
+						"polygon": [
+							305,
+							578,
+							324,
+							578,
+							324,
+							606,
+							305,
+							606
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 176,
+							"length": 1
+						}
+					},
+					{
+						"content": "ン",
+						"polygon": [
+							328,
+							578,
+							346,
+							577,
+							346,
+							606,
+							328,
+							606
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 177,
+							"length": 1
+						}
+					},
+					{
+						"content": "刺",
+						"polygon": [
+							362,
+							577,
+							380,
+							577,
+							380,
+							606,
+							362,
+							606
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 178,
+							"length": 1
+						}
+					},
+					{
+						"content": "身",
+						"polygon": [
+							392,
+							577,
+							417,
+							577,
+							417,
+							607,
+							392,
+							606
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 179,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥3,280/kg",
+						"polygon": [
+							249,
+							616,
+							417,
+							616,
+							417,
+							646,
+							249,
+							646
+						],
+						"confidence": 0.985,
+						"span": {
+							"offset": 181,
+							"length": 10
+						}
+					},
+					{
+						"content": "0.184kg)",
+						"polygon": [
+							460,
+							614,
+							587,
+							613,
+							587,
+							645,
+							460,
+							644
+						],
+						"confidence": 0.977,
+						"span": {
+							"offset": 192,
+							"length": 8
+						}
+					},
+					{
+						"content": "¥603",
+						"polygon": [
+							742,
+							612,
+							815,
+							611,
+							815,
+							638,
+							742,
+							639
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 201,
+							"length": 4
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							161,
+							660,
+							180,
+							660,
+							180,
+							688,
+							161,
+							688
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 206,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							188,
+							660,
+							208,
+							660,
+							208,
+							688,
+							188,
+							688
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 207,
+							"length": 1
+						}
+					},
+					{
+						"content": "オ",
+						"polygon": [
+							248,
+							659,
+							267,
+							659,
+							267,
+							687,
+							248,
+							687
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 209,
+							"length": 1
+						}
+					},
+					{
+						"content": "リ",
+						"polygon": [
+							271,
+							659,
+							293,
+							659,
+							293,
+							687,
+							271,
+							687
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 210,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							297,
+							659,
+							315,
+							659,
+							315,
+							687,
+							297,
+							687
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 211,
+							"length": 1
+						}
+					},
+					{
+						"content": "ブ",
+						"polygon": [
+							326,
+							659,
+							348,
+							658,
+							348,
+							687,
+							326,
+							687
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 212,
+							"length": 1
+						}
+					},
+					{
+						"content": "オ",
+						"polygon": [
+							356,
+							658,
+							378,
+							658,
+							378,
+							687,
+							356,
+							687
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 213,
+							"length": 1
+						}
+					},
+					{
+						"content": "イ",
+						"polygon": [
+							386,
+							658,
+							404,
+							658,
+							403,
+							686,
+							385,
+							687
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 214,
+							"length": 1
+						}
+					},
+					{
+						"content": "ル",
+						"polygon": [
+							408,
+							658,
+							437,
+							658,
+							437,
+							686,
+							408,
+							686
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 215,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥1,200/L",
+						"polygon": [
+							249,
+							698,
+							397,
+							697,
+							397,
+							726,
+							249,
+							728
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 217,
+							"length": 9
+						}
+					},
+					{
+						"content": "0.75L)",
+						"polygon": [
+							456,
+							696,
+							548,
+							695,
+							548,
+							724,
+							456,
+							723
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 227,
+							"length": 6
+						}
+					},
+					{
+						"content": "¥900",
+						"polygon": [
+							743,
+							693,
+							816,
+							693,
+							816,
+							720,
+							743,
+							720
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 234,
+							"length": 4
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							161,
+							741,
+							180,
+							741,
+							180,
+							770,
+							161,
+							770
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 239,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							188,
+							741,
+							208,
+							741,
+							208,
+							769,
+							188,
+							769
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 240,
+							"length": 1
+						}
+					},
+					{
+						"content": "ミ",
+						"polygon": [
+							250,
+							741,
+							268,
+							741,
+							268,
+							769,
+							250,
+							769
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 242,
+							"length": 1
+						}
+					},
+					{
+						"content": "ネ",
+						"polygon": [
+							273,
+							741,
+							294,
+							741,
+							294,
+							769,
+							273,
+							769
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 243,
+							"length": 1
+						}
+					},
+					{
+						"content": "ラ",
+						"polygon": [
+							302,
+							741,
+							320,
+							740,
+							320,
+							769,
+							302,
+							769
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 244,
+							"length": 1
+						}
+					},
+					{
+						"content": "ル",
+						"polygon": [
+							324,
+							740,
+							342,
+							740,
+							342,
+							769,
+							324,
+							769
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 245,
+							"length": 1
+						}
+					},
+					{
+						"content": "ウ",
+						"polygon": [
+							354,
+							740,
+							375,
+							740,
+							375,
+							768,
+							354,
+							769
+						],
+						"confidence": 0.976,
+						"span": {
+							"offset": 246,
+							"length": 1
+						}
+					},
+					{
+						"content": "ォ",
+						"polygon": [
+							383,
+							740,
+							401,
+							740,
+							401,
+							768,
+							383,
+							768
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 247,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							405,
+							740,
+							423,
+							740,
+							423,
+							768,
+							405,
+							768
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 248,
+							"length": 1
+						}
+					},
+					{
+						"content": "タ",
+						"polygon": [
+							439,
+							740,
+							456,
+							740,
+							457,
+							768,
+							439,
+							768
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 249,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							461,
+							740,
+							492,
+							740,
+							492,
+							767,
+							461,
+							768
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 250,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥120/500ml",
+						"polygon": [
+							248,
+							779,
+							435,
+							778,
+							435,
+							807,
+							249,
+							808
+						],
+						"confidence": 0.973,
+						"span": {
+							"offset": 252,
+							"length": 11
+						}
+					},
+					{
+						"content": "1500ml)",
+						"polygon": [
+							478,
+							778,
+							590,
+							777,
+							590,
+							806,
+							478,
+							805
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 264,
+							"length": 7
+						}
+					},
+					{
+						"content": "¥360",
+						"polygon": [
+							744,
+							775,
+							817,
+							775,
+							817,
+							802,
+							744,
+							802
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 272,
+							"length": 4
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							160,
+							822,
+							179,
+							822,
+							179,
+							850,
+							160,
+							850
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 277,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							187,
+							822,
+							208,
+							822,
+							208,
+							850,
+							187,
+							850
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 278,
+							"length": 1
+						}
+					},
+					{
+						"content": "エ",
+						"polygon": [
+							248,
+							821,
+							266,
+							821,
+							266,
+							849,
+							248,
+							849
+						],
+						"confidence": 0.99,
+						"span": {
+							"offset": 280,
+							"length": 1
+						}
+					},
+					{
+						"content": "ナ",
+						"polygon": [
+							270,
+							821,
+							292,
+							821,
+							291,
+							849,
+							270,
+							849
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 281,
+							"length": 1
+						}
+					},
+					{
+						"content": "ジ",
+						"polygon": [
+							296,
+							821,
+							313,
+							821,
+							313,
+							849,
+							296,
+							849
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 282,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							321,
+							821,
+							338,
+							821,
+							338,
+							849,
+							321,
+							849
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 283,
+							"length": 1
+						}
+					},
+					{
+						"content": "ド",
+						"polygon": [
+							350,
+							821,
+							367,
+							821,
+							367,
+							848,
+							350,
+							849
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 284,
+							"length": 1
+						}
+					},
+					{
+						"content": "リ",
+						"polygon": [
+							371,
+							821,
+							392,
+							821,
+							392,
+							848,
+							371,
+							848
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 285,
+							"length": 1
+						}
+					},
+					{
+						"content": "ン",
+						"polygon": [
+							396,
+							821,
+							414,
+							821,
+							414,
+							848,
+							396,
+							848
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 286,
+							"length": 1
+						}
+					},
+					{
+						"content": "ク",
+						"polygon": [
+							422,
+							821,
+							448,
+							821,
+							448,
+							848,
+							422,
+							848
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 287,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥980/1000cc",
+						"polygon": [
+							248,
+							860,
+							448,
+							859,
+							448,
+							887,
+							248,
+							888
+						],
+						"confidence": 0.974,
+						"span": {
+							"offset": 289,
+							"length": 12
+						}
+					},
+					{
+						"content": "250cc)",
+						"polygon": [
+							491,
+							858,
+							584,
+							857,
+							584,
+							886,
+							491,
+							885
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 302,
+							"length": 6
+						}
+					},
+					{
+						"content": "¥245",
+						"polygon": [
+							745,
+							856,
+							818,
+							856,
+							818,
+							883,
+							745,
+							883
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 309,
+							"length": 4
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							160,
+							902,
+							179,
+							902,
+							179,
+							931,
+							160,
+							931
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 314,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							187,
+							902,
+							208,
+							902,
+							208,
+							930,
+							187,
+							930
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 315,
+							"length": 1
+						}
+					},
+					{
+						"content": "液",
+						"polygon": [
+							247,
+							901,
+							270,
+							901,
+							270,
+							930,
+							247,
+							930
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 317,
+							"length": 1
+						}
+					},
+					{
+						"content": "体",
+						"polygon": [
+							279,
+							901,
+							298,
+							901,
+							297,
+							930,
+							279,
+							930
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 318,
+							"length": 1
+						}
+					},
+					{
+						"content": "洗",
+						"polygon": [
+							306,
+							901,
+							325,
+							901,
+							325,
+							930,
+							306,
+							930
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 319,
+							"length": 1
+						}
+					},
+					{
+						"content": "剤",
+						"polygon": [
+							333,
+							901,
+							359,
+							901,
+							359,
+							930,
+							333,
+							930
+						],
+						"confidence": 0.929,
+						"span": {
+							"offset": 320,
+							"length": 1
+						}
+					},
+					{
+						"content": "詰",
+						"polygon": [
+							371,
+							901,
+							390,
+							900,
+							390,
+							930,
+							371,
+							930
+						],
+						"confidence": 0.986,
+						"span": {
+							"offset": 322,
+							"length": 1
+						}
+					},
+					{
+						"content": "替",
+						"polygon": [
+							402,
+							900,
+							428,
+							900,
+							428,
+							930,
+							402,
+							930
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 323,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥1.8/g",
+						"polygon": [
+							248,
+							939,
+							360,
+							940,
+							360,
+							970,
+							248,
+							969
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 325,
+							"length": 7
+						}
+					},
+					{
+						"content": "850g)",
+						"polygon": [
+							394,
+							939,
+							474,
+							939,
+							474,
+							969,
+							394,
+							969
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 333,
+							"length": 5
+						}
+					},
+					{
+						"content": "¥1,530",
+						"polygon": [
+							713,
+							936,
+							819,
+							936,
+							819,
+							965,
+							713,
+							966
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 339,
+							"length": 6
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							160,
+							983,
+							179,
+							983,
+							179,
+							1011,
+							160,
+							1011
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 346,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							186,
+							983,
+							207,
+							983,
+							207,
+							1011,
+							186,
+							1011
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 347,
+							"length": 1
+						}
+					},
+					{
+						"content": "サ",
+						"polygon": [
+							248,
+							982,
+							267,
+							982,
+							267,
+							1010,
+							248,
+							1011
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 349,
+							"length": 1
+						}
+					},
+					{
+						"content": "プ",
+						"polygon": [
+							271,
+							982,
+							290,
+							982,
+							290,
+							1011,
+							271,
+							1010
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 350,
+							"length": 1
+						}
+					},
+					{
+						"content": "リ",
+						"polygon": [
+							298,
+							982,
+							316,
+							982,
+							316,
+							1010,
+							298,
+							1011
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 351,
+							"length": 1
+						}
+					},
+					{
+						"content": "メ",
+						"polygon": [
+							324,
+							982,
+							343,
+							982,
+							343,
+							1010,
+							324,
+							1010
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 352,
+							"length": 1
+						}
+					},
+					{
+						"content": "ン",
+						"polygon": [
+							347,
+							982,
+							365,
+							982,
+							365,
+							1010,
+							347,
+							1010
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 353,
+							"length": 1
+						}
+					},
+					{
+						"content": "ト",
+						"polygon": [
+							373,
+							982,
+							392,
+							982,
+							392,
+							1010,
+							373,
+							1010
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 354,
+							"length": 1
+						}
+					},
+					{
+						"content": "粉",
+						"polygon": [
+							404,
+							981,
+							422,
+							981,
+							422,
+							1010,
+							404,
+							1010
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 355,
+							"length": 1
+						}
+					},
+					{
+						"content": "末",
+						"polygon": [
+							434,
+							981,
+							457,
+							981,
+							457,
+							1010,
+							434,
+							1010
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 356,
+							"length": 1
+						}
+					},
+					{
+						"content": "(¥0.9/mg",
+						"polygon": [
+							248,
+							1020,
+							388,
+							1021,
+							388,
+							1052,
+							248,
+							1050
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 358,
+							"length": 8
+						}
+					},
+					{
+						"content": "1200mg)",
+						"polygon": [
+							423,
+							1019,
+							545,
+							1019,
+							545,
+							1051,
+							423,
+							1049
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 367,
+							"length": 7
+						}
+					},
+					{
+						"content": "¥1,080",
+						"polygon": [
+							714,
+							1018,
+							820,
+							1018,
+							820,
+							1046,
+							714,
+							1047
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 375,
+							"length": 6
+						}
+					},
+					{
+						"content": "小",
+						"polygon": [
+							160,
+							1095,
+							176,
+							1095,
+							176,
+							1125,
+							160,
+							1124
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 382,
+							"length": 1
+						}
+					},
+					{
+						"content": "計",
+						"polygon": [
+							192,
+							1095,
+							219,
+							1095,
+							219,
+							1125,
+							192,
+							1125
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 383,
+							"length": 1
+						}
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							688,
+							1094,
+							819,
+							1094,
+							819,
+							1123,
+							688,
+							1124
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 385,
+							"length": 7
+						}
+					},
+					{
+						"content": "8%",
+						"polygon": [
+							159,
+							1134,
+							195,
+							1133,
+							195,
+							1164,
+							159,
+							1163
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 393,
+							"length": 2
+						}
+					},
+					{
+						"content": "対",
+						"polygon": [
+							207,
+							1134,
+							226,
+							1134,
+							226,
+							1164,
+							207,
+							1164
+						],
+						"confidence": 0.983,
+						"span": {
+							"offset": 395,
+							"length": 1
+						}
+					},
+					{
+						"content": "象",
+						"polygon": [
+							239,
+							1133,
+							258,
+							1133,
+							258,
+							1164,
+							239,
+							1164
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 396,
+							"length": 1
+						}
+					},
+					{
+						"content": "額",
+						"polygon": [
+							266,
+							1133,
+							294,
+							1134,
+							294,
+							1164,
+							266,
+							1164
+						],
+						"confidence": 0.99,
+						"span": {
+							"offset": 397,
+							"length": 1
+						}
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							688,
+							1133,
+							820,
+							1133,
+							820,
+							1163,
+							688,
+							1164
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 399,
+							"length": 7
+						}
+					},
+					{
+						"content": "内",
+						"polygon": [
+							159,
+							1173,
+							180,
+							1173,
+							180,
+							1204,
+							159,
+							1204
+						],
+						"confidence": 0.897,
+						"span": {
+							"offset": 407,
+							"length": 1
+						}
+					},
+					{
+						"content": "消",
+						"polygon": [
+							189,
+							1173,
+							209,
+							1173,
+							209,
+							1204,
+							189,
+							1204
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 408,
+							"length": 1
+						}
+					},
+					{
+						"content": "費",
+						"polygon": [
+							222,
+							1173,
+							242,
+							1173,
+							242,
+							1204,
+							222,
+							1204
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 409,
+							"length": 1
+						}
+					},
+					{
+						"content": "税",
+						"polygon": [
+							251,
+							1173,
+							271,
+							1173,
+							270,
+							1204,
+							251,
+							1204
+						],
+						"confidence": 0.907,
+						"span": {
+							"offset": 410,
+							"length": 1
+						}
+					},
+					{
+						"content": "等",
+						"polygon": [
+							279,
+							1173,
+							305,
+							1173,
+							305,
+							1204,
+							279,
+							1204
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 411,
+							"length": 1
+						}
+					},
+					{
+						"content": "(8%)",
+						"polygon": [
+							322,
+							1173,
+							389,
+							1173,
+							389,
+							1204,
+							322,
+							1204
+						],
+						"confidence": 0.986,
+						"span": {
+							"offset": 412,
+							"length": 4
+						}
+					},
+					{
+						"content": "¥815",
+						"polygon": [
+							742,
+							1174,
+							820,
+							1174,
+							820,
+							1202,
+							742,
+							1202
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 417,
+							"length": 4
+						}
+					},
+					{
+						"content": "合",
+						"polygon": [
+							158,
+							1254,
+							186,
+							1253,
+							186,
+							1296,
+							158,
+							1296
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 422,
+							"length": 1
+						}
+					},
+					{
+						"content": "計",
+						"polygon": [
+							203,
+							1253,
+							242,
+							1254,
+							242,
+							1296,
+							203,
+							1296
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 423,
+							"length": 1
+						}
+					},
+					{
+						"content": "(",
+						"polygon": [
+							260,
+							1254,
+							273,
+							1254,
+							273,
+							1295,
+							260,
+							1295
+						],
+						"confidence": 0.983,
+						"span": {
+							"offset": 424,
+							"length": 1
+						}
+					},
+					{
+						"content": "税",
+						"polygon": [
+							273,
+							1254,
+							305,
+							1255,
+							305,
+							1295,
+							273,
+							1295
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 425,
+							"length": 1
+						}
+					},
+					{
+						"content": "込",
+						"polygon": [
+							306,
+							1255,
+							332,
+							1255,
+							332,
+							1295,
+							306,
+							1295
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 426,
+							"length": 1
+						}
+					},
+					{
+						"content": ")",
+						"polygon": [
+							333,
+							1255,
+							350,
+							1255,
+							350,
+							1294,
+							333,
+							1295
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 427,
+							"length": 1
+						}
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							647,
+							1257,
+							823,
+							1256,
+							823,
+							1297,
+							647,
+							1297
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 429,
+							"length": 7
+						}
+					},
+					{
+						"content": "ク",
+						"polygon": [
+							160,
+							1313,
+							182,
+							1313,
+							182,
+							1346,
+							160,
+							1345
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 437,
+							"length": 1
+						}
+					},
+					{
+						"content": "レ",
+						"polygon": [
+							182,
+							1313,
+							203,
+							1313,
+							203,
+							1346,
+							182,
+							1346
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 438,
+							"length": 1
+						}
+					},
+					{
+						"content": "ジ",
+						"polygon": [
+							212,
+							1313,
+							234,
+							1312,
+							233,
+							1345,
+							212,
+							1345
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 439,
+							"length": 1
+						}
+					},
+					{
+						"content": "ッ",
+						"polygon": [
+							243,
+							1312,
+							264,
+							1313,
+							264,
+							1345,
+							243,
+							1345
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 440,
+							"length": 1
+						}
+					},
+					{
+						"content": "ト",
+						"polygon": [
+							269,
+							1313,
+							294,
+							1312,
+							294,
+							1345,
+							268,
+							1345
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 441,
+							"length": 1
+						}
+					},
+					{
+						"content": "カ",
+						"polygon": [
+							299,
+							1312,
+							320,
+							1312,
+							320,
+							1345,
+							299,
+							1345
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 442,
+							"length": 1
+						}
+					},
+					{
+						"content": "ー",
+						"polygon": [
+							325,
+							1312,
+							346,
+							1312,
+							346,
+							1345,
+							325,
+							1345
+						],
+						"confidence": 0.994,
+						"span": {
+							"offset": 443,
+							"length": 1
+						}
+					},
+					{
+						"content": "ド",
+						"polygon": [
+							359,
+							1312,
+							387,
+							1312,
+							387,
+							1345,
+							359,
+							1345
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 444,
+							"length": 1
+						}
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							692,
+							1315,
+							823,
+							1315,
+							823,
+							1347,
+							692,
+							1347
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 446,
+							"length": 7
+						}
+					},
+					{
+						"content": "お",
+						"polygon": [
+							158,
+							1360,
+							179,
+							1360,
+							179,
+							1392,
+							158,
+							1392
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 454,
+							"length": 1
+						}
+					},
+					{
+						"content": "釣",
+						"polygon": [
+							192,
+							1360,
+							213,
+							1360,
+							213,
+							1392,
+							192,
+							1392
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 455,
+							"length": 1
+						}
+					},
+					{
+						"content": "り",
+						"polygon": [
+							222,
+							1360,
+							247,
+							1360,
+							247,
+							1392,
+							222,
+							1392
+						],
+						"confidence": 0.985,
+						"span": {
+							"offset": 456,
+							"length": 1
+						}
+					},
+					{
+						"content": "¥0",
+						"polygon": [
+							782,
+							1362,
+							824,
+							1362,
+							824,
+							1392,
+							782,
+							1391
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 458,
+							"length": 2
+						}
+					},
+					{
+						"content": "※",
+						"polygon": [
+							217,
+							1415,
+							238,
+							1415,
+							237,
+							1445,
+							217,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 461,
+							"length": 1
+						}
+					},
+					{
+						"content": "外",
+						"polygon": [
+							246,
+							1415,
+							266,
+							1415,
+							266,
+							1445,
+							246,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 462,
+							"length": 1
+						}
+					},
+					{
+						"content": "8",
+						"polygon": [
+							270,
+							1415,
+							286,
+							1415,
+							286,
+							1445,
+							270,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 463,
+							"length": 1
+						}
+					},
+					{
+						"content": "は",
+						"polygon": [
+							286,
+							1415,
+							306,
+							1415,
+							306,
+							1445,
+							286,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 464,
+							"length": 1
+						}
+					},
+					{
+						"content": "軽",
+						"polygon": [
+							323,
+							1415,
+							346,
+							1414,
+							346,
+							1445,
+							323,
+							1445
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 465,
+							"length": 1
+						}
+					},
+					{
+						"content": "減",
+						"polygon": [
+							351,
+							1414,
+							371,
+							1414,
+							371,
+							1445,
+							351,
+							1445
+						],
+						"confidence": 0.992,
+						"span": {
+							"offset": 466,
+							"length": 1
+						}
+					},
+					{
+						"content": "税",
+						"polygon": [
+							383,
+							1414,
+							403,
+							1414,
+							403,
+							1445,
+							383,
+							1445
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 467,
+							"length": 1
+						}
+					},
+					{
+						"content": "率",
+						"polygon": [
+							412,
+							1414,
+							431,
+							1414,
+							431,
+							1445,
+							412,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 468,
+							"length": 1
+						}
+					},
+					{
+						"content": "(8%)",
+						"polygon": [
+							436,
+							1414,
+							507,
+							1414,
+							507,
+							1445,
+							436,
+							1445
+						],
+						"confidence": 0.989,
+						"span": {
+							"offset": 469,
+							"length": 4
+						}
+					},
+					{
+						"content": "対",
+						"polygon": [
+							519,
+							1414,
+							540,
+							1414,
+							540,
+							1445,
+							519,
+							1445
+						],
+						"confidence": 0.991,
+						"span": {
+							"offset": 473,
+							"length": 1
+						}
+					},
+					{
+						"content": "象",
+						"polygon": [
+							549,
+							1414,
+							568,
+							1414,
+							568,
+							1445,
+							549,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 474,
+							"length": 1
+						}
+					},
+					{
+						"content": "商",
+						"polygon": [
+							577,
+							1414,
+							597,
+							1414,
+							597,
+							1445,
+							577,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 475,
+							"length": 1
+						}
+					},
+					{
+						"content": "品",
+						"polygon": [
+							605,
+							1414,
+							625,
+							1414,
+							625,
+							1445,
+							605,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 476,
+							"length": 1
+						}
+					},
+					{
+						"content": "で",
+						"polygon": [
+							633,
+							1414,
+							653,
+							1414,
+							653,
+							1445,
+							634,
+							1445
+						],
+						"confidence": 0.996,
+						"span": {
+							"offset": 477,
+							"length": 1
+						}
+					},
+					{
+						"content": "す",
+						"polygon": [
+							662,
+							1414,
+							685,
+							1414,
+							685,
+							1445,
+							662,
+							1445
+						],
+						"confidence": 0.993,
+						"span": {
+							"offset": 478,
+							"length": 1
+						}
+					},
+					{
+						"content": "。",
+						"polygon": [
+							686,
+							1414,
+							699,
+							1414,
+							699,
+							1445,
+							686,
+							1445
+						],
+						"confidence": 0.995,
+						"span": {
+							"offset": 479,
+							"length": 1
+						}
+					}
+				],
+				"lines": [
+					{
+						"content": "ウェイトマート 渋谷中央店",
+						"polygon": [
+							242,
+							80,
+							748,
+							75,
+							748,
+							117,
+							243,
+							121
+						],
+						"spans": [
+							{
+								"offset": 0,
+								"length": 13
+							}
+						]
+					},
+					{
+						"content": "東京都渋谷区道玄坂2-5-1",
+						"polygon": [
+							318,
+							138,
+							665,
+							135,
+							665,
+							163,
+							319,
+							167
+						],
+						"spans": [
+							{
+								"offset": 14,
+								"length": 14
+							}
+						]
+					},
+					{
+						"content": "TEL : 03-5678-1234",
+						"polygon": [
+							358,
+							175,
+							643,
+							173,
+							643,
+							200,
+							358,
+							203
+						],
+						"spans": [
+							{
+								"offset": 29,
+								"length": 18
+							}
+						]
+					},
+					{
+						"content": "2026年5月14日(木) 18:42",
+						"polygon": [
+							159,
+							235,
+							538,
+							231,
+							538,
+							260,
+							159,
+							264
+						],
+						"spans": [
+							{
+								"offset": 48,
+								"length": 19
+							}
+						]
+					},
+					{
+						"content": "レジ:03",
+						"polygon": [
+							162,
+							275,
+							271,
+							274,
+							272,
+							302,
+							162,
+							302
+						],
+						"spans": [
+							{
+								"offset": 68,
+								"length": 5
+							}
+						]
+					},
+					{
+						"content": "担当:サトウ",
+						"polygon": [
+							320,
+							272,
+							490,
+							271,
+							490,
+							300,
+							320,
+							301
+						],
+						"spans": [
+							{
+								"offset": 74,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "取引No:000987654",
+						"polygon": [
+							159,
+							314,
+							446,
+							311,
+							446,
+							339,
+							160,
+							342
+						],
+						"spans": [
+							{
+								"offset": 81,
+								"length": 14
+							}
+						]
+					},
+					{
+						"content": "領収証",
+						"polygon": [
+							437,
+							358,
+							552,
+							357,
+							553,
+							394,
+							438,
+							395
+						],
+						"spans": [
+							{
+								"offset": 96,
+								"length": 3
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							161,
+							416,
+							207,
+							416,
+							208,
+							444,
+							161,
+							444
+						],
+						"spans": [
+							{
+								"offset": 100,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "黒毛和牛こま切れ",
+						"polygon": [
+							247,
+							415,
+							474,
+							413,
+							475,
+							442,
+							247,
+							443
+						],
+						"spans": [
+							{
+								"offset": 103,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "(¥1,480/100g",
+						"polygon": [
+							249,
+							453,
+							447,
+							453,
+							447,
+							483,
+							249,
+							483
+						],
+						"spans": [
+							{
+								"offset": 112,
+								"length": 12
+							}
+						]
+					},
+					{
+						"content": "342g)",
+						"polygon": [
+							486,
+							451,
+							564,
+							451,
+							564,
+							482,
+							486,
+							481
+						],
+						"spans": [
+							{
+								"offset": 125,
+								"length": 5
+							}
+						]
+					},
+					{
+						"content": "¥5,061",
+						"polygon": [
+							708,
+							449,
+							809,
+							448,
+							809,
+							476,
+							708,
+							477
+						],
+						"spans": [
+							{
+								"offset": 131,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							161,
+							498,
+							208,
+							498,
+							208,
+							526,
+							161,
+							526
+						],
+						"spans": [
+							{
+								"offset": 138,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "若鶏もも肉",
+						"polygon": [
+							247,
+							496,
+							388,
+							496,
+							388,
+							525,
+							247,
+							525
+						],
+						"spans": [
+							{
+								"offset": 141,
+								"length": 5
+							}
+						]
+					},
+					{
+						"content": "(¥980/kg",
+						"polygon": [
+							249,
+							535,
+							379,
+							535,
+							379,
+							565,
+							249,
+							564
+						],
+						"spans": [
+							{
+								"offset": 147,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "1.25kg)",
+						"polygon": [
+							422,
+							532,
+							529,
+							533,
+							528,
+							564,
+							422,
+							564
+						],
+						"spans": [
+							{
+								"offset": 156,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "¥1,225",
+						"polygon": [
+							708,
+							531,
+							813,
+							530,
+							813,
+							558,
+							708,
+							559
+						],
+						"spans": [
+							{
+								"offset": 164,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							161,
+							579,
+							208,
+							579,
+							208,
+							607,
+							161,
+							607
+						],
+						"spans": [
+							{
+								"offset": 171,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "サーモン刺身",
+						"polygon": [
+							248,
+							577,
+							416,
+							577,
+							416,
+							606,
+							248,
+							606
+						],
+						"spans": [
+							{
+								"offset": 174,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "(¥3,280/kg",
+						"polygon": [
+							249,
+							615,
+							416,
+							615,
+							416,
+							646,
+							249,
+							646
+						],
+						"spans": [
+							{
+								"offset": 181,
+								"length": 10
+							}
+						]
+					},
+					{
+						"content": "0.184kg)",
+						"polygon": [
+							460,
+							614,
+							586,
+							613,
+							586,
+							645,
+							460,
+							645
+						],
+						"spans": [
+							{
+								"offset": 192,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "¥603",
+						"polygon": [
+							742,
+							611,
+							814,
+							611,
+							814,
+							638,
+							742,
+							638
+						],
+						"spans": [
+							{
+								"offset": 201,
+								"length": 4
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							161,
+							660,
+							208,
+							660,
+							208,
+							688,
+							161,
+							688
+						],
+						"spans": [
+							{
+								"offset": 206,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "オリーブオイル",
+						"polygon": [
+							248,
+							659,
+							437,
+							658,
+							437,
+							686,
+							248,
+							687
+						],
+						"spans": [
+							{
+								"offset": 209,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "(¥1,200/L",
+						"polygon": [
+							249,
+							698,
+							397,
+							697,
+							397,
+							726,
+							249,
+							727
+						],
+						"spans": [
+							{
+								"offset": 217,
+								"length": 9
+							}
+						]
+					},
+					{
+						"content": "0.75L)",
+						"polygon": [
+							456,
+							695,
+							548,
+							695,
+							548,
+							724,
+							455,
+							723
+						],
+						"spans": [
+							{
+								"offset": 227,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "¥900",
+						"polygon": [
+							743,
+							693,
+							815,
+							693,
+							816,
+							720,
+							743,
+							720
+						],
+						"spans": [
+							{
+								"offset": 234,
+								"length": 4
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							161,
+							741,
+							208,
+							741,
+							208,
+							769,
+							161,
+							770
+						],
+						"spans": [
+							{
+								"offset": 239,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "ミネラルウォーター",
+						"polygon": [
+							249,
+							741,
+							492,
+							739,
+							492,
+							768,
+							250,
+							769
+						],
+						"spans": [
+							{
+								"offset": 242,
+								"length": 9
+							}
+						]
+					},
+					{
+						"content": "(¥120/500ml",
+						"polygon": [
+							248,
+							779,
+							434,
+							778,
+							434,
+							806,
+							249,
+							807
+						],
+						"spans": [
+							{
+								"offset": 252,
+								"length": 11
+							}
+						]
+					},
+					{
+						"content": "1500ml)",
+						"polygon": [
+							478,
+							777,
+							590,
+							777,
+							590,
+							805,
+							478,
+							805
+						],
+						"spans": [
+							{
+								"offset": 264,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "¥360",
+						"polygon": [
+							744,
+							775,
+							816,
+							775,
+							817,
+							802,
+							744,
+							802
+						],
+						"spans": [
+							{
+								"offset": 272,
+								"length": 4
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							160,
+							822,
+							207,
+							822,
+							208,
+							850,
+							160,
+							850
+						],
+						"spans": [
+							{
+								"offset": 277,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "エナジードリンク",
+						"polygon": [
+							248,
+							821,
+							447,
+							820,
+							447,
+							848,
+							248,
+							849
+						],
+						"spans": [
+							{
+								"offset": 280,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "(¥980/1000cc",
+						"polygon": [
+							248,
+							859,
+							448,
+							858,
+							448,
+							886,
+							248,
+							888
+						],
+						"spans": [
+							{
+								"offset": 289,
+								"length": 12
+							}
+						]
+					},
+					{
+						"content": "250cc)",
+						"polygon": [
+							491,
+							857,
+							584,
+							857,
+							584,
+							886,
+							491,
+							886
+						],
+						"spans": [
+							{
+								"offset": 302,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "¥245",
+						"polygon": [
+							745,
+							856,
+							817,
+							856,
+							817,
+							882,
+							745,
+							882
+						],
+						"spans": [
+							{
+								"offset": 309,
+								"length": 4
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							160,
+							902,
+							207,
+							902,
+							207,
+							930,
+							160,
+							930
+						],
+						"spans": [
+							{
+								"offset": 314,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "液体洗剤 詰替",
+						"polygon": [
+							247,
+							900,
+							427,
+							900,
+							427,
+							930,
+							247,
+							930
+						],
+						"spans": [
+							{
+								"offset": 317,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "(¥1.8/g",
+						"polygon": [
+							248,
+							939,
+							360,
+							940,
+							359,
+							970,
+							248,
+							969
+						],
+						"spans": [
+							{
+								"offset": 325,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "850g)",
+						"polygon": [
+							394,
+							939,
+							474,
+							939,
+							474,
+							969,
+							394,
+							969
+						],
+						"spans": [
+							{
+								"offset": 333,
+								"length": 5
+							}
+						]
+					},
+					{
+						"content": "¥1,530",
+						"polygon": [
+							713,
+							936,
+							818,
+							936,
+							818,
+							965,
+							713,
+							965
+						],
+						"spans": [
+							{
+								"offset": 339,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "外8",
+						"polygon": [
+							160,
+							983,
+							207,
+							983,
+							207,
+							1011,
+							160,
+							1011
+						],
+						"spans": [
+							{
+								"offset": 346,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "サプリメント粉末",
+						"polygon": [
+							248,
+							981,
+							456,
+							981,
+							456,
+							1010,
+							248,
+							1010
+						],
+						"spans": [
+							{
+								"offset": 349,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "(¥0.9/mg",
+						"polygon": [
+							248,
+							1020,
+							387,
+							1021,
+							387,
+							1051,
+							248,
+							1050
+						],
+						"spans": [
+							{
+								"offset": 358,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "1200mg)",
+						"polygon": [
+							423,
+							1019,
+							544,
+							1019,
+							544,
+							1050,
+							423,
+							1050
+						],
+						"spans": [
+							{
+								"offset": 367,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "¥1,080",
+						"polygon": [
+							714,
+							1018,
+							819,
+							1017,
+							819,
+							1046,
+							714,
+							1046
+						],
+						"spans": [
+							{
+								"offset": 375,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "小計",
+						"polygon": [
+							160,
+							1095,
+							218,
+							1095,
+							218,
+							1124,
+							160,
+							1124
+						],
+						"spans": [
+							{
+								"offset": 382,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							688,
+							1094,
+							818,
+							1094,
+							818,
+							1123,
+							687,
+							1123
+						],
+						"spans": [
+							{
+								"offset": 385,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "8%対象額",
+						"polygon": [
+							159,
+							1133,
+							294,
+							1133,
+							294,
+							1163,
+							159,
+							1163
+						],
+						"spans": [
+							{
+								"offset": 393,
+								"length": 5
+							}
+						]
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							688,
+							1133,
+							819,
+							1133,
+							819,
+							1163,
+							688,
+							1163
+						],
+						"spans": [
+							{
+								"offset": 399,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "内消費税等(8%)",
+						"polygon": [
+							159,
+							1173,
+							388,
+							1173,
+							388,
+							1204,
+							159,
+							1204
+						],
+						"spans": [
+							{
+								"offset": 407,
+								"length": 9
+							}
+						]
+					},
+					{
+						"content": "¥815",
+						"polygon": [
+							742,
+							1174,
+							819,
+							1174,
+							819,
+							1202,
+							742,
+							1202
+						],
+						"spans": [
+							{
+								"offset": 417,
+								"length": 4
+							}
+						]
+					},
+					{
+						"content": "合計(税込)",
+						"polygon": [
+							158,
+							1253,
+							349,
+							1253,
+							349,
+							1295,
+							158,
+							1295
+						],
+						"spans": [
+							{
+								"offset": 422,
+								"length": 6
+							}
+						]
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							647,
+							1256,
+							822,
+							1256,
+							822,
+							1297,
+							647,
+							1297
+						],
+						"spans": [
+							{
+								"offset": 429,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "クレジットカード",
+						"polygon": [
+							160,
+							1312,
+							387,
+							1312,
+							387,
+							1345,
+							160,
+							1345
+						],
+						"spans": [
+							{
+								"offset": 437,
+								"length": 8
+							}
+						]
+					},
+					{
+						"content": "¥11,004",
+						"polygon": [
+							692,
+							1315,
+							823,
+							1315,
+							823,
+							1347,
+							692,
+							1347
+						],
+						"spans": [
+							{
+								"offset": 446,
+								"length": 7
+							}
+						]
+					},
+					{
+						"content": "お釣り",
+						"polygon": [
+							157,
+							1360,
+							247,
+							1360,
+							247,
+							1392,
+							158,
+							1392
+						],
+						"spans": [
+							{
+								"offset": 454,
+								"length": 3
+							}
+						]
+					},
+					{
+						"content": "¥0",
+						"polygon": [
+							782,
+							1362,
+							823,
+							1362,
+							823,
+							1391,
+							782,
+							1391
+						],
+						"spans": [
+							{
+								"offset": 458,
+								"length": 2
+							}
+						]
+					},
+					{
+						"content": "※外8は軽減税率(8%)対象商品です。",
+						"polygon": [
+							217,
+							1414,
+							698,
+							1413,
+							698,
+							1444,
+							217,
+							1445
+						],
+						"spans": [
+							{
+								"offset": 461,
+								"length": 19
+							}
+						]
+					}
+				],
+				"spans": [
+					{
+						"offset": 0,
+						"length": 480
+					}
+				]
+			}
+		],
+		"styles": [],
+		"documents": [
+			{
+				"docType": "receipt.retailMeal",
+				"boundingRegions": [
+					{
+						"pageNumber": 1,
+						"polygon": [
+							0,
+							0,
+							1024,
+							0,
+							1024,
+							1536,
+							0,
+							1536
+						]
+					}
+				],
+				"fields": {
+					"CountryRegion": {
+						"type": "countryRegion",
+						"valueCountryRegion": "JPN",
+						"confidence": 0.995
+					},
+					"Items": {
+						"type": "array",
+						"valueArray": [
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "黒毛和牛こま切れ",
+										"content": "黒毛和牛こま切れ",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													247,
+													413,
+													475,
+													413,
+													475,
+													444,
+													247,
+													444
+												]
+											}
+										],
+										"confidence": 0.979,
+										"spans": [
+											{
+												"offset": 103,
+												"length": 8
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1480,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥1,480/100g",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													249,
+													453,
+													447,
+													453,
+													447,
+													483,
+													249,
+													483
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 112,
+												"length": 12
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 342,
+										"content": "342g)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													486,
+													451,
+													565,
+													451,
+													565,
+													482,
+													486,
+													480
+												]
+											}
+										],
+										"confidence": 0.881,
+										"spans": [
+											{
+												"offset": 125,
+												"length": 5
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "g",
+										"content": "342g)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													486,
+													451,
+													565,
+													451,
+													565,
+													482,
+													486,
+													480
+												]
+											}
+										],
+										"confidence": 0.881,
+										"spans": [
+											{
+												"offset": 125,
+												"length": 5
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 5061,
+											"currencyCode": "JPY"
+										},
+										"content": "¥5,061",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													708,
+													449,
+													810,
+													448,
+													810,
+													476,
+													708,
+													477
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 131,
+												"length": 6
+											}
+										]
+									}
+								},
+								"content": "外8\n黒毛和牛こま切れ\n(¥1,480/100g\n342g)\n¥5,061",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											161,
+											413,
+											810,
+											413,
+											810,
+											483,
+											161,
+											483
+										]
+									}
+								],
+								"confidence": 0.972,
+								"spans": [
+									{
+										"offset": 100,
+										"length": 37
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "若鶏もも肉",
+										"content": "若鶏もも肉",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													247,
+													496,
+													388,
+													496,
+													388,
+													525,
+													247,
+													525
+												]
+											}
+										],
+										"confidence": 0.98,
+										"spans": [
+											{
+												"offset": 141,
+												"length": 5
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 980,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥980/kg",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													249,
+													535,
+													380,
+													535,
+													380,
+													566,
+													249,
+													565
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 147,
+												"length": 8
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 1.25,
+										"content": "1.25kg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													422,
+													533,
+													529,
+													533,
+													529,
+													564,
+													422,
+													563
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 156,
+												"length": 7
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "kg",
+										"content": "1.25kg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													422,
+													533,
+													529,
+													533,
+													529,
+													564,
+													422,
+													563
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 156,
+												"length": 7
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1225,
+											"currencyCode": "JPY"
+										},
+										"content": "¥1,225",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													708,
+													531,
+													814,
+													530,
+													814,
+													558,
+													708,
+													559
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 164,
+												"length": 6
+											}
+										]
+									}
+								},
+								"content": "外8\n若鶏もも肉\n(¥980/kg\n1.25kg)\n¥1,225",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											161,
+											496,
+											814,
+											496,
+											814,
+											566,
+											161,
+											566
+										]
+									}
+								],
+								"confidence": 0.978,
+								"spans": [
+									{
+										"offset": 138,
+										"length": 32
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "サーモン刺身",
+										"content": "サーモン刺身",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													577,
+													417,
+													577,
+													417,
+													607,
+													248,
+													607
+												]
+											}
+										],
+										"confidence": 0.98,
+										"spans": [
+											{
+												"offset": 174,
+												"length": 6
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 3280,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥3,280/kg",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													249,
+													616,
+													417,
+													616,
+													417,
+													646,
+													249,
+													646
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 181,
+												"length": 10
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 0.184,
+										"content": "0.184kg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													460,
+													614,
+													587,
+													613,
+													587,
+													645,
+													460,
+													644
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 192,
+												"length": 8
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "kg",
+										"content": "0.184kg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													460,
+													614,
+													587,
+													613,
+													587,
+													645,
+													460,
+													644
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 192,
+												"length": 8
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 603,
+											"currencyCode": "JPY"
+										},
+										"content": "¥603",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													742,
+													612,
+													815,
+													611,
+													815,
+													638,
+													742,
+													639
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 201,
+												"length": 4
+											}
+										]
+									}
+								},
+								"content": "外8\nサーモン刺身\n(¥3,280/kg\n0.184kg)\n¥603",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											161,
+											577,
+											815,
+											577,
+											815,
+											646,
+											161,
+											646
+										]
+									}
+								],
+								"confidence": 0.976,
+								"spans": [
+									{
+										"offset": 171,
+										"length": 34
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "オリーブオイル",
+										"content": "オリーブオイル",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													658,
+													437,
+													658,
+													437,
+													687,
+													248,
+													687
+												]
+											}
+										],
+										"confidence": 0.98,
+										"spans": [
+											{
+												"offset": 209,
+												"length": 7
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1200,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥1,200/L",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													249,
+													698,
+													397,
+													697,
+													397,
+													726,
+													249,
+													728
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 217,
+												"length": 9
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 0.75,
+										"content": "0.75L)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													456,
+													696,
+													548,
+													695,
+													548,
+													724,
+													456,
+													723
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 227,
+												"length": 6
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "L",
+										"content": "0.75L)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													456,
+													696,
+													548,
+													695,
+													548,
+													724,
+													456,
+													723
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 227,
+												"length": 6
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 900,
+											"currencyCode": "JPY"
+										},
+										"content": "¥900",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													743,
+													693,
+													816,
+													693,
+													816,
+													720,
+													743,
+													720
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 234,
+												"length": 4
+											}
+										]
+									}
+								},
+								"content": "外8\nオリーブオイル\n(¥1,200/L\n0.75L)\n¥900",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											161,
+											658,
+											816,
+											658,
+											816,
+											728,
+											161,
+											728
+										]
+									}
+								],
+								"confidence": 0.973,
+								"spans": [
+									{
+										"offset": 206,
+										"length": 32
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "ミネラルウォーター\n1500ml)",
+										"content": "ミネラルウォーター\n1500ml)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													250,
+													740,
+													590,
+													740,
+													590,
+													806,
+													250,
+													806
+												]
+											}
+										],
+										"confidence": 0.978,
+										"spans": [
+											{
+												"offset": 242,
+												"length": 9
+											},
+											{
+												"offset": 264,
+												"length": 7
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"content": "(¥120/500ml",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													779,
+													435,
+													778,
+													435,
+													807,
+													249,
+													808
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 252,
+												"length": 11
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 360,
+											"currencyCode": "JPY"
+										},
+										"content": "¥360",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													744,
+													775,
+													817,
+													775,
+													817,
+													802,
+													744,
+													802
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 272,
+												"length": 4
+											}
+										]
+									}
+								},
+								"content": "外8\nミネラルウォーター\n(¥120/500ml\n1500ml)\n¥360",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											161,
+											740,
+											817,
+											740,
+											817,
+											808,
+											161,
+											808
+										]
+									}
+								],
+								"confidence": 0.968,
+								"spans": [
+									{
+										"offset": 239,
+										"length": 37
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "エナジードリンク\n250cc)",
+										"content": "エナジードリンク\n250cc)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													821,
+													584,
+													821,
+													584,
+													886,
+													248,
+													886
+												]
+											}
+										],
+										"confidence": 0.532,
+										"spans": [
+											{
+												"offset": 280,
+												"length": 8
+											},
+											{
+												"offset": 302,
+												"length": 6
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"content": "(¥980/1000cc",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													860,
+													448,
+													859,
+													448,
+													887,
+													248,
+													888
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 289,
+												"length": 12
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 245,
+											"currencyCode": "JPY"
+										},
+										"content": "¥245",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													745,
+													856,
+													818,
+													856,
+													818,
+													883,
+													745,
+													883
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 309,
+												"length": 4
+											}
+										]
+									}
+								},
+								"content": "外8\nエナジードリンク\n(¥980/1000cc\n250cc)\n¥245",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											160,
+											821,
+											818,
+											821,
+											818,
+											888,
+											160,
+											888
+										]
+									}
+								],
+								"confidence": 0.972,
+								"spans": [
+									{
+										"offset": 277,
+										"length": 36
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "液体洗剤 詰替",
+										"content": "液体洗剤 詰替",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													247,
+													900,
+													428,
+													900,
+													428,
+													930,
+													247,
+													930
+												]
+											}
+										],
+										"confidence": 0.98,
+										"spans": [
+											{
+												"offset": 317,
+												"length": 7
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1.8,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥1.8/g",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													939,
+													360,
+													940,
+													360,
+													970,
+													248,
+													969
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 325,
+												"length": 7
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 850,
+										"content": "850g)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													394,
+													939,
+													474,
+													939,
+													474,
+													969,
+													394,
+													969
+												]
+											}
+										],
+										"confidence": 0.93,
+										"spans": [
+											{
+												"offset": 333,
+												"length": 5
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "g",
+										"content": "850g)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													394,
+													939,
+													474,
+													939,
+													474,
+													969,
+													394,
+													969
+												]
+											}
+										],
+										"confidence": 0.93,
+										"spans": [
+											{
+												"offset": 333,
+												"length": 5
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1530,
+											"currencyCode": "JPY"
+										},
+										"content": "¥1,530",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													713,
+													936,
+													819,
+													936,
+													819,
+													965,
+													713,
+													966
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 339,
+												"length": 6
+											}
+										]
+									}
+								},
+								"content": "外8\n液体洗剤 詰替\n(¥1.8/g\n850g)\n¥1,530",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											160,
+											900,
+											819,
+											900,
+											819,
+											970,
+											160,
+											970
+										]
+									}
+								],
+								"confidence": 0.974,
+								"spans": [
+									{
+										"offset": 314,
+										"length": 31
+									}
+								]
+							},
+							{
+								"type": "object",
+								"valueObject": {
+									"Description": {
+										"type": "string",
+										"valueString": "サプリメント粉末",
+										"content": "サプリメント粉末",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													981,
+													457,
+													981,
+													457,
+													1011,
+													248,
+													1011
+												]
+											}
+										],
+										"confidence": 0.979,
+										"spans": [
+											{
+												"offset": 349,
+												"length": 8
+											}
+										]
+									},
+									"Price": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 0.9,
+											"currencyCode": "JPY"
+										},
+										"content": "(¥0.9/mg",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													248,
+													1020,
+													388,
+													1021,
+													388,
+													1052,
+													248,
+													1050
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 358,
+												"length": 8
+											}
+										]
+									},
+									"Quantity": {
+										"type": "number",
+										"valueNumber": 1200,
+										"content": "1200mg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													423,
+													1019,
+													545,
+													1019,
+													545,
+													1051,
+													423,
+													1049
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 367,
+												"length": 7
+											}
+										]
+									},
+									"QuantityUnit": {
+										"type": "string",
+										"valueString": "mg",
+										"content": "1200mg)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													423,
+													1019,
+													545,
+													1019,
+													545,
+													1051,
+													423,
+													1049
+												]
+											}
+										],
+										"confidence": 0.984,
+										"spans": [
+											{
+												"offset": 367,
+												"length": 7
+											}
+										]
+									},
+									"TotalPrice": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 1080,
+											"currencyCode": "JPY"
+										},
+										"content": "¥1,080",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													714,
+													1018,
+													820,
+													1018,
+													820,
+													1046,
+													714,
+													1047
+												]
+											}
+										],
+										"confidence": 0.986,
+										"spans": [
+											{
+												"offset": 375,
+												"length": 6
+											}
+										]
+									}
+								},
+								"content": "外8\nサプリメント粉末\n(¥0.9/mg\n1200mg)\n¥1,080",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											160,
+											981,
+											820,
+											981,
+											820,
+											1052,
+											160,
+											1052
+										]
+									}
+								],
+								"confidence": 0.972,
+								"spans": [
+									{
+										"offset": 346,
+										"length": 35
+									}
+								]
+							}
+						]
+					},
+					"MerchantAddress": {
+						"type": "address",
+						"content": "東京都渋谷区道玄坂2-5-1",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									319,
+									135,
+									666,
+									135,
+									666,
+									168,
+									319,
+									168
+								]
+							}
+						],
+						"confidence": 0.984,
+						"spans": [
+							{
+								"offset": 14,
+								"length": 14
+							}
+						],
+						"valueAddress": {
+							"houseNumber": "2-5-1",
+							"city": "渋谷区",
+							"state": "東京都",
+							"streetAddress": "道玄坂2-5-1",
+							"cityDistrict": "道玄坂"
+						}
+					},
+					"MerchantName": {
+						"type": "string",
+						"valueString": "ウェイトマート 渋谷中央店",
+						"content": "ウェイトマート 渋谷中央店",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									242,
+									76,
+									749,
+									76,
+									749,
+									121,
+									242,
+									121
+								]
+							}
+						],
+						"confidence": 0.951,
+						"spans": [
+							{
+								"offset": 0,
+								"length": 13
+							}
+						]
+					},
+					"MerchantPhoneNumber": {
+						"type": "phoneNumber",
+						"valuePhoneNumber": "+81356781234",
+						"content": "03-5678-1234",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									440,
+									175,
+									643,
+									173,
+									643,
+									200,
+									440,
+									202
+								]
+							}
+						],
+						"confidence": 0.989,
+						"spans": [
+							{
+								"offset": 35,
+								"length": 12
+							}
+						]
+					},
+					"ReceiptType": {
+						"type": "string",
+						"valueString": "Supplies",
+						"confidence": 0.988
+					},
+					"Subtotal": {
+						"type": "currency",
+						"valueCurrency": {
+							"currencySymbol": "¥",
+							"amount": 11004,
+							"currencyCode": "JPY"
+						},
+						"content": "¥11,004",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									688,
+									1094,
+									819,
+									1094,
+									819,
+									1123,
+									688,
+									1124
+								]
+							}
+						],
+						"confidence": 0.988,
+						"spans": [
+							{
+								"offset": 385,
+								"length": 7
+							}
+						]
+					},
+					"TaxDetails": {
+						"type": "array",
+						"valueArray": [
+							{
+								"type": "object",
+								"valueObject": {
+									"Amount": {
+										"type": "currency",
+										"valueCurrency": {
+											"currencySymbol": "¥",
+											"amount": 815,
+											"currencyCode": "JPY"
+										},
+										"content": "¥815",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													742,
+													1174,
+													820,
+													1174,
+													820,
+													1202,
+													742,
+													1202
+												]
+											}
+										],
+										"confidence": 0.973,
+										"spans": [
+											{
+												"offset": 417,
+												"length": 4
+											}
+										]
+									},
+									"Description": {
+										"type": "string",
+										"valueString": "内消費税等",
+										"content": "内消費税等",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													159,
+													1173,
+													305,
+													1173,
+													305,
+													1204,
+													159,
+													1204
+												]
+											}
+										],
+										"confidence": 0.963,
+										"spans": [
+											{
+												"offset": 407,
+												"length": 5
+											}
+										]
+									},
+									"Rate": {
+										"type": "number",
+										"valueNumber": 0.08,
+										"content": "(8%)",
+										"boundingRegions": [
+											{
+												"pageNumber": 1,
+												"polygon": [
+													322,
+													1173,
+													389,
+													1173,
+													389,
+													1204,
+													322,
+													1204
+												]
+											}
+										],
+										"confidence": 0.973,
+										"spans": [
+											{
+												"offset": 412,
+												"length": 4
+											}
+										]
+									}
+								},
+								"content": "内消費税等(8%)\n¥815",
+								"boundingRegions": [
+									{
+										"pageNumber": 1,
+										"polygon": [
+											159,
+											1173,
+											820,
+											1173,
+											820,
+											1204,
+											159,
+											1204
+										]
+									}
+								],
+								"confidence": 0.979,
+								"spans": [
+									{
+										"offset": 407,
+										"length": 14
+									}
+								]
+							}
+						]
+					},
+					"Total": {
+						"type": "currency",
+						"valueCurrency": {
+							"currencySymbol": "¥",
+							"amount": 11004,
+							"currencyCode": "JPY"
+						},
+						"content": "¥11,004",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									647,
+									1257,
+									823,
+									1256,
+									823,
+									1297,
+									647,
+									1297
+								]
+							}
+						],
+						"confidence": 0.984,
+						"spans": [
+							{
+								"offset": 429,
+								"length": 7
+							}
+						]
+					},
+					"TotalTax": {
+						"type": "currency",
+						"valueCurrency": {
+							"currencySymbol": "¥",
+							"amount": 815,
+							"currencyCode": "JPY"
+						},
+						"content": "¥815",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									742,
+									1174,
+									820,
+									1174,
+									820,
+									1202,
+									742,
+									1202
+								]
+							}
+						],
+						"confidence": 0.973,
+						"spans": [
+							{
+								"offset": 417,
+								"length": 4
+							}
+						]
+					},
+					"TransactionDate": {
+						"type": "date",
+						"valueDate": "2026-05-14",
+						"content": "2026年5月14日",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									159,
+									234,
+									373,
+									233,
+									373,
+									263,
+									159,
+									265
+								]
+							}
+						],
+						"confidence": 0.985,
+						"spans": [
+							{
+								"offset": 48,
+								"length": 10
+							}
+						]
+					},
+					"TransactionTime": {
+						"type": "time",
+						"valueTime": "18:42:00",
+						"content": "18:42",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									458,
+									232,
+									538,
+									232,
+									538,
+									260,
+									458,
+									261
+								]
+							}
+						],
+						"confidence": 0.99,
+						"spans": [
+							{
+								"offset": 62,
+								"length": 5
+							}
+						]
+					}
+				},
+				"confidence": 0.987,
+				"spans": [
+					{
+						"offset": 0,
+						"length": 480
+					}
+				]
+			}
+		],
+		"contentFormat": "text"
+	}
+}
