@@ -169,11 +169,24 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.account.buttons.save'))
       end
     end
+
+    it 'account form sends account update context' do
+      get settings_account_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('input[type="hidden"][name="update_context"]')['value']).to eq('account')
+      end
+    end
   end
 
   describe 'GET /settings/security' do
     it 'renders security copy through locale keys' do
       get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -183,6 +196,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.security.password.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.two_factor.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.passkey.title'))
+        expect(document.at_css('input[type="hidden"][name="update_context"]')['value']).to eq('security')
       end
     end
   end
@@ -309,6 +323,31 @@ RSpec.describe 'Settings', type: :request do
         expect(user.reload.avatar).not_to be_attached
       end
     end
+
+    it 'invalid account update renders account form with field errors' do
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: 'a' * 31
+              }
+            }
+
+      document = Nokogiri::HTML(response.body)
+      name_input = document.at_css('input[name="user[name]"]')
+      invalid_user = User.new(name: 'a' * 31, email: 'name_too_long@example.com', password: 'password123')
+      invalid_user.valid?
+      name_error = invalid_user.errors.full_messages_for(:name).first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('settings.account.title'))
+        expect(response.body).not_to include(I18n.t('auth.registrations.edit.title'))
+        expect(name_input).to be_present
+        expect(name_input['class']).to include('input-field-error')
+        expect(response.body).to include(name_error)
+      end
+    end
   end
 
   describe 'PATCH /users security' do
@@ -329,6 +368,8 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('settings.security.title'))
+        expect(response.body).not_to include(I18n.t('auth.registrations.edit.title'))
         expect(response.body).to include(password_error)
         expect(response.body).to include(confirmation_error)
       end

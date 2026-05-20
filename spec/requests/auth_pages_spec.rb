@@ -88,6 +88,8 @@ RSpec.describe 'Auth pages', type: :request do
     it 'renders account edit copy through locale keys' do
       get edit_user_registration_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
@@ -95,6 +97,52 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.edit.fields.email'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.fields.current_password'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.buttons.save'))
+        expect(document.at_css('input[type="hidden"][name="update_context"]')['value']).to eq('registration')
+      end
+    end
+
+    it 'invalid account edit update renders users edit with field errors' do
+      put user_registration_path,
+          params: {
+            update_context: 'registration',
+            user: {
+              email: '',
+              password: '',
+              password_confirmation: '',
+              current_password: ''
+            }
+          }
+
+      document = Nokogiri::HTML(response.body)
+      email_input = document.at_css('input[name="user[email]"]')
+      email_error = "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.blank')}"
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
+        expect(response.body).not_to include(I18n.t('settings.account.title'))
+        expect(email_input).to be_present
+        expect(email_input['class']).to include('input-field-error')
+        expect(response.body).to include(email_error)
+      end
+    end
+
+    it 'missing update context falls back to users edit on invalid update' do
+      put user_registration_path,
+          params: {
+            user: {
+              email: '',
+              password: '',
+              password_confirmation: '',
+              current_password: ''
+            }
+          }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
+        expect(response.body).not_to include(I18n.t('settings.account.title'))
       end
     end
   end

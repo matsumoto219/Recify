@@ -26,10 +26,12 @@ class Users::RegistrationsController < Devise::RegistrationsController
     self.resource = resource_class.to_adapter.get!(send(:"current_#{resource_name}").to_key)
     prev_unconfirmed_email = resource.unconfirmed_email if resource.respond_to?(:unconfirmed_email)
     password_update = password_update_request?
-    update_context = params[:update_context].presence
-    security_update = update_context == "security" || password_update
-    success_path = security_update ? settings_security_path : settings_path
-    failure_template = security_update ? "settings/security" : "settings/account"
+    update_context = normalized_update_context
+    registration_update = update_context == "registration"
+    security_update = update_context == "security" || (!registration_update && password_update)
+    account_update = update_context == "account" && !security_update
+    success_path = update_success_path(update_context, security_update)
+    failure_template = update_failure_template(update_context, security_update)
 
     if security_update && password_change_blank?
       resource.errors.add(:password, :blank)
@@ -42,9 +44,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     end
 
     resource_updated = (
-      if security_update
-        update_resource(resource, account_update_params)
-      else
+      if account_update
         profile_params = account_update_params.except(:current_password, :password, :password_confirmation)
         if avatar_storage_quota_exceeded?(resource, profile_params[:avatar])
           resource.errors.add(:avatar, :storage_quota_exceeded)
@@ -56,6 +56,8 @@ class Users::RegistrationsController < Devise::RegistrationsController
         resource_updated = resource.update_without_password(profile_params)
         resource.avatar.purge if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present? && resource.avatar.attached?
         resource_updated
+      else
+        update_resource(resource, account_update_params)
       end
     )
 
@@ -116,6 +118,27 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def remove_avatar_requested?
     params[:remove_avatar] == "1"
+  end
+
+  def normalized_update_context
+    update_context = params[:update_context].presence
+    return update_context if %w[account security registration].include?(update_context)
+
+    "registration"
+  end
+
+  def update_success_path(update_context, security_update)
+    return settings_security_path if security_update
+    return settings_path if update_context == "account"
+
+    after_update_path_for(resource)
+  end
+
+  def update_failure_template(update_context, security_update)
+    return "settings/security" if security_update
+    return "settings/account" if update_context == "account"
+
+    "devise/registrations/edit"
   end
 
   # If you have extra params to permit, append them to the sanitizer.
