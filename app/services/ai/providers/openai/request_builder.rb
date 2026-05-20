@@ -38,9 +38,7 @@ module Ai
               }
             ],
             text: {
-              format: {
-                type: "json_object"
-              }
+              format: structured_output_format
             }
           }
 
@@ -64,6 +62,15 @@ module Ai
         def ai_name_completion_enabled?
           input.respond_to?(:with_indifferent_access) &&
             input.with_indifferent_access.dig(:meta, :ai_name_completion_enabled) == true
+        end
+
+        def structured_output_format
+          {
+            type: "json_schema",
+            name: "recify_receipt_analysis_v1",
+            strict: true,
+            schema: Ai::ReceiptAnalysisSchema.to_json_schema
+          }
         end
       end
     end
