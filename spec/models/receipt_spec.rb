@@ -156,6 +156,20 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'image validation' do
+    it 'WebP画像を対応外形式として弾く' do
+      receipt = build(:receipt)
+      receipt.image.attach(
+        io: StringIO.new('webp image'),
+        filename: 'receipt.webp',
+        content_type: 'image/webp'
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)

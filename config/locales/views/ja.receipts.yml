@@ -154,7 +154,7 @@ ja:
         upload: アップロードして登録
         uploading: アップロード中...
       js:
-        invalid_image: 画像ファイルを選択してください
+        invalid_image: JPG, PNG, BMP, TIFF, HEIF, HEIC形式の画像を選択してください
         empty_file: 画像はまだ選択されていません
         quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
     processing_errors:

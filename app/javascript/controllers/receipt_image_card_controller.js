@@ -1,5 +1,35 @@
 import { Controller } from '@hotwired/stimulus'
 
+const ALLOWED_RECEIPT_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/bmp',
+  'image/tiff',
+  'image/heif',
+  'image/heic'
+]
+
+const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.bmp',
+  '.tif',
+  '.tiff',
+  '.heif',
+  '.heic'
+]
+
+function isAllowedReceiptImageFile (file) {
+  if (!file) return false
+
+  const type = file.type?.toLowerCase()
+  if (type) return ALLOWED_RECEIPT_IMAGE_TYPES.includes(type)
+
+  const name = file.name?.toLowerCase() || ''
+  return ALLOWED_RECEIPT_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension))
+}
+
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
   static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
@@ -45,7 +75,13 @@ export default class extends Controller {
   }
 
   previewFile (file) {
-    if (!file || !file.type.startsWith('image/')) return
+    if (!file) return
+
+    if (!isAllowedReceiptImageFile(file)) {
+      this.clearFileInput()
+      this.showUploadError()
+      return
+    }
 
     if (this.exceedsStorageQuota(file)) {
       this.clearFileInput()
@@ -149,7 +185,7 @@ export default class extends Controller {
     this.hideDropOverlay()
 
     const file = event.dataTransfer?.files?.[0]
-    if (!file || !file.type.startsWith('image/')) {
+    if (!isAllowedReceiptImageFile(file)) {
       this.showUploadError()
       return
     }

@@ -139,7 +139,7 @@
         </section>
 
         <%= form.file_field :image,
-          accept: "image/*",
+          accept: receipt_image_accept,
           capture: "environment",
           class: "hidden",
           disabled: ocr_down,
@@ -150,7 +150,7 @@
           } %>
 
         <%= form.file_field :image,
-          accept: "image/*",
+          accept: receipt_image_accept,
           class: "hidden",
           disabled: ocr_down,
           data: {

@@ -1,5 +1,35 @@
 import { Controller } from '@hotwired/stimulus'
 
+const ALLOWED_RECEIPT_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/bmp',
+  'image/tiff',
+  'image/heif',
+  'image/heic'
+]
+
+const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.bmp',
+  '.tif',
+  '.tiff',
+  '.heif',
+  '.heic'
+]
+
+function isAllowedReceiptImageFile (file) {
+  if (!file) return false
+
+  const type = file.type?.toLowerCase()
+  if (type) return ALLOWED_RECEIPT_IMAGE_TYPES.includes(type)
+
+  const name = file.name?.toLowerCase() || ''
+  return ALLOWED_RECEIPT_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension))
+}
+
 export default class extends Controller {
   static targets = [
     'cameraInput',
@@ -154,7 +184,7 @@ export default class extends Controller {
   }
 
   isImageFile (file) {
-    return file.type.startsWith('image/')
+    return isAllowedReceiptImageFile(file)
   }
 
   exceedsStorageQuota (file) {

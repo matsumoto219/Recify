@@ -592,6 +592,11 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       upload_root = document.at_css('[data-controller~="receipt-upload"]')
+      image_inputs = document.css('input[type="file"][name="receipt[image]"]')
+      expected_accept = %w[
+        image/jpeg image/png image/bmp image/tiff image/heif image/heic
+        .jpg .jpeg .png .bmp .tif .tiff .heif .heic
+      ].join(',')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -603,6 +608,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(upload_root['data-receipt-upload-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
         expect(upload_root['data-receipt-upload-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
         expect(upload_root['data-receipt-upload-quota-exceeded-message-value']).to eq(I18n.t('receipts.new_upload.js.quota_exceeded'))
+        expect(image_inputs.size).to eq(2)
+        expect(image_inputs.map { |input| input['accept'] }).to all(eq(expected_accept))
       end
     end
 
