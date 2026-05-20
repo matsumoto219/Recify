@@ -66,19 +66,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.decimal "confidence"
     t.string "confirmed_name"
     t.datetime "created_at", null: false
-    t.integer "discount_amount"
+    t.bigint "discount_amount"
     t.decimal "discount_rate", precision: 5, scale: 3
-    t.integer "line_total"
-    t.boolean "needs_review"
-    t.integer "original_line_total"
+    t.bigint "line_total"
+    t.boolean "needs_review", default: false, null: false
+    t.bigint "original_line_total"
     t.integer "position_index"
-    t.integer "price"
+    t.bigint "price"
     t.string "product_code"
     t.decimal "quantity", precision: 10, scale: 3
     t.string "quantity_unit"
     t.text "raw_text"
-    t.integer "receipt_id", null: false
-    t.json "review_reasons", default: [], null: false
+    t.bigint "receipt_id", null: false
+    t.jsonb "review_reasons", default: [], null: false
     t.string "suggested_name"
     t.decimal "tax_rate", precision: 5, scale: 4
     t.datetime "updated_at", null: false
@@ -86,21 +86,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
   end
 
   create_table "receipt_payments", force: :cascade do |t|
-    t.integer "amount"
+    t.bigint "amount"
     t.datetime "created_at", null: false
     t.string "method"
-    t.integer "receipt_id", null: false
+    t.bigint "receipt_id", null: false
     t.datetime "updated_at", null: false
     t.index ["receipt_id"], name: "index_receipt_payments_on_receipt_id"
   end
 
   create_table "receipt_tax_details", force: :cascade do |t|
-    t.integer "amount"
+    t.bigint "amount"
     t.datetime "created_at", null: false
     t.string "description"
-    t.integer "net_amount"
-    t.decimal "rate"
-    t.integer "receipt_id", null: false
+    t.bigint "net_amount"
+    t.decimal "rate", precision: 5, scale: 4
+    t.bigint "receipt_id", null: false
     t.datetime "updated_at", null: false
     t.index ["receipt_id"], name: "index_receipt_tax_details_on_receipt_id"
   end
@@ -115,18 +115,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.text "processing_error_message"
     t.datetime "purchased_at"
     t.string "receipt_type"
-    t.json "review_reasons"
+    t.jsonb "review_reasons", default: [], null: false
     t.string "status"
     t.text "store_address"
     t.string "store_name"
     t.string "store_phone_number"
-    t.integer "subtotal_amount"
-    t.integer "tax_amount"
+    t.bigint "subtotal_amount"
+    t.bigint "tax_amount"
     t.decimal "tax_rate", precision: 5, scale: 4
-    t.integer "tip_amount"
-    t.integer "total_amount"
+    t.bigint "tip_amount"
+    t.bigint "total_amount"
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
+    t.bigint "user_id", null: false
     t.index ["user_id", "created_at"], name: "index_receipts_on_user_id_and_created_at_desc", order: { created_at: :desc }
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
@@ -137,7 +137,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.datetime "created_at", null: false
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
-    t.boolean "guest"
+    t.boolean "guest", default: false, null: false
     t.string "name"
     t.boolean "product_name_ai_completion_enabled", default: false, null: false
     t.boolean "push_notification_enabled", default: true, null: false
