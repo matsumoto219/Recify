@@ -2,11 +2,15 @@ import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
-  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError']
+  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
   static values = {
     initiallyOpen: Boolean,
     unselectedLabel: { type: String, default: 'Unselected' },
-    emptyFileLabel: { type: String, default: 'No file selected' }
+    emptyFileLabel: { type: String, default: 'No file selected' },
+    quotaExceededMessage: { type: String, default: 'Storage quota exceeded.' },
+    storageUsedBytes: { type: Number, default: 0 },
+    storageLimitBytes: { type: Number, default: 0 },
+    storageExcludingBlobBytes: { type: Number, default: 0 }
   }
 
   connect () {
@@ -15,6 +19,7 @@ export default class extends Controller {
     this.dragDepth = 0
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
     this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
+    this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.sync()
 
@@ -42,8 +47,15 @@ export default class extends Controller {
   previewFile (file) {
     if (!file || !file.type.startsWith('image/')) return
 
+    if (this.exceedsStorageQuota(file)) {
+      this.clearFileInput()
+      this.showUploadError(this.quotaExceededMessageValue)
+      return
+    }
+
     this.updateFileName(file.name)
     this.hideUploadError()
+    this.clearRemoveImageRequest()
 
     this.revokeObjectUrl()
     this.objectUrl = URL.createObjectURL(file)
@@ -71,9 +83,12 @@ export default class extends Controller {
     this.fileNameTarget.textContent = fileName || this.unselectedLabelValue
   }
 
-  showUploadError () {
+  showUploadError (message = this.defaultUploadErrorMessage) {
     if (!this.hasUploadErrorTarget) return
 
+    if (message) {
+      this.uploadErrorTarget.textContent = message
+    }
     this.uploadErrorTarget.classList.remove('hidden')
   }
 
@@ -139,6 +154,12 @@ export default class extends Controller {
       return
     }
 
+    if (this.exceedsStorageQuota(file)) {
+      this.clearFileInput()
+      this.showUploadError(this.quotaExceededMessageValue)
+      return
+    }
+
     this.hideUploadError()
 
     // fileInputに反映
@@ -149,6 +170,36 @@ export default class extends Controller {
     }
 
     this.previewFile(file)
+  }
+
+  toggleRemoveImage () {
+    if (!this.hasRemoveImageFieldTarget || !this.removeImageFieldTarget.checked) return
+
+    this.hideUploadError()
+    this.clearFileInput()
+    this.revokeObjectUrl()
+    if (this.hasFileNameTarget) {
+      this.updateFileName(this.fileNameTarget.dataset.initialLabel || this.emptyFileLabelValue)
+    }
+  }
+
+  clearRemoveImageRequest () {
+    if (!this.hasRemoveImageFieldTarget) return
+
+    this.removeImageFieldTarget.checked = false
+  }
+
+  clearFileInput () {
+    if (!this.hasFileInputTarget) return
+
+    this.fileInputTarget.value = ''
+  }
+
+  exceedsStorageQuota (file) {
+    if (!file || this.storageLimitBytesValue <= 0) return false
+
+    const candidateUsedBytes = this.storageUsedBytesValue - this.storageExcludingBlobBytesValue + file.size
+    return candidateUsedBytes > this.storageLimitBytesValue
   }
 
   revokeObjectUrl () {

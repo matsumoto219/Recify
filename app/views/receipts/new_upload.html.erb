@@ -60,7 +60,10 @@
             service_status_polling_target: "uploadRoot",
             receipt_upload_ocr_available_value: ocr_available,
             receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
-            receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file")
+            receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file"),
+            receipt_upload_quota_exceeded_message_value: t("receipts.new_upload.js.quota_exceeded"),
+            receipt_upload_storage_used_bytes_value: current_user.storage_used_bytes,
+            receipt_upload_storage_limit_bytes_value: current_user.storage_limit_bytes
           }
         } do |form| %>
       <div class="space-y-6">

@@ -600,6 +600,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.new_upload.buttons.upload'))
         expect(upload_root['data-receipt-upload-invalid-image-message-value']).to eq(I18n.t('receipts.new_upload.js.invalid_image'))
         expect(upload_root['data-receipt-upload-empty-file-message-value']).to eq(I18n.t('receipts.new_upload.js.empty_file'))
+        expect(upload_root['data-receipt-upload-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
+        expect(upload_root['data-receipt-upload-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
+        expect(upload_root['data-receipt-upload-quota-exceeded-message-value']).to eq(I18n.t('receipts.new_upload.js.quota_exceeded'))
       end
     end
 
@@ -1936,6 +1939,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'receipt image cardにJS用文言をdata属性で渡す' do
+      receipt.image.attach(uploaded_image)
+
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
@@ -1946,6 +1951,12 @@ RSpec.describe 'Receipts', type: :request do
         expect(image_card).to be_present
         expect(image_card['data-receipt-image-card-unselected-label-value']).to eq(I18n.t('shared.receipt_image_card.js.unselected'))
         expect(image_card['data-receipt-image-card-empty-file-label-value']).to eq(I18n.t('shared.receipt_image_card.js.empty_file'))
+        expect(image_card['data-receipt-image-card-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
+        expect(image_card['data-receipt-image-card-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
+        expect(image_card['data-receipt-image-card-storage-excluding-blob-bytes-value']).to eq(receipt.image.blob.byte_size.to_s)
+        expect(image_card['data-receipt-image-card-quota-exceeded-message-value']).to eq(I18n.t('shared.receipt_image_card.quota_exceeded'))
+        expect(document.at_css('input[name="receipt[remove_image]"][value="1"]')).to be_present
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.remove_label'))
       end
     end
 
@@ -2647,6 +2658,87 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
         expect(receipt.reload.store_name).to eq('更新前')
+      end
+    end
+
+    it 'remove_image=1で既存画像を削除する' do
+      receipt.image.attach(uploaded_image)
+      old_blob = receipt.image.blob
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像削除後',
+          total_amount: 2200,
+          payment_method: 'cash',
+          remove_image: '1'
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.image).not_to be_attached
+        expect(ActiveStorage::Blob.exists?(old_blob.id)).to be(false)
+      end
+    end
+
+    it 'validation失敗時はremove_image=1でも既存画像を削除しない' do
+      receipt.image.attach(uploaded_image)
+      old_blob = receipt.image.blob
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像削除失敗',
+          total_amount: 2200,
+          payment_method: 'cash',
+          memo: 'x' * 1001,
+          remove_image: '1'
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(receipt.reload.image).to be_attached
+        expect(receipt.image.blob.id).to eq(old_blob.id)
+      end
+    end
+
+    it 'remove_image=1と新規画像が同時に送られた場合は新規画像を優先する' do
+      receipt.image.attach(uploaded_image)
+      old_blob = receipt.image.blob
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え優先',
+          total_amount: 2200,
+          payment_method: 'cash',
+          image: Rack::Test::UploadedFile.new(image_path, 'image/jpeg'),
+          remove_image: '1'
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.image).to be_attached
+        expect(receipt.image.blob.id).not_to eq(old_blob.id)
+      end
+    end
+
+    it '画像削除後はstorage_used_bytesが減る' do
+      receipt.image.attach(uploaded_image)
+      expect(user.storage_used_bytes).to be_positive
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像削除容量反映',
+          total_amount: 2200,
+          payment_method: 'cash',
+          remove_image: '1'
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(user.storage_used_bytes).to eq(0)
       end
     end
 

@@ -267,10 +267,10 @@
               show_toggle: true,
               show_upload: true,
               show_modal: true,
-              initially_open: true,
               empty_message: t("receipts.form.image.empty"),
               helper_text: t("receipts.form.image.helper"),
-              accept: receipt_image_accept %>
+              accept: receipt_image_accept,
+              storage_usage: current_user.storage_usage %>
       </div>
     </div>
 

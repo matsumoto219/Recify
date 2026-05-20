@@ -15,9 +15,14 @@
   preview_height_class = local_assigns.fetch(:preview_height_class, "h-[320px]")
   has_image = receipt.image.attached?
   enable_controller = show_toggle || show_modal || show_upload
+  storage_usage = local_assigns[:storage_usage]
+  storage_used_bytes = storage_usage&.used_bytes.to_i
+  storage_limit_bytes = storage_usage&.limit_bytes.to_i
+  storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? receipt.image.blob&.byte_size.to_i : 0))
+  quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}").html_safe : "" %>>
+<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
   <%= render "shared/ui/surface_card", padding: :sm do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
@@ -148,6 +153,21 @@
           <p class="text-xs token-text-muted whitespace-pre-line">
             <%= helper_text %>
           </p>
+        <% end %>
+
+        <% if has_image %>
+          <label class="flex items-start gap-3 rounded-lg border token-border-soft token-bg-card-subtle px-3 py-3 text-left cursor-pointer select-none">
+            <%= check_box_tag "receipt[remove_image]", "1", false,
+                  class: "mt-0.5 h-4 w-4 rounded border token-border-strong token-bg-input token-text-brand focus:ring-2 token-focus-ring-brand",
+                  data: {
+                    receipt_image_card_target: "removeImageField",
+                    action: "change->receipt-image-card#toggleRemoveImage"
+                  } %>
+            <span class="space-y-1 min-w-0">
+              <span class="block text-sm font-medium token-text-base"><%= t("shared.receipt_image_card.remove_label") %></span>
+              <span class="block text-xs token-text-muted leading-relaxed"><%= t("shared.receipt_image_card.remove_description") %></span>
+            </span>
+          </label>
         <% end %>
       </div>
     <% end %>

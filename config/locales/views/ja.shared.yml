@@ -46,7 +46,10 @@ ja:
       current_image: 現在の画像
       file_not_selected: ファイル未選択
       select_image: 画像を選択
+      remove_label: 保存済み画像を削除
+      remove_description: 保存すると、このレシート画像を削除します。新しい画像を選択した場合は差し替えを優先します。
       invalid_image: 画像ファイルを選択してください
+      quota_exceeded: ストレージ容量の上限を超えるため、この画像は選択できません。
       close_preview_aria: 全体プレビューを閉じる
       js:
         unselected: 未選択

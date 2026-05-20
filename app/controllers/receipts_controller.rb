@@ -114,6 +114,7 @@ class ReceiptsController < ApplicationController
     clear_processing_error_after_manual_update!(update_params)
 
     if @receipt.update(update_params)
+      purge_receipt_image_if_requested!
       redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
       flash.now[:alert] = @receipt.errors.full_messages
@@ -200,7 +201,7 @@ class ReceiptsController < ApplicationController
       :payment_method,
       :memo,
       :image,
-      :keep_image,
+      :remove_image,
       :store_address,
       :store_phone_number,
       # NOTE: 以下は将来フォームから直接編集する場合の候補
@@ -244,6 +245,7 @@ class ReceiptsController < ApplicationController
 
   def normalized_receipt_params
     permitted = receipt_params.to_h.deep_dup
+    permitted.delete("remove_image")
 
     purchased_on = permitted.delete("purchased_on")
     purchased_time = permitted.delete("purchased_time")
@@ -252,6 +254,18 @@ class ReceiptsController < ApplicationController
     normalize_receipt_item_tax_rates!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
+  end
+
+  def remove_image_requested?
+    ActiveModel::Type::Boolean.new.cast(params.dig(:receipt, :remove_image))
+  end
+
+  def purge_receipt_image_if_requested!
+    return unless remove_image_requested?
+    return if uploaded_receipt_image.present?
+    return unless @receipt.image.attached?
+
+    @receipt.image.purge
   end
 
   def build_purchased_at(purchased_on, purchased_time)

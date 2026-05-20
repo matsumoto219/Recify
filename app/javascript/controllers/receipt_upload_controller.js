@@ -16,7 +16,10 @@ export default class extends Controller {
   static values = {
     ocrAvailable: { type: Boolean, default: true },
     invalidImageMessage: { type: String, default: 'Please select an image file.' },
-    emptyFileMessage: { type: String, default: 'No image selected yet.' }
+    emptyFileMessage: { type: String, default: 'No image selected yet.' },
+    quotaExceededMessage: { type: String, default: 'Storage quota exceeded.' },
+    storageUsedBytes: { type: Number, default: 0 },
+    storageLimitBytes: { type: Number, default: 0 }
   }
 
   connect () {
@@ -85,6 +88,11 @@ export default class extends Controller {
       return
     }
 
+    if (this.exceedsStorageQuota(file)) {
+      this.showFileError(this.quotaExceededMessageValue)
+      return
+    }
+
     const dataTransfer = new DataTransfer()
     dataTransfer.items.add(file)
     this.libraryInputTarget.files = dataTransfer.files
@@ -112,6 +120,11 @@ export default class extends Controller {
       return
     }
 
+    if (this.exceedsStorageQuota(file)) {
+      this.showFileError(this.quotaExceededMessageValue)
+      return
+    }
+
     this.revokePreviewUrl()
     this.selectedObjectUrl = URL.createObjectURL(file)
     this.previewTarget.src = this.selectedObjectUrl
@@ -134,12 +147,20 @@ export default class extends Controller {
 
   showFileError (message) {
     this.clearPreview()
+    this.cameraInputTarget.value = ''
+    this.libraryInputTarget.value = ''
     this.fileNameTarget.textContent = message
     this.submitButtonTarget.disabled = true
   }
 
   isImageFile (file) {
     return file.type.startsWith('image/')
+  }
+
+  exceedsStorageQuota (file) {
+    if (!file || this.storageLimitBytesValue <= 0) return false
+
+    return this.storageUsedBytesValue + file.size > this.storageLimitBytesValue
   }
 
   clearPreview () {
