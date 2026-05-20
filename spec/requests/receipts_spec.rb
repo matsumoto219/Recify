@@ -880,7 +880,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures 'show fallback guidance' do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('処理に関する注意')
-        expect(response.body).to include('AI補完処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_errors.ai_error'))
       end
 
       get edit_receipt_path(receipt)
@@ -888,7 +888,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures 'edit fallback guidance' do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('処理に関する注意')
-        expect(response.body).to include('AI補完処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_errors.ai_error'))
       end
     end
 
@@ -1794,6 +1794,68 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '文字読み取り不可の処理失敗カードは撮影状態の確認文言を表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'no_text_detected'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(response.body).to include('画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。')
+      end
+    end
+
+    it 'OCR側の非レシート判定はAI側not receiptと同じ認識失敗文言を表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'receipt_not_detected'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(response.body).to include(I18n.t('receipts.processing_error_codes.ai_not_receipt'))
+        expect(I18n.t('receipts.processing_error_codes.receipt_not_detected')).to eq(I18n.t('receipts.processing_error_codes.ai_not_receipt'))
+      end
+    end
+
+    it 'AI一時停止の確認カードはAI失敗ではなく一時停止中として表示する' do
+      receipt.update!(
+        status: 'review_needed',
+        processing_error_code: 'ai_unavailable'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.attention_title'))
+        expect(response.body).to include('AI補完は一時停止中です。OCR結果を確認・修正してください。')
+        expect(response.body).not_to include('AI補完に失敗しました')
+      end
+    end
+
+    it 'AI not receiptの不確実ケースは確認系文言を表示する' do
+      receipt.update!(
+        status: 'review_needed',
+        processing_error_code: 'ai_not_receipt_uncertain'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.attention_title'))
+        expect(response.body).to include('レシート判定に迷いがあります。OCR結果を確認してください。')
+      end
+    end
+
     it 'warningのみのレシートは完了状態のまま確認情報として表示する' do
       receipt.update!(
         status: 'completed',
@@ -1928,7 +1990,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('処理に関する注意')
-        expect(response.body).to include('AI補完処理に失敗しました')
+        expect(response.body).to include(I18n.t('receipts.processing_errors.ai_error'))
         expect(response.body).not_to include('要確認内容')
         expect(response.body).not_to include('解析結果に必要な項目が不足しています')
       end

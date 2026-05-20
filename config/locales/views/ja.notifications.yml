@@ -26,4 +26,4 @@ ja:
         body: "%{subject}の内容を確認してください。"
       failed:
         title: 処理失敗
-        body: "%{subject}の解析に失敗しました。"
+        body: "%{subject}の処理に失敗しました。"

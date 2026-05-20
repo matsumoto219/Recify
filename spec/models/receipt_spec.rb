@@ -168,6 +168,46 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe '#processing_error_user_message' do
+    it '処理失敗toastの文言を処理失敗トーンへ寄せる' do
+      expect(I18n.t('flash.receipts.analysis_failed')).to eq('処理に失敗しました。手動入力で続行できます。')
+    end
+
+    it '処理失敗の永続通知本文を処理失敗トーンへ寄せる' do
+      expect(I18n.t('notifications.receipts.failed.body', subject: 'テストレシート')).to eq('テストレシートの処理に失敗しました。')
+    end
+
+    it 'AI一時停止はAI失敗ではなく一時停止中として表示する' do
+      receipt = build_stubbed(:receipt, :failed, processing_error_code: 'ai_unavailable')
+
+      expect(receipt.processing_error_user_message).to eq('AI補完は一時停止中です。OCR結果を確認・修正してください。')
+    end
+
+    it 'AI共通エラーはOCR結果の確認・修正文言へ寄せる' do
+      receipt = build_stubbed(:receipt, :failed, processing_error_code: 'analysis_missing_keys')
+
+      expect(receipt.processing_error_user_message).to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
+    end
+
+    it '文字読み取り不可とレシート認識不可を別文言にする' do
+      no_text_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'no_text_detected')
+      not_detected_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'receipt_not_detected')
+      ai_not_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'ai_not_receipt')
+
+      aggregate_failures do
+        expect(no_text_receipt.processing_error_user_message).to eq('画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。')
+        expect(not_detected_receipt.processing_error_user_message).to eq('レシートを認識できませんでした。レシート全体が写っている画像でお試しください。')
+        expect(ai_not_receipt.processing_error_user_message).to eq(not_detected_receipt.processing_error_user_message)
+      end
+    end
+
+    it 'AI not receiptの不確実ケースは確認系文言にする' do
+      receipt = build_stubbed(:receipt, :review_needed, processing_error_code: 'ai_not_receipt_uncertain')
+
+      expect(receipt.processing_error_user_message).to eq('レシート判定に迷いがあります。OCR結果を確認してください。')
+    end
+  end
+
   describe 'broadcasts' do
     let(:user) { create(:user) }
 

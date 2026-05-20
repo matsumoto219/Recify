@@ -11,7 +11,7 @@ ja:
       update_success: 設定を更新しました
       update_failure: 設定の保存に失敗しました
     storage:
-      quota_exceeded: ストレージ容量の上限を超えるため、ファイルをアップロードできません。
+      quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
     receipts:
       create: レシートを登録しました
       update: レシートを更新しました
@@ -21,4 +21,4 @@ ja:
       ocr_unavailable: 解析機能は一時停止中です。手動入力をご利用ください。
       analysis_completed: レシート解析が完了しました
       analysis_review_needed: レシート解析が完了しました。内容を確認してください
-      analysis_failed: 解析に失敗しました。手動入力で続行してください。
+      analysis_failed: 処理に失敗しました。手動入力で続行できます。
