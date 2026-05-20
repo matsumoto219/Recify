@@ -598,6 +598,11 @@ RSpec.describe 'Receipts', type: :request do
       upload_root = document.at_css('[data-controller~="receipt-upload"]')
       camera_input = document.at_css('input[type="file"][name="receipt[image]"]')
       library_input = document.at_css('input[type="file"][name="receipt[images][]"]')
+      preview_controls = document.at_css('[data-receipt-upload-target="previewControls"]')
+      preview_previous_button = document.at_css('[data-receipt-upload-target="previewPreviousButton"]')
+      preview_next_button = document.at_css('[data-receipt-upload-target="previewNextButton"]')
+      preview_counter = document.at_css('[data-receipt-upload-target="previewCounter"]')
+      preview_current_file_name = document.at_css('[data-receipt-upload-target="previewCurrentFileName"]')
       expected_accept = %w[
         image/jpeg image/png image/bmp image/tiff image/heif image/heic
         .jpg .jpeg .png .bmp .tif .tiff .heif .heic
@@ -616,12 +621,21 @@ RSpec.describe 'Receipts', type: :request do
         expect(upload_root['data-receipt-upload-max-file-count-value']).to eq(ReceiptBatchUploadService::MAX_FILES.to_s)
         expect(upload_root['data-receipt-upload-max-file-count-message-value']).to eq(I18n.t('receipts.new_upload.js.max_files', max: ReceiptBatchUploadService::MAX_FILES))
         expect(upload_root['data-receipt-upload-selected-files-message-value']).to eq(I18n.t('receipts.new_upload.js.selected_files'))
+        expect(upload_root['data-receipt-upload-preview-counter-message-value']).to eq(I18n.t('receipts.new_upload.js.preview_counter'))
         expect(response.body).to include(I18n.t('receipts.new_upload.multiple_hint', max: ReceiptBatchUploadService::MAX_FILES))
         expect(camera_input['accept']).to eq(expected_accept)
         expect(camera_input['capture']).to eq('environment')
         expect(camera_input['multiple']).to be_nil
         expect(library_input['accept']).to eq(expected_accept)
         expect(library_input['multiple']).to eq('multiple')
+        expect(preview_controls).to be_present
+        expect(preview_controls['class']).to include('hidden')
+        expect(preview_previous_button['type']).to eq('button')
+        expect(preview_previous_button['aria-label']).to eq(I18n.t('receipts.new_upload.preview_previous_aria'))
+        expect(preview_next_button['type']).to eq('button')
+        expect(preview_next_button['aria-label']).to eq(I18n.t('receipts.new_upload.preview_next_aria'))
+        expect(preview_counter['aria-live']).to eq('polite')
+        expect(preview_current_file_name).to be_present
       end
     end
 

@@ -39,6 +39,11 @@ export default class extends Controller {
     'emptyState',
     'previewWrapper',
     'preview',
+    'previewControls',
+    'previewPreviousButton',
+    'previewNextButton',
+    'previewCounter',
+    'previewCurrentFileName',
     'dropzone',
     'dropOverlay'
   ]
@@ -51,12 +56,15 @@ export default class extends Controller {
     maxFileCount: { type: Number, default: 5 },
     maxFileCountMessage: { type: String, default: 'Too many files selected.' },
     selectedFilesMessage: { type: String, default: '%{count} files selected: %{files}' },
+    previewCounterMessage: { type: String, default: '%{current} / %{total}' },
     storageUsedBytes: { type: Number, default: 0 },
     storageLimitBytes: { type: Number, default: 0 }
   }
 
   connect () {
-    this.selectedObjectUrl = null
+    this.selectedFiles = []
+    this.previewIndex = 0
+    this.previewObjectUrl = null
   }
 
   disconnect () {
@@ -66,22 +74,26 @@ export default class extends Controller {
   openCamera () {
     if (!this.ocrAvailableValue) return
 
-    this.libraryInputTarget.value = ''
     this.cameraInputTarget.click()
   }
 
   openLibrary () {
     if (!this.ocrAvailableValue) return
 
-    this.cameraInputTarget.value = ''
     this.libraryInputTarget.click()
   }
 
   previewCamera () {
+    if (this.cameraInputTarget.files.length === 0) return
+
+    this.libraryInputTarget.value = ''
     this.previewFiles(this.cameraInputTarget.files, { single: true })
   }
 
   previewLibrary () {
+    if (this.libraryInputTarget.files.length === 0) return
+
+    this.cameraInputTarget.value = ''
     this.previewFiles(this.libraryInputTarget.files)
   }
 
@@ -146,14 +158,74 @@ export default class extends Controller {
   }
 
   showPreview (files) {
-    const previewFile = files[0]
+    this.selectedFiles = files
+    this.previewIndex = 0
+    this.renderCurrentPreview()
+    this.fileNameTarget.textContent = this.selectedFilesText(files)
+  }
+
+  previousPreview () {
+    if (this.previewIndex <= 0) return
+
+    this.previewIndex -= 1
+    this.renderCurrentPreview()
+  }
+
+  nextPreview () {
+    if (this.previewIndex >= this.selectedFiles.length - 1) return
+
+    this.previewIndex += 1
+    this.renderCurrentPreview()
+  }
+
+  renderCurrentPreview () {
+    const previewFile = this.selectedFiles[this.previewIndex]
+
+    if (!previewFile) {
+      this.clearPreview()
+      return
+    }
 
     this.revokePreviewUrl()
-    this.selectedObjectUrl = URL.createObjectURL(previewFile)
-    this.previewTarget.src = this.selectedObjectUrl
+    this.previewObjectUrl = URL.createObjectURL(previewFile)
+    this.previewTarget.src = this.previewObjectUrl
     this.previewWrapperTarget.classList.remove('hidden')
     this.emptyStateTarget.classList.add('hidden')
-    this.fileNameTarget.textContent = this.selectedFilesText(files)
+    this.updatePreviewControls()
+  }
+
+  updatePreviewControls () {
+    if (!this.hasPreviewControlsTarget) return
+
+    if (this.selectedFiles.length <= 1) {
+      this.hidePreviewControls()
+      return
+    }
+
+    const currentFile = this.selectedFiles[this.previewIndex]
+    this.previewControlsTarget.classList.remove('hidden')
+    this.previewPreviousButtonTarget.disabled = this.previewIndex === 0
+    this.previewNextButtonTarget.disabled = this.previewIndex === this.selectedFiles.length - 1
+    this.previewCounterTarget.textContent = this.previewCounterText()
+    this.previewCurrentFileNameTarget.textContent = currentFile.name
+    this.previewCurrentFileNameTarget.title = currentFile.name
+  }
+
+  hidePreviewControls () {
+    if (!this.hasPreviewControlsTarget) return
+
+    this.previewControlsTarget.classList.add('hidden')
+    this.previewPreviousButtonTarget.disabled = true
+    this.previewNextButtonTarget.disabled = true
+    this.previewCounterTarget.textContent = ''
+    this.previewCurrentFileNameTarget.textContent = ''
+    this.previewCurrentFileNameTarget.removeAttribute('title')
+  }
+
+  previewCounterText () {
+    return this.previewCounterMessageValue
+      .replace('%{current}', this.previewIndex + 1)
+      .replace('%{total}', this.selectedFiles.length)
   }
 
   validateFiles (files) {
@@ -216,16 +288,19 @@ export default class extends Controller {
 
   clearPreview () {
     this.revokePreviewUrl()
+    this.selectedFiles = []
+    this.previewIndex = 0
     this.previewTarget.src = ''
     this.previewWrapperTarget.classList.add('hidden')
     this.emptyStateTarget.classList.remove('hidden')
     this.fileNameTarget.textContent = this.emptyFileMessageValue
+    this.hidePreviewControls()
   }
 
   revokePreviewUrl () {
-    if (!this.selectedObjectUrl) return
+    if (!this.previewObjectUrl) return
 
-    URL.revokeObjectURL(this.selectedObjectUrl)
-    this.selectedObjectUrl = null
+    URL.revokeObjectURL(this.previewObjectUrl)
+    this.previewObjectUrl = null
   }
 }
