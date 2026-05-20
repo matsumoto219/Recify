@@ -135,7 +135,7 @@ RSpec.describe ReceiptOcrService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('external_service_unavailable')
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_unavailable')
+          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_unavailable').once
         end
       end
 

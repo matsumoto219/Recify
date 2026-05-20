@@ -5,29 +5,58 @@ RSpec.describe Ocr::Client do
   let(:image) { Rack::Test::UploadedFile.new(image_path, 'image/jpeg') }
   let(:provider) { 'azure_document_intelligence' }
   let(:client) { described_class.new(image: image, provider: provider) }
+  let(:operation_location) do
+    'https://example.cognitiveservices.azure.com/documentintelligence/documentModels/prebuilt-receipt/analyzeResults/123'
+  end
+  let(:succeeded_response) do
+    {
+      'status' => 'succeeded',
+      'analyzeResult' => {
+        'content' => 'sample receipt content',
+        'documents' => [
+          {
+            'fields' => {
+              'MerchantName' => { 'valueString' => 'Test Store' },
+              'Total' => { 'valueCurrency' => { 'amount' => 1280 } }
+            }
+          }
+        ]
+      }
+    }
+  end
+  let(:accepted_response) do
+    faraday_response(status: 202, headers: { 'operation-location' => operation_location })
+  end
+
+  def faraday_response(status:, headers: {}, body: '{}')
+    instance_double(Faraday::Response, status: status, headers: headers, body: body)
+  end
+
+  def request_double
+    Struct.new(:headers, :body) do
+      def url(value)
+        @url = value
+      end
+    end.new({})
+  end
+
+  def stub_connection_post(target_client, *outcomes)
+    connection = instance_double(Faraday::Connection)
+    remaining_outcomes = outcomes.dup
+
+    allow(target_client).to receive(:connection).and_return(connection)
+    allow(connection).to receive(:post) do |&block|
+      block.call(request_double)
+      outcome = remaining_outcomes.shift
+      raise outcome if outcome.is_a?(Exception)
+
+      outcome
+    end
+
+    connection
+  end
 
   describe '#call' do
-    let(:operation_location) do
-      'https://example.cognitiveservices.azure.com/documentintelligence/documentModels/prebuilt-receipt/analyzeResults/123'
-    end
-
-    let(:succeeded_response) do
-      {
-        'status' => 'succeeded',
-        'analyzeResult' => {
-          'content' => 'sample receipt content',
-          'documents' => [
-            {
-              'fields' => {
-                'MerchantName' => { 'valueString' => 'Test Store' },
-                'Total' => { 'valueCurrency' => { 'amount' => 1280 } }
-              }
-            }
-          ]
-        }
-      }
-    end
-
     before do
       allow(client).to receive(:submit_request).and_return(operation_location)
     end
@@ -68,6 +97,234 @@ RSpec.describe Ocr::Client do
       expect do
         client.call
       end.to raise_error(Ocr::OcrError, 'unexpected_error')
+    end
+  end
+
+  describe '#submit_request' do
+    it '429が1回出た後に成功したらretryしてoperation-locationを返す' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 429),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it 'HTTP 408が1回出た後に成功したらretryする' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 408),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it '5xxがretry上限を超えたら external_service_unavailable を投げる' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 500),
+        faraday_response(status: 500),
+        faraday_response(status: 500)
+      )
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'external_service_unavailable')
+
+      aggregate_failures do
+        expect(connection).to have_received(:post).exactly(3).times
+        expect(client).to have_received(:sleep).with(0.5).once
+        expect(client).to have_received(:sleep).with(1.0).once
+      end
+    end
+
+    it 'submit POST の Faraday::TimeoutError はretryしない' do
+      connection = stub_connection_post(client, Faraday::TimeoutError.new('timeout'))
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:submit_request)
+      end.to raise_error(Faraday::TimeoutError)
+
+      aggregate_failures do
+        expect(connection).to have_received(:post).once
+        expect(client).not_to have_received(:sleep)
+      end
+    end
+
+    it 'Faraday::ConnectionFailed はretryする' do
+      connection = stub_connection_post(
+        client,
+        Faraday::ConnectionFailed.new('connection failed'),
+        accepted_response
+      )
+      allow(client).to receive(:sleep)
+
+      result = client.send(:submit_request)
+
+      aggregate_failures do
+        expect(result).to eq(operation_location)
+        expect(connection).to have_received(:post).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it '401/403はretryしない' do
+      [ 401, 403 ].each do |status|
+        request_client = described_class.new(image: image, provider: provider)
+        connection = stub_connection_post(request_client, faraday_response(status: status))
+        allow(request_client).to receive(:sleep)
+
+        expect do
+          request_client.send(:submit_request)
+        end.to raise_error(Ocr::OcrError, 'external_service_auth_error')
+
+        aggregate_failures do
+          expect(connection).to have_received(:post).once
+          expect(request_client).not_to have_received(:sleep)
+        end
+      end
+    end
+
+    it '404/input_invalidはretryしない' do
+      connection = stub_connection_post(client, faraday_response(status: 404))
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'input_invalid')
+
+      aggregate_failures do
+        expect(connection).to have_received(:post).once
+        expect(client).not_to have_received(:sleep)
+      end
+    end
+
+    it '422/ocr_api_errorはretryしない' do
+      connection = stub_connection_post(client, faraday_response(status: 422))
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'ocr_api_error')
+
+      aggregate_failures do
+        expect(connection).to have_received(:post).once
+        expect(client).not_to have_received(:sleep)
+      end
+    end
+
+    it 'operation-location欠落はretryしない' do
+      connection = stub_connection_post(client, faraday_response(status: 202, headers: {}))
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'ocr_invalid_response')
+
+      aggregate_failures do
+        expect(connection).to have_received(:post).once
+        expect(client).not_to have_received(:sleep)
+      end
+    end
+  end
+
+  describe '#poll_result' do
+    let(:succeeded_poll_response) do
+      faraday_response(status: 200, body: JSON.generate(succeeded_response))
+    end
+
+    it 'polling GET の Faraday::TimeoutError はretryする' do
+      outcomes = [
+        Faraday::TimeoutError.new('timeout'),
+        succeeded_poll_response
+      ]
+      allow(Faraday).to receive(:get) do
+        outcome = outcomes.shift
+        raise outcome if outcome.is_a?(Exception)
+
+        outcome
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(result).to eq(succeeded_response)
+        expect(Faraday).to have_received(:get).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it 'polling GET の一時失敗ではsubmit_requestを再実行しない' do
+      connection = stub_connection_post(client, accepted_response)
+      outcomes = [
+        faraday_response(status: 500),
+        succeeded_poll_response
+      ]
+      allow(Faraday).to receive(:get) do
+        outcome = outcomes.shift
+        raise outcome if outcome.is_a?(Exception)
+
+        outcome
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.call
+
+      aggregate_failures do
+        expect(result).to eq(succeeded_response)
+        expect(connection).to have_received(:post).once
+        expect(Faraday).to have_received(:get).twice
+        expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it 'MAX_POLL超過の ocr_timeout はretryしない' do
+      running_response = faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' }))
+      allow(Faraday).to receive(:get).and_return(running_response)
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:poll_result, operation_location)
+      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+
+      aggregate_failures do
+        expect(Faraday).to have_received(:get).exactly(described_class::MAX_POLL).times
+        expect(client).not_to have_received(:sleep).with(0.5)
+      end
+    end
+
+    it 'Azure status failed / ocr_failed はretryしない' do
+      failed_response = faraday_response(status: 200, body: JSON.generate({ 'status' => 'failed' }))
+      allow(Faraday).to receive(:get).and_return(failed_response)
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:poll_result, operation_location)
+      end.to raise_error(Ocr::OcrError, 'ocr_failed')
+
+      aggregate_failures do
+        expect(Faraday).to have_received(:get).once
+        expect(client).not_to have_received(:sleep).with(0.5)
+      end
     end
   end
 

@@ -14,6 +14,8 @@ module Ocr
     # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
     # 現時点では保守的な初期値とし、実データを見ながら後で調整する。
     MAX_POLL = 10
+    MAX_RETRIES = 2
+    BASE_RETRY_DELAY = 0.5
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethod" ].freeze
 
@@ -67,14 +69,17 @@ module Ocr
     end
 
     def submit_request
-      res = connection.post do |req|
-        req.url analyze_path
-        req.headers["Ocp-Apim-Subscription-Key"] = api_key
-        req.headers["Content-Type"] = "application/octet-stream"
-        req.body = request_body
+      # POST timeout は Azure 側で受理済みの可能性があるため retry しない。
+      res = with_retries(operation: :submit_request, retry_timeouts: false) do
+        connection.post do |req|
+          req.url analyze_path
+          req.headers["Ocp-Apim-Subscription-Key"] = api_key
+          req.headers["Content-Type"] = "application/octet-stream"
+          req.body = request_body
+        end.tap do |response|
+          handle_response_status!(response)
+        end
       end
-
-      handle_response_status!(res)
 
       op_location = res.headers["operation-location"] || res.headers["Operation-Location"]
       raise OcrError, "ocr_invalid_response" if op_location.blank?
@@ -86,11 +91,13 @@ module Ocr
       MAX_POLL.times do
         sleep POLL_INTERVAL
 
-        res = Faraday.get(op_location) do |req|
-          req.headers["Ocp-Apim-Subscription-Key"] = api_key
+        res = with_retries(operation: :poll_result, retry_timeouts: true) do
+          Faraday.get(op_location) do |req|
+            req.headers["Ocp-Apim-Subscription-Key"] = api_key
+          end.tap do |response|
+            handle_response_status!(response)
+          end
         end
-
-        handle_response_status!(res)
 
         # NOTE:
         # Azure のレスポンス本文は一旦そのまま受け取り、後段 parser で必要部分だけ使う方針。
@@ -121,6 +128,56 @@ module Ocr
       end
 
       image
+    end
+
+    def with_retries(operation:, retry_timeouts:)
+      attempts = 0
+
+      begin
+        attempts += 1
+        yield
+      rescue Faraday::TimeoutError, Faraday::ConnectionFailed, OcrError, OcrTimeoutError => e
+        raise unless retryable_error?(e, retry_timeouts:)
+        raise if attempts > MAX_RETRIES
+
+        Rails.logger.warn(
+          "[OCR::Client] retry operation=#{operation} attempt=#{attempts} error_code=#{error_code_for(e)} class=#{e.class}"
+        )
+        sleep(retry_delay_for(attempts))
+        retry
+      end
+    end
+
+    def retryable_error?(error, retry_timeouts:)
+      case error
+      when Faraday::TimeoutError
+        retry_timeouts
+      when Faraday::ConnectionFailed
+        true
+      when OcrTimeoutError
+        error.message == "ocr_timeout"
+      when OcrError
+        error.message == "external_service_unavailable"
+      else
+        false
+      end
+    end
+
+    def retry_delay_for(attempt)
+      BASE_RETRY_DELAY * (2**(attempt - 1))
+    end
+
+    def error_code_for(error)
+      case error
+      when Faraday::TimeoutError, OcrTimeoutError
+        "ocr_timeout"
+      when Faraday::ConnectionFailed
+        "external_service_unavailable"
+      when OcrError
+        error.message
+      else
+        "unexpected_error"
+      end
     end
 
     # TODO:
