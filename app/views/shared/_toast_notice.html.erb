@@ -1,0 +1,18 @@
+<%
+  notice_type = local_assigns.fetch(:notice_type, :info)
+  message = local_assigns[:message]
+  body = local_assigns[:body]
+  surface_id = local_assigns.fetch(:surface_id, "toast-#{SecureRandom.hex(4)}")
+%>
+
+<%= render "shared/ui/notice_surface",
+           notice_type: notice_type,
+           message: message,
+           body: body,
+           dismissible: true,
+           animated: true,
+           animation_name: "slide_right",
+           auto_dismiss: true,
+           max_visible: 5,
+           surface_id: surface_id,
+           align: :center %>

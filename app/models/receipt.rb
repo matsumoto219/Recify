@@ -628,14 +628,13 @@ class Receipt < ApplicationRecord
       return
     end
 
-    broadcast_replace_later_to(
+    broadcast_append_later_to(
       [ user, :receipts ],
-      target: "flash",
-      partial: "shared/flash",
+      target: "toast-stream",
+      partial: "shared/toast_notice",
       locals: {
-        flash_messages: {
-          flash_type => [ message ]
-        }
+        notice_type: flash_type,
+        message: message
       }
     )
   end

@@ -354,7 +354,7 @@ RSpec.describe Receipt, type: :model do
       }.not_to change(user.notifications, :count)
     end
 
-    it 'completed/review_needed/failed のprocessing flashをshared/flashでbroadcastする' do
+    it 'completed/review_needed/failed のprocessing flashをappend専用toastへbroadcastする' do
       cases = [
         {
           status: "completed",
@@ -384,14 +384,13 @@ RSpec.describe Receipt, type: :model do
           processing_error_code: entry[:processing_error_code]
         )
 
-        expect(receipt).to receive(:broadcast_replace_later_to).with(
+        expect(receipt).to receive(:broadcast_append_later_to).with(
           [ user, :receipts ],
-          target: "flash",
-          partial: "shared/flash",
+          target: "toast-stream",
+          partial: "shared/toast_notice",
           locals: {
-            flash_messages: {
-              entry[:flash_type] => [ entry[:message] ]
-            }
+            notice_type: entry[:flash_type],
+            message: entry[:message]
           }
         )
 
@@ -403,7 +402,7 @@ RSpec.describe Receipt, type: :model do
       user.update!(push_notification_enabled: false)
       receipt = build_stubbed(:receipt, user: user, status: "completed")
 
-      expect(receipt).not_to receive(:broadcast_replace_later_to)
+      expect(receipt).not_to receive(:broadcast_append_later_to)
 
       receipt.send(:broadcast_processing_flash)
     end

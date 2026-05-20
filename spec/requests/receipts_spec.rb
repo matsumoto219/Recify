@@ -926,6 +926,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(flash).to be_present
+        expect(document.at_css('#toast-stream')).to be_present
         expect(notice_surface).to be_present
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
         expect(notice_surface['data-notice-surface-max-visible-value']).to eq('3')
