@@ -37,10 +37,12 @@ export default class extends Controller {
 
   connect () {
     this.lineTotalTooltipDelay = 500
+    this.continuousAmountUpdateThreshold = 150
   }
 
   disconnect () {
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
+    this.amountAnimationTargets().forEach((target) => this.cancelAmountAnimation(target))
   }
 
   addItem (event) {
@@ -271,28 +273,31 @@ export default class extends Controller {
     const duration = 250
     const startValue = this.currentAmountValue(target)
     const endValue = Math.floor(nextValue)
-
-    if (target.amountAnimationFrame) {
-      cancelAnimationFrame(target.amountAnimationFrame)
-    }
+    const requestedAt = performance.now()
+    const renderImmediately = this.shouldRenderAmountImmediately(target, requestedAt)
+    const animationToken = this.startAmountAnimation(target)
 
     const render = (value) => {
-      const amountText = `¥${this.formatNumber(value)}`
+      const displayValue = Math.floor(value)
+      const amountText = `¥${this.formatNumber(displayValue)}`
       const text = withLabel ? `${this.subtotalLabelValue} ${amountText}` : amountText
 
       target.textContent = text
       target.title = text
+      this.syncAmountDisplayState(target, displayValue)
     }
 
-    if (startValue === endValue) {
+    if (startValue === endValue || renderImmediately) {
       render(endValue)
-      target.dataset.amountValue = String(endValue)
+      this.finishAmountAnimation(target, animationToken, endValue)
       return
     }
 
-    const startedAt = performance.now()
+    const startedAt = requestedAt
 
     const tick = (currentTime) => {
+      if (!this.isCurrentAmountAnimation(target, animationToken)) return
+
       const progress = Math.min((currentTime - startedAt) / duration, 1)
       const easedProgress = this.easeOutCubic(progress)
       const currentValue = startValue + (endValue - startValue) * easedProgress
@@ -303,8 +308,7 @@ export default class extends Controller {
         target.amountAnimationFrame = requestAnimationFrame(tick)
       } else {
         render(endValue)
-        target.dataset.amountValue = String(endValue)
-        target.amountAnimationFrame = null
+        this.finishAmountAnimation(target, animationToken, endValue)
       }
     }
 
@@ -485,35 +489,39 @@ export default class extends Controller {
     const duration = 300
     const startValue = this.currentAmountValue(target)
     const endValue = Math.floor(nextValue)
+    const requestedAt = performance.now()
+    const renderImmediately = this.shouldRenderAmountImmediately(target, requestedAt)
+    const animationToken = this.startAmountAnimation(target)
 
-    if (target.amountAnimationFrame) {
-      cancelAnimationFrame(target.amountAnimationFrame)
+    const render = (value) => {
+      const displayValue = Math.floor(value)
+      target.textContent = `¥${this.formatNumber(displayValue)}`
+      target.title = target.textContent.trim()
+      this.syncAmountDisplayState(target, displayValue)
     }
 
-    if (startValue === endValue) {
-      target.textContent = `¥${this.formatNumber(endValue)}`
-      target.title = target.textContent.trim()
-      target.dataset.amountValue = String(endValue)
+    if (startValue === endValue || renderImmediately) {
+      render(endValue)
+      this.finishAmountAnimation(target, animationToken, endValue)
       return
     }
 
-    const startedAt = performance.now()
+    const startedAt = requestedAt
 
     const tick = (currentTime) => {
+      if (!this.isCurrentAmountAnimation(target, animationToken)) return
+
       const progress = Math.min((currentTime - startedAt) / duration, 1)
       const easedProgress = this.easeOutCubic(progress)
       const currentValue = startValue + (endValue - startValue) * easedProgress
 
-      target.textContent = `¥${this.formatNumber(currentValue)}`
-      target.title = target.textContent.trim()
+      render(currentValue)
 
       if (progress < 1) {
         target.amountAnimationFrame = requestAnimationFrame(tick)
       } else {
-        target.textContent = `¥${this.formatNumber(endValue)}`
-        target.title = target.textContent.trim()
-        target.dataset.amountValue = String(endValue)
-        target.amountAnimationFrame = null
+        render(endValue)
+        this.finishAmountAnimation(target, animationToken, endValue)
       }
     }
 
@@ -521,12 +529,68 @@ export default class extends Controller {
   }
 
   currentAmountValue (target) {
+    if (Number.isFinite(target.amountDisplayValue)) {
+      return target.amountDisplayValue
+    }
+
+    const rawText = target.textContent || ''
+    const textValue = parseInt(rawText.replace(/[^0-9-]/g, ''), 10)
+    if (!Number.isNaN(textValue)) return textValue
+
     if (target.dataset.amountValue) {
       return parseInt(target.dataset.amountValue, 10) || 0
     }
 
-    const rawText = target.textContent || ''
-    return parseInt(rawText.replace(/[^0-9-]/g, ''), 10) || 0
+    return 0
+  }
+
+  shouldRenderAmountImmediately (target, requestedAt) {
+    const lastRequestedAt = target.amountLastRequestedAt
+    target.amountLastRequestedAt = requestedAt
+
+    return Number.isFinite(lastRequestedAt) &&
+      requestedAt - lastRequestedAt < this.continuousAmountUpdateThreshold
+  }
+
+  startAmountAnimation (target) {
+    this.cancelAmountAnimation(target)
+    target.amountAnimationToken = (target.amountAnimationToken || 0) + 1
+    return target.amountAnimationToken
+  }
+
+  cancelAmountAnimation (target) {
+    if (target.amountAnimationFrame) {
+      cancelAnimationFrame(target.amountAnimationFrame)
+    }
+
+    target.amountAnimationFrame = null
+    target.amountAnimationToken = (target.amountAnimationToken || 0) + 1
+  }
+
+  isCurrentAmountAnimation (target, animationToken) {
+    return target.amountAnimationToken === animationToken
+  }
+
+  finishAmountAnimation (target, animationToken, endValue) {
+    if (!this.isCurrentAmountAnimation(target, animationToken)) return
+
+    target.amountAnimationFrame = null
+    this.syncAmountDisplayState(target, endValue)
+  }
+
+  syncAmountDisplayState (target, value) {
+    const amountValue = Math.floor(value)
+    target.amountDisplayValue = amountValue
+    target.dataset.amountValue = String(amountValue)
+  }
+
+  amountAnimationTargets () {
+    return [
+      ...this.lineTotalDisplayTargets,
+      ...(this.hasTotalAmountTarget ? [this.totalAmountTarget] : []),
+      ...(this.hasSubtotalAmountTarget ? [this.subtotalAmountTarget] : []),
+      ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : [])
+    ]
   }
 
   easeOutCubic (progress) {

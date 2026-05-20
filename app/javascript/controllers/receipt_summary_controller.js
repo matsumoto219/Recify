@@ -11,15 +11,24 @@ export default class extends Controller {
   }
 
   connect () {
+    this.handleBeforeCache = this.prepareForCache.bind(this)
+    document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+
     const stored = sessionStorage.getItem(this.storageKeyValue)
     this.isMonthly = stored !== 'overall'
-    this.render()
-    this.animateSummaryValues()
+    this.render({ animateSubtext: false })
+    this.seedSummaryValues()
+  }
+
+  disconnect () {
+    document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
+    this.cancelAnimations()
   }
 
   toggle () {
     if (!this.hasLabelTarget || !this.hasValueTarget || !this.hasSubtextTarget) return
 
+    this.cancelAnimations()
     this.isMonthly = !this.isMonthly
 
     sessionStorage.setItem(
@@ -27,10 +36,11 @@ export default class extends Controller {
       this.isMonthly ? 'monthly' : 'overall'
     )
 
-    this.render()
+    this.render({ animateSubtext: false })
+    this.seedSummaryValues()
   }
 
-  render () {
+  render ({ animateSubtext = true } = {}) {
     if (!this.hasLabelTarget || !this.hasValueTarget || !this.hasSubtextTarget) return
 
     if (this.isMonthly) {
@@ -39,7 +49,8 @@ export default class extends Controller {
       this.updateSubtext(
         this.subtextTarget.dataset.monthlyText,
         this.subtextTarget.dataset.monthlyIcon,
-        this.subtextTarget.dataset.monthlyIconClass
+        this.subtextTarget.dataset.monthlyIconClass,
+        { animate: animateSubtext }
       )
     } else {
       this.labelTarget.innerText = this.overallLabel()
@@ -47,12 +58,13 @@ export default class extends Controller {
       this.updateSubtext(
         this.subtextTarget.dataset.overallText,
         this.subtextTarget.dataset.overallIcon,
-        this.subtextTarget.dataset.overallIconClass
+        this.subtextTarget.dataset.overallIconClass,
+        { animate: animateSubtext }
       )
     }
   }
 
-  updateSubtext (text, icon, iconClass) {
+  updateSubtext (text, icon, iconClass, { animate = true } = {}) {
     let iconElement = this.subtextTarget.querySelector('.material-symbols-outlined')
     let textElement = Array.from(this.subtextTarget.querySelectorAll('span'))
       .find((element) => !element.classList.contains('material-symbols-outlined'))
@@ -78,23 +90,26 @@ export default class extends Controller {
       this.subtextTarget.append(textElement)
     }
 
-    this.updateSubtextText(textElement, text, icon)
+    this.updateSubtextText(textElement, text, icon, { animate })
   }
 
-  updateSubtextText (textElement, text, icon) {
+  updateSubtextText (textElement, text, icon, { animate = true } = {}) {
     const changeRate = this.extractChangeRate(text)
 
     if (!icon || !Number.isFinite(changeRate)) {
+      this.cancelElementAnimation(textElement)
       textElement.innerText = text
       return
     }
 
     const storageKey = `${this.storageKeyValue}:monthly_change_rate`
-    const previousRate = Number(sessionStorage.getItem(storageKey))
+    const storedRate = sessionStorage.getItem(storageKey)
+    const previousRate = storedRate === null ? NaN : Number(storedRate)
 
     sessionStorage.setItem(storageKey, String(changeRate))
 
-    if (!Number.isFinite(previousRate) || previousRate === changeRate) {
+    if (!animate || !Number.isFinite(previousRate) || previousRate === changeRate) {
+      this.cancelElementAnimation(textElement)
       textElement.innerText = this.formatChangeRate(changeRate)
       return
     }
@@ -190,13 +205,13 @@ export default class extends Controller {
 
   animateSummaryValues () {
     this.summaryValueTargets.forEach((element) => {
-      const key = element.dataset.summaryKey || 'amount'
       const nextValue = this.rawValueFor(element)
 
       if (!Number.isFinite(nextValue)) return
 
-      const storageKey = `${this.storageKeyValue}:${key}`
-      const previousValue = Number(sessionStorage.getItem(storageKey))
+      const storageKey = this.summaryValueStorageKey(element)
+      const storedValue = sessionStorage.getItem(storageKey)
+      const previousValue = storedValue === null ? NaN : Number(storedValue)
 
       sessionStorage.setItem(storageKey, String(nextValue))
 
@@ -210,6 +225,8 @@ export default class extends Controller {
   }
 
   animateNumber (element, from, to) {
+    this.cancelElementAnimation(element)
+
     if (this.prefersReducedMotion()) {
       element.innerText = this.formatValue(element, to)
       return
@@ -217,10 +234,11 @@ export default class extends Controller {
 
     const duration = this.durationForNumber(element, from, to)
     const startedAt = performance.now()
-
-    if (element._rafId) cancelAnimationFrame(element._rafId)
+    const animationToken = element._animationToken
 
     const tick = (currentTime) => {
+      if (element._animationToken !== animationToken) return
+
       const progress = Math.min((currentTime - startedAt) / duration, 1)
       const easedProgress = 1 - Math.pow(1 - progress, 3)
       const currentValue = Math.round(from + (to - from) * easedProgress)
@@ -231,7 +249,7 @@ export default class extends Controller {
         element._rafId = requestAnimationFrame(tick)
       } else {
         element.innerText = this.formatValue(element, to)
-        element._rafId = null
+        if (element._animationToken === animationToken) element._rafId = null
       }
     }
 
@@ -239,6 +257,8 @@ export default class extends Controller {
   }
 
   animateChangeRate (element, from, to) {
+    this.cancelElementAnimation(element)
+
     if (this.prefersReducedMotion()) {
       element.innerText = this.formatChangeRate(to)
       return
@@ -246,10 +266,11 @@ export default class extends Controller {
 
     const duration = this.durationForChangeRate(from, to)
     const startedAt = performance.now()
-
-    if (element._rafId) cancelAnimationFrame(element._rafId)
+    const animationToken = element._animationToken
 
     const tick = (currentTime) => {
+      if (element._animationToken !== animationToken) return
+
       const progress = Math.min((currentTime - startedAt) / duration, 1)
       const easedProgress = 1 - Math.pow(1 - progress, 3)
       const currentValue = Math.round(from + (to - from) * easedProgress)
@@ -260,7 +281,7 @@ export default class extends Controller {
         element._rafId = requestAnimationFrame(tick)
       } else {
         element.innerText = this.formatChangeRate(to)
-        element._rafId = null
+        if (element._animationToken === animationToken) element._rafId = null
       }
     }
 
@@ -273,6 +294,56 @@ export default class extends Controller {
     }
 
     return Number(element.dataset.rawValue)
+  }
+
+  seedSummaryValues () {
+    this.summaryValueTargets.forEach((element) => {
+      const nextValue = this.rawValueFor(element)
+
+      if (!Number.isFinite(nextValue)) return
+
+      sessionStorage.setItem(this.summaryValueStorageKey(element), String(nextValue))
+      element.innerText = this.formatValue(element, nextValue)
+    })
+  }
+
+  prepareForCache () {
+    this.cancelAnimations()
+    this.render({ animateSubtext: false })
+    this.seedSummaryValues()
+  }
+
+  cancelAnimations () {
+    this.summaryValueTargets.forEach((element) => {
+      this.cancelElementAnimation(element)
+
+      const nextValue = this.rawValueFor(element)
+      if (Number.isFinite(nextValue)) {
+        element.innerText = this.formatValue(element, nextValue)
+      }
+    })
+
+    if (!this.hasSubtextTarget) return
+
+    const textElement = Array.from(this.subtextTarget.querySelectorAll('span'))
+      .find((element) => !element.classList.contains('material-symbols-outlined'))
+
+    this.cancelElementAnimation(textElement)
+  }
+
+  cancelElementAnimation (element) {
+    if (!element) return
+
+    if (element._rafId) cancelAnimationFrame(element._rafId)
+
+    element._rafId = null
+    element._animationToken = (element._animationToken || 0) + 1
+  }
+
+  summaryValueStorageKey (element) {
+    const key = element.dataset.summaryKey || 'amount'
+
+    return `${this.storageKeyValue}:${key}`
   }
 
   currentMonthRawValue () {
