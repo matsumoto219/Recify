@@ -51,7 +51,7 @@ class ReceiptsController < ApplicationController
     if ExternalServiceStatus.down?(:ocr)
       @receipt = current_user.receipts.new
       flash.now[:alert] = t("flash.receipts.ocr_unavailable")
-      render :new_upload, status: :unprocessable_content
+      render :new_upload, status: :unprocessable_content, formats: :html
       return
     end
 
@@ -59,7 +59,7 @@ class ReceiptsController < ApplicationController
       @receipt = current_user.receipts.new
       @receipt.errors.add(:image, :storage_quota_exceeded)
       flash.now[:alert] = t("flash.storage.quota_exceeded")
-      render :new_upload, status: :unprocessable_content
+      render :new_upload, status: :unprocessable_content, formats: :html
       return
     end
 
@@ -76,7 +76,7 @@ class ReceiptsController < ApplicationController
         "[ReceiptUpload] failed user_id=#{current_user.id} errors=#{@receipt.errors.full_messages.join(', ')}"
       )
       flash.now[:alert] = @receipt.errors.full_messages
-      render :new_upload, status: :unprocessable_content
+      render :new_upload, status: :unprocessable_content, formats: :html
     end
   end
 
@@ -93,7 +93,7 @@ class ReceiptsController < ApplicationController
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
       flash.now[:alert] = @receipt.errors.full_messages
-      render :new, status: :unprocessable_content
+      render :new, status: :unprocessable_content, formats: :html
     end
   end
 
@@ -104,7 +104,7 @@ class ReceiptsController < ApplicationController
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
       @receipt.errors.add(:image, :storage_quota_exceeded)
       flash.now[:alert] = t("flash.storage.quota_exceeded")
-      render :edit, status: :unprocessable_content
+      render :edit, status: :unprocessable_content, formats: :html
       return
     end
 
@@ -118,7 +118,7 @@ class ReceiptsController < ApplicationController
       redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
       flash.now[:alert] = @receipt.errors.full_messages
-      render :edit, status: :unprocessable_content
+      render :edit, status: :unprocessable_content, formats: :html
     end
   end
 

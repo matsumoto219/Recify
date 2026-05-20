@@ -95,6 +95,22 @@ RSpec.describe 'Error pages', type: :request do
     )
   end
 
+  it 'Turbo requestのnot foundも現仕様どおりbranded 404になる' do
+    user = create(:user)
+    other_receipt = create(:receipt, :completed, user: create(:user))
+
+    sign_in user
+
+    get receipt_path(other_receipt), headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+    expect_error_page(
+      status_code: :not_found,
+      icon: 'travel_explore',
+      title: I18n.t('errors.not_found.title'),
+      primary_cta: I18n.t('errors.not_found.primary_cta')
+    )
+  end
+
   it '他ユーザーのnotification参照はbranded 404になる' do
     user = create(:user)
     other_notification = create(:notification, user: create(:user))

@@ -679,6 +679,28 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'Turbo requestでもストレージ上限guardはglobal error pageへ飛ばさずupload画面を維持する' do
+      user.update!(storage_limit_bytes: 1)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path,
+             params: { receipt: { image: uploaded_image } },
+             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.new_upload.title'))
+        expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+        expect(response.body).not_to include('Error Code: 422')
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
     it 'OCR down時はreceiptを作成せず解析jobもenqueueしない' do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
@@ -692,6 +714,27 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it 'Turbo requestでもOCR down guardはglobal error pageへ飛ばさずupload画面を維持する' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      expect do
+        post upload_receipts_path,
+             params: { receipt: { image: uploaded_image } },
+             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.new_upload.title'))
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(response.body).not_to include('Error Code: 422')
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -1043,6 +1086,25 @@ RSpec.describe 'Receipts', type: :request do
         expect(notice_surface.text).to include(I18n.t('shared.notice_surface.titles.error'))
         expect(notice_surface.at_css('button[aria-label="' + I18n.t('shared.notice_surface.close_label') + '"]')).to be_present
         expect(error_items.size).to be >= 2
+      end
+    end
+
+    it 'Turbo requestでもvalidation errorはglobal error pageへ飛ばさず入力フォームを維持する' do
+      expect do
+        post receipts_path,
+             params: invalid_params,
+             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.form.titles.new'))
+        expect(response.body).not_to include('Error Code: 422')
+        expect(notice_surface).to be_present
+        expect(notice_surface['class']).to include('notice-surface-error')
       end
     end
 

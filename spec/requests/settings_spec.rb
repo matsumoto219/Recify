@@ -375,7 +375,7 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it '通知OFFでも設定保存失敗のTurbo flashは表示する' do
+    it '通知OFFでも設定保存失敗のTurbo flashは表示する（現状は200でflashだけ更新する）' do
       user.update!(push_notification_enabled: false)
 
       patch settings_path,
@@ -392,6 +392,20 @@ RSpec.describe 'Settings', type: :request do
         expect(stream).to be_present
         expect(notice_surface).to be_present
         expect(stream.text).to include(I18n.t('flash.settings.update_failure'))
+      end
+    end
+
+    it 'Turbo flash replaceはappend toast containerをtargetにしない' do
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('turbo-stream[target="flash"]')).to be_present
+        expect(document.at_css('turbo-stream[target="toast-stream"]')).to be_nil
       end
     end
 
