@@ -1072,6 +1072,9 @@ RSpec.describe ReceiptAnalysisService do
         aggregate_failures(fixture_name) do
           expect(test_receipt.status).to eq('failed')
           expect(test_receipt.processing_error_code).to eq('receipt_not_detected')
+          expect(test_receipt.receipt_items.count).to eq(0)
+          expect(test_receipt.receipt_payments.count).to eq(0)
+          expect(test_receipt.receipt_tax_details.count).to eq(0)
           expect(ReceiptAiEnrichmentService).not_to have_received(:call)
         end
       end

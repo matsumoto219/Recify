@@ -1,6 +1,12 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i
+    FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/
+    FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i
+    FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
+    FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
+    FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
 
     class << self
       def call(ocr_result:, ai_result: nil)
@@ -365,19 +371,46 @@ module Analysis
       end
 
       def item_line?(line)
-        return false if line.blank?
-        return false if line.include?("合計")
-        return false if line.match?(%r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}})
-        return false if line.match?(/現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i)
+        text = line.to_s.strip
+        return false if text.blank?
+        return false if fallback_non_item_line?(text)
+        return false if extract_item_price(text).blank?
 
-        line.match?(/\S+.*\d+/)
+        extract_item_name(text).present?
       end
 
       def extract_item_price(line)
-        numbers = line.to_s.scan(/\d[\d,]*/)
-        return nil if numbers.empty?
+        amount_text = rightmost_fallback_amount_candidate(line)
+        return nil if amount_text.blank?
 
-        Amounts::NumberParser.parse_amount(numbers.first)
+        Amounts::NumberParser.parse_amount_or_nil(amount_text)
+      end
+
+      def fallback_non_item_line?(line)
+        text = line.to_s.strip
+        compact_text = text.gsub(/\s+/, "").delete(":：")
+
+        return true if compact_text.match?(FALLBACK_NON_ITEM_KEYWORD_PATTERN)
+        return true if compact_text.match?(/\A(?:税込み?|税抜き?)(?:金額|価格)?[¥￥]?\d[\d,，]*円?\z/)
+        return true if text.match?(FALLBACK_REFERENCE_LINE_PATTERN)
+        return true if text.match?(/\bT\d{13}\b/i)
+        return true if text.match?(FALLBACK_DATE_TIME_LINE_PATTERN)
+        return true if text.match?(FALLBACK_URL_OR_EMAIL_PATTERN)
+        return true if text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
+
+        false
+      end
+
+      def fallback_amount_source(line)
+        line.to_s.sub(/\s*[x×]\s*\d+(?:\.\d+)?\s*\z/i, "")
+      end
+
+      def rightmost_fallback_amount_candidate(line)
+        source = fallback_amount_source(line)
+        matches = source.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match }
+        return nil if matches.empty?
+
+        matches.max_by { |match| match.end(0) }.to_s
       end
 
       def extract_item_quantity(line)
@@ -477,7 +510,13 @@ module Analysis
       end
 
       def extract_item_name(line)
-        line.to_s.sub(/\s+\d.*$/, "").strip
+        source = fallback_amount_source(line)
+        amount_text = rightmost_fallback_amount_candidate(line)
+        return source.to_s.sub(/\s+\d.*$/, "").strip if amount_text.blank?
+
+        amount_index = source.rindex(amount_text)
+        name = amount_index ? source[0...amount_index] : source
+        name.to_s.sub(/[¥￥]\s*\z/, "").strip
       end
 
       def extract_item_line_total(_line, price:, quantity:)

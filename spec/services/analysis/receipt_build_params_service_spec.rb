@@ -367,8 +367,41 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(items.first[:line_total]).to eq(1_234)
           expect(items.second[:price]).to eq(4_320)
           expect(items.second[:line_total]).to eq(4_320)
-          expect(items.third[:price]).to eq(1)
-          expect(items.third[:line_total]).to eq(1)
+          expect(items.third[:price]).to eq(1_234)
+          expect(items.third[:line_total]).to eq(1_234)
+        end
+      end
+
+      it '非明細行をfallback明細にしない' do
+        ocr_result[:lines] = [
+          'サンプルストア',
+          '小計 1000',
+          '消費税 80',
+          '税額 80',
+          '税込 1080',
+          '税抜 1000',
+          'TEL 03-1234-5678',
+          '住所 東京都港区芝1-1-1',
+          '登録番号 T1234567890123',
+          'インボイス T1234567890123',
+          '伝票番号 123456',
+          '取引番号 987654',
+          'レシート番号 111222',
+          '2026/05/20 12:34',
+          '販売期間 2026年5月20日(水)~6月30日(火)',
+          'https://example.com/receipt/123',
+          'support@example.com',
+          '商品A 1,234'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.size).to eq(1)
+          expect(items.first[:raw_text]).to eq('商品A 1,234')
+          expect(items.first[:price]).to eq(1_234)
+          expect(items.first[:line_total]).to eq(1_234)
         end
       end
     end
