@@ -18,6 +18,27 @@ RSpec.describe Receipts::BatchUploadService, type: :service do
     allow(ReceiptAnalysisJob).to receive(:perform_later)
   end
 
+  it '複数uploadの解析jobをreceipt_analysis queueへenqueueする' do
+    allow(ReceiptAnalysisJob).to receive(:perform_later).and_call_original
+    ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+    files = [
+      uploaded_receipt_fixture,
+      uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
+    ]
+
+    result = described_class.call(user:, files:)
+
+    enqueued_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |job| job[:job] == ReceiptAnalysisJob }
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(enqueued_jobs.size).to eq(2)
+      expect(enqueued_jobs.map { |job| job[:queue] }.uniq).to eq([ 'receipt_analysis' ])
+    end
+  ensure
+    ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  end
+
   it '1ファイルごとにreceiptを作成しcommit後に解析jobをenqueueする' do
     files = [
       uploaded_receipt_fixture,

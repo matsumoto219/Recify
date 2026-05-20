@@ -1,6 +1,12 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAnalysisJob, type: :job do
+  describe '.queue_name' do
+    it 'receipt_analysis queueを使う' do
+      expect(described_class.queue_name).to eq('receipt_analysis')
+    end
+  end
+
   describe '#perform' do
     it 'processing receiptだけReceiptAnalysisServiceを実行する' do
       receipt = create(:receipt, :processing, :with_image)

@@ -5,6 +5,12 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
 
   let(:cache_store) { ActiveSupport::Cache::MemoryStore.new }
 
+  describe '.queue_name' do
+    it 'default queueを維持する' do
+      expect(described_class.queue_name).to eq('default')
+    end
+  end
+
   before do
     allow(Rails).to receive(:cache).and_return(cache_store)
     Rails.cache.clear

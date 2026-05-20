@@ -1,5 +1,5 @@
 class ReceiptAnalysisJob < ApplicationJob
-  queue_as :default
+  queue_as :receipt_analysis
 
   discard_on ActiveRecord::RecordNotFound
 
