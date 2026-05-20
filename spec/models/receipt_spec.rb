@@ -309,6 +309,22 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it 'destroy時に紐づく永続通知も削除する' do
+      receipt = create(:receipt, :completed, user: user)
+      notification = create(
+        :notification,
+        user: user,
+        notifiable: receipt,
+        action_path: "/receipts/#{receipt.id}"
+      )
+
+      expect {
+        receipt.destroy!
+      }.to change(Notification, :count).by(-1)
+
+      expect(Notification.exists?(notification.id)).to be(false)
+    end
+
     it '通知OFFでも永続Notificationは作成する' do
       user.update!(push_notification_enabled: false)
       receipt = create(:receipt, :processing, :with_image, user: user, store_name: '通知OFFストア')

@@ -26,9 +26,8 @@ class NotificationsController < ApplicationController
   private
 
   def safe_notification_redirect_path(notification)
-    path = notification.action_path.presence
-    return notifications_path if path.blank?
+    return notifications_path unless notification.action_available?
 
-    path.start_with?("/") ? path : notifications_path
+    notification.action_path
   end
 end

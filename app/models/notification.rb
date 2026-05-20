@@ -88,7 +88,25 @@ class Notification < ApplicationRecord
     update!(read_at: Time.current)
   end
 
+  def stale_notifiable?
+    return false if notifiable_type.blank? || notifiable_id.blank?
+
+    notifiable.blank?
+  rescue NameError
+    true
+  end
+
+  def action_available?
+    internal_action_path? && !stale_notifiable?
+  end
+
   private
+
+  def internal_action_path?
+    path = action_path.to_s
+
+    path.start_with?("/") && !path.start_with?("//")
+  end
 
   def broadcast_realtime_surfaces_after_create
     broadcast_realtime_surfaces

@@ -1,7 +1,7 @@
 <%
   unread = notification.unread?
-  action_path = notification.action_path.to_s
-  item_path = action_path.start_with?("/") ? action_path : notifications_path
+  stale_notifiable = notification.stale_notifiable?
+  item_path = notification.action_available? ? notification.action_path : notifications_path
 
   icon_config =
     case notification.kind
@@ -41,6 +41,12 @@
     <% if notification.body.present? %>
       <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed token-text-muted">
         <%= notification.body %>
+      </p>
+    <% end %>
+
+    <% if stale_notifiable %>
+      <p class="mt-1 text-[12px] token-text-subtle">
+        <%= t("notifications.item.deleted_target") %>
       </p>
     <% end %>
 

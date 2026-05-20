@@ -2,6 +2,7 @@ require 'rails_helper'
 
 RSpec.describe 'Notifications', type: :request do
   let(:user) { create(:user) }
+  let(:missing_receipt_id) { Receipt.maximum(:id).to_i + 1000 }
 
   before do
     sign_in user
@@ -69,6 +70,29 @@ RSpec.describe 'Notifications', type: :request do
       end
     end
 
+    it '削除済みreceiptの通知はdropdownに削除済みreceipt pathを出さない' do
+      create(
+        :notification,
+        user:,
+        title: '削除済みレシート通知',
+        notifiable_type: 'Receipt',
+        notifiable_id: missing_receipt_id,
+        action_path: receipt_path(missing_receipt_id)
+      )
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      dropdown = document.at_css('#notifications-dropdown')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(dropdown).to be_present
+        expect(dropdown.at_css(%(a[href="#{receipt_path(missing_receipt_id)}"]))).to be_nil
+        expect(dropdown.text).to include(I18n.t('notifications.item.deleted_target'))
+      end
+    end
+
     it '通知がない場合はdropdownにempty stateを表示する' do
       get receipts_path
 
@@ -115,6 +139,28 @@ RSpec.describe 'Notifications', type: :request do
         expect(response.body).not_to include('他人の通知')
       end
     end
+
+    it '削除済みreceiptの通知は一覧に削除済みreceipt pathを出さない' do
+      create(
+        :notification,
+        :read,
+        user:,
+        title: '削除済みレシート通知',
+        notifiable_type: 'Receipt',
+        notifiable_id: missing_receipt_id,
+        action_path: receipt_path(missing_receipt_id)
+      )
+
+      get notifications_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css(%(a[href="#{receipt_path(missing_receipt_id)}"]))).to be_nil
+        expect(response.body).to include(I18n.t('notifications.item.deleted_target'))
+      end
+    end
   end
 
   describe 'PATCH /notifications/:id/read' do
@@ -132,6 +178,24 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
+        expect(notification.reload).to be_read
+      end
+    end
+
+    it '削除済みreceiptの通知は既読化後に通知一覧へ戻す' do
+      notification = create(
+        :notification,
+        user:,
+        notifiable_type: 'Receipt',
+        notifiable_id: missing_receipt_id,
+        action_path: receipt_path(missing_receipt_id),
+        read_at: nil
+      )
+
+      patch read_notification_path(notification)
+
+      aggregate_failures do
+        expect(response).to redirect_to(notifications_path)
         expect(notification.reload).to be_read
       end
     end
