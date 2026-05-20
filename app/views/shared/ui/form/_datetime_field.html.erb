@@ -46,7 +46,7 @@
   # TODO: 将来的にフォーム入力欄の高さ・余白・WebKit向け補正はCSS側へ寄せる
   # iOS Safari の input[type="date/time"] は h-11 を無視して高さが崩れるため、
   # 暫定的に ::-webkit-date-and-time-value へ min-height / line-height を指定している
-  base_field_class = "w-full rounded-lg input-field leading-none appearance-none outline-none transition-all [&::-webkit-date-and-time-value]:min-h-[1.5rem] [&::-webkit-date-and-time-value]:leading-[1.5rem] #{highlight_classes}"
+  base_field_class = "w-full rounded-lg input-field text-base leading-none appearance-none outline-none transition-all [&::-webkit-date-and-time-value]:min-h-[1.5rem] [&::-webkit-date-and-time-value]:leading-[1.5rem] #{highlight_classes}"
   field_spacing_class = case size
                         when :regular
                           with_icon ? "h-11 min-h-11 py-2.5 pl-10 pr-4" : "h-11 min-h-11 py-2.5 px-4"

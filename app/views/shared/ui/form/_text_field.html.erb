@@ -43,7 +43,7 @@
   has_error = attribute_errors.any?
   attribute_full_messages = Array(f.object&.errors&.full_messages_for(attribute))
 
-  base_input_class = "input-field w-full"
+  base_input_class = "input-field w-full text-base"
 
   highlight_classes = case highlight_variant
                       when :none
