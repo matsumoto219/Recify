@@ -13,12 +13,16 @@
   accept = local_assigns[:accept]
   preview_width_class = local_assigns.fetch(:preview_width_class, "w-[220px]")
   preview_height_class = local_assigns.fetch(:preview_height_class, "h-[320px]")
-  has_image = receipt.image.attached?
+  raw_image_attached = receipt.image.attached?
+  image_attachment = receipt.image.attachment if raw_image_attached
+  displayable_image = receipt.image if image_attachment&.persisted? && image_attachment.blob&.persisted?
+  has_image = displayable_image.present?
+  has_pending_image = raw_image_attached && !has_image
   enable_controller = show_toggle || show_modal || show_upload
   storage_usage = local_assigns[:storage_usage]
   storage_used_bytes = storage_usage&.used_bytes.to_i
   storage_limit_bytes = storage_usage&.limit_bytes.to_i
-  storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? receipt.image.blob&.byte_size.to_i : 0))
+  storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? displayable_image.blob&.byte_size.to_i : 0))
   quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
 %>
 
@@ -60,7 +64,7 @@
             <% preview_options[:aria] = { label: t("shared.receipt_image_card.full_preview_aria") } %>
           <% end %>
           <%= content_tag preview_tag, **preview_options do %>
-            <%= image_tag receipt.image,
+            <%= image_tag displayable_image,
                   class: "w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
                   data: { receipt_image_card_target: "previewImage" } %>
 
@@ -76,8 +80,8 @@
           <!-- アクション（ダウンロード） -->
           <!-- TODO ファイル名や拡張子の仕様を決める -->
           <div class="mt-3 flex justify-end">
-            <%= link_to url_for(receipt.image),
-                  download: receipt.image.filename.to_s,
+            <%= link_to url_for(displayable_image),
+                  download: displayable_image.filename.to_s,
                   class: "inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
               <span class="material-symbols-outlined text-sm">download</span>
               <%= t("shared.receipt_image_card.download") %>
@@ -89,7 +93,7 @@
       <% if keep_image_enabled %>
         <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle relative overflow-hidden">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
-          <p><%= empty_message %></p>
+          <p><%= has_pending_image ? t("shared.receipt_image_card.reselect_image") : empty_message %></p>
 
           <%= image_tag "",
                 class: "hidden absolute inset-0 w-full h-full object-contain token-bg-input",
@@ -199,7 +203,7 @@
               aria-label="<%= t("shared.receipt_image_card.close_preview_aria") %>">
               <span class="material-symbols-outlined">close</span>
             </button>
-            <%= image_tag receipt.image,
+            <%= image_tag displayable_image,
                   class: "block w-full max-h-[85vh] object-contain token-bg-input",
                   data: { receipt_image_card_target: "modalImage" } %>
           </div>

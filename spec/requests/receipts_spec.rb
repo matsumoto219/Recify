@@ -1217,6 +1217,28 @@ RSpec.describe 'Receipts', type: :request do
       expect([ 200, 422 ]).to include(response.status)
     end
 
+    it '画像のみの手動登録失敗時はsigned_id errorにならず新規フォームに戻る' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            image: uploaded_image
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.form.titles.new'))
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_present
+        expect(document.at_css('[data-controller~="receipt-image-card"]')).to be_present
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.reselect_image'))
+        expect(document.at_css('input[name="receipt[remove_image]"][value="1"]')).to be_nil
+        expect(response.body).not_to include('Cannot get a signed_id')
+      end
+    end
+
     it 'flash.now alertの複数エラーをlist表示する' do
       post receipts_path, params: invalid_params
 
@@ -2225,6 +2247,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(image_card['data-receipt-image-card-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
         expect(image_card['data-receipt-image-card-storage-excluding-blob-bytes-value']).to eq(receipt.image.blob.byte_size.to_s)
         expect(image_card['data-receipt-image-card-quota-exceeded-message-value']).to eq(I18n.t('shared.receipt_image_card.quota_exceeded'))
+        expect(document.at_css('img[data-receipt-image-card-target="previewImage"]')['src']).to include('/rails/active_storage/')
         expect(document.at_css('input[name="receipt[remove_image]"][value="1"]')).to be_present
         expect(response.body).to include(I18n.t('shared.receipt_image_card.remove_label'))
       end
@@ -2849,6 +2872,31 @@ RSpec.describe 'Receipts', type: :request do
         expect([ 200, 422 ]).to include(response.status)
         expect(receipt.store_name).to eq('更新前')
         expect(receipt.total_amount).to eq(1400)
+      end
+    end
+
+    it '画像差し替えを含むvalidation失敗時もsigned_id errorにならず編集フォームに戻る' do
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え失敗',
+          total_amount: 1500,
+          payment_method: 'cash',
+          memo: 'x' * 1001,
+          image: uploaded_image
+        }
+      }
+      receipt.reload
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(receipt.store_name).to eq('更新前')
+        expect(receipt.total_amount).to eq(1400)
+        expect(receipt.memo).to be_blank
+        expect(response.body).to include(I18n.t('receipts.form.titles.edit'))
+        expect(document.at_css('#flash [data-controller~="notice-surface"]')).to be_present
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.reselect_image'))
+        expect(response.body).not_to include('Cannot get a signed_id')
       end
     end
 
