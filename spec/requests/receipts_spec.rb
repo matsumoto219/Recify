@@ -157,6 +157,8 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       summary = document.at_css('#receipts_summary')
+      summary_cards = summary.xpath('./section')
+      total_count_card = summary_cards.find { |card| card.text.include?(I18n.t('dashboard.summary.total_count.title')) }
       header = document.at_css('#dashboard-header')
 
       aggregate_failures do
@@ -173,6 +175,10 @@ RSpec.describe 'Receipts', type: :request do
         expect(summary.text).to include(I18n.t('dashboard.summary.processing.title'))
         expect(summary.text).to include(I18n.t('dashboard.summary.review_needed.title'))
         expect(summary.text).to include(I18n.t('dashboard.summary.failed.title'))
+        expect(summary['class']).to include('md:grid-cols-4')
+        expect(summary['class']).to include('xl:grid-cols-5')
+        expect(total_count_card['class']).to include('hidden')
+        expect(total_count_card['class']).to include('xl:block')
         expect(summary['data-receipt-summary-monthly-label-value']).to eq(I18n.t('dashboard.summary.amount.current_month_title'))
         expect(summary['data-receipt-summary-overall-label-value']).to eq(I18n.t('dashboard.summary.amount.overall_title'))
         expect(summary['data-receipt-summary-change-label-value']).to eq(I18n.t('dashboard.summary.amount.monthly_change_prefix'))

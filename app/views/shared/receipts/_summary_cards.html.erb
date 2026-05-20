@@ -1,5 +1,5 @@
 <section id="receipts_summary"
-  class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10"
+  class="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 mb-10"
   data-controller="receipt-summary"
   data-receipt-summary-storage-key-value="receiptAmountMode"
   data-receipt-summary-monthly-label-value="<%= t("dashboard.summary.amount.current_month_title") %>"
@@ -12,6 +12,7 @@
     title: t("dashboard.summary.total_count.title"),
     value: "#{receipts_count}#{count_suffix}",
     subtext: t("dashboard.summary.total_count.subtext"),
+    class: "hidden xl:block",
     value_data: {
       receipt_summary_target: "summaryValue",
       summary_key: "receipts_count",
