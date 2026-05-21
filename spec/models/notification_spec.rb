@@ -105,6 +105,14 @@ RSpec.describe Notification, type: :model do
       notification.update!(read_at: Time.current)
     end
 
+    it '削除時に永続通知UIをreplaceする' do
+      notification = create(:notification)
+
+      expect(described_class).to receive(:broadcast_realtime_surfaces_for).with(notification.user)
+
+      notification.destroy!
+    end
+
     it 'badge / dropdown / index header / list をreplaceする' do
       user = create(:user)
       create(:notification, user:, read_at: nil)
@@ -142,6 +150,91 @@ RSpec.describe Notification, type: :model do
           locals: { notifications: user.notifications.recent.limit(50).to_a }
         )
       end
+    end
+  end
+
+  describe '.cleanup_old!' do
+    it '既読から30日を超えた通知を削除し、未読は残す' do
+      user = create(:user)
+      old_read = create(:notification, :read, user:, read_at: 31.days.ago)
+      recent_read = create(:notification, :read, user:, read_at: 29.days.ago)
+      old_unread = create(:notification, user:, created_at: 1.year.ago, read_at: nil)
+
+      expect {
+        described_class.cleanup_old!(now: Time.current)
+      }.to change(described_class, :count).by(-1)
+
+      aggregate_failures do
+        expect(described_class.exists?(old_read.id)).to be(false)
+        expect(described_class.exists?(recent_read.id)).to be(true)
+        expect(described_class.exists?(old_unread.id)).to be(true)
+      end
+    end
+
+    it 'userごとに最新100件を残して古い既読通知を削除する' do
+      user = create(:user)
+      other_user = create(:user)
+      old_notifications = insert_notifications_for(user, count: 105, read_at: 1.day.ago)
+      insert_notifications_for(other_user, count: 3, read_at: 1.day.ago)
+
+      deleted_count = described_class.prune_for_user!(user, broadcast: false)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(5)
+        expect(user.notifications.count).to eq(100)
+        expect(other_user.notifications.count).to eq(3)
+        expect(described_class.where(id: old_notifications.first(5).map { |attributes| attributes[:id] })).to be_empty
+      end
+    end
+
+    it '100件超でも未読通知は削除しない' do
+      user = create(:user)
+      insert_notifications_for(user, count: 100, read_at: 1.day.ago)
+      unread_attributes = insert_notifications_for(user, count: 2, read_at: nil, created_at_start: 200.days.ago)
+
+      deleted_count = described_class.prune_for_user!(user, broadcast: false)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(0)
+        expect(user.notifications.count).to eq(102)
+        expect(described_class.where(id: unread_attributes.map { |attributes| attributes[:id] }).count).to eq(2)
+      end
+    end
+
+    it '削除件数を返し、対象userのsurfaceを更新する' do
+      user = create(:user)
+      old_read = create(:notification, :read, user:, read_at: 31.days.ago)
+
+      expect(described_class).to receive(:broadcast_realtime_surfaces_for).with(user)
+
+      deleted_count = described_class.cleanup_old!(now: Time.current)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(1)
+        expect(described_class.exists?(old_read.id)).to be(false)
+      end
+    end
+  end
+
+  def insert_notifications_for(user, count:, read_at:, created_at_start: count.minutes.ago)
+    now = Time.current
+    attributes = count.times.map do |index|
+      created_at = created_at_start + index.minutes
+      {
+        user_id: user.id,
+        kind: 'receipt_completed',
+        title: "通知#{index}",
+        body: '本文',
+        action_path: "/receipts/#{index}",
+        read_at: read_at,
+        metadata: {},
+        created_at: created_at,
+        updated_at: now
+      }
+    end
+
+    described_class.insert_all!(attributes, returning: %w[id]).rows.map.with_index do |row, index|
+      attributes[index].merge(id: row.first)
     end
   end
 end

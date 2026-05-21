@@ -17,9 +17,13 @@ class Notification < ApplicationRecord
 
   DROPDOWN_LIMIT = 5
   INDEX_LIMIT = 50
+  READ_RETENTION_DAYS = 30
+  MAX_NOTIFICATIONS_PER_USER = 100
 
   after_create_commit :broadcast_realtime_surfaces_after_create
+  after_create_commit :prune_user_notifications_after_create
   after_update_commit :broadcast_realtime_surfaces_after_read_change, if: :saved_change_to_read_at?
+  after_destroy_commit :broadcast_realtime_surfaces_after_destroy
 
   class << self
     def broadcast_realtime_surfaces_for(user)
@@ -35,7 +39,43 @@ class Notification < ApplicationRecord
       broadcast_index_list_for(user, notifications: index_notifications)
     end
 
+    def cleanup_old!(now: Time.current)
+      threshold = now - READ_RETENTION_DAYS.days
+      affected_user_ids = read.where("read_at < ?", threshold).distinct.pluck(:user_id)
+      deleted_count = read.where("read_at < ?", threshold).delete_all
+
+      distinct.pluck(:user_id).each do |user_id|
+        pruned_count = prune_for_user!(user_id, broadcast: false)
+        next if pruned_count.zero?
+
+        deleted_count += pruned_count
+        affected_user_ids << user_id
+      end
+
+      broadcast_cleanup_for(affected_user_ids.uniq)
+      deleted_count
+    end
+
+    def prune_for_user!(user_or_id, broadcast: true)
+      user = user_or_id.is_a?(User) ? user_or_id : User.find_by(id: user_or_id)
+      return 0 unless user
+
+      protected_ids = user.notifications.recent.limit(MAX_NOTIFICATIONS_PER_USER).pluck(:id)
+      deletable_scope = user.notifications.read
+      deletable_scope = deletable_scope.where.not(id: protected_ids) if protected_ids.any?
+      deleted_count = deletable_scope.delete_all
+
+      broadcast_realtime_surfaces_for(user) if broadcast && deleted_count.positive?
+      deleted_count
+    end
+
     private
+
+    def broadcast_cleanup_for(user_ids)
+      User.where(id: user_ids).find_each do |user|
+        broadcast_realtime_surfaces_for(user)
+      end
+    end
 
     def broadcast_unread_badge_for(user, unread_count:)
       Turbo::StreamsChannel.broadcast_replace_later_to(
@@ -116,7 +156,15 @@ class Notification < ApplicationRecord
     broadcast_realtime_surfaces
   end
 
+  def broadcast_realtime_surfaces_after_destroy
+    broadcast_realtime_surfaces
+  end
+
   def broadcast_realtime_surfaces
     self.class.broadcast_realtime_surfaces_for(user)
+  end
+
+  def prune_user_notifications_after_create
+    self.class.prune_for_user!(user)
   end
 end

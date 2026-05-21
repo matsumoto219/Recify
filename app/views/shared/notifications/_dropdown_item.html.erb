@@ -16,42 +16,53 @@
     end
 
   item_classes = [
-    "flex gap-3 border-b token-border-glass px-4 py-3 text-left transition-colors",
-    "token-hover-bg-card-subtle",
+    "flex items-start gap-2 border-b token-border-glass px-4 py-3 text-left transition-colors token-hover-bg-card-subtle",
     unread ? "token-brand-soft-bg" : nil
   ].compact.join(" ")
 %>
 
-<%= link_to item_path, class: item_classes do %>
-  <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full <%= icon_config[:class] %>">
-    <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= icon_config[:icon] %></span>
-  </div>
-
-  <div class="min-w-0 flex-1">
-    <div class="flex items-start gap-2">
-      <p class="min-w-0 flex-1 truncate text-[13px] font-semibold token-text-base" data-notification-dropdown-item-title>
-        <%= notification.title %>
-      </p>
-
-      <% if unread %>
-        <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full token-state-error-soft" aria-label="<%= t("shared.notifications.unread_aria") %>"></span>
-      <% end %>
+<div class="<%= item_classes %>">
+  <%= link_to item_path, class: "flex min-w-0 flex-1 gap-3" do %>
+    <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full <%= icon_config[:class] %>">
+      <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= icon_config[:icon] %></span>
     </div>
 
-    <% if notification.body.present? %>
-      <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed token-text-muted">
-        <%= notification.body %>
-      </p>
-    <% end %>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-start gap-2">
+        <p class="min-w-0 flex-1 truncate text-[13px] font-semibold token-text-base" data-notification-dropdown-item-title>
+          <%= notification.title %>
+        </p>
 
-    <% if stale_notifiable %>
-      <p class="mt-1 text-[12px] token-text-subtle">
-        <%= t("notifications.item.deleted_target") %>
-      </p>
-    <% end %>
+        <% if unread %>
+          <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full token-state-error-soft" aria-label="<%= t("shared.notifications.unread_aria") %>"></span>
+        <% end %>
+      </div>
 
-    <p class="mt-1 text-[10px] token-text-subtle">
-      <%= l(notification.created_at, format: :short) %>
-    </p>
-  </div>
-<% end %>
+      <% if notification.body.present? %>
+        <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed token-text-muted">
+          <%= notification.body %>
+        </p>
+      <% end %>
+
+      <% if stale_notifiable %>
+        <p class="mt-1 text-[12px] token-text-subtle">
+          <%= t("notifications.item.deleted_target") %>
+        </p>
+      <% end %>
+
+      <p class="mt-1 text-[10px] token-text-subtle">
+        <%= l(notification.created_at, format: :short) %>
+      </p>
+    </div>
+  <% end %>
+
+  <%= button_to notification_path(notification),
+    method: :delete,
+    form: { class: "contents" },
+    data: { turbo_confirm: t("notifications.item.delete_confirm") },
+    class: "mt-0.5 inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg token-text-muted header-text-error-hover transition-colors",
+    aria: { label: t("notifications.item.delete_aria", title: notification.title) },
+    title: t("notifications.item.delete_aria", title: notification.title) do %>
+    <span class="material-symbols-outlined text-[17px]" aria-hidden="true">close</span>
+  <% end %>
+</div>

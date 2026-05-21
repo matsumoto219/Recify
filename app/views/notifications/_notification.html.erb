@@ -43,6 +43,17 @@
           notification.action_path,
           class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-base transition-colors" %>
       <% end %>
+
+      <%= button_to notification_path(notification),
+        method: :delete,
+        form: { class: "contents" },
+        data: { turbo_confirm: t("notifications.item.delete_confirm") },
+        class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-error transition-colors cursor-pointer",
+        aria: { label: t("notifications.item.delete_aria", title: notification.title) },
+        title: t("notifications.item.delete_aria", title: notification.title) do %>
+        <span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
+        <span><%= t("notifications.item.delete") %></span>
+      <% end %>
     </div>
   </div>
 </article>

@@ -35,7 +35,7 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :notifications, only: [ :index ] do
+  resources :notifications, only: [ :index, :destroy ] do
     member do
       patch :read
     end

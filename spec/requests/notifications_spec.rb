@@ -49,6 +49,9 @@ RSpec.describe 'Notifications', type: :request do
       surface = dropdown.at_css('[data-notification-dropdown-surface]')
       motion = dropdown.at_css('[data-notification-dropdown-motion]')
       titles = dropdown.css('[data-notification-dropdown-item-title]').map(&:text).map(&:strip)
+      delete_forms = dropdown.css("form[action^='/notifications/'][method='post']")
+      delete_button = delete_forms.first.at_css('button')
+      first_item = delete_forms.first.parent
 
       aggregate_failures do
         expect(dropdown).to be_present
@@ -67,6 +70,14 @@ RSpec.describe 'Notifications', type: :request do
         expect(dropdown.at_css(%([aria-label="#{I18n.t('shared.notifications.unread_aria')}"]))).to be_present
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')
+        expect(delete_forms.size).to eq(5)
+        expect(delete_forms.first['class']).to include('contents')
+        expect(delete_forms.first.at_css('input[name="_method"]')['value']).to eq('delete')
+        expect(first_item['class']).to include('token-hover-bg-card-subtle')
+        expect(dropdown.css('a.token-hover-bg-card-subtle')).to be_empty
+        expect(delete_button.text).to include('close')
+        expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
+        expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
       end
     end
 
@@ -124,11 +135,13 @@ RSpec.describe 'Notifications', type: :request do
     end
 
     it '自分の通知だけを表示する' do
-      create(:notification, user:, title: '自分の通知', body: '確認できます')
+      notification = create(:notification, user:, title: '自分の通知', body: '確認できます')
       create(:notification, user: create(:user), title: '他人の通知')
 
       get notifications_path
       document = Nokogiri::HTML(response.body)
+      delete_form = document.at_css("#notifications_list form[action='#{notification_path(notification)}'][method='post']")
+      delete_button = delete_form.at_css('button')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -137,6 +150,12 @@ RSpec.describe 'Notifications', type: :request do
         expect(response.body).to include('自分の通知')
         expect(response.body).to include('確認できます')
         expect(response.body).not_to include('他人の通知')
+        expect(delete_form).to be_present
+        expect(delete_form.at_css('input[name="_method"]')['value']).to eq('delete')
+        expect(delete_button['data-turbo-confirm']).to eq(I18n.t('notifications.item.delete_confirm'))
+        expect(delete_button.text).to include('close', I18n.t('notifications.item.delete'))
+        expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))
+        expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))
       end
     end
 
@@ -222,6 +241,74 @@ RSpec.describe 'Notifications', type: :request do
         expect(response).to redirect_to(notifications_path)
         expect(user.notifications.unread.count).to eq(0)
         expect(other_notification.reload).to be_unread
+      end
+    end
+  end
+
+  describe 'DELETE /notifications/:id' do
+    it '自分の未読通知を削除し、未読件数も減らす' do
+      notification = create(:notification, user:, read_at: nil)
+
+      expect {
+        delete notification_path(notification)
+      }.to change(user.notifications, :count).by(-1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(notifications_path)
+        expect(user.notifications.unread.count).to eq(0)
+        expect(Notification.exists?(notification.id)).to be(false)
+      end
+    end
+
+    it '既読通知も削除できる' do
+      notification = create(:notification, :read, user:)
+
+      expect {
+        delete notification_path(notification)
+      }.to change(user.notifications, :count).by(-1)
+
+      expect(response).to redirect_to(notifications_path)
+    end
+
+    it '削除済みreceiptに紐づくstale通知も削除できる' do
+      notification = create(
+        :notification,
+        user:,
+        notifiable_type: 'Receipt',
+        notifiable_id: missing_receipt_id,
+        action_path: receipt_path(missing_receipt_id)
+      )
+
+      expect {
+        delete notification_path(notification)
+      }.to change(user.notifications, :count).by(-1)
+
+      expect(response).to redirect_to(notifications_path)
+    end
+
+    it '他人の通知は削除できない' do
+      notification = create(:notification, user: create(:user))
+
+      expect {
+        delete notification_path(notification)
+      }.not_to change(Notification, :count)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'Turbo requestでは通知surfaceを更新する' do
+      notification = create(:notification, user:, read_at: nil)
+
+      delete notification_path(notification), headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq(Mime[:turbo_stream].to_s)
+        expect(response.body).to include('notifications_unread_badge')
+        expect(response.body).to include('notifications_dropdown_content')
+        expect(response.body).to include('notifications_index_header')
+        expect(response.body).to include('notifications_list')
+        expect(Notification.exists?(notification.id)).to be(false)
       end
     end
   end
