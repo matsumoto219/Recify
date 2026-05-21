@@ -284,18 +284,21 @@ body {
 
 .mobile-search-panel-motion {
   pointer-events: none;
+}
+
+.mobile-search-panel-motion .search-panel-mobile > * {
   opacity: 0;
-  transform: translateY(-0.5rem);
-  transition-property: opacity, transform;
+  transition-property: opacity;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-  will-change: opacity, transform;
 }
 
 .mobile-search-panel-motion.is-open {
   pointer-events: auto;
+}
+
+.mobile-search-panel-motion.is-open .search-panel-mobile > * {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .swipe-action {
@@ -354,7 +357,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .collapsible-grid,
-  .mobile-search-panel-motion,
+  .mobile-search-panel-motion .search-panel-mobile > *,
   .swipe-action-foreground-transition,
   .swipe-action-foreground-deleting {
     transition-duration: 1ms;
