@@ -108,6 +108,21 @@ RSpec.describe ReceiptAnalysisService do
     }
   end
 
+  let(:timeout_ai_result) do
+    {
+      success: false,
+      error_code: 'ai_primary_failed',
+      receipt_attributes: {},
+      receipt_items_attributes: [],
+      meta: {
+        primary_provider: 'openai',
+        fallback_used: false,
+        primary_error_code: 'ai_primary_failed',
+        primary_error_message: 'Net::ReadTimeout with #<TCPSocket:(closed)>'
+      }
+    }
+  end
+
   def ai_not_receipt_result(confidence: 0.92, rejection_reason: 'memo')
     meta = {
       document_type: 'development_note',
@@ -462,6 +477,27 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.receipt_payments.size).to eq(1)
         expect(payment.method).to eq('CreditCard')
         expect(payment.amount).to eq(1280)
+      end
+    end
+
+    it 'AI timeout時は安全な理由だけを残してOCR fallbackでreview_neededにする' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(timeout_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_primary_failed')
+        expect(receipt.processing_error_message).to eq(
+          'AI補完に失敗したためOCR結果で保存しました (provider=openai, code=ai_primary_failed, reason=timeout)'
+        )
+        expect(receipt.processing_error_message).not_to include('Net::ReadTimeout')
+        expect(receipt.processing_error_message).not_to include('prompt')
+        expect(receipt.processing_error_message).not_to include('sk-')
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.total_amount).to eq(1280)
       end
     end
 

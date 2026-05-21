@@ -77,7 +77,11 @@ class ReceiptAnalysisService
       )
       handle_ai_not_receipt!(ocr_result, ai_result, receipt_signal)
     else
-      save_fallback_result!(ocr_result, ai_result[:error_code].presence || "ai_invalid_response")
+      save_fallback_result!(
+        ocr_result,
+        ai_result[:error_code].presence || "ai_invalid_response",
+        processing_error_message: ai_fallback_processing_error_message(ai_result)
+      )
     end
   rescue AnalysisError
     raise
@@ -410,7 +414,7 @@ class ReceiptAnalysisService
     receipt
   end
 
-  def save_fallback_result!(ocr_result, error_code)
+  def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
     params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
 
     # === AmountService integration point (fallback) ===
@@ -449,7 +453,7 @@ class ReceiptAnalysisService
     receipt_attributes = params[:receipt_attributes].merge(
       status: "review_needed",
       processing_error_code: error_code,
-      processing_error_message: nil,
+      processing_error_message: processing_error_message,
       review_reasons: review_reasons,
       ocr_completed_at: Time.current
     )
@@ -566,6 +570,38 @@ class ReceiptAnalysisService
     else
       Array(amount_result[:inconsistencies])
     end
+  end
+
+  def ai_fallback_processing_error_message(ai_result)
+    return unless ai_result.is_a?(Hash)
+
+    meta = ai_result[:meta].is_a?(Hash) ? ai_result[:meta].symbolize_keys : {}
+    return if meta.blank?
+
+    provider = meta[:fallback_provider].presence || meta[:primary_provider].presence
+    error_code = meta[:fallback_error_code].presence ||
+      meta[:primary_error_code].presence ||
+      ai_result[:error_code].presence
+    raw_message = meta[:fallback_error_message].presence || meta[:primary_error_message].presence
+    reason = ai_fallback_reason(raw_message)
+
+    details = []
+    details << "provider=#{provider}" if provider.present?
+    details << "code=#{error_code}" if error_code.present?
+    details << "reason=#{reason}" if reason.present?
+
+    return if details.blank?
+
+    "AI補完に失敗したためOCR結果で保存しました (#{details.join(', ')})"
+  end
+
+  def ai_fallback_reason(raw_message)
+    message = raw_message.to_s
+    return "timeout" if message.match?(/timeout|timed out|read timeout|execution expired/i)
+    return "rate_limit" if message.match?(/rate limit|too many requests|\b429\b/i)
+    return "invalid_response" if message.match?(/invalid response|invalid json|parse/i)
+
+    "provider_error"
   end
 
   # ReceiptBuildParamsService が save-ready な item 値を返す前提で、

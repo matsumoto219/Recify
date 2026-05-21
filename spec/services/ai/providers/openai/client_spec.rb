@@ -13,6 +13,23 @@ RSpec.describe Ai::Providers::Openai::Client do
     }
   end
 
+  def with_env(overrides)
+    previous_values = overrides.keys.to_h do |key|
+      [ key, ENV.key?(key) ? ENV[key] : :__unset__ ]
+    end
+
+    overrides.each { |key, value| ENV[key] = value }
+    yield
+  ensure
+    previous_values.each do |key, value|
+      if value == :__unset__
+        ENV.delete(key)
+      else
+        ENV[key] = value
+      end
+    end
+  end
+
   before do
     allow(client).to receive(:retry_jitter_delay).and_return(0.0)
   end
@@ -259,6 +276,24 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(Net::HTTP::Post).to have_received(:new)
         expect(request).to have_received(:body=).with(request_body.to_json)
         expect(result).to eq({ 'id' => 'resp_123' })
+      end
+    end
+
+    it 'ENVでopen/read timeoutを上書きできる' do
+      with_env(
+        'OPENAI_API_KEY' => 'test-openai-key',
+        'OPENAI_OPEN_TIMEOUT' => '12',
+        'OPENAI_READ_TIMEOUT' => '90'
+      ) do
+        allow(client).to receive(:parse_response_body).with(body).and_return({ 'id' => 'resp_timeout_env' })
+
+        result = client.send(:post_request, request_body)
+
+        aggregate_failures do
+          expect(result).to eq({ 'id' => 'resp_timeout_env' })
+          expect(http).to have_received(:open_timeout=).with(12)
+          expect(http).to have_received(:read_timeout=).with(90)
+        end
       end
     end
 
