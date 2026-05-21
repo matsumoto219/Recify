@@ -10,10 +10,14 @@ module Ai
         PROVIDER_NAME = "openai".freeze
         ENDPOINT = "https://api.openai.com/v1/responses".freeze
         DEFAULT_OPEN_TIMEOUT = 10
-        DEFAULT_READ_TIMEOUT = 30
-        MAX_RETRIES = 2
-        BASE_RETRY_DELAY = 1.0
-        MAX_RETRY_DELAY = 10.0
+        DEFAULT_READ_TIMEOUT = 120
+        DEFAULT_MAX_RETRIES = 2
+        DEFAULT_BASE_RETRY_DELAY = 1.0
+        DEFAULT_MAX_RETRY_DELAY = 10.0
+
+        MAX_RETRIES = DEFAULT_MAX_RETRIES
+        BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
+        MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
 
         def call(input)
           body = RequestBuilder.build(input)
@@ -98,7 +102,7 @@ module Ai
             yield
           rescue Net::OpenTimeout, Net::ReadTimeout, Ai::Errors::ProviderError => e
             raise unless retryable_error?(e)
-            raise if attempts > MAX_RETRIES
+            raise if attempts > max_retries
 
             sleep(retry_delay_for(attempts, e))
             retry
@@ -138,11 +142,11 @@ module Ai
         end
 
         def exponential_retry_delay(attempt)
-          BASE_RETRY_DELAY * (2**(attempt - 1))
+          base_retry_delay * (2**(attempt - 1))
         end
 
         def retry_jitter_delay
-          rand * BASE_RETRY_DELAY
+          rand * base_retry_delay
         end
 
         def retry_after_for(error)
@@ -175,7 +179,7 @@ module Ai
         end
 
         def cap_retry_delay(delay)
-          [ delay.to_f, MAX_RETRY_DELAY ].min
+          [ delay.to_f, max_retry_delay ].min
         end
 
         def headers
@@ -205,6 +209,18 @@ module Ai
           ENV.fetch("OPENAI_READ_TIMEOUT") do
             ENV.fetch("OPENAI_TIMEOUT", DEFAULT_READ_TIMEOUT)
           end.to_i
+        end
+
+        def max_retries
+          ENV.fetch("OPENAI_MAX_RETRIES", DEFAULT_MAX_RETRIES).to_i
+        end
+
+        def base_retry_delay
+          ENV.fetch("OPENAI_BASE_RETRY_DELAY", DEFAULT_BASE_RETRY_DELAY).to_f
+        end
+
+        def max_retry_delay
+          ENV.fetch("OPENAI_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
         end
 
         def parse_response_body(body)

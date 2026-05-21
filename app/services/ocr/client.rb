@@ -4,20 +4,26 @@ require "time"
 
 module Ocr
   class Client
-    DEFAULT_TIMEOUT = 15
+    DEFAULT_TIMEOUT = 30
     # NOTE:
     # 現時点では単純な固定間隔 polling。
     # Azure 側の解析完了が遅い場合は、この間隔や回数が先にボトルネックになる。
     # 将来は backoff や provider ごとの最適値調整を検討する。
-    POLL_INTERVAL = 1.0
+    DEFAULT_POLL_INTERVAL = 1.0
     # NOTE:
     # 受信JSONの行数上限ではなく、まずは polling 上限が実運用上のボトルネックになりやすい。
     # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
     # 現時点では保守的な初期値とし、実データを見ながら後で調整する。
-    MAX_POLL = 10
-    MAX_RETRIES = 2
-    BASE_RETRY_DELAY = 0.5
-    MAX_RETRY_DELAY = 10.0
+    DEFAULT_MAX_POLL = 20
+    DEFAULT_MAX_RETRIES = 2
+    DEFAULT_BASE_RETRY_DELAY = 0.5
+    DEFAULT_MAX_RETRY_DELAY = 10.0
+
+    POLL_INTERVAL = DEFAULT_POLL_INTERVAL
+    MAX_POLL = DEFAULT_MAX_POLL
+    MAX_RETRIES = DEFAULT_MAX_RETRIES
+    BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
+    MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethod" ].freeze
 
@@ -65,7 +71,7 @@ module Ocr
 
     def connection
       @connection ||= Faraday.new(url: endpoint) do |f|
-        f.options.timeout = DEFAULT_TIMEOUT
+        f.options.timeout = timeout
         f.adapter Faraday.default_adapter
       end
     end
@@ -90,8 +96,8 @@ module Ocr
     end
 
     def poll_result(op_location)
-      MAX_POLL.times do
-        sleep POLL_INTERVAL
+      max_poll.times do
+        sleep poll_interval
 
         res = with_retries(operation: :poll_result, retry_timeouts: true) do
           Faraday.get(op_location) do |req|
@@ -140,7 +146,7 @@ module Ocr
         yield
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, OcrError, OcrTimeoutError => e
         raise unless retryable_error?(e, retry_timeouts:)
-        raise if attempts > MAX_RETRIES
+        raise if attempts > max_retries
 
         retry_delay = retry_delay_for(attempts, e)
         Rails.logger.warn(
@@ -174,11 +180,11 @@ module Ocr
     end
 
     def exponential_retry_delay(attempt)
-      BASE_RETRY_DELAY * (2**(attempt - 1))
+      base_retry_delay * (2**(attempt - 1))
     end
 
     def retry_jitter_delay
-      rand * BASE_RETRY_DELAY
+      rand * base_retry_delay
     end
 
     def retry_after_for(error)
@@ -188,7 +194,7 @@ module Ocr
     end
 
     def cap_retry_delay(delay)
-      [ delay.to_f, MAX_RETRY_DELAY ].min
+      [ delay.to_f, max_retry_delay ].min
     end
 
     def error_code_for(error)
@@ -305,6 +311,30 @@ module Ocr
 
     def api_key
       ENV.fetch("AZURE_OCR_API_KEY")
+    end
+
+    def timeout
+      ENV.fetch("AZURE_OCR_TIMEOUT", DEFAULT_TIMEOUT).to_i
+    end
+
+    def max_poll
+      ENV.fetch("AZURE_OCR_MAX_POLL", DEFAULT_MAX_POLL).to_i
+    end
+
+    def poll_interval
+      ENV.fetch("AZURE_OCR_POLL_INTERVAL", DEFAULT_POLL_INTERVAL).to_f
+    end
+
+    def max_retries
+      ENV.fetch("AZURE_OCR_MAX_RETRIES", DEFAULT_MAX_RETRIES).to_i
+    end
+
+    def base_retry_delay
+      ENV.fetch("AZURE_OCR_BASE_RETRY_DELAY", DEFAULT_BASE_RETRY_DELAY).to_f
+    end
+
+    def max_retry_delay
+      ENV.fetch("AZURE_OCR_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
     end
   end
 

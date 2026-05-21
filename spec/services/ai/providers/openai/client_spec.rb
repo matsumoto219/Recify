@@ -4,6 +4,16 @@ RSpec.describe Ai::Providers::Openai::Client do
   let(:input) { { filtered_content: 'sample receipt text' } }
   let(:client) { described_class.new }
   let(:request_body) { { model: 'gpt-test', input: 'payload' } }
+  let(:operational_env_keys) do
+    %w[
+      OPENAI_TIMEOUT
+      OPENAI_OPEN_TIMEOUT
+      OPENAI_READ_TIMEOUT
+      OPENAI_MAX_RETRIES
+      OPENAI_BASE_RETRY_DELAY
+      OPENAI_MAX_RETRY_DELAY
+    ]
+  end
   let(:parsed_response) do
     {
       success: true,
@@ -18,7 +28,9 @@ RSpec.describe Ai::Providers::Openai::Client do
       [ key, ENV.key?(key) ? ENV[key] : :__unset__ ]
     end
 
-    overrides.each { |key, value| ENV[key] = value }
+    overrides.each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
     yield
   ensure
     previous_values.each do |key, value|
@@ -27,6 +39,12 @@ RSpec.describe Ai::Providers::Openai::Client do
       else
         ENV[key] = value
       end
+    end
+  end
+
+  around do |example|
+    with_env(operational_env_keys.to_h { |key| [ key, nil ] }) do
+      example.run
     end
   end
 
@@ -165,6 +183,39 @@ RSpec.describe Ai::Providers::Openai::Client do
           expect(client).to have_received(:post_request).with(request_body).exactly(3).times
         end
       }
+    end
+
+    it 'ENVでretry上限を上書きできる' do
+      with_env('OPENAI_MAX_RETRIES' => '0') do
+        allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+        allow(client).to receive(:post_request).with(request_body)
+          .and_raise(Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error'))
+        allow(client).to receive(:sleep)
+
+        expect do
+          client.call(input)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.message).to eq('server error')
+            expect(client).to have_received(:post_request).with(request_body).once
+            expect(client).not_to have_received(:sleep)
+          end
+        }
+      end
+    end
+
+    it 'ENVでretry delayを上書きできる' do
+      with_env(
+        'OPENAI_BASE_RETRY_DELAY' => '2.0',
+        'OPENAI_MAX_RETRY_DELAY' => '3.0'
+      ) do
+        allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+
+        aggregate_failures do
+          expect(client.send(:retry_delay_for, 1)).to eq(2.25)
+          expect(client.send(:retry_delay_for, 3)).to eq(3.0)
+        end
+      end
     end
 
     it 'AuthError は再試行せずそのまま送出する' do

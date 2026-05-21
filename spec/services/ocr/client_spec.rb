@@ -5,6 +5,16 @@ RSpec.describe Ocr::Client do
   let(:image) { Rack::Test::UploadedFile.new(image_path, 'image/jpeg') }
   let(:provider) { 'azure_document_intelligence' }
   let(:client) { described_class.new(image: image, provider: provider) }
+  let(:operational_env_keys) do
+    %w[
+      AZURE_OCR_TIMEOUT
+      AZURE_OCR_MAX_POLL
+      AZURE_OCR_POLL_INTERVAL
+      AZURE_OCR_MAX_RETRIES
+      AZURE_OCR_BASE_RETRY_DELAY
+      AZURE_OCR_MAX_RETRY_DELAY
+    ]
+  end
   let(:operation_location) do
     'https://example.cognitiveservices.azure.com/documentintelligence/documentModels/prebuilt-receipt/analyzeResults/123'
   end
@@ -54,6 +64,31 @@ RSpec.describe Ocr::Client do
     end
 
     connection
+  end
+
+  def with_env(overrides)
+    previous_values = overrides.keys.to_h do |key|
+      [ key, ENV.key?(key) ? ENV[key] : :__unset__ ]
+    end
+
+    overrides.each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+    yield
+  ensure
+    previous_values.each do |key, value|
+      if value == :__unset__
+        ENV.delete(key)
+      else
+        ENV[key] = value
+      end
+    end
+  end
+
+  around do |example|
+    with_env(operational_env_keys.to_h { |key| [ key, nil ] }) do
+      example.run
+    end
   end
 
   before do
@@ -315,6 +350,69 @@ RSpec.describe Ocr::Client do
       aggregate_failures do
         expect(connection).to have_received(:post).once
         expect(client).not_to have_received(:sleep)
+      end
+    end
+  end
+
+  describe 'operational ENV settings' do
+    it 'AZURE_OCR_TIMEOUTでFaraday timeoutを上書きできる' do
+      with_env(
+        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+        'AZURE_OCR_TIMEOUT' => '45'
+      ) do
+        connection = client.send(:connection)
+
+        expect(connection.options.timeout).to eq(45)
+      end
+    end
+
+    it 'AZURE_OCR_MAX_POLLとAZURE_OCR_POLL_INTERVALでpolling上限を上書きできる' do
+      with_env(
+        'AZURE_OCR_MAX_POLL' => '2',
+        'AZURE_OCR_POLL_INTERVAL' => '0.25'
+      ) do
+        running_response = faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' }))
+        allow(Faraday).to receive(:get).and_return(running_response)
+        allow(client).to receive(:sleep)
+
+        expect do
+          client.send(:poll_result, operation_location)
+        end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+
+        aggregate_failures do
+          expect(Faraday).to have_received(:get).twice
+          expect(client).to have_received(:sleep).with(0.25).twice
+        end
+      end
+    end
+
+    it 'AZURE_OCR_MAX_RETRIESでretry上限を上書きできる' do
+      with_env('AZURE_OCR_MAX_RETRIES' => '0') do
+        connection = stub_connection_post(client, faraday_response(status: 429))
+        allow(client).to receive(:sleep)
+
+        expect do
+          client.send(:submit_request)
+        end.to raise_error(Ocr::OcrError, 'external_service_unavailable')
+
+        aggregate_failures do
+          expect(connection).to have_received(:post).once
+          expect(client).not_to have_received(:sleep)
+        end
+      end
+    end
+
+    it 'AZURE_OCR_BASE_RETRY_DELAYとAZURE_OCR_MAX_RETRY_DELAYでretry delayを上書きできる' do
+      with_env(
+        'AZURE_OCR_BASE_RETRY_DELAY' => '2.0',
+        'AZURE_OCR_MAX_RETRY_DELAY' => '3.0'
+      ) do
+        allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+
+        aggregate_failures do
+          expect(client.send(:retry_delay_for, 1)).to eq(2.25)
+          expect(client.send(:retry_delay_for, 3)).to eq(3.0)
+        end
       end
     end
   end
