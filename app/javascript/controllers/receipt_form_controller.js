@@ -27,8 +27,8 @@ export default class extends Controller {
     nextIndex: Number,
     roundingMode: { type: String, default: 'floor' },
     discountRoundingMode: { type: String, default: 'round' },
-    confirmItemRemoval: { type: Boolean, default: true },
-    confirmItemRemovalMessage: { type: String, default: 'Delete this item?' },
+    deleteConfirmationEnabled: { type: Boolean, default: true },
+    deleteConfirmationMessage: { type: String, default: 'Delete this item?' },
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
@@ -96,7 +96,7 @@ export default class extends Controller {
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
     if (!row) return
 
-    if (this.confirmItemRemovalValue && !window.confirm(this.confirmItemRemovalMessageValue)) return
+    if (this.deleteConfirmationEnabledValue && !window.confirm(this.deleteConfirmationMessageValue)) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="destroyField"]')
 

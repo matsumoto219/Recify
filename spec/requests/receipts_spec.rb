@@ -2730,8 +2730,8 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to redirect_to(receipts_path)
     end
 
-    it '明細削除確認設定がONならformにconfirm value trueを渡す' do
-      user.update!(receipt_item_delete_confirmation_enabled: true)
+    it '削除確認設定がONならformにdelete confirmation value trueを渡す' do
+      user.update!(delete_confirmation_enabled: true)
 
       get edit_receipt_path(receipt)
 
@@ -2739,20 +2739,20 @@ RSpec.describe 'Receipts', type: :request do
       form = document.at_css('[data-controller~="receipt-form"]')
 
       aggregate_failures do
-        expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
-        expect(form['data-receipt-form-confirm-item-removal-message-value']).to eq(I18n.t('receipts.form.confirm_item_removal'))
+        expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('true')
+        expect(form['data-receipt-form-delete-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_item_confirm'))
       end
     end
 
-    it '明細削除確認設定がOFFならformにconfirm value falseを渡す' do
-      user.update!(receipt_item_delete_confirmation_enabled: false)
+    it '削除確認設定がOFFならformにdelete confirmation value falseを渡す' do
+      user.update!(delete_confirmation_enabled: false)
 
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
       form = document.at_css('[data-controller~="receipt-form"]')
 
-      expect(form['data-receipt-form-confirm-item-removal-value']).to eq('false')
+      expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('false')
     end
 
     it '外税tax_detailsと金額が整合するレシートではformにexternal basisを渡す' do
@@ -2897,7 +2897,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(form['data-receipt-form-confirm-item-removal-value']).to eq('true')
+        expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('true')
         expect(item_row).to be_present
         expect(item_row['data-action']).to include('mouseenter->receipt-form#scheduleLineTotalTooltip')
         expect(item_row['data-action']).to include('mouseleave->receipt-form#hideLineTotalTooltip')

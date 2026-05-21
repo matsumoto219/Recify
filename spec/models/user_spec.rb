@@ -7,6 +7,12 @@ RSpec.describe User, type: :model do
 
       expect(user.push_notification_enabled).to be(true)
     end
+
+    it 'delete_confirmation_enabled は初期値trueにする' do
+      user = create(:user)
+
+      expect(user.delete_confirmation_enabled).to be(true)
+    end
   end
 
   describe 'avatar validation' do

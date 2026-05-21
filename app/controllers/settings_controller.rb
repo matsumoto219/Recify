@@ -24,14 +24,14 @@ class SettingsController < ApplicationController
             message: message,
             push_notification_enabled: current_user.push_notification_enabled,
             product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled,
-            receipt_item_delete_confirmation_enabled: current_user.receipt_item_delete_confirmation_enabled,
+            delete_confirmation_enabled: current_user.delete_confirmation_enabled,
             theme_preference: current_user.theme_preference
           }
         end
 
         format.turbo_stream do
           flash.now[:notice] = message if current_user.push_notification_enabled?
-          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash")
+          render turbo_stream: settings_update_streams
         end
       end
     else
@@ -60,8 +60,19 @@ class SettingsController < ApplicationController
     params.require(:user).permit(
       :push_notification_enabled,
       :product_name_ai_completion_enabled,
-      :receipt_item_delete_confirmation_enabled,
+      :delete_confirmation_enabled,
       :theme_preference
     )
+  end
+
+  def settings_update_streams
+    [
+      turbo_stream.update("flash", partial: "shared/ui/feedback/flash"),
+      turbo_stream.replace(
+        "notifications_dropdown_content",
+        partial: "shared/notifications/dropdown_content",
+        locals: { notifications: current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a }
+      )
+    ]
   end
 end

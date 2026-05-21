@@ -10,16 +10,16 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'GET /settings' do
-    it 'shows receipt item delete confirmation toggle' do
+    it 'shows delete confirmation toggle' do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include(I18n.t('settings.index.usage.receipt_item_delete_confirmation.label'))
-        expect(response.body).to include(I18n.t('settings.index.usage.receipt_item_delete_confirmation.description'))
-        expect(document.at_css('input[name="receipt_item_delete_confirmation_enabled"]')).to be_present
+        expect(response.body).to include(I18n.t('settings.index.usage.delete_confirmation.label'))
+        expect(response.body).to include(I18n.t('settings.index.usage.delete_confirmation.description'))
+        expect(document.at_css('input[name="delete_confirmation_enabled"]')).to be_present
       end
     end
 
@@ -450,6 +450,49 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '削除確認OFFへのTurbo更新で通知dropdownのconfirmを消す' do
+      notification = create(:notification, user:, title: '通知1')
+
+      patch settings_path,
+            params: { user: { delete_confirmation_enabled: false } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+      stream = document.at_css('turbo-stream[target="notifications_dropdown_content"]')
+      delete_form = stream.at_css("form[action='#{notification_path(notification)}'][method='post']")
+      delete_button = delete_form.at_css('button')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.delete_confirmation_enabled).to be(false)
+        expect(stream).to be_present
+        expect(stream['action']).to eq('replace')
+        expect(delete_button['data-turbo-confirm']).to be_nil
+      end
+    end
+
+    it '削除確認ONへのTurbo更新で通知dropdownのconfirmを出す' do
+      user.update!(delete_confirmation_enabled: false)
+      notification = create(:notification, user:, title: '通知1')
+
+      patch settings_path,
+            params: { user: { delete_confirmation_enabled: true } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+      stream = document.at_css('turbo-stream[target="notifications_dropdown_content"]')
+      delete_form = stream.at_css("form[action='#{notification_path(notification)}'][method='post']")
+      delete_button = delete_form.at_css('button')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.delete_confirmation_enabled).to be(true)
+        expect(stream).to be_present
+        expect(stream['action']).to eq('replace')
+        expect(delete_button['data-turbo-confirm']).to eq(I18n.t('notifications.item.delete_confirm'))
+      end
+    end
+
     it 'JSON更新成功時にlocale経由のmessageを返す' do
       patch settings_path,
             params: { user: { theme_preference: 'dark' } },
@@ -480,17 +523,17 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it 'updates receipt item delete confirmation setting to false' do
+    it 'updates delete confirmation setting to false' do
       patch settings_path,
-            params: { user: { receipt_item_delete_confirmation_enabled: false } },
+            params: { user: { delete_confirmation_enabled: false } },
             as: :json
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(user.reload.receipt_item_delete_confirmation_enabled).to be(false)
+        expect(user.reload.delete_confirmation_enabled).to be(false)
         expect(response.parsed_body).to include(
           'ok' => true,
-          'receipt_item_delete_confirmation_enabled' => false
+          'delete_confirmation_enabled' => false
         )
       end
     end
@@ -527,19 +570,19 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it 'updates receipt item delete confirmation setting to true' do
-      user.update!(receipt_item_delete_confirmation_enabled: false)
+    it 'updates delete confirmation setting to true' do
+      user.update!(delete_confirmation_enabled: false)
 
       patch settings_path,
-            params: { user: { receipt_item_delete_confirmation_enabled: true } },
+            params: { user: { delete_confirmation_enabled: true } },
             as: :json
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(user.reload.receipt_item_delete_confirmation_enabled).to be(true)
+        expect(user.reload.delete_confirmation_enabled).to be(true)
         expect(response.parsed_body).to include(
           'ok' => true,
-          'receipt_item_delete_confirmation_enabled' => true
+          'delete_confirmation_enabled' => true
         )
       end
     end

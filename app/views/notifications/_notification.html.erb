@@ -1,6 +1,7 @@
 <%
   unread = notification.unread?
   stale_notifiable = notification.stale_notifiable?
+  delete_confirm_data = notification.user.delete_confirmation_enabled? ? { turbo_confirm: t("notifications.item.delete_confirm") } : {}
   item_classes = [
     "token-bg-card",
     "token-border-soft",
@@ -47,7 +48,7 @@
       <%= button_to notification_path(notification),
         method: :delete,
         form: { class: "contents" },
-        data: { turbo_confirm: t("notifications.item.delete_confirm") },
+        data: delete_confirm_data,
         class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-error transition-colors cursor-pointer",
         aria: { label: t("notifications.item.delete_aria", title: notification.title) },
         title: t("notifications.item.delete_aria", title: notification.title) do %>

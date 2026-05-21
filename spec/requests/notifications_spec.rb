@@ -82,9 +82,24 @@ RSpec.describe 'Notifications', type: :request do
         expect(delete_forms.first.ancestors('a')).to be_empty
         expect(dropdown.css('a.token-hover-bg-card-subtle')).to be_empty
         expect(delete_button.text).to include('close')
+        expect(delete_button['data-turbo-confirm']).to eq(I18n.t('notifications.item.delete_confirm'))
         expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
         expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
       end
+    end
+
+    it '削除確認設定がOFFならdropdownの通知削除confirmを出さない' do
+      user.update!(delete_confirmation_enabled: false)
+      notification = create(:notification, user:, title: '通知1')
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      dropdown = document.at_css('#notifications-dropdown')
+      delete_form = dropdown.at_css("form[action='#{notification_path(notification)}'][method='post']")
+      delete_button = delete_form.at_css('button')
+
+      expect(delete_button['data-turbo-confirm']).to be_nil
     end
 
     it '削除済みreceiptの通知はdropdownに削除済みreceipt pathを出さない' do
@@ -164,6 +179,19 @@ RSpec.describe 'Notifications', type: :request do
         expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))
         expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))
       end
+    end
+
+    it '削除確認設定がOFFなら通知一覧の削除confirmを出さない' do
+      user.update!(delete_confirmation_enabled: false)
+      notification = create(:notification, user:, title: '自分の通知')
+
+      get notifications_path
+
+      document = Nokogiri::HTML(response.body)
+      delete_form = document.at_css("#notifications_list form[action='#{notification_path(notification)}'][method='post']")
+      delete_button = delete_form.at_css('button')
+
+      expect(delete_button['data-turbo-confirm']).to be_nil
     end
 
     it '削除済みreceiptの通知は一覧に削除済みreceipt pathを出さない' do

@@ -88,7 +88,7 @@ ja:
         push_notification_enabled: "通知"
         product_name_ai_completion_enabled: "AI補完"
         theme_preference: "表示テーマ"
-        receipt_item_delete_confirmation_enabled: "明細削除の確認"
+        delete_confirmation_enabled: "削除確認"
         storage_limit_bytes: "ストレージ上限"
 
     errors:

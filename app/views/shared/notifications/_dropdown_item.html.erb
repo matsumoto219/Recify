@@ -2,6 +2,7 @@
   unread = notification.unread?
   stale_notifiable = notification.stale_notifiable?
   item_path = read_notification_path(notification)
+  delete_confirm_data = notification.user.delete_confirmation_enabled? ? { turbo_confirm: t("notifications.item.delete_confirm") } : {}
 
   icon_config =
     case notification.kind
@@ -61,7 +62,7 @@
   <%= button_to notification_path(notification),
     method: :delete,
     form: { class: "contents" },
-    data: { turbo_confirm: t("notifications.item.delete_confirm") },
+    data: delete_confirm_data,
     class: "mt-0.5 inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg token-text-muted header-text-error-hover transition-colors",
     aria: { label: t("notifications.item.delete_aria", title: notification.title) },
     title: t("notifications.item.delete_aria", title: notification.title) do %>

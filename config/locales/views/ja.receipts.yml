@@ -48,7 +48,7 @@ ja:
       image_empty: 画像なし
       discount: 割引
     form:
-      confirm_item_removal: この明細を削除しますか？
+      delete_item_confirm: この明細を削除しますか？
       titles:
         new: レシート登録
         edit: レシート編集

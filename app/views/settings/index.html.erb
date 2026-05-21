@@ -200,10 +200,10 @@
               remote: true %>
 
         <%= render "shared/ui/form/toggle_switch",
-              label: t("settings.index.usage.receipt_item_delete_confirmation.label"),
-              description: t("settings.index.usage.receipt_item_delete_confirmation.description"),
-              checked: current_user.receipt_item_delete_confirmation_enabled,
-              name: "receipt_item_delete_confirmation_enabled",
+              label: t("settings.index.usage.delete_confirmation.label"),
+              description: t("settings.index.usage.delete_confirmation.description"),
+              checked: current_user.delete_confirmation_enabled,
+              name: "delete_confirmation_enabled",
               url: settings_path,
               remote: true %>
 
