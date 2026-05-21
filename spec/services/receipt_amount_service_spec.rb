@@ -376,6 +376,24 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'treats blank quantity as one when calculating countable item totals' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 250, quantity: nil, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :manual
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:quantity]).to eq(BigDecimal('1'))
+        expect(item[:line_total]).to eq(250)
+        expect(result[:resolved][:total]).to eq(250)
+      end
+    end
+
     it 'keeps discounted line_total derived from original_line_total minus discount_amount' do
       result = call_service(
         receipt: {},

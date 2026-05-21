@@ -283,6 +283,7 @@ class ReceiptsController < ApplicationController
 
     permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
     normalize_receipt_item_tax_rates!(permitted)
+    prune_blank_new_receipt_items!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
   end
@@ -324,6 +325,47 @@ class ReceiptsController < ApplicationController
     BigDecimal(raw_tax_rate.to_s) / 100
   rescue ArgumentError
     nil
+  end
+
+  def prune_blank_new_receipt_items!(permitted)
+    items_attributes = permitted["receipt_items_attributes"]
+    return if items_attributes.blank?
+
+    items_attributes.delete_if do |_index, item_attributes|
+      blank_new_receipt_item_attributes?(item_attributes)
+    end
+
+    permitted.delete("receipt_items_attributes") if items_attributes.empty?
+  end
+
+  def blank_new_receipt_item_attributes?(item_attributes)
+    return false if item_attributes["id"].present?
+    return false if ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+
+    !receipt_item_meaningful_input?(item_attributes)
+  end
+
+  def receipt_item_meaningful_input?(item_attributes)
+    return true if %w[confirmed_name category product_code].any? { |field| item_attributes[field].present? }
+    return true if Array(item_attributes["review_reasons"]).reject(&:blank?).present?
+    return true if numeric_input_present?(item_attributes["price"])
+    return true if positive_numeric_input?(item_attributes["line_total"])
+    return true if positive_numeric_input?(item_attributes["tax_rate"])
+    return true if positive_numeric_input?(item_attributes["discount_rate"])
+
+    false
+  end
+
+  def numeric_input_present?(value)
+    !value.nil? && value.to_s.strip != ""
+  end
+
+  def positive_numeric_input?(value)
+    return false unless numeric_input_present?(value)
+
+    BigDecimal(value.to_s).positive?
+  rescue ArgumentError
+    false
   end
 
   def apply_amount_calculation!(permitted, context:)

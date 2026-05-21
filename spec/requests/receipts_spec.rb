@@ -560,6 +560,27 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it '新規明細はquantityを1で初期表示し金額と率は空欄にする' do
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      item_row = document.css('[data-receipt-form-target="itemRow"]').first
+      template_html = document.at_css('template[data-receipt-form-target="template"]')&.inner_html.to_s
+      template = Nokogiri::HTML.fragment(template_html)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(item_row.at_css('[data-receipt-form-target="quantityInput"]')['value']).to eq('1')
+        expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['value'].to_s).to eq('')
+        expect(item_row.at_css('[data-receipt-form-target="discountRateInput"]')['value'].to_s).to eq('')
+        expect(item_row.at_css('[data-receipt-form-target="taxRateInput"]')['value'].to_s).to eq('')
+        expect(template.at_css('[data-receipt-form-target="quantityInput"]')['value']).to eq('1')
+        expect(template.at_css('[data-receipt-form-target="priceInput"]')['value'].to_s).to eq('')
+        expect(template.at_css('[data-receipt-form-target="discountRateInput"]')['value'].to_s).to eq('')
+        expect(template.at_css('[data-receipt-form-target="taxRateInput"]')['value'].to_s).to eq('')
+      end
+    end
+
     context '未ログイン時' do
       before do
         sign_out user
@@ -1392,6 +1413,132 @@ RSpec.describe 'Receipts', type: :request do
         expect(item.discount_rate).to eq(BigDecimal('0.105'))
         expect(item.line_total).to eq(894)
         expect(receipt.total_amount).to eq(894)
+      end
+    end
+
+    it '空の新規明細行はline_total 0の明細として保存しない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '空明細除外',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '',
+                category: '',
+                price: '',
+                quantity: '1',
+                quantity_unit: '個',
+                product_code: '',
+                discount_rate: '',
+                tax_rate: '',
+                line_total: '0',
+                needs_review: false
+              }
+            }
+          }
+        }
+      end.to change(Receipt, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.total_amount).to eq(0)
+      end
+    end
+
+    it '空欄quantityは1として保存し、price/tax_rate/discount_rateの空欄はnilを維持する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '数量空欄作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '金額未入力商品',
+              price: '',
+              quantity: '',
+              quantity_unit: '個',
+              discount_rate: '',
+              tax_rate: '',
+              line_total: '',
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      item = Receipt.order(:id).last.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(item.quantity).to eq(BigDecimal('1'))
+        expect(item.price).to be_nil
+        expect(item.tax_rate).to be_nil
+        expect(item.discount_rate).to be_nil
+      end
+    end
+
+    it '明示的な0円明細は保存できる' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '0円明細作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '0円商品',
+              price: '0',
+              quantity: '',
+              quantity_unit: '個',
+              discount_rate: '',
+              tax_rate: '',
+              line_total: '0',
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      item = Receipt.order(:id).last.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(item.confirmed_name).to eq('0円商品')
+        expect(item.price).to eq(0)
+        expect(item.quantity).to eq(BigDecimal('1'))
+        expect(item.line_total).to eq(0)
+      end
+    end
+
+    it '明示的な0のtax_rateとdiscount_rateは0として保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '0率明細作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '0率商品',
+              price: '100',
+              quantity: '',
+              quantity_unit: '個',
+              discount_rate: '0',
+              tax_rate: '0',
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      item = Receipt.order(:id).last.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(item.quantity).to eq(BigDecimal('1'))
+        expect(item.tax_rate).to eq(BigDecimal('0'))
+        expect(item.discount_rate).to eq(BigDecimal('0'))
+        expect(item.line_total).to eq(100)
       end
     end
 
@@ -2680,6 +2827,29 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'quantityがnilの既存明細は編集フォームで1として表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '数量未入力商品',
+        price: 500,
+        quantity: nil,
+        quantity_unit: '個',
+        line_total: 500,
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_name_input = document.at_css('input[value="数量未入力商品"]')
+      item_row = item_name_input.ancestors.find { |node| node['data-receipt-form-target'].to_s == 'itemRow' }
+      quantity_input = item_row.at_css('[data-receipt-form-target="quantityInput"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(quantity_input['value']).to eq('1')
+      end
+    end
+
     it '既存割引額からdiscount_rate入力値を表示する' do
       receipt.receipt_items.create!(
         confirmed_name: '割引商品',
@@ -3476,6 +3646,45 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(item.line_total).to eq(1_500)
         expect(receipt.total_amount).to eq(1_500)
+      end
+    end
+
+    it '既存明細のquantity空欄保存は1として扱う' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '数量空欄更新商品',
+        price: 500,
+        quantity: 2,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_000,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '数量空欄更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 500,
+              quantity: '',
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.quantity).to eq(BigDecimal('1'))
+        expect(item.line_total).to eq(500)
       end
     end
 

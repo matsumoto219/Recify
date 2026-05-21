@@ -28,6 +28,7 @@
   line_total_value = new_record ? 0 : item.line_total.to_i
   original_line_total_value = new_record ? 0 : (item.original_line_total.presence || item.line_total.to_i)
   selected_unit = new_record ? ReceiptItem::DEFAULT_QUANTITY_UNIT : item.quantity_unit.presence || ReceiptItem::DEFAULT_QUANTITY_UNIT
+  quantity_value = new_record ? "1" : (item.formatted_quantity_for_input.presence || "1")
 %>
 
 <div class="<%= row_class %>"
@@ -74,7 +75,7 @@
         <%= render "shared/ui/form/quantity_unit_number_field",
                    f: item_form,
                    label: t("receipts.item_fields.quantity"),
-                   value: (new_record ? nil : item.formatted_quantity_for_input),
+                   value: quantity_value,
                    selected_unit: selected_unit,
                    unit_options: ReceiptItem.quantity_unit_options,
                    show_label: false,
