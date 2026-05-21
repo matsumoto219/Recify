@@ -19,18 +19,14 @@
           breadcrumb_path: receipts_path %>
 
     <div class="flex items-center gap-3">
-      <%= render "shared/ui/actions/button",
-            as: :link,
-            href: receipt_path(@receipt),
-            variant: :secondary,
-            label: t("common.delete"),
-            icon: "delete",
-            size: :compact,
-            radius: :xl,
-            data: {
-              turbo_method: :delete,
-              turbo_confirm: t("common.confirm_delete")
-            } %>
+      <%= button_to receipt_path(@receipt),
+            method: :delete,
+            form: { class: "contents" },
+            data: { turbo_confirm: t("common.confirm_delete") },
+            class: "inline-flex justify-center group items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed font-medium btn-secondary border px-6 py-2.5 text-sm rounded-xl" do %>
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span>
+        <span><%= t("common.delete") %></span>
+      <% end %>
 
       <%= render "shared/ui/actions/button",
             as: :link,

@@ -30,12 +30,14 @@
   </head>
 
   <body data-theme-preference="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
+    <% show_dashboard_shell = user_signed_in? && !(controller_name == "home" && action_name == "index") %>
+
     <div id="flash">
       <%= render "shared/ui/feedback/flash" %>
     </div>
 
     <noscript>
-      <div class="relative z-[10000] border-b token-border-soft token-bg-card px-4 py-3 token-text-base shadow-sm">
+      <div class="relative z-30 <%= 'mt-[calc(4rem+env(safe-area-inset-top))]' if show_dashboard_shell %> border-b token-border-soft token-bg-card px-4 py-3 token-text-base shadow-sm">
         <div class="mx-auto max-w-5xl text-center">
           <p class="text-sm font-bold"><%= t("shared.noscript.title") %></p>
           <p class="mt-1 text-sm leading-relaxed token-text-muted"><%= t("shared.noscript.body") %></p>
@@ -44,8 +46,6 @@
     </noscript>
 
     <div id="toast-stream" class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm"></div>
-
-    <% show_dashboard_shell = user_signed_in? && !(controller_name == "home" && action_name == "index") %>
 
     <% if show_dashboard_shell %>
       <%= render "layouts/dashboard_shell" do %>

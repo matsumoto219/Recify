@@ -151,6 +151,24 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
+  describe 'DELETE /users/sign_out' do
+    let(:user) { create(:user) }
+
+    it 'keeps sign out unavailable over GET' do
+      expect do
+        Rails.application.routes.recognize_path(destroy_user_session_path, method: :get)
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it 'signs out through the DELETE route' do
+      sign_in user
+
+      delete destroy_user_session_path
+
+      expect(response).to have_http_status(:see_other)
+    end
+  end
+
   describe 'GET /users/password/new' do
     it 'renders password reset copy through locale keys' do
       get new_user_password_path

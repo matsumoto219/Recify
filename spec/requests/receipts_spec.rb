@@ -88,6 +88,21 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it 'ヘッダーのログアウト導線はJSなしでもDELETE送信できるformを描画する' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      sign_out_form = document.at_css("form[action='#{destroy_user_session_path}'][method='post']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(sign_out_form).to be_present
+        expect(sign_out_form.at_css('input[name="_method"]')['value']).to eq('delete')
+        expect(sign_out_form.at_css('button')).to be_present
+        expect(sign_out_form.text).to include(I18n.t('common.logout'))
+      end
+    end
+
     it '自分のレシートだけが表示される' do
       get receipts_path
 
@@ -1996,6 +2011,20 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.show.store_information'))
         expect(response.body).to include(I18n.t('receipts.show.items_title'))
         expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
+      end
+    end
+
+    it '削除導線はJSなしでもDELETE送信できるformを描画する' do
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      delete_form = document.at_css("form[action='#{receipt_path(receipt)}'][method='post']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(delete_form).to be_present
+        expect(delete_form.at_css('input[name="_method"]')['value']).to eq('delete')
+        expect(delete_form.text).to include(I18n.t('common.delete'))
       end
     end
 
