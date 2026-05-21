@@ -177,7 +177,7 @@ ja:
     processing_error_codes:
       no_text_detected: 画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。
       receipt_not_detected: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。
-      unsupported_country: 現在このレシート形式には対応していません。別のレシート画像でお試しください。
+      unsupported_country: 現在は日本のレシートのみ対応しています。日本国内のレシート画像でお試しください。
       ai_not_receipt: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。
       ai_not_receipt_uncertain: レシート判定に迷いがあります。OCR結果を確認してください。
       ai_unavailable: AI補完は一時停止中です。OCR結果を確認・修正してください。
