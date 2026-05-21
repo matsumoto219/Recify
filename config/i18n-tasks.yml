@@ -1,0 +1,81 @@
+# i18n-tasks configuration for Recify.
+# Keep this aligned with config.i18n.load_path in config/application.rb.
+
+base_locale: ja
+locales: [ja]
+internal_locale: en
+
+data:
+  adapter: I18n::Tasks::Data::FileSystem
+  router: pattern_router
+  read:
+    - config/locales/%{locale}.yml
+    - config/locales/%{locale}.*.yml
+    - config/locales/**/%{locale}.yml
+    - config/locales/**/%{locale}.*.yml
+  write:
+    - ["activerecord.*", "config/locales/models/%{locale}.activerecord.yml"]
+    - ["enums.*", "config/locales/models/%{locale}.enums.yml"]
+    - ["flash.*", "config/locales/messages/%{locale}.flash.yml"]
+    - ["auth.*", "config/locales/views/%{locale}.auth.yml"]
+    - ["common.*", "config/locales/views/%{locale}.common.yml"]
+    - ["dashboard.*", "config/locales/views/%{locale}.dashboard.yml"]
+    - ["errors.*", "config/locales/views/%{locale}.errors.yml"]
+    - ["notifications.*", "config/locales/views/%{locale}.notifications.yml"]
+    - ["receipt_cards.*", "config/locales/views/%{locale}.receipt_cards.yml"]
+    - ["receipts.*", "config/locales/views/%{locale}.receipts.yml"]
+    - ["search.*", "config/locales/views/%{locale}.search.yml"]
+    - ["settings.*", "config/locales/views/%{locale}.settings.yml"]
+    - ["shared.*", "config/locales/views/%{locale}.shared.yml"]
+    - config/locales/%{locale}.yml
+  external:
+    - "<%= %x[bundle info devise-i18n --path].chomp %>/rails/locales/%{locale}.yml"
+  sort: false
+
+search:
+  paths:
+    - app/
+  relative_roots:
+    - app/controllers
+    - app/helpers
+    - app/mailers
+    - app/presenters
+    - app/views
+  exclude:
+    - app/assets/images
+    - app/assets/fonts
+    - app/assets/videos
+    - app/assets/builds
+  strict: true
+  ast_matchers:
+    - I18n::Tasks::Scanners::AstMatchers::RailsModelMatcher
+    - I18n::Tasks::Scanners::AstMatchers::DefaultI18nSubjectMatcher
+
+ignore_unused:
+  # Rails and validation lookup these dynamically.
+  - activerecord.*
+  - errors.messages.*
+
+  # Domain labels are referenced through dynamic enum/status/review code paths.
+  - enums.*
+  - review_reasons.*
+  - processing_error_codes.*
+  - mismatch_codes.*
+  - payment_method.*
+  - category.*
+  - receipts.processing_error_codes.*
+  - receipts.processing_errors.*
+  - receipts.review_reason_sources.*
+  - shared.service_status.*
+  - shared.setting_status.*
+  - shared.storage_usage.messages.*
+
+  # Devise-i18n and generated Devise flows include optional features that are
+  # not enabled in the current User model, but may be enabled later.
+  - devise.*
+  - auth.links.confirmation_instructions
+  - auth.links.unlock_instructions
+
+ignore_missing:
+  # Provided by devise-i18n external locale data at runtime.
+  - errors.messages.not_saved
