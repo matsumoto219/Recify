@@ -4,7 +4,7 @@
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
-  <details class="group w-full min-w-0 max-w-full" data-receipt-warning-notes-card>
+  <details class="collapsible-details group w-full min-w-0 max-w-full" data-controller="collapsible-details" data-receipt-warning-notes-card>
     <summary class="flex w-full min-w-0 max-w-full cursor-pointer list-none items-start gap-3 focus:outline-none [&::-webkit-details-marker]:hidden" data-receipt-notes-summary>
       <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-state-warning-soft">
         <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">info</span>
@@ -27,17 +27,21 @@
       </div>
     </summary>
 
-    <div class="mt-4 min-w-0 max-w-full space-y-4 pl-12" data-receipt-notes-details>
-      <% warning_groups.each do |source, reasons| %>
-        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
-          <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-warning"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
-          <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
-            <% receipt.review_reason_labels_for(reasons).each do |reason| %>
-              <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
-            <% end %>
-          </ul>
+    <div class="collapsible-grid min-w-0 max-w-full" data-collapsible-details-target="content" data-receipt-notes-details>
+      <div class="collapsible-grid-inner">
+        <div class="mt-4 min-w-0 max-w-full space-y-4 pl-12">
+          <% warning_groups.each do |source, reasons| %>
+            <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
+              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-warning"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
+              <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
+                <% receipt.review_reason_labels_for(reasons).each do |reason| %>
+                  <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+                <% end %>
+              </ul>
+            </div>
+          <% end %>
         </div>
-      <% end %>
+      </div>
     </div>
   </details>
 <% end %>

@@ -53,42 +53,44 @@
         </button>
       <% end %>
 
-      <div <%= show_toggle ? ' class="hidden" data-receipt-image-card-target="content"'.html_safe : ' class=""'.html_safe %>>
-        <div class="mt-4 w-full flex justify-center">
-          <% preview_tag = show_modal ? :button : :div %>
-          <% preview_options = {
-            class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'cursor-zoom-in text-left' : ''}"
-          } %>
-          <% if show_modal %>
-            <% preview_options[:type] = "button" %>
-            <% preview_options[:data] = { action: "click->receipt-image-card#openModal" } %>
-            <% preview_options[:aria] = { label: t("shared.receipt_image_card.full_preview_aria") } %>
-          <% end %>
-          <%= content_tag preview_tag, **preview_options do %>
-            <%= image_tag displayable_image,
-                  class: "w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
-                  data: { receipt_image_card_target: "previewImage" } %>
+      <div class="<%= show_toggle ? 'collapsible-grid' : '' %>" <%= show_toggle ? 'data-receipt-image-card-target="content"'.html_safe : "" %>>
+        <div class="<%= show_toggle ? 'collapsible-grid-inner' : '' %>">
+          <div class="mt-4 w-full flex justify-center">
+            <% preview_tag = show_modal ? :button : :div %>
+            <% preview_options = {
+              class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'cursor-zoom-in text-left' : ''}"
+            } %>
+            <% if show_modal %>
+              <% preview_options[:type] = "button" %>
+              <% preview_options[:data] = { action: "click->receipt-image-card#openModal" } %>
+              <% preview_options[:aria] = { label: t("shared.receipt_image_card.full_preview_aria") } %>
+            <% end %>
+            <%= content_tag preview_tag, **preview_options do %>
+              <%= image_tag displayable_image,
+                    class: "w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
+                    data: { receipt_image_card_target: "previewImage" } %>
 
-            <div class="absolute inset-0 image-preview-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-              <div class="floating-action-button p-3 rounded-full flex items-center justify-center backdrop-blur-md">
-                <span class="material-symbols-outlined field-text">zoom_in</span>
+              <div class="absolute inset-0 image-preview-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <div class="floating-action-button p-3 rounded-full flex items-center justify-center backdrop-blur-md">
+                  <span class="material-symbols-outlined field-text">zoom_in</span>
+                </div>
               </div>
+            <% end %>
+          </div>
+
+          <% if show_download %>
+            <!-- アクション（ダウンロード） -->
+            <!-- TODO ファイル名や拡張子の仕様を決める -->
+            <div class="mt-3 flex justify-end">
+              <%= link_to url_for(displayable_image),
+                    download: displayable_image.filename.to_s,
+                    class: "inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
+                <span class="material-symbols-outlined text-sm">download</span>
+                <%= t("shared.receipt_image_card.download") %>
+              <% end %>
             </div>
           <% end %>
         </div>
-
-        <% if show_download %>
-          <!-- アクション（ダウンロード） -->
-          <!-- TODO ファイル名や拡張子の仕様を決める -->
-          <div class="mt-3 flex justify-end">
-            <%= link_to url_for(displayable_image),
-                  download: displayable_image.filename.to_s,
-                  class: "inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
-              <span class="material-symbols-outlined text-sm">download</span>
-              <%= t("shared.receipt_image_card.download") %>
-            <% end %>
-          </div>
-        <% end %>
       </div>
     <% else %>
       <% if keep_image_enabled %>

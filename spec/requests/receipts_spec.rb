@@ -2927,7 +2927,10 @@ RSpec.describe 'Receipts', type: :request do
 
         expect(item_details_toggle['data-action']).to include('click->receipt-form#toggleItemDetails')
         expect(item_details_toggle['aria-expanded']).to eq('false')
-        expect(item_details_panel['class']).to include('hidden')
+        expect(item_details_panel['class']).to include('collapsible-grid')
+        expect(item_details_panel['class']).not_to include('is-open')
+        expect(item_details_panel['aria-hidden']).to eq('true')
+        expect(item_details_panel.has_attribute?('inert')).to be(true)
         expect(item_details_panel.at_css('[data-receipt-form-target="discountRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_present

@@ -255,6 +255,56 @@ body {
   will-change: opacity, transform, translate;
 }
 
+/* ===== Disclosure / Collapse Motion ===== */
+.collapsible-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transition-property: grid-template-rows, opacity;
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  will-change: grid-template-rows, opacity;
+}
+
+.collapsible-grid.is-open,
+.collapsible-details:not([data-collapsible-enhanced="true"])[open] > .collapsible-grid,
+.collapsible-details[data-collapsible-enhanced="true"][data-collapsible-open="true"] > .collapsible-grid {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.collapsible-grid-inner {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.mobile-search-panel-motion {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-0.5rem);
+  transition-property: opacity, transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  will-change: opacity, transform;
+}
+
+.mobile-search-panel-motion.is-open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-grid,
+  .mobile-search-panel-motion {
+    transition-duration: 1ms;
+  }
+}
+
 /* ===== Ambient Background Utilities ===== */
 .ambient-background {
   display: none;

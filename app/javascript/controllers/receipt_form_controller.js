@@ -41,10 +41,14 @@ export default class extends Controller {
   connect () {
     this.lineTotalTooltipDelay = 500
     this.continuousAmountUpdateThreshold = 150
+    this.handleBeforeCache = this.handleBeforeCache.bind(this)
+    document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+    this.syncItemDetailsPanels()
     this.syncQuantityInputSteps()
   }
 
   disconnect () {
+    document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
     this.amountAnimationTargets().forEach((target) => this.cancelAmountAnimation(target))
   }
@@ -60,6 +64,7 @@ export default class extends Controller {
 
     event.currentTarget.insertAdjacentHTML('beforebegin', html)
     this.nextIndexValue = index + 1
+    this.syncItemDetailsPanels()
     this.syncQuantityInputSteps()
   }
 
@@ -124,19 +129,46 @@ export default class extends Controller {
     const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
     if (!panel) return
 
-    const willOpen = panel.classList.contains('hidden')
+    const willOpen = !this.itemDetailsPanelOpen(panel)
     if (willOpen) this.hideLineTotalTooltipFor(row)
 
-    panel.classList.toggle('hidden', !willOpen)
-    row.classList.toggle('receipt-form-item-details-open', willOpen)
+    this.setItemDetailsOpen({ row, panel, toggles, icons, open: willOpen })
+  }
+
+  syncItemDetailsPanels () {
+    this.itemRowTargets.forEach((row) => {
+      const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
+      const toggles = row.querySelectorAll('[data-receipt-form-target="itemDetailsToggle"]')
+      const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
+      const open = row.classList.contains('receipt-form-item-details-open') || this.itemDetailsPanelOpen(panel)
+
+      this.setItemDetailsOpen({ row, panel, toggles, icons, open })
+    })
+  }
+
+  setItemDetailsOpen ({ row, panel, toggles, icons, open }) {
+    if (!panel) return
+
+    panel.classList.toggle('is-open', open)
+    panel.toggleAttribute('inert', !open)
+    panel.setAttribute('aria-hidden', String(!open))
+    row?.classList.toggle('receipt-form-item-details-open', open)
 
     toggles.forEach((toggle) => {
-      toggle.setAttribute('aria-expanded', String(willOpen))
+      toggle.setAttribute('aria-expanded', String(open))
     })
 
     icons.forEach((icon) => {
-      icon.classList.toggle('rotate-180', willOpen)
+      icon.classList.toggle('rotate-180', open)
     })
+  }
+
+  itemDetailsPanelOpen (panel) {
+    return Boolean(panel?.classList.contains('is-open'))
+  }
+
+  handleBeforeCache () {
+    this.syncItemDetailsPanels()
   }
 
   scheduleLineTotalTooltip (event) {

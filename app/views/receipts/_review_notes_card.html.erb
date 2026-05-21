@@ -5,7 +5,7 @@
 %>
 
 <%= render "shared/ui/layout/surface_card", variant: :warning, padding: :md, class: "min-w-0 max-w-full" do %>
-  <details class="group w-full min-w-0 max-w-full" data-receipt-review-notes-card>
+  <details class="collapsible-details group w-full min-w-0 max-w-full" data-controller="collapsible-details" data-receipt-review-notes-card>
     <summary class="flex w-full min-w-0 max-w-full cursor-pointer list-none items-start gap-3 focus:outline-none [&::-webkit-details-marker]:hidden" data-receipt-notes-summary>
       <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-state-error-soft">
         <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">error</span>
@@ -28,40 +28,44 @@
       </div>
     </summary>
 
-    <div class="mt-4 min-w-0 max-w-full space-y-4 pl-12" data-receipt-notes-details>
-      <% review_groups.each do |source, reasons| %>
-        <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-          <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
-          <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
-            <% receipt.review_reason_labels_for(reasons).each do |reason| %>
-              <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
-            <% end %>
-          </ul>
-        </div>
-      <% end %>
-
-      <% if review_items.any? %>
-        <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
-          <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.review_notes_card.item_label") %></div>
-          <ul class="min-w-0 max-w-full space-y-2 text-sm token-text-base break-words [overflow-wrap:anywhere]">
-            <% review_items.each do |review_item| %>
-              <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || t("receipts.review_notes_card.item_name_missing") %>
-              <li class="min-w-0 max-w-full">
-                <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
-                <% if review_item.review_reason_labels.any? %>
-                  <ul class="mt-1 min-w-0 max-w-full space-y-1 pl-5 text-xs token-text-muted list-disc break-words [overflow-wrap:anywhere]">
-                    <% review_item.review_reason_labels.each do |reason| %>
-                      <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
-                    <% end %>
-                  </ul>
-                <% else %>
-                  <p class="mt-1 break-words [overflow-wrap:anywhere] text-xs token-text-muted"><%= t("receipts.review_notes_card.item_default_message") %></p>
+    <div class="collapsible-grid min-w-0 max-w-full" data-collapsible-details-target="content" data-receipt-notes-details>
+      <div class="collapsible-grid-inner">
+        <div class="mt-4 min-w-0 max-w-full space-y-4 pl-12">
+          <% review_groups.each do |source, reasons| %>
+            <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
+              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
+              <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
+                <% receipt.review_reason_labels_for(reasons).each do |reason| %>
+                  <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
                 <% end %>
-              </li>
-            <% end %>
-          </ul>
+              </ul>
+            </div>
+          <% end %>
+
+          <% if review_items.any? %>
+            <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
+              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.review_notes_card.item_label") %></div>
+              <ul class="min-w-0 max-w-full space-y-2 text-sm token-text-base break-words [overflow-wrap:anywhere]">
+                <% review_items.each do |review_item| %>
+                  <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || t("receipts.review_notes_card.item_name_missing") %>
+                  <li class="min-w-0 max-w-full">
+                    <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
+                    <% if review_item.review_reason_labels.any? %>
+                      <ul class="mt-1 min-w-0 max-w-full space-y-1 pl-5 text-xs token-text-muted list-disc break-words [overflow-wrap:anywhere]">
+                        <% review_item.review_reason_labels.each do |reason| %>
+                          <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+                        <% end %>
+                      </ul>
+                    <% else %>
+                      <p class="mt-1 break-words [overflow-wrap:anywhere] text-xs token-text-muted"><%= t("receipts.review_notes_card.item_default_message") %></p>
+                    <% end %>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
+          <% end %>
         </div>
-      <% end %>
+      </div>
     </div>
   </details>
 <% end %>

@@ -54,6 +54,7 @@ export default class extends Controller {
     this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
     this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
+    this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.sync()
 
     this.initializeFileName()
@@ -62,6 +63,7 @@ export default class extends Controller {
     this.handleModalCloseClick = this.handleModalCloseClick.bind(this)
     this.handleModalPanelClick = this.handleModalPanelClick.bind(this)
     document.addEventListener('keydown', this.handleKeydown)
+    document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     this.addModalEventListeners()
   }
 
@@ -71,6 +73,7 @@ export default class extends Controller {
     this.unlockBodyScroll()
     this.revokeObjectUrl()
     document.removeEventListener('keydown', this.handleKeydown)
+    document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
   }
 
   shouldCollapseInitiallyForMobile () {
@@ -284,6 +287,14 @@ export default class extends Controller {
     this.closeModal()
   }
 
+  handleBeforeCache () {
+    if (this.modalElement && !this.modalElement.classList.contains('hidden')) {
+      this.closeModal()
+    }
+
+    this.sync()
+  }
+
   handleModalCloseClick (event) {
     event.preventDefault()
     this.closeModal()
@@ -344,7 +355,9 @@ export default class extends Controller {
 
   sync () {
     if (this.hasContentTarget) {
-      this.contentTarget.classList.toggle('hidden', !this.isOpen)
+      this.contentTarget.classList.toggle('is-open', this.isOpen)
+      this.contentTarget.toggleAttribute('inert', !this.isOpen)
+      this.contentTarget.setAttribute('aria-hidden', String(!this.isOpen))
     }
 
     if (this.hasChevronTarget) {

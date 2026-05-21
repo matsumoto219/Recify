@@ -13,10 +13,13 @@ export default class extends Controller {
     this.handleOutsideTap = this.handleOutsideTap.bind(this)
     this.handleKeydown = this.handleKeydown.bind(this)
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
-    this.close()
     this.debounceTimer = null
+    this.closeTimer = null
+    this.openFrame = null
+    this.focusFrame = null
     this.searchAbortController = null
     this.searchSequence = 0
+    this.close({ animated: false })
     document.addEventListener('pointerdown', this.handleOutsideTap)
     document.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
@@ -27,25 +30,68 @@ export default class extends Controller {
     document.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     clearTimeout(this.debounceTimer)
+    this.clearCloseTimer()
+    this.cancelOpenFrame()
+    this.cancelFocusFrame()
     this.abortCurrentSearch()
   }
 
   open () {
     if (!this.hasPanelTarget) return
 
+    this.clearCloseTimer()
+    this.cancelOpenFrame()
+    this.cancelFocusFrame()
     this.panelTarget.classList.remove('hidden')
     this.syncToggle(true)
 
-    if (this.hasInputTarget) {
-      requestAnimationFrame(() => this.inputTarget.focus())
+    if (this.prefersReducedMotion()) {
+      this.panelTarget.classList.add('is-open')
+      this.focusInput()
+      return
     }
+
+    this.openFrame = requestAnimationFrame(() => {
+      this.panelTarget.classList.add('is-open')
+      this.openFrame = null
+      this.focusInput()
+    })
   }
 
-  close () {
+  close ({ animated = true } = {}) {
     if (!this.hasPanelTarget) return
 
-    this.panelTarget.classList.add('hidden')
+    this.clearCloseTimer()
+    this.cancelOpenFrame()
+    this.cancelFocusFrame()
     this.syncToggle(false)
+
+    if (!animated || this.prefersReducedMotion() || this.panelTarget.classList.contains('hidden')) {
+      this.panelTarget.classList.remove('is-open')
+      this.panelTarget.classList.add('hidden')
+      return
+    }
+
+    this.panelTarget.classList.remove('is-open')
+    this.closeTimer = setTimeout(() => {
+      this.panelTarget.classList.add('hidden')
+      this.closeTimer = null
+    }, 180)
+  }
+
+  focusInput () {
+    if (!this.hasInputTarget) return
+
+    this.cancelFocusFrame()
+    this.focusFrame = requestAnimationFrame(() => {
+      if (!this.hasPanelTarget || this.panelTarget.classList.contains('hidden')) {
+        this.focusFrame = null
+        return
+      }
+
+      this.inputTarget.focus()
+      this.focusFrame = null
+    })
   }
 
   toggle () {
@@ -74,7 +120,7 @@ export default class extends Controller {
   }
 
   handleBeforeCache () {
-    this.close()
+    this.close({ animated: false })
   }
 
   handleInput (event) {
@@ -180,6 +226,31 @@ export default class extends Controller {
     if (!this.hasToggleTarget) return
 
     this.toggleTarget.setAttribute('aria-expanded', String(expanded))
+  }
+
+  clearCloseTimer () {
+    if (!this.closeTimer) return
+
+    clearTimeout(this.closeTimer)
+    this.closeTimer = null
+  }
+
+  cancelOpenFrame () {
+    if (this.openFrame === null) return
+
+    cancelAnimationFrame(this.openFrame)
+    this.openFrame = null
+  }
+
+  cancelFocusFrame () {
+    if (this.focusFrame === null) return
+
+    cancelAnimationFrame(this.focusFrame)
+    this.focusFrame = null
+  }
+
+  prefersReducedMotion () {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   }
 
   showSearchErrorNotice () {

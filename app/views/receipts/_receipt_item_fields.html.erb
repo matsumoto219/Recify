@@ -153,117 +153,119 @@
     </button>
   </div>
 
-  <div class="col-span-2 md:col-span-12 hidden" data-receipt-form-target="itemDetailsPanel">
-    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
-      <div class="col-span-2 md:col-span-2">
-        <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
-          <div>
-            <%= render "shared/ui/form/number_field",
-                       f: item_form,
-                       attribute: :discount_rate,
-                       label: t("receipts.item_fields.discount_rate"),
-                       value: (new_record ? nil : item.discount_rate_percentage_input),
-                       step: 0.1,
-                       decimal_precision: 1,
-                       min: 0,
-                       max: 100,
-                       suffix: "%",
-                       show_label: false,
-                       text_align: :center,
-                       show_stepper_buttons: true,
-                       stepper_button_class: "md:hidden",
-                       size: :dense,
-                       highlight_variant: (item.errors[:discount_rate].any? ? :error : nil),
-                       show_error_message: false,
-                       html_options: {
-                         data: {
-                           action: "input->receipt-form#recalculate",
-                           receipt_form_target: "discountRateInput",
-                           original_discount_rate: (new_record ? nil : item.discount_rate_percentage_input)
-                         }
-                       } %>
+  <div class="col-span-2 md:col-span-12 collapsible-grid" data-receipt-form-target="itemDetailsPanel" aria-hidden="true" inert>
+    <div class="collapsible-grid-inner min-w-0">
+      <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
+        <div class="col-span-2 md:col-span-2">
+          <div class="space-y-2">
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
+            <div>
+              <%= render "shared/ui/form/number_field",
+                         f: item_form,
+                         attribute: :discount_rate,
+                         label: t("receipts.item_fields.discount_rate"),
+                         value: (new_record ? nil : item.discount_rate_percentage_input),
+                         step: 0.1,
+                         decimal_precision: 1,
+                         min: 0,
+                         max: 100,
+                         suffix: "%",
+                         show_label: false,
+                         text_align: :center,
+                         show_stepper_buttons: true,
+                         stepper_button_class: "md:hidden",
+                         size: :dense,
+                         highlight_variant: (item.errors[:discount_rate].any? ? :error : nil),
+                         show_error_message: false,
+                         html_options: {
+                           data: {
+                             action: "input->receipt-form#recalculate",
+                             receipt_form_target: "discountRateInput",
+                             original_discount_rate: (new_record ? nil : item.discount_rate_percentage_input)
+                           }
+                         } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-2 md:col-span-2">
+          <div class="space-y-2">
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.tax_rate") %></p>
+            <div>
+              <%= render "shared/ui/form/number_field",
+                         f: item_form,
+                         attribute: :tax_rate,
+                         label: t("receipts.item_fields.tax_rate"),
+                         value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
+                         step: 0.1,
+                         decimal_precision: 1,
+                         min: 0,
+                         max: 100,
+                         suffix: "%",
+                         show_label: false,
+                         text_align: :center,
+                         show_stepper_buttons: true,
+                         stepper_button_class: "md:hidden",
+                         size: :dense,
+                         html_options: {
+                           data: {
+                             action: "input->receipt-form#recalculate",
+                             receipt_form_target: "taxRateInput"
+                           }
+                         },
+                         highlight_variant: ((item.errors[:tax_rate].any? || (item.needs_review && item_error_flags[:tax_rate])) ? :error : nil),
+                         show_error_message: false %>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-2 md:col-span-3">
+          <div class="space-y-2">
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.category") %></p>
+            <div>
+              <%= render "shared/ui/form/select_field",
+                         f: item_form,
+                         attribute: :category,
+                         label: t("receipts.item_fields.category"),
+                         options: ReceiptItem.category_options,
+                         selected: (new_record ? nil : item.category),
+                         include_blank: t("receipts.item_fields.uncategorized"),
+                         show_label: false,
+                         select_wrapper_class: "w-full",
+                         size: :dense,
+                         highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
+                         show_error_message: false %>
+            </div>
+          </div>
+        </div>
+
+        <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-5 md:flex md:justify-end">
+          <div class="space-y-2">
+            <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true"><%= t("receipts.item_fields.subtotal") %></p>
+            <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
+              <span class="text-sm font-medium token-text-muted shrink-0"><%= t("receipts.item_fields.subtotal") %></span>
+              <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay"><%= line_total_display %></span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="col-span-2 md:col-span-2">
-        <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.tax_rate") %></p>
-          <div>
-            <%= render "shared/ui/form/number_field",
-                       f: item_form,
-                       attribute: :tax_rate,
-                       label: t("receipts.item_fields.tax_rate"),
-                       value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
-                       step: 0.1,
-                       decimal_precision: 1,
-                       min: 0,
-                       max: 100,
-                       suffix: "%",
-                       show_label: false,
-                       text_align: :center,
-                       show_stepper_buttons: true,
-                       stepper_button_class: "md:hidden",
-                       size: :dense,
-                       html_options: {
-                         data: {
-                           action: "input->receipt-form#recalculate",
-                           receipt_form_target: "taxRateInput"
-                         }
-                       },
-                       highlight_variant: ((item.errors[:tax_rate].any? || (item.needs_review && item_error_flags[:tax_rate])) ? :error : nil),
-                       show_error_message: false %>
+      <% if item_warning_reason_labels.any? %>
+        <div class="receipt-form-item-warning-notes mt-3 rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
+          <div class="flex items-start gap-2">
+            <span class="material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
+            <div class="min-w-0">
+              <p class="text-sm font-bold token-text-warning"><%= t("receipts.item_fields.warning_title") %></p>
+              <ul class="mt-1 list-disc space-y-1 pl-5 text-sm token-text-base">
+                <% item_warning_reason_labels.each do |label| %>
+                  <li><%= label %></li>
+                <% end %>
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="col-span-2 md:col-span-3">
-        <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.category") %></p>
-          <div>
-            <%= render "shared/ui/form/select_field",
-                       f: item_form,
-                       attribute: :category,
-                       label: t("receipts.item_fields.category"),
-                       options: ReceiptItem.category_options,
-                       selected: (new_record ? nil : item.category),
-                       include_blank: t("receipts.item_fields.uncategorized"),
-                       show_label: false,
-                       select_wrapper_class: "w-full",
-                       size: :dense,
-                       highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
-                       show_error_message: false %>
-          </div>
-        </div>
-      </div>
-
-      <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-5 md:flex md:justify-end">
-        <div class="space-y-2">
-          <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true"><%= t("receipts.item_fields.subtotal") %></p>
-          <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
-            <span class="text-sm font-medium token-text-muted shrink-0"><%= t("receipts.item_fields.subtotal") %></span>
-            <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay"><%= line_total_display %></span>
-          </div>
-        </div>
-      </div>
+      <% end %>
     </div>
-
-    <% if item_warning_reason_labels.any? %>
-      <div class="receipt-form-item-warning-notes mt-3 rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
-        <div class="flex items-start gap-2">
-          <span class="material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
-          <div class="min-w-0">
-            <p class="text-sm font-bold token-text-warning"><%= t("receipts.item_fields.warning_title") %></p>
-            <ul class="mt-1 list-disc space-y-1 pl-5 text-sm token-text-base">
-              <% item_warning_reason_labels.each do |label| %>
-                <li><%= label %></li>
-              <% end %>
-            </ul>
-          </div>
-        </div>
-      </div>
-    <% end %>
   </div>
 
   <div class="receipt-form-item-mobile-summary col-span-2 md:hidden">
