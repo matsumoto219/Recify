@@ -146,6 +146,34 @@ RSpec.describe Receipt, type: :model do
   end
 
   describe '.search' do
+    let(:user) { create(:user) }
+
+    def create_search_receipt(user:, store_name:, total_amount:, purchased_at:, item_name: nil)
+      receipt = create(
+        :receipt,
+        :completed,
+        user: user,
+        store_name: store_name,
+        total_amount: total_amount,
+        purchased_at: purchased_at
+      )
+
+      if item_name.present?
+        receipt.receipt_items.create!(
+          raw_text: item_name,
+          confirmed_name: item_name,
+          category: "food",
+          quantity: 1,
+          quantity_unit: "個",
+          price: total_amount,
+          line_total: total_amount,
+          position_index: 1
+        )
+      end
+
+      receipt
+    end
+
     it 'subquery用途のmatching idsには既存orderを持ち込まない' do
       sql = described_class.order(created_at: :desc).search('コーヒー').to_sql
 
@@ -153,6 +181,140 @@ RSpec.describe Receipt, type: :model do
         expect(sql).to include('ORDER BY "receipts"."created_at" DESC')
         expect(sql.scan(/ORDER BY/).size).to eq(1)
       end
+    end
+
+    it 'スペース区切りのtokenをAND条件として検索する' do
+      target = create_search_receipt(
+        user: user,
+        store_name: 'セブン松山店',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'セブン松山店',
+        total_amount: 1500,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'ローソン松山店',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+
+      expect(user.receipts.search('セブン 1000')).to contain_exactly(target)
+    end
+
+    it '金額比較演算子でtotal_amountを検索する' do
+      low = create_search_receipt(
+        user: user,
+        store_name: '低額ストア',
+        total_amount: 800,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      exact = create_search_receipt(
+        user: user,
+        store_name: '一致ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      high = create_search_receipt(
+        user: user,
+        store_name: '高額ストア',
+        total_amount: 1200,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+
+      aggregate_failures do
+        expect(user.receipts.search('<=1000')).to contain_exactly(low, exact)
+        expect(user.receipts.search('>=1000')).to contain_exactly(exact, high)
+        expect(user.receipts.search('amount<=1000')).to contain_exactly(low, exact)
+        expect(user.receipts.search('total>=1000')).to contain_exactly(exact, high)
+      end
+    end
+
+    it '明細名tokenと金額演算子をAND検索する' do
+      target = create_search_receipt(
+        user: user,
+        store_name: '牛乳対象ストア',
+        total_amount: 280,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0),
+        item_name: '牛乳'
+      )
+      create_search_receipt(
+        user: user,
+        store_name: '牛乳高額ストア',
+        total_amount: 480,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0),
+        item_name: '牛乳'
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'パン対象ストア',
+        total_amount: 280,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0),
+        item_name: 'パン'
+      )
+
+      expect(user.receipts.search('牛乳 <=300')).to contain_exactly(target)
+    end
+
+    it '日付tokenとdate演算子で購入日を検索する' do
+      january_10 = create_search_receipt(
+        user: user,
+        store_name: '一月十日ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      january_20 = create_search_receipt(
+        user: user,
+        store_name: '一月二十日ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 20, 12, 0, 0)
+      )
+      february = create_search_receipt(
+        user: user,
+        store_name: '二月ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 2, 1, 12, 0, 0)
+      )
+
+      aggregate_failures do
+        expect(user.receipts.search('2026-01-10')).to contain_exactly(january_10)
+        expect(user.receipts.search('date>=2026-01-15')).to contain_exactly(january_20, february)
+        expect(user.receipts.search('date<=2026-01-10')).to contain_exactly(january_10)
+        expect(user.receipts.search('date:2026-01-01..2026-01-31')).to contain_exactly(january_10, january_20)
+      end
+    end
+
+    it '店舗名・金額・日付の複合条件をAND検索する' do
+      target = create_search_receipt(
+        user: user,
+        store_name: 'セブン松山店',
+        total_amount: 900,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'セブン松山店',
+        total_amount: 1500,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'セブン松山店',
+        total_amount: 900,
+        purchased_at: Time.zone.local(2025, 12, 31, 12, 0, 0)
+      )
+      create_search_receipt(
+        user: user,
+        store_name: 'ローソン松山店',
+        total_amount: 900,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+
+      expect(user.receipts.search('セブン <=1000 date>=2026-01-01')).to contain_exactly(target)
     end
   end
 

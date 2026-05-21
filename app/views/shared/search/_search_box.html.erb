@@ -2,13 +2,22 @@
   placeholder = local_assigns.fetch(:placeholder, t("dashboard.search.placeholder"))
   wrapper_class = local_assigns[:wrapper_class]
   input_class = local_assigns[:input_class]
-  input_data = local_assigns.fetch(:input_data, {})
+  input_data = local_assigns.fetch(:input_data, {}).dup
   input_name = local_assigns.fetch(:name, nil)
   input_id = local_assigns.fetch(:id, nil)
   variant = local_assigns.fetch(:variant, :desktop).to_sym
   close_action = local_assigns[:close_action]
   panel_data = local_assigns.fetch(:panel_data, {})
   mobile = variant == :mobile
+  help_id = local_assigns.fetch(:help_id, "#{mobile ? "mobile" : "desktop"}-search-help")
+  custom_input_action = input_data.delete(:action)
+  input_actions = [
+    "input->search#handleInput",
+    "focus->search#showHelp",
+    "blur->search#hideHelp",
+    "keydown->search#handleInputKeydown",
+    custom_input_action
+  ].compact.join(" ")
 
   resolved_wrapper_class = [
     mobile ? "relative w-full rounded-2xl border search-panel-mobile p-3" : "relative w-full",
@@ -23,10 +32,10 @@
 %>
 
 <div class="<%= resolved_wrapper_class %>"
+  data-search-box
   <% panel_data.each do |key, value| %>
     data-<%= key.to_s.dasherize %>="<%= value %>"
   <% end %>>
-  <%# TODO: 検索機能本実装時にquery parameter / Turbo検索 / 絞り込み処理へ接続する %>
   <%= form_with url: receipts_path, method: :get, local: true, class: "contents" do %>
   <div class="relative overflow-hidden rounded-lg">
     <button type="submit"
@@ -39,7 +48,8 @@
       type="text"
       name="q"
       value="<%= params[:q] %>"
-      data-action="input->search#handleInput"
+      data-action="<%= input_actions %>"
+      aria-describedby="<%= help_id %>"
       <% if input_id.present? %> id="<%= input_id %>"<% end %>
       <% if input_name.present? %> name="<%= input_name %>"<% end %>
       placeholder="<%= placeholder %>"
@@ -59,4 +69,23 @@
     <span class="pointer-events-none absolute bottom-0 left-0 h-[2px] w-0 rounded-full token-brand-gradient-horizontal transition-all duration-300 ease-in peer-focus:w-full"></span>
   </div>
   <% end %>
+
+  <div
+    id="<%= help_id %>"
+    data-search-help
+    role="tooltip"
+    aria-hidden="true"
+    class="pointer-events-none absolute left-0 right-0 top-full z-40 mt-2 hidden w-full max-w-none rounded-xl border token-border-soft token-bg-floating p-3 text-left token-shadow-glass">
+    <p class="text-xs font-bold token-text-base"><%= t("search.help.title") %></p>
+    <p class="mt-1 text-xs leading-relaxed token-text-muted"><%= t("search.help.description") %></p>
+    <ul class="mt-3 grid gap-1.5 text-xs token-text-muted">
+      <% t("search.help.examples").each do |example| %>
+        <li class="flex items-start gap-2 min-w-0">
+          <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full token-brand-soft-bg"></span>
+          <code class="min-w-0 break-words rounded-md token-bg-card-subtle px-1.5 py-0.5 font-mono text-[0.72rem] token-text-base"><%= example %></code>
+        </li>
+      <% end %>
+    </ul>
+    <p class="mt-3 text-[0.72rem] leading-relaxed token-text-subtle"><%= t("search.help.syntax") %></p>
+  </div>
 </div>

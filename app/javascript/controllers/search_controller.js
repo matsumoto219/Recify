@@ -121,6 +121,7 @@ export default class extends Controller {
 
   handleBeforeCache () {
     this.close({ animated: false })
+    this.hideAllHelp()
   }
 
   handleInput (event) {
@@ -131,6 +132,28 @@ export default class extends Controller {
     this.debounceTimer = setTimeout(() => {
       this.performSearch(input)
     }, 300)
+  }
+
+  showHelp (event) {
+    const help = this.helpFor(event.currentTarget)
+    if (!help) return
+
+    help.classList.remove('hidden')
+    help.setAttribute('aria-hidden', 'false')
+  }
+
+  hideHelp (event) {
+    const help = this.helpFor(event.currentTarget)
+    if (!help) return
+
+    help.classList.add('hidden')
+    help.setAttribute('aria-hidden', 'true')
+  }
+
+  handleInputKeydown (event) {
+    if (event.key !== 'Escape') return
+
+    this.hideHelp(event)
   }
 
   async performSearch (input) {
@@ -256,6 +279,20 @@ export default class extends Controller {
 
   prefersReducedMotion () {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }
+
+  helpFor (element) {
+    const box = element.closest('[data-search-box]')
+    if (!box) return null
+
+    return box.querySelector('[data-search-help]')
+  }
+
+  hideAllHelp () {
+    this.element.querySelectorAll('[data-search-help]').forEach((help) => {
+      help.classList.add('hidden')
+      help.setAttribute('aria-hidden', 'true')
+    })
   }
 
   showSearchErrorNotice () {

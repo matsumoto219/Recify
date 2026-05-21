@@ -197,6 +197,14 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
         expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))
         expect(header.at_css('input[name="q"]')['placeholder']).to eq(I18n.t('dashboard.search.placeholder'))
+        expect(header.at_css('input[name="q"]')['aria-describedby']).to eq('desktop-search-help')
+        expect(header.at_css('#desktop-search-help')['role']).to eq('tooltip')
+        expect(header.at_css('#desktop-search-help')['aria-hidden']).to eq('true')
+        expect(header.at_css('#desktop-search-help')['class'].split).to include('hidden')
+        expect(header.at_css('#desktop-search-help')['class'].split).to include('w-full', 'max-w-none')
+        expect(header.at_css('#desktop-search-help')['class']).not_to include('max-w-[min(28rem')
+        expect(header.at_css('#desktop-search-help').text).to include(I18n.t('search.help.title'))
+        expect(header.at_css('#desktop-search-help').text).to include('date>=2026-01-01')
         expect(header.at_css('[data-search-target="toggle"]')['aria-label']).to eq(I18n.t('dashboard.header.search_label'))
         expect(header.at_css('[data-notification-dropdown-target="button"]')['aria-label']).to eq(I18n.t('dashboard.header.notifications_label'))
         expect(summary.text).to include(I18n.t('dashboard.summary.total_count.title'))
@@ -346,6 +354,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(mobile_panel.ancestors).not_to include(header)
         expect(header.at_css('.search-panel-mobile')).to be_nil
         expect(mobile_panel.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
+        expect(mobile_panel.at_css('input[name="q"]')['aria-describedby']).to eq('mobile-search-help')
+        expect(mobile_panel.at_css('#mobile-search-help').text).to include(I18n.t('search.help.title'))
+        expect(mobile_panel.at_css('#mobile-search-help')['class'].split).to include('hidden')
+        expect(mobile_panel.at_css('#mobile-search-help')['class'].split).to include('w-full', 'max-w-none')
+        expect(mobile_panel.at_css('#mobile-search-help')['class']).not_to include('max-w-[min(28rem')
       end
     end
 
