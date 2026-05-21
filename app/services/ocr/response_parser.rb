@@ -511,11 +511,16 @@ class Ocr::ResponseParser
 
   def extract_country_region(parsed_response)
     fields = extract_fields(parsed_response)
-
-    fields.dig("CountryRegion", "valueCountryRegion") ||
+    country_region = fields.dig("CountryRegion", "valueCountryRegion") ||
       fields.dig("CountryRegion", "valueString")
+
+    normalize_country_region(country_region)
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def normalize_country_region(value)
+    value.to_s.strip.upcase.presence
   end
 
   def extract_receipt_type(parsed_response)

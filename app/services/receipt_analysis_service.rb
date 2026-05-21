@@ -12,6 +12,7 @@ class ReceiptAnalysisService
   REVIEW_NEEDED_CONFIDENCE_THRESHOLD = 0.6
   OCR_ENABLED_ENV_KEY = "RECEIPT_OCR_ENABLED"
   AI_ENABLED_ENV_KEY = "RECEIPT_AI_ENABLED"
+  SUPPORTED_RECEIPT_COUNTRY_CODES = %w[JPN].freeze
 
   def self.call(receipt)
     new(receipt).call
@@ -36,6 +37,16 @@ class ReceiptAnalysisService
 
     unless ocr_result[:success]
       return fail_receipt!(ocr_result[:error_code].presence || "ocr_api_error")
+    end
+
+    if unsupported_country?(ocr_result)
+      country_code = ocr_country_region(ocr_result)
+      Rails.logger.warn("[ReceiptAnalysis] unsupported_country receipt_id=#{receipt.id} country_region=#{country_code}")
+      return fail_receipt!(
+        "unsupported_country",
+        "country_region=#{country_code}",
+        unsupported_country_attributes(country_code)
+      )
     end
 
     receipt_signal = Analysis::ReceiptSignalEvaluator.call(ocr_result)
@@ -214,6 +225,26 @@ class ReceiptAnalysisService
     return true if overall_confidence.present? && overall_confidence.to_f < UNREADABLE_CONFIDENCE_THRESHOLD
 
     false
+  end
+
+  def unsupported_country?(ocr_result)
+    country_code = ocr_country_region(ocr_result)
+    country_code.present? && !SUPPORTED_RECEIPT_COUNTRY_CODES.include?(country_code)
+  end
+
+  def ocr_country_region(ocr_result)
+    candidates = ocr_candidates(ocr_result)
+    normalize_country_region(candidates[:country_region])
+  end
+
+  def normalize_country_region(value)
+    value.to_s.strip.upcase.presence
+  end
+
+  def unsupported_country_attributes(country_code)
+    return {} unless country_code.to_s.length == 3
+
+    { country_region: country_code }
   end
 
   def no_text_detected?(receipt_signal)
@@ -472,16 +503,17 @@ class ReceiptAnalysisService
     receipt
   end
 
-  def fail_receipt!(error_code, message = nil)
+  def fail_receipt!(error_code, message = nil, attributes = {})
     mapped = Analysis::ReceiptProcessingErrorMapper.map(error_code)
-
-    receipt.update!(
+    receipt_attributes = {
       status: "failed",
       processing_error_code: mapped[:error_code],
       processing_error_message: message,
       review_reasons: [],
       ocr_completed_at: Time.current
-    )
+    }.merge(attributes)
+
+    receipt.update!(receipt_attributes)
 
     Rails.logger.error(
       "[ReceiptAnalysis] failed receipt_id=#{receipt.id} error_code=#{error_code}"

@@ -24,6 +24,7 @@ module Analysis
       "image_missing" => "image_error",
       "image_invalid_format" => "image_error",
       "image_corrupted" => "image_error",
+      "unsupported_country" => "image_error",
 
       # AI系
       "ai_timeout" => "ai_error",

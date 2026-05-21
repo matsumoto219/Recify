@@ -20,7 +20,7 @@ RSpec.describe ReceiptAnalysisService do
         purchased_at_text: '2026/04/02 12:34',
         total_amount: 1280,
         tip_amount: 100,
-        country_region: 'JP',
+        country_region: 'JPN',
         receipt_type: 'Meal',
         payment_method_text: 'Master',
         items: [
@@ -159,7 +159,7 @@ RSpec.describe ReceiptAnalysisService do
         purchased_at_text: '2026/04/02 12:34',
         total_amount: nil,
         tip_amount: nil,
-        country_region: 'JP',
+        country_region: 'JPN',
         receipt_type: nil,
         payment_method_text: nil,
         items: [
@@ -255,8 +255,77 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.store_name).to eq("サンプルストア")
       expect(receipt.total_amount).to eq(1280)
       expect(receipt.tip_amount).to eq(100)
-      expect(receipt.country_region).to eq("JP")
+      expect(receipt.country_region).to eq("JPN")
       expect(receipt.receipt_type).to eq("Meal")
+    end
+
+    it 'OCR country_region が日本以外の場合は unsupported_country でfailedにしAIを呼ばない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { country_region: 'USA' })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('unsupported_country')
+        expect(receipt.processing_error_message).to eq('country_region=USA')
+        expect(receipt.country_region).to eq('USA')
+        expect(receipt.receipt_items).to be_empty
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
+    it 'OCR country_region はuppercaseに正規化してJPNなら通す' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { country_region: ' jpn ' })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.country_region).to eq('JPN')
+      end
+    end
+
+    it 'OCR country_region がnilの場合は未検出として許可する' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { country_region: nil })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.country_region).to eq('JPN')
+      end
+    end
+
+    it 'OCR country_region が2文字コードの場合は許可しない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(
+        build_ocr_result(candidates: { country_region: 'JP' })
+      )
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('unsupported_country')
+        expect(receipt.processing_error_message).to eq('country_region=JP')
+        expect(receipt.country_region).to eq('JPN')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
     end
 
     it '明細が保存される' do
@@ -1022,7 +1091,7 @@ RSpec.describe ReceiptAnalysisService do
             purchased_at_text: nil,
             total_amount: nil,
             payment_method_text: nil,
-            country_region: 'JP',
+            country_region: 'JPN',
             receipt_type: 'Meal',
             items: [],
             payments: [],

@@ -120,7 +120,7 @@ RSpec.describe Analysis::ReceiptSignalEvaluator do
       raw_text: '旅行メモ',
       lines: [ '旅行メモ' ],
       candidates: {
-        country_region: 'JP',
+        country_region: 'JPN',
         receipt_type: 'Meal'
       }
     )

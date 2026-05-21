@@ -89,6 +89,7 @@ class Receipt < ApplicationRecord
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
 
+  before_validation :normalize_country_region
   before_validation :set_default_country_region
   before_validation :normalize_store_phone_number
   before_update :mark_summary_broadcast_needed
@@ -234,6 +235,10 @@ class Receipt < ApplicationRecord
 
   # TODO: v1.0で libphonenumber 等を導入予定
   # 手動登録など country_region が空のレシートを日本扱いにする
+  def normalize_country_region
+    self.country_region = country_region.to_s.strip.upcase.presence if country_region.present?
+  end
+
   def set_default_country_region
     self.country_region = "JPN" if country_region.blank?
   end
@@ -252,7 +257,7 @@ class Receipt < ApplicationRecord
   end
 
   def japanese_country_region?
-    country_region.blank? || %w[JPN JP].include?(country_region.to_s.upcase)
+    country_region.blank? || country_region.to_s.upcase == "JPN"
   end
 
   def normalize_phone_number_text(value)

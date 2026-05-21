@@ -32,7 +32,7 @@ RSpec.describe Ocr::ResponseParser do
                 'Subtotal' => { 'valueCurrency' => { 'amount' => 1180 } },
                 'TotalTax' => { 'valueCurrency' => { 'amount' => 80 } },
                 'Tip' => { 'valueCurrency' => { 'amount' => 100 } },
-                'CountryRegion' => { 'valueCountryRegion' => 'JP' },
+                'CountryRegion' => { 'valueCountryRegion' => 'JPN' },
                 'ReceiptType' => { 'valueString' => 'Meal' },
                 'Payments' => {
                   'valueArray' => [
@@ -116,7 +116,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:tax_amount]).to eq(80)
         expect(candidates[:tax_rate]).to eq(10)
         expect(candidates[:tip_amount]).to eq(100)
-        expect(candidates[:country_region]).to eq('JP')
+        expect(candidates[:country_region]).to eq('JPN')
         expect(candidates[:receipt_type]).to eq('Meal')
         expect(candidates[:payment_method_text]).to eq('master')
         expect(result.dig(:meta, :doc_type)).to eq('receipt.retailMeal')
@@ -340,6 +340,16 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:tax_details]).to eq([])
         expect(candidates[:items]).to eq([])
       end
+    end
+
+    it 'CountryRegionは3文字uppercase形式へ正規化する' do
+      response = raw_response.deep_dup
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['CountryRegion'] = { 'valueCountryRegion' => ' jpn ' }
+
+      result = described_class.new(response: response).call
+
+      expect(result.dig(:candidates, :country_region)).to eq('JPN')
     end
 
     it '壊れたJSON文字列では ocr_api_error を返す' do

@@ -28,7 +28,7 @@ RSpec.describe 'Receipts', type: :request do
         subtotal_amount: 1164,
         tax_amount: 116,
         payment_method_text: 'Master',
-        country_region: 'JP',
+        country_region: 'JPN',
         items: [
           {
             raw_text: 'コーヒー',
@@ -2295,6 +2295,23 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。')
+      end
+    end
+
+    it '海外レシートの処理失敗カードは日本レシートのみ対応文言を表示する' do
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'unsupported_country',
+        processing_error_message: 'country_region=USA'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(response.body).to include(I18n.t('receipts.processing_error_codes.unsupported_country'))
+        expect(response.body).to include('country_region=USA')
       end
     end
 

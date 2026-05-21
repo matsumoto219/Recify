@@ -170,6 +170,24 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'country_region normalization' do
+    it 'blank country_region は手動登録向けに JPN を既定値にする' do
+      receipt = build(:receipt, country_region: nil)
+
+      receipt.valid?
+
+      expect(receipt.country_region).to eq('JPN')
+    end
+
+    it 'country_region はuppercaseに正規化し、2文字コードを3文字へ変換しない' do
+      receipt = build(:receipt, country_region: ' jp ')
+
+      receipt.valid?
+
+      expect(receipt.country_region).to eq('JP')
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)
@@ -213,6 +231,12 @@ RSpec.describe Receipt, type: :model do
         expect(not_detected_receipt.processing_error_user_message).to eq('レシートを認識できませんでした。レシート全体が写っている画像でお試しください。')
         expect(ai_not_receipt.processing_error_user_message).to eq(not_detected_receipt.processing_error_user_message)
       end
+    end
+
+    it '海外レシートは日本レシートのみ対応文言にする' do
+      receipt = build_stubbed(:receipt, :failed, processing_error_code: 'unsupported_country')
+
+      expect(receipt.processing_error_user_message).to eq('現在は日本のレシートのみ対応しています。日本国内のレシート画像でお試しください。')
     end
 
     it 'AI not receiptの不確実ケースは確認系文言にする' do

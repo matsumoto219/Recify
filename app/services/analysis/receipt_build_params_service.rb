@@ -81,7 +81,9 @@ module Analysis
           tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
           tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
           tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),           # NOTE: 日本レシートではほぼ未取得。保存はするが現状未使用に近い
-          country_region: ai_attrs[:country_region].presence || candidates[:country_region],        # NOTE: 保存優先項目。現状UIでは未使用
+          country_region: normalize_country_region(
+            ai_attrs[:country_region].presence || candidates[:country_region]
+          ), # NOTE: 保存優先項目。現状UIでは未使用
           receipt_type: ai_attrs[:receipt_type].presence || candidates[:receipt_type],              # NOTE: 保存優先項目。現状UIでは未使用
           payment_method: ai_attrs[:payment_method].presence || detect_payment_method(candidates),
           processing_error_code: ai_attrs[:processing_error_code],
@@ -244,7 +246,7 @@ module Analysis
           tax_amount: normalize_amount(symbolized[:tax_amount]),
           tax_rate: normalize_rate(symbolized[:tax_rate]),
           tip_amount: normalize_amount(symbolized[:tip_amount]),   # NOTE: AI側から来ても現状未使用に近い
-          country_region: symbolized[:country_region],             # NOTE: AI側から来ても保存優先。現状UIでは未使用
+          country_region: normalize_country_region(symbolized[:country_region]), # NOTE: AI側から来ても保存優先。現状UIでは未使用
           receipt_type: symbolized[:receipt_type],                 # NOTE: AI側から来ても保存優先。現状UIでは未使用
           payment_method: symbolized[:payment_method],
           processing_error_code: symbolized[:processing_error_code],
@@ -260,6 +262,10 @@ module Analysis
           item_hash = item.is_a?(Hash) ? item : item.to_h
           item_hash.with_indifferent_access
         end
+      end
+
+      def normalize_country_region(value)
+        value.to_s.strip.upcase.presence
       end
 
       def merge_items(candidate_items, ai_items)

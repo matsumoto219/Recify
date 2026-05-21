@@ -20,7 +20,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           tax_amount: 80,
           tax_rate: 10,
           tip_amount: 100,
-          country_region: 'JP',
+          country_region: 'JPN',
           receipt_type: 'Meal',
           payment_method_text: 'Master',
           items: [
@@ -67,11 +67,19 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:tax_amount]).to eq(80)
           expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal("0.1"))
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
-          expect(params[:receipt_attributes][:country_region]).to eq('JP')
+          expect(params[:receipt_attributes][:country_region]).to eq('JPN')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
           expect(params[:receipt_attributes][:purchased_at]).to be_present
         end
+      end
+
+      it 'country_regionは保存前に3文字uppercaseへ正規化する' do
+        ocr_result[:candidates][:country_region] = ' jpn '
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:country_region]).to eq('JPN')
       end
 
       it 'itemsが正しく生成される' do
@@ -394,7 +402,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:store_name]).to eq('AI補正ストア')
           expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
-          expect(params[:receipt_attributes][:country_region]).to eq('JP')
+          expect(params[:receipt_attributes][:country_region]).to eq('JPN')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
         end
       end
