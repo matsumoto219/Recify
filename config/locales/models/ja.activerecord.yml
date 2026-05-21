@@ -1,13 +1,93 @@
 ja:
   activerecord:
+    models:
+      user: ユーザー
+      receipt: レシート
+      receipt_item: レシート明細
+      receipt_payment: 支払い
+      receipt_tax_detail: 税内訳
+      notification: 通知
+
     attributes:
       receipt:
+        user: ユーザー
+        store_name: 店舗名
+        store_address: 店舗住所
+        store_phone: 電話番号
+        store_phone_number: 電話番号
+        purchased_at: 購入日時
+        purchase_time: 購入時刻
+        total_amount: 合計金額
+        subtotal_amount: 小計
+        tax_amount: 税額
+        tax_rate: 税率
+        tip_amount: チップ
+        payment_method: 支払い方法
+        category: カテゴリ
+        status: ステータス
         image: "画像"
+        country_region: 国コード
+        receipt_type: レシート種別
+        review_reasons: 確認理由
+        processing_error_code: 処理エラーコード
+        processing_error_message: 処理エラーメッセージ
+      receipt_item:
+        receipt: レシート
+        raw_text: OCR原文
+        suggested_name: AI補完名
+        confirmed_name: 品名
+        name: 品名
+        category: カテゴリ
+        price: 価格
+        quantity: 数量
+        quantity_unit: 単位
+        line_total: 明細小計
+        needs_review: 要確認
+        position_index: 表示順
+        confidence: 信頼度
+        product_code: 商品コード
+        tax_rate: 税率
+        discount_amount: 割引額
+        discount_rate: 割引率
+        original_line_total: 割引前小計
+        review_reasons: 確認理由
+      receipt_tax_detail:
+        receipt: レシート
+        tax_type: 税区分
+        description: 説明
+        rate: 税率
+        amount: 税額
+        net_amount: 税抜金額
+      receipt_payment:
+        receipt: レシート
+        method: 支払い方法
+        payment_method: 支払い方法
+        amount: 支払い金額
+      notification:
+        user: ユーザー
+        kind: 種別
+        notifiable: 対象
+        notifiable_type: 対象種別
+        notifiable_id: 対象ID
+        title: タイトル
+        body: 本文
+        message: メッセージ
+        action_path: 遷移先
+        read_at: 既読日時
+        metadata: メタデータ
       user:
+        name: "ユーザー名"
         email: "メールアドレス"
         password: "パスワード"
         password_confirmation: "パスワード確認"
+        current_password: "現在のパスワード"
         avatar: "プロフィール画像"
+        guest: "ゲストユーザー"
+        push_notification_enabled: "通知"
+        product_name_ai_completion_enabled: "AI補完"
+        theme_preference: "表示テーマ"
+        receipt_item_delete_confirmation_enabled: "明細削除の確認"
+        storage_limit_bytes: "ストレージ上限"
 
     errors:
       models:

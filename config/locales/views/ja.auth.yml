@@ -78,3 +78,27 @@ ja:
           submit: 再設定メールを送信
           submitting: 送信中...
         back_to_login: ログインに戻る
+      edit:
+        title: パスワード変更
+        fields:
+          password: 新しいパスワード
+          password_confirmation: 新しいパスワード（確認用）
+          minimum_password_length: "%{count}文字以上"
+        buttons:
+          submit: パスワードを変更
+    links:
+      confirmation_instructions: 確認メールが届きませんか？
+      unlock_instructions: ロック解除メールが届きませんか？
+      omniauth: "%{provider}でログイン"
+    mailer:
+      greeting: "%{email} 様"
+      reset_password_instructions:
+        body: パスワード変更のリクエストを受け付けました。以下のリンクから変更できます。
+        action: パスワードを変更する
+        ignore: このメールに心当たりがない場合は破棄してください。
+        no_change_until_link: 上記リンクから新しいパスワードを設定するまで、パスワードは変更されません。
+      password_change:
+        body: パスワードが変更されたことをお知らせします。
+      email_changed:
+        changing: "メールアドレスが %{email} に変更されようとしています。"
+        changed: "メールアドレスが %{email} に変更されました。"
