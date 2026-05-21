@@ -1,14 +1,16 @@
 <%
   title = local_assigns.fetch(:title, t("shared.amount_summary_card.default_title"))
-  amount = local_assigns.fetch(:amount, 0)
+  amount = local_assigns[:amount]
   currency_prefix = local_assigns.fetch(:currency_prefix, "¥")
   icon = local_assigns.fetch(:icon, "payments")
   subtotal = local_assigns[:subtotal]
   tax_amount = local_assigns[:tax_amount]
   tax_rate = local_assigns[:tax_rate]
   tax_rate_summary = local_assigns[:tax_rate_summary]
-  unset_label = t("shared.amount_summary_card.unset")
-  tax_rate_display = tax_rate_summary.presence || tax_rate.presence || unset_label
+  amount_display = receipt_total_amount_display(amount, currency_prefix: currency_prefix)
+  subtotal_display = receipt_detail_amount_display(subtotal, currency_prefix: currency_prefix)
+  tax_amount_display = receipt_detail_amount_display(tax_amount, currency_prefix: currency_prefix)
+  tax_rate_display = tax_rate_summary.presence || receipt_rate_display(tax_rate)
   subtotal_target = local_assigns[:subtotal_target]
   tax_amount_target = local_assigns[:tax_amount_target]
   tax_rate_target = local_assigns[:tax_rate_target]
@@ -26,19 +28,20 @@
 
   <p class="truncate text-xs font-bold uppercase tracking-widest opacity-80 mb-2" title="<%= title %>"><%= title %></p>
   <h2 class="text-4xl font-black mb-6 truncate"
+      title="<%= amount_display %>"
       data-receipt-form-target="totalAmount">
-    <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>
+    <%= amount_display %>
   </h2>
 
   <%= render "shared/ui/layout/section_divider", class: "mt-6 mb-4" %>
   <div class="space-y-3">
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal.present? ? subtotal : unset_label %>" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal.present? ? subtotal : unset_label %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal_display %>" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal_display %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_amount") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount.present? ? tax_amount : unset_label %>" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount.present? ? tax_amount : unset_label %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount_display %>" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount_display %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_rate") %></span>
@@ -53,16 +56,20 @@
           <% rate = tax_detail.respond_to?(:rate) ? tax_detail.rate : tax_detail[:rate] || tax_detail["rate"] %>
           <% net_amount = tax_detail.respond_to?(:net_amount) ? tax_detail.net_amount : tax_detail[:net_amount] || tax_detail["net_amount"] %>
           <% amount = tax_detail.respond_to?(:amount) ? tax_detail.amount : tax_detail[:amount] || tax_detail["amount"] %>
-          <% rate_label = rate.present? ? "#{number_with_precision(rate.to_d * 100, precision: 1, strip_insignificant_zeros: true)}%" : t("shared.amount_summary_card.tax_rate_unset") %>
+          <% rate_label = receipt_rate_display(rate) %>
+          <% tax_detail_amount_display = receipt_detail_amount_display(amount, currency_prefix: currency_prefix) %>
+          <% tax_detail_net_amount_display = receipt_detail_amount_display(net_amount, currency_prefix: currency_prefix) %>
+          <% tax_detail_total = amount.nil? || net_amount.nil? ? nil : net_amount.to_i + amount.to_i %>
+          <% tax_detail_total_display = receipt_detail_amount_display(tax_detail_total, currency_prefix: currency_prefix) %>
 
           <div class="rounded-lg amount-summary-detail-surface px-3 py-2 text-xs space-y-1">
             <div class="flex min-w-0 justify-between gap-4 font-medium">
               <span class="min-w-0 truncate" title="<%= rate_label %><%= t("shared.amount_summary_card.target") %>"><%= rate_label %><%= t("shared.amount_summary_card.target") %></span>
-              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_amount") %> <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %>"><%= t("shared.amount_summary_card.tax_amount") %> <%= currency_prefix %><%= number_with_delimiter(amount.to_i) %></span>
+              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_amount_display %>"><%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_amount_display %></span>
             </div>
             <div class="flex min-w-0 justify-between gap-4 opacity-70">
-              <span class="min-w-0 truncate" title="<%= t("shared.amount_summary_card.subtotal") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %>"><%= t("shared.amount_summary_card.subtotal") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i) %></span>
-              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_included") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %>"><%= t("shared.amount_summary_card.tax_included") %> <%= currency_prefix %><%= number_with_delimiter(net_amount.to_i + amount.to_i) %></span>
+              <span class="min-w-0 truncate" title="<%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_net_amount_display %>"><%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_net_amount_display %></span>
+              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_total_display %>"><%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_total_display %></span>
             </div>
           </div>
         <% end %>

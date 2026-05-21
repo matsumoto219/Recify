@@ -2,6 +2,7 @@ ja:
   receipts:
     common:
       unset: 未設定
+      not_available: —
       unregistered: 未登録
       multiple_tax_rates: 複数税率
       count_suffix: 件

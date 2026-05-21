@@ -436,19 +436,21 @@ class ReceiptAmountService
     quantity = fetch_value(i, :quantity)
     original_line_total = fetch_value(i, :original_line_total)
     line_total = fetch_value(i, :line_total)
+    discount_amount = fetch_value(i, :discount_amount)
 
     {
       price: to_i_or_nil(price),
       quantity: to_decimal_or_nil(quantity),
       original_line_total: to_i_or_nil(original_line_total),
       line_total: to_i_or_nil(line_total),
-      discount_amount: to_i(fetch_value(i, :discount_amount)),
+      discount_amount: to_i_or_nil(discount_amount),
       discount_rate: fetch_value(i, :discount_rate),
       quantity_unit: fetch_value(i, :quantity_unit),
       tax_rate: fetch_value(i, :tax_rate),
       amount_price_present: value_present?(price),
       amount_quantity_present: value_present?(quantity),
-      amount_line_total_present: value_present?(line_total)
+      amount_line_total_present: value_present?(line_total),
+      amount_discount_amount_present: value_present?(discount_amount)
     }
   end
 

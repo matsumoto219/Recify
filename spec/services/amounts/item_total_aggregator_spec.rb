@@ -125,6 +125,29 @@ RSpec.describe Amounts::ItemTotalAggregator do
     )
 
     aggregate_failures do
+      expect(result[:items].first[:discount_amount]).to be_nil
+      expect(result[:items].first[:discount_rate]).to be_nil
+      expect(result[:items].first[:line_total]).to eq(310)
+    end
+  end
+
+  it 'preserves explicit zero discount_amount when manual context marks it as submitted' do
+    result = aggregate(
+      [
+        {
+          quantity_unit: '個',
+          original_line_total: 310,
+          discount_amount: 0,
+          amount_discount_amount_present: true,
+          discount_rate: '',
+          line_total: 310
+        }
+      ],
+      context: :manual,
+      discount_rounding_mode: :round
+    )
+
+    aggregate_failures do
       expect(result[:items].first[:discount_amount]).to eq(0)
       expect(result[:items].first[:discount_rate]).to be_nil
       expect(result[:items].first[:line_total]).to eq(310)

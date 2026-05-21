@@ -261,6 +261,24 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'receipt cardはnil合計を未設定、明示0合計を¥0として表示する' do
+      nil_amount_receipt = create(:receipt, user: user, store_name: '未設定金額', total_amount: 1_000, status: 'completed')
+      nil_amount_receipt.update_columns(total_amount: nil)
+      zero_amount_receipt = create(:receipt, user: user, store_name: '0円金額', total_amount: 0, status: 'completed')
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      nil_amount_card = document.at_css("#receipt_#{nil_amount_receipt.id}")
+      zero_amount_card = document.at_css("#receipt_#{zero_amount_receipt.id}")
+
+      aggregate_failures do
+        expect(nil_amount_card.text).to include(I18n.t('receipts.common.unset'))
+        expect(nil_amount_card.text).not_to include('¥0')
+        expect(zero_amount_card.text).to include('¥0')
+      end
+    end
+
     it 'receipt listのempty state文言をlocale経由で描画する' do
       user.receipts.destroy_all
 
@@ -549,7 +567,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.form.sections.basic_info'))
         expect(response.body).to include(I18n.t('receipts.form.buttons.add_item'))
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
-        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
+        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
       end
     end
@@ -574,6 +592,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['value'].to_s).to eq('')
         expect(item_row.at_css('[data-receipt-form-target="discountRateInput"]')['value'].to_s).to eq('')
         expect(item_row.at_css('[data-receipt-form-target="taxRateInput"]')['value'].to_s).to eq('')
+        expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq(I18n.t('receipts.common.unset'))
+        expect(document.at_css('[data-receipt-form-target="subtotalAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+        expect(document.at_css('[data-receipt-form-target="taxAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+        expect(document.at_css('[data-receipt-form-target="taxRateSummary"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+        expect(item_row.at_css('[data-receipt-form-target="lineTotalDisplay"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
         expect(template.at_css('[data-receipt-form-target="quantityInput"]')['value']).to eq('1')
         expect(template.at_css('[data-receipt-form-target="priceInput"]')['value'].to_s).to eq('')
         expect(template.at_css('[data-receipt-form-target="discountRateInput"]')['value'].to_s).to eq('')
@@ -1477,6 +1500,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(item.price).to be_nil
         expect(item.tax_rate).to be_nil
         expect(item.discount_rate).to be_nil
+        expect(item.discount_amount).to be_nil
       end
     end
 
@@ -1538,6 +1562,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(item.quantity).to eq(BigDecimal('1'))
         expect(item.tax_rate).to eq(BigDecimal('0'))
         expect(item.discount_rate).to eq(BigDecimal('0'))
+        expect(item.discount_amount).to eq(0)
         expect(item.line_total).to eq(100)
       end
     end
@@ -1575,7 +1600,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'discount_rate 空欄はdiscount_amount 0として保存する' do
+    it 'discount_rate と discount_amount の空欄はdiscount_amount nilとして保存する' do
       post receipts_path, params: {
         receipt: {
           store_name: '割引なし作成',
@@ -1601,7 +1626,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(item.original_line_total).to eq(310)
-        expect(item.discount_amount).to eq(0)
+        expect(item.discount_amount).to be_nil
         expect(item.discount_rate).to be_nil
         expect(item.line_total).to eq(310)
       end
@@ -1971,6 +1996,72 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.show.store_information'))
         expect(response.body).to include(I18n.t('receipts.show.items_title'))
         expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
+      end
+    end
+
+    it '詳細画面はnilの合計を未設定、内訳金額とrateをダッシュで表示し、明示0は0として表示する' do
+      receipt.update_columns(
+        total_amount: nil,
+        subtotal_amount: nil,
+        tax_amount: nil,
+        tax_rate: nil
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '未計算商品',
+        price: nil,
+        quantity: nil,
+        line_total: nil,
+        needs_review: false
+      )
+      receipt.receipt_tax_details.build(rate: nil, net_amount: nil, amount: nil).save!(validate: false)
+
+      zero_receipt = create(
+        :receipt,
+        user: user,
+        store_name: '0円詳細',
+        total_amount: 0,
+        subtotal_amount: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        payment_method: 'cash',
+        status: 'completed'
+      )
+      zero_receipt.receipt_items.create!(
+        confirmed_name: '0円商品',
+        price: 0,
+        quantity: 1,
+        line_total: 0,
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      nil_document = Nokogiri::HTML(response.body)
+      nil_text = nil_document.text.squish
+
+      aggregate_failures 'nil display' do
+        expect(nil_document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq(I18n.t('receipts.common.unset'))
+        expect(nil_text).to include(I18n.t('shared.amount_summary_card.subtotal'))
+        expect(nil_text).to include(I18n.t('shared.amount_summary_card.tax_amount'))
+        expect(nil_text).to include(I18n.t('shared.amount_summary_card.tax_rate'))
+        expect(nil_text).to include('未計算商品')
+        expect(nil_text).to include(I18n.t('receipts.common.not_available'))
+        expect(nil_text).not_to include('¥0')
+        expect(nil_text).not_to include('0%')
+      end
+
+      get receipt_path(zero_receipt)
+
+      zero_document = Nokogiri::HTML(response.body)
+      zero_text = zero_document.text.squish
+
+      aggregate_failures 'explicit zero display' do
+        expect(zero_document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq('¥0')
+        expect(zero_text).to include("#{I18n.t('shared.amount_summary_card.subtotal')} ¥0")
+        expect(zero_text).to include("#{I18n.t('shared.amount_summary_card.tax_amount')} ¥0")
+        expect(zero_text).to include("#{I18n.t('shared.amount_summary_card.tax_rate')} 0%")
+        expect(zero_text).to include('0円商品')
+        expect(zero_text).to include('¥0')
       end
     end
 
@@ -2456,7 +2547,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
         expect(document.at_css(%(nav[aria-label="#{I18n.t('shared.section_header.breadcrumb_aria')}"]))).to be_present
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
-        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.unset'))
+        expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
       end
     end

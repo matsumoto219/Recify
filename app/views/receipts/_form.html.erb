@@ -10,7 +10,7 @@
                   "receipt-form-confirm-item-removal-message-value": t("receipts.form.confirm_item_removal"),
                   "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form,
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
-                  "receipt-form-unset-label-value": t("receipts.common.unset"),
+                  "receipt-form-unset-label-value": t("receipts.common.not_available"),
                   "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates")
                 }
               } do |f| %>
@@ -21,7 +21,7 @@
   <% from_index = receipt.persisted? && params[:from].to_s == "index" %>
   <% breadcrumb_label = receipt.persisted? ? (from_index ? t("receipts.form.breadcrumbs.index") : t("receipts.form.breadcrumbs.show")) : nil %>
   <% breadcrumb_path = receipt.persisted? ? (from_index ? receipts_path : receipt_path(receipt)) : nil %>
-  <% total_amount_value = receipt.total_amount.to_i %>
+  <% total_amount_value = receipt.total_amount %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
 
@@ -37,7 +37,6 @@
                        else
                          t("receipts.common.multiple_tax_rates")
                        end
-    tax_rate_value = receipt.tax_rate_percentage_input.present? ? "#{receipt.tax_rate_percentage_input}%" : nil
 
     receipt_review_reason_codes = Array(receipt.review_reasons).map(&:to_s)
     receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }
@@ -252,9 +251,9 @@
               title: t("receipts.common.total_amount_title"),
               amount: total_amount_value,
               icon: "payments",
-              subtotal: (subtotal_amount_value.present? ? "¥#{number_with_delimiter(subtotal_amount_value)}" : t("receipts.common.unset")),
-              tax_amount: (tax_amount_value.present? ? "¥#{number_with_delimiter(tax_amount_value)}" : t("receipts.common.unset")),
-              tax_rate: tax_rate_value,
+              subtotal: subtotal_amount_value,
+              tax_amount: tax_amount_value,
+              tax_rate: receipt.tax_rate,
               tax_rate_summary: tax_rate_summary,
               subtotal_target: "subtotalAmount",
               tax_amount_target: "taxAmount",

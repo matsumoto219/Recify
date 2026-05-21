@@ -449,6 +449,63 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'keeps blank discount_amount nil when no discount is entered in manual context' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 310,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_amount: '',
+            discount_rate: '',
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:original_line_total]).to eq(310)
+        expect(item[:discount_amount]).to be_nil
+        expect(item[:discount_rate]).to be_nil
+        expect(item[:line_total]).to eq(310)
+        expect(result[:resolved][:total]).to eq(310)
+      end
+    end
+
+    it 'preserves explicit zero discount_amount in manual context' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 310,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_amount: 0,
+            discount_rate: '',
+            line_total: nil,
+            tax_rate: BigDecimal('0.1'),
+            amount_discount_amount_present: true
+          }
+        ],
+        context: :manual
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:original_line_total]).to eq(310)
+        expect(item[:discount_amount]).to eq(0)
+        expect(item[:discount_rate]).to be_nil
+        expect(item[:line_total]).to eq(310)
+        expect(result[:resolved][:total]).to eq(310)
+      end
+    end
+
     it 'preserves OCR discount_amount in analysis context even when discount_rate is present' do
       result = call_service(
         receipt: {},

@@ -2,7 +2,7 @@
   <%
     item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
-                         t("receipts.common.unset")
+                         nil
                        elsif item_tax_rates.one?
                          "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
                        else
@@ -156,7 +156,7 @@
                       <span><%= t("receipts.show.item_quantity") %>: <%= item.formatted_quantity_with_unit %></span>
                       <% if item.price.present? %>
                         <span class="mx-2">/</span>
-                        <span><%= t("receipts.show.item_unit_price") %>: ¥<%= number_with_delimiter(item.price) %></span>
+                        <span><%= t("receipts.show.item_unit_price") %>: <%= receipt_detail_amount_display(item.price) %></span>
                       <% end %>
                       <% if (discount_label = receipt_item_discount_label(item)).present? %>
                         <span class="mx-2">/</span>
@@ -164,7 +164,8 @@
                       <% end %>
                     </p>
                   </div>
-                  <p class="font-bold token-text-base shrink-0 truncate" title="¥<%= number_with_delimiter(item.line_total.to_i) %>">¥<%= number_with_delimiter(item.line_total.to_i) %></p>
+                  <% line_total_display = receipt_detail_amount_display(item.line_total) %>
+                  <p class="font-bold token-text-base shrink-0 truncate" title="<%= line_total_display %>"><%= line_total_display %></p>
                 </div>
               <% end %>
             </div>
@@ -197,9 +198,9 @@
               title: t("receipts.common.total_amount_title"),
               amount: @receipt.total_amount,
               icon: "payments",
-              subtotal: @receipt.subtotal_amount.present? ? "¥#{number_with_delimiter(@receipt.subtotal_amount)}" : t("receipts.common.unset"),
-              tax_amount: @receipt.tax_amount.present? ? "¥#{number_with_delimiter(@receipt.tax_amount)}" : t("receipts.common.unset"),
-              tax_rate: (@receipt.tax_rate_percentage_input.present? ? "#{@receipt.tax_rate_percentage_input}%" : t("receipts.common.unset")),
+              subtotal: @receipt.subtotal_amount,
+              tax_amount: @receipt.tax_amount,
+              tax_rate: @receipt.tax_rate,
               tax_rate_summary: tax_rate_summary,
               tax_details: @receipt.receipt_tax_details.order(:rate) %>
       </div>

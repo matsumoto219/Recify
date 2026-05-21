@@ -415,7 +415,7 @@ class ReceiptsController < ApplicationController
       item_attr["price"] = price unless price.nil?
       item_attr["line_total"] = line_total unless line_total.nil?
       item_attr["original_line_total"] = original_line_total unless original_line_total.nil?
-      item_attr["discount_amount"] = discount_amount unless discount_amount.nil?
+      item_attr["discount_amount"] = discount_amount if calculated_item_key?(calc, :discount_amount)
       item_attr["discount_rate"] = discount_rate if calculated_item_key?(calc, :discount_rate)
     end
   end

@@ -26,7 +26,7 @@ module Amounts
         discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
         discount_rate = discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
 
-        adjusted_line_total = [ original_line_total - discount_amount, 0 ].max
+        adjusted_line_total = [ original_line_total - discount_amount.to_i, 0 ].max
 
         item_to_hash(item).merge(
           quantity: normalized_quantity_for(item),
@@ -75,8 +75,8 @@ module Amounts
     end
 
     def discount_amount_for(item, original_line_total, submitted_discount_rate)
-      explicit_discount_amount = to_i(fetch_value(item, :discount_amount))
-      return explicit_discount_amount if analysis_context? && explicit_discount_amount.positive?
+      explicit_discount_amount = to_i_or_nil(fetch_value(item, :discount_amount))
+      return explicit_discount_amount if analysis_context? && discount_amount_input_present?(item)
 
       if !submitted_discount_rate.nil?
         return 0 unless original_line_total.positive?
@@ -87,18 +87,18 @@ module Amounts
         )
       end
 
-      return 0 if manual_input_context?
+      return explicit_discount_amount if manual_input_context? && manual_discount_amount_input_present?(item)
 
-      explicit_discount_amount.positive? ? explicit_discount_amount : 0
+      manual_input_context? ? nil : (discount_amount_input_present?(item) ? explicit_discount_amount : nil)
     end
 
     def discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
       return submitted_discount_rate unless submitted_discount_rate.nil?
-      return nil unless discount_amount.positive?
+      return nil unless discount_amount.to_i.positive?
       return nil unless original_line_total.positive?
-      return nil if discount_amount > original_line_total
+      return nil if discount_amount.to_i > original_line_total
 
-      BigDecimal(discount_amount.to_s) / BigDecimal(original_line_total.to_s)
+      BigDecimal(discount_amount.to_i.to_s) / BigDecimal(original_line_total.to_s)
     end
 
     def normalized_quantity_for(item)
@@ -107,6 +107,13 @@ module Amounts
     end
 
     def fetch_value(item, key)
+      if item.is_a?(Hash)
+        return item[key] if item.key?(key)
+        return item[key.to_s] if item.key?(key.to_s)
+
+        return nil
+      end
+
       return item[key] || item[key.to_s] if item.respond_to?(:[])
       return item.public_send(key) if item.respond_to?(key)
 
@@ -115,6 +122,10 @@ module Amounts
 
     def to_i(value)
       Amounts::NumberParser.parse_amount(value)
+    end
+
+    def to_i_or_nil(value)
+      Amounts::NumberParser.parse_amount_or_nil(value)
     end
 
     def to_decimal(value)
@@ -153,6 +164,17 @@ module Amounts
 
     def manual_input_context?
       %i[edit_save manual].include?(@context)
+    end
+
+    def discount_amount_input_present?(item)
+      value_present?(fetch_value(item, :discount_amount))
+    end
+
+    def manual_discount_amount_input_present?(item)
+      flag = fetch_value(item, :amount_discount_amount_present)
+      return flag if flag == true || flag == false
+
+      false
     end
 
     def value_present?(value)

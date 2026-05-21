@@ -23,6 +23,28 @@ module ReceiptsHelper
     "image/jpeg,image/png,image/bmp,image/tiff,image/heif,image/heic,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.heif,.heic"
   end
 
+  def receipt_total_amount_display(amount, currency_prefix: "¥")
+    return t("receipts.common.unset") if amount.nil?
+
+    "#{currency_prefix}#{number_with_delimiter(amount)}"
+  end
+
+  def receipt_detail_amount_display(amount, currency_prefix: "¥")
+    return t("receipts.common.not_available") if amount.nil?
+
+    "#{currency_prefix}#{number_with_delimiter(amount)}"
+  end
+
+  def receipt_rate_display(rate)
+    return t("receipts.common.not_available") if rate.nil?
+    return rate if rate.is_a?(String) && rate.include?("%")
+
+    percentage = BigDecimal(rate.to_s) * 100
+    "#{number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)}%"
+  rescue ArgumentError
+    rate.to_s.presence || t("receipts.common.not_available")
+  end
+
   def receipt_item_discount_label(item)
     discount_amount = item.discount_amount.to_i
     return nil unless discount_amount.positive?
