@@ -34,9 +34,26 @@
   quantity_inputmode = ReceiptItem.quantity_inputmode_for(selected_unit)
 %>
 
-<div class="<%= row_class %>"
-     data-receipt-form-target="itemRow"
-     data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
+<div class="swipe-action rounded-lg"
+     data-controller="swipe-action">
+  <div class="swipe-action-background md:hidden" aria-hidden="true">
+    <button type="button"
+            class="flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
+            data-action="click->receipt-form#removeItem click->swipe-action#close"
+            data-swipe-action-target="action"
+            data-swipe-ignore
+            tabindex="-1"
+            aria-label="<%= t("receipts.item_fields.remove_aria") %>">
+      <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+    </button>
+  </div>
+
+  <div class="swipe-action-foreground"
+       data-swipe-action-target="foreground"
+       data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
+    <div class="<%= row_class %>"
+         data-receipt-form-target="itemRow"
+         data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
   <div class="col-span-2 md:col-span-6 relative">
     <div class="flex items-center gap-2 md:block">
       <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.name") %></span>
@@ -311,4 +328,6 @@
     <%= item_form.hidden_field :needs_review %>
     <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
   <% end %>
+    </div>
+  </div>
 </div>

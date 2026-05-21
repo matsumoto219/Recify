@@ -2924,6 +2924,7 @@ RSpec.describe 'Receipts', type: :request do
         item_details_toggle = item_row.at_css('[data-receipt-form-target="itemDetailsToggle"]')
         item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
         mobile_summary = item_row.at_css('.receipt-form-item-mobile-summary')
+        swipe_wrapper = item_row.ancestors.find { |node| node['data-controller'].to_s.include?('swipe-action') }
 
         expect(item_details_toggle['data-action']).to include('click->receipt-form#toggleItemDetails')
         expect(item_details_toggle['aria-expanded']).to eq('false')
@@ -2946,6 +2947,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(mobile_summary.at_css('[data-action="click->receipt-form#removeItem"]')).to be_present
         expect(mobile_summary.at_css('.receipt-form-item-mobile-subtotal [data-receipt-form-target="lineTotalDisplay"]')).to be_present
         expect(mobile_summary.at_css('.receipt-form-item-mobile-subtotal')['class']).not_to include('border')
+        expect(swipe_wrapper).to be_present
+        expect(swipe_wrapper.at_css('[data-swipe-action-target="foreground"]')).to be_present
+        expect(swipe_wrapper.at_css('.swipe-action-background [data-action*="receipt-form#removeItem"][data-swipe-action-target="action"]')).to be_present
         expect(item_row.at_css('.receipt-form-item-mobile-name-toggle[data-receipt-form-target="itemDetailsToggle"]')).to be_present
         mobile_detail_divider = item_row.at_css('.receipt-form-item-mobile-detail-divider')
         expect(mobile_detail_divider).to be_present

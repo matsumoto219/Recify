@@ -98,23 +98,39 @@ export default class extends Controller {
   removeItem (event) {
     event.preventDefault()
 
-    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
+    const row = this.itemRowForAction(event.currentTarget)
     if (!row) return
 
-    if (this.deleteConfirmationEnabledValue && !window.confirm(this.deleteConfirmationMessageValue)) return
+    const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
+    delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
+
+    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deleteConfirmationMessageValue)) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="destroyField"]')
+    const rowContainer = this.itemRowContainer(row)
 
     if (destroyField) {
       // 既存レコード → _destroy を有効にして非表示
       destroyField.value = '1'
       row.style.display = 'none'
+      if (rowContainer !== row) rowContainer.style.display = 'none'
     } else {
       // 新規レコード → DOMから削除
-      row.remove()
+      rowContainer.remove()
     }
 
     this.recalculate()
+  }
+
+  itemRowForAction (element) {
+    const directRow = element.closest('[data-receipt-form-target="itemRow"]')
+    if (directRow) return directRow
+
+    return element.closest('[data-controller~="swipe-action"]')?.querySelector('[data-receipt-form-target="itemRow"]')
+  }
+
+  itemRowContainer (row) {
+    return row.closest('[data-controller~="swipe-action"]') || row
   }
 
   toggleItemDetails (event) {

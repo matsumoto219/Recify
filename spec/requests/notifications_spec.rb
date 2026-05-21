@@ -162,7 +162,8 @@ RSpec.describe 'Notifications', type: :request do
 
       get notifications_path
       document = Nokogiri::HTML(response.body)
-      delete_form = document.at_css("#notifications_list form[action='#{notification_path(notification)}'][method='post']")
+      notification_item = document.at_css("#notification_#{notification.id}")
+      delete_form = notification_item.at_css("form[action='#{notification_path(notification)}'][method='post']")
       delete_button = delete_form.at_css('button')
 
       aggregate_failures do
@@ -172,6 +173,8 @@ RSpec.describe 'Notifications', type: :request do
         expect(response.body).to include('自分の通知')
         expect(response.body).to include('確認できます')
         expect(response.body).not_to include('他人の通知')
+        expect(notification_item['data-controller'].to_s).not_to include('swipe-action')
+        expect(notification_item.at_css('.swipe-action-background')).to be_nil
         expect(delete_form).to be_present
         expect(delete_form.at_css('input[name="_method"]')['value']).to eq('delete')
         expect(delete_button['data-turbo-confirm']).to eq(I18n.t('notifications.item.delete_confirm'))

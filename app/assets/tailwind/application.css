@@ -298,9 +298,65 @@ body {
   transform: translateY(0);
 }
 
+.swipe-action {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.swipe-action-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  background: color-mix(
+    in srgb,
+    var(--state-error) 16%,
+    var(--bg-card-subtle)
+  );
+}
+
+.swipe-action-foreground {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.swipe-action-foreground-transition {
+  transition-property: transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.swipe-action-foreground-deleting {
+  transition-property: transform, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (width >= 768px) {
+  .swipe-action {
+    overflow: visible;
+  }
+
+  .swipe-action-background {
+    display: none;
+  }
+
+  .swipe-action-foreground {
+    transform: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapsible-grid,
-  .mobile-search-panel-motion {
+  .mobile-search-panel-motion,
+  .swipe-action-foreground-transition,
+  .swipe-action-foreground-deleting {
     transition-duration: 1ms;
   }
 }
