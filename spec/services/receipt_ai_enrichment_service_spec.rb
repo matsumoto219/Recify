@@ -6,13 +6,13 @@ RSpec.describe ReceiptAiEnrichmentService do
   let(:valid_ocr_result) do
     {
       success: true,
-      raw_text: 'セブン-イレブン コーヒー 180円',
+      raw_text: 'サンプルコンビニ コーヒー 180円',
       lines: [
-        'セブン-イレブン',
+        'サンプルコンビニ',
         'コーヒー 180円'
       ],
       candidates: {
-        store_name: 'セブン-イレブン',
+        store_name: 'サンプルコンビニ',
         payment_method_text: 'クレジット'
       },
       meta: {

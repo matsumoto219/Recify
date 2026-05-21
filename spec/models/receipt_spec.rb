@@ -186,24 +186,24 @@ RSpec.describe Receipt, type: :model do
     it 'スペース区切りのtokenをAND条件として検索する' do
       target = create_search_receipt(
         user: user,
-        store_name: 'セブン松山店',
+        store_name: 'サンプルコンビニ渋谷店',
         total_amount: 1000,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
       create_search_receipt(
         user: user,
-        store_name: 'セブン松山店',
+        store_name: 'サンプルコンビニ渋谷店',
         total_amount: 1500,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
       create_search_receipt(
         user: user,
-        store_name: 'ローソン松山店',
+        store_name: 'サンプルストア銀座店',
         total_amount: 1000,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
 
-      expect(user.receipts.search('セブン 1000')).to contain_exactly(target)
+      expect(user.receipts.search('サンプルコンビニ 1000')).to contain_exactly(target)
     end
 
     it '金額比較演算子でtotal_amountを検索する' do
@@ -291,30 +291,30 @@ RSpec.describe Receipt, type: :model do
     it '店舗名・金額・日付の複合条件をAND検索する' do
       target = create_search_receipt(
         user: user,
-        store_name: 'セブン松山店',
+        store_name: 'サンプルコンビニ渋谷店',
         total_amount: 900,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
       create_search_receipt(
         user: user,
-        store_name: 'セブン松山店',
+        store_name: 'サンプルコンビニ渋谷店',
         total_amount: 1500,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
       create_search_receipt(
         user: user,
-        store_name: 'セブン松山店',
+        store_name: 'サンプルコンビニ渋谷店',
         total_amount: 900,
         purchased_at: Time.zone.local(2025, 12, 31, 12, 0, 0)
       )
       create_search_receipt(
         user: user,
-        store_name: 'ローソン松山店',
+        store_name: 'サンプルストア銀座店',
         total_amount: 900,
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
 
-      expect(user.receipts.search('セブン <=1000 date>=2026-01-01')).to contain_exactly(target)
+      expect(user.receipts.search('サンプルコンビニ <=1000 date>=2026-01-01')).to contain_exactly(target)
     end
   end
 
