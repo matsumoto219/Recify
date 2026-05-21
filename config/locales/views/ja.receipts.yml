@@ -21,7 +21,7 @@ ja:
       title: レシート詳細
       breadcrumb_index: レシート一覧
       review_description: 確認が必要な項目があります。
-      warning_description: 以下の内容を確認してください。
+      warning_description: 内容を確認してください。
       store_information: Store Information
       store_name: 店舗名
       store_name_missing: 店舗名なし
@@ -64,7 +64,7 @@ ja:
         add_item: 明細追加
       review:
         blocking_description: 保存前に以下の内容を確認してください。
-        warning_description: 以下の内容を確認してください。
+        warning_description: 内容を確認してください。
       sections:
         basic_info: 基本情報
         items: 明細一覧

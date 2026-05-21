@@ -1,4 +1,4 @@
-<section class="max-w-7xl mx-auto px-0 md:px-2 py-2">
+<section class="w-full min-w-0 max-w-7xl mx-auto px-0 md:px-2 py-2">
   <%
     item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
@@ -40,7 +40,7 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     <% if has_alert_cards %>
-      <div id="receipt-detail-alerts" class="order-1 md:order-2 lg:order-none lg:col-span-8 space-y-6">
+      <div id="receipt-detail-alerts" class="order-1 md:order-2 lg:order-none lg:col-span-8 min-w-0 space-y-6">
         <% if @receipt.has_processing_error? %>
           <%= render "receipts/processing_error_card",
                 receipt: @receipt,
@@ -61,7 +61,7 @@
       </div>
     <% end %>
 
-    <div id="receipt-detail-main" class="order-3 md:order-3 lg:order-none lg:col-span-8 space-y-6">
+    <div id="receipt-detail-main" class="order-3 md:order-3 lg:order-none lg:col-span-8 min-w-0 space-y-6">
       <%= render "shared/ui/layout/surface_card", padding: :lg do %>
         <div class="flex justify-between items-start mb-8 gap-4">
           <div class="flex items-center min-w-0">
