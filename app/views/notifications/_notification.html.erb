@@ -2,6 +2,7 @@
   unread = notification.unread?
   stale_notifiable = notification.stale_notifiable?
   delete_confirm_data = notification.user.delete_confirmation_enabled? ? { turbo_confirm: t("notifications.item.delete_confirm") } : {}
+  action_button_classes = "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 text-xs font-semibold transition-colors"
   item_classes = [
     "token-bg-card",
     "token-border-soft",
@@ -38,21 +39,22 @@
         <%= button_to t("notifications.item.mark_as_read"),
           read_notification_path(notification),
           method: :patch,
-          class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-base transition-colors cursor-pointer" %>
+          form: { class: "contents" },
+          class: "#{action_button_classes} token-text-base cursor-pointer" %>
       <% elsif notification.action_available? %>
         <%= link_to t("notifications.item.open"),
           notification.action_path,
-          class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-base transition-colors" %>
+          class: "#{action_button_classes} token-text-base" %>
       <% end %>
 
       <%= button_to notification_path(notification),
         method: :delete,
         form: { class: "contents" },
         data: delete_confirm_data,
-        class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 py-2 text-xs font-semibold token-text-error transition-colors cursor-pointer",
+        class: "#{action_button_classes} token-text-error cursor-pointer",
         aria: { label: t("notifications.item.delete_aria", title: notification.title) },
         title: t("notifications.item.delete_aria", title: notification.title) do %>
-        <span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
+        <span class="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">close</span>
         <span><%= t("notifications.item.delete") %></span>
       <% end %>
     </div>
