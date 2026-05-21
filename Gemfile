@@ -70,8 +70,12 @@ end
 group :development do
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
+
   # HTML lint
   gem "erb_lint", require: false
+
+  # i18n unused/missing key checker
+  gem "i18n-tasks", require: false
 end
 
 group :test do
