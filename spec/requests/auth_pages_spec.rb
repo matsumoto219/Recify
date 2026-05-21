@@ -7,11 +7,15 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       guest_form = document.at_css("form[action='#{guest_sign_in_path}']")
+      noscript_banner = document.at_css('noscript')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(I18n.t('auth.sessions.title'))
+        expect(noscript_banner).to be_present
+        expect(noscript_banner.text).to include(I18n.t('shared.noscript.title'))
+        expect(noscript_banner.text).to include(I18n.t('shared.noscript.body'))
         expect(response.body).to include(I18n.t('auth.sessions.fields.email'))
         expect(response.body).to include(I18n.t('auth.sessions.forgot_password'))
         expect(response.body).to include(I18n.t('auth.sessions.guest.button'))

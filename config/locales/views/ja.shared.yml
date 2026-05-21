@@ -2,6 +2,9 @@ ja:
   shared:
     avatar:
       default_alt: プロフィール画像
+    noscript:
+      title: JavaScriptを有効にしてください
+      body: Recifyは画像アップロード、金額計算、検索、通知などにJavaScriptを使用します。ブラウザ設定でJavaScriptを有効にしてから再読み込みしてください。
     footer:
       terms: 利用規約
       privacy: プライバシーポリシー
