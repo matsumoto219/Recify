@@ -21,6 +21,7 @@
       <%= content_for?(:mobile_bottom_actions) ? 'pb-55' : 'pb-28' %>
       md:pb-10
     ">
+      <%= render "shared/noscript_banner", layout: :dashboard %>
       <%= yield %>
     </main>
   </div>

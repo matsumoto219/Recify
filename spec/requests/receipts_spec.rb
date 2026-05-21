@@ -103,6 +103,19 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'JS無効案内はdashboardのmain領域内に描画する' do
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('body > noscript')).to be_nil
+        expect(document.at_css('main noscript')).to be_present
+        expect(document.at_css('main noscript').text).to include(I18n.t('shared.noscript.title'))
+      end
+    end
+
     it '自分のレシートだけが表示される' do
       get receipts_path
 

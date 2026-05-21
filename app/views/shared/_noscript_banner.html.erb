@@ -1,0 +1,18 @@
+<%
+  layout = local_assigns.fetch(:layout, :page).to_sym
+  banner_classes = case layout
+                   when :dashboard
+                     "relative z-30 mb-6 rounded-xl border token-border-soft token-bg-card px-4 py-3 token-text-base shadow-sm"
+                   else
+                     "relative z-30 border-b token-border-soft token-bg-card px-4 py-3 token-text-base shadow-sm"
+                   end
+%>
+
+<noscript>
+  <div class="<%= banner_classes %>">
+    <div class="mx-auto max-w-5xl text-center">
+      <p class="text-sm font-bold"><%= t("shared.noscript.title") %></p>
+      <p class="mt-1 text-sm leading-relaxed token-text-muted"><%= t("shared.noscript.body") %></p>
+    </div>
+  </div>
+</noscript>
