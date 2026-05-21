@@ -1,5 +1,6 @@
 <%
   hide_on_mobile = local_assigns.fetch(:hide_on_mobile, false)
+  animate_on_connect = local_assigns.fetch(:animate_on_connect, false)
   summary_classes = [
     hide_on_mobile ? "hidden md:grid" : "grid",
     "grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 mb-10"
@@ -13,7 +14,8 @@
   data-receipt-summary-monthly-label-value="<%= t("dashboard.summary.amount.current_month_title") %>"
   data-receipt-summary-overall-label-value="<%= t("dashboard.summary.amount.overall_title") %>"
   data-receipt-summary-change-label-value="<%= t("dashboard.summary.amount.monthly_change_prefix") %>"
-  data-receipt-summary-count-suffix-value="<%= t("dashboard.summary.count_suffix") %>">
+  data-receipt-summary-count-suffix-value="<%= t("dashboard.summary.count_suffix") %>"
+  data-receipt-summary-animate-on-connect-value="<%= animate_on_connect %>">
   <% count_suffix = t("dashboard.summary.count_suffix") %>
 
   <%= render "shared/receipts/summary_card",

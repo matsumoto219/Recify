@@ -289,7 +289,10 @@ RSpec.describe Receipt, type: :model do
         [ user, :receipts ],
         target: "receipts_summary",
         partial: "shared/receipts/summary_cards",
-        locals: hash_including(failed_count: summary[:failed_count])
+        locals: hash_including(
+          failed_count: summary[:failed_count],
+          animate_on_connect: true
+        )
       )
 
       receipt.send(:broadcast_summary_cards_update)

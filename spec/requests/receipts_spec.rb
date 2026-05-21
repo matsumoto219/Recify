@@ -216,6 +216,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(summary['data-receipt-summary-overall-label-value']).to eq(I18n.t('dashboard.summary.amount.overall_title'))
         expect(summary['data-receipt-summary-change-label-value']).to eq(I18n.t('dashboard.summary.amount.monthly_change_prefix'))
         expect(summary['data-receipt-summary-count-suffix-value']).to eq(I18n.t('dashboard.summary.count_suffix'))
+        expect(summary['data-receipt-summary-animate-on-connect-value']).to eq('false')
       end
     end
 

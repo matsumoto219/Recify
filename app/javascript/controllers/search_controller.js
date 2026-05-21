@@ -193,6 +193,11 @@ export default class extends Controller {
       }
 
       if (summary && newSummary) {
+        const summaryController = newSummary.querySelector('[data-controller~="receipt-summary"]')
+        if (summaryController) {
+          summaryController.dataset.receiptSummaryAnimateOnConnectValue = 'true'
+        }
+
         summary.innerHTML = newSummary.innerHTML
       }
 

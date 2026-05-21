@@ -614,7 +614,7 @@ class Receipt < ApplicationRecord
       [ user, :receipts ],
       target: "receipts_summary",
       partial: "shared/receipts/summary_cards",
-      locals: summary
+      locals: summary.merge(animate_on_connect: true)
     )
   ensure
     @summary_broadcast_needed = false

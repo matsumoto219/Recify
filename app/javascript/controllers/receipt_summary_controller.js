@@ -7,7 +7,8 @@ export default class extends Controller {
     monthlyLabel: String,
     overallLabel: String,
     changeLabel: String,
-    countSuffix: String
+    countSuffix: String,
+    animateOnConnect: { type: Boolean, default: false }
   }
 
   connect () {
@@ -16,8 +17,13 @@ export default class extends Controller {
 
     const stored = sessionStorage.getItem(this.storageKeyValue)
     this.isMonthly = stored !== 'overall'
-    this.render({ animateSubtext: false })
-    this.seedSummaryValues()
+    this.render({ animateSubtext: this.animateOnConnectValue })
+
+    if (this.animateOnConnectValue) {
+      this.animateSummaryValues()
+    } else {
+      this.seedSummaryValues()
+    }
   }
 
   disconnect () {
@@ -310,6 +316,7 @@ export default class extends Controller {
   prepareForCache () {
     this.cancelAnimations()
     this.render({ animateSubtext: false })
+    this.animateOnConnectValue = false
     this.seedSummaryValues()
   }
 
