@@ -652,32 +652,6 @@ class ReceiptAnalysisService
     item_attributes[:needs_review] == true
   end
 
-  def extract_item_name(line)
-    line.to_s.sub(/\s+\d.*$/, "").strip
-  end
-
-  def extract_item_price(line)
-    numbers = line.to_s.scan(/\d+/)
-    return nil if numbers.empty?
-
-    numbers.first.to_i
-  end
-
-  def extract_item_quantity(line)
-    quantity_match = line.to_s.match(/[x×]\s*(\d+(?:\.\d+)?)/i)
-    return BigDecimal(quantity_match[1]) if quantity_match
-
-    1
-  end
-
-  def extract_item_line_total(line, price: nil, quantity: nil)
-    normalized_price = price || extract_item_price(line)
-    normalized_quantity = quantity.nil? ? extract_item_quantity(line) : normalize_quantity(quantity)
-    return nil unless normalized_price
-
-    (BigDecimal(normalized_price.to_s) * normalize_quantity(normalized_quantity)).round(0).to_i
-  end
-
   def apply_ocr_only_tax_rate_policy(items_attributes, amount_result)
     resolved_tax_rate = amount_result.dig(:resolved, :tax_rate)
 
