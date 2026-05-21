@@ -125,6 +125,9 @@ module Analysis
 
           raw_text = normalized_item[:raw_text].to_s
           quantity = normalize_quantity(normalized_item[:quantity])
+          quantity_unit = normalized_item[:quantity_unit]
+          quantity_fraction_invalid = integer_quantity_fraction?(quantity, quantity_unit)
+          quantity = BigDecimal("1") if quantity_fraction_invalid
           discount_amount = normalize_amount(normalized_item[:discount_amount])
           explicit_original_line_total = normalize_amount(normalized_item[:original_line_total])
           raw_line_total = normalize_amount(normalized_item[:line_total])
@@ -144,7 +147,8 @@ module Analysis
           review_reasons = item_review_reasons(
             normalized_item,
             tax_rate_confidence:,
-            category_invalid:
+            category_invalid:,
+            quantity_fraction_invalid:
           )
 
           {
@@ -160,7 +164,7 @@ module Analysis
             discount_amount: discount_amount,
             discount_rate: normalize_rate(normalized_item[:discount_rate]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit
-            quantity_unit: normalized_item[:quantity_unit],
+            quantity_unit: quantity_unit,
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
@@ -172,7 +176,8 @@ module Analysis
               tax_rate: tax_rate,
               tax_rate_confidence: tax_rate_confidence,
               review_reasons: review_reasons,
-              category_invalid: category_invalid
+              category_invalid: category_invalid,
+              quantity_fraction_invalid: quantity_fraction_invalid
             ),
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
@@ -312,8 +317,9 @@ module Analysis
         end
       end
 
-      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_invalid:)
+      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_invalid:, quantity_fraction_invalid: false)
         return true if category_invalid
+        return true if quantity_fraction_invalid
         return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
 
         if tax_rate.present? && tax_rate_confidence_low?(tax_rate_confidence)
@@ -328,9 +334,10 @@ module Analysis
         end
       end
 
-      def item_review_reasons(normalized_item, tax_rate_confidence:, category_invalid: false)
+      def item_review_reasons(normalized_item, tax_rate_confidence:, category_invalid: false, quantity_fraction_invalid: false)
         normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
           reasons << "item_category_uncertain" if category_invalid
+          reasons << "item_quantity_uncertain" if quantity_fraction_invalid
           reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
           reasons.uniq!
         end
@@ -518,6 +525,15 @@ module Analysis
         quantity = Amounts::NumberParser.parse_quantity(value, default: BigDecimal("1"))
 
         quantity.positive? ? quantity : BigDecimal("1")
+      end
+
+      def integer_quantity_fraction?(quantity, quantity_unit)
+        return false if quantity.blank?
+        return false if ReceiptItem.decimal_quantity_unit?(quantity_unit)
+
+        BigDecimal(quantity.to_s).frac != 0
+      rescue ArgumentError
+        false
       end
 
       def normalize_confidence(value)

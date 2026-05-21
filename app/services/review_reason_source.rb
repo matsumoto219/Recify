@@ -4,6 +4,7 @@ module ReviewReasonSource
   AI_REASONS = %w[
     item_name_uncertain
     item_category_uncertain
+    item_quantity_uncertain
     item_tax_rate_uncertain
     store_name_missing
     store_name_uncertain

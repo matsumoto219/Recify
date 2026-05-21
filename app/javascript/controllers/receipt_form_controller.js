@@ -32,12 +32,16 @@ export default class extends Controller {
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
-    multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' }
+    multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' },
+    decimalQuantityUnits: { type: String, default: 'kg,g,mg,L,ml,cc' },
+    integerQuantityStep: { type: String, default: '1' },
+    decimalQuantityStep: { type: String, default: '0.001' }
   }
 
   connect () {
     this.lineTotalTooltipDelay = 500
     this.continuousAmountUpdateThreshold = 150
+    this.syncQuantityInputSteps()
   }
 
   disconnect () {
@@ -56,6 +60,34 @@ export default class extends Controller {
 
     event.currentTarget.insertAdjacentHTML('beforebegin', html)
     this.nextIndexValue = index + 1
+    this.syncQuantityInputSteps()
+  }
+
+  quantityUnitChanged (event) {
+    const unitSelect = event.currentTarget
+
+    this.syncQuantityInputStepForUnitSelect(unitSelect)
+    this.clearFractionalQuantityForIntegerUnit(unitSelect)
+    this.recalculate()
+  }
+
+  preventIntegerQuantityDecimalInput (event) {
+    if (event.isComposing) return
+    if (event.inputType !== 'insertText') return
+    if (!this.integerQuantityInput(event.target)) return
+    if (!this.decimalSeparatorText(event.data)) return
+
+    event.preventDefault()
+  }
+
+  sanitizeQuantityInput (event) {
+    if (event.isComposing) return
+    if (!this.integerQuantityInput(event.target)) return
+
+    const sanitizedValue = this.integerQuantityText(event.target.value)
+    if (event.target.value !== sanitizedValue) {
+      event.target.value = sanitizedValue
+    }
   }
 
   removeItem (event) {
@@ -427,6 +459,102 @@ export default class extends Controller {
 
   countableQuantityUnits () {
     return ['個', '点', '本', '袋', '枚', '台', '箱', 'セット']
+  }
+
+  syncQuantityInputSteps () {
+    this.quantityUnitInputTargets.forEach((unitSelect) => {
+      this.syncQuantityInputStepForUnitSelect(unitSelect)
+    })
+  }
+
+  syncQuantityInputStepForUnitSelect (unitSelect) {
+    const row = unitSelect.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return
+
+    const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
+    if (!quantityInput) return
+
+    const decimalAllowed = this.decimalQuantityUnit(unitSelect.value)
+    quantityInput.step = decimalAllowed ? this.decimalQuantityStepValue : this.integerQuantityStepValue
+    quantityInput.inputMode = decimalAllowed ? 'decimal' : 'numeric'
+  }
+
+  clearFractionalQuantityForIntegerUnit (unitSelect) {
+    if (this.decimalQuantityUnit(unitSelect.value)) return
+
+    const quantityInput = this.quantityInputForUnitSelect(unitSelect)
+    if (!quantityInput) return
+
+    const quantityText = String(quantityInput.value ?? '')
+    if (!this.hasDecimalSeparator(quantityText)) return
+
+    if (this.decimalFractionIsZero(quantityText)) {
+      quantityInput.value = this.integerQuantityText(quantityText)
+    } else {
+      quantityInput.value = ''
+    }
+  }
+
+  quantityInputForUnitSelect (unitSelect) {
+    const row = unitSelect.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return null
+
+    return row.querySelector('[data-receipt-form-target="quantityInput"]')
+  }
+
+  quantityUnitSelectForInput (input) {
+    const row = input.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return null
+
+    return row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
+  }
+
+  integerQuantityInput (input) {
+    const unitSelect = this.quantityUnitSelectForInput(input)
+    return !this.decimalQuantityUnit(unitSelect?.value)
+  }
+
+  decimalQuantityUnit (unit) {
+    return this.decimalQuantityUnitList().includes(String(unit ?? '').trim())
+  }
+
+  decimalQuantityUnitList () {
+    return this.decimalQuantityUnitsValue
+      .split(',')
+      .map((unit) => unit.trim())
+      .filter((unit) => unit !== '')
+  }
+
+  decimalSeparatorText (value) {
+    return /[.,．，]/.test(String(value ?? ''))
+  }
+
+  hasDecimalSeparator (value) {
+    return this.decimalSeparatorText(value)
+  }
+
+  decimalFractionIsZero (value) {
+    const normalized = this.normalizeQuantityText(value)
+    const decimalPart = normalized.split(/[.,]/)[1]
+
+    return decimalPart === undefined || /^0*$/.test(decimalPart.replace(/[^0-9]/g, ''))
+  }
+
+  integerQuantityText (value) {
+    const normalized = this.normalizeQuantityText(value)
+    const integerPart = normalized.split(/[.,]/)[0]
+
+    return integerPart
+      .replace(/[^0-9-]/g, '')
+      .replace(/(?!^)-/g, '')
+  }
+
+  normalizeQuantityText (value) {
+    return String(value ?? '')
+      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .replace(/．/g, '.')
+      .replace(/，/g, ',')
+      .replace(/－/g, '-')
   }
 
   formatNumber (num) {

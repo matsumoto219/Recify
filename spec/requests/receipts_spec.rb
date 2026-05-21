@@ -1726,9 +1726,9 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '量り売り商品',
               price: '14,400',
               quantity: '0,300',
-              quantity_unit: '個',
+              quantity_unit: 'kg',
               tax_rate: 10,
-              line_total: nil,
+              line_total: '4,320',
               needs_review: false
             },
             '1' => {
@@ -1750,8 +1750,36 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.total_amount).to eq(8_640)
         expect(items.first.quantity).to eq(BigDecimal('0.300'))
+        expect(items.first.quantity_unit).to eq('kg')
         expect(items.first.line_total).to eq(4_320)
         expect(items.second.line_total).to eq(4_320)
+      end
+    end
+
+    it 'integer-only unitの小数quantityはJSなしでも保存しない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '不正数量作成',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '小数個数商品',
+                price: 100,
+                quantity: '1.1',
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('数量はこの単位では整数で入力してください')
       end
     end
 
@@ -2162,9 +2190,9 @@ RSpec.describe 'Receipts', type: :request do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
-        quantity: BigDecimal('0.300'),
+        quantity: 1,
         quantity_unit: '束',
-        line_total: 30,
+        line_total: 100,
         needs_review: false
       )
 
@@ -2172,7 +2200,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('数量: 0.300 束')
+        expect(response.body).to include('数量: 1 束')
       end
     end
 
@@ -2906,8 +2934,13 @@ RSpec.describe 'Receipts', type: :request do
         end
 
         quantity_unit_select = item_row.at_css('[data-receipt-form-target="quantityUnitInput"]')
-        expect(quantity_unit_select['data-action']).to be_nil
+        quantity_input = item_row.at_css('[data-receipt-form-target="quantityInput"]')
+        expect(quantity_input['data-action']).to include('beforeinput->receipt-form#preventIntegerQuantityDecimalInput')
+        expect(quantity_input['data-action']).to include('input->receipt-form#sanitizeQuantityInput')
+        expect(quantity_unit_select['data-action']).to include('change->receipt-form#quantityUnitChanged')
         expect(quantity_unit_select['aria-label']).to eq(I18n.t('receipts.item_fields.unit'))
+        expect(quantity_input['step']).to eq('1')
+        expect(quantity_input['inputmode']).to eq('numeric')
         expect(item_row.at_css(%(button[aria-label="#{I18n.t('shared.number_field.decrement_aria', label: I18n.t('receipts.item_fields.unit_price'))}"]))).to be_present
         expect(item_row.at_css(%(button[aria-label="#{I18n.t('shared.number_field.increment_aria', label: I18n.t('receipts.item_fields.unit_price'))}"]))).to be_present
 
@@ -2964,7 +2997,7 @@ RSpec.describe 'Receipts', type: :request do
           confirmed_name: name,
           price: 100,
           quantity: quantity,
-          quantity_unit: '個',
+          quantity_unit: quantity.frac.zero? ? '個' : 'kg',
           line_total: 100,
           needs_review: false
         )
@@ -3106,7 +3139,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '数量単位selectを再計算判定targetとして表示し、unit変更だけでは再計算しない' do
+    it '数量単位selectを再計算判定targetとして表示し、unit変更時にstep同期と再計算を行う' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',
         price: 14_400,
@@ -3120,11 +3153,16 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       quantity_unit_select = document.at_css('select[name$="[quantity_unit]"]')
+      quantity_input = document.at_css('[data-receipt-form-target="quantityInput"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(quantity_unit_select['data-receipt-form-target']).to eq('quantityUnitInput')
-        expect(quantity_unit_select['data-action']).to be_nil
+        expect(quantity_unit_select['data-action']).to include('change->receipt-form#quantityUnitChanged')
+        expect(quantity_input['data-action']).to include('beforeinput->receipt-form#preventIntegerQuantityDecimalInput')
+        expect(quantity_input['data-action']).to include('input->receipt-form#sanitizeQuantityInput')
+        expect(quantity_input['step']).to eq('0.001')
+        expect(quantity_input['inputmode']).to eq('decimal')
       end
     end
 
@@ -3139,7 +3177,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(template_html).to include('data-original-line-total="0"')
         expect(template_html).to include('data-receipt-form-target="quantityUnitInput"')
-        expect(template_html).not_to include('data-action="change-&gt;receipt-form#recalculate"')
+        expect(template_html).to include('change-&gt;receipt-form#quantityUnitChanged')
+        expect(template_html).not_to include('change-&gt;receipt-form#recalculate')
         expect(controller_source).to include('syncLineTotalState')
         expect(controller_source).to include('lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)')
       end
@@ -3171,9 +3210,9 @@ RSpec.describe 'Receipts', type: :request do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
-        quantity: BigDecimal('0.300'),
+        quantity: 1,
         quantity_unit: '束',
-        line_total: 30,
+        line_total: 100,
         needs_review: false
       )
 
@@ -3888,10 +3927,10 @@ RSpec.describe 'Receipts', type: :request do
       item = receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
-        quantity: BigDecimal('0.300'),
+        quantity: 1,
         quantity_unit: '束',
         tax_rate: BigDecimal('0.1'),
-        line_total: 30,
+        line_total: 100,
         needs_review: false
       )
 
@@ -3904,7 +3943,7 @@ RSpec.describe 'Receipts', type: :request do
               id: item.id,
               confirmed_name: item.confirmed_name,
               price: item.price,
-              quantity: '0.300',
+              quantity: '1',
               quantity_unit: '束',
               tax_rate: 10,
               line_total: item.line_total,
@@ -3919,7 +3958,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(item.quantity_unit).to eq('束')
-        expect(item.line_total).to eq(30)
+        expect(item.line_total).to eq(100)
       end
     end
 

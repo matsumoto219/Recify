@@ -700,6 +700,23 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(item[:line_total]).to eq(4_320)
         end
       end
+
+      it 'integer-only unitの小数quantityは未確定扱いで1にfallbackする' do
+        ocr_result[:candidates][:items].first[:price] = '100円'
+        ocr_result[:candidates][:items].first[:quantity] = '1.5'
+        ocr_result[:candidates][:items].first[:quantity_unit] = '個'
+        ocr_result[:candidates][:items].first[:line_total] = nil
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:quantity]).to eq(BigDecimal('1'))
+          expect(item[:line_total]).to eq(100)
+          expect(item[:needs_review]).to be(true)
+          expect(item[:review_reasons]).to include('item_quantity_uncertain')
+        end
+      end
     end
 
     context 'payment_method_text が判定不能な場合' do

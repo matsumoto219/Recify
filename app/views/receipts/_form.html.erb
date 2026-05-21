@@ -11,7 +11,10 @@
                   "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form,
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
-                  "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates")
+                  "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates"),
+                  "receipt-form-decimal-quantity-units-value": ReceiptItem::DECIMAL_QUANTITY_UNITS.join(","),
+                  "receipt-form-integer-quantity-step-value": "1",
+                  "receipt-form-decimal-quantity-step-value": "0.001"
                 }
               } do |f| %>
 

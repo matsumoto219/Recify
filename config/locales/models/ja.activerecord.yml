@@ -51,6 +51,8 @@ ja:
         discount_rate: 割引率
         original_line_total: 割引前小計
         review_reasons: 確認理由
+      receipt/receipt_items:
+        quantity: 数量
       receipt_tax_detail:
         receipt: レシート
         tax_type: 税区分
@@ -117,6 +119,8 @@ ja:
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
         receipt_item:
           attributes:
+            quantity:
+              must_be_integer_for_unit: "はこの単位では整数で入力してください"
             tax_rate:
               less_than_or_equal_to: "は100%以下で入力してください"
               greater_than_or_equal_to: "は0%以上で入力してください"

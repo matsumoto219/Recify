@@ -31,6 +31,13 @@ class ReceiptItem < ApplicationRecord
     cc
   ].freeze
 
+  INTEGER_QUANTITY_UNITS = [
+    *COUNTABLE_QUANTITY_UNITS,
+    "その他"
+  ].freeze
+
+  DECIMAL_QUANTITY_UNITS = MEASUREMENT_QUANTITY_UNITS
+
   QUANTITY_UNITS = [
     *COUNTABLE_QUANTITY_UNITS,
     *MEASUREMENT_QUANTITY_UNITS,
@@ -56,6 +63,7 @@ class ReceiptItem < ApplicationRecord
   validates :quantity,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999.999 },
             allow_blank: true
+  validate :quantity_must_be_integer_for_integer_unit
 
   validates :position_index,
             numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999 },
@@ -98,6 +106,22 @@ class ReceiptItem < ApplicationRecord
 
   def self.quantity_unit_options
     QUANTITY_UNITS.map { |unit| [ unit, unit ] }
+  end
+
+  def self.decimal_quantity_unit?(unit)
+    DECIMAL_QUANTITY_UNITS.include?(unit.to_s.strip)
+  end
+
+  def self.integer_quantity_unit?(unit)
+    !decimal_quantity_unit?(unit)
+  end
+
+  def self.quantity_step_for(unit)
+    decimal_quantity_unit?(unit) ? "0.001" : "1"
+  end
+
+  def self.quantity_inputmode_for(unit)
+    decimal_quantity_unit?(unit) ? "decimal" : "numeric"
   end
 
   def category_label
@@ -150,6 +174,16 @@ class ReceiptItem < ApplicationRecord
   end
 
   private
+
+  def quantity_must_be_integer_for_integer_unit
+    return if quantity.blank?
+    return if self.class.decimal_quantity_unit?(quantity_unit)
+
+    decimal = BigDecimal(quantity.to_s)
+    errors.add(:quantity, :must_be_integer_for_unit) unless decimal.frac.zero?
+  rescue ArgumentError
+    nil
+  end
 
   def inferred_discount_rate
     discount = discount_amount.to_i

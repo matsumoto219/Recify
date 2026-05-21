@@ -43,6 +43,7 @@ ja:
         items_missing: "商品情報が取得できていません"
         item_name_uncertain: "商品名の精度が低い可能性があります"
         item_category_uncertain: "カテゴリの精度が低い可能性があります"
+        item_quantity_uncertain: "数量の判定に不確実性があります"
         item_tax_rate_uncertain: "税率の判定に不確実性があります"
         ocr_unreadable: "画像が読み取れませんでした"
         ocr_low_confidence: "画像の精度が低い可能性があります"
