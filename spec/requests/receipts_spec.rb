@@ -2252,10 +2252,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
-        expect(response.body).to include('OCR service timeout')
+        expect(response.body).not_to include('OCR service timeout')
         expect(response.body).to include('手動編集で内容を修正できます')
         expect(response.body).to include('編集して修正')
         expect(response.body).to include(edit_receipt_path(receipt, from: 'show'))
+        expect(receipt.reload.processing_error_message).to eq('OCR service timeout')
       end
     end
 
@@ -2320,8 +2321,10 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include(I18n.t('receipts.processing_error_codes.ai_not_receipt'))
-        expect(response.body).to include('development_note / not_receipt')
+        expect(response.body).not_to include('development_note / not_receipt')
+        expect(response.body).not_to include('not_receipt')
         expect(response.body).to include(edit_receipt_path(receipt, from: 'show'))
+        expect(receipt.reload.processing_error_message).to eq('development_note / not_receipt')
       end
     end
 
@@ -2353,7 +2356,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include(I18n.t('receipts.processing_error_codes.unsupported_country'))
-        expect(response.body).to include('country_region=USA')
+        expect(response.body).not_to include('country_region=USA')
+        expect(receipt.reload.processing_error_message).to eq('country_region=USA')
       end
     end
 
@@ -2661,7 +2665,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
         expect(response.body).to include('OCR処理に失敗しました')
-        expect(response.body).to include('OCR service timeout')
+        expect(response.body).not_to include('OCR service timeout')
+        expect(receipt.reload.processing_error_message).to eq('OCR service timeout')
       end
     end
 

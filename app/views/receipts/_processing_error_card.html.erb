@@ -24,13 +24,6 @@
         <% end %>
       </div>
 
-      <% if receipt.processing_error_message.present? %>
-        <div class="rounded-lg border <%= box_class %> px-3 py-2">
-          <div class="mb-1 text-xs font-bold <%= title_class %>"><%= t("receipts.processing_error_card.details_label") %></div>
-          <p class="text-sm token-text-base break-words"><%= receipt.processing_error_message %></p>
-        </div>
-      <% end %>
-
       <% if edit_path.present? %>
         <div>
           <%= render "shared/ui/actions/button",

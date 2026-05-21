@@ -184,7 +184,6 @@ ja:
     processing_error_card:
       failed_title: 処理失敗
       attention_title: 処理に関する注意
-      details_label: 補足
       manual_edit_hint: 手動編集で内容を修正できます。
       edit_action: 編集して修正
     review_reason_sources:
