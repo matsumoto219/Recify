@@ -32,7 +32,7 @@ RSpec.describe 'Notifications', type: :request do
     end
 
     it '通知dropdownに最新5件だけ表示し、通知一覧への導線を出す' do
-      6.times do |index|
+      notifications = 6.times.map do |index|
         create(
           :notification,
           user:,
@@ -52,6 +52,7 @@ RSpec.describe 'Notifications', type: :request do
       delete_forms = dropdown.css("form[action^='/notifications/'][method='post']")
       delete_button = delete_forms.first.at_css('button')
       first_item = delete_forms.first.parent
+      first_read_link = dropdown.at_css("a[href='#{read_notification_path(notifications.first)}']")
 
       aggregate_failures do
         expect(dropdown).to be_present
@@ -70,10 +71,15 @@ RSpec.describe 'Notifications', type: :request do
         expect(dropdown.at_css(%([aria-label="#{I18n.t('shared.notifications.unread_aria')}"]))).to be_present
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')
+        expect(first_read_link).to be_present
+        expect(first_read_link['data-turbo-method']).to eq('patch')
+        expect(dropdown.at_css(%(a[href="#{notifications.first.action_path}"]))).to be_nil
         expect(delete_forms.size).to eq(5)
         expect(delete_forms.first['class']).to include('contents')
         expect(delete_forms.first.at_css('input[name="_method"]')['value']).to eq('delete')
         expect(first_item['class']).to include('token-hover-bg-card-subtle')
+        expect(first_item.css('a form')).to be_empty
+        expect(delete_forms.first.ancestors('a')).to be_empty
         expect(dropdown.css('a.token-hover-bg-card-subtle')).to be_empty
         expect(delete_button.text).to include('close')
         expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
@@ -82,7 +88,7 @@ RSpec.describe 'Notifications', type: :request do
     end
 
     it '削除済みreceiptの通知はdropdownに削除済みreceipt pathを出さない' do
-      create(
+      notification = create(
         :notification,
         user:,
         title: '削除済みレシート通知',
@@ -100,6 +106,7 @@ RSpec.describe 'Notifications', type: :request do
         expect(response).to have_http_status(:success)
         expect(dropdown).to be_present
         expect(dropdown.at_css(%(a[href="#{receipt_path(missing_receipt_id)}"]))).to be_nil
+        expect(dropdown.at_css(%(a[href="#{read_notification_path(notification)}"][data-turbo-method="patch"]))).to be_present
         expect(dropdown.text).to include(I18n.t('notifications.item.deleted_target'))
       end
     end
@@ -216,6 +223,7 @@ RSpec.describe 'Notifications', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(notifications_path)
         expect(notification.reload).to be_read
+        expect(flash[:alert]).to eq(I18n.t('notifications.item.deleted_target'))
       end
     end
 

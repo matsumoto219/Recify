@@ -1,7 +1,7 @@
 <%
   unread = notification.unread?
   stale_notifiable = notification.stale_notifiable?
-  item_path = notification.action_available? ? notification.action_path : notifications_path
+  item_path = read_notification_path(notification)
 
   icon_config =
     case notification.kind
@@ -22,7 +22,9 @@
 %>
 
 <div class="<%= item_classes %>">
-  <%= link_to item_path, class: "flex min-w-0 flex-1 gap-3" do %>
+  <%= link_to item_path,
+    class: "flex min-w-0 flex-1 gap-3",
+    data: { turbo_method: :patch } do %>
     <div class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full <%= icon_config[:class] %>">
       <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= icon_config[:icon] %></span>
     </div>

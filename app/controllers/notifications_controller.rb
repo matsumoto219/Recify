@@ -10,7 +10,8 @@ class NotificationsController < ApplicationController
     notification = current_user.notifications.find(params[:id])
     notification.mark_as_read!
 
-    redirect_to safe_notification_redirect_path(notification)
+    redirect_options = notification.stale_notifiable? ? { alert: t("notifications.item.deleted_target") } : {}
+    redirect_to safe_notification_redirect_path(notification), **redirect_options
   end
 
   def read_all
