@@ -1326,6 +1326,49 @@ RSpec.describe 'Receipts', type: :request do
       expect([ 200, 422 ]).to include(response.status)
     end
 
+    it '手動新規のvalidation失敗時は未入力金額を未設定表示のまま維持する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash'
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq(I18n.t('receipts.common.unset'))
+        expect(document.at_css('[data-receipt-form-target="subtotalAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+        expect(document.at_css('[data-receipt-form-target="taxAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+      end
+    end
+
+    it '手動新規のvalidation失敗時も明示0入力は0円表示を維持する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            total_amount: '0',
+            subtotal_amount: '0',
+            tax_amount: '0'
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq('¥0')
+        expect(document.at_css('[data-receipt-form-target="subtotalAmount"]').text.strip).to eq('¥0')
+        expect(document.at_css('[data-receipt-form-target="taxAmount"]').text.strip).to eq('¥0')
+      end
+    end
+
     it '画像のみの手動登録失敗時はsigned_id errorにならず新規フォームに戻る' do
       expect do
         post receipts_path, params: {
@@ -1474,6 +1517,9 @@ RSpec.describe 'Receipts', type: :request do
           receipt: {
             store_name: '空明細除外',
             payment_method: 'cash',
+            total_amount: '500',
+            subtotal_amount: '455',
+            tax_amount: '45',
             receipt_items_attributes: {
               '0' => {
                 confirmed_name: '',
@@ -1497,7 +1543,9 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.receipt_items).to be_empty
-        expect(receipt.total_amount).to eq(0)
+        expect(receipt.total_amount).to eq(500)
+        expect(receipt.subtotal_amount).to eq(455)
+        expect(receipt.tax_amount).to eq(45)
       end
     end
 
@@ -1506,6 +1554,9 @@ RSpec.describe 'Receipts', type: :request do
         receipt: {
           store_name: '数量空欄作成',
           payment_method: 'cash',
+          total_amount: '0',
+          subtotal_amount: '0',
+          tax_amount: '0',
           receipt_items_attributes: {
             '0' => {
               confirmed_name: '金額未入力商品',
@@ -1789,6 +1840,9 @@ RSpec.describe 'Receipts', type: :request do
         receipt: {
           store_name: 'measurement line_total nil 作成',
           payment_method: 'cash',
+          total_amount: '0',
+          subtotal_amount: '0',
+          tax_amount: '0',
           receipt_items_attributes: {
             '0' => {
               confirmed_name: '量り売り商品',
@@ -1970,6 +2024,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 110,
               quantity: 1,
+              quantity_unit: '個',
               tax_rate: 10,
               line_total: nil,
               needs_review: false

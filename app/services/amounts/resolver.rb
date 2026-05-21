@@ -42,8 +42,10 @@ module Amounts
 
     def resolve_manual
       return resolve_analysis if item_data_present?
+      return resolve_receipt_input if receipt_input_present?
+      return resolve_receipt_input if tax_detail_data_present?
 
-      resolve_receipt_input
+      empty_manual_input
     end
 
     def resolve_receipt_input
@@ -56,7 +58,47 @@ module Amounts
     end
 
     def item_data_present?
-      @items.any? { |item| item_line_total(item).positive? }
+      @items.any? { |item| item_amount_data_present?(item) }
+    end
+
+    def item_amount_data_present?(item)
+      item_line_total(item).positive? ||
+        explicit_zero_amount_item?(item) ||
+        to_i(fetch_value(item, :original_line_total)).positive? ||
+        to_i(fetch_value(item, :discount_amount)).positive?
+    end
+
+    def explicit_zero_amount_item?(item)
+      explicit_zero_line_total?(item) || explicit_zero_price_total?(item)
+    end
+
+    def explicit_zero_line_total?(item)
+      value_was_present?(item, :line_total) && to_i(fetch_value(item, :line_total)).zero?
+    end
+
+    def explicit_zero_price_total?(item)
+      value_was_present?(item, :price) && to_i(fetch_value(item, :price)).zero?
+    end
+
+    def receipt_input_present?
+      %i[subtotal_amount tax_amount total_amount tax_rate].any? do |key|
+        present?(fetch_value(@receipt, key))
+      end
+    end
+
+    def tax_detail_data_present?
+      @tax_details.any? do |tax_detail|
+        %i[rate net_amount amount].any? { |key| present?(fetch_value(tax_detail, key)) }
+      end
+    end
+
+    def empty_manual_input
+      {
+        subtotal: nil,
+        tax: nil,
+        total: nil,
+        tax_rate: nil
+      }
     end
 
     def item_line_total(item)
@@ -115,6 +157,13 @@ module Amounts
 
     def present?(value)
       !value.nil? && value != ""
+    end
+
+    def value_was_present?(item, key)
+      flag = fetch_value(item, :"amount_#{key}_present")
+      return flag if [ true, false ].include?(flag)
+
+      present?(fetch_value(item, key))
     end
 
     def normalize_context(value)

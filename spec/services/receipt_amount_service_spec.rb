@@ -136,6 +136,39 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'keeps manual empty amount input nil when no valid items exist' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to be_nil
+        expect(result[:resolved][:subtotal]).to be_nil
+        expect(result[:resolved][:tax]).to be_nil
+        expect(result[:resolved][:tax_rate]).to be_nil
+      end
+    end
+
+    it 'preserves explicit zero amount input in manual context' do
+      result = call_service(
+        receipt: {
+          total_amount: 0,
+          subtotal_amount: 0,
+          tax_amount: 0
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(0)
+        expect(result[:resolved][:subtotal]).to eq(0)
+        expect(result[:resolved][:tax]).to eq(0)
+      end
+    end
+
     it 'accepts symbol context values' do
       result = call_service(
         receipt: {
@@ -987,6 +1020,32 @@ RSpec.describe ReceiptAmountService do
         expect(item[:discount_amount]).to eq(310)
         expect(item[:line_total]).to eq(0)
         expect(result[:resolved][:total]).to eq(0)
+      end
+    end
+
+    it 'keeps explicit zero amount items in manual context' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 0,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 0,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:price]).to eq(0)
+        expect(item[:line_total]).to eq(0)
+        expect(result[:resolved][:total]).to eq(0)
+        expect(result[:resolved][:subtotal]).to eq(0)
+        expect(result[:resolved][:tax]).to eq(0)
       end
     end
 
