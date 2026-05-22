@@ -163,6 +163,7 @@ RSpec.describe 'Auth pages', type: :request do
           expect(user.unlock_token).to be_present
           expect(ActionMailer::Base.deliveries.size).to eq(1)
           expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
+          expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.unlock_instructions.action'))
         end
 
         token = unlock_token_from(ActionMailer::Base.deliveries.last)
@@ -308,6 +309,25 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to include(I18n.t('settings.account.title'))
       end
     end
+
+    it 'guestが直リンクでedit registrationを開いても内部メールを表示しない' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      guest.update!(name: '')
+      sign_in guest
+
+      get edit_user_registration_path
+
+      document = Nokogiri::HTML(response.body)
+      email_input = document.at_css('input[name="user[email]"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(email_input['value']).to be_blank
+        expect(response.body).not_to include(fake_email)
+      end
+    end
   end
 
   describe 'DELETE /users/sign_out' do
@@ -356,6 +376,22 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to redirect_to(new_user_session_path)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
+      end
+    end
+
+    it 'guestの内部メール宛にはpassword reset mailを送らない' do
+      guest = User.guest!
+
+      post user_password_path,
+        params: {
+          user: {
+            email: guest.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
   end

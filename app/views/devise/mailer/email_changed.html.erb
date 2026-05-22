@@ -4,5 +4,5 @@
 <% if @resource.try(:unconfirmed_email?) %>
   <p><%= t("auth.mailer.email_changed.changing", email: @resource.unconfirmed_email) %></p>
 <% else %>
-  <p><%= t("auth.mailer.email_changed.changed", email: @resource.email) %></p>
+  <p><%= t("auth.mailer.email_changed.changed", email: @resource.display_email) %></p>
 <% end %>

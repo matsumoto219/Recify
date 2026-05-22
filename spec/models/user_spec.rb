@@ -94,6 +94,29 @@ RSpec.describe User, type: :model do
     end
   end
 
+  describe 'display labels' do
+    it '名前なしguestは内部メールを表示名・表示メールに使わない' do
+      guest = described_class.guest!
+      guest.update!(name: '')
+
+      aggregate_failures do
+        expect(guest.display_name).to eq(I18n.t('users.display.guest_name'))
+        expect(guest.display_email).to eq(I18n.t('users.display.email_unregistered'))
+        expect(guest.display_name).not_to include(guest.email)
+        expect(guest.display_email).not_to include(guest.email)
+      end
+    end
+
+    it '通常ユーザーは名前がなければメールアドレスを表示名に使う' do
+      user = create(:user, name: '')
+
+      aggregate_failures do
+        expect(user.display_name).to eq(user.email)
+        expect(user.display_email).to eq(user.email)
+      end
+    end
+  end
+
   describe '#guest_registration_pending?' do
     it 'guestの本登録申請中だけtrueにする' do
       guest = described_class.guest!
@@ -141,6 +164,36 @@ RSpec.describe User, type: :model do
         expect(user.email).to eq('normal-reconfirm@example.com')
         expect(user.unconfirmed_email).to be_nil
       end
+    end
+  end
+
+  describe 'guest devise notifications' do
+    it 'guest本登録のconfirmation mailだけは新メール宛に送る' do
+      guest = described_class.guest!
+      fake_email = guest.email
+
+      guest.start_guest_registration(
+        email: 'guest-notification-confirm@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+
+      delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+
+      aggregate_failures do
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(delivered_recipients).to include('guest-notification-confirm@example.com')
+        expect(delivered_recipients).not_to include(fake_email)
+      end
+    end
+
+    it 'guestのfake email宛Devise通知は送らない' do
+      guest = described_class.guest!
+
+      guest.send_reset_password_instructions
+      guest.lock_access!(send_instructions: true)
+
+      expect(ActionMailer::Base.deliveries).to be_empty
     end
   end
 

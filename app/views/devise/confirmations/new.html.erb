@@ -1,11 +1,19 @@
 <%# TODO: Devise confirmable を有効化する場合は auth locale とUI設計に接続する %>
+<%
+  confirmation_email_value =
+    if resource.respond_to?(:guest?) && resource.guest?
+      resource.unconfirmed_email.presence
+    else
+      resource.pending_reconfirmation? ? resource.unconfirmed_email : resource.email
+    end
+%>
 <h2>Resend confirmation instructions</h2>
 
 <%= form_for(resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }) do |f| %>
 
   <div class="field">
     <p><%= f.label :email %></p>
-    <p><%= f.email_field :email, autofocus: true, autocomplete: "email", value: (resource.pending_reconfirmation? ? resource.unconfirmed_email : resource.email) %></p>
+    <p><%= f.email_field :email, autofocus: true, autocomplete: "email", value: confirmation_email_value %></p>
   </div>
 
   <div class="actions">

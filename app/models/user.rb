@@ -64,6 +64,14 @@ class User < ApplicationRecord
     update!(guest: false)
   end
 
+  def display_name
+    name.presence || (guest? ? I18n.t("users.display.guest_name") : email.to_s)
+  end
+
+  def display_email
+    guest? ? I18n.t("users.display.email_unregistered") : email.to_s
+  end
+
   def storage_usage
     Storage::UsageCalculator.new(self)
   end
@@ -78,10 +86,23 @@ class User < ApplicationRecord
 
   private
 
+  def send_devise_notification(notification, *args)
+    return if suppress_guest_fake_email_notification?(notification)
+
+    super
+  end
+
   def send_email_changed_notification?
     return false if guest?
 
     super
+  end
+
+  def suppress_guest_fake_email_notification?(notification)
+    return false unless guest?
+    return false if notification == :confirmation_instructions && pending_reconfirmation?
+
+    true
   end
 
   def avatar_type

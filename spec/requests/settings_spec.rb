@@ -172,6 +172,34 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).not_to include(guest.email)
       end
     end
+
+    it 'guestがプロフィール編集で名前を空にしてもheader/avatarに内部メールを表示しない' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: ''
+              }
+            }
+
+      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+      avatar_fallbacks = document.css('[data-avatar-fallback]').map(&:text)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(guest.reload.name).to be_blank
+        expect(response.body).to include(I18n.t('users.display.guest_name'))
+        expect(response.body).to include(I18n.t('users.display.email_unregistered'))
+        expect(response.body).not_to include(fake_email)
+        expect(avatar_fallbacks).to include(I18n.t('users.display.guest_name').first)
+      end
+    end
   end
 
   describe 'GET /settings/account' do
@@ -491,6 +519,7 @@ RSpec.describe 'Settings', type: :request do
 
       guest.reload
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+      delivered_body = ActionMailer::Base.deliveries.last.body.decoded
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
@@ -502,6 +531,8 @@ RSpec.describe 'Settings', type: :request do
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(delivered_recipients).to include('guest-upgrade@example.com')
         expect(delivered_recipients).not_to include(fake_email)
+        expect(delivered_body).to include('guest-upgrade@example.com')
+        expect(delivered_body).not_to include(fake_email)
       end
     end
 
@@ -582,6 +613,7 @@ RSpec.describe 'Settings', type: :request do
               }
             }
 
+      confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?('reconfirmable-new@example.com') }
       user.reload
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
 
@@ -592,6 +624,16 @@ RSpec.describe 'Settings', type: :request do
         expect(user.unconfirmed_email).to eq('reconfirmable-new@example.com')
         expect(delivered_recipients).to include('reconfirmable-new@example.com')
         expect(delivered_recipients).to include(old_email)
+        expect(confirmation_mail.body.decoded).to include('reconfirmable-new@example.com')
+      end
+
+      token = confirmation_token_from(confirmation_mail)
+
+      get user_confirmation_path(confirmation_token: token)
+
+      aggregate_failures do
+        expect(user.reload.email).to eq('reconfirmable-new@example.com')
+        expect(user.unconfirmed_email).to be_nil
       end
     end
 

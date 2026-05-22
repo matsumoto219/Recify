@@ -36,8 +36,8 @@
 
       <div class="flex items-center gap-3 border-l token-border-glass pl-4 md:pl-6">
         <div class="text-right hidden sm:block min-w-0 max-w-[160px]">
-          <p class="truncate text-xs font-bold token-text-base" title="<%= current_user.name.presence || current_user.email %>">
-            <%= current_user.name.presence || current_user.email %>
+          <p class="truncate text-xs font-bold token-text-base" title="<%= current_user.display_name %>">
+            <%= current_user.display_name %>
           </p>
         </div>
 

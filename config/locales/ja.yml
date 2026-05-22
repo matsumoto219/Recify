@@ -1,1 +1,5 @@
 ja:
+  users:
+    display:
+      guest_name: ゲストユーザー
+      email_unregistered: メールアドレス未登録

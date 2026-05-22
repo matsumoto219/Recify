@@ -99,6 +99,10 @@ ja:
         no_change_until_link: 上記リンクから新しいパスワードを設定するまで、パスワードは変更されません。
       password_change:
         body: パスワードが変更されたことをお知らせします。
+      unlock_instructions:
+        body: ログイン失敗が規定回数を超えたため、アカウントがロックされました。
+        instructions: 以下のリンクからアカウントのロックを解除できます。
+        action: アカウントのロックを解除する
       confirmation_instructions:
         body: メールアドレス確認のリクエストを受け付けました。以下のリンクから確認を完了してください。
         action: メールアドレスを確認する

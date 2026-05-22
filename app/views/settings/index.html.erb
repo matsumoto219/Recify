@@ -14,9 +14,9 @@
     <%= render "shared/ui/layout/surface_card", hoverable: true, padding: :md do %>
       <%
         user_status_label = current_user.guest? ? t("settings.index.user.guest") : t("settings.index.user.registered")
-        user_name_label = current_user.name.presence || t("settings.index.user.name_missing")
+        user_name_label = current_user.guest? ? current_user.display_name : current_user.name.presence || t("settings.index.user.name_missing")
         user_email_label = if current_user.guest?
-                             t("settings.index.user.email_unregistered")
+                             current_user.display_email
                            else
                              masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14)
                            end
