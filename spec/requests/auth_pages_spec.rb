@@ -426,15 +426,25 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(document.css('.ambient-background').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.buttons.submit'))
+        expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_login'))
         expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+        expect(document.at_css("a[href='#{new_user_session_path}']")).to be_present
       end
     end
 
-    it 'signed in guestの内部メールを初期表示しない' do
+    it 'guest本登録申請中は内部メールを出さず本登録設定へ戻す' do
       guest = User.guest!
+      fake_email = guest.email
+      guest.start_guest_registration(
+        email: 'guest-pending-confirmation@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+      ActionMailer::Base.deliveries.clear
       sign_in guest
 
       get new_user_confirmation_path
@@ -444,12 +454,51 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).not_to include(guest.email)
-        expect(email_input['value']).to be_blank
+        expect(document.css('.ambient-background').size).to eq(1)
+        expect(response.body).not_to include(fake_email)
+        expect(response.body).to include('guest-pending-confirmation@example.com')
+        expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_guest_registration'))
+        expect(email_input['value']).to eq('guest-pending-confirmation@example.com')
+        expect(document.at_css("a[href='#{settings_security_path(anchor: 'guest-registration')}']")).to be_present
       end
     end
 
-    it 'confirmation resend sends confirmation mail' do
+    it '通常ユーザーのreconfirmation中はメール変更設定へ戻す' do
+      user = create(:user)
+      user.update!(email: 'normal-pending-confirmation@example.com')
+      ActionMailer::Base.deliveries.clear
+      sign_in user
+
+      get new_user_confirmation_path
+
+      document = Nokogiri::HTML(response.body)
+      email_input = document.at_css("input[type='email'][name='user[email]']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.css('.ambient-background').size).to eq(1)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
+        expect(email_input['value']).to eq('normal-pending-confirmation@example.com')
+        expect(document.at_css("a[href='#{settings_security_path(anchor: 'email')}']")).to be_present
+      end
+    end
+
+    it 'ログイン中でpendingがない場合はセキュリティ設定へ戻す' do
+      user = create(:user)
+      sign_in user
+
+      get new_user_confirmation_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
+        expect(document.at_css("a[href='#{settings_security_path}']")).to be_present
+      end
+    end
+
+    it '未ログインのconfirmation resendは確認メールを送りログインへ戻す' do
       user = create(:user, :unconfirmed)
       ActionMailer::Base.deliveries.clear
 
@@ -465,6 +514,50 @@ RSpec.describe 'Auth pages', type: :request do
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+
+    it 'guest本登録申請中のconfirmation resend後は本登録設定へ戻す' do
+      guest = User.guest!
+      guest.start_guest_registration(
+        email: 'guest-resend-confirmation@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+      ActionMailer::Base.deliveries.clear
+      sign_in guest
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: guest.unconfirmed_email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-confirmation@example.com')
+      end
+    end
+
+    it '通常ユーザーのreconfirmation resend後はメール変更設定へ戻す' do
+      user = create(:user)
+      user.update!(email: 'normal-resend-confirmation@example.com')
+      ActionMailer::Base.deliveries.clear
+      sign_in user
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: user.unconfirmed_email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'email'))
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.to).to include('normal-resend-confirmation@example.com')
       end
     end
   end

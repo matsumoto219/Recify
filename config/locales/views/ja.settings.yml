@@ -84,6 +84,7 @@ ja:
         submit: 確認メールを送信
         submitting: 送信中...
         pending: "確認待ち: %{email}"
+        resend_confirmation: 確認メールを再送する
         change_unavailable: 変更する
         description: メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。
       guest_registration:
@@ -102,6 +103,7 @@ ja:
         pending:
           title: 確認メール送信済み
           sent_to: "送信先: %{email}"
+          resend: 確認メールを再送する
       password:
         title: パスワード変更
         current: 現在のパスワード

@@ -13,10 +13,30 @@
     else
       resource.email
     end
+
+  confirmation_back_path =
+    if user_signed_in? && current_user.guest_registration_pending?
+      settings_security_path(anchor: "guest-registration")
+    elsif user_signed_in? && current_user.pending_reconfirmation?
+      settings_security_path(anchor: "email")
+    elsif user_signed_in?
+      settings_security_path
+    else
+      new_session_path(resource_name)
+    end
+
+  confirmation_back_label =
+    if user_signed_in? && current_user.guest_registration_pending?
+      t("auth.confirmations.new.back_to_guest_registration")
+    elsif user_signed_in?
+      t("auth.confirmations.new.back_to_security")
+    else
+      t("auth.confirmations.new.back_to_login")
+    end
 %>
 
 <div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
-  <%= render "shared/ui/layout/ambient_background" %>
+  <%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="confirmation-resend-page-title">
@@ -65,8 +85,8 @@
         <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
 
         <%= render "shared/ui/navigation/navigation_link",
-              path: new_session_path(resource_name),
-              text: t("auth.confirmations.new.back_to_login"),
+              path: confirmation_back_path,
+              text: confirmation_back_label,
               arrow: :left %>
       </div>
     <% end %>

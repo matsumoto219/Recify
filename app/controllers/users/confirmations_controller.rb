@@ -16,12 +16,20 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
   #   super
   # end
 
-  # protected
+  protected
 
   # The path used after resending confirmation instructions.
-  # def after_resending_confirmation_instructions_path_for(resource_name)
-  #   super(resource_name)
-  # end
+  def after_resending_confirmation_instructions_path_for(resource_name)
+    return new_session_path(resource_name) unless user_signed_in?
+
+    if current_user.guest_registration_pending?
+      settings_security_path(anchor: "guest-registration")
+    elsif current_user.pending_reconfirmation?
+      settings_security_path(anchor: "email")
+    else
+      settings_security_path
+    end
+  end
 
   # The path used after confirmation.
   # def after_confirmation_path_for(resource_name, resource)

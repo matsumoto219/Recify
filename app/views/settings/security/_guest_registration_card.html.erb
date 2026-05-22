@@ -21,6 +21,16 @@
         <p class="mt-1 token-text-muted break-words">
           <%= t("settings.security.guest_registration.pending.sent_to", email: current_user.unconfirmed_email) %>
         </p>
+        <div class="mt-3">
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: new_user_confirmation_path,
+                label: t("settings.security.guest_registration.pending.resend"),
+                variant: :secondary,
+                size: :compact,
+                icon: "mark_email_unread",
+                class: "token-border-brand-soft" %>
+        </div>
       </div>
     <% end %>
 

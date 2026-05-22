@@ -299,9 +299,13 @@ RSpec.describe 'Settings', type: :request do
 
       get settings_security_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.email.pending', email: 'pending-normal@example.com'))
+        expect(response.body).to include(I18n.t('settings.security.email.resend_confirmation'))
+        expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
       end
     end
 
@@ -319,10 +323,14 @@ RSpec.describe 'Settings', type: :request do
 
       get settings_security_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.title'))
         expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.sent_to', email: 'pending-guest@example.com'))
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.resend'))
+        expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
         expect(response.body).not_to include(fake_email)
       end
     end

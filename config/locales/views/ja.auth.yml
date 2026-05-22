@@ -94,6 +94,8 @@ ja:
           submit: 確認メールを再送
           submitting: 送信中...
         back_to_login: ログインに戻る
+        back_to_security: セキュリティ設定へ戻る
+        back_to_guest_registration: 本登録設定へ戻る
     unlocks:
       new:
         title: ロック解除メール再送
