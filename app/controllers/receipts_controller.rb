@@ -135,7 +135,7 @@ class ReceiptsController < ApplicationController
   private
 
   def set_receipt
-    @receipt = current_user.receipts.find(params[:id])
+    @receipt = current_user.receipts.find_by!(public_id: params[:public_id])
   end
 
   def block_processing_receipt

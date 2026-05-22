@@ -3,6 +3,10 @@
 # :normal / :warning / :review / :error のような row variant に集約する。
 
 module ReceiptsHelper
+  def receipt_dom_id(receipt)
+    receipt.dom_target_id
+  end
+
   # 電話番号表示用（日本向けフォーマット）
   def display_phone_number(phone_number)
     return t("receipts.common.unregistered") if phone_number.blank?

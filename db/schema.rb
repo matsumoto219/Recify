@@ -108,11 +108,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
   create_table "receipts", force: :cascade do |t|
     t.string "country_region"
     t.datetime "created_at", null: false
+    t.string "display_id", limit: 16, null: false
     t.text "memo"
     t.datetime "ocr_completed_at"
     t.string "payment_method"
     t.string "processing_error_code"
     t.text "processing_error_message"
+    t.string "public_id", limit: 32, null: false
     t.datetime "purchased_at"
     t.string "receipt_type"
     t.jsonb "review_reasons", default: [], null: false
@@ -127,7 +129,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.bigint "total_amount"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["public_id"], name: "index_receipts_on_public_id", unique: true
     t.index ["user_id", "created_at"], name: "index_receipts_on_user_id_and_created_at_desc", order: { created_at: :desc }
+    t.index ["user_id", "display_id"], name: "index_receipts_on_user_id_and_display_id", unique: true
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"

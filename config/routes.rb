@@ -29,7 +29,7 @@ Rails.application.routes.draw do
   root "home#index"
 
   # Receiptsコントローラ
-  resources :receipts do
+  resources :receipts, param: :public_id do
     collection do
       get :select_input_method
       get :new_upload

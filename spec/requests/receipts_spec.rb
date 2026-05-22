@@ -284,10 +284,13 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
-      completed_card = document.at_css("#receipt_#{my_receipt.id}")
-      processing_card = document.at_css("#receipt_#{processing_receipt.id}")
+      completed_card = document.at_css("#receipt_#{my_receipt.public_id}")
+      processing_card = document.at_css("#receipt_#{processing_receipt.public_id}")
 
       aggregate_failures do
+        expect(completed_card["id"]).to eq("receipt_#{my_receipt.public_id}")
+        expect(completed_card["id"]).not_to eq("receipt_#{my_receipt.id}")
+        expect(response.body).not_to include("/receipts/#{my_receipt.id}")
         expect(completed_card.text).to include(I18n.t('receipt_cards.fallback.store_name'))
         expect(completed_card.text).to include(I18n.t('receipt_cards.fallback.purchased_at'))
         expect(completed_card.text).to include(I18n.t('receipt_cards.labels.total_amount'))
@@ -306,8 +309,8 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
-      nil_amount_card = document.at_css("#receipt_#{nil_amount_receipt.id}")
-      zero_amount_card = document.at_css("#receipt_#{zero_amount_receipt.id}")
+      nil_amount_card = document.at_css("#receipt_#{nil_amount_receipt.public_id}")
+      zero_amount_card = document.at_css("#receipt_#{zero_amount_receipt.public_id}")
 
       aggregate_failures do
         expect(nil_amount_card.text).to include(I18n.t('receipts.common.unset'))
@@ -424,7 +427,7 @@ RSpec.describe 'Receipts', type: :request do
       card_ids = document.css('#receipts-list-grid > [id^="receipt_"]').map { |node| node['id'] }
 
       aggregate_failures do
-        expect(card_ids.index("receipt_#{newer_receipt.id}")).to be < card_ids.index("receipt_#{older_receipt.id}")
+        expect(card_ids.index("receipt_#{newer_receipt.public_id}")).to be < card_ids.index("receipt_#{older_receipt.public_id}")
         expect(document.at_css('#receipts-page-header').text).to include('3件')
         expect(document.at_css('#receipts_summary').text).to include('¥300')
       end
@@ -518,7 +521,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
-      card = document.at_css("#receipt_#{failed_receipt.id}")
+      card = document.at_css("#receipt_#{failed_receipt.public_id}")
 
       aggregate_failures do
         expect(card.at_css("a[href='#{receipt_path(failed_receipt, from: 'index')}']")).to be_present
@@ -532,7 +535,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
-      card = document.at_css("#receipt_#{review_receipt.id}")
+      card = document.at_css("#receipt_#{review_receipt.public_id}")
 
       aggregate_failures do
         expect(card.at_css("a[href='#{receipt_path(review_receipt, from: 'index')}']")).to be_present
@@ -546,7 +549,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
-      card = document.at_css("#receipt_#{processing_receipt.id}")
+      card = document.at_css("#receipt_#{processing_receipt.public_id}")
 
       aggregate_failures do
         expect(card.at_css("a[href='#{receipt_path(processing_receipt, from: 'index')}']")).to be_nil
@@ -1071,7 +1074,7 @@ RSpec.describe 'Receipts', type: :request do
 
       get receipts_path
       document = Nokogiri::HTML(response.body)
-      card = document.at_css("#receipt_#{receipt.id}")
+      card = document.at_css("#receipt_#{receipt.public_id}")
 
       aggregate_failures 'index failed card' do
         expect(response).to have_http_status(:success)
@@ -1132,7 +1135,7 @@ RSpec.describe 'Receipts', type: :request do
 
       get receipts_path
       document = Nokogiri::HTML(response.body)
-      card = document.at_css("#receipt_#{receipt.id}")
+      card = document.at_css("#receipt_#{receipt.public_id}")
 
       aggregate_failures 'index review card' do
         expect(response).to have_http_status(:success)
@@ -2093,7 +2096,7 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
-  describe 'GET /receipts/:id' do
+  describe 'GET /receipts/:public_id' do
     let(:receipt) do
       create(
         :receipt,
@@ -2108,7 +2111,16 @@ RSpec.describe 'Receipts', type: :request do
     it '詳細を取得できる' do
       get receipt_path(receipt)
 
-      expect(response).to have_http_status(:success)
+      aggregate_failures do
+        expect(receipt_path(receipt)).to eq("/receipts/#{receipt.public_id}")
+        expect(response).to have_http_status(:success)
+      end
+    end
+
+    it '内部IDのURLでは取得できない' do
+      get "/receipts/#{receipt.id}"
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it '詳細画面の主要文言をlocale経由で描画する' do
@@ -2121,6 +2133,18 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.show.store_information'))
         expect(response.body).to include(I18n.t('receipts.show.items_title'))
         expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
+      end
+    end
+
+    it '詳細画面はdisplay_idを表示し、receiptの内部IDをURLやDOMに出さない' do
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include("ID: #{receipt.display_id}")
+        expect(response.body).not_to include("#RCP-#{receipt.id.to_s.rjust(6, '0')}")
+        expect(response.body).not_to include("/receipts/#{receipt.id}")
+        expect(response.body).not_to include("receipt_#{receipt.id}")
       end
     end
 
@@ -2706,7 +2730,7 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
-  describe 'GET /receipts/:id/edit' do
+  describe 'GET /receipts/:public_id/edit' do
     let(:receipt) do
       create(:receipt, user: user, store_name: '編集対象', total_amount: 1300, payment_method: 'cash', status: 'review_needed')
     end
@@ -2729,6 +2753,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.form.titles.edit'))
         expect(response.body).to include(I18n.t('receipts.form.buttons.save'))
         expect(response.body).to include(I18n.t('receipts.common.total_amount_title'))
+        expect(form['id']).to eq("edit_receipt_form_#{receipt.public_id}")
+        expect(form['id']).not_to eq("edit_receipt_form_#{receipt.id}")
+        expect(response.body).not_to include("/receipts/#{receipt.id}")
         expect(document.at_css(%(nav[aria-label="#{I18n.t('shared.section_header.breadcrumb_aria')}"]))).to be_present
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
@@ -3376,7 +3403,7 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
-  describe 'PATCH /receipts/:id' do
+  describe 'PATCH /receipts/:public_id' do
     let(:receipt) do
       create(
         :receipt,
@@ -4132,7 +4159,7 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
-  describe 'DELETE /receipts/:id' do
+  describe 'DELETE /receipts/:public_id' do
     let!(:receipt) do
       create(:receipt, user: user, store_name: '削除対象', total_amount: 1500, payment_method: 'cash', status: 'completed')
     end

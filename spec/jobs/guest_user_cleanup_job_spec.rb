@@ -105,7 +105,7 @@ RSpec.describe GuestUserCleanupJob, type: :job do
         user: guest,
         kind: 'receipt_review_needed',
         notifiable: receipt,
-        action_path: "/receipts/#{receipt.id}"
+        action_path: "/receipts/#{receipt.public_id}"
       )
 
       described_class.perform_now

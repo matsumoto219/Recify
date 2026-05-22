@@ -40,6 +40,17 @@ class Receipt < ApplicationRecord
     "review_needed" => "receipt_review_needed",
     "failed" => "receipt_failed"
   }.freeze
+  PUBLIC_ID_PREFIX = "rcpt_"
+  PUBLIC_ID_RANDOM_LENGTH = 16
+  PUBLIC_ID_FORMAT = /\A#{PUBLIC_ID_PREFIX}[A-Za-z0-9]{#{PUBLIC_ID_RANDOM_LENGTH}}\z/
+  DISPLAY_ID_PREFIX = "R-"
+  DISPLAY_ID_RANDOM_LENGTH = 6
+  DISPLAY_ID_FORMAT = /\A#{DISPLAY_ID_PREFIX}[0-9A-Z]{#{DISPLAY_ID_RANDOM_LENGTH}}\z/
+  UNIQUE_ID_RETRY_LIMIT = 10
+  UNIQUE_ID_INDEX_NAMES = %w[
+    index_receipts_on_public_id
+    index_receipts_on_user_id_and_display_id
+  ].freeze
 
   OCR_ERROR_CODES = %w[
     ocr_unreadable
@@ -70,6 +81,16 @@ class Receipt < ApplicationRecord
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }
+  validates :public_id,
+            presence: true,
+            uniqueness: true,
+            length: { maximum: 32 },
+            format: { with: PUBLIC_ID_FORMAT }
+  validates :display_id,
+            presence: true,
+            uniqueness: { scope: :user_id },
+            length: { maximum: 16 },
+            format: { with: DISPLAY_ID_FORMAT }
 
   # 合計金額数値と範囲指定
   validates :total_amount,
@@ -92,7 +113,25 @@ class Receipt < ApplicationRecord
   before_validation :normalize_country_region
   before_validation :set_default_country_region
   before_validation :normalize_store_phone_number
+  before_validation :assign_public_id, on: :create
+  before_validation :assign_display_id, on: :create
   before_update :mark_summary_broadcast_needed
+
+  def save(*args, **kwargs, &block)
+    save_with_unique_identifier_retry { super(*args, **kwargs, &block) }
+  end
+
+  def save!(*args, **kwargs, &block)
+    save_with_unique_identifier_retry { super(*args, **kwargs, &block) }
+  end
+
+  def to_param
+    public_id
+  end
+
+  def dom_target_id
+    "receipt_#{public_id}"
+  end
 
   def receipt_tax_basis_for_form
     external_tax_basis_from_details? ? "external" : "internal"
@@ -568,6 +607,65 @@ class Receipt < ApplicationRecord
       will_save_change_to_purchased_at?
   end
 
+  def assign_public_id
+    self.public_id ||= generate_unique_public_id
+  end
+
+  def assign_display_id
+    self.display_id ||= generate_unique_display_id
+  end
+
+  def save_with_unique_identifier_retry
+    retry_count = 0
+
+    begin
+      yield
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless new_record? && unique_identifier_collision_error?(e)
+
+      retry_count += 1
+      raise if retry_count > UNIQUE_ID_RETRY_LIMIT
+
+      regenerate_unique_identifiers
+      retry
+    end
+  end
+
+  def regenerate_unique_identifiers
+    self.public_id = generate_unique_public_id
+    self.display_id = generate_unique_display_id
+  end
+
+  def generate_unique_public_id
+    UNIQUE_ID_RETRY_LIMIT.times do
+      candidate = "#{PUBLIC_ID_PREFIX}#{SecureRandom.base58(PUBLIC_ID_RANDOM_LENGTH)}"
+      return candidate unless self.class.unscoped.exists?(public_id: candidate)
+    end
+
+    raise ActiveRecord::RecordNotUnique, "Could not generate unique receipt public_id"
+  end
+
+  def generate_unique_display_id
+    UNIQUE_ID_RETRY_LIMIT.times do
+      candidate = "#{DISPLAY_ID_PREFIX}#{SecureRandom.random_number(36**DISPLAY_ID_RANDOM_LENGTH).to_s(36).upcase.rjust(DISPLAY_ID_RANDOM_LENGTH, '0')}"
+      return candidate unless display_id_exists_for_user?(candidate)
+    end
+
+    raise ActiveRecord::RecordNotUnique, "Could not generate unique receipt display_id"
+  end
+
+  def display_id_exists_for_user?(candidate)
+    owner_id = user_id || user&.id
+    return false if owner_id.blank?
+
+    self.class.unscoped.where(user_id: owner_id, display_id: candidate).exists?
+  end
+
+  def unique_identifier_collision_error?(error)
+    message = error.message.to_s
+    UNIQUE_ID_INDEX_NAMES.any? { |index_name| message.include?(index_name) }
+  end
+
   def summary_broadcast_needed?
     @summary_broadcast_needed == true
   end
@@ -601,7 +699,7 @@ class Receipt < ApplicationRecord
   def broadcast_receipt_card_update
     broadcast_replace_later_to(
       [ user, :receipts ],
-      target: "receipt_#{id}",
+      target: dom_target_id,
       partial: "shared/receipts/receipt_card",
       locals: { receipt: self }
     )

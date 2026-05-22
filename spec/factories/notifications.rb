@@ -4,7 +4,7 @@ FactoryBot.define do
     kind { "receipt_completed" }
     title { "レシート解析が完了しました" }
     body { "レシートを確認できます。" }
-    action_path { "/receipts/1" }
+    action_path { "/receipts/rcpt_ABCDEFGHJKLMNPQR" }
     read_at { nil }
     metadata { {} }
 

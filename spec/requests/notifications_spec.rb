@@ -3,6 +3,7 @@ require 'rails_helper'
 RSpec.describe 'Notifications', type: :request do
   let(:user) { create(:user) }
   let(:missing_receipt_id) { Receipt.maximum(:id).to_i + 1000 }
+  let(:missing_receipt_public_id) { 'rcpt_ABCDEFGHJKLMNPQR' }
 
   before do
     sign_in user
@@ -109,7 +110,7 @@ RSpec.describe 'Notifications', type: :request do
         title: '削除済みレシート通知',
         notifiable_type: 'Receipt',
         notifiable_id: missing_receipt_id,
-        action_path: receipt_path(missing_receipt_id)
+        action_path: receipt_path(missing_receipt_public_id)
       )
 
       get receipts_path
@@ -120,7 +121,7 @@ RSpec.describe 'Notifications', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(dropdown).to be_present
-        expect(dropdown.at_css(%(a[href="#{receipt_path(missing_receipt_id)}"]))).to be_nil
+        expect(dropdown.at_css(%(a[href="#{receipt_path(missing_receipt_public_id)}"]))).to be_nil
         expect(dropdown.at_css(%(a[href="#{read_notification_path(notification)}"][data-turbo-method="patch"]))).to be_present
         expect(dropdown.text).to include(I18n.t('notifications.item.deleted_target'))
       end
@@ -205,7 +206,7 @@ RSpec.describe 'Notifications', type: :request do
         title: '削除済みレシート通知',
         notifiable_type: 'Receipt',
         notifiable_id: missing_receipt_id,
-        action_path: receipt_path(missing_receipt_id)
+        action_path: receipt_path(missing_receipt_public_id)
       )
 
       get notifications_path
@@ -214,7 +215,7 @@ RSpec.describe 'Notifications', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(document.at_css(%(a[href="#{receipt_path(missing_receipt_id)}"]))).to be_nil
+        expect(document.at_css(%(a[href="#{receipt_path(missing_receipt_public_id)}"]))).to be_nil
         expect(response.body).to include(I18n.t('notifications.item.deleted_target'))
       end
     end
@@ -234,6 +235,8 @@ RSpec.describe 'Notifications', type: :request do
       patch read_notification_path(notification)
 
       aggregate_failures do
+        expect(receipt_path(receipt)).to eq("/receipts/#{receipt.public_id}")
+        expect(notification.action_path).to eq("/receipts/#{receipt.public_id}")
         expect(response).to redirect_to(receipt_path(receipt))
         expect(notification.reload).to be_read
       end
@@ -245,7 +248,7 @@ RSpec.describe 'Notifications', type: :request do
         user:,
         notifiable_type: 'Receipt',
         notifiable_id: missing_receipt_id,
-        action_path: receipt_path(missing_receipt_id),
+        action_path: receipt_path(missing_receipt_public_id),
         read_at: nil
       )
 
@@ -315,7 +318,7 @@ RSpec.describe 'Notifications', type: :request do
         user:,
         notifiable_type: 'Receipt',
         notifiable_id: missing_receipt_id,
-        action_path: receipt_path(missing_receipt_id)
+        action_path: receipt_path(missing_receipt_public_id)
       )
 
       expect {

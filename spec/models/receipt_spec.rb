@@ -332,6 +332,88 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'public/display identifiers' do
+    it '作成時にpublic_idとdisplay_idを自動生成する' do
+      receipt = create(:receipt)
+
+      aggregate_failures do
+        expect(receipt.public_id).to match(/\Arcpt_[A-Za-z0-9]{16}\z/)
+        expect(receipt.display_id).to match(/\AR-[0-9A-Z]{6}\z/)
+      end
+    end
+
+    it 'factory経由でもpublic_idとdisplay_idを生成する' do
+      receipt = create(:receipt)
+
+      aggregate_failures do
+        expect(receipt.public_id).to be_present
+        expect(receipt.display_id).to be_present
+      end
+    end
+
+    it 'public_idは全ユーザー横断でuniqueにする' do
+      receipt = create(:receipt)
+      duplicate = build(:receipt, public_id: receipt.public_id)
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors[:public_id]).to be_present
+    end
+
+    it 'public_id生成時に既存値との衝突を避ける' do
+      duplicate_random = 'ABCDEFGHJKLMNPQR'
+      unique_random = 'STUVWXYZabcdefgh'
+      create(:receipt, public_id: "rcpt_#{duplicate_random}")
+
+      allow(SecureRandom).to receive(:base58).and_return(duplicate_random, unique_random)
+
+      receipt = create(:receipt)
+
+      expect(receipt.public_id).to eq("rcpt_#{unique_random}")
+    end
+
+    it 'display_idは同一ユーザー内だけuniqueにする' do
+      user = create(:user)
+      other_user = create(:user, email: 'display-id-other@example.com')
+      receipt = create(:receipt, user:)
+
+      same_user_duplicate = build(:receipt, user:, display_id: receipt.display_id)
+      other_user_duplicate = build(:receipt, user: other_user, display_id: receipt.display_id)
+
+      aggregate_failures do
+        expect(same_user_duplicate).not_to be_valid
+        expect(same_user_duplicate.errors[:display_id]).to be_present
+        expect(other_user_duplicate).to be_valid
+      end
+    end
+
+    it 'display_id生成時に同一ユーザー内の既存値との衝突を避ける' do
+      user = create(:user)
+      create(:receipt, user:, display_id: 'R-000001')
+
+      allow(SecureRandom).to receive(:random_number).and_call_original
+      allow(SecureRandom).to receive(:random_number).with(36**described_class::DISPLAY_ID_RANDOM_LENGTH).and_return(1, 2)
+
+      receipt = create(:receipt, user:)
+
+      expect(receipt.display_id).to eq('R-000002')
+    end
+
+    it 'to_paramはpublic_idを返す' do
+      receipt = create(:receipt)
+
+      expect(receipt.to_param).to eq(receipt.public_id)
+    end
+
+    it 'DOM targetはpublic_idベースにする' do
+      receipt = create(:receipt)
+
+      aggregate_failures do
+        expect(receipt.dom_target_id).to eq("receipt_#{receipt.public_id}")
+        expect(receipt.dom_target_id).not_to eq("receipt_#{receipt.id}")
+      end
+    end
+  end
+
   describe 'country_region normalization' do
     it 'blank country_region は手動登録向けに JPN を既定値にする' do
       receipt = build(:receipt, country_region: nil)
@@ -355,6 +437,8 @@ RSpec.describe Receipt, type: :model do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)
 
       aggregate_failures do
+        expect(indexes).to include(have_attributes(columns: %w[public_id], unique: true))
+        expect(indexes).to include(have_attributes(columns: %w[user_id display_id], unique: true))
         expect(indexes).to include(have_attributes(columns: %w[user_id created_at]))
         expect(indexes).to include(have_attributes(columns: %w[user_id status]))
         expect(indexes).to include(have_attributes(columns: %w[user_id status purchased_at]))
@@ -493,7 +577,7 @@ RSpec.describe Receipt, type: :model do
       aggregate_failures do
         expect(notification.kind).to eq('receipt_completed')
         expect(notification.notifiable).to eq(receipt)
-        expect(notification.action_path).to eq("/receipts/#{receipt.id}")
+        expect(notification.action_path).to eq("/receipts/#{receipt.public_id}")
         expect(notification.title).to include('完了')
       end
     end
@@ -504,7 +588,7 @@ RSpec.describe Receipt, type: :model do
         :notification,
         user: user,
         notifiable: receipt,
-        action_path: "/receipts/#{receipt.id}"
+        action_path: "/receipts/#{receipt.public_id}"
       )
 
       expect {
@@ -557,7 +641,7 @@ RSpec.describe Receipt, type: :model do
         user: user,
         kind: 'receipt_failed',
         notifiable: receipt,
-        action_path: "/receipts/#{receipt.id}",
+        action_path: "/receipts/#{receipt.public_id}",
         metadata: { receipt_id: receipt.id, status: 'failed' }
       )
 

@@ -40,7 +40,7 @@ RSpec.describe Notification, type: :model do
         notifiable_id: receipt.id,
         title: 'レシート解析が完了しました',
         body: 'レシートを確認できます。',
-        action_path: "/receipts/#{receipt.id}",
+        action_path: "/receipts/#{receipt.public_id}",
         metadata: { receipt_id: receipt.id, status: 'completed' },
         created_at: timestamp,
         updated_at: timestamp
@@ -225,7 +225,7 @@ RSpec.describe Notification, type: :model do
         kind: 'receipt_completed',
         title: "通知#{index}",
         body: '本文',
-        action_path: "/receipts/#{index}",
+        action_path: "/receipts/rcpt_#{index.to_s(36).upcase.rjust(16, 'A')}",
         read_at: read_at,
         metadata: {},
         created_at: created_at,

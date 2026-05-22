@@ -1,4 +1,4 @@
-<% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.id}" : "new_receipt_form" %>
+<% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.public_id}" : "new_receipt_form" %>
 <%= form_with model: receipt,
               html: {
                 id: form_dom_id,

@@ -75,7 +75,7 @@
 
               <!-- mobile only: ID + status -->
               <div class="flex items-center justify-between mt-2 md:hidden gap-3">
-                <p class="text-xs token-text-muted truncate" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+                <p class="text-xs token-text-muted truncate" title="ID: <%= @receipt.display_id %>">ID: <%= @receipt.display_id %></p>
                 <%= render "shared/ui/badge/receipt_status_badge",
                       status: @receipt.status,
                       label: @receipt.status_label,
@@ -89,7 +89,7 @@
                   status: @receipt.status,
                   label: @receipt.status_label,
                   size: :md %>
-            <p class="truncate text-sm token-text-muted mt-2" title="ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %>">ID: #RCP-<%= @receipt.id.to_s.rjust(6, "0") %></p>
+            <p class="truncate text-sm token-text-muted mt-2" title="ID: <%= @receipt.display_id %>">ID: <%= @receipt.display_id %></p>
           </div>
         </div>
 
