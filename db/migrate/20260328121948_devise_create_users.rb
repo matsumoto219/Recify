@@ -32,6 +32,8 @@ class DeviseCreateUsers < ActiveRecord::Migration[8.1]
       t.string   :unlock_token
       t.datetime :locked_at
 
+      ## Guest
+      t.boolean :guest, default: false, null: false
 
       t.timestamps null: false
     end
@@ -40,5 +42,9 @@ class DeviseCreateUsers < ActiveRecord::Migration[8.1]
     add_index :users, :reset_password_token, unique: true
     add_index :users, :confirmation_token,   unique: true
     add_index :users, :unlock_token,         unique: true
+    add_index :users,
+      "COALESCE(last_sign_in_at, updated_at)",
+      name: "index_users_on_guest_cleanup_at",
+      where: "guest = TRUE AND confirmed_at IS NOT NULL"
   end
 end

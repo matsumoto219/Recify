@@ -18,9 +18,16 @@ class User < ApplicationRecord
             numericality: { only_integer: true, greater_than: 0 }
 
   THEME_PREFERENCES = %w[system light dark].freeze
+  GUEST_CLEANUP_RETENTION_PERIOD = 7.days
 
   validates :theme_preference,
             inclusion: { in: THEME_PREFERENCES }
+
+  scope :guest_cleanup_candidates, ->(cutoff = GUEST_CLEANUP_RETENTION_PERIOD.ago) {
+    where(guest: true)
+      .where.not(confirmed_at: nil)
+      .where("COALESCE(last_sign_in_at, updated_at) <= ?", cutoff)
+  }
 
   def self.guest!
     user = new(

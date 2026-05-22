@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe User, type: :model do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe 'defaults' do
     it 'push_notification_enabled は初期値trueにする' do
       user = create(:user)
@@ -44,6 +46,42 @@ RSpec.describe User, type: :model do
         expect(user).to be_guest
         expect(user).to be_confirmed
         expect(user.confirmation_token).to be_nil
+      end
+    end
+  end
+
+  describe '.guest_cleanup_candidates' do
+    around do |example|
+      travel_to(Time.zone.parse('2026-05-22 10:00:00')) { example.run }
+    end
+
+    it 'confirmed済みで7日以上前にログインしたguestだけを返す' do
+      old_guest = create(:user, guest: true, last_sign_in_at: 7.days.ago)
+      recent_guest = create(:user, guest: true, last_sign_in_at: 6.days.ago)
+      regular_user = create(:user, guest: false, last_sign_in_at: 8.days.ago)
+      unconfirmed_guest = create(:user, :unconfirmed, guest: true, last_sign_in_at: 8.days.ago)
+
+      candidates = described_class.guest_cleanup_candidates
+
+      aggregate_failures do
+        expect(candidates).to include(old_guest)
+        expect(candidates).not_to include(recent_guest)
+        expect(candidates).not_to include(regular_user)
+        expect(candidates).not_to include(unconfirmed_guest)
+      end
+    end
+
+    it 'last_sign_in_atがないguestはupdated_atで判定する' do
+      old_guest = create(:user, guest: true, last_sign_in_at: nil)
+      recent_guest = create(:user, guest: true, last_sign_in_at: nil)
+      old_guest.update_columns(updated_at: 8.days.ago)
+      recent_guest.update_columns(updated_at: 6.days.ago)
+
+      candidates = described_class.guest_cleanup_candidates
+
+      aggregate_failures do
+        expect(candidates).to include(old_guest)
+        expect(candidates).not_to include(recent_guest)
       end
     end
   end

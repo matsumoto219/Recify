@@ -160,6 +160,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
     t.string "unconfirmed_email"
     t.string "unlock_token"
     t.datetime "updated_at", null: false
+    t.index "COALESCE(last_sign_in_at, updated_at)", name: "index_users_on_guest_cleanup_at", where: "((guest = true) AND (confirmed_at IS NOT NULL))"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
