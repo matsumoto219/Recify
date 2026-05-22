@@ -53,6 +53,12 @@ Rails.application.routes.draw do
 
   get "/external_services/status", to: "external_services#status", as: :external_services_status
 
+  if Rails.env.development? || Rails.env.test?
+    namespace :debug do
+      post "/external_services/:service/:state", to: "external_services#update", as: :external_service_state
+    end
+  end
+
   # アカウント設定
   get "/settings", to: "settings#index", as: :settings
   get "/settings/account", to: "settings#account", as: :settings_account
