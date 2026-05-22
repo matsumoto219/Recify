@@ -3,6 +3,14 @@ require 'rails_helper'
 RSpec.describe User, type: :model do
   include ActiveSupport::Testing::TimeHelpers
 
+  before do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  after do
+    ActionMailer::Base.deliveries.clear
+  end
+
   describe 'defaults' do
     it 'push_notification_enabled は初期値trueにする' do
       user = create(:user)
@@ -82,6 +90,56 @@ RSpec.describe User, type: :model do
       aggregate_failures do
         expect(candidates).to include(old_guest)
         expect(candidates).not_to include(recent_guest)
+      end
+    end
+  end
+
+  describe '#guest_registration_pending?' do
+    it 'guestの本登録申請中だけtrueにする' do
+      guest = described_class.guest!
+      guest.start_guest_registration(
+        email: 'pending-guest@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+
+      aggregate_failures do
+        expect(guest.reload).to be_guest_registration_pending
+        expect(create(:user)).not_to be_guest_registration_pending
+      end
+    end
+  end
+
+  describe '#confirm' do
+    it 'guest本登録のconfirmation完了時だけguest:falseにする' do
+      guest = described_class.guest!
+      guest.start_guest_registration(
+        email: 'complete-guest@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+
+      expect do
+        guest.confirm
+      end.to change { guest.reload.guest? }.from(true).to(false)
+
+      aggregate_failures do
+        expect(guest.email).to eq('complete-guest@example.com')
+        expect(guest.unconfirmed_email).to be_nil
+      end
+    end
+
+    it '通常ユーザーのreconfirmationではguest状態を変更しない' do
+      user = create(:user)
+      user.update!(email: 'normal-reconfirm@example.com')
+
+      expect do
+        user.confirm
+      end.not_to change { user.reload.guest? }
+
+      aggregate_failures do
+        expect(user.email).to eq('normal-reconfirm@example.com')
+        expect(user.unconfirmed_email).to be_nil
       end
     end
   end

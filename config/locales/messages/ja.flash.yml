@@ -10,6 +10,13 @@ ja:
     settings:
       update_success: 設定を更新しました
       update_failure: 設定の保存に失敗しました
+    users:
+      email_change:
+        confirmation_sent: 確認メールを送信しました。新しいメールアドレスで確認を完了してください。
+        guest_not_allowed: ゲストユーザーは通常のメールアドレス変更を利用できません。
+      guest_registration:
+        confirmation_sent: 確認メールを送信しました。メール内のリンクから本登録を完了してください。
+        not_allowed: 本登録済みユーザーはゲスト本登録化を利用できません。
     storage:
       quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
     receipts:

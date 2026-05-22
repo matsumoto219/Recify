@@ -1,0 +1,80 @@
+<%
+  form_resource = local_assigns.fetch(:resource)
+  form_resource_name = local_assigns.fetch(:resource_name)
+  update_context = local_assigns.fetch(:update_context, "")
+  attempted_email = update_context == "email" ? params.dig(:user, :email).to_s : ""
+%>
+
+<div id="email" class="scroll-mt-24">
+  <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+    <%= render "shared/ui/layout/section_header",
+          icon: "mail",
+          title: t("settings.security.email.title"),
+          subtitle: t("settings.security.email.description"),
+          title_size: "text-xl",
+          subtitle_size: "text-sm",
+          class: "mb-6" %>
+
+    <div class="mb-6 token-bg-card-subtle border token-border-soft p-4 rounded-lg min-w-0">
+      <p class="text-xs token-text-muted mb-1"><%= t("settings.security.email.current") %></p>
+      <p class="truncate token-text-base font-medium min-w-0" title="<%= current_user.email %>">
+        <%= masked_email_with_domain(current_user.email, local_max_length: 25, local_max_length_mobile: 15, domain_max_length_mobile: 16) %>
+      </p>
+
+      <% if current_user.pending_reconfirmation? %>
+        <p class="mt-2 text-sm token-text-warning break-words">
+          <%= t("settings.security.email.pending", email: current_user.unconfirmed_email) %>
+        </p>
+      <% end %>
+    </div>
+
+    <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
+      <%= hidden_field_tag :update_context, "email" %>
+
+      <div class="space-y-6">
+        <%= render "shared/ui/form/text_field",
+              f: f,
+              attribute: :email,
+              label: t("settings.security.email.new"),
+              icon: "mail",
+              field_type: :email_field,
+              value: attempted_email,
+              placeholder: t("settings.security.email.new_placeholder"),
+              autocomplete: "email",
+              required: true,
+              with_icon: true,
+              show_error_message: true,
+              size: :comfortable,
+              label_class: "text-sm font-medium normal-case tracking-normal px-0",
+              error_message_class: "px-0",
+              input_wrapper_class: "" %>
+
+        <%= render "shared/ui/form/text_field",
+              f: f,
+              attribute: :current_password,
+              label: t("settings.security.email.current_password"),
+              icon: "lock",
+              field_type: :password_field,
+              placeholder: "••••••••",
+              autocomplete: "current-password",
+              required: true,
+              with_icon: true,
+              show_error_message: true,
+              size: :comfortable,
+              label_class: "text-sm font-medium normal-case tracking-normal px-0",
+              error_message_class: "px-0",
+              input_wrapper_class: "" %>
+
+        <div class="pt-2 flex justify-end">
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.email.submit"),
+                variant: :primary,
+                size: :compact,
+                weight: :bold,
+                type: "submit",
+                disable_with: t("settings.security.email.submitting") %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>

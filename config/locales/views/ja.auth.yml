@@ -99,6 +99,10 @@ ja:
         no_change_until_link: 上記リンクから新しいパスワードを設定するまで、パスワードは変更されません。
       password_change:
         body: パスワードが変更されたことをお知らせします。
+      confirmation_instructions:
+        body: メールアドレス確認のリクエストを受け付けました。以下のリンクから確認を完了してください。
+        action: メールアドレスを確認する
+        ignore: このメールに心当たりがない場合は破棄してください。
       email_changed:
         changing: "メールアドレスが %{email} に変更されようとしています。"
         changed: "メールアドレスが %{email} に変更されました。"

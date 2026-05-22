@@ -1,0 +1,96 @@
+<%
+  form_resource = local_assigns.fetch(:resource)
+  form_resource_name = local_assigns.fetch(:resource_name)
+  update_context = local_assigns.fetch(:update_context, "")
+  attempted_email = update_context == "guest_registration" ? params.dig(:user, :email).to_s : ""
+%>
+
+<div id="guest-registration" class="scroll-mt-24">
+  <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+    <%= render "shared/ui/layout/section_header",
+          icon: "how_to_reg",
+          title: t("settings.security.guest_registration.title"),
+          subtitle: t("settings.security.guest_registration.description"),
+          title_size: "text-xl",
+          subtitle_size: "text-sm",
+          class: "mb-6" %>
+
+    <% if current_user.guest_registration_pending? %>
+      <div class="mb-6 rounded-lg border token-border-soft token-state-warning-soft px-4 py-3 text-sm min-w-0">
+        <p class="font-semibold token-text-base"><%= t("settings.security.guest_registration.pending.title") %></p>
+        <p class="mt-1 token-text-muted break-words">
+          <%= t("settings.security.guest_registration.pending.sent_to", email: current_user.unconfirmed_email) %>
+        </p>
+      </div>
+    <% end %>
+
+    <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
+      <%= hidden_field_tag :update_context, "guest_registration" %>
+
+      <div class="space-y-6">
+        <%= render "shared/ui/form/text_field",
+              f: f,
+              attribute: :email,
+              label: t("settings.security.guest_registration.fields.email"),
+              icon: "mail",
+              field_type: :email_field,
+              value: attempted_email,
+              placeholder: t("settings.security.guest_registration.fields.email_placeholder"),
+              autocomplete: "email",
+              required: true,
+              with_icon: true,
+              show_error_message: true,
+              size: :comfortable,
+              label_class: "text-sm font-medium normal-case tracking-normal px-0",
+              error_message_class: "px-0",
+              input_wrapper_class: "" %>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <%= render "shared/ui/form/text_field",
+                f: f,
+                attribute: :password,
+                label: t("settings.security.guest_registration.fields.password"),
+                icon: "password",
+                field_type: :password_field,
+                placeholder: "••••••••",
+                autocomplete: "new-password",
+                required: true,
+                with_icon: true,
+                show_error_message: true,
+                size: :comfortable,
+                label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
+
+          <%= render "shared/ui/form/text_field",
+                f: f,
+                attribute: :password_confirmation,
+                label: t("settings.security.guest_registration.fields.password_confirmation"),
+                icon: "password",
+                field_type: :password_field,
+                placeholder: "••••••••",
+                autocomplete: "new-password",
+                required: true,
+                with_icon: true,
+                show_error_message: true,
+                size: :comfortable,
+                label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
+        </div>
+
+        <p class="text-sm token-text-subtle"><%= t("settings.security.guest_registration.hint") %></p>
+
+        <div class="pt-2 flex justify-end">
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.guest_registration.submit"),
+                variant: :primary,
+                size: :compact,
+                weight: :bold,
+                type: "submit",
+                disable_with: t("settings.security.guest_registration.submitting") %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>

@@ -15,6 +15,11 @@
       <%
         user_status_label = current_user.guest? ? t("settings.index.user.guest") : t("settings.index.user.registered")
         user_name_label = current_user.name.presence || t("settings.index.user.name_missing")
+        user_email_label = if current_user.guest?
+                             t("settings.index.user.email_unregistered")
+                           else
+                             masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14)
+                           end
       %>
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
         <div class="flex min-w-0 w-full max-w-full items-center gap-5 overflow-hidden md:w-0 md:flex-1">
@@ -37,7 +42,7 @@
                 <%= user_status_label %>
               </span>
             </div>
-            <p class="text-sm token-text-muted truncate min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 10, local_max_length_mobile: 6, domain_max_length_mobile: 14) %></p>
+            <p class="text-sm token-text-muted truncate min-w-0" title="<%= user_email_label %>"><%= user_email_label %></p>
           </div>
         </div>
 
@@ -62,57 +67,71 @@
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-3">
-          <%= render "shared/ui/actions/button",
-                as: :link,
-                href: settings_security_path(anchor: "email"),
-                label: t("settings.index.security.email"),
-                variant: :secondary,
-                full_width: true,
-                class: "px-4 text-left",
-                trailing_icon: "chevron_right",
-                trailing_icon_animated: true %>
+          <% if current_user.guest? %>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: settings_security_path(anchor: "guest-registration"),
+                  label: t("settings.index.security.guest_registration"),
+                  variant: :secondary,
+                  full_width: true,
+                  class: "px-4 text-left",
+                  trailing_icon: "chevron_right",
+                  trailing_icon_animated: true %>
+          <% else %>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: settings_security_path(anchor: "email"),
+                  label: t("settings.index.security.email"),
+                  variant: :secondary,
+                  full_width: true,
+                  class: "px-4 text-left",
+                  trailing_icon: "chevron_right",
+                  trailing_icon_animated: true %>
 
-          <%= render "shared/ui/actions/button",
-                as: :link,
-                href: settings_security_path(anchor: "password"),
-                label: t("settings.index.security.password"),
-                variant: :secondary,
-                full_width: true,
-                class: "px-4 text-left",
-                trailing_icon: "chevron_right",
-                trailing_icon_animated: true %>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: settings_security_path(anchor: "password"),
+                  label: t("settings.index.security.password"),
+                  variant: :secondary,
+                  full_width: true,
+                  class: "px-4 text-left",
+                  trailing_icon: "chevron_right",
+                  trailing_icon_animated: true %>
+          <% end %>
         </div>
 
-        <%= render "shared/ui/layout/section_divider" %>
-        <div class="space-y-3">
-          <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
-          <div class="flex items-center justify-between text-sm">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined token-text-muted text-sm">info</span>
-              <span class="token-text-muted"><%= t("settings.index.security.two_factor") %></span>
+        <% unless current_user.guest? %>
+          <%= render "shared/ui/layout/section_divider" %>
+          <div class="space-y-3">
+            <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
+            <div class="flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined token-text-muted text-sm">info</span>
+                <span class="token-text-muted"><%= t("settings.index.security.two_factor") %></span>
+              </div>
+              <%= render "shared/ui/badge/setting_status_badge",
+                    state: :inactive,
+                    variant: :text,
+                    size: :lg %>
             </div>
-            <%= render "shared/ui/badge/setting_status_badge",
-                  state: :inactive,
-                  variant: :text,
-                  size: :lg %>
-          </div>
 
-          <%# TODO: Passkey 設定機能を実装する。現状はダミー表示 %>
-          <div class="flex items-center justify-between text-sm">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined token-text-muted text-sm">info</span>
-              <span class="token-text-muted"><%= t("settings.index.security.passkey") %></span>
+            <%# TODO: Passkey 設定機能を実装する。現状はダミー表示 %>
+            <div class="flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined token-text-muted text-sm">info</span>
+                <span class="token-text-muted"><%= t("settings.index.security.passkey") %></span>
+              </div>
+              <%= render "shared/ui/badge/setting_status_badge",
+                    state: :inactive,
+                    variant: :text,
+                    size: :lg %>
             </div>
-            <%= render "shared/ui/badge/setting_status_badge",
-                  state: :inactive,
-                  variant: :text,
-                  size: :lg %>
-          </div>
 
-          <p class="text-[11px] token-text-subtle leading-relaxed">
-            <%= t("settings.index.security.hint") %>
-          </p>
-        </div>
+            <p class="text-[11px] token-text-subtle leading-relaxed">
+              <%= t("settings.index.security.hint") %>
+            </p>
+          </div>
+        <% end %>
       </div>
     <% end %>
 

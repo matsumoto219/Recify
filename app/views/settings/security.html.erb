@@ -1,219 +1,41 @@
 <%
-  form_resource_for_error_state = defined?(resource) && resource.present? ? resource : current_user
-  security_form_error = params[:update_context] == "security" && form_resource_for_error_state.errors.any?
+  form_resource = defined?(resource) && resource.present? ? resource : current_user
+  form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
+  update_context = params[:update_context].to_s
+  security_form_error = update_context == "security" && form_resource.errors.any?
 %>
 <section
   class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
   data-controller="security-scroll"
   data-security-scroll-scroll-to-password-value="<%= security_form_error %>">
-  <!-- START: settings/security page header -->
   <%= render "shared/ui/layout/section_header",
         title: t("settings.security.title"),
         subtitle: t("settings.security.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base",
         class: "px-4 md:px-0" %>
-  <!-- END: settings/security page header -->
 
-  <%# TODO: フラッシュメッセージ表示（成功/失敗）
-      - flash[:notice] / flash[:alert] を表示
-      - 成功時: 「パスワードを更新しました」
-      - エラー時: エラーメッセージ一覧 %>
-
-  <!-- START: settings/security email card -->
   <div class="space-y-6">
-    <div id="email" class="scroll-mt-24">
-      <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
-        <%= render "shared/ui/layout/section_header",
-              icon: "mail",
-              title: t("settings.security.email.title"),
-              title_size: "text-xl",
-              class: "mb-4" %>
+    <% if current_user.guest? %>
+      <%= render "settings/security/guest_registration_card",
+            resource: form_resource,
+            resource_name: form_resource_name,
+            update_context: update_context %>
+    <% else %>
+      <%= render "settings/security/email_change_card",
+            resource: form_resource,
+            resource_name: form_resource_name,
+            update_context: update_context %>
 
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 token-bg-card-subtle border token-border-soft p-4 rounded-lg min-w-0">
-          <div class="min-w-0">
-            <p class="text-xs token-text-muted mb-1"><%= t("settings.security.email.current") %></p>
-            <p class="truncate token-text-base font-medium min-w-0" title="<%= current_user.email %>"><%= masked_email_with_domain(current_user.email, local_max_length: 25, local_max_length_mobile: 15, domain_max_length_mobile: 16) %></p>
-          </div>
+      <%= render "settings/security/password_change_card",
+            resource: form_resource,
+            resource_name: form_resource_name,
+            security_form_error: security_form_error %>
 
-          <%# TODO: メールアドレス変更機能を実装
-              - Deviseのconfirmableを利用
-              - 再認証（current_password）を必須化
-              - 変更確認メール送信 %>
-          <div class="shrink-0 flex justify-end md:block">
-            <%= render "shared/ui/actions/button",
-                  label: t("settings.security.email.change_unavailable"),
-                  variant: :secondary,
-                  size: :md,
-                  disabled: true,
-                  class: "px-5 py-2" %>
-          </div>
-        </div>
-
-        <p class="mt-4 text-sm token-text-subtle break-words"><%= t("settings.security.email.description") %></p>
-      <% end %>
-    </div>
-    <!-- END: settings/security email card -->
-
-    <!-- START: settings/security password card -->
-    <div id="password" class="scroll-mt-24">
-      <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
-        <%= render "shared/ui/layout/section_header",
-              icon: "lock",
-              title: t("settings.security.password.title"),
-              title_size: "text-xl",
-              class: "mb-6" %>
-
-        <%
-          form_resource = defined?(resource) && resource.present? ? resource : current_user
-          form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
-        %>
-        <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
-          <%= hidden_field_tag :update_context, "security" %>
-          <%# TODO: 入力クリア
-              - 更新成功後にフォームをリセット（Turbo or Stimulusで form.reset()）
-              - パスワードが画面に残らないようにする %>
-          <div class="space-y-6">
-            <%= render "shared/ui/form/text_field",
-                  f: f,
-                  attribute: :current_password,
-                  label: t("settings.security.password.current"),
-                  icon: "lock",
-                  field_type: :password_field,
-                  placeholder: "••••••••",
-                  autocomplete: "current-password",
-                  autofocus: security_form_error,
-                  with_icon: true,
-                  highlight_variant: :default,
-                  show_error_message: true,
-                  size: :comfortable,
-                  label_class: "text-sm font-medium normal-case tracking-normal px-0",
-                  error_message_class: "px-0",
-                  input_wrapper_class: "" %>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <%= render "shared/ui/form/text_field",
-                    f: f,
-                    attribute: :password,
-                    label: t("settings.security.password.new"),
-                    icon: "password",
-                    field_type: :password_field,
-                    placeholder: "••••••••",
-                    autocomplete: "new-password",
-                    with_icon: true,
-                    highlight_variant: :default,
-                    show_error_message: true,
-                    size: :comfortable,
-                    label_class: "text-sm font-medium normal-case tracking-normal px-0",
-                    error_message_class: "px-0",
-                    input_wrapper_class: "" %>
-
-              <%= render "shared/ui/form/text_field",
-                    f: f,
-                    attribute: :password_confirmation,
-                    label: t("settings.security.password.confirmation"),
-                    icon: "password",
-                    field_type: :password_field,
-                    placeholder: "••••••••",
-                    autocomplete: "new-password",
-                    with_icon: true,
-                    highlight_variant: :default,
-                    show_error_message: true,
-                    size: :comfortable,
-                    label_class: "text-sm font-medium normal-case tracking-normal px-0",
-                    error_message_class: "px-0",
-                    input_wrapper_class: "" %>
-            </div>
-
-            <%# TODO: エラーメッセージ表示
-                - resource.errors.full_messages を表示
-                - current_password不一致やバリデーションエラーを表示 %>
-
-            <%# TODO: パスワード強度表示（後で実装）
-                - 強度バー（弱/中/強）
-                - 最低文字数や記号チェック %>
-
-            <p class="text-sm token-text-subtle"><%= t("settings.security.password.hint") %></p>
-            <div class="pt-2 flex justify-end">
-              <%= render "shared/ui/actions/button",
-                    label: t("settings.security.password.save"),
-                    variant: :primary,
-                    size: :compact,
-                    weight: :bold,
-                    type: "submit",
-                    disable_with: t("settings.security.password.saving") %>
-            </div>
-          </div>
-        <% end %>
-
-      <% end %>
-    </div>
-    <!-- END: settings/security password card -->
-
-    <!-- START: settings/security auth options grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- START: settings/security 2fa card -->
-      <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
-        <div>
-          <div class="flex items-center justify-between mb-4">
-            <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
-            <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
-          </div>
-          <%= render "shared/ui/layout/section_header",
-                title: t("settings.security.auth.two_factor.title"),
-                subtitle: t("settings.security.auth.two_factor.subtitle"),
-                title_size: "text-lg",
-                subtitle_size: "text-sm",
-                class: "mb-6" %>
-        </div>
-
-        <%# TODO: 2FA実装（TOTP）
-            - QRコード生成
-            - シークレット保存
-            - 有効/無効切り替え %>
-        <%= render "shared/ui/actions/button",
-              label: t("settings.security.auth.two_factor.action"),
-              variant: :secondary,
-              size: :compact,
-              full_width: true,
-              disabled: true,
-              class: "token-border-brand-soft" %>
-      <% end %>
-      <!-- END: settings/security 2fa card -->
-
-      <!-- START: settings/security passkey card -->
-      <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
-        <div>
-          <div class="flex items-center justify-between mb-4">
-            <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
-            <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
-          </div>
-          <%= render "shared/ui/layout/section_header",
-                title: t("settings.security.auth.passkey.title"),
-                subtitle: t("settings.security.auth.passkey.subtitle"),
-                title_size: "text-lg",
-                subtitle_size: "text-sm",
-                class: "mb-6" %>
-        </div>
-
-        <%# TODO: Passkey実装（WebAuthn）
-            - credential登録
-            - デバイス管理
-            - ログイン連携 %>
-        <%= render "shared/ui/actions/button",
-              label: t("settings.security.auth.passkey.action"),
-              variant: :secondary,
-              size: :compact,
-              full_width: true,
-              disabled: true,
-              class: "token-border-brand-soft" %>
-      <% end %>
-      <!-- END: settings/security passkey card -->
-    </div>
+      <%= render "settings/security/auth_options" %>
+    <% end %>
   </div>
-  <!-- END: settings/security auth options grid -->
 
-  <!-- START: settings/security notice -->
   <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-6 mb-4" %>
   <footer>
     <div class="flex items-start gap-3 token-text-subtle text-xs">
@@ -223,5 +45,4 @@
       </p>
     </div>
   </footer>
-  <!-- END: settings/security notice -->
 </section>

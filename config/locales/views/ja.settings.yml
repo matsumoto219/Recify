@@ -7,6 +7,7 @@ ja:
         guest: ゲストユーザー
         registered: 本登録ユーザー
         name_missing: ユーザー名未設定
+        email_unregistered: メールアドレス未登録
         edit_profile: プロフィールを編集
       sections:
         system_status: システム状態
@@ -19,6 +20,7 @@ ja:
         ocr: OCRサービス
         ai: AIサービス
       security:
+        guest_registration: 本登録する
         email: メールアドレス変更
         password: パスワード変更
         two_factor: 2要素認証 (2FA)
@@ -74,10 +76,32 @@ ja:
       title: セキュリティ
       subtitle: アカウントの安全性を管理します
       email:
-        title: メールアドレス
+        title: メールアドレス変更
         current: 現在のメールアドレス
-        change_unavailable: 変更する（未対応）
+        new: 新しいメールアドレス
+        new_placeholder: new@example.com
+        current_password: 現在のパスワード
+        submit: 確認メールを送信
+        submitting: 送信中...
+        pending: "確認待ち: %{email}"
+        change_unavailable: 変更する
         description: メールアドレスを変更すると、新しいアドレスに確認用のリンクが送信されます。
+      guest_registration:
+        title: 本登録
+        description: |-
+          現在はゲスト利用中です。
+          メールアドレスとパスワードを登録すると、本登録アカウントとして引き続き利用できます。
+        fields:
+          email: メールアドレス
+          email_placeholder: new@example.com
+          password: パスワード
+          password_confirmation: パスワード確認
+        hint: 確認メールのリンクを開くまではゲストユーザーのままです。
+        submit: 確認メールを送信
+        submitting: 送信中...
+        pending:
+          title: 確認メール送信済み
+          sent_to: "送信先: %{email}"
       password:
         title: パスワード変更
         current: 現在のパスワード

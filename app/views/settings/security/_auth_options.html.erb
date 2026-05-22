@@ -1,0 +1,47 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
+        <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
+      </div>
+      <%= render "shared/ui/layout/section_header",
+            title: t("settings.security.auth.two_factor.title"),
+            subtitle: t("settings.security.auth.two_factor.subtitle"),
+            title_size: "text-lg",
+            subtitle_size: "text-sm",
+            class: "mb-6" %>
+    </div>
+
+    <%= render "shared/ui/actions/button",
+          label: t("settings.security.auth.two_factor.action"),
+          variant: :secondary,
+          size: :compact,
+          full_width: true,
+          disabled: true,
+          class: "token-border-brand-soft" %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
+        <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
+      </div>
+      <%= render "shared/ui/layout/section_header",
+            title: t("settings.security.auth.passkey.title"),
+            subtitle: t("settings.security.auth.passkey.subtitle"),
+            title_size: "text-lg",
+            subtitle_size: "text-sm",
+            class: "mb-6" %>
+    </div>
+
+    <%= render "shared/ui/actions/button",
+          label: t("settings.security.auth.passkey.action"),
+          variant: :secondary,
+          size: :compact,
+          full_width: true,
+          disabled: true,
+          class: "token-border-brand-soft" %>
+  <% end %>
+</div>

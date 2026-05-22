@@ -42,6 +42,28 @@ class User < ApplicationRecord
     user
   end
 
+  def confirm(args = {})
+    completing_guest_registration = guest_registration_pending?
+    confirmed = super
+    complete_guest_registration! if confirmed && completing_guest_registration
+
+    confirmed
+  end
+
+  def guest_registration_pending?
+    guest? && pending_reconfirmation?
+  end
+
+  def start_guest_registration(attributes)
+    return false unless guest?
+
+    update(attributes.slice(:email, :password, :password_confirmation))
+  end
+
+  def complete_guest_registration!
+    update!(guest: false)
+  end
+
   def storage_usage
     Storage::UsageCalculator.new(self)
   end
@@ -55,6 +77,12 @@ class User < ApplicationRecord
   end
 
   private
+
+  def send_email_changed_notification?
+    return false if guest?
+
+    super
+  end
 
   def avatar_type
     return unless avatar.attached?

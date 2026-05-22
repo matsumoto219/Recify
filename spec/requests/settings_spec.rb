@@ -6,7 +6,16 @@ RSpec.describe 'Settings', type: :request do
   let(:avatar_upload) { Rack::Test::UploadedFile.new(avatar_path, 'image/jpeg') }
 
   before do
+    ActionMailer::Base.deliveries.clear
     sign_in user
+  end
+
+  after do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  def confirmation_token_from(message)
+    message.body.decoded.match(/confirmation_token=([^"'\s]+)/)[1]
   end
 
   describe 'GET /settings' do
@@ -139,6 +148,20 @@ RSpec.describe 'Settings', type: :request do
         end
       end
     end
+
+    it 'guestには内部用メールアドレスを表示しない' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.user.email_unregistered'))
+        expect(response.body).not_to include(guest.email)
+      end
+    end
   end
 
   describe 'GET /settings/account' do
@@ -187,16 +210,75 @@ RSpec.describe 'Settings', type: :request do
       get settings_security_path
 
       document = Nokogiri::HTML(response.body)
+      update_context_values = document.css('input[type="hidden"][name="update_context"]').map { |input| input['value'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(I18n.t('settings.security.title'))
         expect(response.body).to include(I18n.t('settings.security.email.title'))
+        expect(response.body).to include(I18n.t('settings.security.email.submit'))
         expect(response.body).to include(I18n.t('settings.security.password.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.two_factor.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.passkey.title'))
-        expect(document.at_css('input[type="hidden"][name="update_context"]')['value']).to eq('security')
+        expect(update_context_values).to include('email', 'security')
+      end
+    end
+
+    it 'guestには本登録カードだけを表示する' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      update_context_values = document.css('input[type="hidden"][name="update_context"]').map { |input| input['value'] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.title'))
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.description'))
+        expect(response.body).not_to include(I18n.t('settings.security.email.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.password.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.auth.two_factor.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.auth.passkey.title'))
+        expect(response.body).not_to include(guest.email)
+        expect(update_context_values).to eq([ 'guest_registration' ])
+      end
+    end
+
+    it '通常ユーザーのメール変更待ちを表示する' do
+      user.update!(email: 'pending-normal@example.com')
+      ActionMailer::Base.deliveries.clear
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.email.pending', email: 'pending-normal@example.com'))
+      end
+    end
+
+    it 'guest本登録申請中の送信先を表示する' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      guest.start_guest_registration(
+        email: 'pending-guest@example.com',
+        password: 'password123',
+        password_confirmation: 'password123'
+      )
+      ActionMailer::Base.deliveries.clear
+      sign_in guest
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.title'))
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.sent_to', email: 'pending-guest@example.com'))
+        expect(response.body).not_to include(fake_email)
       end
     end
   end
@@ -372,6 +454,150 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).not_to include(I18n.t('auth.registrations.edit.title'))
         expect(response.body).to include(password_error)
         expect(response.body).to include(confirmation_error)
+      end
+    end
+
+    it 'guest本登録申請で新メールをunconfirmed_emailに入れて確認メールだけ送る' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-upgrade@example.com',
+                password: 'password123',
+                password_confirmation: 'password123'
+              }
+            }
+
+      guest.reload
+      delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(flash[:notice]).to eq(I18n.t('flash.users.guest_registration.confirmation_sent'))
+        expect(guest).to be_guest
+        expect(guest.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to eq('guest-upgrade@example.com')
+        expect(guest).to be_valid_password('password123')
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(delivered_recipients).to include('guest-upgrade@example.com')
+        expect(delivered_recipients).not_to include(fake_email)
+      end
+    end
+
+    it 'guest本登録はconfirmation完了で本登録ユーザーにする' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-confirmed@example.com',
+                password: 'password123',
+                password_confirmation: 'password123'
+              }
+            }
+
+      token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+
+      get user_confirmation_path(confirmation_token: token)
+
+      aggregate_failures do
+        expect(guest.reload).not_to be_guest
+        expect(guest.email).to eq('guest-confirmed@example.com')
+        expect(guest.unconfirmed_email).to be_nil
+      end
+    end
+
+    it '通常ユーザーのメール変更はcurrent_passwordを必須にする' do
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'new-address@example.com',
+                current_password: ''
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.email).not_to eq('new-address@example.com')
+        expect(user.unconfirmed_email).to be_nil
+      end
+    end
+
+    it '通常ユーザーのメール変更は確認完了まで旧メールを維持する' do
+      old_email = user.email
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'reconfirmable-new@example.com',
+                current_password: 'password'
+              }
+            }
+
+      user.reload
+      delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'email'))
+        expect(flash[:notice]).to eq(I18n.t('flash.users.email_change.confirmation_sent'))
+        expect(user.email).to eq(old_email)
+        expect(user.unconfirmed_email).to eq('reconfirmable-new@example.com')
+        expect(delivered_recipients).to include('reconfirmable-new@example.com')
+        expect(delivered_recipients).to include(old_email)
+      end
+    end
+
+    it '通常ユーザーがguest_registration contextを叩いても拒否する' do
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'not-guest@example.com',
+                password: 'password123',
+                password_confirmation: 'password123'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload).not_to be_guest
+        expect(user.unconfirmed_email).to be_nil
+      end
+    end
+
+    it 'guestがemail contextを叩いても通常メール変更扱いしない' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'guest-email-context@example.com',
+                current_password: 'password'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(guest.reload.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
   end

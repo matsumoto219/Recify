@@ -27,6 +27,17 @@ class Users::RegistrationsController < Devise::RegistrationsController
     prev_unconfirmed_email = resource.unconfirmed_email if resource.respond_to?(:unconfirmed_email)
     password_update = password_update_request?
     update_context = normalized_update_context
+
+    if update_context == "email"
+      update_email
+      return
+    end
+
+    if update_context == "guest_registration"
+      update_guest_registration
+      return
+    end
+
     registration_update = update_context == "registration"
     security_update = update_context == "security" || (!registration_update && password_update)
     account_update = update_context == "account" && !security_update
@@ -95,6 +106,50 @@ class Users::RegistrationsController < Devise::RegistrationsController
     flash.now[:alert] = resource.errors.full_messages
   end
 
+  def update_email
+    if resource.guest?
+      reject_security_update(t("flash.users.email_change.guest_not_allowed"))
+      return
+    end
+
+    if update_resource(resource, email_update_params)
+      flash[:notice] = t("flash.users.email_change.confirmation_sent")
+      bypass_sign_in resource, scope: resource_name if sign_in_after_change_password?
+      redirect_to settings_security_path(anchor: "email")
+    else
+      clean_up_passwords resource
+      set_minimum_password_length
+      set_flash_from_resource_errors(resource)
+      render "settings/security", status: :unprocessable_content
+    end
+  end
+
+  def update_guest_registration
+    unless resource.guest?
+      reject_security_update(t("flash.users.guest_registration.not_allowed"))
+      return
+    end
+
+    if resource.start_guest_registration(guest_registration_params)
+      flash[:notice] = t("flash.users.guest_registration.confirmation_sent")
+      bypass_sign_in resource, scope: resource_name
+      redirect_to settings_security_path(anchor: "guest-registration")
+    else
+      clean_up_passwords resource
+      set_minimum_password_length
+      set_flash_from_resource_errors(resource)
+      render "settings/security", status: :unprocessable_content
+    end
+  end
+
+  def reject_security_update(message)
+    resource.errors.add(:base, message)
+    clean_up_passwords resource
+    set_minimum_password_length
+    set_flash_from_resource_errors(resource)
+    render "settings/security", status: :unprocessable_content
+  end
+
   def password_change_blank?
     current_password = account_update_params[:current_password].to_s
     password = account_update_params[:password].to_s
@@ -122,7 +177,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def normalized_update_context
     update_context = params[:update_context].presence
-    return update_context if %w[account security registration].include?(update_context)
+    return update_context if %w[account security registration email guest_registration].include?(update_context)
 
     "registration"
   end
@@ -144,6 +199,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
   # If you have extra params to permit, append them to the sanitizer.
   def configure_account_update_params
     devise_parameter_sanitizer.permit(:account_update, keys: [ :name, :avatar ])
+  end
+
+  def email_update_params
+    account_update_params.slice(:email, :current_password)
+  end
+
+  def guest_registration_params
+    account_update_params.slice(:email, :password, :password_confirmation)
   end
 
   # The path used after sign up.
