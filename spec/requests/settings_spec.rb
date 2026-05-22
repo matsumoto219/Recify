@@ -18,6 +18,16 @@ RSpec.describe 'Settings', type: :request do
     message.body.decoded.match(/confirmation_token=([^"'\s]+)/)[1]
   end
 
+  def form_for_update_context(document, update_context)
+    document.css('form').find do |form|
+      form.at_css("input[type=\"hidden\"][name=\"update_context\"][value=\"#{update_context}\"]")
+    end
+  end
+
+  def current_password_input_for(document, update_context)
+    form_for_update_context(document, update_context).at_css('input[name="user[current_password]"]')
+  end
+
   describe 'GET /settings' do
     it 'shows delete confirmation toggle' do
       get settings_path
@@ -211,6 +221,7 @@ RSpec.describe 'Settings', type: :request do
 
       document = Nokogiri::HTML(response.body)
       update_context_values = document.css('input[type="hidden"][name="update_context"]').map { |input| input['value'] }
+      email_change_control_row = document.at_css('[data-email-change-control-row]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -222,6 +233,10 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.security.auth.two_factor.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.passkey.title'))
         expect(update_context_values).to include('email', 'security')
+        expect(email_change_control_row['class']).to include('space-y-6')
+        expect(email_change_control_row['class']).to include('md:grid')
+        expect(email_change_control_row['class']).to include('md:grid-cols-2')
+        expect(email_change_control_row['class']).to include('md:items-end')
       end
     end
 
@@ -534,6 +549,27 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'メール変更のcurrent_passwordエラーはメール変更カードだけに表示する' do
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'wrong-password-email-change@example.com',
+                current_password: 'wrong-password'
+              }
+            }
+
+      document = Nokogiri::HTML(response.body)
+      email_current_password = current_password_input_for(document, 'email')
+      password_current_password = current_password_input_for(document, 'security')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(email_current_password['class']).to include('input-field-error')
+        expect(password_current_password['class']).not_to include('input-field-error')
+      end
+    end
+
     it '通常ユーザーのメール変更は確認完了まで旧メールを維持する' do
       old_email = user.email
 
@@ -556,6 +592,45 @@ RSpec.describe 'Settings', type: :request do
         expect(user.unconfirmed_email).to eq('reconfirmable-new@example.com')
         expect(delivered_recipients).to include('reconfirmable-new@example.com')
         expect(delivered_recipients).to include(old_email)
+      end
+    end
+
+    it 'パスワード変更のcurrent_passwordエラーはパスワード変更カードだけに表示する' do
+      patch user_registration_path,
+            params: {
+              update_context: 'security',
+              user: {
+                current_password: 'wrong-password',
+                password: 'new-password123',
+                password_confirmation: 'new-password123'
+              }
+            }
+
+      document = Nokogiri::HTML(response.body)
+      email_current_password = current_password_input_for(document, 'email')
+      password_current_password = current_password_input_for(document, 'security')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(email_current_password['class']).not_to include('input-field-error')
+        expect(password_current_password['class']).to include('input-field-error')
+      end
+    end
+
+    it '通常ユーザーのパスワード変更は成功する' do
+      patch user_registration_path,
+            params: {
+              update_context: 'security',
+              user: {
+                current_password: 'password',
+                password: 'new-password123',
+                password_confirmation: 'new-password123'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path)
+        expect(user.reload).to be_valid_password('new-password123')
       end
     end
 

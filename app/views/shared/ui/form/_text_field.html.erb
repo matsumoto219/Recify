@@ -14,6 +14,7 @@
     - show_label: true/false（default: true）
     - with_icon: true/false（default: true）
     - highlight_variant: :default / :error / :none（default: :default）
+    - show_error_state: true/false（default: true）
     - show_error_message: true/false（default: true）
     - input_class: 追加class
     - input_wrapper_class: 入力欄ラッパー用class
@@ -32,6 +33,7 @@
 
   with_icon = local_assigns.fetch(:with_icon, true)
   highlight_variant = (local_assigns[:highlight_variant].presence || :default).to_sym
+  show_error_state = local_assigns.fetch(:show_error_state, true)
   show_error_message = local_assigns.fetch(:show_error_message, true)
   input_wrapper_class = local_assigns[:input_wrapper_class]
   label_class = local_assigns[:label_class]
@@ -39,7 +41,7 @@
   size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
 
-  attribute_errors = Array(f.object&.errors&.[](attribute))
+  attribute_errors = show_error_state ? Array(f.object&.errors&.[](attribute)) : []
   has_error = attribute_errors.any?
   attribute_full_messages = Array(f.object&.errors&.full_messages_for(attribute))
 

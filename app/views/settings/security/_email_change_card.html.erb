@@ -2,6 +2,7 @@
   form_resource = local_assigns.fetch(:resource)
   form_resource_name = local_assigns.fetch(:resource_name)
   update_context = local_assigns.fetch(:update_context, "")
+  show_form_errors = update_context == "email"
   attempted_email = update_context == "email" ? params.dig(:user, :email).to_s : ""
 %>
 
@@ -43,36 +44,40 @@
               autocomplete: "email",
               required: true,
               with_icon: true,
+              show_error_state: show_form_errors,
               show_error_message: true,
               size: :comfortable,
               label_class: "text-sm font-medium normal-case tracking-normal px-0",
               error_message_class: "px-0",
               input_wrapper_class: "" %>
 
-        <%= render "shared/ui/form/text_field",
-              f: f,
-              attribute: :current_password,
-              label: t("settings.security.email.current_password"),
-              icon: "lock",
-              field_type: :password_field,
-              placeholder: "••••••••",
-              autocomplete: "current-password",
-              required: true,
-              with_icon: true,
-              show_error_message: true,
-              size: :comfortable,
-              label_class: "text-sm font-medium normal-case tracking-normal px-0",
-              error_message_class: "px-0",
-              input_wrapper_class: "" %>
+        <div class="space-y-6 md:space-y-0 md:grid md:grid-cols-2 md:items-end md:gap-6" data-email-change-control-row>
+          <%= render "shared/ui/form/text_field",
+                f: f,
+                attribute: :current_password,
+                label: t("settings.security.email.current_password"),
+                icon: "lock",
+                field_type: :password_field,
+                placeholder: "••••••••",
+                autocomplete: "current-password",
+                required: true,
+                with_icon: true,
+                show_error_state: show_form_errors,
+                show_error_message: true,
+                size: :comfortable,
+                label_class: "text-sm font-medium normal-case tracking-normal px-0",
+                error_message_class: "px-0",
+                input_wrapper_class: "" %>
 
-        <div class="pt-2 flex justify-end">
-          <%= render "shared/ui/actions/button",
-                label: t("settings.security.email.submit"),
-                variant: :primary,
-                size: :compact,
-                weight: :bold,
-                type: "submit",
-                disable_with: t("settings.security.email.submitting") %>
+          <div class="pt-2 flex justify-end md:pt-0">
+            <%= render "shared/ui/actions/button",
+                  label: t("settings.security.email.submit"),
+                  variant: :primary,
+                  size: :compact,
+                  weight: :bold,
+                  type: "submit",
+                  disable_with: t("settings.security.email.submitting") %>
+          </div>
         </div>
       </div>
     <% end %>
