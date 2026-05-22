@@ -73,8 +73,6 @@ ignore_unused:
   # Devise-i18n and generated Devise flows include optional features that are
   # not enabled in the current User model, but may be enabled later.
   - devise.*
-  - auth.links.confirmation_instructions
-  - auth.links.unlock_instructions
 
 ignore_missing:
   # Provided by devise-i18n external locale data at runtime.

@@ -36,6 +36,8 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       guest_form = document.at_css("form[action='#{guest_sign_in_path}']")
+      forgot_password_link = document.at_css("a[href='#{new_user_password_path}']")
+      sign_up_link = document.at_css("a[href='#{new_user_registration_path}']")
       noscript_banner = document.at_css('noscript')
 
       aggregate_failures do
@@ -52,6 +54,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('shared.footer.terms'))
         expect(response.body).to include(I18n.t('shared.footer.privacy'))
         expect(guest_form).to be_present
+        expect(forgot_password_link).to be_present
+        expect(sign_up_link).to be_present
       end
     end
 
@@ -189,6 +193,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_registration_path
 
       document = Nokogiri::HTML(response.body)
+      login_link = document.at_css("a[href='#{new_user_session_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -199,6 +204,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.terms'))
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
+        expect(login_link).to be_present
       end
     end
 
@@ -382,6 +388,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_password_path
 
       document = Nokogiri::HTML(response.body)
+      login_link = document.at_css("a[href='#{new_user_session_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -391,6 +398,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.passwords.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.passwords.new.buttons.submit'))
         expect(response.body).to include(I18n.t('auth.passwords.new.back_to_login'))
+        expect(login_link).to be_present
       end
     end
   end
@@ -400,6 +408,7 @@ RSpec.describe 'Auth pages', type: :request do
       get edit_user_password_path(reset_password_token: reset_password_token)
 
       document = Nokogiri::HTML(response.body)
+      login_link = document.at_css("a[href='#{new_user_session_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -412,6 +421,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(document.at_css("input[type='hidden'][name='user[reset_password_token]']")['value']).to eq(reset_password_token)
         expect(document.at_css("input[type='password'][name='user[password]']")).to be_present
         expect(document.at_css("input[type='password'][name='user[password_confirmation]']")).to be_present
+        expect(login_link).to be_present
       end
     end
   end
@@ -567,6 +577,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_unlock_path
 
       document = Nokogiri::HTML(response.body)
+      login_link = document.at_css("a[href='#{new_user_session_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -576,6 +587,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.unlocks.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.unlocks.new.buttons.submit'))
         expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+        expect(login_link).to be_present
       end
     end
 
