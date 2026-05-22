@@ -15,6 +15,12 @@ ja:
       page_title: 処理できませんでした
       title: 処理できませんでした
       description: リクエストを処理できませんでした。入力内容を確認して、もう一度お試しください。
+    forbidden:
+      title: アクセスできません
+      description: このリクエストは安全のためブロックされました。
+    too_many_requests:
+      title: アクセスが集中しています
+      description: しばらく時間をおいてから、もう一度お試しください。
     internal_server_error:
       page_title: 予期しないエラーが発生しました
       title: 予期しないエラーが発生しました

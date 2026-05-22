@@ -22,6 +22,8 @@ gem "jbuilder"
 gem "faraday"
 # Pagination [https://github.com/ddnexus/pagy]
 gem "pagy"
+# Rack middleware for throttling abusive requests
+gem "rack-attack", "~> 6.8"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
