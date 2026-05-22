@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Users::RegistrationsController < Devise::RegistrationsController
+  SUPPORTED_UPDATE_CONTEXTS = %w[account security email guest_registration].freeze
+
   # before_action :configure_sign_up_params, only: [:create]
   before_action :configure_account_update_params, only: [ :update ]
 
@@ -24,9 +26,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
   # PUT /resource
   def update
     self.resource = resource_class.to_adapter.get!(send(:"current_#{resource_name}").to_key)
-    prev_unconfirmed_email = resource.unconfirmed_email if resource.respond_to?(:unconfirmed_email)
-    password_update = password_update_request?
     update_context = normalized_update_context
+
+    unless update_context
+      redirect_unsupported_update_context
+      return
+    end
+
+    prev_unconfirmed_email = resource.unconfirmed_email if resource.respond_to?(:unconfirmed_email)
 
     if update_context == "email"
       update_email
@@ -38,8 +45,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       return
     end
 
-    registration_update = update_context == "registration"
-    security_update = update_context == "security" || (!registration_update && password_update)
+    security_update = update_context == "security"
     account_update = update_context == "account" && !security_update
     success_path = update_success_path(update_context, security_update)
     failure_template = update_failure_template(update_context, security_update)
@@ -150,17 +156,23 @@ class Users::RegistrationsController < Devise::RegistrationsController
     render "settings/security", status: :unprocessable_content
   end
 
+  def redirect_unsupported_update_context
+    redirect_to unsupported_update_context_path,
+                alert: t("flash.users.unsupported_update_context")
+  end
+
+  def unsupported_update_context_path
+    return settings_security_path(anchor: "guest-registration") if resource.guest?
+
+    settings_security_path
+  end
+
   def password_change_blank?
     current_password = account_update_params[:current_password].to_s
     password = account_update_params[:password].to_s
     password_confirmation = account_update_params[:password_confirmation].to_s
 
     current_password.present? && password.blank? && password_confirmation.blank?
-  end
-
-  def password_update_request?
-    account_update_params[:password].present? ||
-      account_update_params[:password_confirmation].present?
   end
 
   def avatar_storage_quota_exceeded?(resource, uploaded_avatar)
@@ -177,9 +189,9 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def normalized_update_context
     update_context = params[:update_context].presence
-    return update_context if %w[account security registration email guest_registration].include?(update_context)
+    return update_context if SUPPORTED_UPDATE_CONTEXTS.include?(update_context)
 
-    "registration"
+    nil
   end
 
   def update_success_path(update_context, security_update)

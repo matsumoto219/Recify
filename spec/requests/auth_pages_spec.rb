@@ -37,6 +37,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.sessions.title'))
         expect(noscript_banner).to be_present
         expect(noscript_banner.text).to include(I18n.t('shared.noscript.title'))
@@ -183,9 +184,12 @@ RSpec.describe 'Auth pages', type: :request do
     it 'renders registration copy through locale keys' do
       get new_user_registration_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.registrations.new.title'))
         expect(response.body).to include(I18n.t('auth.registrations.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.terms'))
@@ -249,68 +253,29 @@ RSpec.describe 'Auth pages', type: :request do
       sign_in user
     end
 
-    it 'renders account edit copy through locale keys' do
+    it '本登録ユーザーにはsettingsへの案内だけを表示する' do
       get edit_user_registration_path
 
       document = Nokogiri::HTML(response.body)
+      registration_forms = document.css("form[action='#{user_registration_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
-        expect(response.body).to include(I18n.t('auth.registrations.edit.fields.email'))
-        expect(response.body).to include(I18n.t('auth.registrations.edit.fields.current_password'))
-        expect(response.body).to include(I18n.t('auth.registrations.edit.buttons.save'))
-        expect(document.at_css('input[type="hidden"][name="update_context"]')['value']).to eq('registration')
+        expect(response.body).to include(I18n.t('auth.registrations.edit.normal.title'))
+        expect(response.body).to include(I18n.t('auth.registrations.edit.normal.description'))
+        expect(document.at_css("a[href='#{settings_security_path}']")).to be_present
+        expect(document.at_css("a[href='#{settings_account_path}']")).to be_present
+        expect(registration_forms).to be_empty
+        expect(document.at_css('input[name="user[email]"]')).to be_nil
+        expect(document.at_css('input[name="user[password]"]')).to be_nil
+        expect(document.at_css('input[name="user[current_password]"]')).to be_nil
       end
     end
 
-    it 'invalid account edit update renders users edit with field errors' do
-      put user_registration_path,
-          params: {
-            update_context: 'registration',
-            user: {
-              email: '',
-              password: '',
-              password_confirmation: '',
-              current_password: ''
-            }
-          }
-
-      document = Nokogiri::HTML(response.body)
-      email_input = document.at_css('input[name="user[email]"]')
-      email_error = "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.blank')}"
-
-      aggregate_failures do
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).not_to match(/translation missing/i)
-        expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
-        expect(response.body).not_to include(I18n.t('settings.account.title'))
-        expect(email_input).to be_present
-        expect(email_input['class']).to include('input-field-error')
-        expect(response.body).to include(email_error)
-      end
-    end
-
-    it 'missing update context falls back to users edit on invalid update' do
-      put user_registration_path,
-          params: {
-            user: {
-              email: '',
-              password: '',
-              password_confirmation: '',
-              current_password: ''
-            }
-          }
-
-      aggregate_failures do
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
-        expect(response.body).not_to include(I18n.t('settings.account.title'))
-      end
-    end
-
-    it 'guestが直リンクでedit registrationを開いても内部メールを表示しない' do
+    it 'guestには本登録化への案内だけを表示し、内部メールを表示しない' do
       sign_out user
       guest = User.guest!
       fake_email = guest.email
@@ -320,12 +285,72 @@ RSpec.describe 'Auth pages', type: :request do
       get edit_user_registration_path
 
       document = Nokogiri::HTML(response.body)
-      email_input = document.at_css('input[name="user[email]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(email_input['value']).to be_blank
+        expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
+        expect(response.body).to include(I18n.t('auth.registrations.edit.guest.title'))
+        expect(response.body).to include(I18n.t('auth.registrations.edit.guest.description'))
+        expect(document.at_css("a[href='#{settings_security_path(anchor: 'guest-registration')}']")).to be_present
+        expect(document.at_css("a[href='#{settings_account_path}']")).to be_present
+        expect(document.css("form[action='#{user_registration_path}']")).to be_empty
+        expect(document.at_css('input[name="user[email]"]')).to be_nil
         expect(response.body).not_to include(fake_email)
+      end
+    end
+
+    it 'registration contextを直接送っても旧更新処理を実行しない' do
+      original_email = user.email
+      original_encrypted_password = user.encrypted_password
+
+      put user_registration_path,
+          params: {
+            update_context: 'registration',
+            user: {
+              email: 'legacy-registration@example.com',
+              password: 'new-password123',
+              password_confirmation: 'new-password123',
+              current_password: 'password'
+            }
+          }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.users.unsupported_update_context'))
+        expect(user.reload.email).to eq(original_email)
+        expect(user.unconfirmed_email).to be_nil
+        expect(user.encrypted_password).to eq(original_encrypted_password)
+        expect(user).to be_valid_password('password')
+        expect(user).not_to be_valid_password('new-password123')
+      end
+    end
+
+    it '未知のupdate contextを直接送っても更新しない' do
+      original_name = user.name
+      original_email = user.email
+      original_encrypted_password = user.encrypted_password
+
+      put user_registration_path,
+          params: {
+            update_context: 'unknown',
+            user: {
+              name: 'Unknown Context',
+              email: 'unknown-context@example.com',
+              password: 'new-password123',
+              password_confirmation: 'new-password123',
+              current_password: 'password'
+            }
+          }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.users.unsupported_update_context'))
+        expect(user.reload.name).to eq(original_name)
+        expect(user.email).to eq(original_email)
+        expect(user.unconfirmed_email).to be_nil
+        expect(user.encrypted_password).to eq(original_encrypted_password)
+        expect(user).not_to be_valid_password('new-password123')
       end
     end
   end
@@ -352,9 +377,12 @@ RSpec.describe 'Auth pages', type: :request do
     it 'renders password reset copy through locale keys' do
       get new_user_password_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.passwords.new.title'))
         expect(response.body).to include(I18n.t('auth.passwords.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.passwords.new.buttons.submit'))
