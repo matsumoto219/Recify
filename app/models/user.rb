@@ -33,7 +33,6 @@ class User < ApplicationRecord
     user = new(
       email: "guest_#{SecureRandom.hex(8)}@example.com",
       password: SecureRandom.urlsafe_base64(12),
-      name: "GUEST USER",
       guest: true
     )
 

@@ -168,6 +168,8 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(guest.reload.name).to be_blank
+        expect(response.body).to include(I18n.t('users.display.guest_name'))
         expect(response.body).to include(I18n.t('settings.index.user.email_unregistered'))
         expect(response.body).not_to include(guest.email)
       end

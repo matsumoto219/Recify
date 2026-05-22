@@ -24,6 +24,9 @@ RSpec.describe 'GuestSessions', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(user).to be_confirmed
+        expect(user.name).to be_blank
+        expect(user.display_name).to eq(I18n.t('users.display.guest_name'))
+        expect(user.display_email).to eq(I18n.t('users.display.email_unregistered'))
         expect(user.last_sign_in_at).to be_present
       end
     end

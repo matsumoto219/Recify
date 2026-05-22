@@ -54,6 +54,7 @@ RSpec.describe User, type: :model do
         expect(user).to be_guest
         expect(user).to be_confirmed
         expect(user.confirmation_token).to be_nil
+        expect(user.name).to be_blank
       end
     end
   end
@@ -97,9 +98,9 @@ RSpec.describe User, type: :model do
   describe 'display labels' do
     it '名前なしguestは内部メールを表示名・表示メールに使わない' do
       guest = described_class.guest!
-      guest.update!(name: '')
 
       aggregate_failures do
+        expect(guest.name).to be_blank
         expect(guest.display_name).to eq(I18n.t('users.display.guest_name'))
         expect(guest.display_email).to eq(I18n.t('users.display.email_unregistered'))
         expect(guest.display_name).not_to include(guest.email)

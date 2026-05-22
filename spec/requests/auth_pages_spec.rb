@@ -279,7 +279,6 @@ RSpec.describe 'Auth pages', type: :request do
       sign_out user
       guest = User.guest!
       fake_email = guest.email
-      guest.update!(name: '')
       sign_in guest
 
       get edit_user_registration_path
@@ -289,6 +288,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect(guest.reload.name).to be_blank
         expect(document.css('main').size).to eq(1)
         expect(response.body).to include(I18n.t('auth.registrations.edit.guest.title'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.guest.description'))
