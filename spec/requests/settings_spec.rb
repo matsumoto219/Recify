@@ -18,6 +18,27 @@ RSpec.describe 'Settings', type: :request do
     message.body.decoded.match(/confirmation_token=([^"'\s]+)/)[1]
   end
 
+  def expect_common_mail_layout(message)
+    body = message.body.decoded
+
+    aggregate_failures do
+      expect(body).to include('<!DOCTYPE html>')
+      expect(body).to include(I18n.t('auth.mailer.layout.app_name'))
+      expect(body).to include(I18n.t('auth.mailer.layout.tagline'))
+      expect(body).to include(I18n.t('auth.mailer.layout.footer_notice').lines.first.strip)
+    end
+  end
+
+  def expect_mail_cta_with_fallback(message, action_label)
+    body = message.body.decoded
+
+    aggregate_failures do
+      expect_common_mail_layout(message)
+      expect(body).to include(action_label)
+      expect(body).to include(I18n.t('auth.mailer.common.fallback_url'))
+    end
+  end
+
   def form_for_update_context(document, update_context)
     document.css('form').find do |form|
       form.at_css("input[type=\"hidden\"][name=\"update_context\"][value=\"#{update_context}\"]")
@@ -543,6 +564,7 @@ RSpec.describe 'Settings', type: :request do
         expect(delivered_recipients).not_to include(fake_email)
         expect(delivered_body).to include('guest-upgrade@example.com')
         expect(delivered_body).not_to include(fake_email)
+        expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
       end
     end
 
@@ -624,6 +646,7 @@ RSpec.describe 'Settings', type: :request do
             }
 
       confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?('reconfirmable-new@example.com') }
+      email_changed_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?(old_email) }
       user.reload
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
 
@@ -635,6 +658,10 @@ RSpec.describe 'Settings', type: :request do
         expect(delivered_recipients).to include('reconfirmable-new@example.com')
         expect(delivered_recipients).to include(old_email)
         expect(confirmation_mail.body.decoded).to include('reconfirmable-new@example.com')
+        expect_mail_cta_with_fallback(confirmation_mail, I18n.t('auth.mailer.confirmation_instructions.action'))
+        expect_common_mail_layout(email_changed_mail)
+        expect(email_changed_mail.body.decoded).to include(I18n.t('auth.mailer.email_changed.title'))
+        expect(email_changed_mail.body.decoded).not_to include(I18n.t('auth.mailer.common.fallback_url'))
       end
 
       token = confirmation_token_from(confirmation_mail)

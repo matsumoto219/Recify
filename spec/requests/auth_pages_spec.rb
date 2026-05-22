@@ -30,6 +30,27 @@ RSpec.describe 'Auth pages', type: :request do
     'reset-password-token'
   end
 
+  def expect_common_mail_layout(message)
+    body = message.body.decoded
+
+    aggregate_failures do
+      expect(body).to include('<!DOCTYPE html>')
+      expect(body).to include(I18n.t('auth.mailer.layout.app_name'))
+      expect(body).to include(I18n.t('auth.mailer.layout.tagline'))
+      expect(body).to include(I18n.t('auth.mailer.layout.footer_notice').lines.first.strip)
+    end
+  end
+
+  def expect_mail_cta_with_fallback(message, action_label)
+    body = message.body.decoded
+
+    aggregate_failures do
+      expect_common_mail_layout(message)
+      expect(body).to include(action_label)
+      expect(body).to include(I18n.t('auth.mailer.common.fallback_url'))
+    end
+  end
+
   describe 'GET /users/sign_in' do
     it 'renders login copy through locale keys and keeps guest login action' do
       get new_user_session_path
@@ -172,7 +193,7 @@ RSpec.describe 'Auth pages', type: :request do
           expect(user.unlock_token).to be_present
           expect(ActionMailer::Base.deliveries.size).to eq(1)
           expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
-          expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.unlock_instructions.action'))
+          expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.unlock_instructions.action'))
         end
 
         token = unlock_token_from(ActionMailer::Base.deliveries.last)
@@ -231,6 +252,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(user.confirmation_token).to be_present
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
+        expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
       end
     end
 
@@ -523,7 +545,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to redirect_to(new_user_session_path)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
-        expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.confirmation_instructions.action'))
+        expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
       end
     end
 
@@ -607,7 +629,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to redirect_to(new_user_session_path)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
-        expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.unlock_instructions.action'))
+        expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.unlock_instructions.action'))
       end
     end
   end
@@ -627,6 +649,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to redirect_to(new_user_session_path)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
+        expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.reset_password_instructions.action'))
       end
     end
 

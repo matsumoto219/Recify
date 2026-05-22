@@ -110,21 +110,35 @@ ja:
         back_to_login: ログインに戻る
     mailer:
       greeting: "%{email} 様"
+      layout:
+        app_name: Recify
+        tagline: Receipt Management
+        footer_notice: |-
+          このメールはRecifyから送信されています。
+          心当たりがない場合は、このメールを破棄してください。
+        copyright: "© %{year} Recify. All rights reserved."
+      common:
+        fallback_url: ボタンが機能しない場合は、以下のURLをブラウザにコピーして開いてください。
       reset_password_instructions:
+        title: パスワード再設定
         body: パスワード変更のリクエストを受け付けました。以下のリンクから変更できます。
         action: パスワードを変更する
         ignore: このメールに心当たりがない場合は破棄してください。
         no_change_until_link: 上記リンクから新しいパスワードを設定するまで、パスワードは変更されません。
       password_change:
+        title: パスワード変更のお知らせ
         body: パスワードが変更されたことをお知らせします。
       unlock_instructions:
+        title: アカウントロック解除
         body: ログイン失敗が規定回数を超えたため、アカウントがロックされました。
         instructions: 以下のリンクからアカウントのロックを解除できます。
         action: アカウントのロックを解除する
       confirmation_instructions:
+        title: メールアドレスの確認
         body: メールアドレス確認のリクエストを受け付けました。以下のリンクから確認を完了してください。
         action: メールアドレスを確認する
         ignore: このメールに心当たりがない場合は破棄してください。
       email_changed:
+        title: メールアドレス変更のお知らせ
         changing: "メールアドレスが %{email} に変更されようとしています。"
         changed: "メールアドレスが %{email} に変更されました。"
