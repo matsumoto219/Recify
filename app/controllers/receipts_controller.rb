@@ -297,7 +297,7 @@ class ReceiptsController < ApplicationController
     return if uploaded_receipt_image.present?
     return unless @receipt.image.attached?
 
-    @receipt.image.purge
+    Storage::AttachmentPurger.call(@receipt.image)
   end
 
   def build_purchased_at(purchased_on, purchased_time)
