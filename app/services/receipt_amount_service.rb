@@ -20,6 +20,11 @@
 #   inconsistencies: Array<Symbol>,
 #   mismatch_codes: Array<String>,
 #   mismatch_messages: Array<String>,
+#   calculation_profile: Hash?,
+#   calculation_profile_score: Integer?,
+#   calculation_profile_candidates: Array<Hash>,
+#   context: Symbol,
+#   rounding_mode: { tax:, discount: },
 #   needs_review: Boolean
 # }
 #
@@ -150,7 +155,12 @@ class ReceiptAmountService
       mismatch_messages: mismatch_messages,
       calculation_profile: profile_estimation.profile,
       calculation_profile_score: profile_estimation.score,
-      calculation_profile_candidates: profile_estimation.candidates
+      calculation_profile_candidates: profile_estimation.candidates,
+      context: @context,
+      rounding_mode: {
+        tax: active_tax_rounding_mode,
+        discount: active_discount_rounding_mode
+      }
     )
   end
 

@@ -1271,6 +1271,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.user).to eq(user)
         expect(receipt.store_name).to eq('テスト')
         expect(receipt.total_amount).to eq(1000)
+        expect(receipt.amount_calculation_profile).to include(
+          'context' => 'manual',
+          'resolved' => include('total_amount' => 1000)
+        )
+        expect(receipt.amount_calculation_profile).not_to have_key('calculation_profile_candidates')
       end
     end
 
@@ -3446,6 +3451,10 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(2000)
         expect(receipt.payment_method).to eq('credit_card')
         expect(receipt.memo).to eq('更新メモ')
+        expect(receipt.amount_calculation_profile).to include(
+          'context' => 'edit_save',
+          'resolved' => include('total_amount' => 2000)
+        )
       end
     end
 

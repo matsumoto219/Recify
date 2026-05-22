@@ -2,11 +2,13 @@
 
 module Amounts
   class ResultTemplate
-    def self.build(computed:, resolved:, inconsistencies:, tax_details: [], mismatch_codes: [], mismatch_messages: [], calculation_profile: nil, calculation_profile_score: nil, calculation_profile_candidates: [])
+    def self.build(computed:, resolved:, inconsistencies:, tax_details: [], mismatch_codes: [], mismatch_messages: [], calculation_profile: nil, calculation_profile_score: nil, calculation_profile_candidates: [], context: nil, rounding_mode: nil)
       blocking_inconsistencies = Amounts::MismatchSeverity.blocking(inconsistencies)
       warning_inconsistencies = Amounts::MismatchSeverity.warning(inconsistencies)
 
       {
+        context: context,
+        rounding_mode: rounding_mode,
         computed: computed,
         resolved: resolved,
         tax_details: tax_details,

@@ -678,6 +678,11 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.processing_error_message).to be_nil
         expect(receipt.store_name).to eq('サンプルストア')
         expect(receipt.total_amount).to eq(1280)
+        expect(receipt.amount_calculation_profile).to include(
+          'context' => 'analysis',
+          'resolved' => include('total_amount' => 1280)
+        )
+        expect(receipt.amount_calculation_profile.to_json).not_to include('calculation_profile_candidates', 'raw_text', 'raw_response')
 
         expect(items.size).to eq(2)
         expect(items.first.raw_text).to eq('コーヒー')
@@ -828,6 +833,20 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.processing_error_code).to be_nil
         expect(receipt.store_name).to eq('AI補正ストア')
         expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.amount_calculation_profile).to include(
+          'context' => 'analysis',
+          'computed' => include(
+            'total_amount' => 1280,
+            'subtotal_amount' => 1164,
+            'tax_amount' => 116
+          ),
+          'resolved' => include(
+            'total_amount' => 1280,
+            'subtotal_amount' => 1164,
+            'tax_amount' => 116
+          )
+        )
+        expect(receipt.amount_calculation_profile).not_to have_key('calculation_profile_candidates')
         expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include(
           [ 'ブレンドコーヒー', 'drink' ],
           [ 'たまごサンド', 'food' ]

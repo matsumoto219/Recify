@@ -47,6 +47,28 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'snapshot保存に必要なcontextとrounding_modeを返す' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :manual,
+        tax_rounding_mode: :ceil,
+        discount_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result[:context]).to eq(:manual)
+        expect(result[:rounding_mode]).to eq(tax: :ceil, discount: :floor)
+        expect(result[:computed]).to include(:subtotal, :tax, :total)
+        expect(result[:resolved]).to include(:subtotal, :tax, :total)
+        expect(result).to have_key(:mismatch_codes)
+        expect(result).to have_key(:blocking_mismatch_codes)
+        expect(result).to have_key(:warning_mismatch_codes)
+      end
+    end
+
     it 'corrects total_amount from subtotal_amount plus tax_amount' do
       result = call_service(
         receipt: {

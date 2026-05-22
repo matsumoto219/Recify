@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_22_223317) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -106,6 +106,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_19_062953) do
   end
 
   create_table "receipts", force: :cascade do |t|
+    t.jsonb "amount_calculation_profile", default: {}, null: false
     t.string "country_region"
     t.datetime "created_at", null: false
     t.string "display_id", limit: 16, null: false

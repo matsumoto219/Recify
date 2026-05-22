@@ -383,6 +383,7 @@ class ReceiptsController < ApplicationController
     permitted["tax_amount"] = resolved[:tax]
     permitted["total_amount"] = resolved[:total]
     permitted["tax_rate"] = resolved[:tax_rate]
+    permitted["amount_calculation_profile"] = Amounts::CalculationProfileSnapshot.call(result)
     # 明細の quantity / line_total を計算結果で上書き（複数行対応）
     apply_item_totals!(permitted, result.dig(:computed, :items))
     permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])

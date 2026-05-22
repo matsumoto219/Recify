@@ -375,7 +375,8 @@ class ReceiptAnalysisService
         processing_error_code: nil,
         processing_error_message: nil,
         review_reasons: review_reasons,
-        ocr_completed_at: Time.current
+        ocr_completed_at: Time.current,
+        amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
       ),
       items_attributes: items_attributes,
       payments_attributes: params[:receipt_payments_attributes],
@@ -431,7 +432,8 @@ class ReceiptAnalysisService
         processing_error_code: nil,
         processing_error_message: nil,
         review_reasons: review_reasons,
-        ocr_completed_at: Time.current
+        ocr_completed_at: Time.current,
+        amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
       ),
       items_attributes: items_attributes,
       payments_attributes: params[:receipt_payments_attributes],
@@ -486,7 +488,8 @@ class ReceiptAnalysisService
       processing_error_code: error_code,
       processing_error_message: processing_error_message,
       review_reasons: review_reasons,
-      ocr_completed_at: Time.current
+      ocr_completed_at: Time.current,
+      amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
     )
 
     persist_result_full!(
@@ -602,6 +605,10 @@ class ReceiptAnalysisService
     else
       Array(amount_result[:inconsistencies])
     end
+  end
+
+  def amount_calculation_profile_snapshot(amount_result)
+    Amounts::CalculationProfileSnapshot.call(amount_result)
   end
 
   def ai_fallback_processing_error_message(ai_result)

@@ -1,0 +1,125 @@
+require 'rails_helper'
+
+RSpec.describe Amounts::CalculationProfileSnapshot do
+  describe '.call' do
+    it 'ReceiptAmountService resultから監査用の最小snapshotを作る' do
+      result = {
+        context: :analysis,
+        rounding_mode: { tax: :floor, discount: :round },
+        computed: {
+          total: 1280,
+          subtotal: 1164,
+          tax: 116,
+          items: [
+            { raw_text: 'OCR全文を含む商品行', line_total: 1280 }
+          ]
+        },
+        resolved: {
+          total: 1280,
+          subtotal: 1164,
+          tax: 116,
+          tax_rate: BigDecimal('0.1')
+        },
+        warning_reasons: [:price_tax_inclusion_uncertain],
+        mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+        blocking_mismatch_codes: [],
+        warning_mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+        calculation_profile: {
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round,
+          receipt_tax_basis: :total_includes_tax,
+          item_amount_basis: :mixed_by_tax_rate_group,
+          item_amount_basis_assignments: [
+            {
+              tax_rate: BigDecimal('0.1'),
+              basis: :tax_included,
+              net_amount: 1164,
+              tax_amount: 116,
+              gross_amount: 1280,
+              raw_text: '保存しない'
+            }
+          ]
+        },
+        calculation_profile_score: 0,
+        calculation_profile_candidates: [
+          { profile: { item_amount_basis: :line_total_as_recorded }, score: 0 }
+        ],
+        ai_raw_response: { content: '保存しない' }
+      }
+
+      snapshot = described_class.call(result)
+
+      aggregate_failures do
+        expect(snapshot).to eq(
+          profile: {
+            tax_rounding_mode: 'floor',
+            discount_rounding_mode: 'round',
+            receipt_tax_basis: 'total_includes_tax',
+            item_amount_basis: 'mixed_by_tax_rate_group',
+            item_amount_basis_assignments: [
+              {
+                tax_rate: '0.1',
+                basis: 'tax_included',
+                net_amount: 1164,
+                tax_amount: 116,
+                gross_amount: 1280
+              }
+            ]
+          },
+          score: 0,
+          warnings: ['price_tax_inclusion_uncertain'],
+          mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+          blocking_mismatch_codes: [],
+          warning_mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+          context: 'analysis',
+          rounding_mode: { 'tax' => 'floor', 'discount' => 'round' },
+          computed: {
+            total_amount: 1280,
+            subtotal_amount: 1164,
+            tax_amount: 116
+          },
+          resolved: {
+            total_amount: 1280,
+            subtotal_amount: 1164,
+            tax_amount: 116
+          }
+        )
+        expect(snapshot).not_to have_key(:calculation_profile_candidates)
+        expect(snapshot.to_json).not_to include('OCR全文を含む商品行', 'ai_raw_response', '保存しない')
+      end
+    end
+
+    it 'profileがないmanual/edit_save結果でも空JSONにしない' do
+      snapshot = described_class.call(
+        {
+          context: :manual,
+          rounding_mode: { tax: :floor, discount: :round },
+          computed: { total: 110, subtotal: 100, tax: 10 },
+          resolved: { total: 110, subtotal: 100, tax: 10 },
+          mismatch_codes: []
+        }
+      )
+
+      aggregate_failures do
+        expect(snapshot[:profile]).to be_nil
+        expect(snapshot[:context]).to eq('manual')
+        expect(snapshot.dig(:resolved, :total_amount)).to eq(110)
+        expect(snapshot).not_to be_empty
+      end
+    end
+  end
+
+  describe 'receipts.amount_calculation_profile schema' do
+    it 'jsonb default {} null falseで定義されている' do
+      column = Receipt.columns_hash.fetch('amount_calculation_profile')
+      receipt = create(:receipt)
+
+      aggregate_failures do
+        expect(column.type).to eq(:jsonb)
+        expect(column.null).to eq(false)
+        expect(column.default).to eq('{}')
+        expect(receipt.amount_calculation_profile).to eq({})
+      end
+    end
+  end
+end
