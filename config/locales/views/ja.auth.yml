@@ -72,12 +72,40 @@ ja:
         back_to_login: ログインに戻る
       edit:
         title: パスワード変更
+        subtitle: 新しいパスワードを設定してください
+        form_title: 新しいパスワード設定フォーム
         fields:
           password: 新しいパスワード
           password_confirmation: 新しいパスワード（確認用）
           minimum_password_length: "%{count}文字以上"
         buttons:
           submit: パスワードを変更
+          submitting: 変更中...
+        back_to_login: ログインに戻る
+    confirmations:
+      new:
+        title: 確認メール再送
+        subtitle: 登録したメールアドレスへ確認メールを再送します
+        form_title: 確認メール再送フォーム
+        fields:
+          email: メールアドレス
+          email_placeholder: メールアドレスを入力
+        buttons:
+          submit: 確認メールを再送
+          submitting: 送信中...
+        back_to_login: ログインに戻る
+    unlocks:
+      new:
+        title: ロック解除メール再送
+        subtitle: 登録したメールアドレスへロック解除メールを再送します
+        form_title: ロック解除メール再送フォーム
+        fields:
+          email: メールアドレス
+          email_placeholder: メールアドレスを入力
+        buttons:
+          submit: ロック解除メールを再送
+          submitting: 送信中...
+        back_to_login: ログインに戻る
     links:
       confirmation_instructions: 確認メールが届きませんか？
       unlock_instructions: ロック解除メールが届きませんか？

@@ -1,24 +1,74 @@
-<%# TODO: Devise confirmable を有効化する場合は auth locale とUI設計に接続する %>
 <%
   confirmation_email_value =
-    if resource.respond_to?(:guest?) && resource.guest?
+    if params.dig(:user, :email).present?
+      params.dig(:user, :email)
+    elsif user_signed_in? && current_user.guest?
+      current_user.unconfirmed_email.presence
+    elsif user_signed_in? && current_user.pending_reconfirmation?
+      current_user.unconfirmed_email.presence || current_user.email
+    elsif resource.respond_to?(:guest?) && resource.guest?
       resource.unconfirmed_email.presence
+    elsif resource.respond_to?(:pending_reconfirmation?) && resource.pending_reconfirmation?
+      resource.unconfirmed_email.presence || resource.email
     else
-      resource.pending_reconfirmation? ? resource.unconfirmed_email : resource.email
+      resource.email
     end
 %>
-<h2>Resend confirmation instructions</h2>
 
-<%= form_for(resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }) do |f| %>
+<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+  <%= render "shared/ui/layout/ambient_background" %>
 
-  <div class="field">
-    <p><%= f.label :email %></p>
-    <p><%= f.email_field :email, autofocus: true, autocomplete: "email", value: confirmation_email_value %></p>
+  <div class="w-full max-w-[440px] z-10 space-y-8">
+    <section aria-labelledby="confirmation-resend-page-title">
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
+            title: t("auth.confirmations.new.title"),
+            subtitle: t("auth.confirmations.new.subtitle"),
+            title_id: "confirmation-resend-page-title",
+            align: :center,
+            title_size: "text-3xl",
+            subtitle_size: "text-sm",
+            spacing_class: "space-y-3" %>
+    </section>
+
+    <%= render "shared/ui/layout/surface_card", title_id: "confirmation-resend-form-title" do %>
+      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+        <h2 id="confirmation-resend-form-title" class="sr-only"><%= t("auth.confirmations.new.form_title") %></h2>
+
+        <%= form_for(resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post, class: "space-y-6" }) do |f| %>
+          <%= render "shared/ui/form/text_field",
+                f: f,
+                attribute: :email,
+                label: t("auth.confirmations.new.fields.email"),
+                icon: "mail",
+                field_type: :email_field,
+                value: confirmation_email_value,
+                placeholder: t("auth.confirmations.new.fields.email_placeholder"),
+                autocomplete: "email",
+                autofocus: true,
+                required: true,
+                size: :prominent,
+                label_class: "text-xs font-bold uppercase tracking-widest block px-1",
+                error_message_class: "px-1 text-xs leading-relaxed" %>
+
+          <%= render "shared/ui/actions/button",
+                label: t("auth.confirmations.new.buttons.submit"),
+                type: "submit",
+                variant: :primary,
+                size: :lg,
+                weight: :bold,
+                radius: :lg,
+                full_width: true,
+                disable_with: t("auth.confirmations.new.buttons.submitting") %>
+        <% end %>
+
+        <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
+
+        <%= render "shared/ui/navigation/navigation_link",
+              path: new_session_path(resource_name),
+              text: t("auth.confirmations.new.back_to_login"),
+              arrow: :left %>
+      </div>
+    <% end %>
   </div>
-
-  <div class="actions">
-    <%= f.submit "Resend confirmation instructions" %>
-  </div>
-<% end %>
-
-<%= render "devise/shared/links" %>
+</div>

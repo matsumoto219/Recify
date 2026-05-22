@@ -26,6 +26,10 @@ RSpec.describe 'Auth pages', type: :request do
     message.body.encoded.match(/unlock_token=([^"'\s]+)/)[1]
   end
 
+  def reset_password_token
+    'reset-password-token'
+  end
+
   describe 'GET /users/sign_in' do
     it 'renders login copy through locale keys and keeps guest login action' do
       get new_user_session_path
@@ -389,7 +393,121 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.passwords.new.back_to_login'))
       end
     end
+  end
 
+  describe 'GET /users/password/edit' do
+    it 'renders password edit copy and keeps reset password token' do
+      get edit_user_password_path(reset_password_token: reset_password_token)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
+        expect(response.body).to include(I18n.t('auth.passwords.edit.title'))
+        expect(response.body).to include(I18n.t('auth.passwords.edit.fields.password'))
+        expect(response.body).to include(I18n.t('auth.passwords.edit.fields.password_confirmation'))
+        expect(response.body).to include(I18n.t('auth.passwords.edit.buttons.submit'))
+        expect(document.at_css("input[type='hidden'][name='user[reset_password_token]']")['value']).to eq(reset_password_token)
+        expect(document.at_css("input[type='password'][name='user[password]']")).to be_present
+        expect(document.at_css("input[type='password'][name='user[password_confirmation]']")).to be_present
+      end
+    end
+  end
+
+  describe 'GET /users/confirmation/new' do
+    it 'renders confirmation resend copy through locale keys' do
+      get new_user_confirmation_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
+        expect(response.body).to include(I18n.t('auth.confirmations.new.fields.email'))
+        expect(response.body).to include(I18n.t('auth.confirmations.new.buttons.submit'))
+        expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+      end
+    end
+
+    it 'signed in guestの内部メールを初期表示しない' do
+      guest = User.guest!
+      sign_in guest
+
+      get new_user_confirmation_path
+
+      document = Nokogiri::HTML(response.body)
+      email_input = document.at_css("input[type='email'][name='user[email]']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include(guest.email)
+        expect(email_input['value']).to be_blank
+      end
+    end
+
+    it 'confirmation resend sends confirmation mail' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
+        expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+  end
+
+  describe 'GET /users/unlock/new' do
+    it 'renders unlock resend copy through locale keys' do
+      get new_user_unlock_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to match(/translation missing/i)
+        expect(document.css('main').size).to eq(1)
+        expect(response.body).to include(I18n.t('auth.unlocks.new.title'))
+        expect(response.body).to include(I18n.t('auth.unlocks.new.fields.email'))
+        expect(response.body).to include(I18n.t('auth.unlocks.new.buttons.submit'))
+        expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+      end
+    end
+
+    it 'unlock resend sends unlock mail' do
+      user = create(:user)
+      user.lock_access!(send_instructions: false)
+      ActionMailer::Base.deliveries.clear
+
+      post user_unlock_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
+        expect(ActionMailer::Base.deliveries.last.body.decoded).to include(I18n.t('auth.mailer.unlock_instructions.action'))
+      end
+    end
+  end
+
+  describe 'POST /users/password' do
     it 'password reset sends reset instructions' do
       user = create(:user)
 
