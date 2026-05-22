@@ -240,8 +240,22 @@ class Receipt < ApplicationRecord
       if amount_condition
         operator = amount_condition[1].presence || "="
         amount = amount_condition[2].to_i
+        amount_column = arel_table[:total_amount]
+        amount_predicate =
+          case operator
+          when "<="
+            amount_column.lteq(amount)
+          when ">="
+            amount_column.gteq(amount)
+          when "<"
+            amount_column.lt(amount)
+          when ">"
+            amount_column.gt(amount)
+          else
+            amount_column.eq(amount)
+          end
 
-        token_scope = token_scope.or(where("total_amount #{operator} ?", amount))
+        token_scope = token_scope.or(where(amount_predicate))
       end
 
       scope = scope.merge(token_scope)
