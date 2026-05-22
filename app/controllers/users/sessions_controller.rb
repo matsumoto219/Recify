@@ -17,12 +17,13 @@ class Users::SessionsController < Devise::SessionsController
       sign_in(resource_name, resource)
       respond_with resource, location: after_sign_in_path_for(resource)
     else
+      failure_message = warden.message || :invalid
       self.resource = resource_class.new(sign_in_params)
-      apply_sign_in_error_states
-      flash.now[:alert] = I18n.t("devise.failure.invalid", authentication_keys: resource_class.authentication_keys.join("/")).strip
+      apply_sign_in_error_states if field_error_sign_in_failure?(failure_message)
+      flash.now[:alert] = sign_in_failure_message(failure_message)
       clean_up_passwords(resource)
       set_minimum_password_length
-      respond_with resource, status: :unprocessable_content
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -52,6 +53,25 @@ class Users::SessionsController < Devise::SessionsController
 
   def sign_in_params
     devise_parameter_sanitizer.sanitize(:sign_in)
+  end
+
+  def field_error_sign_in_failure?(failure_message)
+    failure_message.to_sym.in?([ :invalid, :not_found_in_database ])
+  end
+
+  def sign_in_failure_message(failure_message)
+    I18n.t(
+      "devise.failure.#{failure_message}",
+      authentication_keys: sign_in_authentication_keys_label,
+      default: I18n.t("devise.failure.invalid", authentication_keys: sign_in_authentication_keys_label)
+    ).strip
+  end
+
+  def sign_in_authentication_keys_label
+    keys = resource_class.authentication_keys
+    keys = keys.keys if keys.is_a?(Hash)
+
+    keys.map { |key| resource_class.human_attribute_name(key).downcase }.join(I18n.t(:"support.array.words_connector"))
   end
 
   # If you have extra params to permit, append them to the sanitizer.

@@ -1,8 +1,9 @@
 class User < ApplicationRecord
   # Include default devise modules. Others available are:
-  # :confirmable, :lockable, :timeoutable, :trackable and :omniauthable
+  # :timeoutable and :omniauthable
   devise :database_authenticatable, :registerable,
-         :recoverable, :rememberable, :validatable
+         :recoverable, :rememberable, :validatable,
+         :trackable, :confirmable, :lockable
 
   has_many :receipts, dependent: :destroy
   has_many :notifications, dependent: :destroy
@@ -22,12 +23,16 @@ class User < ApplicationRecord
             inclusion: { in: THEME_PREFERENCES }
 
   def self.guest!
-    create!(
+    user = new(
       email: "guest_#{SecureRandom.hex(8)}@example.com",
       password: SecureRandom.urlsafe_base64(12),
       name: "GUEST USER",
       guest: true
     )
+
+    user.skip_confirmation!
+    user.save!
+    user
   end
 
   def storage_usage

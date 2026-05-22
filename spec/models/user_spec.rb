@@ -15,6 +15,39 @@ RSpec.describe User, type: :model do
     end
   end
 
+  describe 'devise modules' do
+    it 'Trackable / Confirmable / Lockable を有効にする' do
+      expect(described_class.devise_modules).to include(:trackable, :confirmable, :lockable)
+    end
+  end
+
+  describe 'factory confirmation state' do
+    it '通常user factoryはconfirmed済みにする' do
+      user = create(:user)
+
+      expect(user).to be_confirmed
+    end
+
+    it 'unconfirmed traitは未確認userを作る' do
+      user = create(:user, :unconfirmed)
+
+      expect(user).not_to be_confirmed
+    end
+  end
+
+  describe '.guest!' do
+    it 'confirmed済みのゲストユーザーを作成する' do
+      user = described_class.guest!
+
+      aggregate_failures do
+        expect(user).to be_persisted
+        expect(user).to be_guest
+        expect(user).to be_confirmed
+        expect(user.confirmation_token).to be_nil
+      end
+    end
+  end
+
   describe 'avatar validation' do
     it 'invalid content type uses locale-backed error message' do
       user = build(:user)

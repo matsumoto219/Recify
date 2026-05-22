@@ -14,6 +14,20 @@ RSpec.describe 'GuestSessions', type: :request do
       end
     end
 
+    it 'confirmed済みのゲストユーザーを作成してログインする' do
+      expect do
+        post guest_sign_in_path
+      end.to change(User.where(guest: true), :count).by(1)
+
+      user = User.where(guest: true).order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(user).to be_confirmed
+        expect(user.last_sign_in_at).to be_present
+      end
+    end
+
     it 'locale経由の失敗flashでログイン画面へ戻す' do
       allow(User).to receive(:guest!).and_raise(StandardError, 'guest unavailable')
 

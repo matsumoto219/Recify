@@ -1,6 +1,31 @@
 require 'rails_helper'
 
 RSpec.describe 'Auth pages', type: :request do
+  before do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  after do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  def with_devise_maximum_attempts(value)
+    original = User.maximum_attempts
+    User.maximum_attempts = value
+
+    yield
+  ensure
+    User.maximum_attempts = original
+  end
+
+  def confirmation_token_from(message)
+    message.body.encoded.match(/confirmation_token=([^"'\s]+)/)[1]
+  end
+
+  def unlock_token_from(message)
+    message.body.encoded.match(/unlock_token=([^"'\s]+)/)[1]
+  end
+
   describe 'GET /users/sign_in' do
     it 'renders login copy through locale keys and keeps guest login action' do
       get new_user_session_path
@@ -64,6 +89,93 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(password_error)
       end
     end
+
+    it 'successful sign in updates Trackable columns' do
+      user = create(:user)
+
+      expect do
+        post user_session_path,
+          params: {
+            user: {
+              email: user.email,
+              password: 'password'
+            }
+          }
+      end.to change { user.reload.sign_in_count }.from(0).to(1)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:see_other)
+        expect(user.reload.current_sign_in_at).to be_present
+        expect(user.last_sign_in_at).to be_present
+        expect(user.current_sign_in_ip).to be_present
+        expect(user.last_sign_in_ip).to be_present
+      end
+    end
+
+    it 'unconfirmed user sign in shows unconfirmed failure' do
+      user = create(:user, :unconfirmed)
+
+      post user_session_path,
+        params: {
+          user: {
+            email: user.email,
+            password: 'password'
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:alert]).to eq(I18n.t('devise.failure.unconfirmed'))
+      end
+    end
+
+    it 'lockable failure warns on last attempt and sends unlock mail when locked' do
+      user = create(:user)
+
+      with_devise_maximum_attempts(2) do
+        post user_session_path,
+          params: {
+            user: {
+              email: user.email,
+              password: 'wrong-password'
+            }
+          }
+
+        aggregate_failures do
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(flash[:alert]).to eq(I18n.t('devise.failure.last_attempt'))
+          expect(user.reload.failed_attempts).to eq(1)
+          expect(ActionMailer::Base.deliveries).to be_empty
+        end
+
+        post user_session_path,
+          params: {
+            user: {
+              email: user.email,
+              password: 'wrong-password'
+            }
+          }
+
+        aggregate_failures do
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(flash[:alert]).to eq(I18n.t('devise.failure.locked'))
+          expect(user.reload).to be_access_locked
+          expect(user.unlock_token).to be_present
+          expect(ActionMailer::Base.deliveries.size).to eq(1)
+          expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
+        end
+
+        token = unlock_token_from(ActionMailer::Base.deliveries.last)
+
+        get user_unlock_path(unlock_token: token)
+
+        aggregate_failures do
+          expect(response).to redirect_to(new_user_session_path)
+          expect(user.reload).not_to be_access_locked
+          expect(user.failed_attempts).to eq(0)
+        end
+      end
+    end
   end
 
   describe 'GET /users/sign_up' do
@@ -78,6 +190,53 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.terms'))
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
+      end
+    end
+
+    it 'registration creates unconfirmed user and sends confirmation mail' do
+      email = 'new-confirmable-user@example.com'
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password'
+            }
+          }
+      end.to change(User, :count).by(1)
+
+      user = User.find_by!(email: email)
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(user).not_to be_confirmed
+        expect(user.confirmation_token).to be_present
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
+      end
+    end
+
+    it 'confirmation link confirms the registered user' do
+      email = 'confirm-link-user@example.com'
+      post user_registration_path,
+        params: {
+          user: {
+            email: email,
+            password: 'password',
+            password_confirmation: 'password'
+          }
+        }
+
+      token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+
+      get user_confirmation_path(confirmation_token: token)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(User.find_by!(email: email)).to be_confirmed
       end
     end
   end
@@ -180,6 +339,23 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.passwords.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.passwords.new.buttons.submit'))
         expect(response.body).to include(I18n.t('auth.passwords.new.back_to_login'))
+      end
+    end
+
+    it 'password reset sends reset instructions' do
+      user = create(:user)
+
+      post user_password_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
       end
     end
   end
