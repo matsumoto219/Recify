@@ -281,6 +281,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(run.status).to eq('succeeded')
         expect(run.stage).to eq('completed')
         expect(run.finished_at).to eq(finalized_at + 1.second)
+        expect(run.expires_at).to eq(finalized_at + 1.second + 90.days)
         expect(run.final_result_summary).to include(
           'schema_version' => 'receipt_analysis_run_final_result_v1',
           'receipt_status' => 'review_needed',
@@ -290,6 +291,33 @@ RSpec.describe ReceiptAnalysisRuns do
           'tax_detail_count' => 1
         )
         expect(run.final_result_summary.dig('amount', 'total_amount')).to eq(1280)
+      end
+    end
+
+    it 'receipt_status別にsucceeded runのexpires_atを更新する' do
+      completed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      review_needed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      failed_receipt_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      empty_summary_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      finalized_at = Time.zone.parse('2026-05-23 10:04:00')
+
+      described_class.record_final_result(completed_run, receipt_attributes: { status: 'completed' }, at: finalized_at)
+      described_class.record_final_result(review_needed_run, receipt_attributes: { status: 'review_needed' }, at: finalized_at)
+      described_class.record_final_result(failed_receipt_run, receipt_attributes: { status: 'failed' }, at: finalized_at)
+      described_class.succeed(completed_run, at: finalized_at)
+      described_class.succeed(review_needed_run, at: finalized_at)
+      described_class.succeed(failed_receipt_run, at: finalized_at)
+      described_class.succeed(empty_summary_run, at: finalized_at)
+
+      aggregate_failures do
+        expect(completed_run.reload.status).to eq('succeeded')
+        expect(completed_run.expires_at).to eq(finalized_at + 30.days)
+        expect(review_needed_run.reload.status).to eq('succeeded')
+        expect(review_needed_run.expires_at).to eq(finalized_at + 90.days)
+        expect(failed_receipt_run.reload.status).to eq('succeeded')
+        expect(failed_receipt_run.expires_at).to eq(finalized_at + 90.days)
+        expect(empty_summary_run.reload.status).to eq('succeeded')
+        expect(empty_summary_run.expires_at).to eq(finalized_at + 30.days)
       end
     end
 

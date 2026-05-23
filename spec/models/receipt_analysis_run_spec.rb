@@ -77,13 +77,26 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
       succeeded = create(:receipt_analysis_run, :succeeded)
       failed = create(:receipt_analysis_run, :failed)
       superseded = create(:receipt_analysis_run, :superseded)
+      skipped = create(:receipt_analysis_run, :skipped)
+      canceled = create(:receipt_analysis_run, status: 'canceled')
       admin_retry = create(:receipt_analysis_run, :admin_retry, :succeeded)
 
       aggregate_failures do
         expect(succeeded.expires_at).to eq(30.days.from_now)
         expect(failed.expires_at).to eq(90.days.from_now)
         expect(superseded.expires_at).to eq(14.days.from_now)
+        expect(skipped.expires_at).to eq(14.days.from_now)
+        expect(canceled.expires_at).to eq(14.days.from_now)
         expect(admin_retry.expires_at).to eq(90.days.from_now)
+      end
+    end
+
+    it 'receipt_statusがreview_needed / failedの場合は長めの保持期間にする' do
+      aggregate_failures do
+        expect(described_class.retention_period_for(status: 'succeeded', source: 'upload', receipt_status: 'completed')).to eq(30.days)
+        expect(described_class.retention_period_for(status: 'succeeded', source: 'upload', receipt_status: 'review_needed')).to eq(90.days)
+        expect(described_class.retention_period_for(status: 'succeeded', source: 'upload', receipt_status: 'failed')).to eq(90.days)
+        expect(described_class.retention_period_for(status: 'succeeded', source: 'upload', receipt_status: nil)).to eq(30.days)
       end
     end
 

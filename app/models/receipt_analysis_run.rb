@@ -29,6 +29,7 @@ class ReceiptAnalysisRun < ApplicationRecord
   SHORT_RETENTION_STATUSES = %w[skipped superseded canceled].freeze
   LONG_RETENTION_STATUSES = %w[failed].freeze
   LONG_RETENTION_SOURCES = %w[admin_retry].freeze
+  LONG_RETENTION_RECEIPT_STATUSES = %w[review_needed failed].freeze
 
   DEFAULT_RETENTION_PERIOD = 30.days
   SHORT_RETENTION_PERIOD = 14.days
@@ -72,16 +73,18 @@ class ReceiptAnalysisRun < ApplicationRecord
   scope :active, -> { where(status: ACTIVE_STATUSES) }
   scope :expired, ->(time = Time.current) { where(expires_at: ..time) }
 
-  def self.default_expires_at_for(status:, source:, from: Time.current)
-    from + retention_period_for(status:, source:)
+  def self.default_expires_at_for(status:, source:, receipt_status: nil, from: Time.current)
+    from + retention_period_for(status:, source:, receipt_status:)
   end
 
-  def self.retention_period_for(status:, source:)
+  def self.retention_period_for(status:, source:, receipt_status: nil)
     normalized_status = status.to_s
     normalized_source = source.to_s
+    normalized_receipt_status = receipt_status.to_s
 
     return LONG_RETENTION_PERIOD if LONG_RETENTION_SOURCES.include?(normalized_source)
     return LONG_RETENTION_PERIOD if LONG_RETENTION_STATUSES.include?(normalized_status)
+    return LONG_RETENTION_PERIOD if LONG_RETENTION_RECEIPT_STATUSES.include?(normalized_receipt_status)
     return SHORT_RETENTION_PERIOD if SHORT_RETENTION_STATUSES.include?(normalized_status)
 
     DEFAULT_RETENTION_PERIOD

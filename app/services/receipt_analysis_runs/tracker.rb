@@ -160,7 +160,12 @@ module ReceiptAnalysisRuns
           error_stage: terminal_error_value(status, error_stage || run.error_stage),
           error_code: terminal_error_value(status, error_code || run.error_code),
           error_message: terminal_error_value(status, safe_error_message(error_message || run.error_message)),
-          expires_at: ReceiptAnalysisRun.default_expires_at_for(status: status, source: run.source, from: at)
+          expires_at: ReceiptAnalysisRun.default_expires_at_for(
+            status: status,
+            source: run.source,
+            receipt_status: final_receipt_status(run),
+            from: at
+          )
         )
         run
       end
@@ -245,6 +250,12 @@ module ReceiptAnalysisRuns
 
     def terminal_error_value(status, value)
       status == "failed" ? value : nil
+    end
+
+    def final_receipt_status(locked_run)
+      return unless locked_run.final_result_summary.respond_to?(:[])
+
+      locked_run.final_result_summary["receipt_status"] || locked_run.final_result_summary[:receipt_status]
     end
 
     def latency_from(started_at, finished_at)
