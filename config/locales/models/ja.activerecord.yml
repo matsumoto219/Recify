@@ -85,6 +85,7 @@ ja:
         current_password: "現在のパスワード"
         avatar: "プロフィール画像"
         guest: "ゲストユーザー"
+        legal_agreement: "利用規約とプライバシーポリシー"
         push_notification_enabled: "通知"
         product_name_ai_completion_enabled: "AI補完"
         theme_preference: "表示テーマ"
@@ -117,6 +118,8 @@ ja:
               invalid_content_type: "はPNG/JPEG/WebP形式でアップロードしてください"
               file_too_large: "は5MB以下にしてください"
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
+            legal_agreement:
+              accepted: "に同意してください"
         receipt_item:
           attributes:
             quantity:

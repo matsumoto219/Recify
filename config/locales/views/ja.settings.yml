@@ -97,6 +97,13 @@ ja:
           email_placeholder: new@example.com
           password: パスワード
           password_confirmation: パスワード確認
+        legal_agreement:
+          aria_label: 規約同意
+          prefix: Recifyの
+          terms: 利用規約
+          connector: および
+          privacy: プライバシーポリシー
+          suffix: に同意します。
         hint: 確認メールのリンクを開くまではゲストユーザーのままです。
         submit: 確認メールを送信
         submitting: 送信中...

@@ -64,6 +64,30 @@
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
+          <%
+            legal_agreement_errors = resource.errors.full_messages_for(:legal_agreement)
+            legal_agreement_error = legal_agreement_errors.first
+          %>
+          <section aria-label="<%= t("auth.registrations.new.terms.aria_label") %>" class="space-y-2">
+            <label class="flex items-start gap-3 rounded-lg border token-border-soft px-4 py-3 text-sm token-text-muted">
+              <%= f.check_box :legal_agreement,
+                    { class: "mt-0.5 rounded token-checkbox", required: true },
+                    "1",
+                    "0" %>
+              <span class="leading-relaxed">
+                <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
+                <%= t("auth.registrations.new.terms.prefix") %>
+                <span class="underline token-hover-text-brand cursor-pointer"><%= t("auth.registrations.new.terms.terms") %></span>
+                <%= t("auth.registrations.new.terms.connector") %>
+                <span class="underline token-hover-text-brand cursor-pointer"><%= t("auth.registrations.new.terms.privacy") %></span>
+                <%= t("auth.registrations.new.terms.suffix") %>
+              </span>
+            </label>
+            <% if legal_agreement_error.present? %>
+              <p class="px-1 text-xs token-text-error leading-relaxed"><%= legal_agreement_error %></p>
+            <% end %>
+          </section>
+
           <div class="pt-4">
             <%= render "shared/ui/actions/button",
                   label: t("auth.registrations.new.submit"),
@@ -76,17 +100,6 @@
                   disable_with: t("auth.registrations.new.submitting") %>
           </div>
         <% end %>
-
-        <section class="text-center" aria-label="<%= t("auth.registrations.new.terms.aria_label") %>">
-          <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
-          <p class="text-[10px] text-center token-text-subtle leading-relaxed">
-            <%= t("auth.registrations.new.terms.prefix") %>
-            <span class="underline token-hover-text-brand cursor-pointer"><%= t("auth.registrations.new.terms.terms") %></span>
-            <%= t("auth.registrations.new.terms.connector") %>
-            <span class="underline token-hover-text-brand cursor-pointer"><%= t("auth.registrations.new.terms.privacy") %></span>
-            <%= t("auth.registrations.new.terms.suffix") %>
-          </p>
-        </section>
 
         <%= render "shared/ui/layout/section_divider", variant: :gradient, class: "mt-10 mb-10" %>
         <section class="text-center space-y-3" aria-label="<%= t("auth.registrations.new.login.aria_label") %>">

@@ -194,7 +194,8 @@ RSpec.describe 'Rails rate limits', type: :request do
                 user: {
                   email: "guest-limited-#{index}@example.com",
                   password: 'password123',
-                  password_confirmation: 'password123'
+                  password_confirmation: 'password123',
+                  legal_agreement: '1'
                 }
               },
               headers: remote_addr('203.0.113.21')
@@ -212,7 +213,8 @@ RSpec.describe 'Rails rate limits', type: :request do
               user: {
                 email: 'guest-limited-blocked@example.com',
                 password: 'password123',
-                password_confirmation: 'password123'
+                password_confirmation: 'password123',
+                legal_agreement: '1'
               }
             },
             headers: remote_addr('203.0.113.21')
@@ -236,7 +238,8 @@ RSpec.describe 'Rails rate limits', type: :request do
                 user: {
                   email: "first-guest-#{index}@example.com",
                   password: 'password123',
-                  password_confirmation: 'password123'
+                  password_confirmation: 'password123',
+                  legal_agreement: '1'
                 }
               },
               headers: remote_addr('203.0.113.22')
@@ -251,7 +254,8 @@ RSpec.describe 'Rails rate limits', type: :request do
               user: {
                 email: 'second-guest@example.com',
                 password: 'password123',
-                password_confirmation: 'password123'
+                password_confirmation: 'password123',
+                legal_agreement: '1'
               }
             },
             headers: remote_addr('203.0.113.22')

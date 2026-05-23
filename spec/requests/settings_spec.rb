@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Settings', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:user) { create(:user) }
   let(:avatar_path) { Rails.root.join('spec/fixtures/files/receipt_sample.jpg') }
   let(:avatar_upload) { Rack::Test::UploadedFile.new(avatar_path, 'image/jpeg') }
@@ -305,6 +307,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.guest_registration.title'))
         expect(response.body).to include(I18n.t('settings.security.guest_registration.description'))
+        expect(response.body).to include(I18n.t('settings.security.guest_registration.legal_agreement.terms'))
+        expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
         expect(response.body).not_to include(I18n.t('settings.security.email.title'))
         expect(response.body).not_to include(I18n.t('settings.security.password.title'))
         expect(response.body).not_to include(I18n.t('settings.security.auth.two_factor.title'))
@@ -337,7 +341,8 @@ RSpec.describe 'Settings', type: :request do
       guest.start_guest_registration(
         email: 'pending-guest@example.com',
         password: 'password123',
-        password_confirmation: 'password123'
+        password_confirmation: 'password123',
+        legal_agreement: '1'
       )
       ActionMailer::Base.deliveries.clear
       sign_in guest
@@ -537,16 +542,20 @@ RSpec.describe 'Settings', type: :request do
       fake_email = guest.email
       sign_in guest
       ActionMailer::Base.deliveries.clear
+      accepted_at = Time.zone.parse('2026-05-23 12:00:00')
 
-      patch user_registration_path,
-            params: {
-              update_context: 'guest_registration',
-              user: {
-                email: 'guest-upgrade@example.com',
-                password: 'password123',
-                password_confirmation: 'password123'
+      travel_to(accepted_at) do
+        patch user_registration_path,
+              params: {
+                update_context: 'guest_registration',
+                user: {
+                  email: 'guest-upgrade@example.com',
+                  password: 'password123',
+                  password_confirmation: 'password123',
+                  legal_agreement: '1'
+                }
               }
-            }
+      end
 
       guest.reload
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
@@ -559,6 +568,10 @@ RSpec.describe 'Settings', type: :request do
         expect(guest.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to eq('guest-upgrade@example.com')
         expect(guest).to be_valid_password('password123')
+        expect(guest.terms_accepted_at).to eq(accepted_at)
+        expect(guest.terms_version).to eq(User::LEGAL_TERMS_VERSION)
+        expect(guest.privacy_accepted_at).to eq(accepted_at)
+        expect(guest.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(delivered_recipients).to include('guest-upgrade@example.com')
         expect(delivered_recipients).not_to include(fake_email)
@@ -580,7 +593,8 @@ RSpec.describe 'Settings', type: :request do
               user: {
                 email: 'guest-confirmed@example.com',
                 password: 'password123',
-                password_confirmation: 'password123'
+                password_confirmation: 'password123',
+                legal_agreement: '1'
               }
             }
 
@@ -592,6 +606,68 @@ RSpec.describe 'Settings', type: :request do
         expect(guest.reload).not_to be_guest
         expect(guest.email).to eq('guest-confirmed@example.com')
         expect(guest.unconfirmed_email).to be_nil
+      end
+    end
+
+    it 'guest本登録申請で同意がなければ更新しない' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-missing-legal@example.com',
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '0'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(guest.reload.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to be_nil
+        expect(guest.terms_accepted_at).to be_nil
+        expect(guest.privacy_accepted_at).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it 'guest本登録申請のaccepted_at/version偽装はサーバー側値で上書きする' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+      accepted_at = Time.zone.parse('2026-05-23 13:00:00')
+
+      travel_to(accepted_at) do
+        patch user_registration_path,
+              params: {
+                update_context: 'guest_registration',
+                user: {
+                  email: 'guest-spoofed-legal@example.com',
+                  password: 'password123',
+                  password_confirmation: 'password123',
+                  legal_agreement: '1',
+                  terms_accepted_at: 1.year.ago,
+                  terms_version: 'client-version',
+                  privacy_accepted_at: 1.year.ago,
+                  privacy_version: 'client-version'
+                }
+              }
+      end
+
+      guest.reload
+
+      aggregate_failures do
+        expect(guest.terms_accepted_at).to eq(accepted_at)
+        expect(guest.terms_version).to eq(User::LEGAL_TERMS_VERSION)
+        expect(guest.privacy_accepted_at).to eq(accepted_at)
+        expect(guest.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
       end
     end
 

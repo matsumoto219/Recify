@@ -21,7 +21,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
              only: :update,
              if: :rate_limit_email_change_context?
 
-  # before_action :configure_sign_up_params, only: [:create]
+  before_action :configure_sign_up_params, only: [ :create ]
   before_action :configure_account_update_params, only: [ :update ]
 
   # GET /resource/sign_up
@@ -126,6 +126,12 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   protected
 
+  def build_resource(hash = {})
+    super
+    resource.legal_agreement_required = true if action_name == "create"
+    resource
+  end
+
   def set_flash_from_resource_errors(resource)
     flash.now[:alert] = resource.errors.full_messages
   end
@@ -227,8 +233,12 @@ class Users::RegistrationsController < Devise::RegistrationsController
   end
 
   # If you have extra params to permit, append them to the sanitizer.
+  def configure_sign_up_params
+    devise_parameter_sanitizer.permit(:sign_up, keys: [ :legal_agreement ])
+  end
+
   def configure_account_update_params
-    devise_parameter_sanitizer.permit(:account_update, keys: [ :name, :avatar ])
+    devise_parameter_sanitizer.permit(:account_update, keys: [ :name, :avatar, :legal_agreement ])
   end
 
   def email_update_params
@@ -236,7 +246,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
   end
 
   def guest_registration_params
-    account_update_params.slice(:email, :password, :password_confirmation)
+    account_update_params.slice(:email, :password, :password_confirmation, :legal_agreement)
   end
 
   # The path used after sign up.

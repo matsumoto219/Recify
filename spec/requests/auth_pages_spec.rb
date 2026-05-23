@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Auth pages', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   before do
     ActionMailer::Base.deliveries.clear
   end
@@ -225,23 +227,28 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.terms'))
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
+        expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
         expect(login_link).to be_present
       end
     end
 
     it 'registration creates unconfirmed user and sends confirmation mail' do
       email = 'new-confirmable-user@example.com'
+      accepted_at = Time.zone.parse('2026-05-23 10:00:00')
 
-      expect do
-        post user_registration_path,
-          params: {
-            user: {
-              email: email,
-              password: 'password',
-              password_confirmation: 'password'
+      travel_to(accepted_at) do
+        expect do
+          post user_registration_path,
+            params: {
+              user: {
+                email: email,
+                password: 'password',
+                password_confirmation: 'password',
+                legal_agreement: '1'
+              }
             }
-          }
-      end.to change(User, :count).by(1)
+        end.to change(User, :count).by(1)
+      end
 
       user = User.find_by!(email: email)
 
@@ -250,9 +257,63 @@ RSpec.describe 'Auth pages', type: :request do
         expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
         expect(user).not_to be_confirmed
         expect(user.confirmation_token).to be_present
+        expect(user.terms_accepted_at).to eq(accepted_at)
+        expect(user.terms_version).to eq(User::LEGAL_TERMS_VERSION)
+        expect(user.privacy_accepted_at).to eq(accepted_at)
+        expect(user.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+
+    it 'registration without legal agreement is rejected' do
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'missing-legal-agreement@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '0'
+            }
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it 'registration ignores spoofed legal acceptance params' do
+      email = 'spoofed-legal-acceptance@example.com'
+      accepted_at = Time.zone.parse('2026-05-23 11:00:00')
+
+      travel_to(accepted_at) do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1',
+              terms_accepted_at: 1.year.ago,
+              terms_version: 'client-version',
+              privacy_accepted_at: 1.year.ago,
+              privacy_version: 'client-version'
+            }
+          }
+      end
+
+      user = User.find_by!(email: email)
+
+      aggregate_failures do
+        expect(user.terms_accepted_at).to eq(accepted_at)
+        expect(user.terms_version).to eq(User::LEGAL_TERMS_VERSION)
+        expect(user.privacy_accepted_at).to eq(accepted_at)
+        expect(user.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
       end
     end
 
@@ -263,7 +324,8 @@ RSpec.describe 'Auth pages', type: :request do
           user: {
             email: email,
             password: 'password',
-            password_confirmation: 'password'
+            password_confirmation: 'password',
+            legal_agreement: '1'
           }
         }
 
@@ -474,7 +536,8 @@ RSpec.describe 'Auth pages', type: :request do
       guest.start_guest_registration(
         email: 'guest-pending-confirmation@example.com',
         password: 'password123',
-        password_confirmation: 'password123'
+        password_confirmation: 'password123',
+        legal_agreement: '1'
       )
       ActionMailer::Base.deliveries.clear
       sign_in guest
@@ -554,7 +617,8 @@ RSpec.describe 'Auth pages', type: :request do
       guest.start_guest_registration(
         email: 'guest-resend-confirmation@example.com',
         password: 'password123',
-        password_confirmation: 'password123'
+        password_confirmation: 'password123',
+        legal_agreement: '1'
       )
       ActionMailer::Base.deliveries.clear
       sign_in guest

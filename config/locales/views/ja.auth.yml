@@ -37,11 +37,11 @@ ja:
         submitting: 登録中...
         terms:
           aria_label: 規約同意案内
-          prefix: 登録することで、Recifyの
+          prefix: Recifyの
           terms: 利用規約
           connector: および
           privacy: プライバシーポリシー
-          suffix: に同意したものとみなされます。
+          suffix: に同意します。
         login:
           aria_label: ログイン案内
           prompt: すでにアカウントをお持ちですか？

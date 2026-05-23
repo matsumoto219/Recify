@@ -19,9 +19,17 @@ class User < ApplicationRecord
 
   THEME_PREFERENCES = %w[system light dark].freeze
   GUEST_CLEANUP_RETENTION_PERIOD = 7.days
+  LEGAL_TERMS_VERSION = "2026-05-23"
+  LEGAL_PRIVACY_VERSION = "2026-05-23"
+
+  attr_accessor :legal_agreement, :legal_agreement_required
 
   validates :theme_preference,
             inclusion: { in: THEME_PREFERENCES }
+
+  validate :legal_agreement_must_be_accepted, if: :legal_agreement_required?
+
+  before_validation :record_legal_acceptance, if: -> { legal_agreement_required? && legal_agreement_accepted? }
 
   scope :guest_cleanup_candidates, ->(cutoff = GUEST_CLEANUP_RETENTION_PERIOD.ago) {
     where(guest: true)
@@ -56,7 +64,9 @@ class User < ApplicationRecord
   def start_guest_registration(attributes)
     return false unless guest?
 
-    update(attributes.slice(:email, :password, :password_confirmation))
+    self.legal_agreement_required = true
+    assign_attributes(attributes.slice(:email, :password, :password_confirmation, :legal_agreement))
+    save
   end
 
   def complete_guest_registration!
@@ -84,6 +94,29 @@ class User < ApplicationRecord
   end
 
   private
+
+  def legal_agreement_required?
+    ActiveModel::Type::Boolean.new.cast(legal_agreement_required)
+  end
+
+  def legal_agreement_accepted?
+    ActiveModel::Type::Boolean.new.cast(legal_agreement)
+  end
+
+  def legal_agreement_must_be_accepted
+    return if legal_agreement_accepted?
+
+    errors.add(:legal_agreement, :accepted)
+  end
+
+  def record_legal_acceptance
+    accepted_at = Time.current
+
+    self.terms_accepted_at = accepted_at
+    self.terms_version = LEGAL_TERMS_VERSION
+    self.privacy_accepted_at = accepted_at
+    self.privacy_version = LEGAL_PRIVACY_VERSION
+  end
 
   def send_devise_notification(notification, *args)
     return if suppress_guest_fake_email_notification?(notification)
