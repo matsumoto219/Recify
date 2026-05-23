@@ -7,6 +7,33 @@ RSpec.describe ReceiptAnalysisRuns do
     JSON.generate(value)
   end
 
+  def json_roundtrip(value)
+    JSON.parse(JSON.generate(value))
+  end
+
+  def jsonable(value)
+    case value
+    when Hash
+      value.each_with_object({}) { |(key, child_value), memo| memo[key.to_s] = jsonable(child_value) }
+    when Array
+      value.map { |child_value| jsonable(child_value) }
+    when BigDecimal
+      value.to_s('F')
+    when Time, ActiveSupport::TimeWithZone, Date, DateTime
+      value.iso8601
+    when Symbol
+      value.to_s
+    else
+      value
+    end
+  end
+
+  def ocr_fixture(name)
+    raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
   let(:receipt) { create(:receipt) }
 
   around do |example|
@@ -155,6 +182,101 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR normalized snapshotをfixtureから保存再現できる形で記録する' do
+      fixture_names = %w[
+        single_tax_receipt
+        multiple_tax_receipt
+        external_tax_receipt
+        long_receipt
+        rotated_receipt
+        blurred_receipt
+        tax_detail_item_conflict_receipt
+        non_receipt_doc_type_memo
+        non_receipt_empty
+        non_receipt_web_page
+      ]
+
+      fixture_names.each do |fixture_name|
+        ocr_result = ocr_fixture(fixture_name)
+        run = described_class.start(receipt: create(:receipt), source: 'upload').run
+        expected_params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+
+        described_class.record_ocr_snapshot(run, ocr_result)
+
+        snapshot = json_roundtrip(run.reload.ocr_result_snapshot)
+        actual_params = Analysis::ReceiptBuildParamsService.call(ocr_result: snapshot, ai_result: nil)
+
+        aggregate_failures(fixture_name) do
+          expect(snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+          expect(snapshot).not_to have_key('raw_text')
+          expect(snapshot['lines']).to be_an(Array)
+          expect(jsonable(actual_params)).to eq(jsonable(expected_params))
+        end
+      end
+    end
+
+    it 'OCR normalized snapshotはtop-level raw textやraw responseを保存しない' do
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        raw_text: 'FULL RAW OCR TEXT MUST NOT BE STORED',
+        lines: [ 'テストストア', 'コーヒー 180', '合計 180' ],
+        candidates: {
+          store_name: 'テストストア',
+          total_amount: 180,
+          items: [ { raw_text: 'コーヒー', line_total: 180 } ],
+          payments: [ { method: 'Cash', amount: 180 } ],
+          tax_details: [ { rate: 0.1, amount: 16, net_amount: 164 } ]
+        },
+        meta: {
+          provider: 'azure_document_intelligence',
+          model_id: 'prebuilt-receipt',
+          raw_response: { secret: 'do-not-store' },
+          signed_id: 'do-not-store'
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+      snapshot_json = deep_json(snapshot)
+
+      aggregate_failures do
+        expect(snapshot['lines']).to eq([ 'テストストア', 'コーヒー 180', '合計 180' ])
+        expect(snapshot.dig('candidates', 'items', 0, 'raw_text')).to eq('コーヒー')
+        expect(snapshot_json).not_to include('FULL RAW OCR TEXT MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('do-not-store')
+        expect(snapshot).not_to have_key('raw_text')
+      end
+    end
+
+    it 'OCR normalized snapshotはlines/items/payments/tax_detailsの上限とtruncated flagsを持つ' do
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        lines: Array.new(151) { |index| "#{index}-#{'a' * 600}" },
+        candidates: {
+          items: Array.new(101) { |index| { raw_text: "商品#{index}", line_total: index } },
+          payments: Array.new(21) { |index| { method: "支払い#{index}", amount: index } },
+          tax_details: Array.new(21) { |index| { description: "税#{index}", rate: 0.1, amount: index, net_amount: index * 10 } }
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot['lines'].size).to eq(150)
+        expect(snapshot['lines'].first.bytesize).to be <= 500
+        expect(snapshot.dig('candidates', 'items').size).to eq(100)
+        expect(snapshot.dig('candidates', 'payments').size).to eq(20)
+        expect(snapshot.dig('candidates', 'tax_details').size).to eq(20)
+        expect(snapshot.dig('truncated', 'lines')).to eq(true)
+        expect(snapshot.dig('truncated', 'items')).to eq(true)
+        expect(snapshot.dig('truncated', 'payments')).to eq(true)
+        expect(snapshot.dig('truncated', 'tax_details')).to eq(true)
+      end
+    end
+
     it 'AI input snapshotをtruncateし件数上限を守る' do
       run = described_class.start(receipt:, source: 'upload').run
       long_filtered_content = 'あ' * 9_000
@@ -209,6 +331,64 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot_json).not_to include('RAW RESPONSE MUST NOT BE STORED')
         expect(snapshot_json).not_to include('drop-me')
         expect(snapshot_json).not_to include('保存しない周辺行')
+      end
+    end
+
+    it 'AI normalized snapshotをJSON保存可能な形で記録しraw系を除外する' do
+      run = described_class.start(receipt:, source: 'upload').run
+      ai_result = {
+        success: true,
+        needs_review: false,
+        error_code: nil,
+        review_reasons: Array.new(22) { |index| "reason_#{index}" },
+        receipt_attributes: {
+          payment_method: 'cash',
+          purchased_at: Time.utc(2026, 5, 23, 10, 0, 0),
+          total_amount: BigDecimal('180.5')
+        },
+        receipt_items_attributes: Array.new(101) do |index|
+          {
+            index: index,
+            suggested_name: "商品#{index}",
+            category: 'other',
+            line_total: BigDecimal('180.5'),
+            needs_review: false,
+            response_body: 'RAW ITEM RESPONSE MUST NOT BE STORED'
+          }
+        end,
+        prompt: 'FULL PROMPT MUST NOT BE STORED',
+        messages: [ 'RAW MESSAGES MUST NOT BE STORED' ],
+        meta: {
+          provider: 'openai',
+          model: 'gpt-test',
+          fallback_used: false,
+          response_body: 'RAW AI RESPONSE MUST NOT BE STORED',
+          api_key: 'SECRET API KEY MUST NOT BE STORED',
+          primary_error_message: 'provider raw message should not be stored'
+        }
+      }
+
+      described_class.record_ai_normalized_result(run, ai_result)
+      snapshot = run.reload.ai_normalized_result_snapshot
+      snapshot_json = deep_json(snapshot)
+
+      aggregate_failures do
+        expect(snapshot['schema_version']).to eq('receipt_analysis_run_ai_normalized_result_v1')
+        expect(snapshot['success']).to eq(true)
+        expect(snapshot['needs_review']).to eq(false)
+        expect(snapshot['review_reasons'].size).to eq(20)
+        expect(snapshot['receipt_items_attributes'].size).to eq(100)
+        expect(snapshot.dig('receipt_attributes', 'total_amount')).to eq('180.5')
+        expect(snapshot.dig('receipt_attributes', 'purchased_at')).to eq('2026-05-23T10:00:00Z')
+        expect(snapshot.dig('receipt_items_attributes', 0, 'line_total')).to eq('180.5')
+        expect(snapshot.dig('truncated', 'receipt_items_attributes')).to eq(true)
+        expect(snapshot.dig('truncated', 'review_reasons')).to eq(true)
+        expect { json_roundtrip(snapshot) }.not_to raise_error
+        expect(snapshot_json).not_to include('FULL PROMPT MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('RAW MESSAGES MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('RAW AI RESPONSE MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('SECRET API KEY MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('provider raw message should not be stored')
       end
     end
 

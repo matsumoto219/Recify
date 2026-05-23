@@ -66,6 +66,21 @@ module ReceiptAnalysisRuns
       end
     end
 
+    def record_ocr_snapshot(snapshot, at: Time.current)
+      snapshot = snapshot.to_h
+
+      with_mutable_run do |locked_run|
+        locked_run.update!(
+          stage: advanced_stage(locked_run, "ocr_validation"),
+          status: "running",
+          started_at: locked_run.started_at || at,
+          ocr_finished_at: locked_run.ocr_finished_at || at,
+          ocr_result_snapshot: snapshot
+        )
+        locked_run
+      end
+    end
+
     def record_ai_input(snapshot, at: Time.current)
       snapshot = snapshot.to_h
 
@@ -95,6 +110,20 @@ module ReceiptAnalysisRuns
           ai_fallback_provider: summary["fallback_provider"].presence || locked_run.ai_fallback_provider,
           ai_fallback_used: summary["fallback_used"] == true,
           ai_result_summary: summary
+        )
+        locked_run
+      end
+    end
+
+    def record_ai_normalized_result(snapshot, at: Time.current)
+      snapshot = snapshot.to_h
+
+      with_mutable_run do |locked_run|
+        locked_run.update!(
+          stage: advanced_stage(locked_run, "finalize"),
+          status: "running",
+          ai_finished_at: locked_run.ai_finished_at || at,
+          ai_normalized_result_snapshot: snapshot
         )
         locked_run
       end

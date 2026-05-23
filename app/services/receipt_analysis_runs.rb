@@ -36,6 +36,13 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def record_ocr_snapshot(run, ocr_result, at: Time.current)
+      Tracker.new(run).record_ocr_snapshot(
+        SnapshotBuilder.ocr_result_snapshot(ocr_result),
+        at: at
+      )
+    end
+
     def record_ai_input(run, ai_input, at: Time.current)
       Tracker.new(run).record_ai_input(
         SnapshotBuilder.ai_input_snapshot(ai_input),
@@ -47,6 +54,13 @@ module ReceiptAnalysisRuns
       Tracker.new(run).record_ai_result(
         SnapshotBuilder.ai_result_summary(ai_result),
         latency_ms: latency_ms,
+        at: at
+      )
+    end
+
+    def record_ai_normalized_result(run, ai_result, at: Time.current)
+      Tracker.new(run).record_ai_normalized_result(
+        SnapshotBuilder.ai_normalized_result_snapshot(ai_result),
         at: at
       )
     end

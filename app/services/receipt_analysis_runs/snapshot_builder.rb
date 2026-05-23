@@ -1,11 +1,18 @@
 module ReceiptAnalysisRuns
   class SnapshotBuilder
     OCR_SUMMARY_SCHEMA_VERSION = "receipt_analysis_run_ocr_summary_v1"
+    OCR_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ocr_result_v1"
     AI_INPUT_SCHEMA_VERSION = "receipt_analysis_run_ai_input_v1"
     AI_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_result_v1"
+    AI_NORMALIZED_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_normalized_result_v1"
     FINAL_RESULT_SCHEMA_VERSION = "receipt_analysis_run_final_result_v1"
     PROMPT_SCHEMA_VERSION = "recify_receipt_analysis_v1"
 
+    MAX_OCR_LINES = 150
+    MAX_OCR_ITEMS = 100
+    MAX_OCR_PAYMENTS = 20
+    MAX_OCR_TAX_DETAILS = 20
+    MAX_AI_NORMALIZED_ITEMS = 100
     FILTERED_CONTENT_MAX_BYTES = 8 * 1024
     STRING_MAX_BYTES = 500
     MAX_ITEMS = 50
@@ -46,12 +53,20 @@ module ReceiptAnalysisRuns
         new.ocr_summary(ocr_result)
       end
 
+      def ocr_result_snapshot(ocr_result)
+        new.ocr_result_snapshot(ocr_result)
+      end
+
       def ai_input_snapshot(ai_input)
         new.ai_input_snapshot(ai_input)
       end
 
       def ai_result_summary(ai_result)
         new.ai_result_summary(ai_result)
+      end
+
+      def ai_normalized_result_snapshot(ai_result)
+        new.ai_normalized_result_snapshot(ai_result)
       end
 
       def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil)
@@ -96,6 +111,29 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def ocr_result_snapshot(ocr_result)
+      result = normalized_hash(ocr_result)
+      candidates = normalized_hash(result[:candidates])
+      lines = limited_strings(result[:lines], MAX_OCR_LINES)
+
+      sanitize_hash(
+        {
+          schema_version: OCR_RESULT_SCHEMA_VERSION,
+          success: result[:success] == true,
+          lines: lines,
+          candidates: ocr_candidates_snapshot(candidates),
+          error_code: safe_string(result[:error_code]),
+          meta: ocr_meta_snapshot(result[:meta]),
+          truncated: {
+            lines: Array(result[:lines]).size > MAX_OCR_LINES,
+            items: Array(candidates[:items]).size > MAX_OCR_ITEMS,
+            payments: Array(candidates[:payments]).size > MAX_OCR_PAYMENTS,
+            tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS
+          }
+        }.compact
+      )
+    end
+
     def ai_input_snapshot(ai_input)
       input = normalized_hash(ai_input)
 
@@ -116,6 +154,27 @@ module ReceiptAnalysisRuns
           truncated: {
             filtered_content: truncated?(input[:filtered_content], max_bytes: FILTERED_CONTENT_MAX_BYTES),
             items: Array(input[:items]).size > MAX_ITEMS
+          }
+        }.compact
+      )
+    end
+
+    def ai_normalized_result_snapshot(ai_result)
+      result = normalized_hash(ai_result)
+
+      sanitize_hash(
+        {
+          schema_version: AI_NORMALIZED_RESULT_SCHEMA_VERSION,
+          success: result[:success] == true,
+          error_code: safe_string(result[:error_code]),
+          needs_review: result[:needs_review] == true,
+          review_reasons: limited_strings(result[:review_reasons], MAX_REVIEW_REASONS),
+          receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
+          receipt_items_attributes: limited_ai_normalized_items(result[:receipt_items_attributes]),
+          meta: ai_normalized_meta_snapshot(result[:meta]),
+          truncated: {
+            receipt_items_attributes: Array(result[:receipt_items_attributes]).size > MAX_AI_NORMALIZED_ITEMS,
+            review_reasons: Array(result[:review_reasons]).size > MAX_REVIEW_REASONS
           }
         }.compact
       )
@@ -166,6 +225,156 @@ module ReceiptAnalysisRuns
     end
 
     private
+
+    def ocr_candidates_snapshot(candidates)
+      {
+        store_name: safe_string(candidates[:store_name]),
+        store_address: safe_string(candidates[:store_address]),
+        store_phone_number: safe_string(candidates[:store_phone_number]),
+        purchased_at_text: safe_string(candidates[:purchased_at_text]),
+        total_amount: safe_value(candidates[:total_amount]),
+        subtotal_amount: safe_value(candidates[:subtotal_amount]),
+        tax_amount: safe_value(candidates[:tax_amount]),
+        tax_rate: safe_value(candidates[:tax_rate]),
+        payment_method_text: safe_string(candidates[:payment_method_text]),
+        tip_amount: safe_value(candidates[:tip_amount]),
+        country_region: safe_string(candidates[:country_region]),
+        receipt_type: safe_string(candidates[:receipt_type]),
+        payments: limited_ocr_payments(candidates[:payments]),
+        tax_details: limited_ocr_tax_details(candidates[:tax_details]),
+        items: limited_ocr_items(candidates[:items]),
+        confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
+      }.compact
+    end
+
+    def ocr_meta_snapshot(value)
+      meta = normalized_hash(value)
+
+      {
+        provider: safe_string(meta[:provider]),
+        model_id: safe_string(meta[:model_id]),
+        model: safe_string(meta[:model]),
+        doc_type: safe_string(meta[:doc_type])
+      }.compact
+    end
+
+    def limited_ocr_items(items)
+      Array(items).first(MAX_OCR_ITEMS).filter_map do |item|
+        item = normalized_hash(item)
+        next if item.blank?
+
+        {
+          raw_text: safe_string(item[:raw_text]),
+          price: safe_value(item[:price]),
+          quantity: safe_value(item[:quantity]),
+          quantity_unit: safe_string(item[:quantity_unit]),
+          product_code: safe_string(item[:product_code]),
+          line_total: safe_value(item[:line_total]),
+          original_line_total: safe_value(item[:original_line_total]),
+          discount_amount: safe_value(item[:discount_amount]),
+          discount_rate: safe_value(item[:discount_rate]),
+          tax_rate: safe_value(item[:tax_rate]),
+          confidence: safe_value(item[:confidence])
+        }.compact
+      end
+    end
+
+    def limited_ocr_payments(payments)
+      Array(payments).first(MAX_OCR_PAYMENTS).filter_map do |payment|
+        payment = normalized_hash(payment)
+        next if payment.blank?
+
+        {
+          method: safe_string(payment[:method]),
+          amount: safe_value(payment[:amount]),
+          confidence: safe_value(payment[:confidence])
+        }.compact
+      end
+    end
+
+    def limited_ocr_tax_details(tax_details)
+      Array(tax_details).first(MAX_OCR_TAX_DETAILS).filter_map do |tax_detail|
+        tax_detail = normalized_hash(tax_detail)
+        next if tax_detail.blank?
+
+        {
+          description: safe_string(tax_detail[:description]),
+          amount: safe_value(tax_detail[:amount]),
+          rate: safe_value(tax_detail[:rate]),
+          net_amount: safe_value(tax_detail[:net_amount])
+        }.compact
+      end
+    end
+
+    def normalized_receipt_attributes_snapshot(value)
+      attributes = normalized_hash(value)
+
+      {
+        store_name: safe_string(attributes[:store_name]),
+        store_address: safe_string(attributes[:store_address]),
+        store_phone_number: safe_string(attributes[:store_phone_number]),
+        purchased_at: safe_value(attributes[:purchased_at]),
+        purchased_at_text: safe_string(attributes[:purchased_at_text]),
+        total_amount: safe_value(attributes[:total_amount]),
+        subtotal_amount: safe_value(attributes[:subtotal_amount]),
+        tax_amount: safe_value(attributes[:tax_amount]),
+        tax_rate: safe_value(attributes[:tax_rate]),
+        tip_amount: safe_value(attributes[:tip_amount]),
+        country_region: safe_string(attributes[:country_region]),
+        receipt_type: safe_string(attributes[:receipt_type]),
+        payment_method: safe_string(attributes[:payment_method]),
+        processing_error_code: safe_string(attributes[:processing_error_code]),
+        processing_error_message: safe_string(attributes[:processing_error_message]),
+        ocr_completed_at: safe_value(attributes[:ocr_completed_at])
+      }.compact
+    end
+
+    def limited_ai_normalized_items(items)
+      Array(items).first(MAX_AI_NORMALIZED_ITEMS).filter_map do |item|
+        item = normalized_hash(item)
+        next if item.blank?
+
+        {
+          index: safe_value(item[:index]),
+          position_index: safe_value(item[:position_index]),
+          raw_text: safe_string(item[:raw_text]),
+          suggested_name: safe_string(item[:suggested_name]),
+          confirmed_name: safe_string(item[:confirmed_name]),
+          category: safe_string(item[:category]),
+          price: safe_value(item[:price]),
+          quantity: safe_value(item[:quantity]),
+          quantity_unit: safe_string(item[:quantity_unit]),
+          product_code: safe_string(item[:product_code]),
+          tax_rate: safe_value(item[:tax_rate]),
+          tax_rate_confidence: safe_value(item[:tax_rate_confidence]),
+          tax_rate_reason: safe_string(item[:tax_rate_reason]),
+          original_line_total: safe_value(item[:original_line_total]),
+          line_total: safe_value(item[:line_total]),
+          discount_amount: safe_value(item[:discount_amount]),
+          discount_rate: safe_value(item[:discount_rate]),
+          needs_review: item.key?(:needs_review) ? item[:needs_review] == true : nil,
+          review_reasons: limited_strings(item[:review_reasons], MAX_REVIEW_REASONS),
+          confidence: safe_value(item[:confidence])
+        }.compact
+      end
+    end
+
+    def ai_normalized_meta_snapshot(value)
+      meta = normalized_hash(value)
+
+      {
+        provider: safe_string(meta[:provider]),
+        model: safe_string(meta[:model]),
+        primary_provider: safe_string(meta[:primary_provider]),
+        fallback_provider: safe_string(meta[:fallback_provider]),
+        fallback_used: meta[:fallback_used] == true,
+        primary_error_code: safe_string(meta[:primary_error_code]),
+        fallback_error_code: safe_string(meta[:fallback_error_code]),
+        document_type: safe_string(meta[:document_type]),
+        rejection_reason: safe_string(meta[:rejection_reason]),
+        is_receipt_confidence: safe_value(meta[:is_receipt_confidence])
+      }.compact
+    end
 
     def store_snapshot(value)
       store = normalized_hash(value)
