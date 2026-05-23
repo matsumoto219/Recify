@@ -80,8 +80,7 @@ class ReceiptsController < ApplicationController
     @receipt.status = "processing"
 
     if @receipt.save
-      Rails.logger.info("[ReceiptAnalysis] enqueue receipt_id=#{@receipt.id} user_id=#{current_user.id} image_attached=#{@receipt.image.attached?}")
-      ReceiptAnalysisJob.perform_later(@receipt.id)
+      enqueue_analysis_job(@receipt, source: "upload", requested_by_user: current_user)
 
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
     else
@@ -155,6 +154,26 @@ class ReceiptsController < ApplicationController
   def set_external_service_states
     @ocr_state = ExternalServiceStatus.snapshot(:ocr)
     @ai_state = ExternalServiceStatus.snapshot(:ai)
+  end
+
+  def enqueue_analysis_job(receipt, source:, requested_by_user:)
+    result = ReceiptAnalysisRuns.start(
+      receipt: receipt,
+      source: source,
+      requested_by_user: requested_by_user
+    )
+
+    unless result.created?
+      Rails.logger.info(
+        "[ReceiptAnalysis] skip_enqueue_existing_run receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id}"
+      )
+      return
+    end
+
+    Rails.logger.info(
+      "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
+    )
+    ReceiptAnalysisJob.perform_later(run_id: result.run.id)
   end
 
   def temporary_notice_options(message)

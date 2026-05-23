@@ -63,10 +63,23 @@ class ReceiptBatchUploadService
 
   def enqueue_analysis_jobs(receipts)
     receipts.each do |receipt|
-      Rails.logger.info(
-        "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
+      result = ReceiptAnalysisRuns.start(
+        receipt: receipt,
+        source: "batch_upload",
+        requested_by_user: user
       )
-      ReceiptAnalysisJob.perform_later(receipt.id)
+
+      unless result.created?
+        Rails.logger.info(
+          "[ReceiptAnalysis] skip_enqueue_existing_run receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id}"
+        )
+        next
+      end
+
+      Rails.logger.info(
+        "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
+      )
+      ReceiptAnalysisJob.perform_later(run_id: result.run.id)
     end
   end
 

@@ -819,7 +819,7 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'POST /receipts/upload' do
-    it '単一camera uploadはreceipt[image]で従来通り成功する' do
+    it '単一camera uploadはsource: uploadのrunを作成しrun_id付き解析jobをenqueueする' do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
@@ -828,18 +828,49 @@ RSpec.describe 'Receipts', type: :request do
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
       end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
 
       receipt = Receipt.order(:id).last
+      run = receipt.receipt_analysis_runs.sole
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(receipt).to be_processing
         expect(receipt.image).to be_attached
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(receipt.id)
+        expect(run.source).to eq('upload')
+        expect(run.requested_by_user).to eq(user)
+        expect(run.status).to eq('queued')
+        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
       end
     end
 
-    it 'library複数uploadで1ファイルごとにreceiptを作成し解析jobをenqueueする' do
+    it 'active runが既にある場合はduplicate enqueueしない' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+
+      existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
+      allow(ReceiptAnalysisRuns).to receive(:start).and_return(
+        ReceiptAnalysisRuns::StartResult.new(run: existing_run, created: false)
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(ReceiptAnalysisRuns).to have_received(:start).with(
+          receipt: Receipt.order(:id).last,
+          source: 'upload',
+          requested_by_user: user
+        )
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it 'library複数uploadでreceiptごとにsource: batch_uploadのrunを作成しrun_id付き解析jobをenqueueする' do
       files = [
         uploaded_receipt_fixture,
         uploaded_receipt_fixture('single_tax_receipt.png', 'image/png'),
@@ -853,6 +884,7 @@ RSpec.describe 'Receipts', type: :request do
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
       end.to change(Receipt, :count).by(3)
+        .and change(ReceiptAnalysisRun, :count).by(3)
 
       created_receipts = Receipt.order(:id).last(3)
 
@@ -861,7 +893,10 @@ RSpec.describe 'Receipts', type: :request do
         expect(created_receipts).to all(be_processing)
         expect(created_receipts).to all(satisfy { |receipt| receipt.image.attached? })
         created_receipts.each do |receipt|
-          expect(ReceiptAnalysisJob).to have_received(:perform_later).with(receipt.id)
+          run = receipt.receipt_analysis_runs.sole
+          expect(run.source).to eq('batch_upload')
+          expect(run.requested_by_user).to eq(user)
+          expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
         end
       end
     end
@@ -1021,7 +1056,9 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(Receipt.order(:id).last.id)
+        receipt = Receipt.order(:id).last
+        run = receipt.receipt_analysis_runs.sole
+        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
       end
     end
 

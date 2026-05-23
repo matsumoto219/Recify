@@ -39,7 +39,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear
   end
 
-  it '1ファイルごとにreceiptを作成しcommit後に解析jobをenqueueする' do
+  it '1ファイルごとにreceiptとbatch_upload runを作成しcommit後に解析jobをenqueueする' do
     files = [
       uploaded_receipt_fixture,
       uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
@@ -53,6 +53,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
         expect(result.count).to eq(2)
       end
     end.to change(user.receipts, :count).by(2)
+      .and change(ReceiptAnalysisRun, :count).by(2)
 
     created_receipts = user.receipts.order(:id).last(2)
 
@@ -60,8 +61,32 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       expect(created_receipts).to all(be_processing)
       expect(created_receipts).to all(satisfy { |receipt| receipt.image.attached? })
       created_receipts.each do |receipt|
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(receipt.id)
+        run = receipt.receipt_analysis_runs.sole
+        expect(run.source).to eq('batch_upload')
+        expect(run.requested_by_user).to eq(user)
+        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
       end
+    end
+  end
+
+  it 'active runが既にあるreceiptはduplicate enqueueしない' do
+    files = [ uploaded_receipt_fixture ]
+    existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
+    allow(ReceiptAnalysisRuns).to receive(:start).and_return(
+      ReceiptAnalysisRuns::StartResult.new(run: existing_run, created: false)
+    )
+
+    result = described_class.call(user:, files:)
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(result.count).to eq(1)
+      expect(ReceiptAnalysisRuns).to have_received(:start).with(
+        receipt: user.receipts.order(:id).last,
+        source: 'batch_upload',
+        requested_by_user: user
+      )
+      expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end
 
