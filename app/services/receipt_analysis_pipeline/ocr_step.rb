@@ -32,7 +32,7 @@ class ReceiptAnalysisPipeline
 
     def ocr_enabled?
       ActiveModel::Type::Boolean.new.cast(
-        ENV.fetch(ReceiptAnalysisService::OCR_ENABLED_ENV_KEY, "true")
+        ENV.fetch(Config::OCR_ENABLED_ENV_KEY, "true")
       )
     end
   end

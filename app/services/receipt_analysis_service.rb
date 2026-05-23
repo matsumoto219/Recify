@@ -1,19 +1,4 @@
 class ReceiptAnalysisService
-  class AnalysisError < StandardError
-    attr_reader :error_code
-
-    def initialize(error_code, message = nil)
-      @error_code = error_code
-      super(message)
-    end
-  end
-
-  UNREADABLE_CONFIDENCE_THRESHOLD = 0.3
-  REVIEW_NEEDED_CONFIDENCE_THRESHOLD = 0.6
-  OCR_ENABLED_ENV_KEY = "RECEIPT_OCR_ENABLED"
-  AI_ENABLED_ENV_KEY = "RECEIPT_AI_ENABLED"
-  SUPPORTED_RECEIPT_COUNTRY_CODES = %w[JPN].freeze
-
   def self.call(receipt, run: nil, ocr_result: nil)
     new(receipt, run: run, ocr_result: ocr_result).call
   end
@@ -111,7 +96,7 @@ class ReceiptAnalysisService
         )
       )
     end
-  rescue AnalysisError
+  rescue ReceiptAnalysisPipeline::AnalysisError
     raise
   rescue StandardError => e
     Rails.logger.error(
@@ -120,7 +105,7 @@ class ReceiptAnalysisService
     finalize(finalize_decision(:fail_receipt, error_code: "unexpected_error", error_message: e.message))
     # NOTE: 想定外エラーはReceipt側にfailed保存したうえでAnalysisErrorを再raiseする。
     # Job retryは行わず、再解析や手動修正はユーザー操作に委ねる方針。
-    raise AnalysisError.new("unexpected_error", e.message)
+    raise ReceiptAnalysisPipeline::AnalysisError.new("unexpected_error", e.message)
   end
 
   private
@@ -148,13 +133,13 @@ class ReceiptAnalysisService
 
   def ocr_enabled?
     ActiveModel::Type::Boolean.new.cast(
-      ENV.fetch(OCR_ENABLED_ENV_KEY, "true")
+      ENV.fetch(ReceiptAnalysisPipeline::Config::OCR_ENABLED_ENV_KEY, "true")
     )
   end
 
   def ai_enabled?
     ActiveModel::Type::Boolean.new.cast(
-      ENV.fetch(AI_ENABLED_ENV_KEY, "true")
+      ENV.fetch(ReceiptAnalysisPipeline::Config::AI_ENABLED_ENV_KEY, "true")
     )
   end
 
@@ -282,14 +267,14 @@ class ReceiptAnalysisService
     # 現在は candidates 配下を参照しているが、meta 配下に入る可能性もあるため、
     # API実レスポンス確認後に参照先を一本化する。
 
-    return true if overall_confidence.present? && overall_confidence.to_f < UNREADABLE_CONFIDENCE_THRESHOLD
+    return true if overall_confidence.present? && overall_confidence.to_f < ReceiptAnalysisPipeline::Config::UNREADABLE_CONFIDENCE_THRESHOLD
 
     false
   end
 
   def unsupported_country?(ocr_result)
     country_code = ocr_country_region(ocr_result)
-    country_code.present? && !SUPPORTED_RECEIPT_COUNTRY_CODES.include?(country_code)
+    country_code.present? && !ReceiptAnalysisPipeline::Config::SUPPORTED_RECEIPT_COUNTRY_CODES.include?(country_code)
   end
 
   def ocr_country_region(ocr_result)

@@ -1788,7 +1788,7 @@ RSpec.describe ReceiptAnalysisService do
 
       expect do
         described_class.call(receipt)
-      end.to raise_error(ReceiptAnalysisService::AnalysisError)
+      end.to raise_error(ReceiptAnalysisPipeline::AnalysisError)
 
       receipt.reload
 

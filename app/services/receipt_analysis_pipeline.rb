@@ -1,6 +1,14 @@
 class ReceiptAnalysisPipeline
   LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
-  SUPPORTED_RECEIPT_COUNTRY_CODES = ReceiptAnalysisService::SUPPORTED_RECEIPT_COUNTRY_CODES
+
+  class AnalysisError < StandardError
+    attr_reader :error_code
+
+    def initialize(error_code, message = nil)
+      @error_code = error_code
+      super(message)
+    end
+  end
 
   class << self
     def run_ocr(run)
@@ -302,7 +310,7 @@ class ReceiptAnalysisPipeline
 
   def ai_enabled?
     ActiveModel::Type::Boolean.new.cast(
-      ENV.fetch(ReceiptAnalysisService::AI_ENABLED_ENV_KEY, "true")
+      ENV.fetch(Config::AI_ENABLED_ENV_KEY, "true")
     )
   end
 
@@ -352,7 +360,7 @@ class ReceiptAnalysisPipeline
 
   def unsupported_country?(ocr_result)
     country_code = ocr_country_region(ocr_result)
-    country_code.present? && !SUPPORTED_RECEIPT_COUNTRY_CODES.include?(country_code)
+    country_code.present? && !Config::SUPPORTED_RECEIPT_COUNTRY_CODES.include?(country_code)
   end
 
   def ocr_country_region(ocr_result)
@@ -378,7 +386,7 @@ class ReceiptAnalysisPipeline
     candidates = ocr_candidates(ocr_result)
     overall_confidence = candidates.dig(:confidence_summary, :overall)
 
-    return true if overall_confidence.present? && overall_confidence.to_f < ReceiptAnalysisService::UNREADABLE_CONFIDENCE_THRESHOLD
+    return true if overall_confidence.present? && overall_confidence.to_f < Config::UNREADABLE_CONFIDENCE_THRESHOLD
 
     false
   end

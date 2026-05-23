@@ -1,6 +1,6 @@
 class ReceiptAnalysisPipeline
   class FinalizeStep
-    REVIEW_NEEDED_CONFIDENCE_THRESHOLD = ReceiptAnalysisService::REVIEW_NEEDED_CONFIDENCE_THRESHOLD
+    REVIEW_NEEDED_CONFIDENCE_THRESHOLD = Config::REVIEW_NEEDED_CONFIDENCE_THRESHOLD
 
     def self.call(receipt:, decision:, run: nil)
       new(receipt: receipt, decision: decision, run: run).call
@@ -31,7 +31,7 @@ class ReceiptAnalysisPipeline
       when "ai_success"
         save_ai_result!(ocr_result_for_finalize, ai_result_for_finalize)
       else
-        raise ReceiptAnalysisService::AnalysisError.new(
+        raise ReceiptAnalysisPipeline::AnalysisError.new(
           "unexpected_error",
           "Unknown finalize_strategy=#{decision.finalize_strategy}"
         )
