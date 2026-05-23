@@ -14,13 +14,14 @@ class ReceiptAnalysisService
   AI_ENABLED_ENV_KEY = "RECEIPT_AI_ENABLED"
   SUPPORTED_RECEIPT_COUNTRY_CODES = %w[JPN].freeze
 
-  def self.call(receipt, run: nil)
-    new(receipt, run: run).call
+  def self.call(receipt, run: nil, ocr_result: nil)
+    new(receipt, run: run, ocr_result: ocr_result).call
   end
 
-  def initialize(receipt, run: nil)
+  def initialize(receipt, run: nil, ocr_result: nil)
     @receipt = receipt
     @run = run
+    @ocr_result = ocr_result
   end
 
   def call
@@ -33,9 +34,9 @@ class ReceiptAnalysisService
       return fail_receipt!("ocr_disabled")
     end
 
-    ocr_result = ReceiptOcrService.call(receipt.image)
+    ocr_result = provided_ocr_result? ? @ocr_result : ReceiptOcrService.call(receipt.image)
     log_ocr_result(ocr_result)
-    record_ocr_result(ocr_result)
+    record_ocr_result(ocr_result) unless provided_ocr_result?
 
     unless ocr_result[:success]
       return fail_receipt!(ocr_result[:error_code].presence || "ocr_api_error")
@@ -126,6 +127,10 @@ class ReceiptAnalysisService
     Rails.logger.info(
       "[ReceiptAnalysis] ocr_result receipt_id=#{receipt.id} success=#{ocr_result[:success]} lines=#{ocr_result[:lines]&.size || 0} error_code=#{ocr_result[:error_code]}"
     )
+  end
+
+  def provided_ocr_result?
+    !@ocr_result.nil?
   end
 
   def ocr_enabled?

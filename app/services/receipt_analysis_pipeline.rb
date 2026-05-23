@@ -32,7 +32,8 @@ class ReceiptAnalysisPipeline
 
     begin
       ReceiptAnalysisRuns.start_stage(run, "ocr")
-      ReceiptAnalysisService.call(receipt, run: run)
+      ocr_step_result = OcrStep.call(run)
+      ReceiptAnalysisService.call(receipt, run: run, ocr_result: ocr_step_result.ocr_result)
       receipt.reload
       ReceiptAnalysisRuns.record_final_result(run, receipt: receipt)
       ReceiptAnalysisRuns.succeed(run)

@@ -32,8 +32,10 @@ RSpec.describe ReceiptAnalysisPipeline do
       },
       meta: {
         provider: 'azure_document_intelligence',
-        model_id: 'prebuilt-receipt'
-      }
+        model_id: 'prebuilt-receipt',
+        raw_response: { secret: 'do-not-store' }
+      },
+      image: 'do-not-store'
     }
   end
 
@@ -42,6 +44,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
+      allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
       allow(ReceiptAnalysisService).to receive(:call) do |target_receipt|
         target_receipt.update!(
           status: 'review_needed',
@@ -55,12 +58,24 @@ RSpec.describe ReceiptAnalysisPipeline do
       run.reload
 
       aggregate_failures do
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt, run: run)
+        expect(ReceiptOcrService).to have_received(:call).once
+        expect(ReceiptAnalysisService).to have_received(:call).with(receipt, run: run, ocr_result: successful_ocr_result)
         expect(run.status).to eq('succeeded')
         expect(run.stage).to eq('completed')
         expect(run.started_at).to be_present
         expect(run.ocr_started_at).to be_present
         expect(run.finished_at).to be_present
+        expect(run.ocr_summary).to include(
+          'success' => true,
+          'provider' => 'azure_document_intelligence',
+          'model' => 'prebuilt-receipt'
+        )
+        expect(run.ocr_result_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ocr_result_v1',
+          'success' => true
+        )
+        expect(run.ocr_result_snapshot).not_to have_key('raw_text')
+        expect(run.ocr_result_snapshot.to_json).not_to include('do-not-store')
         expect(run.final_result_summary).to include(
           'receipt_status' => 'review_needed',
           'processing_error_code' => 'ai_unavailable',
@@ -89,10 +104,12 @@ RSpec.describe ReceiptAnalysisPipeline do
       described_class.run_current_pipeline(run)
 
       aggregate_failures do
+        expect(ReceiptOcrService).to have_received(:call).once
         expect(receipt.reload.status).to eq('failed')
         expect(run.reload.status).to eq('succeeded')
         expect(run.stage).to eq('completed')
         expect(run.ocr_summary).to include('success' => false, 'error_code' => 'ocr_timeout')
+        expect(run.ocr_result_snapshot).to include('success' => false, 'error_code' => 'ocr_timeout')
         expect(run.ai_input_snapshot).to eq({})
         expect(run.ai_result_summary).to eq({})
         expect(run.final_result_summary).to include(
@@ -132,6 +149,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       described_class.run_current_pipeline(run)
 
       aggregate_failures do
+        expect(ReceiptOcrService).to have_received(:call).once
         expect(receipt.reload.status).to eq('review_needed')
         expect(receipt.processing_error_code).to eq('ai_primary_failed')
         expect(run.reload.status).to eq('succeeded')
@@ -191,8 +209,8 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
-        expect(run.stage).to eq('ocr')
-        expect(run.error_stage).to eq('ocr')
+        expect(run.stage).to eq('ocr_validation')
+        expect(run.error_stage).to eq('ocr_validation')
         expect(run.error_code).to eq('unexpected_error')
         expect(run.error_message).to eq('boom')
       end

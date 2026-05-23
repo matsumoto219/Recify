@@ -322,6 +322,31 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it 'ocr_result指定時はOCRを再実行せず既存OCR summaryを維持する' do
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.start_stage(run, "ocr")
+      ocr_result = build_ocr_result
+      ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
+
+      allow(ReceiptOcrService).to receive(:call)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+      described_class.call(receipt, run: run, ocr_result: ocr_result)
+      run.reload
+
+      aggregate_failures do
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(run.ocr_summary).to include(
+          'schema_version' => 'receipt_analysis_run_ocr_summary_v1',
+          'success' => true,
+          'provider' => 'azure_document_intelligence',
+          'model' => 'prebuilt-receipt'
+        )
+        expect(run.stage).to eq('finalize')
+        expect(receipt.reload.status).to eq('review_needed')
+      end
+    end
+
     it 'runありではOCR失敗でもOCR summaryを保存しAI stageを開始しない' do
       run = create(:receipt_analysis_run, receipt:)
       ReceiptAnalysisRuns.start_stage(run, "ocr")
@@ -965,7 +990,7 @@ RSpec.describe ReceiptAnalysisService do
     it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
       service = described_class.new(receipt)
 
-      allow(described_class).to receive(:new).with(receipt, run: nil).and_return(service)
+      allow(described_class).to receive(:new).with(receipt, run: nil, ocr_result: nil).and_return(service)
       allow(service).to receive(:low_quality_ocr?).and_call_original
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
