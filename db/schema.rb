@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_23_053259) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_23_072654) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -68,6 +68,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_053259) do
     t.jsonb "ai_input_snapshot", default: {}, null: false
     t.integer "ai_latency_ms"
     t.string "ai_model"
+    t.jsonb "ai_normalized_result_snapshot", default: {}, null: false
     t.string "ai_provider"
     t.jsonb "ai_result_summary", default: {}, null: false
     t.datetime "ai_started_at"
@@ -85,6 +86,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_053259) do
     t.integer "ocr_latency_ms"
     t.string "ocr_model"
     t.string "ocr_provider"
+    t.jsonb "ocr_result_snapshot", default: {}, null: false
     t.datetime "ocr_started_at"
     t.jsonb "ocr_summary", default: {}, null: false
     t.bigint "parent_run_id"

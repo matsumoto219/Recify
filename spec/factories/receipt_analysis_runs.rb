@@ -21,8 +21,10 @@ FactoryBot.define do
     error_code { nil }
     error_message { nil }
     ocr_summary { {} }
+    ocr_result_snapshot { {} }
     ai_input_snapshot { {} }
     ai_result_summary { {} }
+    ai_normalized_result_snapshot { {} }
     final_result_summary { {} }
     metadata { {} }
 

@@ -16,8 +16,10 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
         attempt_number: 1,
         ai_fallback_used: false,
         ocr_summary: {},
+        ocr_result_snapshot: {},
         ai_input_snapshot: {},
         ai_result_summary: {},
+        ai_normalized_result_snapshot: {},
         final_result_summary: {},
         metadata: {},
         expires_at: 30.days.from_now,
@@ -66,10 +68,36 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
 
       aggregate_failures do
         expect(run.ocr_summary).to eq({})
+        expect(run.ocr_result_snapshot).to eq({})
         expect(run.ai_input_snapshot).to eq({})
         expect(run.ai_result_summary).to eq({})
+        expect(run.ai_normalized_result_snapshot).to eq({})
         expect(run.final_result_summary).to eq({})
         expect(run.metadata).to eq({})
+      end
+    end
+
+    it 'normalized snapshots を保存して読み出せる' do
+      run = create(
+        :receipt_analysis_run,
+        ocr_result_snapshot: {
+          candidates: {
+            store_name: 'テストストア',
+            items: [ { raw_text: 'コーヒー', line_total: 180 } ]
+          }
+        },
+        ai_normalized_result_snapshot: {
+          success: true,
+          receipt_attributes: { payment_method: 'cash' },
+          receipt_items_attributes: [ { index: 0, category: 'drink' } ]
+        }
+      )
+
+      aggregate_failures do
+        expect(run.reload.ocr_result_snapshot.dig('candidates', 'store_name')).to eq('テストストア')
+        expect(run.ocr_result_snapshot.dig('candidates', 'items', 0, 'line_total')).to eq(180)
+        expect(run.ai_normalized_result_snapshot).to include('success' => true)
+        expect(run.ai_normalized_result_snapshot.dig('receipt_attributes', 'payment_method')).to eq('cash')
       end
     end
 
@@ -207,6 +235,17 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
         expect(active_index.where).to include("status")
         expect(active_index.where).to include("queued")
         expect(active_index.where).to include("running")
+      end
+    end
+
+    it 'normalized snapshot columns はnull falseかつ空Hash defaultにする' do
+      columns = ActiveRecord::Base.connection.columns(:receipt_analysis_runs).index_by(&:name)
+
+      aggregate_failures do
+        expect(columns.fetch('ocr_result_snapshot').null).to eq(false)
+        expect(columns.fetch('ocr_result_snapshot').default).to eq('{}')
+        expect(columns.fetch('ai_normalized_result_snapshot').null).to eq(false)
+        expect(columns.fetch('ai_normalized_result_snapshot').default).to eq('{}')
       end
     end
   end
