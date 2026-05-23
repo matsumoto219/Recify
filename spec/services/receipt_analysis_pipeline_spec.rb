@@ -45,6 +45,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       needs_review: false,
       receipt_attributes: {
         store_name: 'AIテストストア',
+        purchased_at: Time.zone.parse('2026-05-23 10:00:00'),
         payment_method: 'cash'
       },
       receipt_items_attributes: [
@@ -96,6 +97,12 @@ RSpec.describe ReceiptAnalysisPipeline do
         metadata: {}
       }.merge(attributes)
     )
+  end
+
+  def ocr_fixture(name)
+    raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
   describe '.run_current_pipeline' do
@@ -540,6 +547,235 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('unsupported_country')
         expect(receipt.country_region).to eq('USA')
+      end
+    end
+
+    it 'snapshot入力でai_success decisionを保存できる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ocr_result_with_raw = successful_ocr_result.deep_merge(
+        raw_text: '保存しないOCR全文',
+        raw_response: '保存しないAzure raw response',
+        image: '保存しない画像情報'
+      )
+      ai_result_with_raw = successful_ai_result.deep_merge(
+        prompt: '保存しないprompt全文',
+        messages: [ '保存しないmessages' ],
+        meta: {
+          response_body: '保存しないAI raw response',
+          api_key: '保存しないapi key'
+        }
+      )
+      captured_build_params_inputs = []
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result_with_raw)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result_with_raw)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+      allow(Analysis::ReceiptBuildParamsService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_build_params_inputs << kwargs
+        original.call(**kwargs)
+      end
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(:ai_success)
+      )
+
+      receipt.reload
+      rehydrated_inputs_json = JSON.generate(captured_build_params_inputs)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.purchased_at).to eq(Time.zone.parse('2026-05-23 10:00:00'))
+        expect(receipt.payment_method).to eq('cash')
+        expect(captured_build_params_inputs.first[:ocr_result]).not_to have_key(:raw_text)
+        expect(rehydrated_inputs_json).not_to include(
+          '保存しないOCR全文',
+          '保存しないAzure raw response',
+          '保存しない画像情報',
+          '保存しないprompt全文',
+          '保存しないmessages',
+          '保存しないAI raw response',
+          '保存しないapi key'
+        )
+      end
+    end
+
+    it 'snapshot入力でocr_only decisionをreview_needed固定で保存できる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(:ocr_only)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+      end
+    end
+
+    it 'snapshot入力でai_fallback decisionをreview_needed固定で保存できる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(
+          :ai_fallback,
+          error_code: 'ai_unavailable',
+          error_message: 'AI補完に失敗したためOCR結果で保存しました'
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_unavailable')
+        expect(receipt.processing_error_message).to eq('AI補完に失敗したためOCR結果で保存しました')
+      end
+    end
+
+    it 'snapshot入力でもfail_receipt decisionはerror mapperを通す' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(
+          :fail_receipt,
+          error_code: 'ocr_timeout',
+          error_message: 'timeout'
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ocr_timeout')
+        expect(receipt.processing_error_message).to eq('timeout')
+      end
+    end
+
+    it 'truncated flagがtrueのOCR snapshotでもfinalizeできる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      long_ocr_result = successful_ocr_result.deep_merge(
+        lines: Array.new(151) { |index| "line #{index}" },
+        candidates: {
+          items: Array.new(101) do |index|
+            {
+              raw_text: "商品#{index} 180",
+              line_total: 180,
+              confidence: 0.95
+            }
+          end
+        }
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, long_ocr_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(:ocr_only)
+      )
+
+      aggregate_failures do
+        expect(run.reload.ocr_result_snapshot.dig('truncated', 'lines')).to eq(true)
+        expect(run.ocr_result_snapshot.dig('truncated', 'items')).to eq(true)
+        expect(receipt.reload.status).to eq('review_needed')
+      end
+    end
+
+    it 'fixtureのOCR snapshot入力でFinalizeが通る' do
+      receipt_fixture_names = %w[
+        single_tax_receipt
+        multiple_tax_receipt
+        external_tax_receipt
+        long_receipt
+        rotated_receipt
+        blurred_receipt
+        tax_detail_item_conflict_receipt
+      ]
+      non_receipt_fixture_names = %w[
+        non_receipt_doc_type_memo
+        non_receipt_empty
+        non_receipt_web_page
+      ]
+
+      receipt_fixture_names.each do |fixture_name|
+        receipt = create(:receipt, :processing, :with_image)
+        run = create(:receipt_analysis_run, receipt:)
+
+        ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_fixture(fixture_name))
+
+        aggregate_failures(fixture_name) do
+          expect do
+            described_class.finalize(
+              receipt: receipt,
+              run: run,
+              decision: finalize_decision(:ocr_only)
+            )
+          end.not_to raise_error
+          expect(receipt.reload.status).to eq('review_needed')
+        end
+      end
+
+      non_receipt_fixture_names.each do |fixture_name|
+        receipt = create(:receipt, :processing, :with_image)
+        run = create(:receipt_analysis_run, receipt:)
+
+        ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_fixture(fixture_name))
+
+        aggregate_failures(fixture_name) do
+          expect do
+            described_class.finalize(
+              receipt: receipt,
+              run: run,
+              decision: finalize_decision(
+                :fail_receipt,
+                error_code: 'receipt_not_detected'
+              )
+            )
+          end.not_to raise_error
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        end
       end
     end
   end

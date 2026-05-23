@@ -14,8 +14,8 @@ class ReceiptAnalysisPipeline
       )
     end
 
-    def finalize(receipt:, decision:)
-      FinalizeStep.call(receipt: receipt, decision: decision)
+    def finalize(receipt:, decision:, run: nil)
+      FinalizeStep.call(receipt: receipt, decision: decision, run: run)
     end
   end
 

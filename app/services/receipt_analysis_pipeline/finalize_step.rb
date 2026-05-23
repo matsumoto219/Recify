@@ -2,13 +2,14 @@ class ReceiptAnalysisPipeline
   class FinalizeStep
     REVIEW_NEEDED_CONFIDENCE_THRESHOLD = ReceiptAnalysisService::REVIEW_NEEDED_CONFIDENCE_THRESHOLD
 
-    def self.call(receipt:, decision:)
-      new(receipt: receipt, decision: decision).call
+    def self.call(receipt:, decision:, run: nil)
+      new(receipt: receipt, decision: decision, run: run).call
     end
 
-    def initialize(receipt:, decision:)
+    def initialize(receipt:, decision:, run: nil)
       @receipt = receipt
       @decision = decision
+      @run = run
     end
 
     def call
@@ -20,15 +21,15 @@ class ReceiptAnalysisPipeline
           decision.receipt_attributes
         )
       when "ocr_only"
-        save_ocr_only_result!(decision.ocr_result)
+        save_ocr_only_result!(ocr_result_for_finalize)
       when "ai_fallback"
         save_fallback_result!(
-          decision.ocr_result,
+          ocr_result_for_finalize,
           decision.error_code,
           processing_error_message: decision.error_message
         )
       when "ai_success"
-        save_ai_result!(decision.ocr_result, decision.ai_result)
+        save_ai_result!(ocr_result_for_finalize, ai_result_for_finalize)
       else
         raise ReceiptAnalysisService::AnalysisError.new(
           "unexpected_error",
@@ -39,7 +40,71 @@ class ReceiptAnalysisPipeline
 
     private
 
-    attr_reader :receipt, :decision
+    attr_reader :receipt, :decision, :run
+
+    def ocr_result_for_finalize
+      return decision.ocr_result if decision.ocr_result.present?
+
+      rehydrate_ocr_snapshot(run&.ocr_result_snapshot)
+    end
+
+    def ai_result_for_finalize
+      return decision.ai_result if decision.ai_result.present?
+
+      rehydrate_ai_snapshot(run&.ai_normalized_result_snapshot)
+    end
+
+    def rehydrate_ocr_snapshot(snapshot)
+      snapshot = normalized_hash(snapshot)
+      return nil if snapshot.blank?
+
+      {
+        success: snapshot[:success] == true,
+        lines: Array(snapshot[:lines]).map(&:to_s),
+        candidates: normalized_hash(snapshot[:candidates]).to_h,
+        error_code: snapshot[:error_code].presence,
+        meta: normalized_hash(snapshot[:meta]).to_h
+      }.compact
+    end
+
+    def rehydrate_ai_snapshot(snapshot)
+      snapshot = normalized_hash(snapshot)
+      return nil if snapshot.blank?
+
+      {
+        success: snapshot[:success] == true,
+        error_code: snapshot[:error_code].presence,
+        needs_review: snapshot[:needs_review] == true,
+        review_reasons: Array(snapshot[:review_reasons]),
+        receipt_attributes: rehydrate_ai_receipt_attributes(snapshot[:receipt_attributes]),
+        receipt_items_attributes: rehydrate_ai_items(snapshot[:receipt_items_attributes]),
+        meta: normalized_hash(snapshot[:meta]).to_h
+      }.compact
+    end
+
+    def rehydrate_ai_receipt_attributes(value)
+      attributes = normalized_hash(value).to_h
+
+      %i[purchased_at ocr_completed_at].each do |key|
+        attributes[key] = parse_time_value(attributes[key]) if attributes[key].present?
+      end
+
+      attributes
+    end
+
+    def rehydrate_ai_items(value)
+      Array(value).map do |item|
+        normalized_hash(item).to_h
+      end
+    end
+
+    def parse_time_value(value)
+      return value unless value.is_a?(String)
+
+      Time.zone.parse(value)
+    rescue ArgumentError, TypeError
+      value
+    end
 
     def save_ai_result!(ocr_result, ai_result)
       params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
@@ -453,6 +518,12 @@ class ReceiptAnalysisPipeline
 
     def ocr_candidates(ocr_result)
       (ocr_result[:candidates] || {}).deep_symbolize_keys
+    end
+
+    def normalized_hash(value)
+      return value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
+
+      {}.with_indifferent_access
     end
   end
 end
