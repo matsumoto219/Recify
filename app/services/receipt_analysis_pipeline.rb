@@ -5,6 +5,14 @@ class ReceiptAnalysisPipeline
     def run_current_pipeline(run)
       new(run).run_current_pipeline
     end
+
+    def run_ai(run:, ocr_result:, ai_name_completion_enabled: false)
+      AiStep.call(
+        run: run,
+        ocr_result: ocr_result,
+        ai_name_completion_enabled: ai_name_completion_enabled
+      )
+    end
   end
 
   def initialize(run)

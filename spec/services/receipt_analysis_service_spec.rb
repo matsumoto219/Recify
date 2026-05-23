@@ -292,6 +292,7 @@ RSpec.describe ReceiptAnalysisService do
         capture_input.call(ai_input)
         ai_result
       end
+      expect(ReceiptAnalysisPipeline).to receive(:run_ai).and_call_original
 
       described_class.call(receipt, run: run)
       run.reload
@@ -319,6 +320,23 @@ RSpec.describe ReceiptAnalysisService do
           'provider' => 'openai',
           'model' => 'gpt-test'
         )
+        expect(run.ai_normalized_result_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
+          'success' => true
+        )
+      end
+    end
+
+    it 'runなしでは従来通りReceiptAiEnrichmentServiceを直接呼び出す' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
+
+      described_class.call(receipt)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(receipt.reload.status).to be_present
       end
     end
 
@@ -362,6 +380,7 @@ RSpec.describe ReceiptAnalysisService do
 
       allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call)
+      expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
 
       described_class.call(receipt, run: run)
       run.reload
@@ -787,6 +806,7 @@ RSpec.describe ReceiptAnalysisService do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
       expect(ReceiptAiEnrichmentService).not_to receive(:call)
+      expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
 
       described_class.call(receipt)
       receipt.reload
@@ -819,6 +839,30 @@ RSpec.describe ReceiptAnalysisService do
         expect(receipt.receipt_payments.size).to eq(1)
         expect(payment.method).to eq('CreditCard')
         expect(payment.amount).to eq(1280)
+      end
+    end
+
+    it 'AI disabled時はPipelineのAiStepを呼ばずOCR-only保存にする' do
+      original_value = ENV['RECEIPT_AI_ENABLED']
+      ENV['RECEIPT_AI_ENABLED'] = 'false'
+
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      expect(ReceiptAiEnrichmentService).not_to receive(:call)
+      expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
+
+      described_class.call(receipt)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.receipt_items.count).to eq(2)
+      end
+    ensure
+      if original_value.nil?
+        ENV.delete('RECEIPT_AI_ENABLED')
+      else
+        ENV['RECEIPT_AI_ENABLED'] = original_value
       end
     end
 

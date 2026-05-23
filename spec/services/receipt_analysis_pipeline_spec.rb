@@ -133,10 +133,14 @@ RSpec.describe ReceiptAnalysisPipeline do
         error_code: 'ai_primary_failed',
         receipt_attributes: {},
         receipt_items_attributes: [],
+        prompt: '保存しないprompt全文',
+        messages: [ '保存しないmessages' ],
         meta: {
           primary_provider: 'openai',
           fallback_used: false,
-          primary_error_code: 'ai_primary_failed'
+          primary_error_code: 'ai_primary_failed',
+          response_body: '保存しないraw response',
+          api_key: '保存しないapi key'
         }
       }
 
@@ -159,6 +163,17 @@ RSpec.describe ReceiptAnalysisPipeline do
           'success' => false,
           'error_code' => 'ai_primary_failed',
           'provider' => 'openai'
+        )
+        expect(run.ai_normalized_result_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
+          'success' => false,
+          'error_code' => 'ai_primary_failed'
+        )
+        expect(run.ai_normalized_result_snapshot.to_json).not_to include(
+          '保存しないprompt全文',
+          '保存しないmessages',
+          '保存しないraw response',
+          '保存しないapi key'
         )
         expect(run.final_result_summary).to include(
           'receipt_status' => 'review_needed',
@@ -213,6 +228,85 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.error_stage).to eq('ocr_validation')
         expect(run.error_code).to eq('unexpected_error')
         expect(run.error_message).to eq('boom')
+      end
+    end
+  end
+
+  describe '.run_ai' do
+    it 'AI実行結果とAI input/result/normalized snapshotを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ai_input = {
+        filtered_content: "テストストア\nコーヒー 180",
+        prompt: '保存しないprompt全文',
+        raw_response: '保存しないraw response',
+        messages: [ '保存しないmessages' ],
+        items: [ { raw_text: 'コーヒー', line_total: 180 } ],
+        meta: { ocr_provider: 'azure_document_intelligence', ocr_model: 'prebuilt-receipt' }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: {
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180
+          }
+        ],
+        meta: {
+          provider: 'openai',
+          model: 'gpt-test',
+          response_body: '保存しないAI raw response',
+          api_key: '保存しないapi key'
+        }
+      }
+
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, capture_input:|
+        expect(ai_name_completion_enabled).to eq(true)
+        capture_input.call(ai_input)
+        ai_result
+      end
+
+      result = described_class.run_ai(
+        run: run,
+        ocr_result: successful_ocr_result,
+        ai_name_completion_enabled: true
+      )
+      run.reload
+
+      aggregate_failures do
+        expect(result.ai_result).to eq(ai_result)
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(run.stage).to eq('finalize')
+        expect(run.ai_input_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ai_input_v1',
+          'filtered_content' => "テストストア\nコーヒー 180"
+        )
+        expect(run.ai_result_summary).to include(
+          'schema_version' => 'receipt_analysis_run_ai_result_v1',
+          'success' => true,
+          'provider' => 'openai',
+          'model' => 'gpt-test'
+        )
+        expect(run.ai_normalized_result_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
+          'success' => true
+        )
+        expect(run.ai_normalized_result_snapshot.dig('receipt_attributes', 'payment_method')).to eq('cash')
+        expect(run.ai_input_snapshot.to_json).not_to include(
+          '保存しないprompt全文',
+          '保存しないraw response',
+          '保存しないmessages'
+        )
+        expect(run.ai_normalized_result_snapshot.to_json).not_to include(
+          '保存しないAI raw response',
+          '保存しないapi key'
+        )
       end
     end
   end

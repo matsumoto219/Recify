@@ -81,7 +81,6 @@ class ReceiptAnalysisService
       return save_fallback_result!(ocr_result, "ai_unavailable")
     end
 
-    start_ai_stage
     ai_result = run_ai_enrichment(ocr_result)
 
     if ai_result[:success]
@@ -150,13 +149,21 @@ class ReceiptAnalysisService
   end
 
   def run_ai_enrichment(ocr_result)
-    ai_result = ReceiptAiEnrichmentService.call(
-      ocr_result,
-      ai_name_completion_enabled: ai_name_completion_enabled?,
-      capture_input: ai_input_capture_callback
-    )
+    ai_result =
+      if run
+        ReceiptAnalysisPipeline.run_ai(
+          run: run,
+          ocr_result: ocr_result,
+          ai_name_completion_enabled: ai_name_completion_enabled?
+        ).ai_result
+      else
+        ReceiptAiEnrichmentService.call(
+          ocr_result,
+          ai_name_completion_enabled: ai_name_completion_enabled?,
+          capture_input: nil
+        )
+      end
     normalized = normalize_ai_result(ai_result)
-    record_ai_result(normalized)
 
     Rails.logger.info(
       "[ReceiptAnalysis] ai_result receipt_id=#{receipt.id} success=#{normalized[:success]} error_code=#{normalized[:error_code]}"
@@ -178,24 +185,6 @@ class ReceiptAnalysisService
     return unless run
 
     ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
-  end
-
-  def start_ai_stage
-    return unless run
-
-    ReceiptAnalysisRuns.start_stage(run, "ai")
-  end
-
-  def ai_input_capture_callback
-    return unless run
-
-    ->(input) { ReceiptAnalysisRuns.record_ai_input(run, input) }
-  end
-
-  def record_ai_result(ai_result)
-    return unless run
-
-    ReceiptAnalysisRuns.record_ai_result(run, ai_result)
   end
 
   # 商品名AI補完

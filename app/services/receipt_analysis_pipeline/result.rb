@@ -1,7 +1,9 @@
 class ReceiptAnalysisPipeline
-  Result = Struct.new(:ocr_result, keyword_init: true) do
+  Result = Struct.new(:ocr_result, :ai_result, keyword_init: true) do
     def success?
-      ocr_result&.dig(:success) == true
+      result = ai_result || ocr_result
+
+      result&.dig(:success) == true
     end
   end
 end
