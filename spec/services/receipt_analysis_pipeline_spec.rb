@@ -105,27 +105,56 @@ RSpec.describe ReceiptAnalysisPipeline do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def with_env(key, value)
+    original_value = ENV[key]
+    ENV[key] = value
+    yield
+  ensure
+    if original_value.nil?
+      ENV.delete(key)
+    else
+      ENV[key] = original_value
+    end
+  end
+
+  def ai_not_receipt_result(confidence: 0.92)
+    {
+      success: false,
+      error_code: 'ai_not_receipt',
+      needs_review: false,
+      receipt_attributes: {},
+      receipt_items_attributes: [],
+      meta: {
+        document_type: 'development_note',
+        rejection_reason: 'memo',
+        is_receipt_confidence: confidence
+      }
+    }
+  end
+
   describe '.run_current_pipeline' do
-    it 'processing receiptだけReceiptAnalysisServiceを実行する' do
+    it 'processing receiptだけ分割したPipeline入口で完走する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
-      allow(ReceiptAnalysisService).to receive(:call) do |target_receipt|
-        target_receipt.update!(
-          status: 'review_needed',
-          processing_error_code: 'ai_unavailable',
-          review_reasons: [ 'ocr_low_confidence' ]
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
         )
-        target_receipt.receipt_items.create!(raw_text: 'コーヒー', line_total: 180)
-      end
+      )
+      allow(ReceiptAnalysisService).to receive(:call)
 
       described_class.run_current_pipeline(run)
       run.reload
 
       aggregate_failures do
         expect(ReceiptOcrService).to have_received(:call).once
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt, run: run, ocr_result: successful_ocr_result)
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(ReceiptAnalysisService).not_to have_received(:call)
         expect(run.status).to eq('succeeded')
         expect(run.stage).to eq('completed')
         expect(run.started_at).to be_present
@@ -143,11 +172,11 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.ocr_result_snapshot).not_to have_key('raw_text')
         expect(run.ocr_result_snapshot.to_json).not_to include('do-not-store')
         expect(run.final_result_summary).to include(
-          'receipt_status' => 'review_needed',
-          'processing_error_code' => 'ai_unavailable',
-          'review_reasons' => [ 'ocr_low_confidence' ],
+          'receipt_status' => 'completed',
+          'review_reasons' => [],
           'item_count' => 1
         )
+        expect(run.final_result_summary).not_to have_key('processing_error_code')
       end
     end
 
@@ -280,7 +309,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      allow(ReceiptAnalysisService).to receive(:call).and_raise(
+      allow(ReceiptAnalysisPipeline::OcrStep).to receive(:call).and_raise(
         ReceiptAnalysisService::AnalysisError.new('unexpected_error', 'boom')
       )
 
@@ -290,10 +319,144 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
-        expect(run.stage).to eq('ocr_validation')
-        expect(run.error_stage).to eq('ocr_validation')
+        expect(run.stage).to eq('ocr')
+        expect(run.error_stage).to eq('ocr')
         expect(run.error_code).to eq('unexpected_error')
         expect(run.error_message).to eq('boom')
+      end
+    end
+  end
+
+  describe '.run_ocr' do
+    it 'OCR成功かつAI有効ならAI stepへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:ai)
+        expect(result.ocr_result).to eq(successful_ocr_result)
+        expect(result.finalize_decision).to be_nil
+        expect(run.reload.stage).to eq('ocr_validation')
+        expect(run.metadata['finalize_decision']).to be_blank
+      end
+    end
+
+    it 'OCR失敗ならfinalize decisionを保存してFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ocr_result = {
+        success: false,
+        error_code: 'ocr_timeout',
+        lines: [],
+        candidates: {},
+        meta: { provider: 'azure_document_intelligence' }
+      }
+
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+        expect(result.finalize_decision.error_code).to eq('ocr_timeout')
+        expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('fail_receipt')
+        expect(run.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_timeout')
+      end
+    end
+
+    it 'OCR validation失敗なら理由別のfinalize decisionを保存する' do
+      cases = {
+        unsupported_country: [
+          successful_ocr_result.deep_merge(candidates: { country_region: 'USA' }),
+          'unsupported_country'
+        ],
+        no_text_detected: [
+          successful_ocr_result.deep_merge(
+            raw_text: '',
+            lines: [],
+            candidates: {
+              store_name: nil,
+              total_amount: nil,
+              payment_method_text: nil,
+              country_region: nil,
+              items: [],
+              payments: [],
+              tax_details: []
+            }
+          ),
+          'no_text_detected'
+        ],
+        ocr_unreadable: [
+          successful_ocr_result.deep_merge(candidates: { confidence_summary: { overall: 0.2 } }),
+          'ocr_unreadable'
+        ],
+        receipt_not_detected: [
+          successful_ocr_result.deep_merge(
+            raw_text: 'これはメモです',
+            lines: [ 'これはメモです' ],
+            candidates: {
+              store_name: nil,
+              total_amount: nil,
+              payment_method_text: nil,
+              country_region: nil,
+              items: [],
+              payments: [],
+              tax_details: []
+            }
+          ),
+          'receipt_not_detected'
+        ]
+      }
+
+      cases.each do |label, (ocr_result, error_code)|
+        receipt = create(:receipt, :processing, :with_image)
+        run = create(:receipt_analysis_run, receipt:)
+
+        allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+
+        result = described_class.run_ocr(run)
+
+        aggregate_failures(label) do
+          expect(result.next_step).to eq(:finalize)
+          expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+          expect(result.finalize_decision.error_code).to eq(error_code)
+          expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq(error_code)
+        end
+      end
+    end
+
+    it 'AI disabled/downならfinalize decisionを保存してFinalizeへ進める' do
+      ai_disabled_receipt = create(:receipt, :processing, :with_image)
+      ai_disabled_run = create(:receipt_analysis_run, receipt: ai_disabled_receipt)
+      ai_down_receipt = create(:receipt, :processing, :with_image)
+      ai_down_run = create(:receipt_analysis_run, receipt: ai_down_receipt)
+
+      allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+
+      with_env('RECEIPT_AI_ENABLED', 'false') do
+        disabled_result = described_class.run_ocr(ai_disabled_run)
+
+        aggregate_failures('disabled') do
+          expect(disabled_result.next_step).to eq(:finalize)
+          expect(disabled_result.finalize_decision.finalize_strategy).to eq('ocr_only')
+          expect(ai_disabled_run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ocr_only')
+        end
+      end
+
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+      down_result = described_class.run_ocr(ai_down_run)
+
+      aggregate_failures('down') do
+        expect(down_result.next_step).to eq(:finalize)
+        expect(down_result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(down_result.finalize_decision.error_code).to eq('ai_unavailable')
+        expect(ai_down_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
       end
     end
   end
@@ -346,7 +509,15 @@ RSpec.describe ReceiptAnalysisPipeline do
       run.reload
 
       aggregate_failures do
-        expect(result.ai_result).to eq(ai_result)
+        expect(result.ai_result).to include(
+          success: true,
+          error_code: nil,
+          needs_review: false,
+          review_reasons: [],
+          receipt_attributes: { payment_method: 'cash' }
+        )
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_success')
+        expect(result.next_step).to eq(:finalize)
         expect(ReceiptAiEnrichmentService).to have_received(:call).once
         expect(run.stage).to eq('finalize')
         expect(run.ai_input_snapshot).to include(
@@ -373,6 +544,63 @@ RSpec.describe ReceiptAnalysisPipeline do
           '保存しないAI raw response',
           '保存しないapi key'
         )
+      end
+    end
+
+    it 'OCR snapshotからAIを実行してfinalize decisionを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_success')
+        expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
+      end
+    end
+
+    it 'AI failure / not_receiptでfinalize decisionを保存する' do
+      failure_receipt = create(:receipt, :processing, :with_image)
+      failure_run = create(:receipt_analysis_run, receipt: failure_receipt)
+      not_receipt_receipt = create(:receipt, :processing, :with_image)
+      not_receipt_run = create(:receipt_analysis_run, receipt: not_receipt_receipt)
+      weak_ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "メモ\n電話番号 03-1234-5678",
+        lines: [ 'メモ', '電話番号 03-1234-5678' ],
+        candidates: {
+          total_amount: nil,
+          payment_method_text: nil,
+          tax_details: [],
+          payments: [],
+          items: [
+            { raw_text: 'メモ', confidence: 0.95 }
+          ]
+        }
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(failure_run, successful_ocr_result)
+      ReceiptAnalysisRuns.record_ocr_snapshot(not_receipt_run, weak_ocr_result)
+
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(
+        { success: false, error_code: 'analysis_missing_keys', receipt_attributes: {}, receipt_items_attributes: [] },
+        ai_not_receipt_result(confidence: 0.92)
+      )
+
+      failure_result = described_class.run_ai(failure_run)
+      not_receipt_result = described_class.run_ai(not_receipt_run)
+
+      aggregate_failures do
+        expect(failure_result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(failure_result.finalize_decision.error_code).to eq('analysis_missing_keys')
+        expect(failure_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('analysis_missing_keys')
+        expect(not_receipt_result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+        expect(not_receipt_result.finalize_decision.error_code).to eq('ai_not_receipt')
+        expect(not_receipt_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_not_receipt')
       end
     end
   end
@@ -418,6 +646,54 @@ RSpec.describe ReceiptAnalysisPipeline do
             strategy: 'unknown'
           )
         ).to be_nil
+      end
+    end
+  end
+
+  describe '.run_finalize' do
+    it 'metadata decisionとsnapshotだけで保存しrunをsucceededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      result = described_class.run_finalize(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:done)
+        expect(receipt.reload.status).to eq('completed')
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.stage).to eq('completed')
+        expect(run.final_result_summary).to include(
+          'receipt_status' => 'completed',
+          'item_count' => 1
+        )
+      end
+    end
+
+    it 'finalize decisionが欠落している場合はrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      result = described_class.run_finalize(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:finalize_decision_missing)
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('finalize')
+        expect(run.error_code).to eq('finalize_decision_missing')
+        expect(receipt.reload.status).to eq('processing')
       end
     end
   end
