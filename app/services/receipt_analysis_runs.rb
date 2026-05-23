@@ -86,6 +86,16 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def copy_retry_snapshots(run, parent_run:, include_ocr: false, include_ai: false, include_finalize_decision: false)
+      Tracker.new(run).copy_retry_snapshots(
+        ocr_summary: include_ocr ? SnapshotBuilder.sanitized_stored_snapshot(parent_run.ocr_summary) : nil,
+        ocr_result_snapshot: include_ocr ? SnapshotBuilder.ocr_result_snapshot(parent_run.ocr_result_snapshot) : nil,
+        ai_result_summary: include_ai ? SnapshotBuilder.sanitized_stored_snapshot(parent_run.ai_result_summary) : nil,
+        ai_normalized_result_snapshot: include_ai ? SnapshotBuilder.ai_normalized_result_snapshot(parent_run.ai_normalized_result_snapshot) : nil,
+        finalize_decision_snapshot: include_finalize_decision ? sanitized_finalize_decision_snapshot(parent_run) : nil
+      )
+    end
+
     def succeed(run, at: Time.current)
       Tracker.new(run).succeed(at: at)
     end
@@ -105,6 +115,17 @@ module ReceiptAnalysisRuns
 
     def cancel(run, at: Time.current)
       Tracker.new(run).cancel(at: at)
+    end
+
+    private
+
+    def sanitized_finalize_decision_snapshot(parent_run)
+      decision = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+        parent_run.metadata.to_h["finalize_decision"]
+      )
+      return {} unless decision
+
+      SnapshotBuilder.finalize_decision_snapshot(decision)
     end
   end
 end

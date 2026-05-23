@@ -88,6 +88,15 @@ module ReceiptAnalysisRuns
           amount_result: amount_result
         )
       end
+
+      def sanitized_stored_snapshot(snapshot)
+        new.sanitized_stored_snapshot(snapshot)
+      end
+    end
+
+    def sanitized_stored_snapshot(snapshot)
+      sanitized = sanitize_value(snapshot)
+      sanitized.is_a?(Hash) ? sanitized : {}
     end
 
     def finalize_decision_snapshot(decision, at: Time.current)

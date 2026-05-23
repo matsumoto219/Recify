@@ -158,6 +158,25 @@ module ReceiptAnalysisRuns
       end
     end
 
+    def copy_retry_snapshots(ocr_summary: nil, ocr_result_snapshot: nil, ai_result_summary: nil, ai_normalized_result_snapshot: nil, finalize_decision_snapshot: nil)
+      with_mutable_run do |locked_run|
+        attrs = {}
+        attrs[:ocr_summary] = ocr_summary.to_h if ocr_summary
+        attrs[:ocr_result_snapshot] = ocr_result_snapshot.to_h if ocr_result_snapshot
+        attrs[:ai_result_summary] = ai_result_summary.to_h if ai_result_summary
+        attrs[:ai_normalized_result_snapshot] = ai_normalized_result_snapshot.to_h if ai_normalized_result_snapshot
+
+        if finalize_decision_snapshot
+          metadata = locked_run.metadata.to_h.deep_dup
+          metadata["finalize_decision"] = finalize_decision_snapshot.to_h
+          attrs[:metadata] = metadata
+        end
+
+        locked_run.update!(attrs) if attrs.present?
+        locked_run
+      end
+    end
+
     def succeed(at: Time.current)
       terminate!("succeeded", at: at)
     end
