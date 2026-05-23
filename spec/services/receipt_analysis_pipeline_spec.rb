@@ -61,6 +61,142 @@ RSpec.describe ReceiptAnalysisPipeline do
     }
   end
 
+  def rich_ocr_result(overrides = {})
+    {
+      success: true,
+      raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\nサンド 550 x2\n合計 1280\nMaster",
+      lines: [
+        'サンプルストア',
+        '2026/04/02 12:34',
+        'コーヒー 180',
+        'サンド 550 x2',
+        '合計 1280',
+        'Master'
+      ],
+      candidates: {
+        store_name: 'サンプルストア',
+        purchased_at_text: '2026/04/02 12:34',
+        total_amount: 1280,
+        tip_amount: 100,
+        country_region: 'JPN',
+        receipt_type: 'Meal',
+        payment_method_text: 'Master',
+        items: [
+          {
+            raw_text: 'コーヒー',
+            price: 180,
+            quantity: 1,
+            quantity_unit: '杯',
+            product_code: 'C001',
+            line_total: 180,
+            tax_rate: 10,
+            confidence: 0.98
+          },
+          {
+            raw_text: 'サンド',
+            price: 550,
+            quantity: 2,
+            quantity_unit: '個',
+            product_code: 'S001',
+            line_total: 1100,
+            tax_rate: 10,
+            confidence: 0.97
+          }
+        ],
+        payments: [
+          { method: 'CreditCard', amount: 1280 }
+        ],
+        tax_details: [
+          { description: 'Sales Tax', amount: 116, rate: 10, net_amount: 1164 }
+        ]
+      },
+      error_code: nil,
+      meta: {
+        provider: 'azure_document_intelligence',
+        model_id: 'prebuilt-receipt',
+        confidence_summary: {
+          items_average: 0.95,
+          overall: 0.95
+        }
+      }
+    }.deep_merge(overrides)
+  end
+
+  def weak_receipt_like_ocr_result
+    rich_ocr_result(
+      raw_text: "サンプルストア\n2026/04/02 12:34\nTEL 03-1234-5678\n東京都港区芝1-1-1\nコーヒー\nサンド\nケーキ",
+      lines: [
+        'サンプルストア',
+        '2026/04/02 12:34',
+        'TEL 03-1234-5678',
+        '東京都港区芝1-1-1',
+        'コーヒー',
+        'サンド',
+        'ケーキ'
+      ],
+      candidates: {
+        store_name: 'サンプルストア',
+        store_address: '東京都港区芝1-1-1',
+        store_phone_number: '03-1234-5678',
+        purchased_at_text: '2026/04/02 12:34',
+        total_amount: nil,
+        tip_amount: nil,
+        country_region: 'JPN',
+        receipt_type: nil,
+        payment_method_text: nil,
+        items: [
+          { raw_text: 'コーヒー', line_total: 180, confidence: 0.95 },
+          { raw_text: 'サンド', line_total: 550, confidence: 0.95 },
+          { raw_text: 'ケーキ', line_total: 320, confidence: 0.95 }
+        ],
+        payments: [],
+        tax_details: []
+      }
+    )
+  end
+
+  def failed_ai_result(error_code = 'analysis_missing_keys')
+    {
+      success: false,
+      error_code: error_code,
+      receipt_attributes: {},
+      receipt_items_attributes: []
+    }
+  end
+
+  def timeout_ai_result
+    {
+      success: false,
+      error_code: 'ai_primary_failed',
+      receipt_attributes: {},
+      receipt_items_attributes: [],
+      meta: {
+        primary_provider: 'openai',
+        fallback_used: false,
+        primary_error_code: 'ai_primary_failed',
+        primary_error_message: 'Net::ReadTimeout with prompt=secret sk-test'
+      }
+    }
+  end
+
+  def ai_success_result_for(ocr_result, review_reasons: [], needs_review: false)
+    {
+      success: true,
+      needs_review: needs_review,
+      review_reasons: review_reasons,
+      receipt_attributes: {
+        payment_method: 'cash'
+      },
+      receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
+        {
+          index: index,
+          category: 'other',
+          needs_review: false
+        }
+      end
+    }
+  end
+
   def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
     {
       resolved: {
@@ -103,6 +239,28 @@ RSpec.describe ReceiptAnalysisPipeline do
     raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
 
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def run_finalize_ocr_fixture(name, ai_result: nil)
+    receipt = create(:receipt, :processing, :with_image)
+    ocr_result = ocr_fixture(name)
+    ai_result ||= ai_success_result_for(ocr_result)
+    captured_amount_result = nil
+
+    allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+      captured_amount_result = original.call(**kwargs)
+    end
+
+    described_class.finalize(
+      receipt: receipt,
+      decision: finalize_decision(
+        :ai_success,
+        ocr_result: ocr_result,
+        ai_result: ai_result
+      )
+    )
+
+    [ receipt.reload, captured_amount_result ]
   end
 
   def with_env(key, value)
@@ -264,6 +422,27 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(ai_down_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
       end
     end
+
+    it 'OCR disabledならocr_disabled decisionを保存してFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      expect(ReceiptOcrService).not_to receive(:call)
+
+      with_env('RECEIPT_OCR_ENABLED', 'false') do
+        result = described_class.run_ocr(run)
+
+        aggregate_failures do
+          expect(result.next_step).to eq(:finalize)
+          expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+          expect(result.finalize_decision.error_code).to eq('ocr_disabled')
+          expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_disabled')
+          expect(run.ocr_result_snapshot).to include(
+            'success' => false,
+            'error_code' => 'ocr_disabled'
+          )
+        end
+      end
+    end
   end
 
   describe '.run_ai' do
@@ -406,6 +585,84 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(not_receipt_result.finalize_decision.finalize_strategy).to eq('fail_receipt')
         expect(not_receipt_result.finalize_decision.error_code).to eq('ai_not_receipt')
         expect(not_receipt_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_not_receipt')
+      end
+    end
+
+    it 'AI not receiptのconfidenceとOCR証拠でfinalize strategyを分岐する' do
+      cases = [
+        [ 'high confidence with strong OCR evidence', successful_ocr_result, 0.92, 'ai_fallback', 'ai_not_receipt_uncertain' ],
+        [ 'medium confidence with strong OCR evidence', successful_ocr_result, 0.65, 'ai_fallback', 'ai_not_receipt_uncertain' ],
+        [ 'medium confidence without strong OCR evidence', weak_receipt_like_ocr_result, 0.65, 'fail_receipt', 'ai_not_receipt' ],
+        [ 'missing confidence', weak_receipt_like_ocr_result, nil, 'ai_fallback', 'ai_not_receipt_uncertain' ],
+        [ 'low confidence', weak_receipt_like_ocr_result, 0.3, 'ai_fallback', 'ai_not_receipt_uncertain' ]
+      ]
+
+      cases.each do |label, ocr_result, confidence, expected_strategy, expected_error_code|
+        receipt = create(:receipt, :processing, :with_image)
+        run = create(:receipt_analysis_run, receipt:)
+
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(
+          ai_not_receipt_result(confidence: confidence)
+        )
+
+        result = described_class.run_ai(run: run, ocr_result: ocr_result)
+
+        aggregate_failures(label) do
+          expect(result.finalize_decision.finalize_strategy).to eq(expected_strategy)
+          expect(result.finalize_decision.error_code).to eq(expected_error_code)
+          expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq(expected_strategy)
+          expect(run.metadata.dig('finalize_decision', 'error_code')).to eq(expected_error_code)
+        end
+      end
+    end
+
+    it 'AI fallback messageはprovider raw errorやprompt/secretを露出しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(timeout_ai_result)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(result.finalize_decision.error_code).to eq('ai_primary_failed')
+        expect(result.finalize_decision.error_message).to eq(
+          'AI補完に失敗したためOCR結果で保存しました (provider=openai, code=ai_primary_failed, reason=timeout)'
+        )
+        expect(result.finalize_decision.error_message).not_to include('Net::ReadTimeout', 'prompt', 'sk-test')
+      end
+
+      described_class.run_finalize(run)
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_primary_failed')
+        expect(receipt.processing_error_message).not_to include('Net::ReadTimeout', 'prompt', 'sk-test')
+      end
+    end
+
+    it 'AI responseが非Hashならai_invalid_responseとしてFinalizeできる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return('invalid ai response')
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(result.finalize_decision.error_code).to eq('ai_invalid_response')
+      end
+
+      described_class.run_finalize(run)
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_invalid_response')
       end
     end
   end
@@ -632,6 +889,152 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('review_needed')
         expect(receipt.processing_error_code).to eq('ai_unavailable')
         expect(receipt.processing_error_message).to eq('AI補完に失敗したためOCR結果で保存しました')
+      end
+    end
+
+    it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
+      receipt = create(:receipt, :processing, :with_image)
+      expect_any_instance_of(ReceiptAnalysisPipeline::FinalizeStep)
+        .to receive(:low_quality_ocr?)
+        .once
+        .and_call_original
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+    end
+
+    it 'AI失敗fallbackでもOCR由来の明細・税内訳・支払い情報を保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_fallback,
+          ocr_result: rich_ocr_result,
+          error_code: 'analysis_missing_keys'
+        )
+      )
+      receipt.reload
+
+      items = receipt.receipt_items.order(:position_index)
+      tax_detail = receipt.receipt_tax_details.first
+      payment = receipt.receipt_payments.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.store_name).to eq('サンプルストア')
+        expect(receipt.total_amount).to eq(1280)
+        expect(receipt.subtotal_amount).to eq(1164)
+        expect(receipt.tax_amount).to eq(116)
+        expect(receipt.review_reasons).to be_blank
+        expect(items.size).to eq(2)
+        expect(items.first.raw_text).to eq('コーヒー')
+        expect(items.second.quantity).to eq(BigDecimal('2'))
+        expect(receipt.receipt_tax_details.size).to eq(1)
+        expect(tax_detail.net_amount).to eq(1164)
+        expect(tax_detail.amount).to eq(116)
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+        expect(receipt.receipt_payments.size).to eq(1)
+        expect(payment.method).to eq('CreditCard')
+        expect(payment.amount).to eq(1280)
+      end
+    end
+
+    it 'AI失敗fallbackではpayment_method_textが空でもpaymentsから代表payment_methodを推定する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\n合計 1280",
+        lines: [
+          'サンプルストア',
+          '2026/04/02 12:34',
+          'コーヒー 180',
+          '合計 1280'
+        ],
+        candidates: {
+          payment_method_text: nil,
+          payments: [
+            { method: '現金', amount: 1280 }
+          ]
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: 'analysis_missing_keys')
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.payment_method).to eq('cash')
+        expect(receipt.receipt_payments.first.method).to eq('現金')
+      end
+    end
+
+    it 'AI失敗fallbackでも複合paymentsから代表payment_methodを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        raw_text: "サンプルストア\n2026/04/02 12:34\nコーヒー 180\n合計 1280",
+        lines: [
+          'サンプルストア',
+          '2026/04/02 12:34',
+          'コーヒー 180',
+          '合計 1280'
+        ],
+        candidates: {
+          payment_method_text: nil,
+          payments: [
+            { method: 'ポイント利用', amount: 280 },
+            { method: 'VISA Credit', amount: 1000 }
+          ]
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: 'analysis_missing_keys')
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.payment_method).to eq('credit_card')
+        expect(receipt.receipt_payments.order(:id).pluck(:method, :amount)).to eq([
+          [ 'ポイント利用', 280 ],
+          [ 'VISA Credit', 1000 ]
+        ])
+      end
+    end
+
+    it 'OCR itemsが空でもlinesからfallbackで明細を生成する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        candidates: {
+          items: [],
+          payments: [],
+          tax_details: []
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: 'analysis_missing_keys')
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.receipt_items.count).to eq(2)
+        expect(receipt.receipt_items.pluck(:raw_text)).to include('コーヒー 180', 'サンド 550 x2')
       end
     end
 
@@ -954,6 +1357,162 @@ RSpec.describe ReceiptAnalysisPipeline do
           expect(receipt.reload.status).to eq('failed')
           expect(receipt.processing_error_code).to eq('receipt_not_detected')
         end
+      end
+    end
+
+    it '単一税率レシートはwarningのみで金額を補正する' do
+      receipt, amount = run_finalize_ocr_fixture('single_tax_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.total_amount).to eq(770)
+        expect(receipt.subtotal_amount).to eq(700)
+        expect(receipt.tax_amount).to eq(70)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([[ 700, 70, BigDecimal('0.1') ]])
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+      end
+    end
+
+    it '複数税率レシートはblocking mismatchでreview_neededにする' do
+      receipt, amount = run_finalize_ocr_fixture('multiple_tax_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([
+          'total_mismatch',
+          'tax_detail_incomplete',
+          'ocr_total_mismatch',
+          'price_tax_inclusion_uncertain'
+        ])
+        expect(receipt.total_amount).to eq(1598)
+        expect(receipt.subtotal_amount).to eq(1598)
+        expect(receipt.tax_amount).to eq(134)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_tax_details).to be_empty
+        expect(amount[:needs_review]).to be(true)
+        expect(amount[:mismatch_codes]).to eq([
+          'TOTAL_MISMATCH',
+          'TAX_DETAIL_INCOMPLETE',
+          'OCR_TOTAL_MISMATCH',
+          'PRICE_TAX_INCLUSION_UNCERTAIN'
+        ])
+        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
+        expect(amount[:warning_inconsistencies]).to eq([
+          :tax_detail_incomplete,
+          :ocr_total_mismatch,
+          :price_tax_inclusion_uncertain
+        ])
+      end
+    end
+
+    it '外税レシートはtax_detailsを優先しreview不要にする' do
+      receipt, amount = run_finalize_ocr_fixture('external_tax_receipt')
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.total_amount).to eq(1535)
+        expect(receipt.subtotal_amount).to eq(1418)
+        expect(receipt.tax_amount).to eq(117)
+        expect(receipt.tax_rate).to be_nil
+        expect(tax_detail.net_amount).to eq(1162)
+        expect(tax_detail.amount).to eq(92)
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:mismatch_codes]).to be_empty
+      end
+    end
+
+    it 'OCRノイズ由来のocr_low_confidenceとblocking mismatchを保存する' do
+      ocr_result = ocr_fixture('ocr_noise_receipt')
+      receipt, amount = run_finalize_ocr_fixture(
+        'ocr_noise_receipt',
+        ai_result: ai_success_result_for(
+          ocr_result,
+          review_reasons: [ 'ocr_low_confidence' ]
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([
+          'ocr_low_confidence',
+          'total_mismatch',
+          'tax_detail_incomplete'
+        ])
+        expect(receipt.total_amount).to eq(890)
+        expect(receipt.subtotal_amount).to eq(890)
+        expect(receipt.tax_amount).to eq(71)
+        expect(amount[:needs_review]).to be(true)
+        expect(amount[:mismatch_codes]).to eq([
+          'TOTAL_MISMATCH',
+          'TAX_DETAIL_INCOMPLETE'
+        ])
+        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+      end
+    end
+
+    it 'subtotal欠損レシートはwarningのみでsubtotal/taxを補完する' do
+      receipt, amount = run_finalize_ocr_fixture('missing_subtotal_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.total_amount).to eq(2998)
+        expect(receipt.subtotal_amount).to eq(2776)
+        expect(receipt.tax_amount).to eq(222)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.08'))
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+      end
+    end
+
+    it 'Azure Totalがお預かり金額でも税内訳合計でtotalを補正する' do
+      receipt, amount = run_finalize_ocr_fixture('deposit_total_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([ 'ocr_total_mismatch' ])
+        expect(receipt.total_amount).to eq(649)
+        expect(receipt.total_amount).not_to eq(5_000)
+        expect(receipt.subtotal_amount).to eq(601)
+        expect(receipt.tax_amount).to eq(48)
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch ])
+      end
+    end
+
+    it 'tax_detailsと明細が矛盾するレシートはwarningのみで保存する' do
+      receipt, amount = run_finalize_ocr_fixture('tax_detail_item_conflict_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([
+          'tax_detail_incomplete',
+          'ocr_total_mismatch'
+        ])
+        expect(receipt.total_amount).to eq(301)
+        expect(receipt.subtotal_amount).to eq(279)
+        expect(receipt.tax_amount).to eq(22)
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([
+          :tax_detail_incomplete,
+          :ocr_total_mismatch
+        ])
+        expect(amount[:mismatch_codes]).to eq([
+          'TAX_DETAIL_INCOMPLETE',
+          'OCR_TOTAL_MISMATCH'
+        ])
       end
     end
   end

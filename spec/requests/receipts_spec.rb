@@ -1327,7 +1327,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '画像あり手動登録時もcompletedで保存され、解析は実行しない' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       expect do
         post receipts_path, params: {
@@ -1344,13 +1344,13 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(response).to redirect_to(receipts_path)
       end
     end
 
     it '画像あり手動登録時は解析失敗処理も実行しない' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       post receipts_path, params: {
         receipt: {
@@ -1366,17 +1366,17 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.status).to eq('completed')
-        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(receipt.processing_error_code).to be_nil
       end
     end
 
     it '画像なし作成時は解析を実行しない' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       post receipts_path, params: valid_params
 
-      expect(ReceiptAnalysisService).not_to have_received(:call)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
     end
 
     it '不正なパラメータでは作成できない' do
@@ -3550,7 +3550,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '画像差し替え時も再解析は実行せず編集保存する' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       patch receipt_path(receipt), params: {
         receipt: {
@@ -3565,12 +3565,12 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.status).to eq('review_needed')
-        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
       end
     end
 
     it '画像差し替え時は解析失敗処理も実行しない' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       patch receipt_path(receipt), params: {
         receipt: {
@@ -3585,7 +3585,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.status).to eq('review_needed')
-        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(receipt.processing_error_code).to be_nil
       end
     end
@@ -3710,7 +3710,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '画像差し替えなし更新時は再解析を実行しない' do
-      allow(ReceiptAnalysisService).to receive(:call)
+      allow(ReceiptOcrJob).to receive(:perform_later)
 
       patch receipt_path(receipt), params: valid_update_params
       receipt.reload
@@ -3718,7 +3718,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.status).to eq('review_needed')
-        expect(ReceiptAnalysisService).not_to have_received(:call)
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
       end
     end
 
