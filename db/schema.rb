@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_23_044640) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_23_053259) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,53 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_044640) do
     t.index ["user_id", "kind", "notifiable_type", "notifiable_id"], name: "index_notifications_on_user_kind_notifiable_unique", unique: true, where: "((notifiable_type IS NOT NULL) AND (notifiable_id IS NOT NULL))"
     t.index ["user_id", "read_at", "created_at"], name: "index_notifications_on_user_id_and_read_at_and_created_at"
     t.index ["user_id"], name: "index_notifications_on_user_id"
+  end
+
+  create_table "receipt_analysis_runs", force: :cascade do |t|
+    t.string "ai_fallback_provider"
+    t.boolean "ai_fallback_used", default: false, null: false
+    t.datetime "ai_finished_at"
+    t.jsonb "ai_input_snapshot", default: {}, null: false
+    t.integer "ai_latency_ms"
+    t.string "ai_model"
+    t.string "ai_provider"
+    t.jsonb "ai_result_summary", default: {}, null: false
+    t.datetime "ai_started_at"
+    t.integer "attempt_number", default: 1, null: false
+    t.datetime "created_at", null: false
+    t.string "error_code"
+    t.text "error_message"
+    t.string "error_stage"
+    t.datetime "expires_at"
+    t.jsonb "final_result_summary", default: {}, null: false
+    t.datetime "finalized_at"
+    t.datetime "finished_at"
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "ocr_finished_at"
+    t.integer "ocr_latency_ms"
+    t.string "ocr_model"
+    t.string "ocr_provider"
+    t.datetime "ocr_started_at"
+    t.jsonb "ocr_summary", default: {}, null: false
+    t.bigint "parent_run_id"
+    t.bigint "receipt_id", null: false
+    t.text "request_reason"
+    t.bigint "requested_by_user_id"
+    t.string "run_key", null: false
+    t.string "source", null: false
+    t.string "stage", null: false
+    t.datetime "started_at"
+    t.string "status", null: false
+    t.integer "total_latency_ms"
+    t.datetime "updated_at", null: false
+    t.index ["expires_at"], name: "index_receipt_analysis_runs_on_expires_at"
+    t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
+    t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
+    t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
+    t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
+    t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
   end
 
   create_table "receipt_items", force: :cascade do |t|
@@ -180,6 +227,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_044640) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "notifications", "users"
+  add_foreign_key "receipt_analysis_runs", "receipt_analysis_runs", column: "parent_run_id", on_delete: :nullify
+  add_foreign_key "receipt_analysis_runs", "receipts"
+  add_foreign_key "receipt_analysis_runs", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "receipt_items", "receipts"
   add_foreign_key "receipt_payments", "receipts"
   add_foreign_key "receipt_tax_details", "receipts"

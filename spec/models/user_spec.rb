@@ -25,6 +25,19 @@ RSpec.describe User, type: :model do
     end
   end
 
+  describe 'associations' do
+    it 'requested_by_userとして紐づく解析runはuser削除時にnilへ戻す' do
+      receipt_owner = create(:user)
+      requested_by_user = create(:user)
+      receipt = create(:receipt, user: receipt_owner)
+      run = create(:receipt_analysis_run, :admin_retry, receipt:, requested_by_user:)
+
+      requested_by_user.destroy!
+
+      expect(run.reload.requested_by_user).to be_nil
+    end
+  end
+
   describe 'devise modules' do
     it 'Trackable / Confirmable / Lockable を有効にする' do
       expect(described_class.devise_modules).to include(:trackable, :confirmable, :lockable)

@@ -3,6 +3,18 @@ require 'rails_helper'
 RSpec.describe Receipt, type: :model do
   include ActiveSupport::Testing::TimeHelpers
 
+  describe 'associations' do
+    it 'destroy時に解析run履歴を削除する' do
+      receipt = create(:receipt)
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+
+      receipt.destroy!
+
+      expect(described_class.exists?(receipt.id)).to be(false)
+      expect(ReceiptAnalysisRun.exists?(run.id)).to be(false)
+    end
+  end
+
   describe '.summary_for' do
     it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)

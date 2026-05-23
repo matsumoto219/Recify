@@ -70,6 +70,7 @@ class Receipt < ApplicationRecord
 
   belongs_to :user
   has_many :notifications, as: :notifiable, dependent: :destroy
+  has_many :receipt_analysis_runs, dependent: :destroy, inverse_of: :receipt
   has_many :receipt_items, dependent: :destroy
   has_many :receipt_payments, dependent: :destroy
   has_many :receipt_tax_details, dependent: :destroy

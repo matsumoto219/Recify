@@ -7,6 +7,11 @@ class User < ApplicationRecord
 
   has_many :receipts, dependent: :destroy
   has_many :notifications, dependent: :destroy
+  has_many :requested_receipt_analysis_runs,
+           class_name: "ReceiptAnalysisRun",
+           foreign_key: :requested_by_user_id,
+           inverse_of: :requested_by_user,
+           dependent: :nullify
 
   has_one_attached :avatar
 
