@@ -88,11 +88,13 @@ module Ai
     end
 
     def build_items_payload
-      # items は OCR構造化結果を基準にしつつ、matched_content_lines / matched_filtered_content_lines で
-      # filtered_content 側の文脈も AI に渡す。商品名補完時は raw_text 単独ではなく content 文脈も参照させる。
-      Array(candidate_value(:items)).each_with_index.map do |item, index|
-        normalize_item_payload(item, index)
-      end.compact
+      @items_payload ||= begin
+        # items は OCR構造化結果を基準にしつつ、matched_content_lines / matched_filtered_content_lines で
+        # filtered_content 側の文脈も AI に渡す。商品名補完時は raw_text 単独ではなく content 文脈も参照させる。
+        Array(candidate_value(:items)).each_with_index.map do |item, index|
+          normalize_item_payload(item, index)
+        end.compact
+      end
     end
 
     def normalize_item_payload(item, index)
@@ -129,11 +131,11 @@ module Ai
     end
 
     def filtered_content
-      filtered_content_lines.join("\n")
+      @filtered_content ||= filtered_content_lines.join("\n")
     end
 
     def filtered_content_lines
-      lines.reject { |line| removable_noise_line?(line) }.first(MAX_FILTERED_CONTENT_LINES)
+      @filtered_content_lines ||= lines.reject { |line| removable_noise_line?(line) }.first(MAX_FILTERED_CONTENT_LINES)
     end
 
     def removable_noise_line?(line)
