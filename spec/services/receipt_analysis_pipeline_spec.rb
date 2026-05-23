@@ -39,6 +39,65 @@ RSpec.describe ReceiptAnalysisPipeline do
     }
   end
 
+  def successful_ai_result
+    {
+      success: true,
+      needs_review: false,
+      receipt_attributes: {
+        store_name: 'AIテストストア',
+        payment_method: 'cash'
+      },
+      receipt_items_attributes: [
+        {
+          index: 0,
+          suggested_name: 'コーヒー',
+          category: 'drink',
+          line_total: 180,
+          needs_review: false,
+          confidence: 0.95
+        }
+      ]
+    }
+  end
+
+  def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
+    {
+      resolved: {
+        total: 180,
+        subtotal: 164,
+        tax: 16,
+        tax_rate: BigDecimal('0.1')
+      },
+      computed: {
+        items: []
+      },
+      tax_details: [],
+      inconsistencies: inconsistencies,
+      blocking_inconsistencies: blocking_inconsistencies,
+      warning_inconsistencies: warning_inconsistencies,
+      mismatch_codes: inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      blocking_mismatch_codes: blocking_inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      warning_mismatch_codes: warning_inconsistencies.filter_map { |inconsistency| Amounts::MismatchCodes.code(inconsistency) },
+      warning_reasons: warning_inconsistencies.map(&:to_s),
+      mismatch_messages: [],
+      needs_review: blocking_inconsistencies.any?
+    }
+  end
+
+  def finalize_decision(strategy, **attributes)
+    ReceiptAnalysisPipeline::FinalizeDecision.new(
+      {
+        finalize_strategy: strategy.to_s,
+        error_code: nil,
+        error_message: nil,
+        receipt_attributes: {},
+        ocr_result: nil,
+        ai_result: nil,
+        metadata: {}
+      }.merge(attributes)
+    )
+  end
+
   describe '.run_current_pipeline' do
     it 'processing receiptだけReceiptAnalysisServiceを実行する' do
       receipt = create(:receipt, :processing, :with_image)
@@ -307,6 +366,180 @@ RSpec.describe ReceiptAnalysisPipeline do
           '保存しないAI raw response',
           '保存しないapi key'
         )
+      end
+    end
+  end
+
+  describe '.finalize' do
+    it 'ai_success decisionを保存しcompletedにできる' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      result = described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(result).to eq(receipt)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.total_amount).to eq(180)
+        expect(receipt.subtotal_amount).to eq(164)
+        expect(receipt.tax_amount).to eq(16)
+        expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include([ 'コーヒー', 'drink' ])
+      end
+    end
+
+    it 'ai_success decisionのwarning mismatchはcompletedのままreview_reasonsに残す' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [:price_tax_inclusion_uncertain],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: [:price_tax_inclusion_uncertain]
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([ 'price_tax_inclusion_uncertain' ])
+      end
+    end
+
+    it 'ai_success decisionのblocking mismatchはreview_neededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [:tax_detail_mismatch],
+          blocking_inconsistencies: [:tax_detail_mismatch],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([ 'tax_detail_mismatch' ])
+      end
+    end
+
+    it 'ocr_only decisionはreview_needed固定で保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: successful_ocr_result)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+      end
+    end
+
+    it 'ai_fallback decisionはreview_needed固定でerror_codeを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_fallback,
+          ocr_result: successful_ocr_result,
+          error_code: 'ai_unavailable',
+          error_message: 'AI補完に失敗したためOCR結果で保存しました'
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('ai_unavailable')
+        expect(receipt.processing_error_message).to eq('AI補完に失敗したためOCR結果で保存しました')
+      end
+    end
+
+    it 'fail_receipt decisionはerror mapperを通してfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :fail_receipt,
+          error_code: 'ocr_timeout',
+          error_message: 'timeout'
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('ocr_timeout')
+        expect(receipt.processing_error_message).to eq('timeout')
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.ocr_completed_at).to be_present
+      end
+    end
+
+    it 'unsupported_countryの追加属性を維持する' do
+      receipt = create(:receipt, :processing, :with_image)
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :fail_receipt,
+          error_code: 'unsupported_country',
+          error_message: 'country_region=USA',
+          receipt_attributes: { country_region: 'USA' }
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('unsupported_country')
+        expect(receipt.country_region).to eq('USA')
       end
     end
   end

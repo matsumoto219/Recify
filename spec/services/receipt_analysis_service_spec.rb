@@ -479,6 +479,19 @@ RSpec.describe ReceiptAnalysisService do
       end
     end
 
+    it '保存実行はReceiptAnalysisPipeline.finalize親入口へ委譲する' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      allow(ReceiptAnalysisPipeline).to receive(:finalize).and_call_original
+
+      described_class.call(receipt)
+
+      expect(ReceiptAnalysisPipeline).to have_received(:finalize) do |**kwargs|
+        expect(kwargs[:receipt]).to eq(receipt)
+        expect(kwargs[:decision].finalize_strategy).to eq('ai_success')
+      end
+    end
+
     it 'OCR結果からレシート情報を保存する' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
@@ -1266,16 +1279,14 @@ RSpec.describe ReceiptAnalysisService do
     end
 
     it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
-      service = described_class.new(receipt)
-
-      allow(described_class).to receive(:new).with(receipt, run: nil, ocr_result: nil).and_return(service)
-      allow(service).to receive(:low_quality_ocr?).and_call_original
+      expect_any_instance_of(ReceiptAnalysisPipeline::FinalizeStep)
+        .to receive(:low_quality_ocr?)
+        .once
+        .and_call_original
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
 
       described_class.call(receipt)
-
-      expect(service).to have_received(:low_quality_ocr?).once
     end
 
     it 'warning mismatch only stores amount warning review_reasons without review_needed status' do

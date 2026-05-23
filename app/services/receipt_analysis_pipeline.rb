@@ -13,6 +13,10 @@ class ReceiptAnalysisPipeline
         ai_name_completion_enabled: ai_name_completion_enabled
       )
     end
+
+    def finalize(receipt:, decision:)
+      FinalizeStep.call(receipt: receipt, decision: decision)
+    end
   end
 
   def initialize(run)
