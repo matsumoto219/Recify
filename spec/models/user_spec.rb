@@ -101,6 +101,58 @@ RSpec.describe User, type: :model do
     end
   end
 
+  describe 'unconfirmed_email uniqueness' do
+    it 'case insensitiveに確認待ちメールアドレスの重複を不正にする' do
+      create(:user, unconfirmed_email: 'Pending-Duplicate@example.com')
+      user = build(:user, unconfirmed_email: 'pending-duplicate@example.com')
+
+      expect(user).not_to be_valid
+
+      aggregate_failures do
+        expect(user.errors.full_messages_for(:unconfirmed_email)).to include(
+          "#{I18n.t('activerecord.attributes.user.unconfirmed_email')}#{I18n.t('activerecord.errors.models.user.attributes.unconfirmed_email.taken')}"
+        )
+        expect(user.errors.full_messages_for(:email)).to include(
+          "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.taken')}"
+        )
+      end
+    end
+
+    it 'unconfirmed_emailがnilまたはblankなら複数許可する' do
+      create(:user, unconfirmed_email: nil)
+      create(:user, unconfirmed_email: '')
+
+      aggregate_failures do
+        expect(build(:user, unconfirmed_email: nil)).to be_valid
+        expect(build(:user, unconfirmed_email: '')).to be_valid
+      end
+    end
+
+    it 'partial expression unique indexを持つ' do
+      index = ActiveRecord::Base.connection.indexes(:users).find do |candidate|
+        candidate.name == 'index_users_on_lower_unconfirmed_email_unique'
+      end
+
+      aggregate_failures do
+        expect(index).to be_present
+        expect(index.unique).to be(true)
+        expect(index.where).to include("unconfirmed_email IS NOT NULL")
+        expect(index.where).to include("unconfirmed_email")
+        expect(index.where).to include("<> ''")
+      end
+    end
+
+    it 'DB制約でも大文字小文字違いの重複を防ぐ' do
+      first_user = create(:user)
+      second_user = create(:user)
+      first_user.update_columns(unconfirmed_email: 'db-pending@example.com')
+
+      expect do
+        second_user.update_columns(unconfirmed_email: 'DB-PENDING@example.com')
+      end.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+  end
+
   describe '.guest_cleanup_candidates' do
     around do |example|
       travel_to(Time.zone.parse('2026-05-22 10:00:00')) { example.run }

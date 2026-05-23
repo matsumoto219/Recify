@@ -80,6 +80,7 @@ ja:
       user:
         name: "ユーザー名"
         email: "メールアドレス"
+        unconfirmed_email: "確認待ちメールアドレス"
         password: "パスワード"
         password_confirmation: "パスワード確認"
         current_password: "現在のパスワード"
@@ -109,6 +110,9 @@ ja:
             email:
               blank: "を入力してください"
               invalid: "を確認してください"
+              taken: "はすでに使用されています"
+            unconfirmed_email:
+              taken: "はすでに確認待ちです"
             password:
               blank: "を入力してください"
               invalid: "を確認してください"

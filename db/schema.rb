@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_23_042621) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_23_044640) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -170,6 +170,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_042621) do
     t.string "unlock_token"
     t.datetime "updated_at", null: false
     t.index "COALESCE(last_sign_in_at, updated_at)", name: "index_users_on_guest_cleanup_at", where: "((guest = true) AND (confirmed_at IS NOT NULL))"
+    t.index "lower((unconfirmed_email)::text)", name: "index_users_on_lower_unconfirmed_email_unique", unique: true, where: "((unconfirmed_email IS NOT NULL) AND ((unconfirmed_email)::text <> ''::text))"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true

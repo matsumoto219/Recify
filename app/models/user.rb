@@ -27,6 +27,7 @@ class User < ApplicationRecord
   validates :theme_preference,
             inclusion: { in: THEME_PREFERENCES }
 
+  validate :pending_email_must_be_available, if: -> { pending_email_candidate.present? }
   validate :legal_agreement_must_be_accepted, if: :legal_agreement_required?
 
   before_validation :record_legal_acceptance, if: -> { legal_agreement_required? && legal_agreement_accepted? }
@@ -116,6 +117,26 @@ class User < ApplicationRecord
     self.terms_version = LEGAL_TERMS_VERSION
     self.privacy_accepted_at = accepted_at
     self.privacy_version = LEGAL_PRIVACY_VERSION
+  end
+
+  def pending_email_candidate
+    unconfirmed_email.presence || (persisted? && will_save_change_to_email? ? email : nil)
+  end
+
+  def pending_email_must_be_available
+    normalized_pending_email = pending_email_candidate.to_s.strip.downcase
+    pending_relation = self.class.where("LOWER(unconfirmed_email) = ?", normalized_pending_email)
+    registered_relation = self.class.where("LOWER(email) = ?", normalized_pending_email)
+
+    if persisted?
+      pending_relation = pending_relation.where.not(id: id)
+      registered_relation = registered_relation.where.not(id: id)
+    end
+
+    return unless pending_relation.exists? || registered_relation.exists?
+
+    errors.add(:unconfirmed_email, :taken)
+    errors.add(:email, :taken)
   end
 
   def send_devise_notification(notification, *args)

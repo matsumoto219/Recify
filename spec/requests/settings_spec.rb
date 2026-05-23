@@ -581,6 +581,38 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'guest本登録申請で同じ確認待ちメールアドレスを重複登録できない' do
+      sign_out user
+      first_guest = User.guest!
+      second_guest = User.guest!
+      first_guest.start_guest_registration(
+        email: 'duplicate-guest-pending@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      ActionMailer::Base.deliveries.clear
+      sign_in second_guest
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'duplicate-guest-pending@example.com',
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '1'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.email.taken'))
+        expect(second_guest.reload.unconfirmed_email).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'guest本登録はconfirmation完了で本登録ユーザーにする' do
       sign_out user
       guest = User.guest!
@@ -747,6 +779,83 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(user.reload.email).to eq('reconfirmable-new@example.com')
         expect(user.unconfirmed_email).to be_nil
+      end
+    end
+
+    it '通常ユーザーは同じ確認待ちメールアドレスへ重複変更できない' do
+      first_user = user
+      second_user = create(:user)
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'duplicate-normal-pending@example.com',
+                current_password: 'password'
+              }
+            }
+
+      expect(first_user.reload.unconfirmed_email).to eq('duplicate-normal-pending@example.com')
+
+      sign_out first_user
+      sign_in second_user
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'duplicate-normal-pending@example.com',
+                current_password: 'password'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.email.taken'))
+        expect(second_user.reload.unconfirmed_email).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it '確認完了済みメールアドレスは別ユーザーの確認待ちメールにできない' do
+      first_user = user
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'confirmed-email-claim@example.com',
+                current_password: 'password'
+              }
+            }
+
+      confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?('confirmed-email-claim@example.com') }
+      token = confirmation_token_from(confirmation_mail)
+
+      get user_confirmation_path(confirmation_token: token)
+
+      second_user = create(:user)
+      sign_out first_user
+      sign_in second_user
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'email',
+              user: {
+                email: 'confirmed-email-claim@example.com',
+                current_password: 'password'
+              }
+            }
+
+      aggregate_failures do
+        expect(first_user.reload.unconfirmed_email).to be_nil
+        expect(first_user.email).to eq('confirmed-email-claim@example.com')
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.email.taken'))
+        expect(second_user.reload.unconfirmed_email).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
 
