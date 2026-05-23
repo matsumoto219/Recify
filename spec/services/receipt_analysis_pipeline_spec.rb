@@ -794,7 +794,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'ai_success decisionのwarning mismatchはcompletedのままreview_reasonsに残す' do
+    it 'ai_success decisionのwarning mismatchはcompletedのままreview_reasonsに残さず診断情報に残す' do
       receipt = create(:receipt, :processing, :with_image)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
@@ -815,7 +815,12 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.reload.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([ 'price_tax_inclusion_uncertain' ])
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.amount_calculation_profile).to include(
+          'warnings' => [ 'price_tax_inclusion_uncertain' ],
+          'warning_mismatch_codes' => [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
+          'blocking_mismatch_codes' => []
+        )
       end
     end
 
@@ -1365,7 +1370,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.review_reasons).to be_blank
         expect(receipt.total_amount).to eq(770)
         expect(receipt.subtotal_amount).to eq(700)
         expect(receipt.tax_amount).to eq(70)
@@ -1383,12 +1388,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to eq([
-          'total_mismatch',
-          'tax_detail_incomplete',
-          'ocr_total_mismatch',
-          'price_tax_inclusion_uncertain'
-        ])
+        expect(receipt.review_reasons).to eq([ 'total_mismatch' ])
         expect(receipt.total_amount).to eq(1598)
         expect(receipt.subtotal_amount).to eq(1598)
         expect(receipt.tax_amount).to eq(134)
@@ -1442,8 +1442,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.status).to eq('review_needed')
         expect(receipt.review_reasons).to eq([
           'ocr_low_confidence',
-          'total_mismatch',
-          'tax_detail_incomplete'
+          'total_mismatch'
         ])
         expect(receipt.total_amount).to eq(890)
         expect(receipt.subtotal_amount).to eq(890)
@@ -1463,11 +1462,16 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([ 'tax_detail_incomplete' ])
+        expect(receipt.review_reasons).to be_blank
         expect(receipt.total_amount).to eq(2998)
         expect(receipt.subtotal_amount).to eq(2776)
         expect(receipt.tax_amount).to eq(222)
         expect(receipt.tax_rate).to eq(BigDecimal('0.08'))
+        expect(receipt.amount_calculation_profile).to include(
+          'warnings' => [ 'tax_detail_incomplete' ],
+          'warning_mismatch_codes' => [ 'TAX_DETAIL_INCOMPLETE' ],
+          'blocking_mismatch_codes' => []
+        )
         expect(amount[:needs_review]).to be(false)
         expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
         expect(amount[:blocking_inconsistencies]).to be_empty
@@ -1480,7 +1484,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([ 'ocr_total_mismatch' ])
+        expect(receipt.review_reasons).to be_blank
         expect(receipt.total_amount).to eq(649)
         expect(receipt.total_amount).not_to eq(5_000)
         expect(receipt.subtotal_amount).to eq(601)
@@ -1496,10 +1500,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([
-          'tax_detail_incomplete',
-          'ocr_total_mismatch'
-        ])
+        expect(receipt.review_reasons).to be_blank
         expect(receipt.total_amount).to eq(301)
         expect(receipt.subtotal_amount).to eq(279)
         expect(receipt.tax_amount).to eq(22)
