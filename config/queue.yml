@@ -11,6 +11,18 @@ default: &default
       threads: <%= ENV.fetch("RECEIPT_ANALYSIS_THREADS", 1) %>
       processes: <%= ENV.fetch("RECEIPT_ANALYSIS_CONCURRENCY", 1) %>
       polling_interval: 0.1
+    - queues: receipt_ocr
+      threads: <%= ENV.fetch("RECEIPT_OCR_THREADS", 1) %>
+      processes: <%= ENV.fetch("RECEIPT_OCR_CONCURRENCY", 1) %>
+      polling_interval: 0.1
+    - queues: receipt_ai
+      threads: <%= ENV.fetch("RECEIPT_AI_THREADS", 1) %>
+      processes: <%= ENV.fetch("RECEIPT_AI_CONCURRENCY", 1) %>
+      polling_interval: 0.1
+    - queues: receipt_finalize
+      threads: <%= ENV.fetch("RECEIPT_FINALIZE_THREADS", 1) %>
+      processes: <%= ENV.fetch("RECEIPT_FINALIZE_CONCURRENCY", 1) %>
+      polling_interval: 0.1
 
 development:
   <<: *default

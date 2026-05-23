@@ -1,0 +1,114 @@
+require 'rails_helper'
+
+RSpec.describe ReceiptOcrJob, type: :job do
+  include ActiveJob::TestHelper
+
+  around do |example|
+    original_adapter = ActiveJob::Base.queue_adapter
+    ActiveJob::Base.queue_adapter = :test
+    clear_enqueued_jobs
+    clear_performed_jobs
+
+    example.run
+  ensure
+    clear_enqueued_jobs
+    clear_performed_jobs
+    ActiveJob::Base.queue_adapter = original_adapter
+  end
+
+  describe '.queue_name' do
+    it 'receipt_ocr queueを使う' do
+      expect(described_class.queue_name).to eq('receipt_ocr')
+    end
+  end
+
+  describe '#perform' do
+    it 'Pipeline親入口だけを呼び、AIが次ならAI Jobをenqueueする' do
+      run = create(:receipt_analysis_run)
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:ai))
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAnalysisPipeline).to have_received(:run_ocr).with(run)
+        expect(ReceiptAiEnrichmentJob).to have_been_enqueued.with(run_id: run.id)
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
+
+    it 'finalizeが次ならFinalize Jobをenqueueする' do
+      run = create(:receipt_analysis_run)
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:finalize))
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
+
+    it 'skippedなら後続Jobをenqueueしない' do
+      run = create(:receipt_analysis_run)
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:skipped, skip_reason: :terminal_run))
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
+
+    it 'terminal runでは追加enqueueしない' do
+      run = create(:receipt_analysis_run, :succeeded)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
+
+    it '存在しないrunは安全にdiscardする' do
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr)
+
+      expect do
+        described_class.perform_now(run_id: -1)
+      end.not_to raise_error
+
+      expect(ReceiptAnalysisPipeline).not_to have_received(:run_ocr)
+    end
+
+    it 'run_id keyword以外の呼び出しは受け付けない' do
+      run = create(:receipt_analysis_run)
+
+      expect { described_class.perform_now(run.id) }.to raise_error(ArgumentError)
+    end
+
+    it 'Pipeline内の例外時はrun failedになり例外を再raiseする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      allow(ReceiptOcrService).to receive(:call).and_raise(StandardError, 'ocr exploded')
+
+      expect do
+        described_class.perform_now(run_id: run.id)
+      end.to raise_error(StandardError, 'ocr exploded')
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('ocr')
+        expect(run.error_code).to eq('unexpected_error')
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
+  end
+
+  private
+
+  def pipeline_result(next_step, skip_reason: nil)
+    ReceiptAnalysisPipeline::Result.new(next_step: next_step, skip_reason: skip_reason)
+  end
+end
