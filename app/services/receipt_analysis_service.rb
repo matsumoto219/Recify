@@ -214,7 +214,14 @@ class ReceiptAnalysisService
   end
 
   def finalize(decision)
+    record_finalize_decision(decision)
     ReceiptAnalysisPipeline.finalize(receipt: receipt, decision: decision, run: run)
+  end
+
+  def record_finalize_decision(decision)
+    return unless run
+
+    ReceiptAnalysisRuns.record_finalize_decision(run, decision)
   end
 
   # 商品名AI補完

@@ -571,6 +571,14 @@ RSpec.describe ReceiptAnalysisService do
           'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
           'success' => true
         )
+        expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
+        expect(run.metadata.dig('finalize_decision', 'schema_version')).to eq('receipt_analysis_run_finalize_decision_v1')
+        expect(run.metadata.dig('finalize_decision', 'error_code')).to be_nil
+        expect(run.metadata.dig('finalize_decision').to_json).not_to include(
+          '保存しないprompt全文',
+          '保存しないraw response',
+          '保存しないimage情報'
+        )
       end
     end
 
@@ -585,6 +593,14 @@ RSpec.describe ReceiptAnalysisService do
         expect(ReceiptAiEnrichmentService).to have_received(:call).once
         expect(receipt.reload.status).to be_present
       end
+    end
+
+    it 'runなしではfinalize decisionを永続化しない' do
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      expect(ReceiptAnalysisRuns).not_to receive(:record_finalize_decision)
+
+      described_class.call(receipt)
     end
 
     it 'ocr_result指定時はOCRを再実行せず既存OCR summaryを維持する' do
@@ -635,7 +651,7 @@ RSpec.describe ReceiptAnalysisService do
       aggregate_failures do
         expect(receipt.reload.status).to eq('failed')
         expect(run.status).to eq('running')
-        expect(run.stage).to eq('ocr_validation')
+        expect(run.stage).to eq('finalize')
         expect(run.ocr_summary).to include(
           'success' => false,
           'error_code' => 'ocr_timeout',
@@ -644,6 +660,8 @@ RSpec.describe ReceiptAnalysisService do
         expect(run.ai_started_at).to be_nil
         expect(run.ai_input_snapshot).to eq({})
         expect(run.ai_result_summary).to eq({})
+        expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('fail_receipt')
+        expect(run.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_timeout')
         expect(ReceiptAiEnrichmentService).not_to have_received(:call)
       end
     end

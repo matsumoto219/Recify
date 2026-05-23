@@ -377,6 +377,51 @@ RSpec.describe ReceiptAnalysisPipeline do
     end
   end
 
+  describe 'FinalizeDecision.from_snapshot' do
+    it '保存済みsnapshotからdecisionを復元しocr/ai resultは復元しない' do
+      snapshot = {
+        schema_version: 'receipt_analysis_run_finalize_decision_v1',
+        strategy: 'fail_receipt',
+        error_code: 'unsupported_country',
+        error_message: 'country_region=USA',
+        receipt_attributes: { country_region: 'USA' },
+        metadata: { reason: 'unsupported_country' },
+        ocr_result: { raw_text: '保存しないOCR全文' },
+        ai_result: { messages: [ '保存しないmessages' ] }
+      }
+
+      decision = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(snapshot)
+
+      aggregate_failures do
+        expect(decision.finalize_strategy).to eq('fail_receipt')
+        expect(decision.error_code).to eq('unsupported_country')
+        expect(decision.error_message).to eq('country_region=USA')
+        expect(decision.receipt_attributes).to eq('country_region' => 'USA')
+        expect(decision.metadata).to eq('reason' => 'unsupported_country')
+        expect(decision.ocr_result).to be_nil
+        expect(decision.ai_result).to be_nil
+      end
+    end
+
+    it '空または不正なsnapshotはnilを返す' do
+      aggregate_failures do
+        expect(ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(nil)).to be_nil
+        expect(
+          ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+            schema_version: 'old',
+            strategy: 'ai_success'
+          )
+        ).to be_nil
+        expect(
+          ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+            schema_version: 'receipt_analysis_run_finalize_decision_v1',
+            strategy: 'unknown'
+          )
+        ).to be_nil
+      end
+    end
+  end
+
   describe '.finalize' do
     it 'ai_success decisionを保存しcompletedにできる' do
       receipt = create(:receipt, :processing, :with_image)
@@ -605,6 +650,58 @@ RSpec.describe ReceiptAnalysisPipeline do
           '保存しないAI raw response',
           '保存しないapi key'
         )
+      end
+    end
+
+    it 'run snapshotがあってもin-memory decision入力を優先する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      snapshot_ocr_result = successful_ocr_result.deep_merge(
+        candidates: {
+          store_name: 'Snapshot Store',
+          total_amount: 999,
+          items: [
+            {
+              raw_text: 'Snapshot Item',
+              line_total: 999,
+              confidence: 0.95
+            }
+          ]
+        }
+      )
+      in_memory_ocr_result = successful_ocr_result.deep_merge(
+        candidates: {
+          store_name: 'In Memory Store',
+          total_amount: 180,
+          items: [
+            {
+              raw_text: 'In Memory Item',
+              line_total: 180,
+              confidence: 0.95
+            }
+          ]
+        }
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, snapshot_ocr_result)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        run: run,
+        decision: finalize_decision(:ocr_only, ocr_result: in_memory_ocr_result)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.store_name).to eq('In Memory Store')
+        expect(receipt.receipt_items.pluck(:raw_text)).to include('In Memory Item')
+        expect(receipt.receipt_items.pluck(:raw_text)).not_to include('Snapshot Item')
       end
     end
 

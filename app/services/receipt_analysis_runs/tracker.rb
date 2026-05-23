@@ -129,6 +129,23 @@ module ReceiptAnalysisRuns
       end
     end
 
+    def record_finalize_decision(snapshot, at: Time.current)
+      snapshot = snapshot.to_h
+
+      with_mutable_run do |locked_run|
+        metadata = locked_run.metadata.to_h.deep_dup
+        metadata["finalize_decision"] = snapshot
+
+        locked_run.update!(
+          stage: advanced_stage(locked_run, "finalize"),
+          status: "running",
+          started_at: locked_run.started_at || at,
+          metadata: metadata
+        )
+        locked_run
+      end
+    end
+
     def record_final_result(summary, at: Time.current)
       with_mutable_run do |locked_run|
         locked_run.update!(

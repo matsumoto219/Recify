@@ -65,6 +65,13 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def record_finalize_decision(run, decision, at: Time.current)
+      Tracker.new(run).record_finalize_decision(
+        SnapshotBuilder.finalize_decision_snapshot(decision, at: at),
+        at: at
+      )
+    end
+
     def record_final_result(run, receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil, at: Time.current)
       Tracker.new(run).record_final_result(
         SnapshotBuilder.final_result_summary(

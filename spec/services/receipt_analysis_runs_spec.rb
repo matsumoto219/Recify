@@ -28,6 +28,20 @@ RSpec.describe ReceiptAnalysisRuns do
     end
   end
 
+  def finalize_decision(strategy, **attributes)
+    ReceiptAnalysisPipeline::FinalizeDecision.new(
+      {
+        finalize_strategy: strategy.to_s,
+        error_code: nil,
+        error_message: nil,
+        receipt_attributes: {},
+        ocr_result: nil,
+        ai_result: nil,
+        metadata: {}
+      }.merge(attributes)
+    )
+  end
+
   def ocr_fixture(name)
     raw_json = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
 
@@ -427,6 +441,154 @@ RSpec.describe ReceiptAnalysisRuns do
           'item_count' => 1
         )
         expect(deep_json(run.ai_result_summary)).not_to include('do-not-store')
+      end
+    end
+
+    it 'finalize decisionをmetadataにmergeして保存し復元できる' do
+      run = described_class.start(receipt:, source: 'upload').run
+      run.update!(metadata: { 'operator_note' => 'keep me' })
+      decision = finalize_decision(
+        :ai_fallback,
+        error_code: 'ai_unavailable',
+        error_message: 'AI補完に失敗したためOCR結果で保存しました',
+        ocr_result: { raw_text: '保存しないOCR全文' },
+        ai_result: { messages: [ '保存しないmessages' ] },
+        metadata: { reason: 'ai_down', prompt: '保存しないprompt' }
+      )
+
+      described_class.record_finalize_decision(run, decision)
+
+      snapshot = run.reload.metadata['finalize_decision']
+      restored = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(snapshot)
+
+      aggregate_failures do
+        expect(run.metadata['operator_note']).to eq('keep me')
+        expect(snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_finalize_decision_v1',
+          'strategy' => 'ai_fallback',
+          'error_code' => 'ai_unavailable',
+          'error_message' => 'AI補完に失敗したためOCR結果で保存しました',
+          'metadata' => { 'reason' => 'ai_down' }
+        )
+        expect(snapshot['recorded_at']).to eq(Time.current.iso8601)
+        expect(restored.finalize_strategy).to eq('ai_fallback')
+        expect(restored.error_code).to eq('ai_unavailable')
+        expect(restored.error_message).to eq('AI補完に失敗したためOCR結果で保存しました')
+        expect(restored.metadata).to eq('reason' => 'ai_down')
+        expect(restored.ocr_result).to be_nil
+        expect(restored.ai_result).to be_nil
+      end
+    end
+
+    it 'finalize decisionのreceipt_attributesとmetadataはallowlistのみ保存する' do
+      run = described_class.start(receipt:, source: 'upload').run
+      decision = finalize_decision(
+        :fail_receipt,
+        error_code: 'unsupported_country',
+        error_message: 'country_region=USA',
+        receipt_attributes: {
+          country_region: 'USA',
+          store_name: '保存しない店舗名',
+          signed_id: '保存しないsigned id'
+        },
+        metadata: {
+          reason: 'unsupported_country',
+          response_body: '保存しないraw response',
+          api_key: '保存しないapi key'
+        }
+      )
+
+      described_class.record_finalize_decision(run, decision)
+
+      snapshot = run.reload.metadata['finalize_decision']
+      snapshot_json = deep_json(snapshot)
+      restored = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(snapshot)
+
+      aggregate_failures do
+        expect(snapshot['receipt_attributes']).to eq('country_region' => 'USA')
+        expect(snapshot['metadata']).to eq('reason' => 'unsupported_country')
+        expect(restored.receipt_attributes).to eq('country_region' => 'USA')
+        expect(snapshot_json).not_to include(
+          '保存しない店舗名',
+          '保存しないsigned id',
+          '保存しないraw response',
+          '保存しないapi key'
+        )
+      end
+    end
+
+    it 'finalize decisionはraw/prompt/messages/image/secret系を保存しない' do
+      run = described_class.start(receipt:, source: 'upload').run
+      decision = finalize_decision(
+        :fail_receipt,
+        error_code: 'unexpected_error',
+        error_message: 'prompt sk-secret raw_response Net::ReadTimeout',
+        receipt_attributes: {
+          country_region: 'JPN',
+          image: '保存しないimage',
+          blob_key: '保存しないblob key'
+        },
+        ocr_result: {
+          raw_text: '保存しないOCR全文',
+          raw_response: '保存しないAzure raw response'
+        },
+        ai_result: {
+          prompt: '保存しないprompt',
+          messages: [ '保存しないmessages' ],
+          response_body: '保存しないOpenAI raw response'
+        },
+        metadata: {
+          reason: 'unexpected_error',
+          token: '保存しないtoken'
+        }
+      )
+
+      described_class.record_finalize_decision(run, decision)
+
+      snapshot = run.reload.metadata['finalize_decision']
+      snapshot_json = deep_json(snapshot)
+
+      aggregate_failures do
+        expect(snapshot['error_message']).to be_nil
+        expect(snapshot['receipt_attributes']).to eq('country_region' => 'JPN')
+        expect(snapshot['metadata']).to eq('reason' => 'unexpected_error')
+        expect(snapshot_json).not_to include(
+          'sk-secret',
+          'raw_response',
+          'Net::ReadTimeout',
+          '保存しないimage',
+          '保存しないblob key',
+          '保存しないOCR全文',
+          '保存しないAzure raw response',
+          '保存しないprompt',
+          '保存しないmessages',
+          '保存しないOpenAI raw response',
+          '保存しないtoken'
+        )
+      end
+    end
+
+    it 'finalize decisionは各strategyを保存/復元できる' do
+      cases = [
+        finalize_decision(:ai_success),
+        finalize_decision(:ocr_only),
+        finalize_decision(:ai_fallback, error_code: 'ai_invalid_response'),
+        finalize_decision(:fail_receipt, error_code: 'receipt_not_detected')
+      ]
+
+      cases.each do |decision|
+        run = described_class.start(receipt: create(:receipt), source: 'upload').run
+
+        described_class.record_finalize_decision(run, decision)
+
+        restored = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(run.reload.metadata['finalize_decision'])
+
+        aggregate_failures(decision.finalize_strategy) do
+          expect(restored.finalize_strategy).to eq(decision.finalize_strategy)
+          expect(restored.error_code).to eq(decision.error_code)
+          expect(restored.ocr_result).to be_nil
+          expect(restored.ai_result).to be_nil
+        end
       end
     end
 

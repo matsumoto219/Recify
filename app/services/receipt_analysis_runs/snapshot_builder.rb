@@ -5,8 +5,13 @@ module ReceiptAnalysisRuns
     AI_INPUT_SCHEMA_VERSION = "receipt_analysis_run_ai_input_v1"
     AI_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_result_v1"
     AI_NORMALIZED_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_normalized_result_v1"
+    FINALIZE_DECISION_SCHEMA_VERSION = "receipt_analysis_run_finalize_decision_v1"
     FINAL_RESULT_SCHEMA_VERSION = "receipt_analysis_run_final_result_v1"
     PROMPT_SCHEMA_VERSION = "recify_receipt_analysis_v1"
+
+    FINALIZE_STRATEGIES = %w[fail_receipt ocr_only ai_fallback ai_success].freeze
+    FINALIZE_DECISION_RECEIPT_ATTRIBUTE_KEYS = %w[country_region].freeze
+    FINALIZE_DECISION_METADATA_KEYS = %w[reason].freeze
 
     MAX_OCR_LINES = 150
     MAX_OCR_ITEMS = 100
@@ -69,6 +74,10 @@ module ReceiptAnalysisRuns
         new.ai_normalized_result_snapshot(ai_result)
       end
 
+      def finalize_decision_snapshot(decision, at: Time.current)
+        new.finalize_decision_snapshot(decision, at: at)
+      end
+
       def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil)
         new.final_result_summary(
           receipt: receipt,
@@ -79,6 +88,23 @@ module ReceiptAnalysisRuns
           amount_result: amount_result
         )
       end
+    end
+
+    def finalize_decision_snapshot(decision, at: Time.current)
+      strategy = safe_string(decision&.finalize_strategy || decision&.strategy)
+      strategy = nil unless FINALIZE_STRATEGIES.include?(strategy)
+
+      sanitize_hash(
+        {
+          schema_version: FINALIZE_DECISION_SCHEMA_VERSION,
+          strategy: strategy,
+          error_code: safe_string(decision&.error_code),
+          error_message: safe_finalize_error_message(decision&.error_message, error_code: decision&.error_code),
+          receipt_attributes: finalize_decision_receipt_attributes(decision&.receipt_attributes),
+          metadata: finalize_decision_metadata(decision&.metadata),
+          recorded_at: safe_value(at)
+        }.compact
+      )
     end
 
     def ocr_summary(ocr_result)
@@ -225,6 +251,38 @@ module ReceiptAnalysisRuns
     end
 
     private
+
+    def finalize_decision_receipt_attributes(value)
+      attributes = normalized_hash(value)
+
+      FINALIZE_DECISION_RECEIPT_ATTRIBUTE_KEYS.each_with_object({}) do |key, memo|
+        memo[key] = safe_string(attributes[key]) if attributes[key].present?
+      end
+    end
+
+    def finalize_decision_metadata(value)
+      metadata = normalized_hash(value)
+
+      FINALIZE_DECISION_METADATA_KEYS.each_with_object({}) do |key, memo|
+        memo[key] = safe_string(metadata[key]) if metadata[key].present?
+      end
+    end
+
+    def safe_finalize_error_message(value, error_code:)
+      return nil if value.blank?
+      return nil if error_code.to_s == "unexpected_error"
+
+      message = safe_string(value)
+      return nil if unsafe_finalize_error_message?(message)
+
+      message
+    end
+
+    def unsafe_finalize_error_message?(message)
+      message.to_s.match?(
+        /#<|Net::|api[_ -]?key|authorization|blob[_ -]?key|cookie|messages|password|prompt|raw[_ -]?response|response[_ -]?body|secret|signed[_ -]?id|sk-[A-Za-z0-9]/i
+      )
+    end
 
     def ocr_candidates_snapshot(candidates)
       {
