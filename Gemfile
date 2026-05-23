@@ -24,6 +24,9 @@ gem "faraday"
 gem "pagy"
 # Rack middleware for throttling abusive requests
 gem "rack-attack", "~> 6.8"
+# Error monitoring for production exceptions
+gem "sentry-ruby", "~> 6.5"
+gem "sentry-rails", "~> 6.5"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
