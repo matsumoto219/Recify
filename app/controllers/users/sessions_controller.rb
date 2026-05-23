@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 class Users::SessionsController < Devise::SessionsController
+  rate_limit to: 5,
+             within: 5.minutes,
+             by: :rate_limit_email_digest,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "login/email",
+             only: :create,
+             if: :rate_limit_email_present?
+
   # before_action :configure_sign_in_params, only: [:create]
 
   # GET /resource/sign_in

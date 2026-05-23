@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 class Users::PasswordsController < Devise::PasswordsController
+  rate_limit to: 3,
+             within: 10.minutes,
+             by: :rate_limit_email_digest,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "password-reset/email",
+             only: :create,
+             if: :rate_limit_email_present?
+
   # GET /resource/password/new
   # def new
   #   super

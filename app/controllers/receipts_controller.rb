@@ -2,6 +2,14 @@ class ReceiptsController < ApplicationController
   before_action :authenticate_user!
   before_action :set_receipt, only: [ :show, :edit, :update, :destroy ]
   before_action :block_processing_receipt, only: [ :show, :edit, :update ]
+  rate_limit to: 10,
+             within: 1.hour,
+             by: :rate_limit_current_user_key,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "receipt-upload/user",
+             only: :upload,
+             if: :rate_limit_signed_in?
 
   MAX_SEARCH_QUERY_LENGTH = 100
   SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i

@@ -3,6 +3,24 @@
 class Users::RegistrationsController < Devise::RegistrationsController
   SUPPORTED_UPDATE_CONTEXTS = %w[account security email guest_registration].freeze
 
+  rate_limit to: 3,
+             within: 1.hour,
+             by: :rate_limit_update_context_user_ip_key,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "guest-registration/user-ip",
+             only: :update,
+             if: :rate_limit_guest_registration_context?
+
+  rate_limit to: 3,
+             within: 1.hour,
+             by: :rate_limit_update_context_user_ip_key,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "email-change/user-ip",
+             only: :update,
+             if: :rate_limit_email_change_context?
+
   # before_action :configure_sign_up_params, only: [:create]
   before_action :configure_account_update_params, only: [ :update ]
 

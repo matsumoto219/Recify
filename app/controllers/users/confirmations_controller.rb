@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 class Users::ConfirmationsController < Devise::ConfirmationsController
+  rate_limit to: 3,
+             within: 10.minutes,
+             by: :rate_limit_email_digest,
+             with: :rate_limit_exceeded,
+             store: ApplicationController::RateLimitStore,
+             name: "confirmation/email",
+             only: :create,
+             if: :rate_limit_email_present?
+
   # GET /resource/confirmation/new
   # def new
   #   super

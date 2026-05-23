@@ -3,6 +3,8 @@ ja:
     failure:
       invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
+    rate_limit:
+      too_many_requests: リクエストが多すぎます。しばらく時間をおいてから、もう一度お試しください。
     guest_sessions:
       create:
         success: ゲストログインしました
