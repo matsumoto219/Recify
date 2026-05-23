@@ -164,5 +164,54 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
         expect(summary_json).not_to include('SIGNED')
       end
     end
+
+    it 'RetryServiceのread-only eligibilityをrecordに含め、enqueueしない' do
+      receipt = create(:receipt, :completed, :with_image)
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: {
+          schema_version: 'receipt_analysis_run_ocr_result_v1',
+          success: true,
+          lines: [ '合計 1000' ],
+          candidates: { total_amount: 1000 }
+        },
+        ai_normalized_result_snapshot: {
+          schema_version: 'receipt_analysis_run_ai_normalized_result_v1',
+          success: true,
+          receipt_attributes: { total_amount: 1000 },
+          receipt_items_attributes: []
+        },
+        metadata: {
+          'finalize_decision' => {
+            schema_version: 'receipt_analysis_run_finalize_decision_v1',
+            strategy: 'ai_success',
+            recorded_at: Time.current.iso8601
+          }
+        }
+      )
+      allow(Analysis::RetryService).to receive(:eligibility).and_call_original
+      allow(ReceiptOcrJob).to receive(:perform_later)
+      allow(ReceiptAiEnrichmentJob).to receive(:perform_later)
+      allow(ReceiptFinalizeJob).to receive(:perform_later)
+
+      record = described_class.call(receipt: receipt).records.first
+
+      aggregate_failures do
+        expect(Analysis::RetryService).to have_received(:eligibility).with(receipt: receipt, parent_run: run)
+        expect(record[:retry_options]).to eq(
+          [
+            { type: 'full_reanalyze', possible: true, disabled_reason: nil },
+            { type: 'ocr_retry', possible: true, disabled_reason: nil },
+            { type: 'ai_retry', possible: true, disabled_reason: nil },
+            { type: 'finalize_retry', possible: true, disabled_reason: nil }
+          ]
+        )
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(ReceiptAiEnrichmentJob).not_to have_received(:perform_later)
+        expect(ReceiptFinalizeJob).not_to have_received(:perform_later)
+      end
+    end
   end
 end

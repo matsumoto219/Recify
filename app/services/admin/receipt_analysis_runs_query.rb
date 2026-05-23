@@ -200,7 +200,8 @@ module Admin
           ai_input: safe_summary(run.ai_input_snapshot),
           ai_result: safe_summary(run.ai_result_summary),
           final_result: safe_summary(run.final_result_summary)
-        }
+        },
+        retry_options: Analysis::RetryService.eligibility(receipt: receipt, parent_run: run).retry_options
       }
     end
 

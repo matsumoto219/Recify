@@ -17,6 +17,7 @@ module Analysis
         !success?
       end
     end
+    Eligibility = Struct.new(:retry_options, keyword_init: true)
 
     class << self
       def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil)
@@ -27,6 +28,20 @@ module Analysis
           retry_type: retry_type,
           reason: reason
         ).call
+      end
+
+      def eligibility(receipt:, parent_run:)
+        Eligibility.new(
+          retry_options: RETRY_TYPES.map do |type|
+            new(
+              receipt: receipt,
+              parent_run: parent_run,
+              actor: nil,
+              retry_type: type,
+              reason: nil
+            ).retry_option
+          end
+        )
       end
     end
 
@@ -41,8 +56,10 @@ module Analysis
     def call
       return failure(:invalid_retry_type, "Unknown retry_type=#{retry_type}") unless RETRY_TYPES.include?(retry_type)
       return failure(:actor_required, "actor is required") unless actor
-      return failure(:parent_run_required, "parent_run is required") if parent_run_required? && parent_run.blank?
-      return failure(:snapshot_missing, missing_snapshot_message) unless required_snapshots_present?
+
+      if (disabled_reason = disabled_reason_for(retry_type))
+        return failure(disabled_reason, disabled_message(disabled_reason), run: disabled_run_for(disabled_reason))
+      end
 
       result = nil
 
@@ -73,42 +90,76 @@ module Analysis
       result
     end
 
+    def retry_option
+      disabled_reason = disabled_reason_for(retry_type)
+
+      {
+        type: retry_type,
+        possible: disabled_reason.blank?,
+        disabled_reason: disabled_reason
+      }
+    end
+
     private
 
     attr_reader :receipt, :parent_run, :actor, :retry_type, :reason
-
-    def parent_run_required?
-      retry_type.in?(%w[ai_retry finalize_retry])
-    end
-
-    def required_snapshots_present?
-      case retry_type
-      when "ai_retry"
-        parent_run&.ocr_result_snapshot.present?
-      when "finalize_retry"
-        parent_run&.ocr_result_snapshot.present? &&
-          parent_run&.ai_normalized_result_snapshot.present? &&
-          parent_finalize_decision.present?
-      else
-        true
-      end
-    end
-
-    def missing_snapshot_message
-      case retry_type
-      when "ai_retry"
-        "parent_run.ocr_result_snapshot is required"
-      when "finalize_retry"
-        "parent_run ocr_result_snapshot, ai_normalized_result_snapshot, and finalize_decision are required"
-      else
-        "required retry snapshot is missing"
-      end
-    end
 
     def parent_finalize_decision
       @parent_finalize_decision ||= ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
         parent_run&.metadata.to_h["finalize_decision"]
       )
+    end
+
+    def disabled_reason_for(type)
+      return "active_run_exists" if active_run_exists?
+
+      case type
+      when "full_reanalyze", "ocr_retry"
+        return "image_missing" unless receipt&.image&.attached?
+      when "ai_retry"
+        return "parent_run_missing" if parent_run.blank?
+        return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
+      when "finalize_retry"
+        return "parent_run_missing" if parent_run.blank?
+        return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
+        return "ai_snapshot_missing" if parent_run.ai_normalized_result_snapshot.blank?
+        return "finalize_decision_missing" if parent_finalize_decision.blank?
+      end
+
+      nil
+    end
+
+    def active_run_exists?
+      active_run.present?
+    end
+
+    def active_run
+      return unless receipt
+
+      @active_run ||= receipt.receipt_analysis_runs.active.order(created_at: :desc).first
+    end
+
+    def disabled_run_for(disabled_reason)
+      active_run if disabled_reason.to_s == "active_run_exists"
+    end
+
+    def disabled_message(disabled_reason)
+      case disabled_reason.to_s
+      when "active_run_exists"
+        "receipt already has an active analysis run"
+      when "image_missing"
+        "receipt image is required"
+      when "parent_run_missing"
+        "parent_run is required"
+      when "ocr_snapshot_missing"
+        "parent_run.ocr_result_snapshot is required"
+      when "ai_snapshot_missing"
+        "parent_run.ai_normalized_result_snapshot is required"
+      when "finalize_decision_missing"
+        "parent_run.metadata.finalize_decision is required"
+      else
+        "retry is not available"
+      end
     end
 
     def copy_retry_snapshots(run)
