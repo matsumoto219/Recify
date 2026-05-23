@@ -31,7 +31,7 @@ class ReceiptAnalysisService
 
     unless ocr_enabled?
       Rails.logger.warn("[ReceiptAnalysis] ocr_disabled receipt_id=#{receipt.id}")
-      return fail_receipt!("ocr_disabled")
+      return finalize(finalize_decision(:fail_receipt, error_code: "ocr_disabled"))
     end
 
     ocr_result = provided_ocr_result? ? @ocr_result : ReceiptOcrService.call(receipt.image)
@@ -39,16 +39,26 @@ class ReceiptAnalysisService
     record_ocr_result(ocr_result) unless provided_ocr_result?
 
     unless ocr_result[:success]
-      return fail_receipt!(ocr_result[:error_code].presence || "ocr_api_error")
+      return finalize(
+        finalize_decision(
+          :fail_receipt,
+          ocr_result: ocr_result,
+          error_code: ocr_result[:error_code].presence || "ocr_api_error"
+        )
+      )
     end
 
     if unsupported_country?(ocr_result)
       country_code = ocr_country_region(ocr_result)
       Rails.logger.warn("[ReceiptAnalysis] unsupported_country receipt_id=#{receipt.id} country_region=#{country_code}")
-      return fail_receipt!(
-        "unsupported_country",
-        "country_region=#{country_code}",
-        unsupported_country_attributes(country_code)
+      return finalize(
+        finalize_decision(
+          :fail_receipt,
+          ocr_result: ocr_result,
+          error_code: "unsupported_country",
+          error_message: "country_region=#{country_code}",
+          receipt_attributes: unsupported_country_attributes(country_code)
+        )
       )
     end
 
@@ -56,45 +66,49 @@ class ReceiptAnalysisService
 
     if no_text_detected?(receipt_signal)
       Rails.logger.warn("[ReceiptAnalysis] no_text_detected receipt_id=#{receipt.id}")
-      return fail_receipt!("no_text_detected")
+      return finalize(finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "no_text_detected"))
     end
 
     if unreadable_ocr?(ocr_result)
       Rails.logger.warn("[ReceiptAnalysis] ocr_unreadable receipt_id=#{receipt.id}")
-      return fail_receipt!("ocr_unreadable")
+      return finalize(finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_unreadable"))
     end
 
     if receipt_structure_missing?(receipt_signal)
       Rails.logger.warn(
         "[ReceiptAnalysis] receipt_not_detected receipt_id=#{receipt.id} score=#{receipt_signal.score} reasons=#{receipt_signal.reasons.join(',')}"
       )
-      return fail_receipt!("receipt_not_detected")
+      return finalize(finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "receipt_not_detected"))
     end
 
     unless ai_enabled?
       Rails.logger.info("[ReceiptAnalysis] ai_disabled_ocr_only receipt_id=#{receipt.id}")
-      return save_ocr_only_result!(ocr_result)
+      return finalize(finalize_decision(:ocr_only, ocr_result: ocr_result))
     end
 
     unless ai_available?
       Rails.logger.info("[ReceiptAnalysis] ai_down_ocr_only receipt_id=#{receipt.id}")
-      return save_fallback_result!(ocr_result, "ai_unavailable")
+      return finalize(finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: "ai_unavailable"))
     end
 
     ai_result = run_ai_enrichment(ocr_result)
 
     if ai_result[:success]
-      save_ai_result!(ocr_result, ai_result)
+      finalize(finalize_decision(:ai_success, ocr_result: ocr_result, ai_result: ai_result))
     elsif ai_not_receipt?(ai_result)
       Rails.logger.warn(
         "[ReceiptAnalysis] ai_not_receipt receipt_id=#{receipt.id} document_type=#{ai_result.dig(:meta, :document_type)} rejection_reason=#{ai_result.dig(:meta, :rejection_reason)} confidence=#{ai_result.dig(:meta, :is_receipt_confidence)}"
       )
-      handle_ai_not_receipt!(ocr_result, ai_result, receipt_signal)
+      finalize(ai_not_receipt_decision(ocr_result, ai_result, receipt_signal))
     else
-      save_fallback_result!(
-        ocr_result,
-        ai_result[:error_code].presence || "ai_invalid_response",
-        processing_error_message: ai_fallback_processing_error_message(ai_result)
+      finalize(
+        finalize_decision(
+          :ai_fallback,
+          ocr_result: ocr_result,
+          ai_result: ai_result,
+          error_code: ai_result[:error_code].presence || "ai_invalid_response",
+          error_message: ai_fallback_processing_error_message(ai_result)
+        )
       )
     end
   rescue AnalysisError
@@ -185,6 +199,41 @@ class ReceiptAnalysisService
     return unless run
 
     ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
+  end
+
+  def finalize_decision(finalize_strategy, ocr_result: nil, ai_result: nil, error_code: nil, error_message: nil, receipt_attributes: {}, metadata: {})
+    ReceiptAnalysisPipeline::FinalizeDecision.new(
+      finalize_strategy: finalize_strategy.to_s,
+      error_code: error_code,
+      error_message: error_message,
+      receipt_attributes: receipt_attributes || {},
+      ocr_result: ocr_result,
+      ai_result: ai_result,
+      metadata: metadata || {}
+    )
+  end
+
+  def finalize(decision)
+    case decision.finalize_strategy
+    when "fail_receipt"
+      fail_receipt!(
+        decision.error_code,
+        decision.error_message,
+        decision.receipt_attributes
+      )
+    when "ocr_only"
+      save_ocr_only_result!(decision.ocr_result)
+    when "ai_fallback"
+      save_fallback_result!(
+        decision.ocr_result,
+        decision.error_code,
+        processing_error_message: decision.error_message
+      )
+    when "ai_success"
+      save_ai_result!(decision.ocr_result, decision.ai_result)
+    else
+      raise AnalysisError.new("unexpected_error", "Unknown finalize_strategy=#{decision.finalize_strategy}")
+    end
   end
 
   # 商品名AI補完
@@ -287,14 +336,25 @@ class ReceiptAnalysisService
     [ meta[:document_type], meta[:rejection_reason] ].compact_blank.join(" / ").presence || "ai_not_receipt"
   end
 
-  def handle_ai_not_receipt!(ocr_result, ai_result, receipt_signal)
+  def ai_not_receipt_decision(ocr_result, ai_result, receipt_signal)
     if ai_not_receipt_should_fail?(ai_result, receipt_signal)
-      fail_receipt!("ai_not_receipt", ai_not_receipt_message(ai_result))
+      finalize_decision(
+        :fail_receipt,
+        ocr_result: ocr_result,
+        ai_result: ai_result,
+        error_code: "ai_not_receipt",
+        error_message: ai_not_receipt_message(ai_result)
+      )
     else
       Rails.logger.warn(
         "[ReceiptAnalysis] ai_not_receipt_uncertain receipt_id=#{receipt.id} score=#{receipt_signal.score} reasons=#{receipt_signal.reasons.join(',')}"
       )
-      save_fallback_result!(ocr_result, "ai_not_receipt_uncertain")
+      finalize_decision(
+        :ai_fallback,
+        ocr_result: ocr_result,
+        ai_result: ai_result,
+        error_code: "ai_not_receipt_uncertain"
+      )
     end
   end
 

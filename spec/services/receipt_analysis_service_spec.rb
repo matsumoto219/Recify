@@ -227,6 +227,32 @@ RSpec.describe ReceiptAnalysisService do
     )
   end
 
+  def capture_finalize_decisions
+    decisions = []
+    allow_any_instance_of(described_class).to receive(:finalize).and_wrap_original do |method, decision|
+      decisions << decision
+      method.call(decision)
+    end
+    decisions
+  end
+
+  def expect_finalize_decision(decision, strategy:, error_code: nil)
+    expect(decision.finalize_strategy).to eq(strategy.to_s)
+    expect(decision.error_code).to eq(error_code) unless error_code.nil?
+  end
+
+  def with_env(key, value)
+    original_value = ENV[key]
+    ENV[key] = value
+    yield
+  ensure
+    if original_value.nil?
+      ENV.delete(key)
+    else
+      ENV[key] = original_value
+    end
+  end
+
   def run_ocr_fixture(name, ai_result: nil)
     captured_amount_result = nil
     ocr_result = ocr_fixture(name)
@@ -245,6 +271,214 @@ RSpec.describe ReceiptAnalysisService do
   end
 
   describe '.call' do
+    context 'finalize decision strategy' do
+      it 'OCR失敗はfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(
+          {
+            success: false,
+            raw_text: '',
+            lines: [],
+            candidates: { items: [], payments: [], tax_details: [] },
+            error_code: 'ocr_timeout',
+            meta: {}
+          }
+        )
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'ocr_timeout')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('ocr_timeout')
+        end
+      end
+
+      it 'unsupported countryはfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(
+          build_ocr_result(candidates: { country_region: 'USA' })
+        )
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'unsupported_country')
+          expect(decisions.last.error_message).to eq('country_region=USA')
+          expect(decisions.last.receipt_attributes).to eq(country_region: 'USA')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('unsupported_country')
+        end
+      end
+
+      it 'no textはfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(
+          build_ocr_result(
+            raw_text: '',
+            lines: [],
+            candidates: {
+              store_name: nil,
+              purchased_at_text: nil,
+              total_amount: nil,
+              payment_method_text: nil,
+              country_region: nil,
+              receipt_type: nil,
+              items: [],
+              payments: [],
+              tax_details: []
+            }
+          )
+        )
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'no_text_detected')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('no_text_detected')
+        end
+      end
+
+      it 'OCR unreadableはfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(
+          build_ocr_result(
+            candidates: {
+              confidence_summary: {
+                overall: 0.2,
+                items_average: 0.2
+              }
+            }
+          )
+        )
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'ocr_unreadable')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('ocr_unreadable')
+        end
+      end
+
+      it 'receipt not detectedはfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(
+          build_ocr_result(
+            raw_text: 'これはレシートではない文書です',
+            lines: [ 'これはレシートではない文書です' ],
+            candidates: {
+              store_name: nil,
+              purchased_at_text: nil,
+              total_amount: nil,
+              payment_method_text: nil,
+              country_region: nil,
+              receipt_type: nil,
+              items: [],
+              payments: [],
+              tax_details: []
+            }
+          )
+        )
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'receipt_not_detected')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('receipt_not_detected')
+        end
+      end
+
+      it 'AI disabledはocr_only decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+        expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
+
+        with_env('RECEIPT_AI_ENABLED', 'false') do
+          described_class.call(receipt)
+        end
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :ocr_only)
+          expect(receipt.reload.status).to eq('review_needed')
+          expect(receipt.processing_error_code).to be_nil
+        end
+      end
+
+      it 'AI downはai_fallback decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+        allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+        expect(ReceiptAnalysisPipeline).not_to receive(:run_ai)
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :ai_fallback, error_code: 'ai_unavailable')
+          expect(receipt.reload.status).to eq('review_needed')
+          expect(receipt.processing_error_code).to eq('ai_unavailable')
+        end
+      end
+
+      it 'AI成功はai_success decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :ai_success)
+          expect(receipt.reload.processing_error_code).to be_nil
+          expect([ 'completed', 'review_needed' ]).to include(receipt.status)
+        end
+      end
+
+      it 'AI failureはai_fallback decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :ai_fallback, error_code: 'analysis_missing_keys')
+          expect(receipt.reload.status).to eq('review_needed')
+          expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        end
+      end
+
+      it 'AI not receipt確定はfail_receipt decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(weak_receipt_like_ocr_result)
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.92))
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :fail_receipt, error_code: 'ai_not_receipt')
+          expect(receipt.reload.status).to eq('failed')
+          expect(receipt.processing_error_code).to eq('ai_not_receipt')
+        end
+      end
+
+      it 'AI not receipt不確実はai_fallback decisionにする' do
+        decisions = capture_finalize_decisions
+        allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_not_receipt_result(confidence: 0.92))
+
+        described_class.call(receipt)
+
+        aggregate_failures do
+          expect_finalize_decision(decisions.last, strategy: :ai_fallback, error_code: 'ai_not_receipt_uncertain')
+          expect(receipt.reload.status).to eq('review_needed')
+          expect(receipt.processing_error_code).to eq('ai_not_receipt_uncertain')
+        end
+      end
+    end
+
     it 'OCR結果からレシート情報を保存する' do
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
