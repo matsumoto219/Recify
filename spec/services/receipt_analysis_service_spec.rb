@@ -864,6 +864,19 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.status).to eq('review_needed')
     end
 
+    it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
+      service = described_class.new(receipt)
+
+      allow(described_class).to receive(:new).with(receipt).and_return(service)
+      allow(service).to receive(:low_quality_ocr?).and_call_original
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+      described_class.call(receipt)
+
+      expect(service).to have_received(:low_quality_ocr?).once
+    end
+
     it 'warning mismatch only stores amount warning review_reasons without review_needed status' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(candidates: { tip_amount: nil, tax_details: [] })
