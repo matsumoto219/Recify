@@ -3,14 +3,12 @@ class ReceiptAnalysisJob < ApplicationJob
 
   discard_on ActiveRecord::RecordNotFound
 
-  LEGACY_RUN_SOURCE = "system_retry"
-
   # NOTE: OCR/AIはResultで失敗を返す設計のため、Jobのretry_onは現時点では使用しない。
   # 外部API再試行は、再解析機能またはService層のretry方針として別途検討する。
   # TODO: ログ強化（外部API応答・エラー分類の詳細化などは本番運用フェーズで対応）
-  def perform(receipt_id = nil, run_id: nil)
-    run = run_id.present? ? ReceiptAnalysisRun.find(run_id) : nil
-    receipt = run&.receipt || Receipt.find(receipt_id)
+  def perform(run_id:)
+    run = ReceiptAnalysisRun.find(run_id)
+    receipt = run.receipt
 
     if terminal_run?(run)
       Rails.logger.info(
@@ -26,8 +24,6 @@ class ReceiptAnalysisJob < ApplicationJob
       )
       return
     end
-
-    run ||= active_run_for(receipt) || start_legacy_run(receipt)
 
     started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
@@ -55,17 +51,8 @@ class ReceiptAnalysisJob < ApplicationJob
 
   private
 
-  def active_run_for(receipt)
-    receipt.receipt_analysis_runs.active.order(created_at: :desc).first
-  end
-
-  def start_legacy_run(receipt)
-    # TODO: 次コミットで旧 receipt_id 経路を削除し、run_id: のみにする。
-    ReceiptAnalysisRuns.start(receipt: receipt, source: LEGACY_RUN_SOURCE).run
-  end
-
   def terminal_run?(run)
-    run.present? && !ReceiptAnalysisRun::ACTIVE_STATUSES.include?(run.status)
+    !ReceiptAnalysisRun::ACTIVE_STATUSES.include?(run.status)
   end
 
   def cancel_active_run(run)

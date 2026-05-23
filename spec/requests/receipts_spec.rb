@@ -1100,7 +1100,8 @@ RSpec.describe 'Receipts', type: :request do
       receipt = Receipt.order(:id).last
       expect(receipt.status).to eq('processing')
 
-      ReceiptAnalysisJob.perform_now(receipt.id)
+      run = receipt.receipt_analysis_runs.sole
+      ReceiptAnalysisJob.perform_now(run_id: run.id)
       receipt.reload
 
       aggregate_failures 'failed receipt state' do
@@ -1157,7 +1158,8 @@ RSpec.describe 'Receipts', type: :request do
       receipt = Receipt.order(:id).last
       expect(receipt.status).to eq('processing')
 
-      ReceiptAnalysisJob.perform_now(receipt.id)
+      run = receipt.receipt_analysis_runs.sole
+      ReceiptAnalysisJob.perform_now(run_id: run.id)
       receipt.reload
 
       aggregate_failures 'review_needed fallback state' do
@@ -1215,7 +1217,8 @@ RSpec.describe 'Receipts', type: :request do
       receipt = Receipt.order(:id).last
       expect(receipt.status).to eq('processing')
 
-      ReceiptAnalysisJob.perform_now(receipt.id)
+      run = receipt.receipt_analysis_runs.sole
+      ReceiptAnalysisJob.perform_now(run_id: run.id)
       receipt.reload
 
       aggregate_failures do

@@ -40,24 +40,6 @@ RSpec.describe ReceiptAnalysisJob, type: :job do
       end
     end
 
-    it '旧receipt_id経路も一時的に実行できる' do
-      receipt = create(:receipt, :processing, :with_image)
-
-      allow(ReceiptAnalysisService).to receive(:call) do |target_receipt|
-        target_receipt.update!(status: 'completed')
-      end
-
-      described_class.perform_now(receipt.id)
-
-      run = receipt.receipt_analysis_runs.sole
-
-      aggregate_failures do
-        expect(ReceiptAnalysisService).to have_received(:call).with(receipt)
-        expect(run.source).to eq('system_retry')
-        expect(run.status).to eq('succeeded')
-      end
-    end
-
     it 'processing以外のreceiptはskipしactive runをcancelする' do
       receipt = create(:receipt, :completed)
       run = create(:receipt_analysis_run, receipt:)
@@ -107,11 +89,11 @@ RSpec.describe ReceiptAnalysisJob, type: :job do
       end
     end
 
-    it '存在しないreceiptは安全にdiscardする' do
+    it '存在しないrunは安全にdiscardする' do
       allow(ReceiptAnalysisService).to receive(:call)
 
       expect do
-        described_class.perform_now(-1)
+        described_class.perform_now(run_id: -1)
       end.not_to raise_error
 
       expect(ReceiptAnalysisService).not_to have_received(:call)
