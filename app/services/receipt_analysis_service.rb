@@ -14,12 +14,13 @@ class ReceiptAnalysisService
   AI_ENABLED_ENV_KEY = "RECEIPT_AI_ENABLED"
   SUPPORTED_RECEIPT_COUNTRY_CODES = %w[JPN].freeze
 
-  def self.call(receipt)
-    new(receipt).call
+  def self.call(receipt, run: nil)
+    new(receipt, run: run).call
   end
 
-  def initialize(receipt)
+  def initialize(receipt, run: nil)
     @receipt = receipt
+    @run = run
   end
 
   def call
@@ -34,6 +35,7 @@ class ReceiptAnalysisService
 
     ocr_result = ReceiptOcrService.call(receipt.image)
     log_ocr_result(ocr_result)
+    record_ocr_result(ocr_result)
 
     unless ocr_result[:success]
       return fail_receipt!(ocr_result[:error_code].presence || "ocr_api_error")
@@ -78,6 +80,7 @@ class ReceiptAnalysisService
       return save_fallback_result!(ocr_result, "ai_unavailable")
     end
 
+    start_ai_stage
     ai_result = run_ai_enrichment(ocr_result)
 
     if ai_result[:success]
@@ -108,7 +111,7 @@ class ReceiptAnalysisService
 
   private
 
-  attr_reader :receipt
+  attr_reader :receipt, :run
 
   def mark_processing!
     receipt.update!(
@@ -144,9 +147,11 @@ class ReceiptAnalysisService
   def run_ai_enrichment(ocr_result)
     ai_result = ReceiptAiEnrichmentService.call(
       ocr_result,
-      ai_name_completion_enabled: ai_name_completion_enabled?
+      ai_name_completion_enabled: ai_name_completion_enabled?,
+      capture_input: ai_input_capture_callback
     )
     normalized = normalize_ai_result(ai_result)
+    record_ai_result(normalized)
 
     Rails.logger.info(
       "[ReceiptAnalysis] ai_result receipt_id=#{receipt.id} success=#{normalized[:success]} error_code=#{normalized[:error_code]}"
@@ -162,6 +167,30 @@ class ReceiptAnalysisService
     #
     # ReceiptAiEnrichmentService は現在、例外をそのまま上げず ResultTemplate.error を返す設計へ寄せている。
     # そのためこの rescue は現状ほぼ通らないが、直前の挙動との差分確認用に一旦コメントで残す。
+  end
+
+  def record_ocr_result(ocr_result)
+    return unless run
+
+    ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
+  end
+
+  def start_ai_stage
+    return unless run
+
+    ReceiptAnalysisRuns.start_stage(run, "ai")
+  end
+
+  def ai_input_capture_callback
+    return unless run
+
+    ->(input) { ReceiptAnalysisRuns.record_ai_input(run, input) }
+  end
+
+  def record_ai_result(ai_result)
+    return unless run
+
+    ReceiptAnalysisRuns.record_ai_result(run, ai_result)
   end
 
   # 商品名AI補完

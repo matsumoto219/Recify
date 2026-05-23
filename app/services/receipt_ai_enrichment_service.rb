@@ -9,14 +9,29 @@ class ReceiptAiEnrichmentService
   end
 
   class << self
-    def call(ocr_result, ai_name_completion_enabled: false)
-      new(ocr_result, ai_name_completion_enabled: ai_name_completion_enabled).call
+    def call(ocr_result, ai_name_completion_enabled: false, capture_input: nil)
+      new(
+        ocr_result,
+        ai_name_completion_enabled: ai_name_completion_enabled,
+        capture_input: capture_input
+      ).call
     end
   end
 
-  def initialize(ocr_result, ai_name_completion_enabled: false, client: Ai::Client.new)
+  class InputCaptureError < StandardError
+    attr_reader :original_error
+
+    def initialize(original_error)
+      @original_error = original_error
+      super(original_error.message)
+      set_backtrace(original_error.backtrace)
+    end
+  end
+
+  def initialize(ocr_result, ai_name_completion_enabled: false, capture_input: nil, client: Ai::Client.new)
     @ocr_result = ocr_result || {}
     @ai_name_completion_enabled = ai_name_completion_enabled == true
+    @capture_input = capture_input
     @client = client
   end
 
@@ -29,6 +44,8 @@ class ReceiptAiEnrichmentService
       ocr_result,
       ai_name_completion_enabled: ai_name_completion_enabled
     )
+    capture_input!(input)
+
     result = client.call(input)
 
     if ai_service_healthy_result?(result)
@@ -39,6 +56,8 @@ class ReceiptAiEnrichmentService
 
     log_result(result)
     result
+  rescue InputCaptureError
+    raise
   rescue AiEnrichmentError => e
     Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
     ExternalServiceStatus.mark_failure!(:ai, error_code: e.error_code)
@@ -62,7 +81,15 @@ class ReceiptAiEnrichmentService
 
   private
 
-  attr_reader :ocr_result, :ai_name_completion_enabled, :client
+  attr_reader :ocr_result, :ai_name_completion_enabled, :capture_input, :client
+
+  def capture_input!(input)
+    return unless capture_input
+
+    capture_input.call(input)
+  rescue StandardError => e
+    raise InputCaptureError.new(e)
+  end
 
   def ai_service_healthy_result?(result)
     result[:success] || result[:error_code].to_s == "ai_not_receipt"

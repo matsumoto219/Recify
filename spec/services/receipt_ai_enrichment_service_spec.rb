@@ -64,6 +64,40 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'capture_inputにPromptBuilder結果を渡し戻り値互換を維持する' do
+        input = { filtered_content: 'test', meta: { item_count: 1 } }
+        capture_input = instance_double(Proc)
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return(input)
+        allow(capture_input).to receive(:call).with(input)
+        allow(client).to receive(:call).with(input).and_return(successful_ai_result)
+
+        result = described_class.call(valid_ocr_result, capture_input: capture_input)
+
+        aggregate_failures do
+          expect(capture_input).to have_received(:call).with(input)
+          expect(client).to have_received(:call).with(input)
+          expect(result).to eq(successful_ai_result)
+        end
+      end
+
+      it 'capture_input例外は握りつぶさずAI本処理を実行しない' do
+        input = { filtered_content: 'test' }
+        capture_error = StandardError.new('capture failed')
+        capture_input = ->(_payload) { raise capture_error }
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return(input)
+        allow(client).to receive(:call)
+
+        expect do
+          described_class.call(valid_ocr_result, capture_input: capture_input)
+        end.to raise_error(ReceiptAiEnrichmentService::InputCaptureError, 'capture failed')
+
+        aggregate_failures do
+          expect(client).not_to have_received(:call)
+          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
+          expect(ExternalServiceStatus).not_to have_received(:mark_failure!)
+        end
+      end
+
       it 'AI失敗結果をそのまま返し failure を記録する' do
         failed_result = {
           success: false,

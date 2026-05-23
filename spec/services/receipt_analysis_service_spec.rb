@@ -259,6 +259,104 @@ RSpec.describe ReceiptAnalysisService do
       expect(receipt.receipt_type).to eq("Meal")
     end
 
+    it 'runありではOCR summaryとAI input/result summaryを保存する' do
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.start_stage(run, "ocr")
+      ai_input = {
+        filtered_content: "サンプルストア\nコーヒー 180",
+        prompt: '保存しないprompt全文',
+        raw_response: '保存しないraw response',
+        image: '保存しないimage情報',
+        items: [
+          {
+            raw_text: 'コーヒー',
+            line_total: 180,
+            matched_content_lines: [ 'コーヒー 180' ]
+          }
+        ],
+        meta: {
+          ocr_provider: 'azure_document_intelligence',
+          ocr_model: 'prebuilt-receipt',
+          item_count: 1
+        }
+      }
+      ai_result = successful_ai_result.merge(
+        meta: {
+          provider: 'openai',
+          model: 'gpt-test'
+        }
+      )
+
+      allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, capture_input:|
+        capture_input.call(ai_input)
+        ai_result
+      end
+
+      described_class.call(receipt, run: run)
+      run.reload
+
+      aggregate_failures do
+        expect(run.status).to eq('running')
+        expect(run.stage).to eq('finalize')
+        expect(run.ocr_summary).to include(
+          'schema_version' => 'receipt_analysis_run_ocr_summary_v1',
+          'success' => true,
+          'provider' => 'azure_document_intelligence',
+          'model' => 'prebuilt-receipt'
+        )
+        expect(run.ai_input_snapshot).to include(
+          'schema_version' => 'receipt_analysis_run_ai_input_v1',
+          'prompt_schema_version' => 'recify_receipt_analysis_v1',
+          'filtered_content' => "サンプルストア\nコーヒー 180"
+        )
+        expect(run.ai_input_snapshot).not_to have_key('prompt')
+        expect(run.ai_input_snapshot).not_to have_key('raw_response')
+        expect(run.ai_input_snapshot).not_to have_key('image')
+        expect(run.ai_result_summary).to include(
+          'schema_version' => 'receipt_analysis_run_ai_result_v1',
+          'success' => true,
+          'provider' => 'openai',
+          'model' => 'gpt-test'
+        )
+      end
+    end
+
+    it 'runありではOCR失敗でもOCR summaryを保存しAI stageを開始しない' do
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.start_stage(run, "ocr")
+      ocr_result = {
+        success: false,
+        error_code: 'ocr_timeout',
+        lines: [],
+        meta: {
+          provider: 'azure_document_intelligence',
+          model_id: 'prebuilt-receipt'
+        }
+      }
+
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.call(receipt, run: run)
+      run.reload
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(run.status).to eq('running')
+        expect(run.stage).to eq('ocr_validation')
+        expect(run.ocr_summary).to include(
+          'success' => false,
+          'error_code' => 'ocr_timeout',
+          'provider' => 'azure_document_intelligence'
+        )
+        expect(run.ai_started_at).to be_nil
+        expect(run.ai_input_snapshot).to eq({})
+        expect(run.ai_result_summary).to eq({})
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      end
+    end
+
     it 'OCR country_region が日本以外の場合は unsupported_country でfailedにしAIを呼ばない' do
       allow(ReceiptOcrService).to receive(:call).and_return(
         build_ocr_result(candidates: { country_region: 'USA' })
@@ -867,7 +965,7 @@ RSpec.describe ReceiptAnalysisService do
     it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
       service = described_class.new(receipt)
 
-      allow(described_class).to receive(:new).with(receipt).and_return(service)
+      allow(described_class).to receive(:new).with(receipt, run: nil).and_return(service)
       allow(service).to receive(:low_quality_ocr?).and_call_original
       allow(ReceiptOcrService).to receive(:call).and_return(build_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)

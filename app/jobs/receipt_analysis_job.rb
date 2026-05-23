@@ -29,7 +29,7 @@ class ReceiptAnalysisJob < ApplicationJob
 
     begin
       ReceiptAnalysisRuns.start_stage(run, "ocr")
-      ReceiptAnalysisService.call(receipt)
+      ReceiptAnalysisService.call(receipt, run: run)
       receipt.reload
       ReceiptAnalysisRuns.record_final_result(run, receipt: receipt)
       ReceiptAnalysisRuns.succeed(run)
