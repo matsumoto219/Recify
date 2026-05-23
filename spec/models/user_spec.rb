@@ -23,6 +23,20 @@ RSpec.describe User, type: :model do
 
       expect(user.delete_confirmation_enabled).to be(true)
     end
+
+    it 'admin は初期値falseにする' do
+      user = create(:user)
+
+      expect(user).not_to be_admin
+    end
+  end
+
+  describe 'admin flag' do
+    it 'admin userを作成できる' do
+      user = create(:user, :admin)
+
+      expect(user).to be_admin
+    end
   end
 
   describe 'associations' do
