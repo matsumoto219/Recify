@@ -819,11 +819,15 @@ RSpec.describe 'Receipts', type: :request do
   end
 
   describe 'POST /receipts/upload' do
-    it '単一camera uploadはsource: uploadのrunを作成しrun_id付き解析jobをenqueueする' do
+    before do
+      allow(ReceiptOcrJob).to receive(:perform_later)
+      allow(ReceiptAnalysisJob).to receive(:perform_later)
+    end
+
+    it '単一camera uploadはsource: uploadのrunを作成しrun_id付きOCR jobをenqueueする' do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -840,7 +844,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(run.source).to eq('upload')
         expect(run.requested_by_user).to eq(user)
         expect(run.status).to eq('queued')
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -848,7 +853,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
       allow(ReceiptAnalysisRuns).to receive(:start).and_return(
@@ -866,11 +870,12 @@ RSpec.describe 'Receipts', type: :request do
           source: 'upload',
           requested_by_user: user
         )
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
-    it 'library複数uploadでreceiptごとにsource: batch_uploadのrunを作成しrun_id付き解析jobをenqueueする' do
+    it 'library複数uploadでreceiptごとにsource: batch_uploadのrunを作成しrun_id付きOCR jobをenqueueする' do
       files = [
         uploaded_receipt_fixture,
         uploaded_receipt_fixture('single_tax_receipt.png', 'image/png'),
@@ -879,7 +884,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -896,8 +900,9 @@ RSpec.describe 'Receipts', type: :request do
           run = receipt.receipt_analysis_runs.sole
           expect(run.source).to eq('batch_upload')
           expect(run.requested_by_user).to eq(user)
-          expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
+          expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
         end
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -906,7 +911,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -915,6 +919,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('receipts.batch_upload.errors.too_many', max: ReceiptBatchUploadService::MAX_FILES))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -931,7 +936,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -940,6 +944,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -953,7 +958,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -962,6 +966,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('receipts.batch_upload.errors.quota_exceeded'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -971,7 +976,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -980,6 +984,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -989,7 +994,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path,
@@ -1002,6 +1006,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.new_upload.title'))
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
         expect(response.body).not_to include('Error Code: 422')
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -1010,7 +1015,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1019,6 +1023,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -1027,7 +1032,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path,
@@ -1040,6 +1044,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.new_upload.title'))
         expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(response.body).not_to include('Error Code: 422')
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
@@ -1048,7 +1053,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1058,7 +1062,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         receipt = Receipt.order(:id).last
         run = receipt.receipt_analysis_runs.sole
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1067,7 +1072,6 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       post upload_receipts_path, params: { receipt: { image: uploaded_image } }
 

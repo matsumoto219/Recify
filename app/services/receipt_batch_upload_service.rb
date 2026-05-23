@@ -79,7 +79,7 @@ class ReceiptBatchUploadService
       Rails.logger.info(
         "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
       )
-      ReceiptAnalysisJob.perform_later(run_id: result.run.id)
+      ReceiptOcrJob.perform_later(run_id: result.run.id)
     end
   end
 

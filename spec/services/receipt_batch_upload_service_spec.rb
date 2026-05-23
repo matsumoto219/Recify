@@ -15,11 +15,12 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
   end
 
   before do
+    allow(ReceiptOcrJob).to receive(:perform_later)
     allow(ReceiptAnalysisJob).to receive(:perform_later)
   end
 
-  it '複数uploadの解析jobをreceipt_analysis queueへenqueueする' do
-    allow(ReceiptAnalysisJob).to receive(:perform_later).and_call_original
+  it '複数uploadのOCR jobをreceipt_ocr queueへenqueueする' do
+    allow(ReceiptOcrJob).to receive(:perform_later).and_call_original
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear
     files = [
       uploaded_receipt_fixture,
@@ -28,18 +29,20 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
 
     result = described_class.call(user:, files:)
 
-    enqueued_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |job| job[:job] == ReceiptAnalysisJob }
+    enqueued_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |job| job[:job] == ReceiptOcrJob }
+    legacy_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |job| job[:job] == ReceiptAnalysisJob }
 
     aggregate_failures do
       expect(result).to be_success
       expect(enqueued_jobs.size).to eq(2)
-      expect(enqueued_jobs.map { |job| job[:queue] }.uniq).to eq([ 'receipt_analysis' ])
+      expect(enqueued_jobs.map { |job| job[:queue] }.uniq).to eq([ 'receipt_ocr' ])
+      expect(legacy_jobs).to be_empty
     end
   ensure
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear
   end
 
-  it '1ファイルごとにreceiptとbatch_upload runを作成しcommit後に解析jobをenqueueする' do
+  it '1ファイルごとにreceiptとbatch_upload runを作成しcommit後にOCR jobをenqueueする' do
     files = [
       uploaded_receipt_fixture,
       uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
@@ -64,8 +67,9 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
         run = receipt.receipt_analysis_runs.sole
         expect(run.source).to eq('batch_upload')
         expect(run.requested_by_user).to eq(user)
-        expect(ReceiptAnalysisJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
       end
+      expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end
 
@@ -86,6 +90,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
         source: 'batch_upload',
         requested_by_user: user
       )
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
       expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end
@@ -97,6 +102,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       expect(result).not_to be_success
       expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.empty'))
       expect(user.receipts.count).to eq(0)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
       expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end
@@ -110,6 +116,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       expect(result).not_to be_success
       expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.too_many', max: ReceiptBatchUploadService::MAX_FILES))
       expect(user.receipts.count).to eq(0)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
       expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end
@@ -129,6 +136,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       end
     end.not_to change(user.receipts, :count)
 
+    expect(ReceiptOcrJob).not_to have_received(:perform_later)
     expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
   end
 
@@ -145,6 +153,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       expect(result).not_to be_success
       expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.quota_exceeded'))
       expect(user.receipts.count).to eq(0)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
       expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
     end
   end

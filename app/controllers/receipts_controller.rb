@@ -173,7 +173,7 @@ class ReceiptsController < ApplicationController
     Rails.logger.info(
       "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
     )
-    ReceiptAnalysisJob.perform_later(run_id: result.run.id)
+    ReceiptOcrJob.perform_later(run_id: result.run.id)
   end
 
   def temporary_notice_options(message)
