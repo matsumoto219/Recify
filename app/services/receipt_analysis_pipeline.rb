@@ -1,12 +1,8 @@
 class ReceiptAnalysisPipeline
-  LOG_TAG = "[ReceiptAnalysisJob]".freeze
+  LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
   SUPPORTED_RECEIPT_COUNTRY_CODES = ReceiptAnalysisService::SUPPORTED_RECEIPT_COUNTRY_CODES
 
   class << self
-    def run_current_pipeline(run)
-      new(run).run_current_pipeline
-    end
-
     def run_ocr(run)
       new(run).run_ocr
     end
@@ -30,35 +26,6 @@ class ReceiptAnalysisPipeline
   def initialize(run)
     @run = run
     @receipt = run.receipt
-  end
-
-  def run_current_pipeline
-    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-    begin
-      result = run_ocr
-      return result if result.next_step == :skipped
-
-      result = run_ai if result.next_step == :ai
-      return result if result.next_step == :skipped
-
-      result = run_finalize if result.next_step == :finalize
-      return result if result.next_step == :skipped
-
-      finished_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      duration_ms = ((finished_at - started_at) * 1000).round(1)
-
-      Rails.logger.info(
-        "#{LOG_TAG} completed receipt_id=#{receipt.id} run_id=#{run.id} duration_ms=#{duration_ms}"
-      )
-      result
-    rescue => e
-      fail_run(e)
-      Rails.logger.error(
-        "#{LOG_TAG} failed receipt_id=#{receipt.id} run_id=#{run.id} error_class=#{e.class} message=#{e.message}"
-      )
-      raise
-    end
   end
 
   def run_ocr

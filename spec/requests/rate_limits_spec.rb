@@ -315,7 +315,6 @@ RSpec.describe 'Rails rate limits', type: :request do
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrJob).to receive(:perform_later)
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
 
       10.times do
         post upload_receipts_path,
@@ -326,7 +325,6 @@ RSpec.describe 'Rails rate limits', type: :request do
 
       aggregate_failures do
         expect(ReceiptOcrJob).to have_received(:perform_later).exactly(10).times
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
 
       expect do
@@ -337,7 +335,6 @@ RSpec.describe 'Rails rate limits', type: :request do
       aggregate_failures do
         expect_rate_limited_response
         expect(ReceiptOcrJob).to have_received(:perform_later).exactly(10).times
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
   end

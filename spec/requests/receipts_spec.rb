@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Receipts', type: :request do
+  include ActiveJob::TestHelper
+
   let(:user) { create(:user) }
   let(:image_path) { Rails.root.join('spec/fixtures/files/receipt_sample.jpg') }
   let(:uploaded_image) do
@@ -66,6 +68,12 @@ RSpec.describe 'Receipts', type: :request do
       receipt_attributes: {},
       receipt_items_attributes: []
     }
+  end
+
+  def perform_analysis_job_chain(run)
+    perform_enqueued_jobs(only: [ ReceiptAiEnrichmentJob, ReceiptFinalizeJob ]) do
+      ReceiptOcrJob.perform_now(run_id: run.id)
+    end
   end
 
   before do
@@ -821,7 +829,6 @@ RSpec.describe 'Receipts', type: :request do
   describe 'POST /receipts/upload' do
     before do
       allow(ReceiptOcrJob).to receive(:perform_later)
-      allow(ReceiptAnalysisJob).to receive(:perform_later)
     end
 
     it '単一camera uploadはsource: uploadのrunを作成しrun_id付きOCR jobをenqueueする' do
@@ -845,7 +852,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(run.requested_by_user).to eq(user)
         expect(run.status).to eq('queued')
         expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -871,7 +877,6 @@ RSpec.describe 'Receipts', type: :request do
           requested_by_user: user
         )
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -902,7 +907,6 @@ RSpec.describe 'Receipts', type: :request do
           expect(run.requested_by_user).to eq(user)
           expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
         end
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -920,7 +924,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('receipts.batch_upload.errors.too_many', max: ReceiptBatchUploadService::MAX_FILES))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -945,7 +948,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -967,7 +969,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('receipts.batch_upload.errors.quota_exceeded'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -985,7 +986,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1007,7 +1007,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
         expect(response.body).not_to include('Error Code: 422')
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1024,7 +1023,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1045,7 +1043,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
         expect(response.body).not_to include('Error Code: 422')
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1063,7 +1060,6 @@ RSpec.describe 'Receipts', type: :request do
         receipt = Receipt.order(:id).last
         run = receipt.receipt_analysis_runs.sole
         expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
-        expect(ReceiptAnalysisJob).not_to have_received(:perform_later)
       end
     end
 
@@ -1105,7 +1101,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(receipt.status).to eq('processing')
 
       run = receipt.receipt_analysis_runs.sole
-      ReceiptAnalysisJob.perform_now(run_id: run.id)
+      perform_analysis_job_chain(run)
       receipt.reload
 
       aggregate_failures 'failed receipt state' do
@@ -1163,7 +1159,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(receipt.status).to eq('processing')
 
       run = receipt.receipt_analysis_runs.sole
-      ReceiptAnalysisJob.perform_now(run_id: run.id)
+      perform_analysis_job_chain(run)
       receipt.reload
 
       aggregate_failures 'review_needed fallback state' do
@@ -1222,7 +1218,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(receipt.status).to eq('processing')
 
       run = receipt.receipt_analysis_runs.sole
-      ReceiptAnalysisJob.perform_now(run_id: run.id)
+      perform_analysis_job_chain(run)
       receipt.reload
 
       aggregate_failures do
