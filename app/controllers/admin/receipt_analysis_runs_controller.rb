@@ -1,7 +1,7 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   RETRY_TYPES = Analysis::RetryService::RETRY_TYPES.freeze
 
-  helper_method :admin_retry_enabled?
+  helper_method :admin_retry_enabled?, :admin_retry_reauthentication_required?
 
   def index
     @filters = filter_params
@@ -17,11 +17,16 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   end
 
   def retry
-    raise_not_found unless admin_retry_enabled?
-
     @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1)
     @record = @result.records.first
     raise_not_found if @record.blank?
+
+    unless admin_retry_enabled?
+      redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
+                  alert: "Retry requires fresh passkey reauthentication.",
+                  status: :see_other
+      return
+    end
 
     retry_type = params[:retry_type].to_s
     reason = params[:reason].to_s.strip
@@ -36,14 +41,17 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       return
     end
 
-    result = Analysis::RetryService.call(
+    retry_attributes = {
       receipt: @record[:receipt],
       parent_run: @record[:run],
       actor: current_user,
       retry_type: retry_type,
       reason: reason,
       request: request
-    )
+    }
+    retry_attributes[:reauthentication] = admin_reauthentication_context if admin_passkey_reauthenticated?
+
+    result = Analysis::RetryService.call(**retry_attributes)
 
     if result.success?
       redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: "Retry enqueued: #{retry_type}"
@@ -55,9 +63,13 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   private
 
   def admin_retry_enabled?
-    # TODO: passkey再認証実装後にproduction retry actionを解禁する。
-    # high-risk admin action requires passkey reauthentication.
-    Rails.env.development? || Rails.env.test?
+    Rails.env.development? ||
+      Rails.env.test? ||
+      (current_user.passkeys.exists? && admin_passkey_reauthenticated?)
+  end
+
+  def admin_retry_reauthentication_required?
+    Rails.env.production? && !admin_passkey_reauthenticated?
   end
 
   def filter_params

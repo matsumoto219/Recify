@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'webauthn/fake_client'
 
 RSpec.describe 'Admin receipt analysis runs', type: :request do
   include ActiveJob::TestHelper
@@ -29,6 +30,36 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
     analysis_jobs = [ ReceiptOcrJob, ReceiptAiEnrichmentJob, ReceiptFinalizeJob ]
 
     expect(enqueued_jobs.select { |job| analysis_jobs.include?(job[:job]) }).to be_empty
+  end
+
+  def webauthn_client
+    @webauthn_client ||= WebAuthn::FakeClient.new('http://localhost:3000')
+  end
+
+  def create_passkey_with_fake_client(user)
+    options = Passkeys.registration_options(user: user)
+    credential = webauthn_client.create(challenge: options.challenge, rp_id: 'localhost', user_verified: true)
+
+    Passkeys.verify_registration(user: user, credential: credential, challenge: options.challenge)
+  end
+
+  def reauthenticate_admin_with_passkey!(admin)
+    passkey = create_passkey_with_fake_client(admin)
+
+    post options_admin_passkey_reauthentication_path, as: :json
+    options = response.parsed_body.fetch('publicKey')
+    credential = webauthn_client.get(
+      challenge: options.fetch('challenge'),
+      rp_id: 'localhost',
+      user_verified: true,
+      allow_credentials: [ passkey.credential_id ]
+    )
+
+    post admin_passkey_reauthentication_path,
+         params: { credential: credential },
+         as: :json
+
+    expect(response).to have_http_status(:success)
   end
 
   describe 'GET /admin' do
@@ -226,7 +257,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('Snapshot presence')
         expect(response.body).to include('Finalize decision')
         expect(response.body).to include('Amount calculation profile')
-        expect(response.body).to include('development/test 限定')
+        expect(response.body).to include('development/test では retry を実行できます')
         expect(response.body).to include('safe content')
         expect(response.body).not_to include('Analysis::RetryService.call')
       end
@@ -293,10 +324,29 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('production では retry action は無効')
+        expect(response.body).to include('production retry action requires fresh passkey reauthentication')
+        expect(response.body).to include(new_admin_passkey_reauthentication_path)
         expect(response.body).not_to include('name="retry_type"')
         expect(response.body).not_to include('再解析理由')
         expect(response.body).not_to include('value="Retry"')
+      end
+    end
+
+    it 'production相当でfresh reauth済みならretry form/buttonを表示する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))
+      sign_in admin
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('fresh passkey reauthentication is active')
+        expect(response.body).to include('name="retry_type"')
+        expect(response.body).to include('再解析理由')
+        expect(response.body).to include('value="Retry"')
       end
     end
   end
@@ -402,7 +452,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
-    it 'production相当ではretry actionを既存404へ流して実行しない' do
+    it 'production相当でfresh reauthなしならRetryServiceを呼ばずreauthへredirectする' do
       admin = create(:user, :admin)
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
@@ -416,9 +466,68 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
            }
 
       aggregate_failures do
-        expect(response).to have_http_status(:not_found)
-        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
+        expect(flash[:alert]).to include('fresh passkey reauthentication')
         expect(Analysis::RetryService).not_to have_received(:call)
+        expect(session.to_hash.to_json).not_to include('production disabled', 'full_reanalyze')
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'production相当でpasskey未登録adminもRetryServiceを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+      allow(Analysis::RetryService).to receive(:call)
+
+      post retry_admin_receipt_analysis_run_path(run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: 'passkey missing'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
+        expect(Analysis::RetryService).not_to have_received(:call)
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'production相当でfresh reauth済みならRetryServiceへreauthentication metadataを渡す' do
+      admin = create(:user, :admin)
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))
+      new_run = create(:receipt_analysis_run, receipt: parent_run.receipt, parent_run: parent_run)
+      result = Analysis::RetryService::Result.new(
+        run: new_run,
+        enqueued_job: ReceiptOcrJob,
+        retry_type: 'full_reanalyze'
+      )
+      sign_in admin
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+      reauthenticate_admin_with_passkey!(admin)
+      allow(Analysis::RetryService).to receive(:call).and_return(result)
+
+      post retry_admin_receipt_analysis_run_path(parent_run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: 'production fresh retry'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(new_run.run_key))
+        expect(Analysis::RetryService).to have_received(:call).with(
+          receipt: parent_run.receipt,
+          parent_run: parent_run,
+          actor: admin,
+          retry_type: 'full_reanalyze',
+          reason: 'production fresh retry',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(
+            method: 'passkey',
+            reauthenticated_at: kind_of(Time)
+          )
+        )
         expect_no_analysis_jobs_enqueued
       end
     end

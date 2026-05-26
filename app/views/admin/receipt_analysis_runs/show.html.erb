@@ -124,10 +124,17 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
-    <% if admin_retry_enabled? %>
-      <p class="mb-4 text-sm token-text-muted">development/test 限定で retry を実行できます。production は passkey再認証実装まで無効です。</p>
+    <% if Rails.env.development? || Rails.env.test? %>
+      <p class="mb-4 text-sm token-text-muted">development/test では retry を実行できます。production では fresh passkey reauthentication が必要です。</p>
+    <% elsif admin_passkey_reauthenticated? %>
+      <p class="mb-4 text-sm token-text-muted">fresh passkey reauthentication is active. production retry action is available for this session window.</p>
     <% else %>
-      <p class="mb-4 text-sm token-text-muted">production では retry action は無効です。passkey再認証実装後に解禁予定です。</p>
+      <div class="mb-4 space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <p class="text-sm token-text-muted">production retry action requires fresh passkey reauthentication. POST payload is not saved; re-enter retry_type and reason after reauthentication.</p>
+        <%= link_to "Passkey reauthentication",
+              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      </div>
     <% end %>
     <div class="grid gap-3 md:grid-cols-2">
       <% @record[:retry_options].each do |option| %>

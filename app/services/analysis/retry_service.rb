@@ -20,14 +20,15 @@ module Analysis
     Eligibility = Struct.new(:retry_options, keyword_init: true)
 
     class << self
-      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil)
+      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil, reauthentication: nil)
         new(
           receipt: receipt,
           parent_run: parent_run,
           actor: actor,
           retry_type: retry_type,
           reason: reason,
-          request: request
+          request: request,
+          reauthentication: reauthentication
         ).call
       end
 
@@ -40,20 +41,22 @@ module Analysis
               actor: nil,
               retry_type: type,
               reason: nil,
-              request: nil
+              request: nil,
+              reauthentication: nil
             ).retry_option
           end
         )
       end
     end
 
-    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:)
+    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:)
       @receipt = receipt
       @parent_run = parent_run
       @actor = actor
       @retry_type = retry_type.to_s
       @reason = reason
       @request = request
+      @reauthentication = reauthentication
     end
 
     def call
@@ -119,7 +122,7 @@ module Analysis
 
     private
 
-    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request
+    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication
 
     def parent_finalize_decision
       @parent_finalize_decision ||= ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
@@ -261,7 +264,7 @@ module Analysis
         metadata[:failure_reason] = result.error_code
       end
 
-      metadata
+      metadata.merge(reauthentication_metadata)
     end
 
     def audit_before_state
@@ -297,6 +300,17 @@ module Analysis
 
     def audit_retry_type
       RETRY_TYPES.include?(retry_type) ? retry_type : "unknown_retry"
+    end
+
+    def reauthentication_metadata
+      context = reauthentication.to_h.symbolize_keys
+      return {} unless context[:method].present? && context[:reauthenticated_at].present?
+
+      {
+        reauthenticated: true,
+        reauthentication_method: context[:method],
+        reauthenticated_at: context[:reauthenticated_at]
+      }
     end
 
     def failure(error_code, error_message, run: nil)

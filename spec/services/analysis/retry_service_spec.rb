@@ -115,6 +115,40 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'reauthentication contextをaudit metadataに保存し、credential materialは保存しない' do
+      reauthenticated_at = Time.current
+
+      result = described_class.call(
+        receipt: receipt,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reason: 'fresh passkey retry',
+        reauthentication: {
+          method: 'passkey',
+          reauthenticated_at: reauthenticated_at,
+          credential_id: 'credential-secret',
+          public_key: 'public-key-secret',
+          challenge: 'challenge-secret'
+        }
+      )
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(audit_log.metadata).to include(
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey',
+          'reauthenticated_at' => reauthenticated_at.iso8601
+        )
+        expect(audit_log.metadata.to_json).not_to include(
+          'credential-secret',
+          'public-key-secret',
+          'challenge-secret'
+        )
+      end
+    end
+
     it 'ai_retryでOCR snapshotをコピーし、ReceiptAiEnrichmentJobをenqueueする' do
       parent_run = create(
         :receipt_analysis_run,
@@ -260,6 +294,41 @@ RSpec.describe Analysis::RetryService do
         expect(AuditLog.last.after_state).to include(
           'receipt_status' => 'completed',
           'failure_reason' => 'active_run_exists'
+        )
+      end
+    end
+
+    it '失敗auditにもreauthentication contextを保存する' do
+      active_run = create(:receipt_analysis_run, :running, receipt: receipt)
+      reauthenticated_at = Time.current
+
+      result = described_class.call(
+        receipt: receipt,
+        parent_run: nil,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reauthentication: {
+          method: 'passkey',
+          reauthenticated_at: reauthenticated_at,
+          credential_id: 'credential-secret',
+          public_key: 'public-key-secret',
+          challenge: 'challenge-secret'
+        }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.run).to eq(active_run)
+        expect(AuditLog.last.metadata).to include(
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey',
+          'reauthenticated_at' => reauthenticated_at.iso8601,
+          'failure_reason' => 'active_run_exists'
+        )
+        expect(AuditLog.last.metadata.to_json).not_to include(
+          'credential-secret',
+          'public-key-secret',
+          'challenge-secret'
         )
       end
     end
