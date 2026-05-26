@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_050939) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_26_073320) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -86,6 +86,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_050939) do
     t.index ["user_id", "kind", "notifiable_type", "notifiable_id"], name: "index_notifications_on_user_kind_notifiable_unique", unique: true, where: "((notifiable_type IS NOT NULL) AND (notifiable_id IS NOT NULL))"
     t.index ["user_id", "read_at", "created_at"], name: "index_notifications_on_user_id_and_read_at_and_created_at"
     t.index ["user_id"], name: "index_notifications_on_user_id"
+  end
+
+  create_table "passkeys", force: :cascade do |t|
+    t.boolean "backed_up", default: false, null: false
+    t.boolean "backup_eligible", default: false, null: false
+    t.datetime "created_at", null: false
+    t.string "credential_id", null: false
+    t.string "label"
+    t.datetime "last_used_at"
+    t.text "public_key", null: false
+    t.bigint "sign_count", default: 0, null: false
+    t.jsonb "transports", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["credential_id"], name: "index_passkeys_on_credential_id", unique: true
+    t.index ["last_used_at"], name: "index_passkeys_on_last_used_at"
+    t.index ["user_id"], name: "index_passkeys_on_user_id"
   end
 
   create_table "receipt_analysis_runs", force: :cascade do |t|
@@ -246,18 +263,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_050939) do
     t.string "unconfirmed_email"
     t.string "unlock_token"
     t.datetime "updated_at", null: false
+    t.string "webauthn_id"
     t.index "COALESCE(last_sign_in_at, updated_at)", name: "index_users_on_guest_cleanup_at", where: "((guest = true) AND (confirmed_at IS NOT NULL))"
     t.index "lower((unconfirmed_email)::text)", name: "index_users_on_lower_unconfirmed_email_unique", unique: true, where: "((unconfirmed_email IS NOT NULL) AND ((unconfirmed_email)::text <> ''::text))"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["unlock_token"], name: "index_users_on_unlock_token", unique: true
+    t.index ["webauthn_id"], name: "index_users_on_webauthn_id", unique: true
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "audit_logs", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "notifications", "users"
+  add_foreign_key "passkeys", "users"
   add_foreign_key "receipt_analysis_runs", "receipt_analysis_runs", column: "parent_run_id", on_delete: :nullify
   add_foreign_key "receipt_analysis_runs", "receipts"
   add_foreign_key "receipt_analysis_runs", "users", column: "requested_by_user_id", on_delete: :nullify

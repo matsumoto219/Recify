@@ -4,35 +4,53 @@ module AuditLogs
 
   BLOCKED_KEYS = %w[
     api_key
+    attestation_object
+    authenticator_data
     authorization
     blob_key
+    challenge
+    client_data_json
     cookie
+    credential_id
     messages
     password
     prompt
+    public_key
+    raw_id
     raw_response
     raw_text
     response_body
     secret
     session
+    signature
     signed_id
     token
+    user_handle
   ].freeze
 
   BLOCKED_KEY_FRAGMENTS = %w[
     api_key
+    attestation_object
+    authenticator_data
     authorization
     blob_key
+    challenge
+    client_data_json
     cookie
+    credential_id
     password
     prompt
+    public_key
+    raw_id
     raw_response
     raw_text
     response_body
     secret
     session
+    signature
     signed_id
     token
+    user_handle
   ].freeze
 
   class << self

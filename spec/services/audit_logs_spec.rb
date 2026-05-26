@@ -136,5 +136,48 @@ RSpec.describe AuditLogs do
       expect(log.metadata['long_text'].bytesize).to be <= described_class::MAX_STRING_BYTES
       expect(log.metadata['values'].size).to eq(described_class::MAX_ARRAY_ITEMS)
     end
+
+    it 'passkey credential materialを保存しない' do
+      log = described_class.record_admin_action!(
+        actor: create(:user, :admin),
+        action: 'admin.passkey_reauthentication',
+        outcome: 'succeeded',
+        metadata: {
+          reauthenticated: true,
+          method: 'passkey',
+          credential_id: 'credential-secret',
+          public_key: 'public-key-secret',
+          challenge: 'challenge-secret',
+          authenticator_data: 'authenticator-data-secret',
+          client_data_json: 'client-data-json-secret',
+          attestation_object: 'attestation-object-secret',
+          raw_id: 'raw-id-secret',
+          signature: 'signature-secret',
+          user_handle: 'user-handle-secret',
+          nested: {
+            passkey_public_key: 'nested-public-key-secret',
+            safe: 'visible'
+          }
+        }
+      )
+
+      expect(log.metadata).to eq(
+        'reauthenticated' => true,
+        'method' => 'passkey',
+        'nested' => { 'safe' => 'visible' }
+      )
+      expect(log.metadata.to_json).not_to include(
+        'credential-secret',
+        'public-key-secret',
+        'challenge-secret',
+        'authenticator-data-secret',
+        'client-data-json-secret',
+        'attestation-object-secret',
+        'raw-id-secret',
+        'signature-secret',
+        'user-handle-secret',
+        'nested-public-key-secret'
+      )
+    end
   end
 end

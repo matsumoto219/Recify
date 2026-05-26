@@ -40,6 +40,15 @@ RSpec.describe User, type: :model do
   end
 
   describe 'associations' do
+    it 'passkeysはuser削除時に削除する' do
+      user = create(:user)
+      passkey = create(:passkey, user: user)
+
+      user.destroy!
+
+      expect(Passkey.where(id: passkey.id)).not_to exist
+    end
+
     it 'requested_by_userとして紐づく解析runはuser削除時にnilへ戻す' do
       receipt_owner = create(:user)
       requested_by_user = create(:user)
@@ -49,6 +58,35 @@ RSpec.describe User, type: :model do
       requested_by_user.destroy!
 
       expect(run.reload.requested_by_user).to be_nil
+    end
+  end
+
+  describe '#ensure_webauthn_id!' do
+    it 'ランダムなstable user handleを保存する' do
+      user = create(:user, webauthn_id: nil)
+
+      webauthn_id = user.ensure_webauthn_id!
+
+      aggregate_failures do
+        expect(webauthn_id).to be_present
+        expect(user.reload.webauthn_id).to eq(webauthn_id)
+      end
+    end
+
+    it '既存webauthn_idがあれば変更しない' do
+      user = create(:user, webauthn_id: 'existing-user-handle')
+
+      expect(user.ensure_webauthn_id!).to eq('existing-user-handle')
+      expect(user.reload.webauthn_id).to eq('existing-user-handle')
+    end
+
+    it 'webauthn_idにunique indexを持つ' do
+      index = ActiveRecord::Base.connection.indexes(:users).find do |candidate|
+        candidate.name == 'index_users_on_webauthn_id'
+      end
+
+      expect(index).to be_present
+      expect(index.unique).to be(true)
     end
   end
 

@@ -7,6 +7,7 @@ class User < ApplicationRecord
 
   has_many :receipts, dependent: :destroy
   has_many :notifications, dependent: :destroy
+  has_many :passkeys, dependent: :destroy
   has_many :requested_receipt_analysis_runs,
            class_name: "ReceiptAnalysisRun",
            foreign_key: :requested_by_user_id,
@@ -42,6 +43,10 @@ class User < ApplicationRecord
       .where.not(confirmed_at: nil)
       .where("COALESCE(last_sign_in_at, updated_at) <= ?", cutoff)
   }
+
+  def self.generate_webauthn_id
+    WebAuthn.generate_user_id
+  end
 
   def self.guest!
     user = new(
@@ -97,6 +102,16 @@ class User < ApplicationRecord
 
   def storage_can_add?(byte_size, excluding_blob: nil)
     storage_usage.can_add?(byte_size, excluding_blob: excluding_blob)
+  end
+
+  def ensure_webauthn_id!
+    return webauthn_id if webauthn_id.present?
+
+    with_lock do
+      reload
+      update!(webauthn_id: self.class.generate_webauthn_id) if webauthn_id.blank?
+      webauthn_id
+    end
   end
 
   private
