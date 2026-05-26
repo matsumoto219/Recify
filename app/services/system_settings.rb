@@ -13,6 +13,8 @@ module SystemSettings
     :risk_level,
     :min,
     :max,
+    :allowed_values,
+    :requires_confirmation,
     keyword_init: true
   ) do
     def to_h
@@ -24,7 +26,9 @@ module SystemSettings
         editable: editable,
         risk_level: risk_level,
         min: min,
-        max: max
+        max: max,
+        allowed_values: allowed_values,
+        requires_confirmation: requires_confirmation
       }.compact
     end
   end
@@ -95,6 +99,29 @@ module SystemSettings
       { VALUE_KEY => value }
     end
 
+    def cast_update_value(key, value)
+      cast_value(definition_for(key), value)
+    end
+
+    def stored_value_for_update(key, value)
+      casted_value = cast_update_value(key, value)
+
+      stored_value(serializable_value(casted_value))
+    end
+
+    def audit_value(value)
+      case value
+      when BigDecimal
+        value.to_s("F")
+      when Array
+        value.map { |child| audit_value(child) }
+      when Hash
+        value.transform_values { |child| audit_value(child) }
+      else
+        value
+      end
+    end
+
     private
 
     def normalize_key(key)
@@ -119,6 +146,18 @@ module SystemSettings
         cast_boolean(value)
       when "integer"
         cast_integer(definition, value)
+      when "decimal"
+        cast_decimal(definition, value)
+      when "string"
+        cast_string(value)
+      when "enum"
+        cast_enum(definition, value)
+      when "percentage"
+        cast_percentage(definition, value)
+      when "user_allowlist"
+        cast_user_allowlist(value)
+      when "duration"
+        cast_duration(definition, value)
       else
         value
       end
@@ -126,8 +165,8 @@ module SystemSettings
 
     def cast_boolean(value)
       return value if value == true || value == false
-      return true if value.to_s == "true"
-      return false if value.to_s == "false"
+      return true if %w[true 1 on yes].include?(value.to_s)
+      return false if %w[false 0 off no].include?(value.to_s)
 
       raise ValidationError, "invalid_boolean"
     end
@@ -140,6 +179,91 @@ module SystemSettings
       integer
     rescue ArgumentError, TypeError
       raise ValidationError, "invalid_integer"
+    end
+
+    def cast_decimal(definition, value)
+      decimal = BigDecimal(value.to_s)
+      validate_numeric_range!(definition, decimal)
+
+      decimal
+    rescue ArgumentError, TypeError
+      raise ValidationError, "invalid_decimal"
+    end
+
+    def cast_string(value)
+      value.to_s
+    end
+
+    def cast_enum(definition, value)
+      enum_value = value.to_s
+      allowed_values = Array(definition.allowed_values).map(&:to_s)
+      raise ValidationError, "invalid_enum" if allowed_values.empty? || !allowed_values.include?(enum_value)
+
+      enum_value
+    end
+
+    def cast_percentage(definition, value)
+      percentage = BigDecimal(value.to_s)
+      min = definition.min || 0
+      max = definition.max || 100
+      raise ValidationError, "below_min" if percentage < BigDecimal(min.to_s)
+      raise ValidationError, "above_max" if percentage > BigDecimal(max.to_s)
+
+      percentage
+    rescue ArgumentError, TypeError
+      raise ValidationError, "invalid_percentage"
+    end
+
+    def cast_user_allowlist(value)
+      values = case value
+               when Array
+                 value
+               else
+                 value.to_s.split(/[\s,]+/)
+               end
+
+      values.map { |entry| entry.to_s.strip }.reject(&:blank?).uniq
+    end
+
+    def cast_duration(definition, value)
+      seconds = if value.is_a?(Hash)
+                  duration_value = value["value"] || value[:value]
+                  unit = (value["unit"] || value[:unit] || "seconds").to_s
+                  Integer(duration_value) * duration_unit_multiplier(unit)
+                else
+                  Integer(value)
+                end
+      raise ValidationError, "below_min" if definition.min && seconds < definition.min
+      raise ValidationError, "above_max" if definition.max && seconds > definition.max
+
+      seconds
+    rescue ArgumentError, TypeError
+      raise ValidationError, "invalid_duration"
+    end
+
+    def duration_unit_multiplier(unit)
+      case unit
+      when "seconds" then 1
+      when "minutes" then 60
+      when "hours" then 3600
+      when "days" then 86_400
+      else
+        raise ValidationError, "invalid_duration_unit"
+      end
+    end
+
+    def validate_numeric_range!(definition, value)
+      raise ValidationError, "below_min" if definition.min && value < BigDecimal(definition.min.to_s)
+      raise ValidationError, "above_max" if definition.max && value > BigDecimal(definition.max.to_s)
+    end
+
+    def serializable_value(value)
+      case value
+      when BigDecimal
+        value.to_s("F")
+      else
+        value
+      end
     end
   end
 end

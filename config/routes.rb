@@ -7,6 +7,9 @@ Rails.application.routes.draw do
         to: "system_settings#show",
         as: :system_setting,
         constraints: { key: /[^\/]+/ }
+    patch "system_settings/:key",
+          to: "system_settings#update",
+          constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale

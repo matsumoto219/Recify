@@ -8,12 +8,55 @@ class Admin::SystemSettingsController < Admin::BaseController
     raise_not_found if @record.blank?
   end
 
+  def update
+    @record = Admin.system_setting(key: params[:key])
+    raise_not_found if @record.blank?
+
+    unless admin_passkey_reauthenticated?
+      redirect_to new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
+                  alert: "設定変更にはパスキーによる再認証が必要です。",
+                  status: :see_other
+      return
+    end
+
+    if update_params[:reason].to_s.strip.blank?
+      redirect_to admin_system_setting_path(@record[:key]),
+                  alert: "変更理由を入力してください。",
+                  status: :see_other
+      return
+    end
+
+    result = SystemOperations.update_setting(
+      key: @record[:key],
+      value: update_params[:value],
+      actor: current_user,
+      reason: update_params[:reason],
+      request: request,
+      reauthentication: admin_reauthentication_context,
+      confirmation: update_params[:confirm]
+    )
+
+    if result.success?
+      redirect_to admin_system_setting_path(@record[:key]),
+                  notice: "設定を更新しました。",
+                  status: :see_other
+    else
+      redirect_to admin_system_setting_path(@record[:key]),
+                  alert: "設定を更新できませんでした: #{result.error_code}",
+                  status: :see_other
+    end
+  end
+
   private
 
   def filter_params
     params.permit(:category, :editable, :risk_level).to_h.each_with_object({}) do |(key, value), filters|
       filters[key.to_sym] = value if value.present?
     end
+  end
+
+  def update_params
+    params.permit(:value, :reason, :confirm)
   end
 
   def raise_not_found

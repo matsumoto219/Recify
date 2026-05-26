@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'webauthn/fake_client'
 
 RSpec.describe 'Admin system settings', type: :request do
   include ActiveJob::TestHelper
@@ -36,7 +37,48 @@ RSpec.describe 'Admin system settings', type: :request do
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
     expect(AuditLog.count).to eq(0)
-    expect(SystemOperations).not_to respond_to(:update_setting)
+  end
+
+  def expect_no_jobs_enqueued
+    forbidden_jobs = [
+      ReceiptOcrJob,
+      ReceiptAiEnrichmentJob,
+      ReceiptFinalizeJob,
+      ReceiptAnalysisRunStaleCleanupJob,
+      ReceiptAnalysisRunRetentionCleanupJob
+    ]
+
+    expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
+  end
+
+  def webauthn_client
+    @webauthn_client ||= WebAuthn::FakeClient.new('http://localhost:3000')
+  end
+
+  def create_passkey_with_fake_client(user)
+    options = Passkeys.registration_options(user: user)
+    credential = webauthn_client.create(challenge: options.challenge, rp_id: 'localhost', user_verified: true)
+
+    Passkeys.verify_registration(user: user, credential: credential, challenge: options.challenge)
+  end
+
+  def reauthenticate_admin_with_passkey!(admin)
+    passkey = create_passkey_with_fake_client(admin)
+
+    post options_admin_passkey_reauthentication_path, as: :json
+    options = response.parsed_body.fetch('publicKey')
+    credential = webauthn_client.get(
+      challenge: options.fetch('challenge'),
+      rp_id: 'localhost',
+      user_verified: true,
+      allow_credentials: [ passkey.credential_id ]
+    )
+
+    post admin_passkey_reauthentication_path,
+         params: { credential: credential },
+         as: :json
+
+    expect(response).to have_http_status(:success)
   end
 
   describe 'GET /admin/system_settings' do
@@ -94,6 +136,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('RAW AI RESPONSE')
         expect(response.body).not_to include('SECRET')
         expect(response.body).not_to include('name="reason"')
+        expect(response.body).not_to include('設定を更新')
         expect_no_side_effects
       end
     end
@@ -115,7 +158,26 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('SENTRY_DSN')
         expect(response.body).not_to include('WEBAUTHN_RP_ID')
         expect(response.body).not_to include('name="reason"')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('設定を更新')
         expect_no_side_effects
+      end
+    end
+
+    it 'fresh reauth済みならeditable keyの更新フォームを表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('feature.receipt_logo_display_enabled')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('設定を更新')
+        expect(response.body).to include('name="value"')
+        expect(response.body).to include('name="reason"')
+        expect(response.body).not_to include('SENTRY_DSN')
+        expect(response.body).not_to include('WEBAUTHN_RP_ID')
       end
     end
 
@@ -129,14 +191,133 @@ RSpec.describe 'Admin system settings', type: :request do
     end
   end
 
-  it 'write routeを提供しない' do
-    admin = create(:user, :admin)
-    sign_in admin
+  describe 'PATCH /admin/system_settings/:key' do
+    it 'fresh reauthなしでは更新せず、再認証へredirectする' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(SystemOperations).to receive(:update_setting)
 
-    post admin_system_settings_path
-    expect(response).to have_http_status(:not_found)
+      patch admin_system_setting_path('feature.receipt_logo_display_enabled'),
+            params: {
+              value: 'true',
+              reason: 'enable logo'
+            }
 
-    patch admin_system_setting_path('feature.receipt_logo_display_enabled')
-    expect(response).to have_http_status(:not_found)
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path('feature.receipt_logo_display_enabled')))
+        expect(flash[:alert]).to include('パスキーによる再認証')
+        expect(SystemOperations).not_to have_received(:update_setting)
+        expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
+        expect(session.to_hash.to_json).not_to include('enable logo', 'true')
+        expect_no_jobs_enqueued
+      end
+    end
+
+    it 'reason blankでは更新しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      allow(SystemOperations).to receive(:update_setting)
+
+      patch admin_system_setting_path('feature.receipt_logo_display_enabled'),
+            params: {
+              value: 'true',
+              reason: ' '
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('feature.receipt_logo_display_enabled'))
+        expect(flash[:alert]).to include('変更理由')
+        expect(SystemOperations).not_to have_received(:update_setting)
+        expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
+      end
+    end
+
+    it 'editable keyはSystemOperations経由で更新する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      result = SystemOperations::Result.new(success: true)
+      allow(SystemOperations).to receive(:update_setting).and_return(result)
+
+      patch admin_system_setting_path('feature.receipt_logo_display_enabled'),
+            params: {
+              value: 'true',
+              reason: 'enable logo',
+              confirm: '1'
+            },
+            headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('feature.receipt_logo_display_enabled'))
+        expect(flash[:notice]).to include('設定を更新しました')
+        expect(SystemOperations).to have_received(:update_setting).with(
+          key: 'feature.receipt_logo_display_enabled',
+          value: 'true',
+          actor: admin,
+          reason: 'enable logo',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey', reauthenticated_at: kind_of(Time)),
+          confirmation: '1'
+        )
+        expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
+        expect_no_jobs_enqueued
+      end
+    end
+
+    it '実SystemOperations経由で更新し、AuditLogを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('limits.receipt_upload_soft_limit'),
+              params: {
+                value: '250',
+                reason: 'upload support'
+              },
+              headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+      }.to change(AuditLog, :count).by(1)
+
+      setting = SystemSetting.find_by!(key: 'limits.receipt_upload_soft_limit')
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('limits.receipt_upload_soft_limit'))
+        expect(setting.value).to eq('value' => 250)
+        expect(setting.updated_by_user).to eq(admin)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_type: 'SystemSetting',
+          target_id: setting.id,
+          target_uid: 'limits.receipt_upload_soft_limit',
+          reason: 'upload support',
+          user_agent: 'System Settings Request Spec'
+        )
+        expect(audit_log.before_state).to eq('value' => 100, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => 250, 'source' => 'db')
+        expect(audit_log.metadata).to include(
+          'key' => 'limits.receipt_upload_soft_limit',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(audit_log.attributes.to_json).not_to include('credential_id', 'challenge', 'public_key', 'secret')
+      end
+    end
+
+    it '存在しないkeyは404にする' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_path('secret.provider_api_key'),
+            params: {
+              value: 'secret',
+              reason: 'bad key'
+            }
+
+      expect(response).to have_http_status(:not_found)
+    end
   end
 end

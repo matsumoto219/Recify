@@ -6,6 +6,10 @@ module SystemOperations
     :success,
     :operation,
     :cleanup_result,
+    :setting,
+    :value,
+    :before_state,
+    :after_state,
     :audit_log,
     :error_code,
     :error_message,
@@ -30,6 +34,18 @@ module SystemOperations
         limit: limit,
         request: request,
         reauthentication: reauthentication
+      )
+    end
+
+    def update_setting(key:, value:, actor:, reason:, request:, reauthentication:, confirmation: nil)
+      SystemSettingUpdateExecutor.call(
+        key: key,
+        value: value,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation
       )
     end
   end

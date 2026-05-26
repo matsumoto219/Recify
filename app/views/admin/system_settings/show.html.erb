@@ -69,6 +69,89 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">設定を変更</h2>
+      <p class="text-sm token-text-muted">変更にはパスキー再認証と変更理由が必要です。</p>
+    </div>
+
+    <% if @record[:editable] != true %>
+      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        この設定は確認のみです。
+      </p>
+    <% elsif !admin_passkey_reauthenticated? %>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <p class="mb-3 text-sm token-text-muted">設定を変更するにはパスキー再認証が必要です。再認証後、変更内容と理由をもう一度入力してください。</p>
+        <%= link_to "パスキー再認証",
+              new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      </div>
+    <% else %>
+      <%= form_with url: admin_system_setting_path(@record[:key]), method: :patch, local: true, class: "space-y-4" do |form| %>
+        <div class="space-y-1">
+          <%= form.label :value, "新しい値", class: "text-xs font-semibold token-text-muted" %>
+          <% current_value = @record[:current_value] %>
+          <% case @record[:value_type].to_s %>
+          <% when "boolean" %>
+            <%= form.select :value,
+                  options_for_select([[ "有効", "true" ], [ "無効", "false" ]], current_value.to_s),
+                  {},
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% when "integer", "duration" %>
+            <%= form.number_field :value,
+                  value: current_value,
+                  min: @record[:min],
+                  max: @record[:max],
+                  step: 1,
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% when "decimal", "percentage" %>
+            <%= form.number_field :value,
+                  value: current_value,
+                  min: @record[:min],
+                  max: @record[:max],
+                  step: :any,
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% when "enum" %>
+            <%= form.select :value,
+                  options_for_select(Array(@record[:allowed_values]).map { |value| [ value, value ] }, current_value.to_s),
+                  {},
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% when "user_allowlist" %>
+            <%= form.text_area :value,
+                  value: Array(current_value).join("\n"),
+                  rows: 5,
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% else %>
+            <%= form.text_field :value,
+                  value: current_value,
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% end %>
+        </div>
+
+        <div class="space-y-1">
+          <%= form.label :reason, "変更理由", class: "text-xs font-semibold token-text-muted" %>
+          <%= form.text_area :reason,
+                rows: 3,
+                required: true,
+                class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+        </div>
+
+        <% if @record[:requires_confirmation] %>
+          <label class="flex items-start gap-3 text-sm token-text-base">
+            <%= form.check_box :confirm, required: true, class: "mt-1" %>
+            <span>内容と影響範囲を確認しました。</span>
+          </label>
+        <% end %>
+
+        <%= render "shared/ui/actions/button",
+              label: "設定を更新",
+              type: "submit",
+              size: :compact,
+              icon: "save" %>
+      <% end %>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">監査ログ</h2>
     <p class="mb-3 text-sm token-text-muted">この設定に関連する監査ログを確認できます。</p>
     <%= link_to "このkeyの監査ログを見る",

@@ -29,4 +29,33 @@ RSpec.describe SystemOperations do
       end
     end
   end
+
+  describe '.update_setting' do
+    it 'SystemSettingUpdateExecutorへ委譲する親入口である' do
+      allow(SystemOperations::SystemSettingUpdateExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))
+
+      result = described_class.update_setting(
+        key: 'feature.receipt_logo_display_enabled',
+        value: 'true',
+        actor: build_stubbed(:user, :admin),
+        reason: 'update setting',
+        request: nil,
+        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::SystemSettingUpdateExecutor).to have_received(:call).with(
+          key: 'feature.receipt_logo_display_enabled',
+          value: 'true',
+          actor: kind_of(User),
+          reason: 'update setting',
+          request: nil,
+          reauthentication: hash_including(method: 'passkey'),
+          confirmation: '1'
+        )
+      end
+    end
+  end
 end

@@ -60,6 +60,8 @@ module Admin
         risk_level: definition.risk_level,
         min: definition.min,
         max: definition.max,
+        allowed_values: definition.allowed_values,
+        requires_confirmation: definition.requires_confirmation == true || definition.risk_level.to_s == "high",
         updated_by_user: entry.updated_by_user,
         updated_by_user_id: entry.updated_by_user&.id,
         updated_at: entry.updated_at,

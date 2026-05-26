@@ -93,4 +93,83 @@ RSpec.describe SystemSettings do
       end
     end
   end
+
+  describe '.cast_update_value and .stored_value_for_update' do
+    it 'booleanをcastする' do
+      expect(described_class.cast_update_value('feature.receipt_logo_display_enabled', '1')).to eq(true)
+      expect(described_class.stored_value_for_update('feature.receipt_logo_display_enabled', 'false')).to eq('value' => false)
+    end
+
+    it 'integerのmin/maxを検証する' do
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_upload_soft_limit', '250')).to eq(250)
+        expect {
+          described_class.cast_update_value('limits.receipt_upload_soft_limit', '1001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+      end
+    end
+
+    it 'percentage / enum / user_allowlist / durationをcastする' do
+      with_extra_definitions(
+        [
+          SystemSettings::Definition.new(
+            key: 'feature.rollout_percentage',
+            category: 'rollout',
+            value_type: 'percentage',
+            default: BigDecimal('0'),
+            editable: true,
+            risk_level: 'medium'
+          ),
+          SystemSettings::Definition.new(
+            key: 'feature.mode',
+            category: 'feature_flag',
+            value_type: 'enum',
+            default: 'off',
+            editable: true,
+            risk_level: 'low',
+            allowed_values: %w[off beta on]
+          ),
+          SystemSettings::Definition.new(
+            key: 'feature.user_allowlist',
+            category: 'rollout',
+            value_type: 'user_allowlist',
+            default: [],
+            editable: true,
+            risk_level: 'medium'
+          ),
+          SystemSettings::Definition.new(
+            key: 'ui.notice_duration',
+            category: 'ui_toggle',
+            value_type: 'duration',
+            default: 60,
+            editable: true,
+            risk_level: 'low',
+            min: 1,
+            max: 3600
+          )
+        ]
+      ) do
+        aggregate_failures do
+          expect(described_class.cast_update_value('feature.rollout_percentage', '12.5')).to eq(BigDecimal('12.5'))
+          expect(described_class.stored_value_for_update('feature.rollout_percentage', '12.5')).to eq('value' => '12.5')
+          expect(described_class.cast_update_value('feature.mode', 'beta')).to eq('beta')
+          expect {
+            described_class.cast_update_value('feature.mode', 'invalid')
+          }.to raise_error(SystemSettings::ValidationError, 'invalid_enum')
+          expect(described_class.cast_update_value('feature.user_allowlist', "1\n2, 2 3")).to eq(%w[1 2 3])
+          expect(described_class.cast_update_value('ui.notice_duration', { value: '5', unit: 'minutes' })).to eq(300)
+        end
+      end
+    end
+  end
+
+  def with_extra_definitions(extra_definitions)
+    original_definitions = described_class.definitions
+    merged_definitions = original_definitions.merge(extra_definitions.index_by(&:key))
+
+    allow(described_class).to receive(:definitions).and_return(merged_definitions)
+    yield
+  ensure
+    allow(described_class).to receive(:definitions).and_call_original
+  end
 end
