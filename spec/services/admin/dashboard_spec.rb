@@ -54,11 +54,11 @@ RSpec.describe Admin::Dashboard do
         )
         expect(result.system_operations[:recurring_dry_run_count]).to be >= 1
         expect(result.locked_future_operations).to include(
-          'feature flag変更',
-          'timeout変更',
-          'queue pause/resume',
-          'external service override',
-          'system settings'
+          '機能公開設定の変更',
+          '処理時間設定の変更',
+          'キューの一時停止・再開',
+          '外部サービス状態の切り替え',
+          'システム設定の変更'
         )
       end
     end
@@ -87,7 +87,7 @@ RSpec.describe Admin::Dashboard do
       json = JSON.generate(described_class.call(admin_user: admin).to_h)
 
       aggregate_failures do
-        expect(json).to include('receipt_ocr', 'feature flag変更')
+        expect(json).to include('receipt_ocr', '機能公開設定の変更')
         expect(json).not_to include('RAW OCR RESPONSE')
         expect(json).not_to include('FULL PROMPT')
         expect(json).not_to include('RAW AI RESPONSE')

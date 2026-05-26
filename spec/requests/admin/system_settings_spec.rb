@@ -62,7 +62,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.content_type).to eq('text/html; charset=utf-8')
         expect(response.body).to eq(expected_body)
         expect(comparable_headers).to eq(expected_headers)
-        expect(response.body).not_to include('System settings')
+        expect(response.body).not_to include('システム設定')
       end
     end
 
@@ -80,8 +80,8 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('System settings')
-        expect(response.body).to include('Definition allowlist')
+        expect(response.body).to include('システム設定')
+        expect(response.body).to include('管理対象設定')
         expect(response.body).to include('feature.receipt_logo_display_enabled')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
         expect(response.body).to include(admin_system_setting_path('feature.receipt_logo_display_enabled'))

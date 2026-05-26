@@ -63,11 +63,11 @@ RSpec.describe 'Admin system operations', type: :request do
         expect(response.body).to eq(expected_body)
         expect(comparable_headers).to eq(expected_headers)
         expect(response.body).to include(I18n.t('errors.not_found.title'))
-        expect(response.body).not_to include('System operations')
+        expect(response.body).not_to include('システム運用')
       end
     end
 
-    it 'adminユーザーはread-only dashboardを閲覧できる' do
+    it 'adminユーザーはシステム運用画面を閲覧できる' do
       admin = create(:user, :admin)
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
@@ -77,10 +77,10 @@ RSpec.describe 'Admin system operations', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('System operations')
+        expect(response.body).to include('システム運用')
         expect(response.body).to include('解析run管理')
         expect(response.body).to include('監査ログ')
-        expect(response.body).to include('Cleanup preview')
+        expect(response.body).to include('Cleanup確認')
         expect(response.body).to include(admin_receipt_analysis_runs_path)
         expect(response.body).to include(admin_receipt_analysis_cleanup_path)
         expect(response.body).to include(admin_audit_logs_path)
@@ -91,10 +91,10 @@ RSpec.describe 'Admin system operations', type: :request do
         expect(response.body).to include('receipt_analysis_run_stale_cleanup_dry_run')
         expect(response.body).to include('receipt_analysis_run_retention_cleanup_dry_run')
         expect(response.body).to include('orphan_blob_cleanup_dry_run')
-        expect(response.body).to include('feature flag変更')
-        expect(response.body).to include('timeout変更')
-        expect(response.body).to include('queue pause/resume')
-        expect(response.body).to include('external service override')
+        expect(response.body).to include('機能公開設定の変更')
+        expect(response.body).to include('処理時間設定の変更')
+        expect(response.body).to include('キューの一時停止・再開')
+        expect(response.body).to include('外部サービス状態の切り替え')
         expect(response.body).not_to include('RAW OCR RESPONSE')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('RAW AI RESPONSE')

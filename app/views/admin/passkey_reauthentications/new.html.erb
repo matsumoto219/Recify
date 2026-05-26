@@ -14,7 +14,7 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <% if admin_passkey_reauthenticated? %>
       <div class="mb-5 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-success">
-        fresh passkey reauthentication is active.
+        パスキー再認証済みです。
       </div>
     <% end %>
 
@@ -22,7 +22,7 @@
       <div class="space-y-4">
         <h2 class="text-lg font-bold token-text-base">パスキーが登録されていません</h2>
         <p class="text-sm token-text-muted leading-relaxed">
-          管理者の高リスク操作にはパスキー再認証が必要です。settings/security からパスキーを登録してください。
+          管理者の重要操作にはパスキー再認証が必要です。パスキー設定から登録してください。
         </p>
         <%= link_to "パスキー登録へ",
               settings_security_path(anchor: "passkeys"),
@@ -42,7 +42,7 @@
         <div class="space-y-2">
           <h2 class="text-lg font-bold token-text-base">パスキーで再認証</h2>
           <p class="text-sm token-text-muted leading-relaxed">
-            再認証は5分間だけ有効です。WebAuthnの内部情報は画面やAuditLogに保存しません。
+            再認証は5分間有効です。認証に使う秘密情報は画面に表示しません。
           </p>
         </div>
 

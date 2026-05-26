@@ -21,21 +21,21 @@ module Admin
     ].freeze
 
     LOCKED_FUTURE_OPERATIONS = [
-      "feature flag変更",
-      "timeout変更",
-      "queue pause/resume",
-      "external service override",
-      "system settings",
-      "admin権限変更",
-      "user BAN/delete"
+      "機能公開設定の変更",
+      "処理時間設定の変更",
+      "キューの一時停止・再開",
+      "外部サービス状態の切り替え",
+      "システム設定の変更",
+      "管理者権限の変更",
+      "ユーザー利用制限・削除"
     ].freeze
 
     POLICY_ITEMS = [
-      "fresh passkey reauthentication required",
-      "reason required",
-      "AuditLog required",
-      "service/facade only",
-      "no raw OCR / prompt / raw AI / secret"
+      "パスキーによる再認証が必要",
+      "実行理由の入力が必要",
+      "監査ログに記録",
+      "専用の管理手順で実行",
+      "OCR原文・AI応答・機密情報は表示しない"
     ].freeze
 
     Result = Struct.new(

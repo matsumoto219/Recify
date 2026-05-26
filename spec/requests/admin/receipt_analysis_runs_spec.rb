@@ -257,7 +257,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('Snapshot presence')
         expect(response.body).to include('Finalize decision')
         expect(response.body).to include('Amount calculation profile')
-        expect(response.body).to include('development/test では retry を実行できます')
+        expect(response.body).to include('再解析を実行できます。実行理由を入力してください。')
         expect(response.body).to include('safe content')
         expect(response.body).not_to include('Analysis::RetryService.call')
       end
@@ -324,11 +324,11 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('production retry action requires fresh passkey reauthentication')
+        expect(response.body).to include('再解析にはパスキー再認証が必要です')
         expect(response.body).to include(new_admin_passkey_reauthentication_path)
-        expect(response.body).not_to include('name="retry_type"')
+        expect(response.body).not_to include('name="retry_kind"')
         expect(response.body).not_to include('再解析理由')
-        expect(response.body).not_to include('value="Retry"')
+        expect(response.body).not_to include('value="再解析を実行"')
       end
     end
 
@@ -343,10 +343,10 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('fresh passkey reauthentication is active')
-        expect(response.body).to include('name="retry_type"')
+        expect(response.body).to include('パスキー再認証済みです')
+        expect(response.body).to include('name="retry_kind"')
         expect(response.body).to include('再解析理由')
-        expect(response.body).to include('value="Retry"')
+        expect(response.body).to include('value="再解析を実行"')
       end
     end
   end
@@ -372,7 +372,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(new_run.run_key))
-        expect(flash[:notice]).to include('Retry enqueued')
+        expect(flash[:notice]).to include('再解析を受け付けました')
         expect(Analysis::RetryService).to have_received(:call).with(
           receipt: parent_run.receipt,
           parent_run: parent_run,
@@ -426,7 +426,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
-        expect(flash[:alert]).to include('reason is required')
+        expect(flash[:alert]).to include('再解析理由を入力してください')
         expect(Analysis::RetryService).not_to have_received(:call)
         expect_no_analysis_jobs_enqueued
       end
@@ -446,7 +446,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
-        expect(flash[:alert]).to include('Invalid retry type')
+        expect(flash[:alert]).to include('再解析の種類を選択してください')
         expect(Analysis::RetryService).not_to have_received(:call)
         expect_no_analysis_jobs_enqueued
       end
@@ -467,7 +467,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
-        expect(flash[:alert]).to include('fresh passkey reauthentication')
+        expect(flash[:alert]).to include('パスキーによる再認証')
         expect(Analysis::RetryService).not_to have_received(:call)
         expect(session.to_hash.to_json).not_to include('production disabled', 'full_reanalyze')
         expect_no_analysis_jobs_enqueued

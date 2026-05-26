@@ -15,7 +15,7 @@
 
   <%= render "shared/ui/layout/section_header",
         title: "管理トップ",
-        subtitle: "v1.0前のadmin運用に必要な状態サマリと主要導線",
+        subtitle: "管理運用に必要な状態サマリと主要導線",
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
@@ -23,33 +23,33 @@
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 class="text-lg font-bold token-text-base">Receipt analysis overview</h2>
-          <p class="text-sm token-text-muted">OCR / AI / Finalize pipeline の現在状態</p>
+          <h2 class="text-lg font-bold token-text-base">解析状況</h2>
+          <p class="text-sm token-text-muted">レシート解析の現在状態</p>
         </div>
         <%= link_to "解析run管理", admin_receipt_analysis_runs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">active runs</dt>
+          <dt class="text-xs font-semibold token-text-muted">処理中run</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:active_runs_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">failed runs</dt>
+          <dt class="text-xs font-semibold token-text-muted">失敗run</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:failed_runs_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">review_needed receipts</dt>
+          <dt class="text-xs font-semibold token-text-muted">要確認レシート</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:review_needed_receipts_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">needs attention</dt>
+          <dt class="text-xs font-semibold token-text-muted">対応が必要なrun</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:needs_attention_count] %></dd>
         </div>
       </dl>
 
       <p class="mt-4 text-sm token-text-muted">
-        latest run:
+        最新run:
         <span class="font-mono token-text-base">
           <%= receipt_analysis[:latest_run_at].present? ? l(receipt_analysis[:latest_run_at], format: :short) : "-" %>
         </span>
@@ -60,26 +60,26 @@
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base">Cleanup / retention</h2>
-          <p class="text-sm token-text-muted">stale active run と期限切れterminal runのdry-run概要</p>
+          <p class="text-sm token-text-muted">長時間残っている処理と保持期限切れrunの確認結果</p>
         </div>
-        <%= link_to "Cleanup preview", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+        <%= link_to "Cleanup確認", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">stale dry-run count</dt>
+          <dt class="text-xs font-semibold token-text-muted">stale候補</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:stale_dry_run_count] %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:stale_cutoff], format: :short) %> cutoff</dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:stale_cutoff], format: :short) %> 基準</dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">expired dry-run count</dt>
+          <dt class="text-xs font-semibold token-text-muted">期限切れ候補</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:expired_dry_run_count] %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:retention_cutoff], format: :short) %> cutoff</dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:retention_cutoff], format: :short) %> 基準</dd>
         </div>
       </dl>
 
       <p class="mt-4 text-sm token-text-muted">
-        cleanup execute requires fresh passkey reauthentication, reason, confirmation, and AuditLog.
+        実行にはパスキー再認証、理由入力、確認チェックが必要です。
       </p>
     <% end %>
   </div>
@@ -88,50 +88,50 @@
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 class="text-lg font-bold token-text-base">Audit trail</h2>
-          <p class="text-sm token-text-muted">直近24時間のadmin action概要</p>
+          <h2 class="text-lg font-bold token-text-base">監査ログ</h2>
+          <p class="text-sm token-text-muted">直近24時間の管理操作概要</p>
         </div>
         <%= link_to "監査ログ", admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-3">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">failed admin actions</dt>
+          <dt class="text-xs font-semibold token-text-muted">失敗した管理操作</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_failed_admin_actions_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">retry actions</dt>
+          <dt class="text-xs font-semibold token-text-muted">再解析操作</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_retry_actions_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">cleanup execute</dt>
+          <dt class="text-xs font-semibold token-text-muted">Cleanup実行</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_cleanup_execute_count] %></dd>
         </div>
       </dl>
 
       <div class="mt-4 flex flex-wrap gap-2 text-sm">
-        <%= link_to "retry audit", admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-        <%= link_to "cleanup execute audit", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= link_to "再解析の監査ログ", admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= link_to "Cleanup実行ログ", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
       </div>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 class="text-lg font-bold token-text-base">Security / reauthentication</h2>
+          <h2 class="text-lg font-bold token-text-base">セキュリティ / 再認証</h2>
           <p class="text-sm token-text-muted">高リスク操作前の本人確認状態</p>
         </div>
-        <%= link_to "Passkey reauth", new_admin_passkey_reauthentication_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+        <%= link_to "パスキー再認証", new_admin_passkey_reauthentication_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">admin passkeys</dt>
+          <dt class="text-xs font-semibold token-text-muted">管理者パスキー</dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:admin_passkey_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted">fresh reauth</dt>
-          <dd class="font-semibold <%= reauth_active ? "token-text-success" : "token-text-muted" %>"><%= reauth_active ? "active" : "expired" %></dd>
+          <dt class="text-xs font-semibold token-text-muted">再認証状態</dt>
+          <dd class="font-semibold <%= reauth_active ? "token-text-success" : "token-text-muted" %>"><%= reauth_active ? "有効" : "期限切れ" %></dd>
           <dd class="mt-1 text-xs token-text-muted">
             <%= reauth_context[:reauthenticated_at].present? ? l(reauth_context[:reauthenticated_at], format: :short) : "-" %>
           </dd>
@@ -148,10 +148,10 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">System operations</h2>
+        <h2 class="text-lg font-bold token-text-base">システム運用</h2>
         <p class="text-sm token-text-muted">queue / recurring の運用詳細は専用ページで確認します。</p>
       </div>
-      <%= link_to "System operations", admin_system_operations_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <%= link_to "システム運用", admin_system_operations_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
@@ -165,9 +165,9 @@
       </div>
 
       <div>
-        <h3 class="mb-3 text-base font-bold token-text-base">Recurring dry-run summary</h3>
+        <h3 class="mb-3 text-base font-bold token-text-base">定期確認サマリ</h3>
         <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-base">
-          dry-run recurring tasks:
+          定期確認タスク:
           <span class="font-mono font-bold"><%= system_operations[:recurring_dry_run_count] %></span>
         </p>
         <div class="mt-3 flex flex-wrap gap-2 text-sm">
@@ -180,8 +180,8 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">Locked future operations</h2>
-    <p class="mb-4 text-sm token-text-muted">以下はv1.0後に個別設計します。管理トップからは実行しません。</p>
+    <h2 class="mb-4 text-lg font-bold token-text-base">制限中の操作</h2>
+    <p class="mb-4 text-sm token-text-muted">以下の操作は、専用の確認手順が整うまで管理トップからは実行できません。</p>
     <ul class="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
       <% @dashboard.locked_future_operations.each do |operation| %>
         <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base"><%= operation %></li>

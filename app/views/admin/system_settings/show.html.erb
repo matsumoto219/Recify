@@ -1,4 +1,4 @@
-<% content_for :title, "System setting: #{@record[:key]}" %>
+<% content_for :title, "設定詳細: #{@record[:key]}" %>
 
 <section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
@@ -12,49 +12,49 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Current value</h2>
-        <p class="text-sm token-text-muted">変更はまだこの画面から行えません。</p>
+        <h2 class="text-lg font-bold token-text-base">現在値</h2>
+        <p class="text-sm token-text-muted">現在の設定値と既定値を確認できます。</p>
       </div>
       <%= link_to "一覧へ戻る", admin_system_settings_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">current</dt>
+        <dt class="text-xs font-semibold token-text-muted">現在値</dt>
         <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:current_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">default</dt>
+        <dt class="text-xs font-semibold token-text-muted">既定値</dt>
         <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:default_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">source</dt>
+        <dt class="text-xs font-semibold token-text-muted">参照元</dt>
         <dd class="font-semibold token-text-base"><%= @record[:source] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">updated by</dt>
+        <dt class="text-xs font-semibold token-text-muted">最終更新者</dt>
         <dd class="font-mono token-text-base"><%= @record[:updated_by_user_id].presence || "-" %></dd>
       </div>
     </dl>
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">Definition</h2>
+    <h2 class="mb-4 text-lg font-bold token-text-base">設定定義</h2>
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">category</dt>
+        <dt class="text-xs font-semibold token-text-muted">カテゴリ</dt>
         <dd class="token-text-base"><%= @record[:category] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">value type</dt>
+        <dt class="text-xs font-semibold token-text-muted">値の種類</dt>
         <dd class="font-mono token-text-base"><%= @record[:value_type] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">editable</dt>
+        <dt class="text-xs font-semibold token-text-muted">変更対象</dt>
         <dd class="font-mono token-text-base"><%= @record[:editable] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">risk level</dt>
+        <dt class="text-xs font-semibold token-text-muted">重要度</dt>
         <dd class="token-text-base"><%= @record[:risk_level] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
@@ -69,8 +69,8 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">Audit trail</h2>
-    <p class="mb-3 text-sm token-text-muted">将来の書き込み操作はAuditLogに記録します。</p>
+    <h2 class="mb-4 text-lg font-bold token-text-base">監査ログ</h2>
+    <p class="mb-3 text-sm token-text-muted">この設定に関連する監査ログを確認できます。</p>
     <%= link_to "このkeyの監査ログを見る",
           admin_audit_logs_path(target_uid: @record[:key]),
           class: "text-sm font-semibold token-text-brand hover:underline" %>

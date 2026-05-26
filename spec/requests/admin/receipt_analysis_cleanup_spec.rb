@@ -93,11 +93,11 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         expect(response.body).to eq(expected_body)
         expect(comparable_headers).to eq(expected_headers)
         expect(response.body).to include(I18n.t('errors.not_found.title'))
-        expect(response.body).not_to include('Cleanup preview')
+        expect(response.body).not_to include('Cleanup確認')
       end
     end
 
-    it 'adminユーザーはdry-run previewを閲覧できる' do
+    it 'adminユーザーはcleanup確認画面を閲覧できる' do
       admin = create(:user, :admin)
       stale_run = create_stale_run
       expired_run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
@@ -107,23 +107,23 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('Cleanup preview')
+        expect(response.body).to include('Cleanup確認')
         expect(response.body).to include('解析run管理')
         expect(response.body).to include('監査ログ')
-        expect(response.body).to include('Stale active runs dry-run')
-        expect(response.body).to include('Expired terminal runs dry-run')
-        expect(response.body).to include('Passkey reauthentication')
+        expect(response.body).to include('Stale active runs')
+        expect(response.body).to include('Expired terminal runs')
+        expect(response.body).to include('パスキー再認証')
         expect(response.body).to include('stale_count')
         expect(response.body).to include('expired_count')
         expect(response.body).to include(stale_run.run_key)
         expect(response.body).to include(expired_run.run_key)
         expect(response.body).to include(admin_receipt_analysis_run_path(stale_run.run_key))
         expect(response.body).to include(admin_receipt_analysis_run_path(expired_run.run_key))
-        expect(response.body).to include('dry_run:false')
+        expect(response.body).to include('Cleanup実行は重要な管理操作です')
       end
     end
 
-    it 'dry_run:false paramsを渡しても実更新/削除しない' do
+    it 'paramsで実行指定を渡してもGETでは実更新/削除しない' do
       admin = create(:user, :admin)
       stale_run = create_stale_run
       expired_run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
@@ -216,8 +216,8 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('Execute stale cleanup')
-        expect(response.body).to include('Execute retention cleanup')
+        expect(response.body).to include('Stale cleanupを実行')
+        expect(response.body).to include('Retention cleanupを実行')
         expect(response.body).to include('name="reason"')
         expect(response.body).to include('name="confirm"')
         expect(response.body).to include('DELETE EXPIRED RUNS')
@@ -263,7 +263,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
-        expect(flash[:alert]).to include('reason')
+        expect(flash[:alert]).to include('実行理由')
         expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
       end
     end
@@ -283,7 +283,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
-        expect(flash[:alert]).to include('confirmation')
+        expect(flash[:alert]).to include('実行確認')
         expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
       end
     end
@@ -313,7 +313,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
-        expect(flash[:notice]).to include('Stale cleanup executed')
+        expect(flash[:notice]).to include('Stale cleanupを実行しました')
         expect(SystemOperations).to have_received(:execute_receipt_analysis_cleanup).with(
           operation: 'stale_cleanup',
           actor: admin,
@@ -398,7 +398,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(retention_cutoff: '2026-05-23T09:00', retention_limit: '20'))
-        expect(flash[:notice]).to include('Retention cleanup executed')
+        expect(flash[:notice]).to include('Retention cleanupを実行しました')
         expect(SystemOperations).to have_received(:execute_receipt_analysis_cleanup).with(
           operation: 'retention_cleanup',
           actor: admin,
@@ -429,7 +429,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(retention_cutoff: '2026-05-23T09:00', retention_limit: '20'))
-        expect(flash[:alert]).to include('confirmation')
+        expect(flash[:alert]).to include('実行確認')
         expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
       end
     end

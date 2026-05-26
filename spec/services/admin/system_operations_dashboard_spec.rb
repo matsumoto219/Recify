@@ -7,9 +7,9 @@ RSpec.describe Admin::SystemOperationsDashboard do
 
       aggregate_failures do
         expect(result.policy_items).to include(
-          'fresh passkey reauthentication required',
-          'reason required',
-          'AuditLog required'
+          'パスキーによる再認証が必要',
+          '実行理由の入力が必要',
+          '監査ログに記録'
         )
         expect(result.queues).to contain_exactly(
           'default',
@@ -26,10 +26,10 @@ RSpec.describe Admin::SystemOperationsDashboard do
           'admin.passkey_reauthentication.failed'
         )
         expect(result.locked_future_operations).to include(
-          'feature flag変更',
-          'timeout変更',
-          'queue pause/resume',
-          'external service override'
+          '機能公開設定の変更',
+          '処理時間設定の変更',
+          'キューの一時停止・再開',
+          '外部サービス状態の切り替え'
         )
       end
     end

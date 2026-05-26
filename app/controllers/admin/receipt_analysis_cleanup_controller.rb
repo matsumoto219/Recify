@@ -29,21 +29,21 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
   def execute_cleanup(operation:, cutoff:, limit:, confirmation_valid:)
     unless cleanup_execution_enabled?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
-                  alert: "Cleanup execution requires fresh passkey reauthentication.",
+                  alert: "Cleanup実行にはパスキーによる再認証が必要です。",
                   status: :see_other
       return
     end
 
     if execution_params[:reason].to_s.strip.blank?
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "Cleanup reason is required.",
+                  alert: "実行理由を入力してください。",
                   status: :see_other
       return
     end
 
     unless confirmation_valid
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "Cleanup confirmation is required.",
+                  alert: "実行確認にチェックしてください。",
                   status: :see_other
       return
     end
@@ -64,7 +64,7 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
                   status: :see_other
     else
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "Cleanup failed: #{result.error_code}",
+                  alert: "Cleanupを実行できませんでした: #{result.error_code}",
                   status: :see_other
     end
   end
@@ -105,9 +105,9 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
 
   def cleanup_notice(operation, cleanup_result)
     if operation == "stale_cleanup"
-      "Stale cleanup executed: failed=#{cleanup_result[:failed_count]}, canceled=#{cleanup_result[:canceled_count]}"
+      "Stale cleanupを実行しました: failed=#{cleanup_result[:failed_count]}, canceled=#{cleanup_result[:canceled_count]}"
     else
-      "Retention cleanup executed: deleted=#{cleanup_result[:deleted_count]}"
+      "Retention cleanupを実行しました: deleted=#{cleanup_result[:deleted_count]}"
     end
   end
 end

@@ -64,7 +64,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(comparable_headers).to eq(expected_headers)
         expect(response.body).to include(I18n.t('errors.not_found.title'))
         expect(response.body).not_to include('管理トップ')
-        expect(response.body).not_to include('Receipt analysis overview')
+        expect(response.body).not_to include('解析状況')
       end
     end
 
@@ -84,12 +84,12 @@ RSpec.describe 'Admin dashboard', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('管理トップ')
-        expect(response.body).to include('Receipt analysis overview')
+        expect(response.body).to include('解析状況')
         expect(response.body).to include('Cleanup / retention')
-        expect(response.body).to include('Audit trail')
-        expect(response.body).to include('Security / reauthentication')
-        expect(response.body).to include('System operations')
-        expect(response.body).to include('Locked future operations')
+        expect(response.body).to include('監査ログ')
+        expect(response.body).to include('セキュリティ / 再認証')
+        expect(response.body).to include('システム運用')
+        expect(response.body).to include('制限中の操作')
         expect(response.body).to include(admin_receipt_analysis_runs_path)
         expect(response.body).to include(admin_receipt_analysis_cleanup_path)
         expect(response.body).to include(admin_audit_logs_path)
@@ -100,7 +100,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('receipt_ocr')
         expect(response.body).to include('receipt_ai')
         expect(response.body).to include('receipt_finalize')
-        expect(response.body).to include('feature flag変更')
+        expect(response.body).to include('機能公開設定の変更')
         expect(response.body).not_to include('RAW OCR RESPONSE')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('RAW AI RESPONSE')
@@ -108,8 +108,8 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).not_to include(admin_receipt_analysis_cleanup_stale_path)
         expect(response.body).not_to include(admin_receipt_analysis_cleanup_retention_path)
         expect(response.body).not_to include('name="reason"')
-        expect(response.body).not_to include('Execute stale cleanup')
-        expect(response.body).not_to include('Execute retention cleanup')
+        expect(response.body).not_to include('Stale cleanupを実行')
+        expect(response.body).not_to include('Retention cleanupを実行')
         expect_no_admin_execution
       end
     end
@@ -122,7 +122,7 @@ RSpec.describe 'Admin dashboard', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('v1.0前のadmin運用に必要な状態サマリ')
+        expect(response.body).to include('管理運用に必要な状態サマリ')
         expect(response.body).not_to include('Latest runs')
         expect(response.body).not_to include('Filters')
       end

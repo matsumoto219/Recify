@@ -23,21 +23,21 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
     unless admin_retry_enabled?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
-                  alert: "Retry requires fresh passkey reauthentication.",
+                  alert: "再解析にはパスキーによる再認証が必要です。",
                   status: :see_other
       return
     end
 
-    retry_type = params[:retry_type].to_s
+    retry_type = params[:retry_kind].presence || params[:retry_type].to_s
     reason = params[:reason].to_s.strip
 
     unless RETRY_TYPES.include?(retry_type)
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "Invalid retry type."
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析の種類を選択してください。"
       return
     end
 
     if reason.blank?
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "Retry reason is required."
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析理由を入力してください。"
       return
     end
 
@@ -54,9 +54,9 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     result = Analysis::RetryService.call(**retry_attributes)
 
     if result.success?
-      redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: "Retry enqueued: #{retry_type}"
+      redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: "再解析を受け付けました。"
     else
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "Retry failed: #{result.error_code}"
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析を開始できませんでした: #{result.error_code}"
     end
   end
 

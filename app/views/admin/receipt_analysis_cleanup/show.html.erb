@@ -1,4 +1,4 @@
-<% content_for :title, "Cleanup preview" %>
+<% content_for :title, "Cleanup確認" %>
 
 <%
   stale = @preview.stale
@@ -16,19 +16,19 @@
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "Cleanup preview",
-        subtitle: "stale / retention cleanup のdry-run結果",
+        title: "Cleanup確認",
+        subtitle: "stale / retention cleanup の対象候補を確認します",
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="space-y-3">
-      <h2 class="text-lg font-bold token-text-base">Read-only dry-run preview</h2>
+      <h2 class="text-lg font-bold token-text-base">対象候補の確認</h2>
       <p class="text-sm token-text-muted">
-        この画面は現在時点のdry-run結果だけを表示します。DB更新、run削除、Job enqueue、cleanup job実行は行いません。
+        この画面では現在時点の対象候補を確認できます。確認だけではDB更新やrun削除は行いません。
       </p>
       <p class="text-sm token-text-muted">
-        <span class="font-mono">dry_run:false</span> の実行は high-risk admin operation です。fresh passkey reauthentication、reason、confirmation、AuditLog が必須です。
+        Cleanup実行は重要な管理操作です。パスキー再認証、理由入力、確認チェックが必要です。
       </p>
     </div>
   <% end %>
@@ -36,8 +36,8 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Preview parameters</h2>
-        <p class="text-sm token-text-muted">limitは安全側の上限で丸めます。dry_run指定は受け付けません。</p>
+        <h2 class="text-lg font-bold token-text-base">確認条件</h2>
+        <p class="text-sm token-text-muted">limitは安全側の上限で丸めます。</p>
       </div>
 
       <%= link_to "Reset", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
@@ -66,7 +66,7 @@
 
       <div class="flex items-end gap-3 md:col-span-4">
         <%= render "shared/ui/actions/button",
-              label: "Preview",
+              label: "確認する",
               type: "submit",
               size: :compact,
               icon: "visibility" %>
@@ -84,7 +84,7 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">Stale active runs dry-run</h2>
+      <h2 class="text-lg font-bold token-text-base">Stale active runs</h2>
       <p class="text-sm token-text-muted">
         queued / running のまま <%= l(stale[:cutoff], format: :short) %> 以前に更新されたrunを確認します。
       </p>
@@ -92,8 +92,8 @@
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">dry_run</dt>
-        <dd class="font-mono token-text-base"><%= stale[:dry_run] %></dd>
+        <dt class="text-xs font-semibold token-text-muted">更新</dt>
+        <dd class="font-mono token-text-base">なし</dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted">limit</dt>
@@ -155,9 +155,9 @@
     </div>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
-      <h3 class="mb-2 text-base font-bold token-text-base">Execute stale cleanup</h3>
+      <h3 class="mb-2 text-base font-bold token-text-base">Stale cleanupを実行</h3>
       <p class="mb-4 text-sm token-text-muted">
-        この操作は対象 active run を failed / canceled へ terminal 化します。実行前に上のdry-run結果を確認してください。
+        この操作は対象 active run を failed / canceled へ更新します。実行前に上の対象候補を確認してください。
       </p>
 
       <% if cleanup_execution_enabled? %>
@@ -168,24 +168,24 @@
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
           <div class="space-y-1">
-            <%= form.label :reason, "Reason", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
           </div>
 
           <label class="flex items-start gap-3 text-sm token-text-base">
             <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span>dry-run対象を確認し、stale cleanupを <span class="font-mono">dry_run:false</span> で実行します。</span>
+            <span>対象候補を確認し、stale cleanupを実行します。</span>
           </label>
 
           <%= render "shared/ui/actions/button",
-                label: "Execute stale cleanup",
+                label: "Stale cleanupを実行",
                 type: "submit",
                 size: :compact,
                 icon: "warning" %>
         <% end %>
       <% else %>
-        <p class="mb-3 text-sm token-text-muted">実行には fresh passkey reauthentication が必要です。POST payloadは保存しないため、再認証後にreasonを再入力してください。</p>
-        <%= link_to "Passkey reauthentication",
+        <p class="mb-3 text-sm token-text-muted">実行にはパスキー再認証が必要です。再認証後、実行理由をもう一度入力してください。</p>
+        <%= link_to "パスキー再認証",
               new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       <% end %>
@@ -194,7 +194,7 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">Expired terminal runs dry-run</h2>
+      <h2 class="text-lg font-bold token-text-base">Expired terminal runs</h2>
       <p class="text-sm token-text-muted">
         terminal状態で <%= l(retention[:cutoff], format: :short) %> 以前に期限切れになったrunを確認します。
       </p>
@@ -202,8 +202,8 @@
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">dry_run</dt>
-        <dd class="font-mono token-text-base"><%= retention[:dry_run] %></dd>
+        <dt class="text-xs font-semibold token-text-muted">更新</dt>
+        <dd class="font-mono token-text-base">なし</dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted">limit</dt>
@@ -251,7 +251,7 @@
     </div>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
-      <h3 class="mb-2 text-base font-bold token-text-base">Execute retention cleanup</h3>
+      <h3 class="mb-2 text-base font-bold token-text-base">Retention cleanupを実行</h3>
       <p class="mb-4 text-sm token-text-muted">
         この操作は期限切れ terminal run を削除します。削除を伴うため、低limitからの実行を推奨します。
       </p>
@@ -264,29 +264,29 @@
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
           <div class="space-y-1">
-            <%= form.label :reason, "Reason", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
           </div>
 
           <label class="flex items-start gap-3 text-sm token-text-base">
             <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span>dry-run対象を確認し、retention cleanupを <span class="font-mono">dry_run:false</span> で実行します。</span>
+            <span>対象候補を確認し、retention cleanupを実行します。</span>
           </label>
 
           <div class="space-y-1">
-            <%= form.label :confirmation_text, "Type DELETE EXPIRED RUNS", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :confirmation_text, "確認文字列 DELETE EXPIRED RUNS", class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_field :confirmation_text, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
           </div>
 
           <%= render "shared/ui/actions/button",
-                label: "Execute retention cleanup",
+                label: "Retention cleanupを実行",
                 type: "submit",
                 size: :compact,
                 icon: "delete" %>
         <% end %>
       <% else %>
-        <p class="mb-3 text-sm token-text-muted">実行には fresh passkey reauthentication が必要です。POST payloadは保存しないため、再認証後にreasonを再入力してください。</p>
-        <%= link_to "Passkey reauthentication",
+        <p class="mb-3 text-sm token-text-muted">実行にはパスキー再認証が必要です。再認証後、実行理由をもう一度入力してください。</p>
+        <%= link_to "パスキー再認証",
               new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       <% end %>

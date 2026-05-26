@@ -35,7 +35,7 @@ class Admin::BaseController < ApplicationController
     return if admin_passkey_reauthenticated?
 
     redirect_to new_admin_passkey_reauthentication_path(return_to: request.fullpath),
-                alert: "High-risk admin action requires fresh passkey reauthentication.",
+                alert: "この操作にはパスキーによる再認証が必要です。",
                 status: :see_other
   end
 

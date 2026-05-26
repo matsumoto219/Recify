@@ -125,13 +125,13 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
     <% if Rails.env.development? || Rails.env.test? %>
-      <p class="mb-4 text-sm token-text-muted">development/test では retry を実行できます。production では fresh passkey reauthentication が必要です。</p>
+      <p class="mb-4 text-sm token-text-muted">再解析を実行できます。実行理由を入力してください。</p>
     <% elsif admin_passkey_reauthenticated? %>
-      <p class="mb-4 text-sm token-text-muted">fresh passkey reauthentication is active. production retry action is available for this session window.</p>
+      <p class="mb-4 text-sm token-text-muted">パスキー再認証済みです。このセッション中に再解析を実行できます。</p>
     <% else %>
       <div class="mb-4 space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
-        <p class="text-sm token-text-muted">production retry action requires fresh passkey reauthentication. POST payload is not saved; re-enter retry_type and reason after reauthentication.</p>
-        <%= link_to "Passkey reauthentication",
+        <p class="text-sm token-text-muted">再解析にはパスキー再認証が必要です。再認証後、再解析内容と理由をもう一度入力してください。</p>
+        <%= link_to "パスキー再認証",
               new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       </div>
@@ -145,14 +145,14 @@
           </div>
           <% if admin_retry_enabled? && option[:possible] %>
             <%= form_with url: retry_admin_receipt_analysis_run_path(@record[:run_key]), method: :post, local: true, class: "space-y-2" do |form| %>
-              <%= hidden_field_tag :retry_type, option[:type] %>
-              <%= form.label :reason, "reason", class: "text-xs font-semibold token-text-muted" %>
+              <%= hidden_field_tag :retry_kind, option[:type] %>
+              <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
               <%= form.text_area :reason,
                     rows: 2,
                     required: true,
                     class: "min-h-20 w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
                     placeholder: "再解析理由" %>
-              <%= form.submit "Retry",
+              <%= form.submit "再解析を実行",
                     class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
             <% end %>
           <% end %>

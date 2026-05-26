@@ -105,11 +105,11 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
            as: :json
 
       get new_admin_passkey_reauthentication_path
-      expect(response.body).to include('fresh passkey reauthentication is active')
+      expect(response.body).to include('パスキー再認証済みです')
 
       travel 6.minutes do
         get new_admin_passkey_reauthentication_path
-        expect(response.body).not_to include('fresh passkey reauthentication is active')
+        expect(response.body).not_to include('パスキー再認証済みです')
       end
     end
   end
