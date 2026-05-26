@@ -12,6 +12,12 @@ module SystemOperations
         confirmation: "UNLOCK USER",
         self_forbidden: false,
         admin_target_forbidden: true
+      },
+      "force_passkey_reset" => {
+        action: "admin.users.force_passkey_reset",
+        confirmation: "RESET PASSKEYS",
+        self_forbidden: true,
+        admin_target_forbidden: true
       }
     }.freeze
 
@@ -91,6 +97,7 @@ module SystemOperations
       raise ValidationError, "admin_target_forbidden" if admin_target_forbidden?
       raise ValidationError, "target_already_locked" if operation == "lock_user" && user_locked?
       raise ValidationError, "target_not_locked" if operation == "unlock_user" && !user_locked?
+      raise ValidationError, "passkeys_missing" if operation == "force_passkey_reset" && user.passkeys.none?
     end
 
     def execute_operation!
@@ -99,6 +106,8 @@ module SystemOperations
         user.lock_access!(send_instructions: false)
       when "unlock_user"
         user.unlock_access!
+      when "force_passkey_reset"
+        user.passkeys.destroy_all
       end
     end
 
@@ -110,7 +119,7 @@ module SystemOperations
         target_uid: target_uid,
         reason: reason,
         outcome: "succeeded",
-        metadata: audit_metadata,
+        metadata: audit_metadata(before_state: before_state, after_state: after_state),
         before_state: before_state,
         after_state: after_state,
         request: request
@@ -133,14 +142,26 @@ module SystemOperations
       )
     end
 
-    def audit_metadata
+    def base_audit_metadata
       {
         operation: operation
       }.merge(reauthentication_metadata)
     end
 
+    def audit_metadata(before_state:, after_state:)
+      metadata = base_audit_metadata
+
+      return metadata unless operation == "force_passkey_reset"
+
+      metadata.merge(
+        passkeys_count_before: before_state[:passkeys_count],
+        passkeys_count_after: after_state[:passkeys_count],
+        latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at]
+      )
+    end
+
     def failure_audit_metadata(error)
-      audit_metadata.merge(error_class: error.class.name)
+      base_audit_metadata.merge(error_class: error.class.name)
     end
 
     def safe_user_state
@@ -154,7 +175,8 @@ module SystemOperations
         locked: current_user.locked_at.present?,
         failed_attempts: current_user.failed_attempts,
         locked_at: current_user.locked_at,
-        passkeys_count: current_user.passkeys.count
+        passkeys_count: current_user.passkeys.count,
+        latest_passkey_last_used_at: current_user.passkeys.maximum(:last_used_at)
       }.tap do |state|
         state[:session_version] = current_user.session_version if current_user.has_attribute?(:session_version)
       end

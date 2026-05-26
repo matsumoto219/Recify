@@ -9,6 +9,10 @@ class Admin::UserOperationsController < Admin::BaseController
     execute_user_operation("unlock_user")
   end
 
+  def force_passkey_reset
+    execute_user_operation("force_passkey_reset")
+  end
+
   private
 
   def set_user
@@ -61,6 +65,8 @@ class Admin::UserOperationsController < Admin::BaseController
       "ユーザーをロックしました。"
     when "unlock_user"
       "ユーザーのロックを解除しました。"
+    when "force_passkey_reset"
+      "登録済みパスキーをリセットしました。"
     else
       "管理操作を実行しました。"
     end
@@ -76,6 +82,8 @@ class Admin::UserOperationsController < Admin::BaseController
       "このユーザーはすでにロックされています。"
     when "target_not_locked"
       "このユーザーはロックされていません。"
+    when "passkeys_missing"
+      "リセット対象のパスキーがありません。"
     when "confirmation_required"
       "確認文字列が一致しません。"
     else

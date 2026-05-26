@@ -14,6 +14,7 @@ Rails.application.routes.draw do
     resources :users, only: %i[index show] do
       post "operations/lock", to: "user_operations#lock", as: :lock_operation, on: :member
       post "operations/unlock", to: "user_operations#unlock", as: :unlock_operation, on: :member
+      post "operations/force_passkey_reset", to: "user_operations#force_passkey_reset", as: :force_passkey_reset_operation, on: :member
     end
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale

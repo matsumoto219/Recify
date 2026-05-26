@@ -22,11 +22,13 @@ RSpec.describe 'Admin user operations', type: :request do
   end
 
   def stub_fresh_admin_reauthentication
-    allow_any_instance_of(Admin::UserOperationsController).to receive(:admin_passkey_reauthenticated?).and_return(true)
-    allow_any_instance_of(Admin::UserOperationsController).to receive(:admin_reauthentication_context).and_return(
-      method: 'passkey',
-      reauthenticated_at: Time.current
-    )
+    [ Admin::UsersController, Admin::UserOperationsController ].each do |controller|
+      allow_any_instance_of(controller).to receive(:admin_passkey_reauthenticated?).and_return(true)
+      allow_any_instance_of(controller).to receive(:admin_reauthentication_context).and_return(
+        method: 'passkey',
+        reauthenticated_at: Time.current
+      )
+    end
   end
 
   describe 'POST /admin/users/:id/operations/lock' do
@@ -171,6 +173,142 @@ RSpec.describe 'Admin user operations', type: :request do
           outcome: 'failed',
           error_code: 'confirmation_required'
         )
+      end
+    end
+  end
+
+  describe 'POST /admin/users/:id/operations/force_passkey_reset' do
+    it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:passkey, user: target)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post force_passkey_reset_operation_admin_user_path(target),
+           params: { reason: 'passkey recovery request', confirmation: 'RESET PASSKEYS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_user_path(target)))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'reason blankではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:passkey, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post force_passkey_reset_operation_admin_user_path(target),
+           params: { reason: ' ', confirmation: 'RESET PASSKEYS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'fresh reauth + reason + confirmationでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:passkey, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      result = SystemOperations::Result.new(success: true)
+      allow(SystemOperations).to receive(:execute_user_operation).and_return(result)
+
+      post force_passkey_reset_operation_admin_user_path(target),
+           params: { reason: 'passkey recovery request', confirmation: 'RESET PASSKEYS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).to have_received(:execute_user_operation).with(
+          operation: 'force_passkey_reset',
+          user: target,
+          actor: admin,
+          reason: 'passkey recovery request',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey', reauthenticated_at: kind_of(ActiveSupport::TimeWithZone)),
+          confirmation: 'RESET PASSKEYS'
+        )
+      end
+    end
+
+    it '実SystemOperations経由でpasskeysを削除し、credential情報を出さない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      passkey = create(:passkey, user: target, credential_id: 'credential-secret', public_key: 'PUBLIC KEY SECRET')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post force_passkey_reset_operation_admin_user_path(target),
+             params: { reason: 'passkey recovery request', confirmation: 'RESET PASSKEYS' }
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.passkeys.reload).to be_empty
+        expect(audit_log).to have_attributes(
+          action: 'admin.users.force_passkey_reset',
+          outcome: 'succeeded',
+          target_uid: "user:#{target.id}"
+        )
+        expect(audit_log.metadata).to include(
+          'passkeys_count_before' => 1,
+          'passkeys_count_after' => 0
+        )
+        expect(audit_log.attributes.to_json).not_to include(passkey.credential_id)
+        expect(audit_log.attributes.to_json).not_to include(passkey.public_key)
+        expect(audit_log.attributes.to_json).not_to include('challenge')
+      end
+    end
+
+    it 'confirmation不一致はSystemOperationsで拒否し、passkeysを残す' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:passkey, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post force_passkey_reset_operation_admin_user_path(target),
+             params: { reason: 'passkey recovery request', confirmation: 'WRONG' }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.passkeys.reload.count).to eq(1)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_passkey_reset',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+
+    it 'HTMLにcredential materialや開発者向け文言を出さない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      passkey = create(:passkey, user: target, credential_id: 'credential-secret', public_key: 'PUBLIC KEY SECRET')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(target)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('パスキーリセット')
+        expect(response.body).to include(force_passkey_reset_operation_admin_user_path(target))
+        expect(response.body).not_to include(passkey.credential_id)
+        expect(response.body).not_to include(passkey.public_key)
+        expect(response.body).not_to include('challenge')
+        expect(response.body).not_to match(/v1\.0後|未実装|TODO|service\/facade|payload|development\/test|production/)
       end
     end
   end

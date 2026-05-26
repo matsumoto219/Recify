@@ -191,6 +191,31 @@
             <% end %>
           </div>
         <% end %>
+
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <h3 class="mb-2 text-base font-bold token-text-base">パスキーリセット</h3>
+          <p class="mb-4 text-sm token-text-muted">本人からの復旧依頼がある場合に、登録済みパスキーをリセットします。</p>
+
+          <% if record[:passkeys_count].to_i.zero? %>
+            <p class="text-sm token-text-muted">登録済みパスキーはありません。</p>
+          <% else %>
+            <%= form_with url: force_passkey_reset_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+              <div class="space-y-1">
+                <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              </div>
+              <div class="space-y-1">
+                <%= form.label :confirmation, "確認文字列 RESET PASSKEYS", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+              </div>
+              <%= render "shared/ui/actions/button",
+                    label: "パスキーリセットを実行",
+                    type: "submit",
+                    size: :compact,
+                    icon: "key_off" %>
+            <% end %>
+          <% end %>
+        </div>
       </div>
     <% end %>
   <% end %>

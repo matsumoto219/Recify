@@ -83,6 +83,37 @@ RSpec.describe 'User passkey sessions', type: :request do
       end
     end
 
+    it 'passkey reset後は削除済みcredentialでログインできない' do
+      admin = create(:user, :admin)
+      user = create(:user)
+      passkey = create_passkey_with_fake_client(user)
+      options = authentication_options_payload
+      credential = fake_assertion_credential(options, user: user)
+
+      result = SystemOperations.execute_user_operation(
+        operation: 'force_passkey_reset',
+        user: user,
+        actor: admin,
+        reason: 'passkey recovery request',
+        request: nil,
+        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        confirmation: 'RESET PASSKEYS'
+      )
+
+      expect(result).to be_success
+      expect(Passkey.find_by(id: passkey.id)).to be_nil
+
+      post users_passkey_sessions_path,
+           params: { credential: credential },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.sessions.passkey.messages.failure'))
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
     it 'password step-up pending中でもpasskey直接ログイン成功時はpendingを削除する' do
       user = create(:user)
       create_passkey_with_fake_client(user)
