@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_23_231335) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_26_050939) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -40,6 +40,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_231335) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "audit_logs", force: :cascade do |t|
+    t.string "action", null: false
+    t.string "actor_kind", null: false
+    t.bigint "actor_user_id"
+    t.jsonb "after_state", default: {}, null: false
+    t.jsonb "before_state", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.string "error_code"
+    t.inet "ip_address"
+    t.jsonb "metadata", default: {}, null: false
+    t.string "outcome", null: false
+    t.text "reason"
+    t.string "request_id"
+    t.bigint "target_id"
+    t.string "target_type"
+    t.string "target_uid"
+    t.datetime "updated_at", null: false
+    t.text "user_agent"
+    t.index ["action", "created_at"], name: "index_audit_logs_on_action_and_created_at"
+    t.index ["actor_user_id", "created_at"], name: "index_audit_logs_on_actor_user_id_and_created_at"
+    t.index ["actor_user_id"], name: "index_audit_logs_on_actor_user_id"
+    t.index ["created_at"], name: "index_audit_logs_on_created_at"
+    t.index ["request_id"], name: "index_audit_logs_on_request_id"
+    t.index ["target_type", "target_id", "created_at"], name: "index_audit_logs_on_target_type_and_target_id_and_created_at"
+    t.index ["target_uid"], name: "index_audit_logs_on_target_uid"
   end
 
   create_table "notifications", force: :cascade do |t|
@@ -229,6 +256,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_23_231335) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "audit_logs", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "notifications", "users"
   add_foreign_key "receipt_analysis_runs", "receipt_analysis_runs", column: "parent_run_id", on_delete: :nullify
   add_foreign_key "receipt_analysis_runs", "receipts"
