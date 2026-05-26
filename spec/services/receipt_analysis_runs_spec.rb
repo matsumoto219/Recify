@@ -682,4 +682,179 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
   end
+
+  describe '.cleanup_stale' do
+    it 'dry_runではDBを更新せず対象情報を返す' do
+      run = create_stale_run(status: 'queued')
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: true)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to eq(true)
+        expect(result[:stale_count]).to eq(1)
+        expect(result[:skipped_count]).to eq(1)
+        expect(result[:records]).to contain_exactly(
+          include(id: run.id, status: 'queued', stage: 'queued', receipt_status: 'processing')
+        )
+        expect(run.reload.status).to eq('queued')
+        expect(run.receipt.reload.status).to eq('processing')
+      end
+    end
+
+    it 'queued stale + processing receipt は run failed / receipt failed にする' do
+      run = create_stale_run(status: 'queued', stage: 'queued')
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+      run.reload
+
+      aggregate_failures do
+        expect(result[:failed_count]).to eq(1)
+        expect(result[:canceled_count]).to eq(0)
+        expect(run.status).to eq('failed')
+        expect(run.stage).to eq('queued')
+        expect(run.error_code).to eq('analysis_stale_run')
+        expect(run.error_stage).to eq('queued')
+        expect(run.finished_at).to eq(Time.current)
+        expect(run.expires_at).to eq(90.days.from_now)
+        expect(run.receipt.reload.status).to eq('failed')
+        expect(run.receipt.processing_error_code).to eq('analysis_stale_run')
+      end
+    end
+
+    it 'running stale + processing receipt は run failed / receipt failed にする' do
+      run = create_stale_run(status: 'running', stage: 'ai')
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+      run.reload
+
+      aggregate_failures do
+        expect(result[:failed_count]).to eq(1)
+        expect(run.status).to eq('failed')
+        expect(run.stage).to eq('ai')
+        expect(run.error_stage).to eq('ai')
+        expect(run.receipt.reload.status).to eq('failed')
+      end
+    end
+
+    it 'stale active runでもreceiptがprocessingでなければ run canceled / receipt不変更にする' do
+      receipt = create(:receipt, :completed)
+      run = create(:receipt_analysis_run, receipt:, status: 'running', stage: 'finalize')
+      run.update_columns(updated_at: 7.hours.ago)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+      run.reload
+
+      aggregate_failures do
+        expect(result[:failed_count]).to eq(0)
+        expect(result[:canceled_count]).to eq(1)
+        expect(run.status).to eq('canceled')
+        expect(run.error_code).to be_nil
+        expect(run.expires_at).to eq(14.days.from_now)
+        expect(receipt.reload.status).to eq('completed')
+      end
+    end
+
+    it 'terminal run と non-stale active run は対象外にする' do
+      stale_terminal = create(:receipt_analysis_run, :failed)
+      fresh_active = create(:receipt_analysis_run, status: 'queued')
+      stale_terminal.update_columns(updated_at: 7.hours.ago)
+      fresh_active.update_columns(updated_at: 1.hour.ago)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(0)
+        expect(stale_terminal.reload.status).to eq('failed')
+        expect(fresh_active.reload.status).to eq('queued')
+      end
+    end
+
+    it 'limitを守る' do
+      create_stale_run(status: 'queued')
+      create_stale_run(status: 'queued')
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, limit: 1, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(1)
+        expect(ReceiptAnalysisRun.active.count).to eq(1)
+      end
+    end
+
+    it 'cleanup後にRetryService eligibilityのactive_run_existsが解除される' do
+      run = create_stale_run(status: 'queued')
+      before_options = Analysis::RetryService.eligibility(receipt: run.receipt, parent_run: run).retry_options
+
+      described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      after_options = Analysis::RetryService.eligibility(receipt: run.receipt.reload, parent_run: run.reload).retry_options
+
+      aggregate_failures do
+        expect(before_options).to all(include(possible: false, disabled_reason: 'active_run_exists'))
+        expect(after_options.find { |option| option[:type] == 'full_reanalyze' }).to include(possible: true, disabled_reason: nil)
+        expect(after_options.find { |option| option[:type] == 'ocr_retry' }).to include(possible: true, disabled_reason: nil)
+      end
+    end
+  end
+
+  describe '.cleanup_expired' do
+    it 'dry_runでは削除せず対象情報を返す' do
+      expired = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+
+      result = described_class.cleanup_expired(cutoff: Time.current, dry_run: true)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to eq(true)
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(0)
+        expect(result[:records]).to contain_exactly(include(id: expired.id, status: 'succeeded'))
+        expect(ReceiptAnalysisRun.exists?(expired.id)).to be(true)
+      end
+    end
+
+    it 'terminal expired runを削除する' do
+      expired = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+      retained = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.from_now)
+
+      result = described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(1)
+        expect(ReceiptAnalysisRun.exists?(expired.id)).to be(false)
+        expect(ReceiptAnalysisRun.exists?(retained.id)).to be(true)
+      end
+    end
+
+    it 'active expired runは削除しない' do
+      active = create(:receipt_analysis_run, status: 'queued', expires_at: 1.day.ago)
+
+      result = described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(0)
+        expect(result[:deleted_count]).to eq(0)
+        expect(ReceiptAnalysisRun.exists?(active.id)).to be(true)
+      end
+    end
+
+    it 'limitを守る' do
+      create_list(:receipt_analysis_run, 2, :succeeded, expires_at: 1.day.ago)
+
+      result = described_class.cleanup_expired(cutoff: Time.current, limit: 1, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(1)
+        expect(ReceiptAnalysisRun.where(status: 'succeeded').count).to eq(1)
+      end
+    end
+  end
+
+  def create_stale_run(status:, stage: 'queued')
+    receipt = create(:receipt, :with_image, :processing)
+    run = create(:receipt_analysis_run, receipt:, status:, stage:)
+    run.update_columns(updated_at: 7.hours.ago)
+    run
+  end
 end

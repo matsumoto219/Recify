@@ -9,6 +9,8 @@ module ReceiptAnalysisRuns
     end
   end
 
+  STALE_ERROR_CODE = "analysis_stale_run".freeze
+
   class << self
     def start(receipt:, source:, requested_by_user: nil, request_reason: nil, parent_run: nil)
       Starter.call(
@@ -117,6 +119,69 @@ module ReceiptAnalysisRuns
       Tracker.new(run).cancel(at: at)
     end
 
+    def cleanup_stale(cutoff: 6.hours.ago, limit: 100, dry_run: true)
+      cutoff = cutoff || 6.hours.ago
+      limit = normalize_positive_integer(limit, 100)
+      dry_run = normalize_boolean(dry_run)
+      runs = stale_runs(cutoff:, limit:)
+      records = runs.map { |run| cleanup_run_record(run) }
+      result = {
+        dry_run: dry_run,
+        cutoff: cutoff,
+        limit: limit,
+        stale_count: runs.size,
+        failed_count: 0,
+        canceled_count: 0,
+        skipped_count: dry_run ? runs.size : 0,
+        records: records,
+        errors: []
+      }
+
+      return result if dry_run
+
+      runs.each_with_index do |run, index|
+        Tracker.new(run).mark_stale!(error_code: STALE_ERROR_CODE)
+        run.reload
+        records[index] = cleanup_run_record(run)
+
+        if run.status == "failed"
+          result[:failed_count] += 1
+        elsif run.status == "canceled"
+          result[:canceled_count] += 1
+        end
+      rescue StandardError => e
+        result[:errors] << cleanup_error_record(run, e)
+      end
+
+      result[:skipped_count] = 0
+      result
+    end
+
+    def cleanup_expired(cutoff: Time.current, limit: 1000, dry_run: true)
+      cutoff ||= Time.current
+      limit = normalize_positive_integer(limit, 1000)
+      dry_run = normalize_boolean(dry_run)
+      runs = expired_terminal_runs(cutoff:, limit:)
+      records = runs.map { |run| expired_run_record(run) }
+      result = {
+        dry_run: dry_run,
+        cutoff: cutoff,
+        limit: limit,
+        expired_count: runs.size,
+        deleted_count: 0,
+        records: records
+      }
+
+      return result if dry_run
+
+      ids = records.map { |record| record[:id] }
+      result[:deleted_count] = ReceiptAnalysisRun
+        .where(id: ids)
+        .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
+        .delete_all
+      result
+    end
+
     private
 
     def sanitized_finalize_decision_snapshot(parent_run)
@@ -126,6 +191,70 @@ module ReceiptAnalysisRuns
       return {} unless decision
 
       SnapshotBuilder.finalize_decision_snapshot(decision)
+    end
+
+    def stale_runs(cutoff:, limit:)
+      ReceiptAnalysisRun
+        .includes(:receipt)
+        .active
+        .where(updated_at: ..cutoff)
+        .order(:updated_at, :id)
+        .limit(limit)
+        .to_a
+    end
+
+    def expired_terminal_runs(cutoff:, limit:)
+      ReceiptAnalysisRun
+        .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
+        .where(expires_at: ..cutoff)
+        .order(:expires_at, :id)
+        .limit(limit)
+        .to_a
+    end
+
+    def cleanup_run_record(run)
+      receipt = run.receipt
+
+      {
+        id: run.id,
+        run_key: run.run_key,
+        status: run.status,
+        stage: run.stage,
+        receipt_id: receipt.id,
+        receipt_status: receipt.status,
+        updated_at: run.updated_at
+      }
+    end
+
+    def expired_run_record(run)
+      {
+        id: run.id,
+        run_key: run.run_key,
+        status: run.status,
+        stage: run.stage,
+        expires_at: run.expires_at
+      }
+    end
+
+    def cleanup_error_record(run, error)
+      {
+        id: run&.id,
+        run_key: run&.run_key,
+        error_class: error.class.name,
+        error_message: error.message
+      }
+    end
+
+    def normalize_positive_integer(value, fallback)
+      integer = value.to_i
+
+      integer.positive? ? integer : fallback
+    end
+
+    def normalize_boolean(value)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value)
     end
   end
 end

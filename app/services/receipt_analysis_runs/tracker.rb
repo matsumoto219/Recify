@@ -199,6 +199,35 @@ module ReceiptAnalysisRuns
       terminate!("canceled", at: at)
     end
 
+    def mark_stale!(at: Time.current, error_code: "analysis_stale_run")
+      run.with_lock do
+        run.reload
+        ensure_not_terminal!(run)
+
+        receipt = run.receipt
+        receipt_processing = stale_receipt_processing?(receipt)
+        status = receipt_processing ? "failed" : "canceled"
+
+        run.update!(
+          status: status,
+          stage: terminal_stage_for(status, run),
+          finished_at: at,
+          finalized_at: run.finalized_at,
+          total_latency_ms: run.total_latency_ms || latency_from(run.started_at, at),
+          error_stage: terminal_error_value(status, run.stage),
+          error_code: terminal_error_value(status, error_code),
+          error_message: terminal_error_value(status, safe_error_message(error_code)),
+          expires_at: ReceiptAnalysisRun.default_expires_at_for(
+            status: status,
+            source: run.source,
+            receipt_status: receipt_processing ? "failed" : final_receipt_status(run),
+            from: at
+          )
+        )
+        run
+      end
+    end
+
     private
 
     attr_reader :run
@@ -315,6 +344,23 @@ module ReceiptAnalysisRuns
 
     def terminal_error_value(status, value)
       status == "failed" ? value : nil
+    end
+
+    def stale_receipt_processing?(receipt)
+      receipt.with_lock do
+        receipt.reload
+        if receipt.processing?
+          receipt.update!(
+            status: "failed",
+            processing_error_code: "analysis_stale_run",
+            processing_error_message: "analysis_stale_run",
+            review_reasons: []
+          )
+          true
+        else
+          false
+        end
+      end
     end
 
     def final_receipt_status(locked_run)
