@@ -37,7 +37,15 @@ class ApplicationController < ActionController::Base
     end
   end
 
+  helper_method :maintenance_notice_enabled?
+
   private
+
+  def maintenance_notice_enabled?
+    return false unless user_signed_in?
+
+    SystemSettings.enabled?("ui.maintenance_notice_enabled", user: current_user)
+  end
 
   def rate_limit_email_digest
     email = normalized_rate_limit_email

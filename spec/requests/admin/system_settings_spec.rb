@@ -306,6 +306,26 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it 'maintenance notice setting update is reflected in the general layout' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_path('ui.maintenance_notice_enabled'),
+            params: {
+              value: 'true',
+              reason: 'maintenance announcement'
+            }
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.title'))
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
     it '存在しないkeyは404にする' do
       admin = create(:user, :admin)
       sign_in admin

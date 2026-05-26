@@ -66,6 +66,9 @@ ja:
         error: エラー
         info: 通知
       close_label: 閉じる
+    maintenance_notice:
+      title: お知らせ
+      body: 現在、一部機能の調整を行っています。
     service_status:
       ok: 利用可能
       degraded: 不安定

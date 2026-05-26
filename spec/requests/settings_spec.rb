@@ -93,6 +93,46 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'maintenance notice is hidden by default' do
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
+    it 'maintenance notice is shown when the system setting is enabled' do
+      create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(true))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.title'))
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
+    it 'maintenance notice is hidden when the system setting is disabled' do
+      create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(false))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
+    it 'evaluates maintenance notice through the SystemSettings facade' do
+      allow(SystemSettings).to receive(:enabled?).and_call_original
+
+      get settings_path
+
+      expect(SystemSettings).to have_received(:enabled?).with('ui.maintenance_notice_enabled', user: user)
+    end
+
     it 'header/settings index にfallback頭文字を表示する' do
       user.update!(name: 'Matsumoto')
 

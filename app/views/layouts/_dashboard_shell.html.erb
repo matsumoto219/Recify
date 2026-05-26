@@ -22,6 +22,7 @@
       md:pb-10
     ">
       <%= render "shared/noscript_banner", layout: :dashboard %>
+      <%= render "shared/ui/feedback/maintenance_notice" if maintenance_notice_enabled? %>
       <%= yield %>
     </main>
   </div>
