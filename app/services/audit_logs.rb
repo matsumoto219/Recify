@@ -53,6 +53,10 @@ module AuditLogs
     user_handle
   ].freeze
 
+  ALLOWED_SENSITIVE_FRAGMENT_KEYS = %w[
+    session_version
+  ].freeze
+
   class << self
     def record_admin_action!(actor:, action:, target: nil, target_uid: nil, reason: nil, outcome:, error_code: nil, metadata: {}, before_state: {}, after_state: {}, request: nil)
       record!(
@@ -152,6 +156,8 @@ module AuditLogs
 
     def blocked_key?(key)
       normalized = key.to_s.downcase
+      return false if ALLOWED_SENSITIVE_FRAGMENT_KEYS.include?(normalized)
+
       BLOCKED_KEYS.include?(normalized) ||
         BLOCKED_KEY_FRAGMENTS.any? { |fragment| normalized.include?(fragment) }
     end

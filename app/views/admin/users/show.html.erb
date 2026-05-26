@@ -216,6 +216,26 @@
             <% end %>
           <% end %>
         </div>
+
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <h3 class="mb-2 text-base font-bold token-text-base">セッション失効</h3>
+          <p class="mb-4 text-sm token-text-muted">対象ユーザーのログイン状態を次のアクセス時に無効にします。</p>
+          <%= form_with url: revoke_sessions_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+            <div class="space-y-1">
+              <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+              <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+            </div>
+            <div class="space-y-1">
+              <%= form.label :confirmation, "確認文字列 REVOKE SESSIONS", class: "text-xs font-semibold token-text-muted" %>
+              <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+            </div>
+            <%= render "shared/ui/actions/button",
+                  label: "セッション失効を実行",
+                  type: "submit",
+                  size: :compact,
+                  icon: "logout" %>
+          <% end %>
+        </div>
       </div>
     <% end %>
   <% end %>

@@ -146,6 +146,47 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
+    it 'revoke_sessionsで対象ユーザーのsession_versionをincrementし、success auditを保存する' do
+      target_user.update!(session_version: 4)
+
+      result = described_class.call(
+        operation: 'revoke_sessions',
+        user: target_user,
+        actor: actor,
+        reason: 'device lost support request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'REVOKE SESSIONS'
+      )
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(target_user.reload.session_version).to eq(5)
+        expect(audit_log).to have_attributes(
+          actor_user: actor,
+          action: 'admin.users.session_revoke',
+          outcome: 'succeeded',
+          target_type: 'User',
+          target_id: target_user.id,
+          target_uid: "user:#{target_user.id}",
+          reason: 'device lost support request'
+        )
+        expect(audit_log.metadata).to include(
+          'operation' => 'revoke_sessions',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey',
+          'reauthenticated_at' => reauthenticated_at.iso8601
+        )
+        expect(audit_log.before_state).to include('session_version' => 4)
+        expect(audit_log.after_state).to include('session_version' => 5)
+        expect(audit_payload).not_to include('session_id', 'session-secret', 'cookie', 'remember_token')
+        expect(audit_payload).not_to include('credential-secret', 'challenge-secret', 'public-key-secret')
+      end
+    end
+
     it 'already locked userのlock_userは失敗auditを残す' do
       target_user.lock_access!(send_instructions: false)
 
@@ -255,7 +296,32 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
-    it 'admin対象ユーザーへの操作を拒否する' do
+    it '自分自身へのrevoke_sessionsを拒否する' do
+      actor.update!(session_version: 3)
+
+      result = described_class.call(
+        operation: 'revoke_sessions',
+        user: actor,
+        actor: actor,
+        reason: 'self revoke',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'REVOKE SESSIONS'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('self_operation_forbidden')
+        expect(actor.reload.session_version).to eq(3)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.session_revoke',
+          outcome: 'failed',
+          error_code: 'self_operation_forbidden'
+        )
+      end
+    end
+
+    it 'admin対象ユーザーへのforce_passkey_resetを拒否する' do
       admin_target = create(:user, :admin)
       create(:passkey, user: admin_target)
 
@@ -273,6 +339,28 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(result).to be_failure
         expect(result.error_code).to eq('admin_target_forbidden')
         expect(admin_target.passkeys.reload.count).to eq(1)
+        expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
+      end
+    end
+
+    it 'admin対象ユーザーへのrevoke_sessionsを拒否する' do
+      admin_target = create(:user, :admin)
+      admin_target.update!(session_version: 9)
+
+      result = described_class.call(
+        operation: 'revoke_sessions',
+        user: admin_target,
+        actor: actor,
+        reason: 'admin target',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'REVOKE SESSIONS'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('admin_target_forbidden')
+        expect(admin_target.reload.session_version).to eq(9)
         expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
       end
     end

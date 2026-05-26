@@ -18,6 +18,12 @@ module SystemOperations
         confirmation: "RESET PASSKEYS",
         self_forbidden: true,
         admin_target_forbidden: true
+      },
+      "revoke_sessions" => {
+        action: "admin.users.session_revoke",
+        confirmation: "REVOKE SESSIONS",
+        self_forbidden: true,
+        admin_target_forbidden: true
       }
     }.freeze
 
@@ -108,6 +114,8 @@ module SystemOperations
         user.unlock_access!
       when "force_passkey_reset"
         user.passkeys.destroy_all
+      when "revoke_sessions"
+        user.increment!(:session_version)
       end
     end
 

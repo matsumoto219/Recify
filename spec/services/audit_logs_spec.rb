@@ -179,5 +179,26 @@ RSpec.describe AuditLogs do
         'nested-public-key-secret'
       )
     end
+
+    it 'session本体は保存せずsession_versionだけを状態値として残す' do
+      log = described_class.record_admin_action!(
+        actor: create(:user, :admin),
+        action: 'admin.users.session_revoke',
+        outcome: 'succeeded',
+        before_state: {
+          session_version: 3,
+          session: 'session-secret',
+          cookie: 'cookie-secret',
+          remember_token: 'remember-secret'
+        },
+        after_state: { session_version: 4 }
+      )
+
+      aggregate_failures do
+        expect(log.before_state).to eq('session_version' => 3)
+        expect(log.after_state).to eq('session_version' => 4)
+        expect(log.attributes.to_json).not_to include('session-secret', 'cookie-secret', 'remember-secret')
+      end
+    end
   end
 end

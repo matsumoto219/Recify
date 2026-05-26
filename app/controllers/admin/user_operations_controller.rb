@@ -13,6 +13,10 @@ class Admin::UserOperationsController < Admin::BaseController
     execute_user_operation("force_passkey_reset")
   end
 
+  def revoke_sessions
+    execute_user_operation("revoke_sessions")
+  end
+
   private
 
   def set_user
@@ -67,6 +71,8 @@ class Admin::UserOperationsController < Admin::BaseController
       "ユーザーのロックを解除しました。"
     when "force_passkey_reset"
       "登録済みパスキーをリセットしました。"
+    when "revoke_sessions"
+      "ログインセッションを失効しました。"
     else
       "管理操作を実行しました。"
     end

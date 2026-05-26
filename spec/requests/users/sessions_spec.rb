@@ -129,6 +129,37 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
+  it 'session revoke後の次requestでsign outしてログインへ戻す' do
+    admin = create(:user, :admin)
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+    expect(session[:user_session_version]).to eq(0)
+
+    result = SystemOperations.execute_user_operation(
+      operation: 'revoke_sessions',
+      user: user,
+      actor: admin,
+      reason: 'device lost support request',
+      request: nil,
+      reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+      confirmation: 'REVOKE SESSIONS'
+    )
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(user.reload.session_version).to eq(1)
+    end
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to redirect_to(new_user_session_path)
+      expect(session[:user_session_version]).to be_blank
+    end
+  end
+
   it 'session version nilの既存セッションは現在値で補完する' do
     user = create(:user)
     sign_in user

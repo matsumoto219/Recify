@@ -312,4 +312,134 @@ RSpec.describe 'Admin user operations', type: :request do
       end
     end
   end
+
+  describe 'POST /admin/users/:id/operations/revoke_sessions' do
+    it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post revoke_sessions_operation_admin_user_path(target),
+           params: { reason: 'device lost support request', confirmation: 'REVOKE SESSIONS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_user_path(target)))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'reason blankではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post revoke_sessions_operation_admin_user_path(target),
+           params: { reason: ' ', confirmation: 'REVOKE SESSIONS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'fresh reauth + reason + confirmationでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      result = SystemOperations::Result.new(success: true)
+      allow(SystemOperations).to receive(:execute_user_operation).and_return(result)
+
+      post revoke_sessions_operation_admin_user_path(target),
+           params: { reason: 'device lost support request', confirmation: 'REVOKE SESSIONS' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).to have_received(:execute_user_operation).with(
+          operation: 'revoke_sessions',
+          user: target,
+          actor: admin,
+          reason: 'device lost support request',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey', reauthenticated_at: kind_of(ActiveSupport::TimeWithZone)),
+          confirmation: 'REVOKE SESSIONS'
+        )
+      end
+    end
+
+    it '実SystemOperations経由でsession_versionをincrementし、AuditLogを作成する' do
+      admin = create(:user, :admin)
+      target = create(:user, session_version: 2)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post revoke_sessions_operation_admin_user_path(target),
+             params: { reason: 'device lost support request', confirmation: 'REVOKE SESSIONS' }
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.reload.session_version).to eq(3)
+        expect(audit_log).to have_attributes(
+          action: 'admin.users.session_revoke',
+          outcome: 'succeeded',
+          target_uid: "user:#{target.id}"
+        )
+        expect(audit_log.before_state).to include('session_version' => 2)
+        expect(audit_log.after_state).to include('session_version' => 3)
+        expect(audit_payload).not_to include('session_id', 'cookie', 'remember_token')
+        expect(audit_payload).not_to include('credential_id', 'public_key', 'challenge')
+      end
+    end
+
+    it 'confirmation不一致はSystemOperationsで拒否し、session_versionを変更しない' do
+      admin = create(:user, :admin)
+      target = create(:user, session_version: 5)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post revoke_sessions_operation_admin_user_path(target),
+             params: { reason: 'device lost support request', confirmation: 'WRONG' }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.reload.session_version).to eq(5)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.session_revoke',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+
+    it 'HTMLにセッション失効フォームを表示し、秘匿情報や開発者向け文言を出さない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(target)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('セッション失効')
+        expect(response.body).to include(revoke_sessions_operation_admin_user_path(target))
+        expect(response.body).not_to include('session_id')
+        expect(response.body).not_to include('remember_token')
+        expect(response.body).not_to include('credential_id')
+        expect(response.body).not_to include('public_key')
+        expect(response.body).not_to include('challenge')
+        expect(response.body).not_to match(/v1\.0後|未実装|TODO|service\/facade|payload|development\/test|production/)
+      end
+    end
+  end
 end
