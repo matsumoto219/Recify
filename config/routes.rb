@@ -1,7 +1,9 @@
 Rails.application.routes.draw do
   namespace :admin do
     root "receipt_analysis_runs#index"
-    resources :receipt_analysis_runs, only: %i[index show], param: :run_key
+    resources :receipt_analysis_runs, only: %i[index show], param: :run_key do
+      post :retry, on: :member
+    end
   end
 
   if Rails.env.development? && defined?(LetterOpenerWeb::Engine)

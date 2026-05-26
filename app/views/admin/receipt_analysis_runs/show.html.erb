@@ -124,14 +124,31 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
-    <p class="mb-4 text-sm token-text-muted">read-only表示です。ここから再解析Jobはenqueueしません。</p>
+    <% if admin_retry_enabled? %>
+      <p class="mb-4 text-sm token-text-muted">development/test 限定で retry を実行できます。production は passkey再認証実装まで無効です。</p>
+    <% else %>
+      <p class="mb-4 text-sm token-text-muted">production では retry action は無効です。passkey再認証実装後に解禁予定です。</p>
+    <% end %>
     <div class="grid gap-3 md:grid-cols-2">
       <% @record[:retry_options].each do |option| %>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <div class="font-semibold token-text-base"><%= option[:type] %></div>
           <div class="mt-1 text-sm <%= option[:possible] ? "token-text-success" : "token-text-muted" %>">
             <%= option[:possible] ? "available" : "disabled: #{option[:disabled_reason]}" %>
           </div>
+          <% if admin_retry_enabled? && option[:possible] %>
+            <%= form_with url: retry_admin_receipt_analysis_run_path(@record[:run_key]), method: :post, local: true, class: "space-y-2" do |form| %>
+              <%= hidden_field_tag :retry_type, option[:type] %>
+              <%= form.label :reason, "reason", class: "text-xs font-semibold token-text-muted" %>
+              <%= form.text_area :reason,
+                    rows: 2,
+                    required: true,
+                    class: "min-h-20 w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
+                    placeholder: "再解析理由" %>
+              <%= form.submit "Retry",
+                    class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+            <% end %>
+          <% end %>
         </div>
       <% end %>
     </div>

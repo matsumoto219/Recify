@@ -226,8 +226,8 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('Snapshot presence')
         expect(response.body).to include('Finalize decision')
         expect(response.body).to include('Amount calculation profile')
+        expect(response.body).to include('development/test 限定')
         expect(response.body).to include('safe content')
-        expect(response.body).not_to include('retry_type')
         expect(response.body).not_to include('Analysis::RetryService.call')
       end
     end
@@ -280,6 +280,196 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).not_to include('RAW AI RESPONSE')
         expect(response.body).not_to include('SECRET')
         expect(response.body).not_to include('SIGNED')
+      end
+    end
+
+    it 'production相当ではretry form/buttonを表示しない' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('production では retry action は無効')
+        expect(response.body).not_to include('name="retry_type"')
+        expect(response.body).not_to include('再解析理由')
+        expect(response.body).not_to include('value="Retry"')
+      end
+    end
+  end
+
+  describe 'POST /admin/receipt_analysis_runs/:run_key/retry' do
+    it 'development/testではRetryService経由でretryし、request contextを渡す' do
+      admin = create(:user, :admin)
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))
+      new_run = create(:receipt_analysis_run, receipt: parent_run.receipt, parent_run: parent_run)
+      result = Analysis::RetryService::Result.new(
+        run: new_run,
+        enqueued_job: ReceiptOcrJob,
+        retry_type: 'full_reanalyze'
+      )
+      sign_in admin
+      allow(Analysis::RetryService).to receive(:call).and_return(result)
+
+      post retry_admin_receipt_analysis_run_path(parent_run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: '問い合わせ対応'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(new_run.run_key))
+        expect(flash[:notice]).to include('Retry enqueued')
+        expect(Analysis::RetryService).to have_received(:call).with(
+          receipt: parent_run.receipt,
+          parent_run: parent_run,
+          actor: admin,
+          retry_type: 'full_reanalyze',
+          reason: '問い合わせ対応',
+          request: kind_of(ActionDispatch::Request)
+        )
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'RetryServiceが失敗した場合は元runへredirectしてalertを出す' do
+      admin = create(:user, :admin)
+      parent_run = create(:receipt_analysis_run, :succeeded)
+      result = Analysis::RetryService::Result.new(
+        run: nil,
+        enqueued_job: nil,
+        retry_type: 'ai_retry',
+        error_code: 'ocr_snapshot_missing',
+        error_message: 'parent_run.ocr_result_snapshot is required'
+      )
+      sign_in admin
+      allow(Analysis::RetryService).to receive(:call).and_return(result)
+
+      post retry_admin_receipt_analysis_run_path(parent_run.run_key),
+           params: {
+             retry_type: 'ai_retry',
+             reason: 'AIだけ再実行'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(parent_run.run_key))
+        expect(flash[:alert]).to include('ocr_snapshot_missing')
+        expect(Analysis::RetryService).to have_received(:call)
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'reason blank はRetryServiceを呼ばずに拒否する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Analysis::RetryService).to receive(:call)
+
+      post retry_admin_receipt_analysis_run_path(run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: ''
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
+        expect(flash[:alert]).to include('reason is required')
+        expect(Analysis::RetryService).not_to have_received(:call)
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'invalid retry_type はRetryServiceを呼ばずに拒否する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Analysis::RetryService).to receive(:call)
+
+      post retry_admin_receipt_analysis_run_path(run.run_key),
+           params: {
+             retry_type: 'destroy_everything',
+             reason: 'invalid'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
+        expect(flash[:alert]).to include('Invalid retry type')
+        expect(Analysis::RetryService).not_to have_received(:call)
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it 'production相当ではretry actionを既存404へ流して実行しない' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+      allow(Analysis::RetryService).to receive(:call)
+
+      post retry_admin_receipt_analysis_run_path(run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: 'production disabled'
+           }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(Analysis::RetryService).not_to have_received(:call)
+        expect_no_analysis_jobs_enqueued
+      end
+    end
+
+    it '非admin404方針を維持する' do
+      user = create(:user)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in user
+
+      post retry_admin_receipt_analysis_run_path(run.run_key),
+           params: {
+             retry_type: 'full_reanalyze',
+             reason: 'not admin'
+           }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+      end
+    end
+
+    it '実RetryService経由でAuditLogへrequest contextを保存する' do
+      admin = create(:user, :admin)
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))
+      sign_in admin
+
+      expect do
+        post retry_admin_receipt_analysis_run_path(parent_run.run_key),
+             params: {
+               retry_type: 'full_reanalyze',
+               reason: '監査ログ確認'
+             },
+             headers: {
+               'HTTP_USER_AGENT' => 'Admin Retry Spec'
+             }
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to have_http_status(:redirect)
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'succeeded',
+          target_uid: parent_run.receipt.public_id,
+          reason: '監査ログ確認'
+        )
+        expect(audit_log.request_id).to be_present
+        expect(audit_log.user_agent).to eq('Admin Retry Spec')
+        expect(audit_log.ip_address).to be_present
       end
     end
   end
