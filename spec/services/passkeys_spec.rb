@@ -81,6 +81,20 @@ RSpec.describe Passkeys do
     end
   end
 
+  describe '.discoverable_authentication_options' do
+    it 'discoverable credential login用にallow credentialsなしでoptionsを生成する' do
+      options = described_class.discoverable_authentication_options
+
+      aggregate_failures do
+        expect(options.challenge).to be_present
+        expect(options.rp_id).to eq(rp_id)
+        expect(options.user_verification).to eq('required')
+        expect(options.allow_credentials).to eq([])
+        expect(options.as_json.fetch(:allowCredentials)).to eq([])
+      end
+    end
+  end
+
   describe '.verify_authentication' do
     it 'authentication responseを検証してsign_countとlast_used_atを更新する' do
       user = create(:user)
@@ -130,6 +144,72 @@ RSpec.describe Passkeys do
     end
   end
 
+  describe '.verify_discoverable_authentication' do
+    it 'discoverable authentication responseを検証してuserを返し、sign_countとlast_used_atを更新する' do
+      user = create(:user)
+      passkey = create_passkey_with_fake_client(user)
+      options = described_class.discoverable_authentication_options
+      credential = client.get(
+        challenge: options.challenge,
+        rp_id: rp_id,
+        user_verified: true,
+        user_handle: raw_user_handle_for(user)
+      )
+
+      result = described_class.verify_discoverable_authentication(
+        credential: credential,
+        challenge: options.challenge
+      )
+
+      aggregate_failures do
+        expect(result.user).to eq(user)
+        expect(result.passkey).to eq(passkey)
+        expect(passkey.reload.sign_count).to be > 0
+        expect(passkey.last_used_at).to be_present
+      end
+    end
+
+    it 'user_handleがcredential所有者と一致しない場合は拒否する' do
+      passkey = create_passkey_with_fake_client(create(:user))
+      other_user = create(:user)
+      options = described_class.discoverable_authentication_options
+      credential = client.get(
+        challenge: options.challenge,
+        rp_id: rp_id,
+        user_verified: true,
+        user_handle: raw_user_handle_for(other_user)
+      )
+
+      expect {
+        described_class.verify_discoverable_authentication(
+          credential: credential,
+          challenge: options.challenge
+        )
+      }.to raise_error(Passkeys::AuthenticationError)
+
+      expect(passkey.reload.last_used_at).to be_blank
+    end
+
+    it 'user_handleがない場合は拒否する' do
+      passkey = create_passkey_with_fake_client(create(:user))
+      options = described_class.discoverable_authentication_options
+      credential = client.get(
+        challenge: options.challenge,
+        rp_id: rp_id,
+        user_verified: true
+      )
+
+      expect {
+        described_class.verify_discoverable_authentication(
+          credential: credential,
+          challenge: options.challenge
+        )
+      }.to raise_error(Passkeys::AuthenticationError)
+
+      expect(passkey.reload.last_used_at).to be_blank
+    end
+  end
+
   describe '.reauthentication_options and .verify_reauthentication' do
     it '同じcredentialで再認証ceremonyを成立させる' do
       user = create(:user)
@@ -158,5 +238,9 @@ RSpec.describe Passkeys do
     credential = client.create(challenge: options.challenge, rp_id: rp_id, user_verified: true)
 
     described_class.verify_registration(user: user, credential: credential, challenge: options.challenge)
+  end
+
+  def raw_user_handle_for(user)
+    WebAuthn.standard_encoder.decode(user.ensure_webauthn_id!)
   end
 end

@@ -19,6 +19,8 @@ Rails.application.routes.draw do
     confirmations: "users/confirmations",
     unlocks: "users/unlocks"
   }
+  post "/users/passkey_sessions/options", to: "users/passkey_sessions#options", as: :users_passkey_sessions_options
+  post "/users/passkey_sessions", to: "users/passkey_sessions#create", as: :users_passkey_sessions
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

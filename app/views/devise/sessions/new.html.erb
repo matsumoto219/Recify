@@ -71,6 +71,30 @@
           </div>
         <% end %>
 
+        <section
+          class="space-y-3"
+          data-controller="passkey-session"
+          data-passkey-session-options-url-value="<%= users_passkey_sessions_options_path %>"
+          data-passkey-session-create-url-value="<%= users_passkey_sessions_path %>"
+          data-passkey-session-unsupported-message-value="<%= t("auth.sessions.passkey.messages.unsupported") %>"
+          data-passkey-session-canceled-message-value="<%= t("auth.sessions.passkey.messages.canceled") %>"
+          data-passkey-session-failure-message-value="<%= t("auth.sessions.passkey.messages.failure") %>"
+          data-passkey-session-request-failed-message-value="<%= t("auth.sessions.passkey.messages.request_failed") %>">
+          <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
+          <%= render "shared/ui/actions/button",
+                label: t("auth.sessions.passkey.button"),
+                type: "button",
+                variant: :secondary,
+                size: :lg,
+                radius: :lg,
+                full_width: true,
+                icon: "passkey",
+                data: {
+                  action: "click->passkey-session#login",
+                  passkey_session_target: "button"
+                } %>
+        </section>
+
         <section class="text-center pt-2" aria-label="<%= t("auth.sessions.sign_up.aria_label") %>">
           <p class="flex flex-col items-center gap-1 text-sm token-text-muted sm:block">
             <span><%= t("auth.sessions.sign_up.prompt") %></span>

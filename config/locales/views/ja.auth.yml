@@ -13,6 +13,13 @@ ja:
       remember_me: ログイン状態を保持する
       submit: ログイン
       submitting: ログイン中...
+      passkey:
+        button: パスキーでログイン
+        messages:
+          unsupported: このブラウザはパスキーでのログインに対応していません。
+          canceled: パスキーでのログインがキャンセルされました。
+          failure: パスキーでログインできませんでした。パスワードでもログインできます。
+          request_failed: リクエストに失敗しました。
       sign_up:
         aria_label: 新規登録案内
         prompt: アカウントをお持ちではありませんか？

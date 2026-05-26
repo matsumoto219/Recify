@@ -1,5 +1,6 @@
 module Passkeys
   VerificationResult = Struct.new(:passkey, :user, :credential, keyword_init: true)
+  AuthenticationError = Class.new(StandardError)
 
   class << self
     def registration_options(user:)
@@ -36,6 +37,10 @@ module Passkeys
       )
     end
 
+    def discoverable_authentication_options
+      WebAuthn::Credential.options_for_get(user_verification: "required")
+    end
+
     def verify_authentication(credential:, challenge:, user: nil)
       webauthn_credential = WebAuthn::Credential.from_get(credential)
       passkey = Passkey.find_by!(credential_id: webauthn_credential.id)
@@ -56,6 +61,36 @@ module Passkeys
       )
 
       VerificationResult.new(passkey: passkey, user: passkey.user, credential: webauthn_credential)
+    end
+
+    def verify_discoverable_authentication(credential:, challenge:)
+      webauthn_credential = WebAuthn::Credential.from_get(credential)
+      passkey = Passkey.includes(:user).find_by!(credential_id: webauthn_credential.id)
+
+      webauthn_credential.verify(
+        challenge,
+        public_key: passkey.public_key,
+        sign_count: passkey.sign_count,
+        user_verification: true
+      )
+
+      user = passkey.user
+      raise AuthenticationError, "user_handle_missing" if webauthn_credential.user_handle.blank?
+      raise AuthenticationError, "user_handle_mismatch" unless ActiveSupport::SecurityUtils.secure_compare(
+        webauthn_credential.user_handle,
+        user.webauthn_id.to_s
+      )
+
+      yield user if block_given?
+
+      passkey.update!(
+        sign_count: webauthn_credential.sign_count || passkey.sign_count,
+        last_used_at: Time.current,
+        backup_eligible: webauthn_credential.backup_eligible? || false,
+        backed_up: webauthn_credential.backed_up? || false
+      )
+
+      VerificationResult.new(passkey: passkey, user: user, credential: webauthn_credential)
     end
 
     def reauthentication_options(user:)

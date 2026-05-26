@@ -69,6 +69,10 @@ class ApplicationController < ActionController::Base
     [ "user", current_user.id ].join(":")
   end
 
+  def rate_limit_remote_ip_key
+    request.remote_ip
+  end
+
   def rate_limit_guest_registration_context?
     user_signed_in? && params[:update_context].to_s == "guest_registration"
   end
