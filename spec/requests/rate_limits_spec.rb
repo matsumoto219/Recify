@@ -220,6 +220,44 @@ RSpec.describe 'Rails rate limits', type: :request do
     end
   end
 
+  describe 'POST /users/two_factor/passkey/options' do
+    it 'throttles passkey step-up options by IP' do
+      10.times do
+        post users_two_factor_passkey_options_path,
+             as: :json,
+             headers: remote_addr('203.0.113.32')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post users_two_factor_passkey_options_path,
+           as: :json,
+           headers: remote_addr('203.0.113.32')
+
+      expect_rate_limited_response
+    end
+  end
+
+  describe 'POST /users/two_factor/passkey' do
+    it 'throttles passkey step-up assertions by IP' do
+      10.times do
+        post users_two_factor_passkey_create_path,
+             params: { credential: { id: 'missing-challenge' } },
+             as: :json,
+             headers: remote_addr('203.0.113.33')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post users_two_factor_passkey_create_path,
+           params: { credential: { id: 'missing-challenge' } },
+           as: :json,
+           headers: remote_addr('203.0.113.33')
+
+      expect_rate_limited_response
+    end
+  end
+
   describe 'PATCH /users update_context=guest_registration' do
     it 'throttles guest registration by user and IP and does not update after the limit' do
       guest = User.guest!

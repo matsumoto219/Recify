@@ -21,6 +21,9 @@ Rails.application.routes.draw do
   }
   post "/users/passkey_sessions/options", to: "users/passkey_sessions#options", as: :users_passkey_sessions_options
   post "/users/passkey_sessions", to: "users/passkey_sessions#create", as: :users_passkey_sessions
+  get "/users/two_factor/passkey", to: "users/two_factor/passkeys#new", as: :users_two_factor_passkey
+  post "/users/two_factor/passkey/options", to: "users/two_factor/passkeys#options", as: :users_two_factor_passkey_options
+  post "/users/two_factor/passkey", to: "users/two_factor/passkeys#create", as: :users_two_factor_passkey_create
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

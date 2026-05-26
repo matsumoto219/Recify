@@ -53,6 +53,8 @@ module Passkeys
         user_verification: true
       )
 
+      yield passkey.user if block_given?
+
       passkey.update!(
         sign_count: webauthn_credential.sign_count || passkey.sign_count,
         last_used_at: Time.current,
@@ -97,8 +99,16 @@ module Passkeys
       authentication_options(user: user)
     end
 
-    def verify_reauthentication(user:, credential:, challenge:)
-      verify_authentication(credential: credential, challenge: challenge, user: user)
+    def verify_reauthentication(user:, credential:, challenge:, &block)
+      verify_authentication(credential: credential, challenge: challenge, user: user, &block)
+    end
+
+    def step_up_options(user:)
+      reauthentication_options(user: user)
+    end
+
+    def verify_step_up(user:, credential:, challenge:, &block)
+      verify_reauthentication(user: user, credential: credential, challenge: challenge, &block)
     end
 
     private

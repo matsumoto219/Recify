@@ -42,6 +42,7 @@ class Users::PasskeySessionsController < ApplicationController
     end
     user = result.user
 
+    clear_pending_second_factor
     sign_in(:user, user)
     render json: {
       ok: true,
@@ -62,6 +63,11 @@ class Users::PasskeySessionsController < ApplicationController
     user.active_for_authentication? && !user.guest?
   end
 
+  def clear_pending_second_factor
+    session.delete(Users::SessionsController::PENDING_SECOND_FACTOR_SESSION_KEY)
+    session.delete(Users::TwoFactor::PasskeysController::STEP_UP_CHALLENGE_SESSION_KEY)
+  end
+
   def consume_authentication_challenge
     challenge_session = session.delete(AUTHENTICATION_CHALLENGE_SESSION_KEY).to_h
     challenge = challenge_session["challenge"].to_s
@@ -75,7 +81,7 @@ class Users::PasskeySessionsController < ApplicationController
   end
 
   def credential_params
-    params.require(:credential).permit(
+    credential = params.require(:credential).permit(
       :type,
       :id,
       :rawId,
@@ -88,6 +94,13 @@ class Users::PasskeySessionsController < ApplicationController
         userHandle
       ]
     ).to_h
+    credential.fetch("rawId")
+    response = credential.fetch("response")
+    response.fetch("authenticatorData")
+    response.fetch("clientDataJSON")
+    response.fetch("signature")
+
+    credential
   end
 
   def render_login_error

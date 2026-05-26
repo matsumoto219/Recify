@@ -76,9 +76,33 @@ RSpec.describe 'User passkey sessions', type: :request do
         expect(response.parsed_body.fetch('ok')).to be(true)
         expect(response.parsed_body.fetch('redirect_url')).to be_present
         expect(session[:passkey_authentication_challenge]).to be_blank
+        expect(session[:pending_second_factor]).to be_blank
         expect(passkey.reload.last_used_at).to be_present
         expect(user.current_sign_in_at).to be_present
         expect(user.current_sign_in_ip).to be_present
+      end
+    end
+
+    it 'password step-up pending中でもpasskey直接ログイン成功時はpendingを削除する' do
+      user = create(:user)
+      create_passkey_with_fake_client(user)
+
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+      expect(session[:pending_second_factor]).to be_present
+
+      options = authentication_options_payload
+      credential = fake_assertion_credential(options, user: user)
+
+      post users_passkey_sessions_path,
+           params: { credential: credential },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(session[:passkey_step_up_challenge]).to be_blank
+        expect(user.reload.sign_in_count).to eq(1)
       end
     end
 

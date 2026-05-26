@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Users::SessionsController < Devise::SessionsController
+  PENDING_SECOND_FACTOR_SESSION_KEY = :pending_second_factor
+  PENDING_SECOND_FACTOR_TTL = 5.minutes
+
   rate_limit to: 5,
              within: 5.minutes,
              by: :rate_limit_email_digest,
@@ -19,12 +22,18 @@ class Users::SessionsController < Devise::SessionsController
 
   # POST /resource/sign_in
   def create
-    self.resource = warden.authenticate(auth_options)
+    self.resource = warden.authenticate(password_auth_options)
 
     if resource
-      set_flash_message!(:notice, :signed_in)
-      sign_in(resource_name, resource)
-      respond_with resource, location: after_sign_in_path_for(resource)
+      if passkey_step_up_required?(resource)
+        store_pending_second_factor(resource)
+        flash[:notice] = t("auth.two_factor.passkey.pending_notice")
+        redirect_to users_two_factor_passkey_path, status: :see_other
+      else
+        set_flash_message!(:notice, :signed_in)
+        sign_in(resource_name, resource, force: true)
+        respond_with resource, location: after_sign_in_path_for(resource)
+      end
     else
       failure_message = warden.message || :invalid
       self.resource = resource_class.new(sign_in_params)
@@ -81,6 +90,24 @@ class Users::SessionsController < Devise::SessionsController
     keys = keys.keys if keys.is_a?(Hash)
 
     keys.map { |key| resource_class.human_attribute_name(key).downcase }.join(I18n.t(:"support.array.words_connector"))
+  end
+
+  def password_auth_options
+    auth_options.merge(store: false, run_callbacks: false)
+  end
+
+  def passkey_step_up_required?(user)
+    !user.guest? && user.passkeys.exists?
+  end
+
+  def store_pending_second_factor(user)
+    session[PENDING_SECOND_FACTOR_SESSION_KEY] = {
+      "user_id" => user.id,
+      "issued_at" => Time.current.iso8601,
+      "remember_me" => ActiveModel::Type::Boolean.new.cast(params.dig(:user, :remember_me)) || false,
+      "method" => "password",
+      "allowed_methods" => [ "passkey" ]
+    }
   end
 
   # If you have extra params to permit, append them to the sanitizer.

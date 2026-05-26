@@ -1,0 +1,57 @@
+<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+  <%= render "shared/ui/layout/ambient_background" %>
+
+  <div class="w-full max-w-[440px] z-10 space-y-8">
+    <section aria-labelledby="two-factor-passkey-title">
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
+            title: t("auth.two_factor.passkey.title"),
+            subtitle: t("auth.two_factor.passkey.subtitle"),
+            title_id: "two-factor-passkey-title",
+            align: :center,
+            title_size: "text-3xl",
+            subtitle_size: "text-sm",
+            spacing_class: "space-y-3" %>
+    </section>
+
+    <%= render "shared/ui/layout/surface_card", title_id: "two-factor-passkey-card-title" do %>
+      <div
+        class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6"
+        data-controller="passkey-session"
+        data-passkey-session-options-url-value="<%= users_two_factor_passkey_options_path %>"
+        data-passkey-session-create-url-value="<%= users_two_factor_passkey_create_path %>"
+        data-passkey-session-unsupported-message-value="<%= t("auth.two_factor.passkey.messages.unsupported") %>"
+        data-passkey-session-canceled-message-value="<%= t("auth.two_factor.passkey.messages.canceled") %>"
+        data-passkey-session-failure-message-value="<%= t("auth.two_factor.passkey.messages.failure") %>"
+        data-passkey-session-request-failed-message-value="<%= t("auth.two_factor.passkey.messages.request_failed") %>"
+        data-passkey-session-conditional-value="false">
+        <h2 id="two-factor-passkey-card-title" class="sr-only"><%= t("auth.two_factor.passkey.card_title") %></h2>
+
+        <p class="text-sm token-text-muted leading-relaxed">
+          <%= t("auth.two_factor.passkey.description") %>
+        </p>
+
+        <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
+
+        <%= render "shared/ui/actions/button",
+              label: t("auth.two_factor.passkey.button"),
+              type: "button",
+              variant: :primary,
+              size: :lg,
+              radius: :lg,
+              full_width: true,
+              icon: "passkey",
+              data: {
+                action: "click->passkey-session#login",
+                passkey_session_target: "button"
+              } %>
+
+        <div class="text-center">
+          <%= link_to t("auth.two_factor.passkey.back_to_login"),
+                new_user_session_path,
+                class: "text-sm token-text-brand font-medium hover:underline underline-offset-4" %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

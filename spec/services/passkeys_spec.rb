@@ -233,6 +233,33 @@ RSpec.describe Passkeys do
     end
   end
 
+  describe '.step_up_options and .verify_step_up' do
+    it 'user指定ありのpasskey step-up ceremonyを成立させる' do
+      user = create(:user)
+      passkey = create_passkey_with_fake_client(user)
+      options = described_class.step_up_options(user: user)
+      credential = client.get(
+        challenge: options.challenge,
+        rp_id: rp_id,
+        user_verified: true,
+        allow_credentials: [ passkey.credential_id ]
+      )
+
+      result = described_class.verify_step_up(
+        user: user,
+        credential: credential,
+        challenge: options.challenge
+      )
+
+      aggregate_failures do
+        expect(options.allow_credentials.first[:id]).to eq(passkey.credential_id)
+        expect(options.user_verification).to eq('required')
+        expect(result.user).to eq(user)
+        expect(passkey.reload.last_used_at).to be_present
+      end
+    end
+  end
+
   def create_passkey_with_fake_client(user)
     options = described_class.registration_options(user: user)
     credential = client.create(challenge: options.challenge, rp_id: rp_id, user_verified: true)

@@ -23,7 +23,8 @@
         data-passkey-session-unsupported-message-value="<%= t("auth.sessions.passkey.messages.unsupported") %>"
         data-passkey-session-canceled-message-value="<%= t("auth.sessions.passkey.messages.canceled") %>"
         data-passkey-session-failure-message-value="<%= t("auth.sessions.passkey.messages.failure") %>"
-        data-passkey-session-request-failed-message-value="<%= t("auth.sessions.passkey.messages.request_failed") %>">
+        data-passkey-session-request-failed-message-value="<%= t("auth.sessions.passkey.messages.request_failed") %>"
+        data-passkey-session-conditional-value="true">
         <h2 id="login-form-title" class="sr-only"><%= t("auth.sessions.form_title") %></h2>
 
         <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "space-y-6" }) do |f| %>

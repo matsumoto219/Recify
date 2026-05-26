@@ -8,12 +8,13 @@ export default class extends Controller {
     unsupportedMessage: String,
     canceledMessage: String,
     failureMessage: String,
-    requestFailedMessage: String
+    requestFailedMessage: String,
+    conditional: Boolean
   }
 
   connect () {
     this.conditionalAbortController = null
-    this.startConditionalLogin()
+    if (this.conditionalValue) this.startConditionalLogin()
   }
 
   disconnect () {
