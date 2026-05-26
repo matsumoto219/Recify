@@ -4,6 +4,10 @@ module Admin
       ReceiptAnalysisRunsQuery.call(**filters)
     end
 
+    def dashboard(admin_user:)
+      Dashboard.call(admin_user: admin_user)
+    end
+
     def audit_logs(**filters)
       AuditLogsQuery.call(**filters)
     end

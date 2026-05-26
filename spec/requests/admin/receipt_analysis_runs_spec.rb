@@ -62,9 +62,9 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
     expect(response).to have_http_status(:success)
   end
 
-  describe 'GET /admin' do
+  describe 'GET /admin/receipt_analysis_runs' do
     it '非ログインユーザーはログインへリダイレクトする' do
-      get admin_root_path
+      get admin_receipt_analysis_runs_path
 
       expect(response).to redirect_to(new_user_session_path)
     end
@@ -78,7 +78,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       expected_headers = comparable_headers
 
       sign_in user
-      get admin_root_path
+      get admin_receipt_analysis_runs_path
 
       aggregate_failures do
         expect(response).to have_http_status(:not_found)
@@ -98,7 +98,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
 
-      get admin_root_path
+      get admin_receipt_analysis_runs_path
 
       aggregate_failures do
         expect(response).to have_http_status(:success)

@@ -1,0 +1,191 @@
+<% content_for :title, "管理トップ" %>
+
+<%
+  receipt_analysis = @dashboard.receipt_analysis
+  cleanup = @dashboard.cleanup
+  audit = @dashboard.audit
+  security = @dashboard.security
+  system_operations = @dashboard.system_operations
+  reauth_context = admin_reauthentication_context
+  reauth_active = admin_passkey_reauthenticated?
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "管理トップ",
+        subtitle: "v1.0前のadmin運用に必要な状態サマリと主要導線",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base">Receipt analysis overview</h2>
+          <p class="text-sm token-text-muted">OCR / AI / Finalize pipeline の現在状態</p>
+        </div>
+        <%= link_to "解析run管理", admin_receipt_analysis_runs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">active runs</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:active_runs_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">failed runs</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:failed_runs_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">review_needed receipts</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:review_needed_receipts_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">needs attention</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:needs_attention_count] %></dd>
+        </div>
+      </dl>
+
+      <p class="mt-4 text-sm token-text-muted">
+        latest run:
+        <span class="font-mono token-text-base">
+          <%= receipt_analysis[:latest_run_at].present? ? l(receipt_analysis[:latest_run_at], format: :short) : "-" %>
+        </span>
+      </p>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base">Cleanup / retention</h2>
+          <p class="text-sm token-text-muted">stale active run と期限切れterminal runのdry-run概要</p>
+        </div>
+        <%= link_to "Cleanup preview", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">stale dry-run count</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:stale_dry_run_count] %></dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:stale_cutoff], format: :short) %> cutoff</dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">expired dry-run count</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:expired_dry_run_count] %></dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:retention_cutoff], format: :short) %> cutoff</dd>
+        </div>
+      </dl>
+
+      <p class="mt-4 text-sm token-text-muted">
+        cleanup execute requires fresh passkey reauthentication, reason, confirmation, and AuditLog.
+      </p>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base">Audit trail</h2>
+          <p class="text-sm token-text-muted">直近24時間のadmin action概要</p>
+        </div>
+        <%= link_to "監査ログ", admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-3">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">failed admin actions</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_failed_admin_actions_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">retry actions</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_retry_actions_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">cleanup execute</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_cleanup_execute_count] %></dd>
+        </div>
+      </dl>
+
+      <div class="mt-4 flex flex-wrap gap-2 text-sm">
+        <%= link_to "retry audit", admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= link_to "cleanup execute audit", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+      </div>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base">Security / reauthentication</h2>
+          <p class="text-sm token-text-muted">高リスク操作前の本人確認状態</p>
+        </div>
+        <%= link_to "Passkey reauth", new_admin_passkey_reauthentication_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">admin passkeys</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:admin_passkey_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">fresh reauth</dt>
+          <dd class="font-semibold <%= reauth_active ? "token-text-success" : "token-text-muted" %>"><%= reauth_active ? "active" : "expired" %></dd>
+          <dd class="mt-1 text-xs token-text-muted">
+            <%= reauth_context[:reauthenticated_at].present? ? l(reauth_context[:reauthenticated_at], format: :short) : "-" %>
+          </dd>
+        </div>
+      </dl>
+
+      <div class="mt-4 flex flex-wrap gap-2 text-sm">
+        <%= link_to "パスキー設定", settings_security_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= link_to "再認証する", new_admin_passkey_reauthentication_path(return_to: admin_root_path), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+      </div>
+    <% end %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">System operations</h2>
+        <p class="text-sm token-text-muted">queue / recurring の運用詳細は専用ページで確認します。</p>
+      </div>
+      <%= link_to "System operations", admin_system_operations_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">Queues</h3>
+        <ul class="grid gap-2 text-sm md:grid-cols-2">
+          <% system_operations[:queues].each do |queue| %>
+            <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= queue %></li>
+          <% end %>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">Recurring dry-run summary</h3>
+        <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-base">
+          dry-run recurring tasks:
+          <span class="font-mono font-bold"><%= system_operations[:recurring_dry_run_count] %></span>
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2 text-sm">
+          <% system_operations[:recurring_tasks].first(3).each do |task| %>
+            <span class="rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted"><%= task[:key] %></span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Locked future operations</h2>
+    <p class="mb-4 text-sm token-text-muted">以下はv1.0後に個別設計します。管理トップからは実行しません。</p>
+    <ul class="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
+      <% @dashboard.locked_future_operations.each do |operation| %>
+        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base"><%= operation %></li>
+      <% end %>
+    </ul>
+  <% end %>
+</section>
