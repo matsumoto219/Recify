@@ -28,7 +28,7 @@
         この画面は現在時点のdry-run結果だけを表示します。DB更新、run削除、Job enqueue、cleanup job実行は行いません。
       </p>
       <p class="text-sm token-text-muted">
-        productionでの <span class="font-mono">dry_run:false</span> はまだ未解禁です。実処理化はAuditLog確認、passkey再認証、運用判断後に行います。
+        <span class="font-mono">dry_run:false</span> の実行は high-risk admin operation です。fresh passkey reauthentication、reason、confirmation、AuditLog が必須です。
       </p>
     </div>
   <% end %>
@@ -153,6 +153,43 @@
         </tbody>
       </table>
     </div>
+
+    <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base">Execute stale cleanup</h3>
+      <p class="mb-4 text-sm token-text-muted">
+        この操作は対象 active run を failed / canceled へ terminal 化します。実行前に上のdry-run結果を確認してください。
+      </p>
+
+      <% if cleanup_execution_enabled? %>
+        <%= form_with url: admin_receipt_analysis_cleanup_stale_path, method: :post, local: true, class: "space-y-4" do |form| %>
+          <%= form.hidden_field :stale_cutoff, value: stale_cutoff_value %>
+          <%= form.hidden_field :stale_limit, value: preview_params[:stale_limit] %>
+          <%= form.hidden_field :retention_cutoff, value: retention_cutoff_value %>
+          <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
+
+          <div class="space-y-1">
+            <%= form.label :reason, "Reason", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          </div>
+
+          <label class="flex items-start gap-3 text-sm token-text-base">
+            <%= form.check_box :confirm, required: true, class: "mt-1" %>
+            <span>dry-run対象を確認し、stale cleanupを <span class="font-mono">dry_run:false</span> で実行します。</span>
+          </label>
+
+          <%= render "shared/ui/actions/button",
+                label: "Execute stale cleanup",
+                type: "submit",
+                size: :compact,
+                icon: "warning" %>
+        <% end %>
+      <% else %>
+        <p class="mb-3 text-sm token-text-muted">実行には fresh passkey reauthentication が必要です。POST payloadは保存しないため、再認証後にreasonを再入力してください。</p>
+        <%= link_to "Passkey reauthentication",
+              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      <% end %>
+    </div>
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
@@ -211,6 +248,48 @@
           <% end %>
         </tbody>
       </table>
+    </div>
+
+    <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base">Execute retention cleanup</h3>
+      <p class="mb-4 text-sm token-text-muted">
+        この操作は期限切れ terminal run を削除します。削除を伴うため、低limitからの実行を推奨します。
+      </p>
+
+      <% if cleanup_execution_enabled? %>
+        <%= form_with url: admin_receipt_analysis_cleanup_retention_path, method: :post, local: true, class: "space-y-4" do |form| %>
+          <%= form.hidden_field :stale_cutoff, value: stale_cutoff_value %>
+          <%= form.hidden_field :stale_limit, value: preview_params[:stale_limit] %>
+          <%= form.hidden_field :retention_cutoff, value: retention_cutoff_value %>
+          <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
+
+          <div class="space-y-1">
+            <%= form.label :reason, "Reason", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          </div>
+
+          <label class="flex items-start gap-3 text-sm token-text-base">
+            <%= form.check_box :confirm, required: true, class: "mt-1" %>
+            <span>dry-run対象を確認し、retention cleanupを <span class="font-mono">dry_run:false</span> で実行します。</span>
+          </label>
+
+          <div class="space-y-1">
+            <%= form.label :confirmation_text, "Type DELETE EXPIRED RUNS", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.text_field :confirmation_text, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+          </div>
+
+          <%= render "shared/ui/actions/button",
+                label: "Execute retention cleanup",
+                type: "submit",
+                size: :compact,
+                icon: "delete" %>
+        <% end %>
+      <% else %>
+        <p class="mb-3 text-sm token-text-muted">実行には fresh passkey reauthentication が必要です。POST payloadは保存しないため、再認証後にreasonを再入力してください。</p>
+        <%= link_to "Passkey reauthentication",
+              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      <% end %>
     </div>
   <% end %>
 </section>

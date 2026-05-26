@@ -3,6 +3,8 @@ Rails.application.routes.draw do
     root "receipt_analysis_runs#index"
     resources :audit_logs, only: %i[index show]
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
+    post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale
+    post "receipt_analysis_cleanup/retention", to: "receipt_analysis_cleanup#execute_retention", as: :receipt_analysis_cleanup_retention
     resource :passkey_reauthentication, only: %i[new create], path: "reauth/passkey" do
       post :options
     end

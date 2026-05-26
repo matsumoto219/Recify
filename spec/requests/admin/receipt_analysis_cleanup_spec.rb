@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'webauthn/fake_client'
 
 RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
   include ActiveJob::TestHelper
@@ -36,6 +37,36 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
     ]
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
+  end
+
+  def webauthn_client
+    @webauthn_client ||= WebAuthn::FakeClient.new('http://localhost:3000')
+  end
+
+  def create_passkey_with_fake_client(user)
+    options = Passkeys.registration_options(user: user)
+    credential = webauthn_client.create(challenge: options.challenge, rp_id: 'localhost', user_verified: true)
+
+    Passkeys.verify_registration(user: user, credential: credential, challenge: options.challenge)
+  end
+
+  def reauthenticate_admin_with_passkey!(admin)
+    passkey = create_passkey_with_fake_client(admin)
+
+    post options_admin_passkey_reauthentication_path, as: :json
+    options = response.parsed_body.fetch('publicKey')
+    credential = webauthn_client.get(
+      challenge: options.fetch('challenge'),
+      rp_id: 'localhost',
+      user_verified: true,
+      allow_credentials: [ passkey.credential_id ]
+    )
+
+    post admin_passkey_reauthentication_path,
+         params: { credential: credential },
+         as: :json
+
+    expect(response).to have_http_status(:success)
   end
 
   describe 'GET /admin/receipt_analysis_cleanup' do
@@ -81,6 +112,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         expect(response.body).to include('監査ログ')
         expect(response.body).to include('Stale active runs dry-run')
         expect(response.body).to include('Expired terminal runs dry-run')
+        expect(response.body).to include('Passkey reauthentication')
         expect(response.body).to include('stale_count')
         expect(response.body).to include('expired_count')
         expect(response.body).to include(stale_run.run_key)
@@ -173,6 +205,233 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         retention_cutoff: '2026-05-23T09:15',
         retention_limit: '10'
       )
+    end
+
+    it 'fresh reauth済みなら実行フォームを表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_receipt_analysis_cleanup_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('Execute stale cleanup')
+        expect(response.body).to include('Execute retention cleanup')
+        expect(response.body).to include('name="reason"')
+        expect(response.body).to include('name="confirm"')
+        expect(response.body).to include('DELETE EXPIRED RUNS')
+      end
+    end
+  end
+
+  describe 'POST /admin/receipt_analysis_cleanup/stale' do
+    it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: '2026-05-23T03:00',
+             stale_limit: '10',
+             reason: 'clear stale runs',
+             confirm: '1'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path))
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
+        expect(session.to_hash.to_json).not_to include('clear stale runs')
+        expect_no_cleanup_or_analysis_jobs
+      end
+    end
+
+    it 'reason blankでは実行しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: '2026-05-23T03:00',
+             stale_limit: '10',
+             reason: ' ',
+             confirm: '1'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
+        expect(flash[:alert]).to include('reason')
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
+      end
+    end
+
+    it 'confirmationなしでは実行しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: '2026-05-23T03:00',
+             stale_limit: '10',
+             reason: 'clear stale runs'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
+        expect(flash[:alert]).to include('confirmation')
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
+      end
+    end
+
+    it 'fresh reauth + reason + confirmationでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      result = SystemOperations::Result.new(
+        success: true,
+        cleanup_result: {
+          failed_count: 1,
+          canceled_count: 0
+        }
+      )
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup).and_return(result)
+      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: '2026-05-23T03:00',
+             stale_limit: '10',
+             reason: 'clear stale runs',
+             confirm: '1'
+           },
+           headers: { 'HTTP_USER_AGENT' => 'Cleanup Request Spec' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T03:00', stale_limit: '10'))
+        expect(flash[:notice]).to include('Stale cleanup executed')
+        expect(SystemOperations).to have_received(:execute_receipt_analysis_cleanup).with(
+          operation: 'stale_cleanup',
+          actor: admin,
+          reason: 'clear stale runs',
+          cutoff: '2026-05-23T03:00',
+          limit: '10',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(
+            method: 'passkey',
+            reauthenticated_at: kind_of(Time)
+          )
+        )
+        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect_no_cleanup_or_analysis_jobs
+      end
+    end
+
+    it '実行結果をAuditLogに残し、stale active runをterminal化する' do
+      admin = create(:user, :admin)
+      stale_run = create_stale_run
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      audit_count = AuditLog.count
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: '2026-05-23T04:00',
+             stale_limit: '10',
+             reason: 'actual stale cleanup',
+             confirm: '1'
+           },
+           headers: { 'HTTP_USER_AGENT' => 'Cleanup Request Spec' }
+
+      audit_log = AuditLog.order(:created_at).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T04:00', stale_limit: '10'))
+        expect(stale_run.reload.status).to eq('failed')
+        expect(stale_run.receipt.reload.status).to eq('failed')
+        expect(AuditLog.count).to eq(audit_count + 1)
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'receipt_analysis_runs.cleanup_stale.execute',
+          outcome: 'succeeded',
+          reason: 'actual stale cleanup',
+          user_agent: 'Cleanup Request Spec'
+        )
+        expect(audit_log.metadata).to include(
+          'dry_run' => false,
+          'stale_count' => 1,
+          'failed_count' => 1,
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(audit_log.metadata.fetch('sample_run_keys')).to include(stale_run.run_key)
+        expect(audit_log.metadata.to_json).not_to include('credential_id', 'challenge', 'public_key')
+      end
+    end
+  end
+
+  describe 'POST /admin/receipt_analysis_cleanup/retention' do
+    it 'fresh reauth + reason + confirmation textでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      result = SystemOperations::Result.new(
+        success: true,
+        cleanup_result: {
+          deleted_count: 2
+        }
+      )
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup).and_return(result)
+
+      post admin_receipt_analysis_cleanup_retention_path,
+           params: {
+             retention_cutoff: '2026-05-23T09:00',
+             retention_limit: '20',
+             reason: 'delete expired runs',
+             confirm: '1',
+             confirmation_text: 'DELETE EXPIRED RUNS'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(retention_cutoff: '2026-05-23T09:00', retention_limit: '20'))
+        expect(flash[:notice]).to include('Retention cleanup executed')
+        expect(SystemOperations).to have_received(:execute_receipt_analysis_cleanup).with(
+          operation: 'retention_cleanup',
+          actor: admin,
+          reason: 'delete expired runs',
+          cutoff: '2026-05-23T09:00',
+          limit: '20',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey')
+        )
+        expect_no_cleanup_or_analysis_jobs
+      end
+    end
+
+    it 'confirmation textが一致しない場合は実行しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
+
+      post admin_receipt_analysis_cleanup_retention_path,
+           params: {
+             retention_cutoff: '2026-05-23T09:00',
+             retention_limit: '20',
+             reason: 'delete expired runs',
+             confirm: '1',
+             confirmation_text: 'wrong'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(retention_cutoff: '2026-05-23T09:00', retention_limit: '20'))
+        expect(flash[:alert]).to include('confirmation')
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
+      end
     end
   end
 
