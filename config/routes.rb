@@ -2,6 +2,11 @@ Rails.application.routes.draw do
   namespace :admin do
     root "dashboard#show"
     resource :system_operations, only: %i[show]
+    get "system_settings", to: "system_settings#index", as: :system_settings
+    get "system_settings/:key",
+        to: "system_settings#show",
+        as: :system_setting,
+        constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_073320) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_26_134152) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -231,6 +231,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_073320) do
     t.index ["user_id"], name: "index_receipts_on_user_id"
   end
 
+  create_table "system_settings", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "updated_by_user_id"
+    t.jsonb "value", default: {}, null: false
+    t.index ["key"], name: "index_system_settings_on_key", unique: true
+    t.index ["updated_at"], name: "index_system_settings_on_updated_at"
+    t.index ["updated_by_user_id"], name: "index_system_settings_on_updated_by_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.datetime "confirmation_sent_at"
@@ -285,4 +297,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_073320) do
   add_foreign_key "receipt_payments", "receipts"
   add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "users"
+  add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
 end

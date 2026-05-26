@@ -19,5 +19,13 @@ module Admin
     def system_operations_dashboard
       SystemOperationsDashboard.call
     end
+
+    def system_settings(**filters)
+      SystemSettingsQuery.call(**filters)
+    end
+
+    def system_setting(key:)
+      SystemSettingsQuery.find(key:)
+    end
   end
 end

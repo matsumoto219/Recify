@@ -1,0 +1,78 @@
+<% content_for :title, "System setting: #{@record[:key]}" %>
+
+<section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: @record[:key],
+        subtitle: "設定詳細",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">Current value</h2>
+        <p class="text-sm token-text-muted">変更はまだこの画面から行えません。</p>
+      </div>
+      <%= link_to "一覧へ戻る", admin_system_settings_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <dl class="grid gap-3 text-sm md:grid-cols-2">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">current</dt>
+        <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:current_value].inspect %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">default</dt>
+        <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:default_value].inspect %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">source</dt>
+        <dd class="font-semibold token-text-base"><%= @record[:source] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">updated by</dt>
+        <dd class="font-mono token-text-base"><%= @record[:updated_by_user_id].presence || "-" %></dd>
+      </div>
+    </dl>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Definition</h2>
+    <dl class="grid gap-3 text-sm md:grid-cols-2">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">category</dt>
+        <dd class="token-text-base"><%= @record[:category] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">value type</dt>
+        <dd class="font-mono token-text-base"><%= @record[:value_type] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">editable</dt>
+        <dd class="font-mono token-text-base"><%= @record[:editable] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">risk level</dt>
+        <dd class="token-text-base"><%= @record[:risk_level] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">min</dt>
+        <dd class="font-mono token-text-base"><%= @record[:min].presence || "-" %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">max</dt>
+        <dd class="font-mono token-text-base"><%= @record[:max].presence || "-" %></dd>
+      </div>
+    </dl>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Audit trail</h2>
+    <p class="mb-3 text-sm token-text-muted">将来の書き込み操作はAuditLogに記録します。</p>
+    <%= link_to "このkeyの監査ログを見る",
+          admin_audit_logs_path(target_uid: @record[:key]),
+          class: "text-sm font-semibold token-text-brand hover:underline" %>
+  <% end %>
+</section>
