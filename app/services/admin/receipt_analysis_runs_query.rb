@@ -190,6 +190,8 @@ module Admin
         pipeline_error_code: run.error_code,
         processing_error_code: processing_error_code,
         error_stage: run.error_stage,
+        receipt_info: receipt_info(receipt),
+        user_info: user_info(user),
         latency_ms: {
           ocr: run.ocr_latency_ms,
           ai: run.ai_latency_ms,
@@ -212,7 +214,41 @@ module Admin
           ai_result: safe_summary(run.ai_result_summary),
           final_result: safe_summary(run.final_result_summary)
         },
+        snapshot_presence: snapshot_presence(run),
+        finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {}),
+        amount_calculation_profile: safe_summary(receipt.amount_calculation_profile || {}),
         retry_options: Analysis::RetryService.eligibility(receipt: receipt, parent_run: run).retry_options
+      }
+    end
+
+    def receipt_info(receipt)
+      {
+        public_id: receipt.public_id,
+        display_id: receipt.display_id,
+        status: receipt.status,
+        store_name: receipt.store_name,
+        total_amount: receipt.total_amount,
+        updated_at: receipt.updated_at
+      }
+    end
+
+    def user_info(user)
+      {
+        id: user.id,
+        guest: user.guest?,
+        admin: user.admin?
+      }
+    end
+
+    def snapshot_presence(run)
+      {
+        ocr_summary: run.ocr_summary.present?,
+        ocr_result_snapshot: run.ocr_result_snapshot.present?,
+        ai_input_snapshot: run.ai_input_snapshot.present?,
+        ai_result_summary: run.ai_result_summary.present?,
+        ai_normalized_result_snapshot: run.ai_normalized_result_snapshot.present?,
+        final_result_summary: run.final_result_summary.present?,
+        finalize_decision: run.metadata.to_h["finalize_decision"].present?
       }
     end
 

@@ -1,0 +1,11 @@
+<nav class="rounded-lg border token-border-soft token-bg-card px-4 py-3" aria-label="Admin navigation">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <%= link_to "管理トップ", admin_root_path, class: "font-semibold token-text-brand hover:underline" %>
+      <span class="token-text-muted" aria-hidden="true">/</span>
+      <%= link_to "解析run管理", admin_receipt_analysis_runs_path, class: "font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= link_to "通常画面へ戻る", receipts_path, class: "text-sm font-semibold token-text-muted hover:underline" %>
+  </div>
+</nav>

@@ -1,6 +1,8 @@
 <% content_for :title, "解析run詳細" %>
 
-<section class="mx-auto w-full max-w-5xl space-y-8 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
   <%= render "shared/ui/layout/section_header",
         title: "解析run詳細",
         subtitle: @record[:run_key],
@@ -10,36 +12,119 @@
         subtitle_size: "text-sm" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <dl class="grid gap-4 md:grid-cols-2">
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">run_key</dt>
-        <dd class="font-mono text-sm token-text-base break-all"><%= @record[:run_key] %></dd>
-      </div>
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">receipt</dt>
-        <dd class="text-sm token-text-base"><%= @record[:display_id] %> / <span class="font-mono"><%= @record[:public_id] %></span></dd>
-      </div>
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">stage / status</dt>
-        <dd class="text-sm token-text-base"><%= @record[:stage] %> / <%= @record[:status] %></dd>
-      </div>
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">receipt status</dt>
-        <dd class="text-sm token-text-base"><%= @record[:receipt_status] %></dd>
-      </div>
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">source</dt>
-        <dd class="text-sm token-text-base"><%= @record[:source] %></dd>
-      </div>
-      <div>
-        <dt class="text-xs font-semibold token-text-muted">error</dt>
-        <dd class="text-sm token-text-base"><%= @record[:error_code].presence || "-" %></dd>
-      </div>
-    </dl>
+    <div class="grid gap-6 lg:grid-cols-3">
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base">Run</h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">run_key</dt>
+            <dd class="font-mono token-text-base break-all"><%= @record[:run_key] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">stage / status</dt>
+            <dd class="token-text-base"><%= @record[:stage] %> / <%= @record[:status] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">source</dt>
+            <dd class="token-text-base"><%= @record[:source] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">error</dt>
+            <dd class="token-text-base"><%= @record[:error_code].presence || "-" %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base">Receipt</h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">display / public id</dt>
+            <dd class="token-text-base">
+              <%= @record.dig(:receipt_info, :display_id) %>
+              <span class="font-mono text-xs token-text-muted"><%= @record.dig(:receipt_info, :public_id) %></span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">receipt status</dt>
+            <dd class="token-text-base"><%= @record[:receipt_status] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">store / total</dt>
+            <dd class="token-text-base">
+              <%= @record.dig(:receipt_info, :store_name).presence || "-" %>
+              /
+              <%= @record.dig(:receipt_info, :total_amount).presence || "-" %>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base">User</h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">user id</dt>
+            <dd class="font-mono token-text-base">#<%= @record.dig(:user_info, :id) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">kind</dt>
+            <dd class="token-text-base"><%= @record.dig(:user_info, :guest) ? "guest" : "registered" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted">admin</dt>
+            <dd class="token-text-base"><%= @record.dig(:user_info, :admin) ? "true" : "false" %></dd>
+          </div>
+        </dl>
+      </section>
+    </div>
   <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Timing / Provider</h2>
+      <dl class="grid gap-4 text-sm md:grid-cols-2">
+        <% @record[:timestamps].each do |name, value| %>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= name %></dt>
+            <dd class="token-text-base"><%= value.present? ? l(value, format: :short) : "-" %></dd>
+          </div>
+        <% end %>
+
+        <% @record[:latency_ms].each do |name, value| %>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= name %> latency</dt>
+            <dd class="token-text-base"><%= value.present? ? "#{value}ms" : "-" %></dd>
+          </div>
+        <% end %>
+      </dl>
+
+      <div class="mt-4 space-y-2">
+        <% @record[:provider].each do |name, provider| %>
+          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <div class="text-xs font-semibold token-text-muted"><%= name %></div>
+            <div class="mt-1 font-mono text-xs token-text-base break-all"><%= provider.presence || "-" %></div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Snapshot presence</h2>
+      <div class="grid gap-2 md:grid-cols-2">
+        <% @record[:snapshot_presence].each do |name, present| %>
+          <div class="flex items-center justify-between rounded-lg border token-border-soft token-bg-card-subtle px-3 py-2 text-sm">
+            <span class="font-mono text-xs token-text-base"><%= name %></span>
+            <span class="<%= present ? "token-text-success" : "token-text-muted" %>"><%= present ? "present" : "missing" %></span>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
+    <p class="mb-4 text-sm token-text-muted">read-only表示です。ここから再解析Jobはenqueueしません。</p>
     <div class="grid gap-3 md:grid-cols-2">
       <% @record[:retry_options].each do |option| %>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
@@ -51,6 +136,18 @@
       <% end %>
     </div>
   <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Finalize decision</h2>
+      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:finalize_decision]) %></pre>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Amount calculation profile</h2>
+      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:amount_calculation_profile]) %></pre>
+    <% end %>
+  </div>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Summaries</h2>

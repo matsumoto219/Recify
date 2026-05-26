@@ -1,6 +1,7 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   def index
-    @result = Admin.receipt_analysis_runs(**filter_params)
+    @filters = filter_params
+    @result = Admin.receipt_analysis_runs(**@filters)
   end
 
   def show
@@ -24,8 +25,13 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       :source,
       :receipt_status,
       :needs_attention,
+      :run_key,
       :limit,
       :offset
-    ).to_h.symbolize_keys
+    ).to_h.each_with_object({}) do |(key, value), filters|
+      next if value.blank?
+
+      filters[key.to_sym] = value
+    end
   end
 end

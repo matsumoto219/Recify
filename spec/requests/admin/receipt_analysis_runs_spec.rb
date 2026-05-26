@@ -56,6 +56,8 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(comparable_headers).to eq(expected_headers)
         expect(response.body).to include(I18n.t('errors.not_found.title'))
         expect(response.body).not_to include('解析run管理')
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('通常画面へ戻る')
         expect(response.body).not_to include('Admin::')
       end
     end
@@ -70,8 +72,31 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('解析run管理')
+        expect(response.body).to include('管理トップ')
+        expect(response.body).to include('通常画面へ戻る')
         expect(response.body).to include(run.run_key)
         expect(response.body).to include(run.receipt.display_id)
+      end
+    end
+
+    it 'adminユーザーにはfilter formを表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('Filters')
+        expect(response.body).to include('name="status"')
+        expect(response.body).to include('name="stage"')
+        expect(response.body).to include('name="source"')
+        expect(response.body).to include('name="receipt_status"')
+        expect(response.body).to include('name="needs_attention"')
+        expect(response.body).to include('name="error_code"')
+        expect(response.body).to include('name="run_key"')
+        expect(response.body).to include('name="receipt_public_id"')
+        expect(response.body).to include('name="user_id"')
       end
     end
 
@@ -88,6 +113,8 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             receipt_status: 'failed',
             error_code: 'ocr_unreadable',
             receipt_public_id: 'rcpt_filter',
+            run_key: 'run-filter',
+            user_id: '123',
             needs_attention: '1',
             limit: '10',
             offset: '20'
@@ -100,10 +127,78 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         receipt_status: 'failed',
         error_code: 'ocr_unreadable',
         receipt_public_id: 'rcpt_filter',
+        run_key: 'run-filter',
+        user_id: '123',
         needs_attention: '1',
         limit: '10',
         offset: '20'
       )
+    end
+
+    it '空filter paramsはAdmin queryへ渡さない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(Admin).to receive(:receipt_analysis_runs).and_call_original
+
+      get admin_receipt_analysis_runs_path,
+          params: {
+            status: '',
+            stage: '',
+            source: '',
+            receipt_status: '',
+            error_code: '',
+            run_key: '',
+            receipt_public_id: '',
+            user_id: ''
+          }
+
+      expect(Admin).to have_received(:receipt_analysis_runs).with(no_args)
+    end
+
+    it 'paginationのnext/prevがfilter paramsを維持する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      create_list(:receipt_analysis_run, 3, :failed, source: 'upload', final_result_summary: { receipt_status: 'failed' })
+
+      get admin_receipt_analysis_runs_path,
+          params: {
+            status: 'failed',
+            stage: 'completed',
+            source: 'upload',
+            receipt_status: 'failed',
+            needs_attention: '1',
+            limit: '1',
+            offset: '1'
+          }
+
+      document = Nokogiri::HTML(response.body)
+      previous_href = document.css('a').find { |link| link.text.strip == '前へ' }['href']
+      next_href = document.css('a').find { |link| link.text.strip == '次へ' }['href']
+      previous_query = Rack::Utils.parse_nested_query(URI.parse(previous_href).query)
+      next_query = Rack::Utils.parse_nested_query(URI.parse(next_href).query)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('3件中 2-2件を表示')
+        expect(previous_query).to include(
+          'status' => 'failed',
+          'stage' => 'completed',
+          'source' => 'upload',
+          'receipt_status' => 'failed',
+          'needs_attention' => '1',
+          'limit' => '1',
+          'offset' => '0'
+        )
+        expect(next_query).to include(
+          'status' => 'failed',
+          'stage' => 'completed',
+          'source' => 'upload',
+          'receipt_status' => 'failed',
+          'needs_attention' => '1',
+          'limit' => '1',
+          'offset' => '2'
+        )
+      end
     end
   end
 
@@ -128,7 +223,12 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include(run.run_key)
         expect(response.body).to include(run.receipt.display_id)
         expect(response.body).to include('Retry options')
+        expect(response.body).to include('Snapshot presence')
+        expect(response.body).to include('Finalize decision')
+        expect(response.body).to include('Amount calculation profile')
         expect(response.body).to include('safe content')
+        expect(response.body).not_to include('retry_type')
+        expect(response.body).not_to include('Analysis::RetryService.call')
       end
     end
 
