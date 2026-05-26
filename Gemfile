@@ -24,6 +24,8 @@ gem "faraday"
 gem "pagy"
 # Rack middleware for throttling abusive requests
 gem "rack-attack", "~> 6.8"
+# Server-side WebAuthn ceremony verification for future passkey support
+gem "webauthn", "~> 3.4"
 # Error monitoring for production exceptions
 gem "sentry-ruby", "~> 6.5"
 gem "sentry-rails", "~> 6.5"
