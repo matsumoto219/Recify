@@ -6,7 +6,11 @@ module Passkeys
       WebAuthn::Credential.options_for_create(
         user: webauthn_user_entity(user),
         exclude: user.passkeys.pluck(:credential_id),
-        authenticator_selection: { user_verification: "required" }
+        authenticator_selection: {
+          user_verification: "required",
+          resident_key: "required",
+          require_resident_key: true
+        }
       )
     end
 

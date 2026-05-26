@@ -18,6 +18,9 @@ RSpec.describe Passkeys do
         expect(options.rp.name).to eq('Recify')
         expect(user.reload.webauthn_id).to be_present
         expect(options.user.id).to eq(user.webauthn_id)
+        expect(options.as_json.dig(:authenticatorSelection, :userVerification)).to eq('required')
+        expect(options.as_json.dig(:authenticatorSelection, :residentKey)).to eq('required')
+        expect(options.as_json.dig(:authenticatorSelection, :requireResidentKey)).to be(true)
       end
     end
   end

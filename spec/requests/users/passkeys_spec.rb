@@ -53,6 +53,9 @@ RSpec.describe 'User passkeys', type: :request do
         expect(payload.fetch('challenge')).to be_present
         expect(payload.dig('rp', 'id')).to eq('localhost')
         expect(payload.dig('rp', 'name')).to eq('Recify')
+        expect(payload.dig('authenticatorSelection', 'userVerification')).to eq('required')
+        expect(payload.dig('authenticatorSelection', 'residentKey')).to eq('required')
+        expect(payload.dig('authenticatorSelection', 'requireResidentKey')).to be(true)
         expect(session[:passkey_registration_challenge]['challenge']).to eq(payload.fetch('challenge'))
         expect(user.reload.webauthn_id).to be_present
       end
