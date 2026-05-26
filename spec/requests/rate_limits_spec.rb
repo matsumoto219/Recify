@@ -258,6 +258,50 @@ RSpec.describe 'Rails rate limits', type: :request do
     end
   end
 
+  describe 'POST /admin/reauth/passkey/options' do
+    it 'throttles admin passkey reauthentication options by IP' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      10.times do
+        post options_admin_passkey_reauthentication_path,
+             as: :json,
+             headers: remote_addr('203.0.113.34')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post options_admin_passkey_reauthentication_path,
+           as: :json,
+           headers: remote_addr('203.0.113.34')
+
+      expect_rate_limited_response
+    end
+  end
+
+  describe 'POST /admin/reauth/passkey' do
+    it 'throttles admin passkey reauthentication assertions by IP' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      10.times do
+        post admin_passkey_reauthentication_path,
+             params: { credential: { id: 'missing-challenge' } },
+             as: :json,
+             headers: remote_addr('203.0.113.35')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post admin_passkey_reauthentication_path,
+           params: { credential: { id: 'missing-challenge' } },
+           as: :json,
+           headers: remote_addr('203.0.113.35')
+
+      expect_rate_limited_response
+    end
+  end
+
   describe 'PATCH /users update_context=guest_registration' do
     it 'throttles guest registration by user and IP and does not update after the limit' do
       guest = User.guest!

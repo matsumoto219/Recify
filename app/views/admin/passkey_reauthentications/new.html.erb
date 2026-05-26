@@ -1,0 +1,65 @@
+<% content_for :title, "管理者パスキー再認証" %>
+
+<section class="mx-auto w-full max-w-4xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "管理者パスキー再認証",
+        subtitle: "高リスク操作を続ける前に、管理者本人確認を更新します。",
+        breadcrumb_label: "管理トップ",
+        breadcrumb_path: admin_root_path,
+        title_size: "text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <% if admin_passkey_reauthenticated? %>
+      <div class="mb-5 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-success">
+        fresh passkey reauthentication is active.
+      </div>
+    <% end %>
+
+    <% if current_user.passkeys.none? %>
+      <div class="space-y-4">
+        <h2 class="text-lg font-bold token-text-base">パスキーが登録されていません</h2>
+        <p class="text-sm token-text-muted leading-relaxed">
+          管理者の高リスク操作にはパスキー再認証が必要です。settings/security からパスキーを登録してください。
+        </p>
+        <%= link_to "パスキー登録へ",
+              settings_security_path(anchor: "passkeys"),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      </div>
+    <% else %>
+      <div
+        class="space-y-5"
+        data-controller="passkey-session"
+        data-passkey-session-options-url-value="<%= options_admin_passkey_reauthentication_path %>"
+        data-passkey-session-create-url-value="<%= admin_passkey_reauthentication_path %>"
+        data-passkey-session-unsupported-message-value="このブラウザはパスキー再認証に対応していません。"
+        data-passkey-session-canceled-message-value="パスキー再認証がキャンセルされました。"
+        data-passkey-session-failure-message-value="パスキー再認証に失敗しました。"
+        data-passkey-session-request-failed-message-value="リクエストに失敗しました。"
+        data-passkey-session-conditional-value="false">
+        <div class="space-y-2">
+          <h2 class="text-lg font-bold token-text-base">パスキーで再認証</h2>
+          <p class="text-sm token-text-muted leading-relaxed">
+            再認証は5分間だけ有効です。WebAuthnの内部情報は画面やAuditLogに保存しません。
+          </p>
+        </div>
+
+        <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
+
+        <%= render "shared/ui/actions/button",
+              label: "パスキーで再認証",
+              type: "button",
+              variant: :primary,
+              size: :lg,
+              radius: :lg,
+              icon: "passkey",
+              data: {
+                action: "click->passkey-session#login",
+                passkey_session_target: "button"
+              } %>
+      </div>
+    <% end %>
+  <% end %>
+</section>
