@@ -1,6 +1,7 @@
 Rails.application.routes.draw do
   namespace :admin do
     root "receipt_analysis_runs#index"
+    resource :system_operations, only: %i[show]
     resources :audit_logs, only: %i[index show]
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale

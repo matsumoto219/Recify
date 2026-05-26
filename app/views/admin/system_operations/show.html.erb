@@ -1,0 +1,114 @@
+<% content_for :title, "System operations" %>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "System operations",
+        subtitle: "高リスク管理操作のread-only dashboard",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">High-risk operation policy</h2>
+      <p class="text-sm token-text-muted">この画面はread-onlyです。実行操作は専用UIとservice/facade経由に限定します。</p>
+    </div>
+
+    <ul class="grid gap-3 text-sm md:grid-cols-2">
+      <% @dashboard.policy_items.each do |item| %>
+        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= item %></li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Receipt analysis operations</h2>
+      <div class="space-y-3 text-sm">
+        <p class="token-text-muted">retry は <span class="font-mono">Analysis::RetryService</span> 経由で実行します。productionではfresh passkey reauthenticationが必要です。</p>
+        <div class="flex flex-wrap gap-2">
+          <%= link_to "解析run管理", admin_receipt_analysis_runs_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to "retry audit", admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        </div>
+      </div>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">Cleanup operations</h2>
+      <div class="space-y-3 text-sm">
+        <p class="token-text-muted">cleanup実処理は <span class="font-mono">SystemOperations</span> 経由です。reason、confirmation、AuditLogが必須です。</p>
+        <div class="flex flex-wrap gap-2">
+          <%= link_to "Cleanup preview / execute", admin_receipt_analysis_cleanup_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to "cleanup execute audit", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to "cleanup dry-run audit", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.dry_run"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">Queue / recurring jobs</h2>
+      <p class="text-sm token-text-muted">queue制御はこの画面では行いません。production worker構成とrecurring dry-runを確認するための表示です。</p>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">Queues</h3>
+        <ul class="grid gap-2 text-sm md:grid-cols-2">
+          <% @dashboard.queues.each do |queue| %>
+            <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= queue %></li>
+          <% end %>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">Recurring dry-run tasks</h3>
+        <div class="space-y-2 text-sm">
+          <% @dashboard.recurring_tasks.each do |task| %>
+            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+              <div class="font-mono text-xs token-text-muted"><%= task[:key] %></div>
+              <div class="font-semibold token-text-base"><%= task[:class_name] %></div>
+              <div class="token-text-muted">queue=<span class="font-mono"><%= task[:queue] %></span> / schedule=<span class="font-mono"><%= task[:schedule] %></span> / dry_run=<span class="font-mono"><%= task[:dry_run] %></span></div>
+            </div>
+          <% end %>
+
+          <% if @dashboard.recurring_tasks.empty? %>
+            <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-muted">dry-run recurring task は見つかりません。</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Audit trail</h2>
+    <div class="grid gap-2 text-sm md:grid-cols-2">
+      <% @dashboard.audit_actions.each do |action| %>
+        <%= link_to action,
+              admin_audit_logs_path(audit_action: action),
+              class: "rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-brand hover:underline" %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Locked future operations</h2>
+    <p class="mb-4 text-sm token-text-muted">以下はv1.0後に個別設計します。この画面からは実行しません。</p>
+    <ul class="grid gap-3 text-sm md:grid-cols-2">
+      <% @dashboard.locked_future_operations.each do |operation| %>
+        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base"><%= operation %></li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Docs</h2>
+    <div class="flex flex-wrap gap-2 text-sm">
+      <span class="rounded-lg border token-border-soft px-3 py-2 font-mono token-text-muted">docs/operations/security.md</span>
+      <span class="rounded-lg border token-border-soft px-3 py-2 font-mono token-text-muted">docs/operations/admin_dashboard.md</span>
+      <span class="rounded-lg border token-border-soft px-3 py-2 font-mono token-text-muted">docs/operations/production_solid_queue.md</span>
+    </div>
+  <% end %>
+</section>

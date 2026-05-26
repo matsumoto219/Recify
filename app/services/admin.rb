@@ -11,5 +11,9 @@ module Admin
     def receipt_analysis_cleanup_preview(**params)
       ReceiptAnalysisCleanupPreview.call(**params)
     end
+
+    def system_operations_dashboard
+      SystemOperationsDashboard.call
+    end
   end
 end
