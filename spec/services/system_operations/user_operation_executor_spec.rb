@@ -148,6 +148,13 @@ RSpec.describe SystemOperations::UserOperationExecutor do
 
     it 'revoke_sessionsで対象ユーザーのsession_versionをincrementし、success auditを保存する' do
       target_user.update!(session_version: 4)
+      user_session = UserSession.create!(
+        user: target_user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: 4,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
 
       result = described_class.call(
         operation: 'revoke_sessions',
@@ -176,12 +183,15 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         )
         expect(audit_log.metadata).to include(
           'operation' => 'revoke_sessions',
+          'revoked_sessions_count' => 1,
           'reauthenticated' => true,
           'reauthentication_method' => 'passkey',
           'reauthenticated_at' => reauthenticated_at.iso8601
         )
         expect(audit_log.before_state).to include('session_version' => 4)
         expect(audit_log.after_state).to include('session_version' => 5)
+        expect(user_session.reload.revoked_at).to eq(Time.current)
+        expect(UserSessions.active_for(user: target_user)).to be_empty
         expect(audit_payload).not_to include('session_id', 'session-secret', 'cookie', 'remember_token')
         expect(audit_payload).not_to include('credential-secret', 'challenge-secret', 'public-key-secret')
       end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_223633) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_26_233017) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -243,6 +243,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_223633) do
     t.index ["updated_by_user_id"], name: "index_system_settings_on_updated_by_user_id"
   end
 
+  create_table "user_sessions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "expired_at"
+    t.inet "ip_address"
+    t.datetime "last_seen_at", null: false
+    t.datetime "revoked_at"
+    t.string "session_uid_digest", null: false
+    t.integer "session_version", null: false
+    t.string "sign_in_method"
+    t.datetime "signed_out_at"
+    t.datetime "started_at", null: false
+    t.datetime "updated_at", null: false
+    t.text "user_agent"
+    t.bigint "user_id", null: false
+    t.index ["last_seen_at"], name: "index_user_sessions_on_last_seen_at"
+    t.index ["revoked_at"], name: "index_user_sessions_on_revoked_at"
+    t.index ["session_uid_digest"], name: "index_user_sessions_on_session_uid_digest", unique: true
+    t.index ["signed_out_at"], name: "index_user_sessions_on_signed_out_at"
+    t.index ["user_id"], name: "index_user_sessions_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.datetime "confirmation_sent_at"
@@ -299,4 +320,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_223633) do
   add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "users"
   add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
+  add_foreign_key "user_sessions", "users"
 end

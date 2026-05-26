@@ -33,6 +33,7 @@ class Users::SessionsController < Devise::SessionsController
         set_flash_message!(:notice, :signed_in)
         sign_in(resource_name, resource, force: true)
         store_user_session_version(resource)
+        UserSessions.record_sign_in(user: resource, request: request, session: session, method: "password")
         respond_with resource, location: after_sign_in_path_for(resource)
       end
     else
@@ -48,6 +49,7 @@ class Users::SessionsController < Devise::SessionsController
 
   # DELETE /resource/sign_out
   def destroy
+    UserSessions.record_sign_out(user: current_user, session: session)
     clear_user_session_version
     super
   end

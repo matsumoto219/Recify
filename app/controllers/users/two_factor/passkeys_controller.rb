@@ -54,6 +54,7 @@ class Users::TwoFactor::PasskeysController < ApplicationController
     @pending_user.remember_me = remember_me
     sign_in(:user, @pending_user)
     store_user_session_version(@pending_user)
+    UserSessions.record_sign_in(user: @pending_user, request: request, session: session, method: "password_passkey_step_up")
 
     render json: {
       ok: true,

@@ -116,6 +116,7 @@ module SystemOperations
         user.passkeys.destroy_all
       when "revoke_sessions"
         user.increment!(:session_version)
+        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
       end
     end
 
@@ -159,13 +160,18 @@ module SystemOperations
     def audit_metadata(before_state:, after_state:)
       metadata = base_audit_metadata
 
-      return metadata unless operation == "force_passkey_reset"
-
-      metadata.merge(
-        passkeys_count_before: before_state[:passkeys_count],
-        passkeys_count_after: after_state[:passkeys_count],
-        latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at]
-      )
+      case operation
+      when "force_passkey_reset"
+        metadata.merge(
+          passkeys_count_before: before_state[:passkeys_count],
+          passkeys_count_after: after_state[:passkeys_count],
+          latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at]
+        )
+      when "revoke_sessions"
+        metadata.merge(revoked_sessions_count: @revoked_sessions_count.to_i)
+      else
+        metadata
+      end
     end
 
     def failure_audit_metadata(error)

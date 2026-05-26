@@ -185,6 +185,7 @@ RSpec.describe AuditLogs do
         actor: create(:user, :admin),
         action: 'admin.users.session_revoke',
         outcome: 'succeeded',
+        metadata: { revoked_sessions_count: 2, session_id: 'session-id-secret' },
         before_state: {
           session_version: 3,
           session: 'session-secret',
@@ -195,9 +196,10 @@ RSpec.describe AuditLogs do
       )
 
       aggregate_failures do
+        expect(log.metadata).to eq('revoked_sessions_count' => 2)
         expect(log.before_state).to eq('session_version' => 3)
         expect(log.after_state).to eq('session_version' => 4)
-        expect(log.attributes.to_json).not_to include('session-secret', 'cookie-secret', 'remember-secret')
+        expect(log.attributes.to_json).not_to include('session-id-secret', 'session-secret', 'cookie-secret', 'remember-secret')
       end
     end
   end

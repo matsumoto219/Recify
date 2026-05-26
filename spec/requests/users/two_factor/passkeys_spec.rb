@@ -119,6 +119,9 @@ RSpec.describe 'User passkey step-up', type: :request do
              params: { credential: credential },
              as: :json
       end.to change { user.reload.sign_in_count }.from(0).to(1)
+        .and change(UserSession, :count).by(1)
+
+      user_session = UserSession.last
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -127,6 +130,10 @@ RSpec.describe 'User passkey step-up', type: :request do
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:passkey_step_up_challenge]).to be_blank
         expect(session[:user_session_version]).to eq(user.session_version)
+        expect(session[:user_session_uid]).to be_present
+        expect(user_session.user).to eq(user)
+        expect(user_session.sign_in_method).to eq('password_passkey_step_up')
+        expect(user_session.session_uid_digest).not_to eq(session[:user_session_uid])
         expect(passkey.reload.last_used_at).to be_present
         expect(user.current_sign_in_at).to be_present
         expect(user.current_sign_in_ip).to be_present

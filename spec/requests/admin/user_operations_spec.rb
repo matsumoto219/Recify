@@ -373,6 +373,13 @@ RSpec.describe 'Admin user operations', type: :request do
     it '実SystemOperations経由でsession_versionをincrementし、AuditLogを作成する' do
       admin = create(:user, :admin)
       target = create(:user, session_version: 2)
+      user_session = UserSession.create!(
+        user: target,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: 2,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
       sign_in admin
       stub_fresh_admin_reauthentication
 
@@ -394,6 +401,9 @@ RSpec.describe 'Admin user operations', type: :request do
         )
         expect(audit_log.before_state).to include('session_version' => 2)
         expect(audit_log.after_state).to include('session_version' => 3)
+        expect(audit_log.metadata).to include('revoked_sessions_count' => 1)
+        expect(user_session.reload.revoked_at).to be_present
+        expect(UserSessions.active_for(user: target)).to be_empty
         expect(audit_payload).not_to include('session_id', 'cookie', 'remember_token')
         expect(audit_payload).not_to include('credential_id', 'public_key', 'challenge')
       end

@@ -54,6 +54,7 @@ module AuditLogs
   ].freeze
 
   ALLOWED_SENSITIVE_FRAGMENT_KEYS = %w[
+    revoked_sessions_count
     session_version
   ].freeze
 

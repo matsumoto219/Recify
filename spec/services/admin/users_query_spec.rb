@@ -70,6 +70,13 @@ RSpec.describe Admin::UsersQuery do
     it 'passkey credentialや認証系カラムをrecordへ含めない' do
       user = create(:user)
       create(:passkey, user: user, credential_id: 'credential-secret-value', public_key: 'PUBLIC KEY SECRET')
+      UserSession.create!(
+        user: user,
+        session_uid_digest: 'session-digest-secret-value',
+        session_version: user.session_version,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
       user.update_column(:reset_password_token, 'RESET TOKEN SECRET')
 
       json = described_class.call(id: user.id).records.first.to_json
@@ -84,6 +91,49 @@ RSpec.describe Admin::UsersQuery do
         expect(json).not_to include('challenge')
         expect(json).not_to include('raw_response')
         expect(json).not_to include('prompt')
+        expect(json).not_to include('session-digest-secret-value')
+      end
+    end
+
+    it 'show用recordにactive session summaryを含める' do
+      user = create(:user, session_version: 2)
+      active = UserSession.create!(
+        user: user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: 2,
+        started_at: 2.hours.ago,
+        last_seen_at: 10.minutes.ago,
+        ip_address: '203.0.113.30',
+        user_agent: 'Session Browser',
+        sign_in_method: 'password'
+      )
+      UserSession.create!(
+        user: user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: 1,
+        started_at: 3.hours.ago,
+        last_seen_at: 5.minutes.ago,
+        sign_in_method: 'passkey'
+      )
+
+      record = described_class.find(id: user.id)
+
+      aggregate_failures do
+        expect(record.dig(:active_sessions, :count)).to eq(1)
+        expect(record.dig(:active_sessions, :latest_seen_at)).to eq(active.last_seen_at)
+        expect(record.dig(:active_sessions, :latest_sign_in_method)).to eq('password')
+        expect(record.dig(:active_sessions, :latest_ip)).to eq('203.0.113.30')
+        expect(record.dig(:active_sessions, :latest_user_agent)).to eq('Session Browser')
+        expect(record.dig(:active_sessions, :recent)).to contain_exactly(
+          hash_including(
+            session_version: 2,
+            started_at: active.started_at,
+            last_seen_at: active.last_seen_at,
+            sign_in_method: 'password',
+            ip_address: '203.0.113.30',
+            user_agent: 'Session Browser'
+          )
+        )
       end
     end
   end

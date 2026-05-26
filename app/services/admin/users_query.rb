@@ -109,7 +109,7 @@ module Admin
     end
 
     def build_record(user, aggregates)
-      {
+      record = {
         id: user.id,
         email: user.email,
         name: user.name,
@@ -138,6 +138,35 @@ module Admin
           created_at: user.created_at,
           updated_at: user.updated_at
         }
+      }
+      record[:active_sessions] = active_session_summary_for(user) if include_session_summary?
+      record
+    end
+
+    def include_session_summary?
+      @id.present?
+    end
+
+    def active_session_summary_for(user)
+      summary = UserSessions.summary_for(user: user)
+      {
+        count: summary.active_sessions_count,
+        latest_seen_at: summary.latest_seen_at,
+        latest_sign_in_method: summary.latest_sign_in_method,
+        latest_ip: summary.latest_ip,
+        latest_user_agent: summary.latest_user_agent,
+        recent: summary.recent_sessions.map { |session| active_session_record(session) }
+      }
+    end
+
+    def active_session_record(session)
+      {
+        session_version: session.session_version,
+        started_at: session.started_at,
+        last_seen_at: session.last_seen_at,
+        sign_in_method: session.sign_in_method,
+        ip_address: session.ip_address&.to_s,
+        user_agent: session.user_agent
       }
     end
 

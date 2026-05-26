@@ -2,6 +2,8 @@ require 'rails_helper'
 require 'webauthn/fake_client'
 
 RSpec.describe 'User password sessions', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:client) { WebAuthn::FakeClient.new('http://localhost:3000') }
 
   def create_passkey_with_fake_client(user)
@@ -18,12 +20,19 @@ RSpec.describe 'User password sessions', type: :request do
       post user_session_path,
            params: { user: { email: user.email, password: 'password' } }
     end.to change { user.reload.sign_in_count }.from(0).to(1)
+      .and change(UserSession, :count).by(1)
+
+    user_session = UserSession.last
 
     aggregate_failures do
       expect(response).to have_http_status(:see_other)
       expect(response).to redirect_to(root_path)
       expect(session[:pending_second_factor]).to be_blank
       expect(session[:user_session_version]).to eq(user.session_version)
+      expect(session[:user_session_uid]).to be_present
+      expect(user_session.user).to eq(user)
+      expect(user_session.sign_in_method).to eq('password')
+      expect(user_session.session_uid_digest).not_to eq(session[:user_session_uid])
       expect(user.current_sign_in_at).to be_present
       expect(user.current_sign_in_ip).to be_present
     end
@@ -114,11 +123,47 @@ RSpec.describe 'User password sessions', type: :request do
     expect(response).to have_http_status(:success)
   end
 
+  it 'request時に現在sessionのlast_seen_atを更新する' do
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+    user_session = UserSession.last
+    user_session.update!(last_seen_at: 10.minutes.ago)
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:success)
+      expect(user_session.reload.last_seen_at).to be_within(1.second).of(Time.current)
+    end
+  end
+
+  it 'last_seen_atが5分未満なら更新しない' do
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+    user_session = UserSession.last
+    recent_seen_at = 1.minute.ago.change(usec: 0)
+    user_session.update!(last_seen_at: recent_seen_at)
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:success)
+      expect(user_session.reload.last_seen_at.to_i).to eq(recent_seen_at.to_i)
+    end
+  end
+
   it 'session version不一致ならsign outしてログインへ戻す' do
     user = create(:user)
 
     post user_session_path,
          params: { user: { email: user.email, password: 'password' } }
+    user_session = UserSession.last
+    stale_seen_at = 10.minutes.ago.change(usec: 0)
+    user_session.update!(last_seen_at: stale_seen_at)
     user.update!(session_version: user.session_version + 1)
 
     get settings_path
@@ -126,6 +171,7 @@ RSpec.describe 'User password sessions', type: :request do
     aggregate_failures do
       expect(response).to redirect_to(new_user_session_path)
       expect(session[:user_session_version]).to be_blank
+      expect(user_session.reload.last_seen_at.to_i).to eq(stale_seen_at.to_i)
     end
   end
 
@@ -187,9 +233,14 @@ RSpec.describe 'User password sessions', type: :request do
     post user_session_path,
          params: { user: { email: user.email, password: 'password' } }
     expect(session[:user_session_version]).to eq(user.session_version)
+    user_session = UserSession.last
 
     delete destroy_user_session_path
 
-    expect(session[:user_session_version]).to be_blank
+    aggregate_failures do
+      expect(session[:user_session_version]).to be_blank
+      expect(session[:user_session_uid]).to be_blank
+      expect(user_session.reload.signed_out_at).to be_present
+    end
   end
 end

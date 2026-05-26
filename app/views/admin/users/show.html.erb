@@ -2,6 +2,7 @@
 
 <%
   record = @record
+  active_sessions = record[:active_sessions] || { count: 0, recent: [] }
   boolean_label = ->(value) { value ? "はい" : "いいえ" }
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
 %>
@@ -126,6 +127,65 @@
       </dl>
     <% end %>
   </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">ログインセッション</h2>
+      <p class="text-sm token-text-muted">現在有効なログイン状態と最終利用状況</p>
+    </div>
+
+    <dl class="mb-5 grid gap-3 text-sm md:grid-cols-4">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">active sessions</dt>
+        <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-active-sessions-count><%= active_sessions[:count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">latest seen</dt>
+        <dd class="token-text-base"><%= timestamp_label.call(active_sessions[:latest_seen_at]) %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">latest method</dt>
+        <dd class="token-text-base"><%= active_sessions[:latest_sign_in_method].presence || "-" %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">latest IP</dt>
+        <dd class="font-mono token-text-base"><%= active_sessions[:latest_ip].presence || "-" %></dd>
+      </div>
+    </dl>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">started</th>
+            <th class="px-3 py-2 font-semibold">last seen</th>
+            <th class="px-3 py-2 font-semibold">method</th>
+            <th class="px-3 py-2 font-semibold">IP</th>
+            <th class="px-3 py-2 font-semibold">user agent</th>
+            <th class="px-3 py-2 font-semibold">version</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% active_sessions[:recent].each do |session_record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(session_record[:started_at]) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(session_record[:last_seen_at]) %></td>
+              <td class="px-3 py-3"><%= session_record[:sign_in_method].presence || "-" %></td>
+              <td class="px-3 py-3 font-mono"><%= session_record[:ip_address].presence || "-" %></td>
+              <td class="max-w-md truncate px-3 py-3"><%= session_record[:user_agent].presence || "-" %></td>
+              <td class="px-3 py-3 font-mono"><%= session_record[:session_version] %></td>
+            </tr>
+          <% end %>
+
+          <% if active_sessions[:recent].empty? %>
+            <tr>
+              <td colspan="6" class="px-3 py-10 text-center text-sm token-text-muted">有効なログインセッションはありません。</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">

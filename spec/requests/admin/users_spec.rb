@@ -171,8 +171,29 @@ RSpec.describe 'Admin users', type: :request do
       )
       create(:passkey, user: user, credential_id: 'hidden-credential-id', public_key: 'HIDDEN PUBLIC KEY', last_used_at: 30.minutes.ago)
       create_list(:receipt, 2, user: user)
+      active_session = UserSession.create!(
+        user: user,
+        session_uid_digest: 'hidden-session-digest',
+        session_version: user.session_version,
+        started_at: 2.hours.ago,
+        last_seen_at: 15.minutes.ago,
+        ip_address: '203.0.113.40',
+        user_agent: 'Support Browser',
+        sign_in_method: 'password'
+      )
+      UserSession.create!(
+        user: user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: user.session_version + 1,
+        started_at: 1.hour.ago,
+        last_seen_at: 10.minutes.ago,
+        ip_address: '203.0.113.41',
+        user_agent: 'Old Version Browser',
+        sign_in_method: 'passkey'
+      )
       create(:audit_log, actor_user: user, action: 'receipt_analysis.ai_retry', target_uid: 'rcpt_user_show')
       previous_audit_count = AuditLog.count
+      previous_user_session_count = UserSession.count
       sign_in admin
 
       get admin_user_path(user)
@@ -188,14 +209,24 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('rcpt_user_show')
         expect(document.at_css('[data-admin-user-passkeys-count]').text).to eq('1')
         expect(document.at_css('[data-admin-user-receipts-count]').text).to eq('2')
+        expect(document.at_css('[data-admin-user-active-sessions-count]').text).to eq('1')
+        expect(response.body).to include(I18n.l(active_session.last_seen_at, format: :short))
+        expect(response.body).to include('203.0.113.40')
+        expect(response.body).to include('Support Browser')
+        expect(response.body).not_to include('203.0.113.41')
+        expect(response.body).not_to include('Old Version Browser')
         expect(response.body).to include(admin_receipt_analysis_runs_path(user_id: user.id))
         expect(response.body).to include(admin_audit_logs_path(actor_user_id: user.id))
         expect(response.body).not_to include('hidden-credential-id')
         expect(response.body).not_to include('HIDDEN PUBLIC KEY')
+        expect(response.body).not_to include('hidden-session-digest')
         expect(response.body).not_to include('challenge')
+        expect(response.body).not_to include('cookie')
+        expect(response.body).not_to include('remember_token')
         expect(response.body).not_to include('raw_response')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('SECRET')
+        expect(UserSession.count).to eq(previous_user_session_count)
         expect_no_admin_side_effects(previous_audit_count)
       end
     end

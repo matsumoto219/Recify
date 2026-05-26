@@ -61,10 +61,14 @@ class ApplicationController < ActionController::Base
 
     if session[USER_SESSION_VERSION_SESSION_KEY].nil?
       store_user_session_version(current_user)
+      touch_current_user_session
       return
     end
 
-    return if session[USER_SESSION_VERSION_SESSION_KEY].to_i == current_user.session_version.to_i
+    if session[USER_SESSION_VERSION_SESSION_KEY].to_i == current_user.session_version.to_i
+      touch_current_user_session
+      return
+    end
 
     clear_user_session_version
     sign_out(:user)
@@ -75,6 +79,10 @@ class ApplicationController < ActionController::Base
 
   def skip_user_session_version_enforcement?
     is_a?(Users::SessionsController) && action_name == "create"
+  end
+
+  def touch_current_user_session
+    UserSessions.touch_current(user: current_user, request: request, session: session)
   end
 
   def maintenance_notice_enabled?
