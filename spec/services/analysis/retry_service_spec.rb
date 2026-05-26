@@ -30,12 +30,19 @@ RSpec.describe Analysis::RetryService do
 
   describe '.call' do
     it 'full_reanalyzeでnew runを作り、ReceiptOcrJobをrun_idだけでenqueueする' do
-      result = described_class.call(
-        receipt: receipt,
-        actor: actor,
-        retry_type: :full_reanalyze,
-        reason: '問い合わせ対応'
-      )
+      result = nil
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: '問い合わせ対応',
+          request: request_context
+        )
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
 
       aggregate_failures do
         expect(result).to be_success
@@ -54,6 +61,35 @@ RSpec.describe Analysis::RetryService do
         expect(receipt.review_reasons).to eq([])
         expect(ReceiptOcrJob).to have_been_enqueued.with(run_id: result.run.id)
         expect(enqueued_jobs.last[:args]).to eq([ { 'run_id' => result.run.id, '_aj_ruby2_keywords' => [ 'run_id' ] } ])
+        expect(audit_log).to have_attributes(
+          actor_user: actor,
+          actor_kind: 'admin',
+          action: 'receipt_analysis.full_reanalyze',
+          target_type: 'Receipt',
+          target_id: receipt.id,
+          target_uid: receipt.public_id,
+          reason: '問い合わせ対応',
+          outcome: 'succeeded',
+          request_id: 'retry-request-id',
+          user_agent: 'RetryService Spec'
+        )
+        expect(audit_log.ip_address.to_s).to eq('203.0.113.22')
+        expect(audit_log.metadata).to include(
+          'retry_type' => 'full_reanalyze',
+          'parent_run_key' => nil,
+          'new_run_key' => result.run.run_key,
+          'enqueued_job' => 'ReceiptOcrJob',
+          'source' => 'admin_retry'
+        )
+        expect(audit_log.before_state).to include(
+          'receipt_status' => 'completed'
+        )
+        expect(audit_log.after_state).to include(
+          'receipt_status' => 'processing',
+          'new_run_key' => result.run.run_key,
+          'new_run_status' => 'queued',
+          'enqueued_job' => 'ReceiptOcrJob'
+        )
       end
     end
 
@@ -121,6 +157,13 @@ RSpec.describe Analysis::RetryService do
         expect(ReceiptOcrJob).not_to have_been_enqueued
         expect(ReceiptFinalizeJob).not_to have_been_enqueued
         expect(parent_state(parent_run.reload)).to eq(original_parent_state)
+        expect(AuditLog.last.metadata).to include(
+          'retry_type' => 'ai_retry',
+          'parent_run_key' => parent_run.run_key,
+          'new_run_key' => run.run_key,
+          'enqueued_job' => 'ReceiptAiEnrichmentJob'
+        )
+        expect(AuditLog.last.metadata.to_json).not_to include('full raw OCR text', 'provider raw', 'secret-token')
       end
     end
 
@@ -171,18 +214,28 @@ RSpec.describe Analysis::RetryService do
         expect(ReceiptOcrJob).not_to have_been_enqueued
         expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
         expect(parent_state(parent_run.reload)).to eq(original_parent_state)
+        expect(AuditLog.last.metadata).to include(
+          'retry_type' => 'finalize_retry',
+          'parent_run_key' => parent_run.run_key,
+          'new_run_key' => run.run_key,
+          'enqueued_job' => 'ReceiptFinalizeJob'
+        )
       end
     end
 
     it 'active runがある場合は失敗し、enqueueしない' do
       active_run = create(:receipt_analysis_run, :running, receipt: receipt)
 
-      result = described_class.call(
-        receipt: receipt,
-        parent_run: nil,
-        actor: actor,
-        retry_type: :full_reanalyze
-      )
+      result = nil
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          parent_run: nil,
+          actor: actor,
+          retry_type: :full_reanalyze
+        )
+      end.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
         expect(result).to be_failure
@@ -190,6 +243,24 @@ RSpec.describe Analysis::RetryService do
         expect(result.run).to eq(active_run)
         expect(ReceiptAnalysisRun.where(receipt: receipt).count).to eq(1)
         expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'active_run_exists'
+        )
+        expect(AuditLog.last.metadata).to include(
+          'retry_type' => 'full_reanalyze',
+          'failure_reason' => 'active_run_exists',
+          'source' => 'admin_retry'
+        )
+        expect(AuditLog.last.before_state).to include(
+          'receipt_status' => 'completed',
+          'active_run_key' => active_run.run_key
+        )
+        expect(AuditLog.last.after_state).to include(
+          'receipt_status' => 'completed',
+          'failure_reason' => 'active_run_exists'
+        )
       end
     end
 
@@ -209,6 +280,16 @@ RSpec.describe Analysis::RetryService do
       end.not_to change(ReceiptAnalysisRun, :count)
 
       expect_no_analysis_job_enqueued
+      expect(AuditLog.last).to have_attributes(
+        action: 'receipt_analysis.ai_retry',
+        outcome: 'failed',
+        error_code: 'ocr_snapshot_missing'
+      )
+      expect(AuditLog.last.metadata).to include(
+        'retry_type' => 'ai_retry',
+        'parent_run_key' => parent_run.run_key,
+        'failure_reason' => 'ocr_snapshot_missing'
+      )
     end
 
     it 'full_reanalyzeで画像がない場合は失敗し、run作成もenqueueもしない' do
@@ -278,15 +359,47 @@ RSpec.describe Analysis::RetryService do
     end
 
     it '未知のretry_typeは失敗し、enqueueしない' do
-      result = described_class.call(
-        receipt: receipt,
-        actor: actor,
-        retry_type: :unknown_retry
-      )
+      result = nil
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :unknown_retry
+        )
+      end.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
         expect(result).to be_failure
         expect(result.error_code).to eq('invalid_retry_type')
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.unknown_retry',
+          outcome: 'failed',
+          error_code: 'invalid_retry_type'
+        )
+        expect(AuditLog.last.metadata).to include(
+          'retry_type' => 'unknown_retry',
+          'failure_reason' => 'invalid_retry_type'
+        )
+      end
+    end
+
+    it 'audit log作成に失敗した場合はrun作成とenqueueを行わない' do
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(ActiveRecord::RecordInvalid)
+      run_count = ReceiptAnalysisRun.count
+
+      expect do
+        described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze
+        )
+      end.to raise_error(ActiveRecord::RecordInvalid)
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun.count).to eq(run_count)
+        expect(receipt.reload).to be_completed
         expect_no_analysis_job_enqueued
       end
     end
@@ -318,6 +431,8 @@ RSpec.describe Analysis::RetryService do
           expect_no_analysis_job_enqueued
         end
       end.not_to change { parent_run.reload.attributes }
+
+      expect(AuditLog.count).to eq(0)
     end
 
     it 'active runがある場合は全retry不可にする' do
@@ -513,5 +628,14 @@ RSpec.describe Analysis::RetryService do
 
   def options_by_type(result)
     result.retry_options.index_by { |option| option[:type] }
+  end
+
+  def request_context
+    instance_double(
+      ActionDispatch::Request,
+      request_id: 'retry-request-id',
+      remote_ip: '203.0.113.22',
+      user_agent: 'RetryService Spec'
+    )
   end
 end

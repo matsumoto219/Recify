@@ -20,13 +20,14 @@ module Analysis
     Eligibility = Struct.new(:retry_options, keyword_init: true)
 
     class << self
-      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil)
+      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil)
         new(
           receipt: receipt,
           parent_run: parent_run,
           actor: actor,
           retry_type: retry_type,
-          reason: reason
+          reason: reason,
+          request: request
         ).call
       end
 
@@ -38,27 +39,42 @@ module Analysis
               parent_run: parent_run,
               actor: nil,
               retry_type: type,
-              reason: nil
+              reason: nil,
+              request: nil
             ).retry_option
           end
         )
       end
     end
 
-    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:)
+    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:)
       @receipt = receipt
       @parent_run = parent_run
       @actor = actor
       @retry_type = retry_type.to_s
       @reason = reason
+      @request = request
     end
 
     def call
-      return failure(:invalid_retry_type, "Unknown retry_type=#{retry_type}") unless RETRY_TYPES.include?(retry_type)
-      return failure(:actor_required, "actor is required") unless actor
+      @audit_before_state = build_audit_before_state
+
+      unless RETRY_TYPES.include?(retry_type)
+        result = failure(:invalid_retry_type, "Unknown retry_type=#{retry_type}")
+        record_audit!(result)
+        return result
+      end
+
+      unless actor
+        result = failure(:actor_required, "actor is required")
+        record_audit!(result)
+        return result
+      end
 
       if (disabled_reason = disabled_reason_for(retry_type))
-        return failure(disabled_reason, disabled_message(disabled_reason), run: disabled_run_for(disabled_reason))
+        result = failure(disabled_reason, disabled_message(disabled_reason), run: disabled_run_for(disabled_reason))
+        record_audit!(result)
+        return result
       end
 
       result = nil
@@ -82,6 +98,7 @@ module Analysis
         mark_receipt_processing!
 
         result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
+        record_audit!(result)
       end
 
       return result if result.failure?
@@ -102,7 +119,7 @@ module Analysis
 
     private
 
-    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason
+    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request
 
     def parent_finalize_decision
       @parent_finalize_decision ||= ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
@@ -195,6 +212,91 @@ module Analysis
       when "finalize_retry"
         ReceiptFinalizeJob
       end
+    end
+
+    def record_audit!(result)
+      AuditLogs.record_admin_action!(
+        actor: actor,
+        action: audit_action,
+        target: receipt,
+        target_uid: receipt&.public_id,
+        reason: reason,
+        outcome: result.success? ? "succeeded" : "failed",
+        error_code: result.error_code,
+        metadata: audit_metadata(result),
+        before_state: audit_before_state,
+        after_state: audit_after_state(result),
+        request: request
+      )
+    end
+
+    def audit_action
+      case retry_type
+      when "full_reanalyze"
+        "receipt_analysis.full_reanalyze"
+      when "ocr_retry"
+        "receipt_analysis.ocr_retry"
+      when "ai_retry"
+        "receipt_analysis.ai_retry"
+      when "finalize_retry"
+        "receipt_analysis.finalize_retry"
+      else
+        "receipt_analysis.unknown_retry"
+      end
+    end
+
+    def audit_metadata(result)
+      metadata = {
+        retry_type: audit_retry_type,
+        parent_run_key: parent_run&.run_key,
+        source: SOURCE
+      }
+
+      if result.success?
+        metadata.merge!(
+          new_run_key: result.run&.run_key,
+          enqueued_job: result.enqueued_job&.name
+        )
+      else
+        metadata[:failure_reason] = result.error_code
+      end
+
+      metadata
+    end
+
+    def audit_before_state
+      @audit_before_state || build_audit_before_state
+    end
+
+    def build_audit_before_state
+      {
+        receipt_status: receipt&.status,
+        active_run_key: active_run&.run_key,
+        parent_run_status: parent_run&.status,
+        parent_run_stage: parent_run&.stage
+      }.compact
+    end
+
+    def audit_after_state(result)
+      state = {
+        receipt_status: receipt&.reload&.status
+      }
+
+      if result.success?
+        state.merge!(
+          new_run_key: result.run&.run_key,
+          new_run_status: result.run&.status,
+          enqueued_job: result.enqueued_job&.name
+        )
+      else
+        state[:failure_reason] = result.error_code
+      end
+
+      state.compact
+    end
+
+    def audit_retry_type
+      RETRY_TYPES.include?(retry_type) ? retry_type : "unknown_retry"
     end
 
     def failure(error_code, error_message, run: nil)
