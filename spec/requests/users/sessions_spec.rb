@@ -23,6 +23,7 @@ RSpec.describe 'User password sessions', type: :request do
       expect(response).to have_http_status(:see_other)
       expect(response).to redirect_to(root_path)
       expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to eq(user.session_version)
       expect(user.current_sign_in_at).to be_present
       expect(user.current_sign_in_ip).to be_present
     end
@@ -82,6 +83,7 @@ RSpec.describe 'User password sessions', type: :request do
       expect(response).to have_http_status(:see_other)
       expect(response).to redirect_to(root_path)
       expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to eq(user.session_version)
     end
   end
 
@@ -99,5 +101,64 @@ RSpec.describe 'User password sessions', type: :request do
          }
 
     expect(session[:pending_second_factor]['remember_me']).to be(true)
+  end
+
+  it 'session version一致なら通常アクセスできる' do
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+
+    get settings_path
+
+    expect(response).to have_http_status(:success)
+  end
+
+  it 'session version不一致ならsign outしてログインへ戻す' do
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+    user.update!(session_version: user.session_version + 1)
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to redirect_to(new_user_session_path)
+      expect(session[:user_session_version]).to be_blank
+    end
+  end
+
+  it 'session version nilの既存セッションは現在値で補完する' do
+    user = create(:user)
+    sign_in user
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:success)
+      expect(session[:user_session_version]).to eq(user.session_version)
+    end
+  end
+
+  it 'current_userなしでは何もしない' do
+    get new_user_session_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:success)
+      expect(session[:user_session_version]).to be_blank
+    end
+  end
+
+  it 'logoutでsession versionを削除する' do
+    user = create(:user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+    expect(session[:user_session_version]).to eq(user.session_version)
+
+    delete destroy_user_session_path
+
+    expect(session[:user_session_version]).to be_blank
   end
 end

@@ -53,6 +53,7 @@ class Users::TwoFactor::PasskeysController < ApplicationController
     clear_pending_second_factor
     @pending_user.remember_me = remember_me
     sign_in(:user, @pending_user)
+    store_user_session_version(@pending_user)
 
     render json: {
       ok: true,

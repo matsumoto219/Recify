@@ -3,6 +3,8 @@
 require "openssl"
 
 class ApplicationController < ActionController::Base
+  USER_SESSION_VERSION_SESSION_KEY = :user_session_version
+
   class RateLimitStore
     class << self
       attr_writer :store
@@ -31,6 +33,8 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
+  before_action :enforce_user_session_version!, unless: :skip_user_session_version_enforcement?
+
   class << self
     def rate_limit_cache_store=(store)
       RateLimitStore.store = store
@@ -40,6 +44,38 @@ class ApplicationController < ActionController::Base
   helper_method :maintenance_notice_enabled?
 
   private
+
+  def store_user_session_version(user)
+    return unless user&.has_attribute?(:session_version)
+
+    session[USER_SESSION_VERSION_SESSION_KEY] = user.session_version.to_i
+  end
+
+  def clear_user_session_version
+    session.delete(USER_SESSION_VERSION_SESSION_KEY)
+  end
+
+  def enforce_user_session_version!
+    return unless user_signed_in?
+    return unless current_user&.has_attribute?(:session_version)
+
+    if session[USER_SESSION_VERSION_SESSION_KEY].nil?
+      store_user_session_version(current_user)
+      return
+    end
+
+    return if session[USER_SESSION_VERSION_SESSION_KEY].to_i == current_user.session_version.to_i
+
+    clear_user_session_version
+    sign_out(:user)
+    redirect_to new_user_session_path,
+                alert: t("auth.sessions.messages.session_expired"),
+                status: :see_other
+  end
+
+  def skip_user_session_version_enforcement?
+    is_a?(Users::SessionsController) && action_name == "create"
+  end
 
   def maintenance_notice_enabled?
     return false unless user_signed_in?

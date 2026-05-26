@@ -20,6 +20,8 @@ ja:
           canceled: パスキーでのログインがキャンセルされました。
           failure: パスキーでログインできませんでした。パスワードでもログインできます。
           request_failed: リクエストに失敗しました。
+      messages:
+        session_expired: セッションの有効期限が切れました。もう一度ログインしてください。
       sign_up:
         aria_label: 新規登録案内
         prompt: アカウントをお持ちではありませんか？

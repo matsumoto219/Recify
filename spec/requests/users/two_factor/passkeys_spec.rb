@@ -126,6 +126,7 @@ RSpec.describe 'User passkey step-up', type: :request do
         expect(response.parsed_body.fetch('redirect_url')).to be_present
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:passkey_step_up_challenge]).to be_blank
+        expect(session[:user_session_version]).to eq(user.session_version)
         expect(passkey.reload.last_used_at).to be_present
         expect(user.current_sign_in_at).to be_present
         expect(user.current_sign_in_ip).to be_present

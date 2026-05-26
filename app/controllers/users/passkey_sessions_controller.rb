@@ -44,6 +44,7 @@ class Users::PasskeySessionsController < ApplicationController
 
     clear_pending_second_factor
     sign_in(:user, user)
+    store_user_session_version(user)
     render json: {
       ok: true,
       redirect_url: after_sign_in_path_for(user)
