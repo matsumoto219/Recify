@@ -6,6 +6,8 @@ RSpec.describe SystemSettings do
       expect(described_class.definitions.keys).to contain_exactly(
         'feature.receipt_image_preprocess_enabled',
         'feature.receipt_logo_display_enabled',
+        'feature.receipt_image_preprocess',
+        'feature.receipt_logo_display',
         'ui.maintenance_notice_enabled',
         'limits.receipt_upload_soft_limit'
       )
@@ -61,6 +63,143 @@ RSpec.describe SystemSettings do
     end
   end
 
+  describe '.enabled?' do
+    it 'unknown keyは明示エラーにする' do
+      expect {
+        described_class.enabled?('secret.provider_api_key')
+      }.to raise_error(SystemSettings::UnknownKeyError)
+    end
+
+    it 'boolean keyの有効/無効を返す' do
+      create(
+        :system_setting,
+        key: 'feature.receipt_logo_display_enabled',
+        value: described_class.stored_value(true)
+      )
+
+      expect(described_class.enabled?('feature.receipt_logo_display_enabled')).to eq(true)
+      expect(described_class.enabled?('ui.maintenance_notice_enabled')).to eq(false)
+    end
+  end
+
+  describe '.rollout_enabled?' do
+    it 'feature flag defaultはfalse' do
+      user = create(:user)
+
+      expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)).to eq(false)
+    end
+
+    it 'enabled falseならallowlistやpercentageに関わらずfalse' do
+      user = create(:user)
+      create(
+        :system_setting,
+        key: 'feature.receipt_image_preprocess',
+        value: described_class.stored_value(
+          'enabled' => false,
+          'rollout_percentage' => 100,
+          'user_allowlist' => [ user.id ]
+        )
+      )
+
+      expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)).to eq(false)
+    end
+
+    it 'user_allowlistにuser.idがあればtrue' do
+      user = create(:user)
+      create(
+        :system_setting,
+        key: 'feature.receipt_image_preprocess',
+        value: described_class.stored_value(
+          'enabled' => true,
+          'rollout_percentage' => 0,
+          'user_allowlist' => [ user.id.to_s ]
+        )
+      )
+
+      expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)).to eq(true)
+    end
+
+    it 'rollout_percentage 100ならuser nilでもtrue' do
+      create(
+        :system_setting,
+        key: 'feature.receipt_image_preprocess',
+        value: described_class.stored_value(
+          'enabled' => true,
+          'rollout_percentage' => 100,
+          'user_allowlist' => []
+        )
+      )
+
+      expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: nil)).to eq(true)
+    end
+
+    it 'rollout_percentage 0ならfalse' do
+      user = create(:user)
+      create(
+        :system_setting,
+        key: 'feature.receipt_image_preprocess',
+        value: described_class.stored_value(
+          'enabled' => true,
+          'rollout_percentage' => 0,
+          'user_allowlist' => []
+        )
+      )
+
+      expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)).to eq(false)
+    end
+
+    it '1..99は同じuser/keyで安定し、user nilはfalse' do
+      user = create(:user)
+      create(
+        :system_setting,
+        key: 'feature.receipt_image_preprocess',
+        value: described_class.stored_value(
+          'enabled' => true,
+          'rollout_percentage' => 50,
+          'user_allowlist' => []
+        )
+      )
+
+      first = described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)
+      second = described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)
+
+      aggregate_failures do
+        expect(second).to eq(first)
+        expect(described_class.rollout_enabled?('feature.receipt_image_preprocess', user: nil)).to eq(false)
+      end
+    end
+
+    it 'boolean keyはrollout判定対象外として拒否する' do
+      expect {
+        described_class.rollout_enabled?('feature.receipt_logo_display_enabled', user: create(:user))
+      }.to raise_error(SystemSettings::ValidationError, 'not_feature_flag')
+    end
+  end
+
+  describe '.limit_for' do
+    it 'soft limitをintegerで返す' do
+      create(
+        :system_setting,
+        key: 'limits.receipt_upload_soft_limit',
+        value: described_class.stored_value('250')
+      )
+
+      expect(described_class.limit_for('limits.receipt_upload_soft_limit')).to eq(250)
+    end
+  end
+
+  describe 'evaluation side effects' do
+    it '評価APIはDB更新もAuditLog作成もしない' do
+      user = create(:user)
+
+      expect {
+        described_class.enabled?('feature.receipt_logo_display_enabled', user: user)
+        described_class.rollout_enabled?('feature.receipt_image_preprocess', user: user)
+        described_class.limit_for('limits.receipt_upload_soft_limit', user: user)
+      }.not_to change { [ SystemSetting.count, AuditLog.count ] }
+    end
+  end
+
   describe '.fetch and .source_for' do
     it 'definitionと現在値をEntryで返す' do
       user = create(:user, :admin)
@@ -109,7 +248,7 @@ RSpec.describe SystemSettings do
       end
     end
 
-    it 'percentage / enum / user_allowlist / durationをcastする' do
+    it 'percentage / enum / user_allowlist / duration / feature_flagをcastする' do
       with_extra_definitions(
         [
           SystemSettings::Definition.new(
@@ -146,6 +285,14 @@ RSpec.describe SystemSettings do
             risk_level: 'low',
             min: 1,
             max: 3600
+          ),
+          SystemSettings::Definition.new(
+            key: 'feature.test_rollout',
+            category: 'feature_flag',
+            value_type: 'feature_flag',
+            default: { 'enabled' => false, 'rollout_percentage' => 0, 'user_allowlist' => [] },
+            editable: true,
+            risk_level: 'medium'
           )
         ]
       ) do
@@ -158,6 +305,11 @@ RSpec.describe SystemSettings do
           }.to raise_error(SystemSettings::ValidationError, 'invalid_enum')
           expect(described_class.cast_update_value('feature.user_allowlist', "1\n2, 2 3")).to eq(%w[1 2 3])
           expect(described_class.cast_update_value('ui.notice_duration', { value: '5', unit: 'minutes' })).to eq(300)
+          expect(described_class.cast_update_value('feature.test_rollout', '{"enabled":true,"rollout_percentage":12.5,"user_allowlist":["1",2]}')).to eq(
+            'enabled' => true,
+            'rollout_percentage' => BigDecimal('12.5'),
+            'user_allowlist' => %w[1 2]
+          )
         end
       end
     end

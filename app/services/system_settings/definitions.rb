@@ -18,6 +18,30 @@ module SystemSettings
         risk_level: "low"
       ),
       Definition.new(
+        key: "feature.receipt_image_preprocess",
+        category: "feature_flag",
+        value_type: "feature_flag",
+        default: {
+          "enabled" => false,
+          "rollout_percentage" => 0,
+          "user_allowlist" => []
+        },
+        editable: true,
+        risk_level: "medium"
+      ),
+      Definition.new(
+        key: "feature.receipt_logo_display",
+        category: "feature_flag",
+        value_type: "feature_flag",
+        default: {
+          "enabled" => false,
+          "rollout_percentage" => 0,
+          "user_allowlist" => []
+        },
+        editable: true,
+        risk_level: "low"
+      ),
+      Definition.new(
         key: "ui.maintenance_notice_enabled",
         category: "ui_toggle",
         value_type: "boolean",

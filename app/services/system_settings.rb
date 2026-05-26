@@ -70,8 +70,47 @@ module SystemSettings
       )
     end
 
-    def value_for(key, context: {})
+    def value_for(key, user: nil, context: {})
       fetch(key).current_value
+    end
+
+    def enabled?(key, user: nil, context: {})
+      definition = definition_for(key)
+      value = value_for(key, user: user, context: context)
+
+      case definition.value_type.to_s
+      when "boolean"
+        value == true
+      when "feature_flag"
+        rollout_enabled?(key, user: user, context: context)
+      else
+        raise ValidationError, "not_boolean_setting"
+      end
+    end
+
+    def rollout_enabled?(key, user:, context: {})
+      definition = definition_for(key)
+      raise ValidationError, "not_feature_flag" unless definition.value_type.to_s == "feature_flag"
+
+      flag_value = normalize_feature_flag_value(value_for(key, user: user, context: context))
+      return false unless flag_value.fetch("enabled")
+      return true if user_allowlisted?(flag_value.fetch("user_allowlist"), user)
+
+      percentage = flag_value.fetch("rollout_percentage")
+      return false if percentage <= 0
+      return true if percentage >= 100
+      return false unless user&.id
+
+      rollout_bucket(key: definition.key, user_id: user.id) < percentage
+    end
+
+    def limit_for(key, user: nil, context: {})
+      value = value_for(key, user: user, context: context)
+      Integer(value)
+    rescue ArgumentError, TypeError
+      definition = definition_for(key)
+
+      Integer(definition.default)
     end
 
     def source_for(key)
@@ -158,6 +197,8 @@ module SystemSettings
         cast_user_allowlist(value)
       when "duration"
         cast_duration(definition, value)
+      when "feature_flag"
+        cast_feature_flag(value)
       else
         value
       end
@@ -261,9 +302,59 @@ module SystemSettings
       case value
       when BigDecimal
         value.to_s("F")
+      when Hash
+        value.transform_values { |child| serializable_value(child) }
+      when Array
+        value.map { |child| serializable_value(child) }
       else
         value
       end
+    end
+
+    def cast_feature_flag(value)
+      raw = feature_flag_hash(value)
+      enabled = cast_boolean(raw.fetch("enabled", false))
+      rollout_percentage = cast_feature_flag_percentage(raw.fetch("rollout_percentage", 0))
+      user_allowlist = cast_user_allowlist(raw.fetch("user_allowlist", []))
+
+      {
+        "enabled" => enabled,
+        "rollout_percentage" => rollout_percentage,
+        "user_allowlist" => user_allowlist
+      }
+    end
+
+    def feature_flag_hash(value)
+      return value.deep_stringify_keys if value.is_a?(Hash)
+      return JSON.parse(value).deep_stringify_keys if value.is_a?(String)
+
+      raise ValidationError, "invalid_feature_flag"
+    rescue JSON::ParserError
+      raise ValidationError, "invalid_feature_flag"
+    end
+
+    def cast_feature_flag_percentage(value)
+      percentage = BigDecimal(value.to_s)
+      raise ValidationError, "below_min" if percentage < 0
+      raise ValidationError, "above_max" if percentage > 100
+
+      percentage.to_i == percentage ? percentage.to_i : percentage
+    rescue ArgumentError, TypeError
+      raise ValidationError, "invalid_percentage"
+    end
+
+    def normalize_feature_flag_value(value)
+      cast_feature_flag(value)
+    end
+
+    def user_allowlisted?(allowlist, user)
+      return false unless user&.id
+
+      Array(allowlist).map(&:to_s).include?(user.id.to_s)
+    end
+
+    def rollout_bucket(key:, user_id:)
+      Digest::SHA256.hexdigest("#{key}:#{user_id}").to_i(16) % 100
     end
   end
 end

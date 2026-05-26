@@ -120,6 +120,11 @@
                   value: Array(current_value).join("\n"),
                   rows: 5,
                   class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          <% when "feature_flag" %>
+            <%= form.text_area :value,
+                  value: JSON.pretty_generate(current_value),
+                  rows: 8,
+                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
           <% else %>
             <%= form.text_field :value,
                   value: current_value,
