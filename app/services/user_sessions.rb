@@ -17,6 +17,14 @@ module UserSessions
   )
 
   class << self
+    def cleanup_retention(dry_run: true, cutoff: 90.days.ago, limit: 1000)
+      RetentionCleanup.call(
+        dry_run: dry_run,
+        cutoff: cutoff,
+        limit: limit
+      )
+    end
+
     def record_sign_in(user:, request:, session:, method:)
       return unless user && session
 

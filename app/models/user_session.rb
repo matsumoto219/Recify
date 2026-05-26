@@ -9,7 +9,7 @@ class UserSession < ApplicationRecord
   validates :last_seen_at, presence: true
 
   scope :active, -> {
-    where(signed_out_at: nil, revoked_at: nil)
+    where(signed_out_at: nil, revoked_at: nil, expired_at: nil)
       .where("last_seen_at >= ?", ACTIVE_RETENTION_PERIOD.ago)
   }
 end

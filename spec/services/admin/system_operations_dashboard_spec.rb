@@ -22,6 +22,7 @@ RSpec.describe Admin::SystemOperationsDashboard do
           'receipt_analysis_runs.cleanup_expired.execute',
           'receipt_analysis_runs.cleanup_stale.dry_run',
           'receipt_analysis_runs.cleanup_expired.dry_run',
+          'user_sessions.retention_cleanup.dry_run',
           'admin.passkey_reauthentication.succeeded',
           'admin.passkey_reauthentication.failed'
         )
@@ -42,7 +43,8 @@ RSpec.describe Admin::SystemOperationsDashboard do
         expect(recurring_keys).to include(
           'orphan_blob_cleanup_dry_run',
           'receipt_analysis_run_stale_cleanup_dry_run',
-          'receipt_analysis_run_retention_cleanup_dry_run'
+          'receipt_analysis_run_retention_cleanup_dry_run',
+          'user_session_retention_cleanup_dry_run'
         )
         expect(result.recurring_tasks).to all(include(dry_run: true))
         expect(result.recurring_tasks).to all(include(:class_name, :queue, :schedule))

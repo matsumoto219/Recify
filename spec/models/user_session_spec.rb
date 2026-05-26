@@ -38,8 +38,9 @@ RSpec.describe UserSession, type: :model do
     active = build_user_session(last_seen_at: 1.hour.ago)
     signed_out = build_user_session(last_seen_at: 1.hour.ago, signed_out_at: Time.current)
     revoked = build_user_session(last_seen_at: 1.hour.ago, revoked_at: Time.current)
+    marked_expired = build_user_session(last_seen_at: 1.hour.ago, expired_at: Time.current)
     expired = build_user_session(last_seen_at: 31.days.ago)
-    [ active, signed_out, revoked, expired ].each(&:save!)
+    [ active, signed_out, revoked, marked_expired, expired ].each(&:save!)
 
     expect(described_class.active).to contain_exactly(active)
   end
