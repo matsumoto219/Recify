@@ -7,5 +7,9 @@ module Admin
     def audit_logs(**filters)
       AuditLogsQuery.call(**filters)
     end
+
+    def receipt_analysis_cleanup_preview(**params)
+      ReceiptAnalysisCleanupPreview.call(**params)
+    end
   end
 end

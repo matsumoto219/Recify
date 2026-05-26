@@ -1,0 +1,216 @@
+<% content_for :title, "Cleanup preview" %>
+
+<%
+  stale = @preview.stale
+  retention = @preview.retention
+  preview_params = @preview.params
+
+  stale_cutoff_value = preview_params[:stale_cutoff]&.strftime("%Y-%m-%dT%H:%M")
+  retention_cutoff_value = preview_params[:retention_cutoff]&.strftime("%Y-%m-%dT%H:%M")
+
+  stale_records = Array(stale[:records])
+  retention_records = Array(retention[:records])
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "Cleanup preview",
+        subtitle: "stale / retention cleanup のdry-run結果",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="space-y-3">
+      <h2 class="text-lg font-bold token-text-base">Read-only dry-run preview</h2>
+      <p class="text-sm token-text-muted">
+        この画面は現在時点のdry-run結果だけを表示します。DB更新、run削除、Job enqueue、cleanup job実行は行いません。
+      </p>
+      <p class="text-sm token-text-muted">
+        productionでの <span class="font-mono">dry_run:false</span> はまだ未解禁です。実処理化はAuditLog確認、passkey再認証、運用判断後に行います。
+      </p>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">Preview parameters</h2>
+        <p class="text-sm token-text-muted">limitは安全側の上限で丸めます。dry_run指定は受け付けません。</p>
+      </div>
+
+      <%= link_to "Reset", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= form_with url: admin_receipt_analysis_cleanup_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
+      <div class="space-y-1">
+        <%= form.label :stale_cutoff, "stale cutoff", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.datetime_field :stale_cutoff, value: stale_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :stale_limit, "stale limit", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.number_field :stale_limit, value: preview_params[:stale_limit], min: 1, max: 100, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :retention_cutoff, "retention cutoff", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.datetime_field :retention_cutoff, value: retention_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :retention_limit, "retention limit", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.number_field :retention_limit, value: preview_params[:retention_limit], min: 1, max: 1000, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="flex items-end gap-3 md:col-span-4">
+        <%= render "shared/ui/actions/button",
+              label: "Preview",
+              type: "submit",
+              size: :compact,
+              icon: "visibility" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_receipt_analysis_cleanup_path,
+              label: "クリア",
+              variant: :secondary,
+              size: :compact,
+              icon: "restart_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">Stale active runs dry-run</h2>
+      <p class="text-sm token-text-muted">
+        queued / running のまま <%= l(stale[:cutoff], format: :short) %> 以前に更新されたrunを確認します。
+      </p>
+    </div>
+
+    <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">dry_run</dt>
+        <dd class="font-mono token-text-base"><%= stale[:dry_run] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">limit</dt>
+        <dd class="font-mono token-text-base"><%= stale[:limit] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">stale_count</dt>
+        <dd class="font-mono token-text-base"><%= stale[:stale_count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">skipped_count</dt>
+        <dd class="font-mono token-text-base"><%= stale[:skipped_count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">failed_count</dt>
+        <dd class="font-mono token-text-base"><%= stale[:failed_count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">canceled_count</dt>
+        <dd class="font-mono token-text-base"><%= stale[:canceled_count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 md:col-span-2">
+        <dt class="text-xs font-semibold token-text-muted">errors</dt>
+        <dd class="font-mono token-text-base"><%= Array(stale[:errors]).size %></dd>
+      </div>
+    </dl>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">run_key</th>
+            <th class="px-3 py-2 font-semibold">status</th>
+            <th class="px-3 py-2 font-semibold">stage</th>
+            <th class="px-3 py-2 font-semibold">receipt_status</th>
+            <th class="px-3 py-2 font-semibold">updated_at</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% stale_records.each do |record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 font-mono text-xs">
+                <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
+              </td>
+              <td class="px-3 py-3"><%= record[:status] %></td>
+              <td class="px-3 py-3"><%= record[:stage] %></td>
+              <td class="px-3 py-3"><%= record[:receipt_status] %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= record[:updated_at].present? ? l(record[:updated_at], format: :short) : "-" %></td>
+            </tr>
+          <% end %>
+
+          <% if stale_records.empty? %>
+            <tr>
+              <td colspan="5" class="px-3 py-10 text-center text-sm token-text-muted">対象のstale active runはありません。</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">Expired terminal runs dry-run</h2>
+      <p class="text-sm token-text-muted">
+        terminal状態で <%= l(retention[:cutoff], format: :short) %> 以前に期限切れになったrunを確認します。
+      </p>
+    </div>
+
+    <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">dry_run</dt>
+        <dd class="font-mono token-text-base"><%= retention[:dry_run] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">limit</dt>
+        <dd class="font-mono token-text-base"><%= retention[:limit] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">expired_count</dt>
+        <dd class="font-mono token-text-base"><%= retention[:expired_count] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted">deleted_count</dt>
+        <dd class="font-mono token-text-base"><%= retention[:deleted_count] %></dd>
+      </div>
+    </dl>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">run_key</th>
+            <th class="px-3 py-2 font-semibold">status</th>
+            <th class="px-3 py-2 font-semibold">stage</th>
+            <th class="px-3 py-2 font-semibold">expires_at</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% retention_records.each do |record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 font-mono text-xs">
+                <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
+              </td>
+              <td class="px-3 py-3"><%= record[:status] %></td>
+              <td class="px-3 py-3"><%= record[:stage] %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : "-" %></td>
+            </tr>
+          <% end %>
+
+          <% if retention_records.empty? %>
+            <tr>
+              <td colspan="4" class="px-3 py-10 text-center text-sm token-text-muted">対象のexpired terminal runはありません。</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

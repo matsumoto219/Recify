@@ -2,6 +2,7 @@ Rails.application.routes.draw do
   namespace :admin do
     root "receipt_analysis_runs#index"
     resources :audit_logs, only: %i[index show]
+    get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     resources :receipt_analysis_runs, only: %i[index show], param: :run_key do
       post :retry, on: :member
     end
