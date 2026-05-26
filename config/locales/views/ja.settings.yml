@@ -24,7 +24,7 @@ ja:
         email: メールアドレス変更
         password: パスワード変更
         two_factor: 2要素認証 (2FA)
-        passkey: Passkey 設定
+        passkey: パスキー設定
         hint: ※ アカウントの安全性を高めるために、定期的なパスワード変更と追加認証機能の利用を推奨します。
       appearance:
         theme_label: 表示テーマ
@@ -126,6 +126,25 @@ ja:
           action: 有効化する（未対応）
         passkey:
           title: パスキー
-          subtitle: 指紋や顔認証で安全にログインできます。
-          action: 登録する（未対応）
+          subtitle: パスワードマネージャーや対応端末を使って、安全にログインできます。
+          action: パスキーを登録
+          default_label: パスキー
+          registered_at: "登録日: %{datetime}"
+          last_used_at: "最終使用: %{datetime}"
+          unused: 未使用
+          delete: 削除
+          delete_confirm: このパスキーを削除しますか？
+          empty: 登録済みのパスキーはありません。
+          label: ラベル
+          label_placeholder: "例: iPhone Face ID"
+          guest_unavailable: 本登録後に安全な本人確認を設定できます。
+          messages:
+            unavailable: 本登録後にこの設定を利用できます。
+            challenge_missing: パスキー登録の有効期限が切れました。もう一度お試しください。
+            unsupported: このブラウザはパスキー登録に対応していません。
+            canceled: パスキー登録がキャンセルされました。
+            success: パスキーを登録しました。
+            failure: パスキー登録に失敗しました。
+            deleted: パスキーを削除しました。
+            request_failed: リクエストに失敗しました。
       footer: セキュリティ設定を変更した際、確認メールが送信される場合があります。不審な操作があれば速やかにパスワードを変更してください。

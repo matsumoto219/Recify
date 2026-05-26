@@ -72,5 +72,8 @@ Rails.application.routes.draw do
   get "/settings", to: "settings#index", as: :settings
   get "/settings/account", to: "settings#account", as: :settings_account
   get "/settings/security", to: "settings#security", as: :settings_security
+  post "/settings/passkeys/options", to: "users/passkeys#options", as: :settings_passkeys_options
+  post "/settings/passkeys", to: "users/passkeys#create", as: :settings_passkeys
+  delete "/settings/passkeys/:id", to: "users/passkeys#destroy", as: :settings_passkey
   patch "settings", to: "settings#update"
 end

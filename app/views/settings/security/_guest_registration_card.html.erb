@@ -34,6 +34,10 @@
       </div>
     <% end %>
 
+    <div class="mb-6 rounded-lg border token-border-soft token-bg-card-subtle px-4 py-3 text-sm token-text-muted">
+      <%= t("settings.security.auth.passkey.guest_unavailable") %>
+    </div>
+
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, local: true do |f| %>
       <%= hidden_field_tag :update_context, "guest_registration" %>
 

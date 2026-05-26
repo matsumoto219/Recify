@@ -53,6 +53,18 @@ RSpec.describe Passkeys do
         expect(passkey.backed_up).to be(true)
       end
     end
+
+    it 'duplicate credentialを拒否する' do
+      user = create(:user)
+      options = described_class.registration_options(user: user)
+      credential = client.create(challenge: options.challenge, rp_id: rp_id, user_verified: true)
+      credential_id = WebAuthn::Credential.from_create(credential).id
+      create(:passkey, credential_id: credential_id)
+
+      expect {
+        described_class.verify_registration(user: user, credential: credential, challenge: options.challenge)
+      }.to raise_error(ActiveRecord::RecordInvalid)
+    end
   end
 
   describe '.authentication_options' do

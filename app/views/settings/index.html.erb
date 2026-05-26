@@ -115,14 +115,13 @@
                     size: :lg %>
             </div>
 
-            <%# TODO: Passkey 設定機能を実装する。現状はダミー表示 %>
             <div class="flex items-center justify-between text-sm">
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined token-text-muted text-sm">info</span>
                 <span class="token-text-muted"><%= t("settings.index.security.passkey") %></span>
               </div>
               <%= render "shared/ui/badge/setting_status_badge",
-                    state: :inactive,
+                    state: current_user.passkeys.exists? ? :active : :inactive,
                     variant: :text,
                     size: :lg %>
             </div>

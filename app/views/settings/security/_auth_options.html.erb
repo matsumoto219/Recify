@@ -1,4 +1,4 @@
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div id="passkeys" class="grid grid-cols-1 md:grid-cols-2 gap-6 scroll-mt-24">
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
     <div>
       <div class="flex items-center justify-between mb-4">
@@ -23,10 +23,19 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
-    <div>
+    <div
+      class="space-y-5"
+      data-controller="passkey"
+      data-passkey-options-url-value="<%= settings_passkeys_options_path %>"
+      data-passkey-create-url-value="<%= settings_passkeys_path %>"
+      data-passkey-unsupported-message-value="<%= t("settings.security.auth.passkey.messages.unsupported") %>"
+      data-passkey-canceled-message-value="<%= t("settings.security.auth.passkey.messages.canceled") %>"
+      data-passkey-success-message-value="<%= t("settings.security.auth.passkey.messages.success") %>"
+      data-passkey-failure-message-value="<%= t("settings.security.auth.passkey.messages.failure") %>"
+      data-passkey-request-failed-message-value="<%= t("settings.security.auth.passkey.messages.request_failed") %>">
       <div class="flex items-center justify-between mb-4">
         <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
-        <%= render "shared/ui/badge/setting_status_badge", state: :inactive %>
+        <%= render "shared/ui/badge/setting_status_badge", state: current_user.passkeys.exists? ? :active : :inactive %>
       </div>
       <%= render "shared/ui/layout/section_header",
             title: t("settings.security.auth.passkey.title"),
@@ -34,14 +43,70 @@
             title_size: "text-lg",
             subtitle_size: "text-sm",
             class: "mb-6" %>
-    </div>
 
-    <%= render "shared/ui/actions/button",
-          label: t("settings.security.auth.passkey.action"),
-          variant: :secondary,
-          size: :compact,
-          full_width: true,
-          disabled: true,
-          class: "token-border-brand-soft" %>
+      <div class="space-y-3">
+        <% if current_user.passkeys.exists? %>
+          <% current_user.passkeys.order(created_at: :desc).each do |passkey| %>
+            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 space-y-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <% passkey_label = passkey.label.presence || t("settings.security.auth.passkey.default_label") %>
+                  <p class="text-sm font-semibold token-text-base truncate" title="<%= passkey_label %>">
+                    <%= passkey_label %>
+                  </p>
+                  <p class="text-xs token-text-muted">
+                    <%= t("settings.security.auth.passkey.registered_at", datetime: l(passkey.created_at, format: :short)) %>
+                  </p>
+                  <p class="text-xs token-text-muted">
+                    <%= t(
+                          "settings.security.auth.passkey.last_used_at",
+                          datetime: passkey.last_used_at.present? ? l(passkey.last_used_at, format: :short) : t("settings.security.auth.passkey.unused")
+                        ) %>
+                  </p>
+                </div>
+
+                <%= button_to t("settings.security.auth.passkey.delete"),
+                      settings_passkey_path(passkey),
+                      method: :delete,
+                      form: { data: { turbo_confirm: t("settings.security.auth.passkey.delete_confirm") } },
+                      class: "btn-ghost border px-3 py-1.5 text-xs rounded-lg font-medium transition-all" %>
+              </div>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted">
+            <%= t("settings.security.auth.passkey.empty") %>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="space-y-3">
+        <label class="block text-sm font-medium token-text-base" for="passkey-label-input">
+          <%= t("settings.security.auth.passkey.label") %>
+        </label>
+        <input
+          id="passkey-label-input"
+          type="text"
+          maxlength="80"
+          placeholder="<%= t("settings.security.auth.passkey.label_placeholder") %>"
+          class="w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base"
+          data-passkey-target="label">
+
+        <p class="hidden text-sm token-text-error" data-passkey-target="error"></p>
+        <p class="hidden text-sm token-text-success" data-passkey-target="success"></p>
+
+        <%= render "shared/ui/actions/button",
+              label: t("settings.security.auth.passkey.action"),
+              variant: :secondary,
+              size: :compact,
+              full_width: true,
+              icon: "passkey",
+              class: "token-border-brand-soft",
+              data: {
+                action: "click->passkey#register",
+                passkey_target: "button"
+              } %>
+      </div>
+    </div>
   <% end %>
 </div>
