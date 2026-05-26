@@ -48,5 +48,17 @@ module SystemOperations
         confirmation: confirmation
       )
     end
+
+    def execute_user_operation(operation:, user:, actor:, reason:, request:, reauthentication:, confirmation:)
+      UserOperationExecutor.call(
+        operation: operation,
+        user: user,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation
+      )
+    end
   end
 end

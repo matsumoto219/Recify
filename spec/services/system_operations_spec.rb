@@ -58,4 +58,34 @@ RSpec.describe SystemOperations do
       end
     end
   end
+
+  describe '.execute_user_operation' do
+    it 'UserOperationExecutorへ委譲する親入口である' do
+      allow(SystemOperations::UserOperationExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))
+      target_user = build_stubbed(:user)
+
+      result = described_class.execute_user_operation(
+        operation: 'lock_user',
+        user: target_user,
+        actor: build_stubbed(:user, :admin),
+        reason: 'support request',
+        request: nil,
+        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        confirmation: 'LOCK USER'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::UserOperationExecutor).to have_received(:call).with(
+          operation: 'lock_user',
+          user: target_user,
+          actor: kind_of(User),
+          reason: 'support request',
+          request: nil,
+          reauthentication: hash_including(method: 'passkey'),
+          confirmation: 'LOCK USER'
+        )
+      end
+    end
+  end
 end

@@ -32,12 +32,14 @@ RSpec.describe 'Admin users', type: :request do
     expect(AuditLog.count).to eq(previous_audit_count)
     expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
     expect(SystemOperations).not_to have_received(:update_setting)
+    expect(SystemOperations).not_to have_received(:execute_user_operation)
     expect(Analysis::RetryService).not_to have_received(:call)
   end
 
   before do
     allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
     allow(SystemOperations).to receive(:update_setting)
+    allow(SystemOperations).to receive(:execute_user_operation)
     allow(Analysis::RetryService).to receive(:call)
   end
 
@@ -211,20 +213,17 @@ RSpec.describe 'Admin users', type: :request do
       end
     end
 
-    it '操作routeは存在しない' do
+    it '管理操作カードを表示するが、再認証前は実行フォームを表示しない' do
+      admin = create(:user, :admin)
       user = create(:user)
+      sign_in admin
 
-      aggregate_failures do
-        expect {
-          Rails.application.routes.recognize_path(admin_user_path(user), method: :post)
-        }.to raise_error(ActionController::RoutingError)
-        expect {
-          Rails.application.routes.recognize_path(admin_user_path(user), method: :patch)
-        }.to raise_error(ActionController::RoutingError)
-        expect {
-          Rails.application.routes.recognize_path(admin_user_path(user), method: :delete)
-        }.to raise_error(ActionController::RoutingError)
-      end
+      get admin_user_path(user)
+
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include('管理操作')
+      expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_user_path(user)))
+      expect(response.body).not_to include(lock_operation_admin_user_path(user))
     end
 
     it 'UIに開発者向け文言を出さない' do
@@ -239,7 +238,6 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).not_to match(/v1\.0後|未実装|TODO|service\/facade|payload|development\/test|production/)
         expect(response.body).not_to include('権限変更')
         expect(response.body).not_to include('削除する')
-        expect(response.body).not_to include('ロックする')
         expect(response.body).not_to include('パスキー削除')
       end
     end

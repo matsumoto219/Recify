@@ -128,6 +128,74 @@
   </div>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base">管理操作</h2>
+      <p class="text-sm token-text-muted">本人からの依頼や復旧対応で必要な場合のみ実行します。</p>
+    </div>
+
+    <% if record[:admin] %>
+      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        管理者ユーザーへの操作は受け付けていません。
+      </p>
+    <% elsif record[:id] == current_user.id %>
+      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        自分自身への操作は受け付けていません。
+      </p>
+    <% elsif !admin_passkey_reauthenticated? %>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <p class="mb-3 text-sm token-text-muted">操作にはパスキー再認証が必要です。再認証後、実行理由と確認文字列をもう一度入力してください。</p>
+        <%= link_to "パスキー再認証",
+              new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
+              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+      </div>
+    <% else %>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <% if record[:locked] %>
+          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+            <h3 class="mb-2 text-base font-bold token-text-base">ロック解除</h3>
+            <p class="mb-4 text-sm token-text-muted">ログイン制限を解除し、失敗回数をリセットします。</p>
+            <%= form_with url: unlock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+              <div class="space-y-1">
+                <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              </div>
+              <div class="space-y-1">
+                <%= form.label :confirmation, "確認文字列 UNLOCK USER", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+              </div>
+              <%= render "shared/ui/actions/button",
+                    label: "ロック解除を実行",
+                    type: "submit",
+                    size: :compact,
+                    icon: "lock_open" %>
+            <% end %>
+          </div>
+        <% else %>
+          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+            <h3 class="mb-2 text-base font-bold token-text-base">ユーザーをロック</h3>
+            <p class="mb-4 text-sm token-text-muted">対象ユーザーのログインを制限します。</p>
+            <%= form_with url: lock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+              <div class="space-y-1">
+                <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              </div>
+              <div class="space-y-1">
+                <%= form.label :confirmation, "確認文字列 LOCK USER", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+              </div>
+              <%= render "shared/ui/actions/button",
+                    label: "ロックを実行",
+                    type: "submit",
+                    size: :compact,
+                    icon: "lock" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
         <h2 class="text-lg font-bold token-text-base">最近の監査ログ</h2>

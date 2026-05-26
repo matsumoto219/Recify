@@ -11,7 +11,10 @@ Rails.application.routes.draw do
           to: "system_settings#update",
           constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
-    resources :users, only: %i[index show]
+    resources :users, only: %i[index show] do
+      post "operations/lock", to: "user_operations#lock", as: :lock_operation, on: :member
+      post "operations/unlock", to: "user_operations#unlock", as: :unlock_operation, on: :member
+    end
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale
     post "receipt_analysis_cleanup/retention", to: "receipt_analysis_cleanup#execute_retention", as: :receipt_analysis_cleanup_retention
