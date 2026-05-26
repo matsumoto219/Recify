@@ -1,0 +1,177 @@
+<% content_for :title, "ユーザー管理" %>
+
+<%
+  filters = @filters || {}
+  query_base = filters.except(:offset).compact_blank
+  limit = @result.limit
+  offset = @result.offset
+  total_count = @result.total_count
+  start_number = total_count.zero? ? 0 : offset + 1
+  end_number = [ offset + @result.records.size, total_count ].min
+  previous_offset = [ offset - limit, 0 ].max
+  next_offset = offset + limit
+  has_previous = offset.positive?
+  has_next = next_offset < total_count
+  boolean_options = [[ "すべて", "" ], [ "はい", "true" ], [ "いいえ", "false" ]]
+  limit_options = [ 25, 50, 100 ].map { |value| [ "#{value}件", value.to_s ] }
+  boolean_label = ->(value) { value ? "はい" : "いいえ" }
+  timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "ユーザー管理",
+        subtitle: "ユーザーの認証状態と利用状況",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">絞り込み</h2>
+        <p class="text-sm token-text-muted">空欄の条件は検索に使いません。</p>
+      </div>
+
+      <%= link_to "リセット", admin_users_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= form_with url: admin_users_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
+      <div class="space-y-1">
+        <%= form.label :email, "email", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :email, value: filters[:email], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :admin, "admin", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :admin,
+              options_for_select(boolean_options, filters[:admin]),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :guest, "guest", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :guest,
+              options_for_select(boolean_options, filters[:guest]),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :confirmed, "confirmed", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :confirmed,
+              options_for_select(boolean_options, filters[:confirmed]),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :locked, "locked", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :locked,
+              options_for_select(boolean_options, filters[:locked]),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :has_passkey, "passkey", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :has_passkey,
+              options_for_select(boolean_options, filters[:has_passkey]),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :limit, "表示件数", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.select :limit,
+              options_for_select(limit_options, filters[:limit].presence || limit.to_s),
+              {},
+              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="flex items-end gap-3 md:col-span-1">
+        <%= render "shared/ui/actions/button",
+              label: "絞り込む",
+              type: "submit",
+              size: :compact,
+              icon: "filter_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">ユーザー一覧</h2>
+        <p class="text-sm token-text-muted"><%= total_count %>件中 <%= start_number %>-<%= end_number %>件を表示</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <% if has_previous %>
+          <%= link_to "前へ",
+                admin_users_path(query_base.merge(limit: limit, offset: previous_offset)),
+                class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
+        <% else %>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">前へ</span>
+        <% end %>
+
+        <% if has_next %>
+          <%= link_to "次へ",
+                admin_users_path(query_base.merge(limit: limit, offset: next_offset)),
+                class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
+        <% else %>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">次へ</span>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">id</th>
+            <th class="px-3 py-2 font-semibold">email</th>
+            <th class="px-3 py-2 font-semibold">admin</th>
+            <th class="px-3 py-2 font-semibold">guest</th>
+            <th class="px-3 py-2 font-semibold">confirmed</th>
+            <th class="px-3 py-2 font-semibold">locked</th>
+            <th class="px-3 py-2 font-semibold">passkeys</th>
+            <th class="px-3 py-2 font-semibold">receipts</th>
+            <th class="px-3 py-2 font-semibold">sign in</th>
+            <th class="px-3 py-2 font-semibold">current</th>
+            <th class="px-3 py-2 font-semibold">last</th>
+            <th class="px-3 py-2 font-semibold">created</th>
+            <th class="px-3 py-2 font-semibold">detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @result.records.each do |record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 font-mono text-xs">#<%= record[:id] %></td>
+              <td class="px-3 py-3 token-text-base"><%= record[:email] %></td>
+              <td class="px-3 py-3"><%= boolean_label.call(record[:admin]) %></td>
+              <td class="px-3 py-3"><%= boolean_label.call(record[:guest]) %></td>
+              <td class="px-3 py-3"><%= boolean_label.call(record[:confirmed]) %></td>
+              <td class="px-3 py-3"><%= boolean_label.call(record[:locked]) %></td>
+              <td class="px-3 py-3 font-mono" data-admin-user-passkeys-count="<%= record[:id] %>"><%= record[:passkeys_count] %></td>
+              <td class="px-3 py-3 font-mono" data-admin-user-receipts-count="<%= record[:id] %>"><%= record[:receipts_count] %></td>
+              <td class="px-3 py-3 font-mono"><%= record.dig(:sign_in, :sign_in_count) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:sign_in, :current_sign_in_at)) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:sign_in, :last_sign_in_at)) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></td>
+              <td class="px-3 py-3"><%= link_to "詳細", admin_user_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+            </tr>
+          <% end %>
+
+          <% if @result.records.empty? %>
+            <tr>
+              <td colspan="13" class="px-3 py-10 text-center text-sm token-text-muted">該当するユーザーはありません。</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

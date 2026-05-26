@@ -1,0 +1,170 @@
+<% content_for :title, "ユーザー詳細" %>
+
+<%
+  record = @record
+  boolean_label = ->(value) { value ? "はい" : "いいえ" }
+  timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: "ユーザー詳細",
+        subtitle: "認証状態と利用状況の確認",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <div class="flex flex-wrap gap-2 text-sm">
+    <%= link_to "ユーザー一覧へ戻る", admin_users_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+    <%= link_to "関連する解析run", admin_receipt_analysis_runs_path(user_id: record[:id]), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+    <%= link_to "関連する監査ログ", admin_audit_logs_path(actor_user_id: record[:id]), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">基本情報</h2>
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">user id</dt>
+          <dd class="font-mono token-text-base">#<%= record[:id] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">email</dt>
+          <dd class="break-all token-text-base"><%= record[:email] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">admin</dt>
+          <dd class="token-text-base"><%= boolean_label.call(record[:admin]) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">guest</dt>
+          <dd class="token-text-base"><%= boolean_label.call(record[:guest]) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">created</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">updated</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
+        </div>
+      </dl>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">セキュリティ状態</h2>
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">confirmed</dt>
+          <dd class="token-text-base"><%= boolean_label.call(record[:confirmed]) %></dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= timestamp_label.call(record.dig(:security, :confirmed_at)) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">unconfirmed email</dt>
+          <dd class="token-text-base"><%= record.dig(:security, :unconfirmed_email_present) ? "あり" : "なし" %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">locked</dt>
+          <dd class="token-text-base"><%= boolean_label.call(record[:locked]) %></dd>
+          <dd class="mt-1 text-xs token-text-muted"><%= timestamp_label.call(record.dig(:security, :locked_at)) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">failed attempts</dt>
+          <dd class="font-mono token-text-base"><%= record.dig(:security, :failed_attempts) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">unlock sent</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:security, :unlock_sent_at)) %></dd>
+        </div>
+      </dl>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">サインイン情報</h2>
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">sign in count</dt>
+          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :sign_in_count) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">current sign in</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:sign_in, :current_sign_in_at)) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">last sign in</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:sign_in, :last_sign_in_at)) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">current IP</dt>
+          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :current_sign_in_ip).presence || "-" %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">last IP</dt>
+          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :last_sign_in_ip).presence || "-" %></dd>
+        </div>
+      </dl>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base">利用状況</h2>
+      <dl class="grid gap-3 text-sm md:grid-cols-2">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">passkeys</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-passkeys-count><%= record[:passkeys_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">latest passkey use</dt>
+          <dd class="token-text-base"><%= timestamp_label.call(record[:latest_passkey_last_used_at]) %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted">receipts</dt>
+          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-receipts-count><%= record[:receipts_count] %></dd>
+        </div>
+      </dl>
+    <% end %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">最近の監査ログ</h2>
+        <p class="text-sm token-text-muted">このユーザーが実行した管理操作</p>
+      </div>
+      <%= link_to "すべて見る", admin_audit_logs_path(actor_user_id: record[:id]), class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">created</th>
+            <th class="px-3 py-2 font-semibold">action</th>
+            <th class="px-3 py-2 font-semibold">outcome</th>
+            <th class="px-3 py-2 font-semibold">target</th>
+            <th class="px-3 py-2 font-semibold">detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @audit_result.records.each do |audit_record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(audit_record[:created_at]) %></td>
+              <td class="px-3 py-3 font-mono text-xs"><%= audit_record[:action] %></td>
+              <td class="px-3 py-3"><%= audit_record[:outcome] %></td>
+              <td class="px-3 py-3"><%= audit_record[:target_uid].presence || "-" %></td>
+              <td class="px-3 py-3"><%= link_to "詳細", admin_audit_log_path(audit_record[:id]), class: "token-text-brand hover:underline" %></td>
+            </tr>
+          <% end %>
+
+          <% if @audit_result.records.empty? %>
+            <tr>
+              <td colspan="5" class="px-3 py-10 text-center text-sm token-text-muted">該当する監査ログはありません。</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>
