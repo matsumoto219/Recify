@@ -1,4 +1,9 @@
 Rails.application.routes.draw do
+  namespace :admin do
+    root "receipt_analysis_runs#index"
+    resources :receipt_analysis_runs, only: %i[index show], param: :run_key
+  end
+
   if Rails.env.development? && defined?(LetterOpenerWeb::Engine)
     mount LetterOpenerWeb::Engine, at: "/letter_opener"
   end

@@ -1,0 +1,66 @@
+<% content_for :title, "解析run詳細" %>
+
+<section class="mx-auto w-full max-w-5xl space-y-8 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "shared/ui/layout/section_header",
+        title: "解析run詳細",
+        subtitle: @record[:run_key],
+        breadcrumb_label: "解析run管理",
+        breadcrumb_path: admin_receipt_analysis_runs_path,
+        title_size: "text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <dl class="grid gap-4 md:grid-cols-2">
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">run_key</dt>
+        <dd class="font-mono text-sm token-text-base break-all"><%= @record[:run_key] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">receipt</dt>
+        <dd class="text-sm token-text-base"><%= @record[:display_id] %> / <span class="font-mono"><%= @record[:public_id] %></span></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">stage / status</dt>
+        <dd class="text-sm token-text-base"><%= @record[:stage] %> / <%= @record[:status] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">receipt status</dt>
+        <dd class="text-sm token-text-base"><%= @record[:receipt_status] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">source</dt>
+        <dd class="text-sm token-text-base"><%= @record[:source] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted">error</dt>
+        <dd class="text-sm token-text-base"><%= @record[:error_code].presence || "-" %></dd>
+      </div>
+    </dl>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
+    <div class="grid gap-3 md:grid-cols-2">
+      <% @record[:retry_options].each do |option| %>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <div class="font-semibold token-text-base"><%= option[:type] %></div>
+          <div class="mt-1 text-sm <%= option[:possible] ? "token-text-success" : "token-text-muted" %>">
+            <%= option[:possible] ? "available" : "disabled: #{option[:disabled_reason]}" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base">Summaries</h2>
+    <div class="space-y-4">
+      <% @record[:summaries].each do |name, summary| %>
+        <section>
+          <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= name %></h3>
+          <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(summary) %></pre>
+        </section>
+      <% end %>
+    </div>
+  <% end %>
+</section>

@@ -1,0 +1,109 @@
+<% content_for :title, "解析run管理" %>
+
+<section class="mx-auto w-full max-w-6xl space-y-8 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "shared/ui/layout/section_header",
+        title: "解析run管理",
+        subtitle: "OCR / AI / Finalize pipeline のread-only一覧",
+        title_size: "text-3xl",
+        subtitle_size: "text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= form_with url: admin_receipt_analysis_runs_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-3" do |form| %>
+      <div class="space-y-1">
+        <%= form.label :status, "run status", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :status, value: params[:status], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :stage, "stage", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :stage, value: params[:stage], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :source, "source", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :source, value: params[:source], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :receipt_status, "receipt status", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :receipt_status, value: params[:receipt_status], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :error_code, "error code", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :error_code, value: params[:error_code], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="space-y-1">
+        <%= form.label :receipt_public_id, "receipt public_id", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.text_field :receipt_public_id, value: params[:receipt_public_id], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+      </div>
+
+      <div class="flex items-end gap-3 md:col-span-3">
+        <label class="inline-flex items-center gap-2 text-sm token-text-muted">
+          <%= form.check_box :needs_attention, { checked: ActiveModel::Type::Boolean.new.cast(params[:needs_attention]) }, "1", "0" %>
+          要対応のみ
+        </label>
+
+        <%= render "shared/ui/actions/button",
+              label: "絞り込む",
+              type: "submit",
+              size: :compact,
+              icon: "filter_alt" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_receipt_analysis_runs_path,
+              label: "クリア",
+              variant: :secondary,
+              size: :compact,
+              icon: "restart_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base">Latest runs</h2>
+        <p class="text-sm token-text-muted"><%= @result.total_count %>件中 <%= @result.records.size %>件を表示</p>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold">run_key</th>
+            <th class="px-3 py-2 font-semibold">receipt</th>
+            <th class="px-3 py-2 font-semibold">run</th>
+            <th class="px-3 py-2 font-semibold">receipt status</th>
+            <th class="px-3 py-2 font-semibold">source</th>
+            <th class="px-3 py-2 font-semibold">error</th>
+            <th class="px-3 py-2 font-semibold">created</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @result.records.each do |record| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 font-mono text-xs">
+                <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
+              </td>
+              <td class="px-3 py-3">
+                <div class="font-semibold token-text-base"><%= record[:display_id] %></div>
+                <div class="font-mono text-xs token-text-muted"><%= record[:public_id] %></div>
+              </td>
+              <td class="px-3 py-3">
+                <div class="token-text-base"><%= record[:stage] %> / <%= record[:status] %></div>
+              </td>
+              <td class="px-3 py-3"><%= record[:receipt_status] %></td>
+              <td class="px-3 py-3"><%= record[:source] %></td>
+              <td class="px-3 py-3"><%= record[:error_code].presence || "-" %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= l(record[:timestamps][:created_at], format: :short) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

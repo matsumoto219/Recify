@@ -34,6 +34,7 @@ module Admin
       receipt: nil,
       receipt_id: nil,
       receipt_public_id: nil,
+      run_key: nil,
       user: nil,
       user_id: nil,
       status: nil,
@@ -50,6 +51,7 @@ module Admin
       @receipt = receipt
       @receipt_id = receipt_id
       @receipt_public_id = receipt_public_id
+      @run_key = run_key
       @user = user
       @user_id = user_id
       @status = status
@@ -81,6 +83,7 @@ module Admin
 
     def filtered_relation
       relation = ReceiptAnalysisRun.includes(:requested_by_user, receipt: :user)
+      relation = filter_by_run_key(relation)
       relation = filter_by_receipt(relation)
       relation = filter_by_user(relation)
       relation = filter_by_column(relation, :status, @status)
@@ -90,6 +93,13 @@ module Admin
       relation = filter_by_receipt_status(relation)
       relation = filter_by_attention(relation)
       filter_by_expiration(relation)
+    end
+
+    def filter_by_run_key(relation)
+      values = filter_values(@run_key)
+      return relation if values.blank?
+
+      relation.where(run_key: values)
     end
 
     def filter_by_receipt(relation)
@@ -167,6 +177,7 @@ module Admin
 
       {
         run: run,
+        run_key: run.run_key,
         receipt: receipt,
         user: user,
         public_id: receipt.public_id,

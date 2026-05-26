@@ -18,6 +18,7 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
         expect(result.records.map { |record| record[:run] }).to start_with(newer, older)
         expect(result.records.first).to include(
           run: newer,
+          run_key: newer.run_key,
           receipt: newer.receipt,
           user: newer.receipt.user,
           public_id: newer.receipt.public_id,
@@ -29,6 +30,18 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
         expect(result.limit).to eq(50)
         expect(result.offset).to eq(0)
         expect(result.total_count).to eq(2)
+      end
+    end
+
+    it 'run_keyで絞り込める' do
+      target_run = create(:receipt_analysis_run, :succeeded)
+      create(:receipt_analysis_run, :succeeded)
+
+      result = described_class.call(run_key: target_run.run_key)
+
+      aggregate_failures do
+        expect(result.records.map { |record| record[:run] }).to eq([ target_run ])
+        expect(result.records.first[:run_key]).to eq(target_run.run_key)
       end
     end
 
