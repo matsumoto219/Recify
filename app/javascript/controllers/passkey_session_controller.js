@@ -11,9 +11,19 @@ export default class extends Controller {
     requestFailedMessage: String
   }
 
+  connect () {
+    this.conditionalAbortController = null
+    this.startConditionalLogin()
+  }
+
+  disconnect () {
+    this.abortConditionalLogin()
+  }
+
   async login (event) {
     event.preventDefault()
     this.hideError()
+    this.abortConditionalLogin()
 
     if (!window.PublicKeyCredential || !navigator.credentials?.get) {
       this.showError(this.unsupportedMessageValue)
@@ -34,19 +44,74 @@ export default class extends Controller {
         return
       }
 
-      const loginResponse = await this.fetchJson(this.createUrlValue, {
-        method: 'POST',
-        body: JSON.stringify({
-          credential: this.serializeCredential(credential)
-        })
-      })
-
-      window.location.assign(loginResponse.redirect_url || '/')
+      await this.submitCredential(credential)
     } catch (error) {
       this.showError(error.message || this.failureMessageValue)
     } finally {
       this.setLoading(false)
     }
+  }
+
+  async startConditionalLogin () {
+    if (!this.supportsConditionalMediation()) return
+
+    let abortController = null
+
+    try {
+      const available = await window.PublicKeyCredential.isConditionalMediationAvailable()
+      if (!available) return
+
+      this.abortConditionalLogin()
+      abortController = new AbortController()
+      this.conditionalAbortController = abortController
+
+      const optionsResponse = await this.fetchJson(this.optionsUrlValue, {
+        method: 'POST'
+      })
+      if (abortController.signal.aborted) return
+
+      const publicKey = this.decodeRequestOptions(optionsResponse.publicKey)
+      const credential = await navigator.credentials.get({
+        publicKey,
+        mediation: 'conditional',
+        signal: abortController.signal
+      })
+      if (!credential || abortController.signal.aborted) return
+
+      await this.submitCredential(credential)
+    } catch (_error) {
+      // Conditional UI should stay quiet; password login and the explicit passkey button remain available.
+    } finally {
+      if (abortController && this.conditionalAbortController === abortController) {
+        this.conditionalAbortController = null
+      }
+    }
+  }
+
+  supportsConditionalMediation () {
+    return Boolean(
+      window.PublicKeyCredential &&
+      typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function' &&
+      navigator.credentials?.get
+    )
+  }
+
+  abortConditionalLogin () {
+    if (!this.conditionalAbortController) return
+
+    this.conditionalAbortController.abort()
+    this.conditionalAbortController = null
+  }
+
+  async submitCredential (credential) {
+    const loginResponse = await this.fetchJson(this.createUrlValue, {
+      method: 'POST',
+      body: JSON.stringify({
+        credential: this.serializeCredential(credential)
+      })
+    })
+
+    window.location.assign(loginResponse.redirect_url || '/')
   }
 
   async fetchJson (url, options = {}) {

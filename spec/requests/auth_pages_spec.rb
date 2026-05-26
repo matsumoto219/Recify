@@ -61,6 +61,9 @@ RSpec.describe 'Auth pages', type: :request do
       guest_form = document.at_css("form[action='#{guest_sign_in_path}']")
       forgot_password_link = document.at_css("a[href='#{new_user_password_path}']")
       sign_up_link = document.at_css("a[href='#{new_user_registration_path}']")
+      email_input = document.at_css('input[name="user[email]"]')
+      passkey_controller = document.at_css('[data-controller~="passkey-session"]')
+      passkey_button = document.at_css('[data-action="click->passkey-session#login"]')
       noscript_banner = document.at_css('noscript')
 
       aggregate_failures do
@@ -73,9 +76,13 @@ RSpec.describe 'Auth pages', type: :request do
         expect(noscript_banner.text).to include(I18n.t('shared.noscript.body'))
         expect(response.body).to include(I18n.t('auth.sessions.fields.email'))
         expect(response.body).to include(I18n.t('auth.sessions.forgot_password'))
+        expect(response.body).to include(I18n.t('auth.sessions.passkey.button'))
         expect(response.body).to include(I18n.t('auth.sessions.guest.button'))
         expect(response.body).to include(I18n.t('shared.footer.terms'))
         expect(response.body).to include(I18n.t('shared.footer.privacy'))
+        expect(email_input['autocomplete']).to eq('username webauthn')
+        expect(passkey_controller).to be_present
+        expect(passkey_button).to be_present
         expect(guest_form).to be_present
         expect(forgot_password_link).to be_present
         expect(sign_up_link).to be_present

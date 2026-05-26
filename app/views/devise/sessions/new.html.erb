@@ -15,7 +15,15 @@
     </section>
 
     <%= render "shared/ui/layout/surface_card", title_id: "login-form-title" do %>
-      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+      <div
+        class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6"
+        data-controller="passkey-session"
+        data-passkey-session-options-url-value="<%= users_passkey_sessions_options_path %>"
+        data-passkey-session-create-url-value="<%= users_passkey_sessions_path %>"
+        data-passkey-session-unsupported-message-value="<%= t("auth.sessions.passkey.messages.unsupported") %>"
+        data-passkey-session-canceled-message-value="<%= t("auth.sessions.passkey.messages.canceled") %>"
+        data-passkey-session-failure-message-value="<%= t("auth.sessions.passkey.messages.failure") %>"
+        data-passkey-session-request-failed-message-value="<%= t("auth.sessions.passkey.messages.request_failed") %>">
         <h2 id="login-form-title" class="sr-only"><%= t("auth.sessions.form_title") %></h2>
 
         <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "space-y-6" }) do |f| %>
@@ -26,7 +34,7 @@
                 icon: "mail",
                 field_type: :email_field,
                 placeholder: t("auth.sessions.fields.email_placeholder"),
-                autocomplete: "email",
+                autocomplete: "username webauthn",
                 autofocus: true,
                 size: :prominent,
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
@@ -71,15 +79,7 @@
           </div>
         <% end %>
 
-        <section
-          class="space-y-3"
-          data-controller="passkey-session"
-          data-passkey-session-options-url-value="<%= users_passkey_sessions_options_path %>"
-          data-passkey-session-create-url-value="<%= users_passkey_sessions_path %>"
-          data-passkey-session-unsupported-message-value="<%= t("auth.sessions.passkey.messages.unsupported") %>"
-          data-passkey-session-canceled-message-value="<%= t("auth.sessions.passkey.messages.canceled") %>"
-          data-passkey-session-failure-message-value="<%= t("auth.sessions.passkey.messages.failure") %>"
-          data-passkey-session-request-failed-message-value="<%= t("auth.sessions.passkey.messages.request_failed") %>">
+        <section class="space-y-3">
           <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
           <%= render "shared/ui/actions/button",
                 label: t("auth.sessions.passkey.button"),

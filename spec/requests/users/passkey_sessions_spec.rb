@@ -182,13 +182,32 @@ RSpec.describe 'User passkey sessions', type: :request do
 
       get new_user_session_path
 
+      document = Nokogiri::HTML(response.body)
+      email_input = document.at_css('input[name="user[email]"]')
+      passkey_controller = document.at_css('[data-controller~="passkey-session"]')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.sessions.submit'))
         expect(response.body).to include(I18n.t('auth.sessions.passkey.button'))
+        expect(email_input['autocomplete']).to eq('username webauthn')
+        expect(passkey_controller).to be_present
         expect(response.body).not_to include(passkey.credential_id)
         expect(response.body).not_to include(passkey.public_key)
         expect(response.body).not_to include('challenge')
+      end
+    end
+  end
+
+  describe 'passkey session JavaScript' do
+    it 'conditional UIとAbortControllerを使う' do
+      source = Rails.root.join('app/javascript/controllers/passkey_session_controller.js').read
+
+      aggregate_failures do
+        expect(source).to include('isConditionalMediationAvailable')
+        expect(source).to include("mediation: 'conditional'")
+        expect(source).to include('AbortController')
+        expect(source).to include('disconnect ()')
       end
     end
   end
