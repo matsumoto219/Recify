@@ -105,7 +105,7 @@ module Analysis
     attr_reader :receipt, :parent_run, :actor, :retry_type, :reason
 
     def parent_finalize_decision
-      @parent_finalize_decision ||= ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+      @parent_finalize_decision ||= ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
         parent_run&.metadata.to_h["finalize_decision"]
       )
     end

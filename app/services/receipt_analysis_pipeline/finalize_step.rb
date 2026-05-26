@@ -107,7 +107,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_ai_result!(ocr_result, ai_result)
-      params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: ai_result)
+      params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
 
       # === AmountService integration ===
       amount_result = ReceiptAmountService.call(
@@ -174,7 +174,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_ocr_only_result!(ocr_result)
-      params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+      params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
 
       # === AmountService integration point (OCR only) ===
       amount_result = ReceiptAmountService.call(
@@ -231,7 +231,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
-      params = Analysis::ReceiptBuildParamsService.call(ocr_result: ocr_result, ai_result: nil)
+      params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
 
       # === AmountService integration point (fallback) ===
       amount_result = ReceiptAmountService.call(
@@ -290,7 +290,7 @@ class ReceiptAnalysisPipeline
     end
 
     def fail_receipt!(error_code, message = nil, attributes = {})
-      mapped = Analysis::ReceiptProcessingErrorMapper.map(error_code)
+      mapped = Analysis.processing_error_mapping(error_code)
       receipt_attributes = {
         status: "failed",
         processing_error_code: mapped[:error_code],
@@ -392,7 +392,7 @@ class ReceiptAnalysisPipeline
     end
 
     def amount_calculation_profile_snapshot(amount_result)
-      Amounts::CalculationProfileSnapshot.call(amount_result)
+      ReceiptAmountService.calculation_profile_snapshot(amount_result)
     end
 
     def normalize_items_attributes(items)
@@ -436,11 +436,11 @@ class ReceiptAnalysisPipeline
     end
 
     def normalize_amount(value)
-      Amounts::NumberParser.parse_amount_or_nil(value)
+      ReceiptAmountService.parse_amount_or_nil(value)
     end
 
     def normalize_quantity(value)
-      quantity = Amounts::NumberParser.parse_quantity(value, default: BigDecimal("1"))
+      quantity = ReceiptAmountService.parse_quantity(value, default: BigDecimal("1"))
 
       quantity.positive? ? quantity : BigDecimal("1")
     end
@@ -493,7 +493,7 @@ class ReceiptAnalysisPipeline
     end
 
     def detect_category(text)
-      Analysis::ReceiptFallbackPatterns.detect_category(text)
+      Analysis.detect_category(text)
     end
 
     def low_quality_ocr?(ocr_result, receipt_attributes:)

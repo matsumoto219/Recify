@@ -88,7 +88,7 @@ class User < ApplicationRecord
   end
 
   def storage_usage
-    Storage::UsageCalculator.new(self)
+    Storage.usage_calculator(self)
   end
 
   def storage_used_bytes

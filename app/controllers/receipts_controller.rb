@@ -324,7 +324,7 @@ class ReceiptsController < ApplicationController
     return if uploaded_receipt_image.present?
     return unless @receipt.image.attached?
 
-    Storage::AttachmentPurger.call(@receipt.image)
+    Storage.purge_attachment(@receipt.image)
   end
 
   def build_purchased_at(purchased_on, purchased_time)
@@ -410,7 +410,7 @@ class ReceiptsController < ApplicationController
     permitted["tax_amount"] = resolved[:tax]
     permitted["total_amount"] = resolved[:total]
     permitted["tax_rate"] = resolved[:tax_rate]
-    permitted["amount_calculation_profile"] = Amounts::CalculationProfileSnapshot.call(result)
+    permitted["amount_calculation_profile"] = ReceiptAmountService.calculation_profile_snapshot(result)
     # 明細の quantity / line_total を計算結果で上書き（複数行対応）
     apply_item_totals!(permitted, result.dig(:computed, :items))
     permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])

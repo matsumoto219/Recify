@@ -335,7 +335,7 @@ class Ocr::ResponseParser
     total_amount = fields.dig("Total", "valueCurrency", "amount") || fields.dig("Total", "valueNumber")
     line_total_amount = extract_total_amount_from_lines(lines)
     if total_amount.present?
-      parsed_total_amount = Amounts::NumberParser.parse_amount(total_amount)
+      parsed_total_amount = ReceiptAmountService.parse_amount(total_amount)
       return line_total_amount if settlement_amount?(parsed_total_amount, lines) && line_total_amount.present?
 
       return parsed_total_amount
@@ -349,7 +349,7 @@ class Ocr::ResponseParser
       next if settlement_line?(line)
       next unless line.match?(/合計|小計|total|税込|現計/i)
 
-      digits = line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }
+      digits = line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }
       digits.max if digits.any?
     end
 
@@ -359,7 +359,7 @@ class Ocr::ResponseParser
   def settlement_amount?(amount, lines)
     Array(lines).any? do |line|
       settlement_line?(line) &&
-        line.scan(/\d[\d,]*/).any? { |value| Amounts::NumberParser.parse_amount(value) == amount }
+        line.scan(/\d[\d,]*/).any? { |value| ReceiptAmountService.parse_amount(value) == amount }
     end
   end
 
@@ -405,7 +405,7 @@ class Ocr::ResponseParser
     amount_candidates = Array(lines).filter_map do |line|
       next unless line.match?(pattern)
 
-      digits = line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }
+      digits = line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }
       digits.max if digits.any?
     end
 
@@ -697,11 +697,11 @@ class Ocr::ResponseParser
   def extract_discount_amount_from_line(line)
     return 0 unless line.match?(/[-−▲]/)
 
-    line.scan(/\d[\d,]*/).map { |value| Amounts::NumberParser.parse_amount(value) }.max.to_i
+    line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }.max.to_i
   end
 
   def normalize_amount_for_discount(value)
-    Amounts::NumberParser.parse_amount(value)
+    ReceiptAmountService.parse_amount(value)
   end
 
   def build_error_result(error_code)

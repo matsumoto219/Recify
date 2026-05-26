@@ -1,6 +1,24 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptOcrService do
+  describe '.error_result' do
+    it 'OCR失敗結果を親入口から組み立てる' do
+      result = described_class.error_result(
+        error_code: 'ocr_disabled',
+        provider: 'azure_document_intelligence',
+        model_id: nil
+      )
+
+      aggregate_failures do
+        expect(result[:success]).to eq(false)
+        expect(result[:error_code]).to eq('ocr_disabled')
+        expect(result[:raw_text]).to eq('')
+        expect(result[:lines]).to eq([])
+        expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
+      end
+    end
+  end
+
   describe '.call' do
     let(:image) { instance_double('AttachedImage', attached?: true) }
     let(:provider) { 'azure_document_intelligence' }

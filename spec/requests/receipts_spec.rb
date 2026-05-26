@@ -78,7 +78,7 @@ RSpec.describe 'Receipts', type: :request do
 
   before do
     sign_in user
-    allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_return({ error_category: 'ocr_error' })
+    allow(Analysis).to receive(:processing_error_mapping).and_return({ error_category: 'ocr_error' })
   end
 
   describe 'GET /receipts' do
@@ -1082,7 +1082,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'upload後のjob実行でOCR失敗ならfailedになり一覧/詳細/編集で導線を表示する' do
-      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
@@ -1143,7 +1143,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'upload後のjob実行でOCR成功かつAI失敗ならOCR由来データを残してreview_needed導線を表示する' do
-      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
@@ -1202,7 +1202,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'upload後のjob実行でAI downならAI呼び出しをskipしてOCR由来データを残す' do
-      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
@@ -2112,7 +2112,7 @@ RSpec.describe 'Receipts', type: :request do
       # Prevent image_tag error in view
       allow_any_instance_of(ActionView::Base).to receive(:image_tag).and_return('')
       # Also stub error mapper locally for safety
-      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_return({ error_category: 'ocr_error' })
+      allow(Analysis).to receive(:processing_error_mapping).and_return({ error_category: 'ocr_error' })
 
       expect do
         post receipts_path, params: {
@@ -2719,7 +2719,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'system系reasonはreview cardに表示しない' do
-      allow(Analysis::ReceiptProcessingErrorMapper).to receive(:map).and_call_original
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
 
       receipt.update!(
         status: 'completed',

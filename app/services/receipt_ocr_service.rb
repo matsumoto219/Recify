@@ -17,6 +17,14 @@ class ReceiptOcrService
     new(image: image, provider: provider).call
   end
 
+  def self.error_result(error_code:, provider: "azure_document_intelligence", model_id: nil)
+    Ocr::ResultTemplate.error_result(
+      error_code: error_code,
+      provider: provider,
+      model_id: model_id
+    )
+  end
+
   def initialize(image:, provider: "azure_document_intelligence")
     @image = image
     @provider = provider
@@ -91,7 +99,7 @@ class ReceiptOcrService
   end
 
   def build_error_result(error_code)
-    Ocr::ResultTemplate.error_result(
+    self.class.error_result(
       error_code: error_code,
       provider: provider,
       model_id: nil

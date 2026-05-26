@@ -15,6 +15,62 @@ RSpec.describe ReceiptAmountService do
     described_class.call(**kwargs)
   end
 
+  describe '.calculation_profile_snapshot' do
+    it 'amount calculation resultから保存用snapshotを返す' do
+      result = {
+        context: :manual,
+        rounding_mode: { tax: :floor, discount: :round },
+        computed: { subtotal: 100, tax: 10, total: 110 },
+        resolved: { subtotal: 100, tax: 10, total: 110 },
+        mismatch_codes: [ 'TOTAL_MISMATCH' ],
+        blocking_mismatch_codes: [ 'TOTAL_MISMATCH' ],
+        warning_mismatch_codes: []
+      }
+
+      snapshot = described_class.calculation_profile_snapshot(result)
+
+      aggregate_failures do
+        expect(snapshot[:context]).to eq('manual')
+        expect(snapshot[:computed]).to eq(
+          total_amount: 110,
+          subtotal_amount: 100,
+          tax_amount: 10
+        )
+        expect(snapshot[:mismatch_codes]).to eq([ 'TOTAL_MISMATCH' ])
+      end
+    end
+  end
+
+  describe '.parse_amount_or_nil' do
+    it '金額文字列をBigDecimalへ正規化する' do
+      expect(described_class.parse_amount_or_nil('1,234円')).to eq(BigDecimal('1234'))
+    end
+
+    it '空文字はnilを返す' do
+      expect(described_class.parse_amount_or_nil('')).to be_nil
+    end
+  end
+
+  describe '.parse_amount' do
+    it '金額文字列をIntegerへ正規化する' do
+      expect(described_class.parse_amount('1,234円')).to eq(1234)
+    end
+
+    it '不正値はdefaultを返す' do
+      expect(described_class.parse_amount('不明', default: 0)).to eq(0)
+    end
+  end
+
+  describe '.parse_quantity' do
+    it '数量文字列をBigDecimalへ正規化する' do
+      expect(described_class.parse_quantity('2.5')).to eq(BigDecimal('2.5'))
+    end
+
+    it '不正値はdefaultを返す' do
+      expect(described_class.parse_quantity('不明', default: BigDecimal('1'))).to eq(BigDecimal('1'))
+    end
+  end
+
   describe '.call' do
     it 'defaults rounding_mode to floor' do
       result = call_service(

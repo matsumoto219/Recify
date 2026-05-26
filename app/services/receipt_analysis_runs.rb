@@ -120,7 +120,7 @@ module ReceiptAnalysisRuns
     private
 
     def sanitized_finalize_decision_snapshot(parent_run)
-      decision = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+      decision = ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
         parent_run.metadata.to_h["finalize_decision"]
       )
       return {} unless decision

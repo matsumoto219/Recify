@@ -428,7 +428,7 @@ module Analysis
     end
 
     def parse_amount(value)
-      Amounts::NumberParser.parse_amount_or_nil(value)
+      ReceiptAmountService.parse_amount_or_nil(value)
     end
   end
 end

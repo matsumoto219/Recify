@@ -159,7 +159,7 @@ RSpec.describe 'External services status', type: :request do
     end
 
     it 'production相当ではdebug routeを実行できない' do
-      allow(ExternalServices::DebugStateSwitcher).to receive(:available?).and_return(false)
+      allow(ExternalServices).to receive(:debug_switch_available?).and_return(false)
 
       post debug_external_service_state_path(service: 'ocr', state: 'down'), as: :json
 

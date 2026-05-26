@@ -667,7 +667,7 @@ RSpec.describe ReceiptAnalysisPipeline do
     end
   end
 
-  describe 'FinalizeDecision.from_snapshot' do
+  describe '.finalize_decision_from_snapshot' do
     it '保存済みsnapshotからdecisionを復元しocr/ai resultは復元しない' do
       snapshot = {
         schema_version: 'receipt_analysis_run_finalize_decision_v1',
@@ -680,7 +680,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ai_result: { messages: [ '保存しないmessages' ] }
       }
 
-      decision = ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(snapshot)
+      decision = described_class.finalize_decision_from_snapshot(snapshot)
 
       aggregate_failures do
         expect(decision.finalize_strategy).to eq('fail_receipt')
@@ -695,15 +695,15 @@ RSpec.describe ReceiptAnalysisPipeline do
 
     it '空または不正なsnapshotはnilを返す' do
       aggregate_failures do
-        expect(ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(nil)).to be_nil
+        expect(described_class.finalize_decision_from_snapshot(nil)).to be_nil
         expect(
-          ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+          described_class.finalize_decision_from_snapshot(
             schema_version: 'old',
             strategy: 'ai_success'
           )
         ).to be_nil
         expect(
-          ReceiptAnalysisPipeline::FinalizeDecision.from_snapshot(
+          described_class.finalize_decision_from_snapshot(
             schema_version: 'receipt_analysis_run_finalize_decision_v1',
             strategy: 'unknown'
           )

@@ -554,7 +554,7 @@ class Receipt < ApplicationRecord
   def error_category
     return nil if processing_error_code.blank?
 
-    Analysis::ReceiptProcessingErrorMapper.map(processing_error_code)[:error_category]&.to_sym
+    Analysis.processing_error_category(processing_error_code)
   end
 
   def has_processing_error?

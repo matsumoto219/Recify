@@ -89,7 +89,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
         end
 
         resource_updated = resource.update_without_password(profile_params)
-        Storage::AttachmentPurger.call(resource.avatar) if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present?
+        Storage.purge_attachment(resource.avatar) if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present?
         resource_updated
       else
         update_resource(resource, account_update_params)

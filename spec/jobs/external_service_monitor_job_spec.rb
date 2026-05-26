@@ -14,8 +14,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
   before do
     allow(Rails).to receive(:cache).and_return(cache_store)
     Rails.cache.clear
-    allow(Ocr::AvailabilityChecker).to receive(:call).and_return(true)
-    allow(Ai::AvailabilityChecker).to receive(:call).and_return(true)
+    allow(ExternalServices).to receive(:check_available?).and_return(true)
   end
 
   after do
@@ -27,8 +26,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     described_class.perform_now
 
     aggregate_failures do
-      expect(Ocr::AvailabilityChecker).not_to have_received(:call)
-      expect(Ai::AvailabilityChecker).not_to have_received(:call)
+      expect(ExternalServices).not_to have_received(:check_available?)
     end
   end
 
@@ -40,8 +38,8 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     end
 
     aggregate_failures do
-      expect(Ocr::AvailabilityChecker).to have_received(:call).once
-      expect(Ai::AvailabilityChecker).not_to have_received(:call)
+      expect(ExternalServices).to have_received(:check_available?).with(:ocr).once
+      expect(ExternalServices).not_to have_received(:check_available?).with(:ai)
     end
   end
 
@@ -92,7 +90,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
   end
 
   it 'checker failure では state を維持し next_check_at を更新する' do
-    allow(Ocr::AvailabilityChecker).to receive(:call).and_return(false)
+    allow(ExternalServices).to receive(:check_available?).with(:ocr).and_return(false)
     make_degraded(:ocr)
 
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
@@ -111,7 +109,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
   end
 
   it 'checker例外も failure 扱いにする' do
-    allow(Ocr::AvailabilityChecker).to receive(:call).and_raise(StandardError, 'boom')
+    allow(ExternalServices).to receive(:check_available?).with(:ocr).and_raise(StandardError, 'boom')
     make_degraded(:ocr)
 
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do

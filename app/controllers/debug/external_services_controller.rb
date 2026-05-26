@@ -4,7 +4,7 @@ module Debug
     before_action :ensure_debug_available!
 
     def update
-      result = ExternalServices::DebugStateSwitcher.call(
+      result = ExternalServices.switch_debug_state(
         service: params[:service],
         state: params[:state],
         actor: current_user,
@@ -21,14 +21,14 @@ module Debug
         format.json { render json: { ok: false, error: e.message }, status: :unprocessable_entity }
         format.html { redirect_back fallback_location: new_upload_receipts_path, alert: e.message }
       end
-    rescue ExternalServices::DebugStateSwitcher::NotAvailableError
+    rescue ExternalServices::DebugSwitchNotAvailableError
       head :not_found
     end
 
     private
 
     def ensure_debug_available!
-      head :not_found unless ExternalServices::DebugStateSwitcher.available?
+      head :not_found unless ExternalServices.debug_switch_available?
     end
 
     def notice_message(result)

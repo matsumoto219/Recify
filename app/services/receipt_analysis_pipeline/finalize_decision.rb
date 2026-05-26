@@ -9,8 +9,8 @@ class ReceiptAnalysisPipeline
     :metadata,
     keyword_init: true
   ) do
-    SCHEMA_VERSION = ReceiptAnalysisRuns::SnapshotBuilder::FINALIZE_DECISION_SCHEMA_VERSION
-    STRATEGIES = ReceiptAnalysisRuns::SnapshotBuilder::FINALIZE_STRATEGIES
+    SCHEMA_VERSION = ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
+    STRATEGIES = ReceiptAnalysisPipeline::FINALIZE_STRATEGIES
 
     def self.from_snapshot(snapshot)
       attributes = normalized_snapshot(snapshot)

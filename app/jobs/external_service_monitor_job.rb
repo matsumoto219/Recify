@@ -1,11 +1,6 @@
 class ExternalServiceMonitorJob < ApplicationJob
   queue_as :default
 
-  CHECKERS = {
-    ocr: Ocr::AvailabilityChecker,
-    ai: Ai::AvailabilityChecker
-  }.freeze
-
   DEFAULT_ERROR_CODES = {
     ocr: "external_service_unavailable",
     ai: "ai_api_error"
@@ -20,7 +15,7 @@ class ExternalServiceMonitorJob < ApplicationJob
   private
 
   def monitor_service(service)
-    if CHECKERS.fetch(service).call
+    if ExternalServices.check_available?(service)
       ExternalServiceStatus.mark_success!(service)
     else
       ExternalServiceStatus.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))

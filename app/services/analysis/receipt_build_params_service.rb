@@ -421,7 +421,7 @@ module Analysis
         amount_text = rightmost_fallback_amount_candidate(line)
         return nil if amount_text.blank?
 
-        Amounts::NumberParser.parse_amount_or_nil(amount_text)
+        ReceiptAmountService.parse_amount_or_nil(amount_text)
       end
 
       def fallback_non_item_line?(line)
@@ -502,7 +502,7 @@ module Analysis
       end
 
       def normalize_amount(value)
-        Amounts::NumberParser.parse_amount_or_nil(value)
+        ReceiptAmountService.parse_amount_or_nil(value)
       end
 
       def normalize_rate(value)
@@ -522,7 +522,7 @@ module Analysis
       end
 
       def normalize_quantity(value)
-        quantity = Amounts::NumberParser.parse_quantity(value, default: BigDecimal("1"))
+        quantity = ReceiptAmountService.parse_quantity(value, default: BigDecimal("1"))
 
         quantity.positive? ? quantity : BigDecimal("1")
       end

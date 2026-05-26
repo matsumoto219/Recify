@@ -41,6 +41,26 @@ class ReceiptAmountService
     ).call
   end
 
+  def self.calculation_profile_snapshot(result, context: nil, rounding_mode: nil)
+    Amounts::CalculationProfileSnapshot.call(
+      result,
+      context: context,
+      rounding_mode: rounding_mode
+    )
+  end
+
+  def self.parse_amount_or_nil(value)
+    Amounts::NumberParser.parse_amount_or_nil(value)
+  end
+
+  def self.parse_amount(value, default: 0)
+    Amounts::NumberParser.parse_amount(value, default: default)
+  end
+
+  def self.parse_quantity(value, default: BigDecimal("1"))
+    Amounts::NumberParser.parse_quantity(value, default: default)
+  end
+
   def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }

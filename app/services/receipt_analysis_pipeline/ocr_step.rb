@@ -14,7 +14,7 @@ class ReceiptAnalysisPipeline
         if ocr_enabled?
           ReceiptOcrService.call(receipt.image)
         else
-          Ocr::ResultTemplate.error_result(
+          ReceiptOcrService.error_result(
             error_code: "ocr_disabled",
             provider: "azure_document_intelligence"
           )

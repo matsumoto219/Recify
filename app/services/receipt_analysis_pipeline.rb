@@ -1,5 +1,7 @@
 class ReceiptAnalysisPipeline
   LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
+  FINALIZE_DECISION_SCHEMA_VERSION = "receipt_analysis_run_finalize_decision_v1"
+  FINALIZE_STRATEGIES = %w[fail_receipt ocr_only ai_fallback ai_success].freeze
 
   class AnalysisError < StandardError
     attr_reader :error_code
@@ -28,6 +30,10 @@ class ReceiptAnalysisPipeline
 
     def finalize(receipt:, decision:, run: nil)
       FinalizeStep.call(receipt: receipt, decision: decision, run: run)
+    end
+
+    def finalize_decision_from_snapshot(snapshot)
+      FinalizeDecision.from_snapshot(snapshot)
     end
   end
 
@@ -276,7 +282,7 @@ class ReceiptAnalysisPipeline
   end
 
   def finalize_decision_from_run
-    FinalizeDecision.from_snapshot(run.metadata.to_h["finalize_decision"])
+    self.class.finalize_decision_from_snapshot(run.metadata.to_h["finalize_decision"])
   end
 
   def ocr_result_from_snapshot
