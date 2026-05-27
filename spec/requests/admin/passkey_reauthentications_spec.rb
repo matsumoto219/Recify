@@ -210,6 +210,8 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('ok')).to be(false)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.admin.passkey_reauthentication.messages.failure'))
+        expect(response.parsed_body.fetch('error')).not_to eq('Passkey reauthentication failed.')
         expect(session[:admin_passkey_reauthenticated_at]).to be_blank
         expect(session[:admin_passkey_reauthentication_method]).to be_blank
         expect(session[:admin_passkey_reauthentication_challenge]).to be_blank

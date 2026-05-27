@@ -647,6 +647,31 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
+    it 'TOTP/recovery codeのreauthentication contextでは高リスク操作を許可しない' do
+      %w[totp recovery_code].each do |method|
+        result = described_class.call(
+          operation: 'lock_user',
+          user: target_user,
+          actor: actor,
+          reason: 'support request',
+          request: request,
+          reauthentication: { method: method, reauthenticated_at: Time.current },
+          confirmation: 'LOCK USER'
+        )
+
+        aggregate_failures method do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('reauthentication_required')
+          expect(target_user.reload.locked_at).to be_nil
+          expect(AuditLog.last).to have_attributes(
+            action: 'admin.users.lock',
+            outcome: 'failed',
+            error_code: 'reauthentication_required'
+          )
+        end
+      end
+    end
+
     it 'unknown operationを拒否する' do
       result = described_class.call(
         operation: 'delete_everything',

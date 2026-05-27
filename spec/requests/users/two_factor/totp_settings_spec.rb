@@ -30,10 +30,14 @@ RSpec.describe 'User TOTP settings', type: :request do
       expect(response).to redirect_to(settings_security_path)
     end
 
-    it 'QRと設定キーを表示し、pending secretはDBへ保存しない' do
+    it '手入力用の設定キーはsetup画面限定で表示し、no-storeかつDB/AuditLogへ保存しない' do
       sign_in user
 
-      secret = start_totp_setup!
+      expect do
+        get new_settings_security_totp_path
+      end.not_to change(AuditLog, :count)
+      expect(response).to have_http_status(:success)
+      secret = session[:totp_setup].fetch('secret')
 
       aggregate_failures do
         expect(response.body).to include('<svg')
@@ -43,6 +47,10 @@ RSpec.describe 'User TOTP settings', type: :request do
         expect(user.reload.totp_credential).to be_blank
         expect(response.headers['Cache-Control']).to include('no-store')
       end
+
+      get settings_security_path
+
+      expect(response.body).not_to include(secret)
     end
   end
 

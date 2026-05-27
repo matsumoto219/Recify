@@ -79,6 +79,10 @@ ja:
         messages:
           success: ログインしました。
           failure: 回復コードが一致しませんでした。もう一度入力してください。
+    admin:
+      passkey_reauthentication:
+        messages:
+          failure: パスキー再認証に失敗しました。もう一度お試しください。
     registrations:
       new:
         title: 新規登録

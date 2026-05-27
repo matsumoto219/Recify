@@ -3,8 +3,8 @@ require 'rails_helper'
 RSpec.describe 'User TOTP step-up', type: :request do
   include ActiveSupport::Testing::TimeHelpers
 
-  def create_confirmed_totp(user)
-    create(:totp_credential, user: user, confirmed_at: Time.current)
+  def create_confirmed_totp(user, secret: nil)
+    create(:totp_credential, user: user, totp_secret: secret || ROTP::Base32.random, confirmed_at: Time.current)
   end
 
   def totp_code(credential)
@@ -59,6 +59,32 @@ RSpec.describe 'User TOTP step-up', type: :request do
   end
 
   describe 'POST /users/two_factor/totp' do
+    it 'pending sessionがない場合はログイン不可にする' do
+      post users_two_factor_totp_create_path, params: { code: '123456' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+      end
+    end
+
+    it 'allowed_methodsにTOTPがない場合は拒否する' do
+      user = create(:user)
+      TwoFactor.generate_recovery_codes_for(user: user)
+
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+      expect(response).to redirect_to(users_two_factor_recovery_code_path)
+
+      post users_two_factor_totp_create_path, params: { code: '123456' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
     it 'TOTP成功でログインし、pendingを削除してTrackableを更新する' do
       user = create(:user)
       credential = create_confirmed_totp(user)
@@ -86,7 +112,9 @@ RSpec.describe 'User TOTP step-up', type: :request do
       credential = create_confirmed_totp(user)
       start_pending_totp(user)
 
-      post users_two_factor_totp_create_path, params: { code: '000000' }
+      expect do
+        post users_two_factor_totp_create_path, params: { code: '000000' }
+      end.not_to change { user.reload.failed_attempts }
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
@@ -118,6 +146,54 @@ RSpec.describe 'User TOTP step-up', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
         expect(session[:pending_second_factor]).to be_blank
+      end
+    end
+
+    it '他ユーザーのTOTP codeを拒否する' do
+      user = create(:user)
+      other_user = create(:user)
+      credential = create_confirmed_totp(user, secret: 'JBSWY3DPEHPK3PXP')
+      other_credential = create_confirmed_totp(other_user, secret: 'JBSWY3DPEHPK3PXQ')
+      start_pending_totp(user)
+
+      post users_two_factor_totp_create_path, params: { code: totp_code(other_credential) }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(session[:pending_second_factor]).to be_present
+        expect(user.reload.sign_in_count).to eq(0)
+        expect(credential.reload.last_used_at).to be_blank
+        expect(other_credential.reload.last_used_at).to be_blank
+      end
+    end
+
+    it 'pending後にlocked userになった場合はstep-upできない' do
+      user = create(:user)
+      credential = create_confirmed_totp(user)
+      start_pending_totp(user)
+      user.lock_access!(send_instructions: false)
+
+      post users_two_factor_totp_create_path, params: { code: totp_code(credential) }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
+    it 'pending後にunconfirmed userになった場合はstep-upできない' do
+      user = create(:user)
+      credential = create_confirmed_totp(user)
+      start_pending_totp(user)
+      user.update!(confirmed_at: nil)
+
+      post users_two_factor_totp_create_path, params: { code: totp_code(credential) }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
       end
     end
   end

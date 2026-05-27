@@ -5,12 +5,13 @@ RSpec.describe 'User recovery codes', type: :request do
 
   let(:user) { create(:user) }
 
-  def start_pending_recovery_code(user)
+  def start_pending_recovery_code(user, remember_me: '0')
     post user_session_path,
          params: {
            user: {
              email: user.email,
-             password: 'password'
+             password: 'password',
+             remember_me: remember_me
            }
          }
 
@@ -40,6 +41,31 @@ RSpec.describe 'User recovery codes', type: :request do
   end
 
   describe 'POST /users/two_factor/recovery_code' do
+    it 'pending sessionがない場合はログイン不可にする' do
+      post users_two_factor_recovery_code_create_path, params: { code: 'ABCD-EFGH-IJKL-MNOP-QRST' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+      end
+    end
+
+    it 'allowed_methodsにrecovery codeがない場合は拒否する' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+      expect(response).to redirect_to(users_two_factor_totp_path)
+
+      post users_two_factor_recovery_code_create_path, params: { code: 'ABCD-EFGH-IJKL-MNOP-QRST' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
     it 'recovery code成功でログインし、使用済みにして再利用不可にする' do
       code = TwoFactor.generate_recovery_codes_for(user: user).first
       start_pending_recovery_code(user)
@@ -55,6 +81,8 @@ RSpec.describe 'User recovery codes', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(root_path)
         expect(session[:pending_second_factor]).to be_blank
+        expect(session[:user_session_version]).to eq(user.session_version)
+        expect(session[:user_session_uid]).to be_present
         expect(used_code).to be_used
         expect(user_session.sign_in_method).to eq('password_recovery_code_step_up')
       end
@@ -73,7 +101,9 @@ RSpec.describe 'User recovery codes', type: :request do
       TwoFactor.generate_recovery_codes_for(user: user)
       start_pending_recovery_code(user)
 
-      post users_two_factor_recovery_code_create_path, params: { code: 'WRONG-CODE' }
+      expect do
+        post users_two_factor_recovery_code_create_path, params: { code: 'WRONG-CODE' }
+      end.not_to change { user.reload.failed_attempts }
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
@@ -93,6 +123,32 @@ RSpec.describe 'User recovery codes', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
         expect(session[:pending_second_factor]).to be_blank
+      end
+    end
+
+    it 'remember_meをstep-up成功後に反映する' do
+      code = TwoFactor.generate_recovery_codes_for(user: user).first
+      start_pending_recovery_code(user, remember_me: '1')
+
+      expect do
+        post users_two_factor_recovery_code_create_path, params: { code: code }
+      end.to change { user.reload.remember_created_at }.from(nil)
+    end
+
+    it '他ユーザーのrecovery codeを拒否する' do
+      other_user = create(:user)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      other_code = TwoFactor.generate_recovery_codes_for(user: other_user).first
+      other_recovery_code = other_user.recovery_codes.find_by(code_digest: TwoFactor.recovery_code_digest(other_code))
+      start_pending_recovery_code(user)
+
+      post users_two_factor_recovery_code_create_path, params: { code: other_code }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(session[:pending_second_factor]).to be_present
+        expect(user.reload.sign_in_count).to eq(0)
+        expect(other_recovery_code.reload.used_at).to be_blank
       end
     end
   end

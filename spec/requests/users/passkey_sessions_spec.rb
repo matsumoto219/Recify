@@ -273,5 +273,23 @@ RSpec.describe 'User passkey sessions', type: :request do
         expect(source).to include('disconnect ()')
       end
     end
+
+    it 'ブラウザ例外messageを画面へ直接表示しない' do
+      session_source = Rails.root.join('app/javascript/controllers/passkey_session_controller.js').read
+      registration_source = Rails.root.join('app/javascript/controllers/passkey_controller.js').read
+
+      [ session_source, registration_source ].each do |source|
+        aggregate_failures do
+          expect(source).to include('userFacingErrorMessage')
+          expect(source).to include('NotAllowedError')
+          expect(source).to include('AbortError')
+          expect(source).to include('SecurityError')
+          expect(source).to include('InvalidStateError')
+          expect(source).not_to include('error.message')
+          expect(source).not_to include('The request is not allowed by the user agent')
+          expect(source).to include('this.showError(this.userFacingErrorMessage(error))')
+        end
+      end
+    end
   end
 end

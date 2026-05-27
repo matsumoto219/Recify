@@ -107,6 +107,37 @@ RSpec.describe 'User passkey step-up', type: :request do
   end
 
   describe 'POST /users/two_factor/passkey' do
+    it 'pending sessionがない場合はログイン不可にする' do
+      post users_two_factor_passkey_create_path,
+           params: { credential: { id: 'missing-pending' } },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.messages.expired'))
+      end
+    end
+
+    it 'allowed_methodsにpasskeyがない場合は拒否する' do
+      user = create(:user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+      expect(response).to redirect_to(users_two_factor_totp_path)
+
+      post users_two_factor_passkey_create_path,
+           params: { credential: { id: 'not-allowed' } },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.messages.expired'))
+        expect(session[:pending_second_factor]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
     it 'step-up成功でログインし、pending/challengeを削除してTrackableを更新する' do
       user = create(:user)
       passkey = create_passkey_with_fake_client(user)
@@ -213,6 +244,30 @@ RSpec.describe 'User passkey step-up', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(users_two_factor_totp_path)
         expect(response.body).to include(users_two_factor_recovery_code_path)
+      end
+    end
+
+    it 'passkey/TOTP/recovery codeすべて有効な場合は各画面に許可されたfallbackだけを表示する' do
+      user = create(:user)
+      create_passkey_with_fake_client(user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      start_pending_step_up(user)
+
+      get users_two_factor_passkey_path
+      passkey_body = response.body
+      get users_two_factor_totp_path
+      totp_body = response.body
+      get users_two_factor_recovery_code_path
+      recovery_body = response.body
+
+      aggregate_failures do
+        expect(passkey_body).to include(users_two_factor_totp_path)
+        expect(passkey_body).to include(users_two_factor_recovery_code_path)
+        expect(totp_body).to include(users_two_factor_passkey_path)
+        expect(totp_body).to include(users_two_factor_recovery_code_path)
+        expect(recovery_body).to include(users_two_factor_passkey_path)
+        expect(recovery_body).to include(users_two_factor_totp_path)
       end
     end
   end

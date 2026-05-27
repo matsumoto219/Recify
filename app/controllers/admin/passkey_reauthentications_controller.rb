@@ -113,7 +113,7 @@ class Admin::PasskeyReauthenticationsController < Admin::BaseController
 
     render json: {
       ok: false,
-      error: "Passkey reauthentication failed."
+      error: t("auth.admin.passkey_reauthentication.messages.failure")
     }, status: status
   end
 

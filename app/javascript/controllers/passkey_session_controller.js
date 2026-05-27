@@ -1,5 +1,12 @@
 import { Controller } from '@hotwired/stimulus'
 
+class PasskeyRequestError extends Error {
+  constructor (displayMessage) {
+    super('Passkey request failed')
+    this.displayMessage = displayMessage
+  }
+}
+
 export default class extends Controller {
   static targets = ['button', 'error']
   static values = {
@@ -41,13 +48,13 @@ export default class extends Controller {
       const credential = await navigator.credentials.get({ publicKey })
 
       if (!credential) {
-        this.showError(this.canceledMessageValue)
+        this.showError(this.failureMessageValue)
         return
       }
 
       await this.submitCredential(credential)
     } catch (error) {
-      this.showError(error.message || this.failureMessageValue)
+      this.showError(this.userFacingErrorMessage(error))
     } finally {
       this.setLoading(false)
     }
@@ -129,10 +136,26 @@ export default class extends Controller {
     const payload = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(payload.error || this.requestFailedMessageValue)
+      throw new PasskeyRequestError(payload.error || this.requestFailedMessageValue)
     }
 
     return payload
+  }
+
+  userFacingErrorMessage (error) {
+    if (error instanceof PasskeyRequestError) {
+      return error.displayMessage || this.requestFailedMessageValue
+    }
+
+    if (this.browserCredentialErrorNames().includes(error?.name)) {
+      return this.failureMessageValue
+    }
+
+    return this.failureMessageValue
+  }
+
+  browserCredentialErrorNames () {
+    return ['NotAllowedError', 'AbortError', 'SecurityError', 'InvalidStateError']
   }
 
   decodeRequestOptions (publicKey) {
