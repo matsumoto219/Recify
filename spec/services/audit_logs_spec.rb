@@ -202,5 +202,69 @@ RSpec.describe AuditLogs do
         expect(log.attributes.to_json).not_to include('session-id-secret', 'session-secret', 'cookie-secret', 'remember-secret')
       end
     end
+
+    it 'TOTP secret / code / recovery code materialを保存しない' do
+      log = described_class.record_admin_action!(
+        actor: create(:user, :admin),
+        action: 'user.two_factor.totp.enabled',
+        outcome: 'succeeded',
+        metadata: {
+          id: 'ordinary-id',
+          recovery_codes_count: 10,
+          backup_codes_count: 10,
+          totp: '123456',
+          otp: '654321',
+          otp_attempt: '123456',
+          totp_code: '123456',
+          totp_secret: 'totp-secret',
+          encrypted_totp_secret: 'encrypted-totp-secret',
+          recovery_code: 'recovery-secret',
+          recovery_codes: [ 'recovery-secret-1', 'recovery-secret-2' ],
+          backup_code: 'backup-secret',
+          backup_codes: [ 'backup-secret' ],
+          provisioning_uri: 'otpauth://totp/Recify',
+          otpauth: 'otpauth://totp/Recify',
+          two_factor: { enabled: true, totp_secret: 'nested-totp-secret' },
+          second_factor: { recovery_code: 'nested-recovery-secret' },
+          one_time_password: '999999',
+          nested: {
+            safe: 'visible',
+            account_recovery_code: 'nested-fragment-secret'
+          }
+        },
+        before_state: {
+          totp_enabled: false,
+          recovery_codes_count: 0,
+          id: 'safe-id'
+        },
+        after_state: {
+          totp_enabled: true,
+          recovery_codes_count: 10
+        }
+      )
+
+      aggregate_failures do
+        expect(log.metadata).to eq(
+          'id' => 'ordinary-id',
+          'recovery_codes_count' => 10,
+          'backup_codes_count' => 10,
+          'nested' => { 'safe' => 'visible' }
+        )
+        expect(log.before_state).to eq('recovery_codes_count' => 0, 'id' => 'safe-id')
+        expect(log.after_state).to eq('recovery_codes_count' => 10)
+        expect(log.attributes.to_json).not_to include(
+          '123456',
+          '654321',
+          'totp-secret',
+          'encrypted-totp-secret',
+          'recovery-secret',
+          'backup-secret',
+          'otpauth://totp/Recify',
+          'nested-totp-secret',
+          'nested-recovery-secret',
+          'nested-fragment-secret'
+        )
+      end
+    end
   end
 end

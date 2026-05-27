@@ -7,5 +7,7 @@ Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   :credential, :rawId, :raw_id, :attestationObject, :attestation_object, :clientDataJSON, :client_data_json,
   :authenticatorData, :authenticator_data, :publicKey, :public_key, :credential_id, :challenge, :signature,
-  :userHandle, :user_handle
+  :userHandle, :user_handle, :totp, :otp_attempt, :totp_code, :totp_secret, :encrypted_totp_secret,
+  :recovery_code, :recovery_codes, :backup_code, :backup_codes, :provisioning_uri, :otpauth,
+  :two_factor, :second_factor, :one_time_password
 ]

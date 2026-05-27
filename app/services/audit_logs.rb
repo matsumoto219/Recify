@@ -7,24 +7,39 @@ module AuditLogs
     attestation_object
     authenticator_data
     authorization
+    backup_code
+    backup_codes
     blob_key
     challenge
     client_data_json
     cookie
     credential_id
+    encrypted_totp_secret
     messages
+    one_time_password
+    otp
+    otp_attempt
+    otpauth
     password
     prompt
+    provisioning_uri
     public_key
     raw_id
     raw_response
     raw_text
+    recovery_code
+    recovery_codes
     response_body
     secret
+    second_factor
     session
     signature
     signed_id
     token
+    totp
+    totp_code
+    totp_secret
+    two_factor
     user_handle
   ].freeze
 
@@ -33,27 +48,39 @@ module AuditLogs
     attestation_object
     authenticator_data
     authorization
+    backup_code
     blob_key
     challenge
     client_data_json
     cookie
     credential_id
+    encrypted_totp_secret
+    one_time_password
+    otp_attempt
+    otpauth
     password
     prompt
+    provisioning_uri
     public_key
     raw_id
     raw_response
     raw_text
+    recovery_code
     response_body
     secret
+    second_factor
     session
     signature
     signed_id
     token
+    totp
+    two_factor
     user_handle
   ].freeze
 
   ALLOWED_SENSITIVE_FRAGMENT_KEYS = %w[
+    backup_codes_count
+    recovery_codes_count
     revoked_sessions_count
     sample_session_ids
     session_version
