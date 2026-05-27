@@ -129,8 +129,8 @@ ja:
           copied: コピーしました。
           failed: コピーできませんでした。
         two_factor:
-          title: 認証アプリ
-          subtitle: 確認コードを使って、セキュリティを強化できます。
+          title: 2要素認証 (2FA)
+          subtitle: 2要素認証で、ログイン時のセキュリティを強化できます。
           action: 有効化する
           empty: 認証アプリはまだ設定されていません。
           enabled_at: "有効化: %{datetime}"
@@ -158,7 +158,7 @@ ja:
             setup_expired: 認証アプリ設定の有効期限が切れました。もう一度お試しください。
             setup_failed: 確認コードが一致しませんでした。もう一度入力してください。
             not_enabled: 認証アプリを先に有効化してください。
-            disabled: 認証アプリを無効化しました。
+            disabled: 認証アプリと回復コードを無効化しました。
         recovery_codes:
           title: 回復コード
           subtitle: 認証アプリが使えない時のために、コードを安全な場所へ保存してください。

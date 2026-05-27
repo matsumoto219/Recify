@@ -430,6 +430,27 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'PC表示で認証アプリカードとパスキーカードの高さを揃えるclassを持つ' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      create(:passkey, user: user)
+      TwoFactor.generate_recovery_codes_for(user: user)
+
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      auth_cards = document.css('#two-factor > section')
+      passkey_card = document.at_css('#passkeys')
+      totp_card = auth_cards.find { |card| card['id'] != 'passkeys' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(auth_cards.size).to eq(2)
+        expect(totp_card['class']).to include('h-full')
+        expect(passkey_card['class']).to include('h-full')
+        expect(document.at_css('#two-factor > #passkeys')).to be_present
+      end
+    end
+
     it 'recovery codeが1〜2件なら注意表示にする' do
       create(:totp_credential, user: user, confirmed_at: Time.current)
       codes = TwoFactor.generate_recovery_codes_for(user: user)

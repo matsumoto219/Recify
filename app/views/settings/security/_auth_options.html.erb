@@ -1,5 +1,5 @@
 <div id="two-factor" class="grid grid-cols-1 md:grid-cols-2 gap-6 scroll-mt-24">
-  <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex h-full flex-col justify-between border token-border-soft" do %>
     <% totp_credential = current_user.totp_credential %>
     <% totp_enabled = totp_credential&.confirmed? %>
     <% recovery_codes_status = TwoFactor.recovery_codes_status(user: current_user) if totp_enabled %>
@@ -82,8 +82,7 @@
     </div>
   <% end %>
 
-  <div id="passkeys" class="scroll-mt-24">
-  <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
+  <%= render "shared/ui/layout/surface_card", id: "passkeys", padding: :md, class: "flex h-full flex-col justify-between border token-border-soft scroll-mt-24" do %>
     <div
       class="space-y-5"
       data-controller="passkey"
@@ -170,5 +169,4 @@
       </div>
     </div>
   <% end %>
-  </div>
 </div>

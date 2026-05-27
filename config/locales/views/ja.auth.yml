@@ -57,7 +57,7 @@ ja:
       totp:
         title: 追加認証
         subtitle: 認証アプリのコードでログインを完了してください
-        card_title: 認証アプリ追加認証
+        card_title: 認証アプリで追加認証
         description: 認証アプリに表示された6桁のコードを入力してください。
         code_label: 確認コード
         code_placeholder: "123456"
