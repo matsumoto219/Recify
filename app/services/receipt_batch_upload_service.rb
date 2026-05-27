@@ -26,6 +26,8 @@ class ReceiptBatchUploadService
     return failure(I18n.t("receipts.batch_upload.errors.quota_exceeded")) unless storage_quota_available?
 
     create_receipts
+  rescue UsageLimits::LimitExceeded
+    failure(I18n.t("receipts.batch_upload.errors.usage_limit_exceeded"))
   end
 
   private
@@ -37,6 +39,8 @@ class ReceiptBatchUploadService
     validation_errors = []
 
     ActiveRecord::Base.transaction do
+      consume_batch_upload_limits!
+
       files.each do |file|
         receipt = user.receipts.new(image: file, status: "processing")
 
@@ -61,6 +65,24 @@ class ReceiptBatchUploadService
     user.storage_can_add?(total_size)
   end
 
+  def consume_batch_upload_limits!
+    UsageCounters.check_and_increment!(
+      user: user,
+      key: "batch_files_per_day",
+      amount: files.size,
+      limit: UserLimits.effective_limit(user: user, key: "batch_files_per_day")
+    )
+
+    return unless user.guest?
+
+    UsageCounters.check_and_increment!(
+      user: user,
+      key: "guest_receipt_uploads_per_day",
+      amount: files.size,
+      limit: SystemSettings.limit_for("limits.guest_receipt_uploads_per_day")
+    )
+  end
+
   def enqueue_analysis_jobs(receipts)
     receipts.each do |receipt|
       result = ReceiptAnalysisRuns.start(
@@ -79,8 +101,23 @@ class ReceiptBatchUploadService
       Rails.logger.info(
         "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
       )
+      unless consume_ocr_job_limit_for!(result.run)
+        Rails.logger.info(
+          "[ReceiptAnalysis] blocked_enqueue_usage_limit receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id}"
+        )
+        next
+      end
+
       ReceiptOcrJob.perform_later(run_id: result.run.id)
     end
+  end
+
+  def consume_ocr_job_limit_for!(run)
+    UsageLimits.consume_ocr_job!(user: user)
+    true
+  rescue UsageLimits::LimitExceeded
+    UsageLimits.mark_analysis_run_blocked!(run: run, stage: "ocr")
+    false
   end
 
   def success(created_receipts)

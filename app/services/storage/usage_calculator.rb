@@ -17,7 +17,7 @@ module Storage
     end
 
     def limit_bytes
-      user.storage_limit_bytes.to_i
+      UserLimits.effective_limit(user: user, key: "storage_bytes").to_i
     end
 
     def remaining_bytes

@@ -120,11 +120,21 @@ module Analysis
         end
 
         run = start_result.run
+        unless consume_retry_operation_limit
+          result = failure(:usage_limit_exceeded, "usage_limit_exceeded")
+          raise ActiveRecord::Rollback
+        end
+
         copy_retry_snapshots(run)
         mark_receipt_processing!
 
         result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
         record_audit!(result)
+      end
+
+      if result&.failure?
+        record_audit!(result)
+        return result
       end
 
       return result if result.failure?
@@ -246,6 +256,18 @@ module Analysis
         processing_error_message: nil,
         review_reasons: []
       )
+    end
+
+    def consume_retry_operation_limit
+      UsageCounters.check_and_increment!(
+        user: actor,
+        key: "retry_operations_per_day",
+        amount: 1,
+        limit: UserLimits.effective_limit(user: actor, key: "retry_operations_per_day")
+      )
+      true
+    rescue UsageLimits::LimitExceeded
+      false
     end
 
     def job_class

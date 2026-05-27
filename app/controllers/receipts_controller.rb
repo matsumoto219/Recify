@@ -79,7 +79,20 @@ class ReceiptsController < ApplicationController
     @receipt = current_user.receipts.new(upload_receipt_params)
     @receipt.status = "processing"
 
-    if @receipt.save
+    saved = false
+
+    begin
+      ActiveRecord::Base.transaction do
+        consume_single_upload_limit!
+        saved = @receipt.save
+        raise ActiveRecord::Rollback unless saved
+      end
+    rescue UsageLimits::LimitExceeded
+      render_upload_usage_limit_exceeded
+      return
+    end
+
+    if saved
       enqueue_analysis_job(@receipt, source: "upload", requested_by_user: current_user)
 
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
@@ -173,6 +186,13 @@ class ReceiptsController < ApplicationController
     Rails.logger.info(
       "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
     )
+    unless consume_ocr_job_limit_for!(result.run, requested_by_user)
+      Rails.logger.info(
+        "[ReceiptAnalysis] blocked_enqueue_usage_limit receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id}"
+      )
+      return
+    end
+
     ReceiptOcrJob.perform_later(run_id: result.run.id)
   end
 
@@ -245,6 +265,41 @@ class ReceiptsController < ApplicationController
   def storage_quota_exceeded_for?(uploaded_file, excluding_blob: nil)
     uploaded_file.present? &&
       !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+  end
+
+  def consume_single_upload_limit!
+    UsageCounters.check_and_increment!(
+      user: current_user,
+      key: upload_counter_key,
+      amount: 1,
+      limit: upload_daily_limit
+    )
+  end
+
+  def upload_counter_key
+    current_user.guest? ? "guest_receipt_uploads_per_day" : "receipt_uploads_per_day"
+  end
+
+  def upload_daily_limit
+    if current_user.guest?
+      SystemSettings.limit_for("limits.guest_receipt_uploads_per_day")
+    else
+      UserLimits.effective_limit(user: current_user, key: "receipt_uploads_per_day")
+    end
+  end
+
+  def render_upload_usage_limit_exceeded
+    @receipt = current_user.receipts.new
+    flash.now[:alert] = t("flash.usage_limits.uploads_exceeded")
+    render :new_upload, status: :unprocessable_content, formats: :html
+  end
+
+  def consume_ocr_job_limit_for!(run, user)
+    UsageLimits.consume_ocr_job!(user: user)
+    true
+  rescue UsageLimits::LimitExceeded
+    UsageLimits.mark_analysis_run_blocked!(run: run, stage: "ocr")
+    false
   end
 
   def receipt_params

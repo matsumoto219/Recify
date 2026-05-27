@@ -22,6 +22,8 @@ ja:
         not_allowed: 本登録済みユーザーはゲスト本登録化を利用できません。
     storage:
       quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
+    usage_limits:
+      uploads_exceeded: 本日のアップロード上限に達しました。時間をおいてから、もう一度お試しください。
     receipts:
       create: レシートを登録しました
       update: レシートを更新しました

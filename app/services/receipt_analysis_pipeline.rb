@@ -45,6 +45,7 @@ class ReceiptAnalysisPipeline
   def run_ocr
     return skipped_result(:terminal_run) if terminal_run?
     return cancel_and_skip(:not_processing) unless receipt.processing?
+    return usage_limit_blocked_result("ocr") unless ocr_provider_call_allowed?
 
     with_run_failure do
       mark_processing!
@@ -88,6 +89,8 @@ class ReceiptAnalysisPipeline
           next_step: :finalize
         )
       end
+
+      return usage_limit_blocked_result("ai") unless ai_provider_call_allowed?
 
       raw_ai_result = AiStep.call(
         run: run,
@@ -308,6 +311,25 @@ class ReceiptAnalysisPipeline
     Result.new(next_step: :skipped, skip_reason: error_code.to_sym)
   rescue ReceiptAnalysisRuns::TerminalRunError
     Result.new(next_step: :skipped, skip_reason: :terminal_run)
+  end
+
+  def ocr_provider_call_allowed?
+    UsageLimits.ensure_ocr_job_within_limit!(user: receipt.user)
+    true
+  rescue UsageLimits::LimitExceeded
+    false
+  end
+
+  def ai_provider_call_allowed?
+    UsageLimits.consume_ai_job!(user: receipt.user)
+    true
+  rescue UsageLimits::LimitExceeded
+    false
+  end
+
+  def usage_limit_blocked_result(stage)
+    UsageLimits.mark_analysis_run_blocked!(run: run, stage: stage)
+    Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   end
 
   def ai_name_completion_enabled?

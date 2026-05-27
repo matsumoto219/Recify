@@ -989,6 +989,69 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '単一uploadの日次上限到達時はreceiptを作成せず解析jobもenqueueしない' do
+      create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 50)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.usage_limits.uploads_exceeded'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(UsageCounter.find_by!(user: user, key: 'receipt_uploads_per_day').used_count).to eq(50)
+      end
+    end
+
+    it 'OCR job日次上限到達時はrunを安全にfailedへ落としprovider jobをenqueueしない' do
+      create(:usage_counter, user: user, key: 'ocr_jobs_per_day', used_count: 50)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
+
+      run = ReceiptAnalysisRun.order(:id).last
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(run.status).to eq('failed')
+        expect(run.error_stage).to eq('ocr')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload).to be_failed
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(UsageCounter.find_by!(user: user, key: 'ocr_jobs_per_day').used_count).to eq(50)
+      end
+    end
+
+    it 'guest単一uploadの日次上限はguest用limitで拒否する' do
+      guest = create(:user, guest: true)
+      sign_in guest
+      create(:usage_counter, user: guest, key: 'guest_receipt_uploads_per_day', used_count: 10)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.usage_limits.uploads_exceeded'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
     it 'Turbo requestでもストレージ上限guardはglobal error pageへ飛ばさずupload画面を維持する' do
       user.update!(storage_limit_bytes: 1)
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)

@@ -169,6 +169,7 @@ ja:
         empty: 画像を選択してください
         too_many: "アップロードできる画像は最大%{max}件です"
         quota_exceeded: 選択した画像の合計サイズがストレージ容量の上限を超えています。
+        usage_limit_exceeded: 本日のアップロード上限に達しました。時間をおいてから、もう一度お試しください。
     processing_errors:
       image_error: 画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。
@@ -181,6 +182,7 @@ ja:
       ai_not_receipt: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。
       ai_not_receipt_uncertain: レシート判定に迷いがあります。OCR結果を確認してください。
       ai_unavailable: AI補完は一時停止中です。OCR結果を確認・修正してください。
+      usage_limit_exceeded: 本日の解析上限に達しました。時間をおいてから、もう一度お試しください。
     processing_error_card:
       failed_title: 処理失敗
       attention_title: 処理に関する注意

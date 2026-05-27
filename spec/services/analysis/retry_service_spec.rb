@@ -63,6 +63,7 @@ RSpec.describe Analysis::RetryService do
         expect(receipt.review_reasons).to eq([])
         expect(ReceiptOcrJob).to have_been_enqueued.with(run_id: result.run.id)
         expect(enqueued_jobs.last[:args]).to eq([ { 'run_id' => result.run.id, '_aj_ruby2_keywords' => [ 'run_id' ] } ])
+        expect(UsageCounter.find_by!(user: actor, key: 'retry_operations_per_day').used_count).to eq(1)
         expect(audit_log).to have_attributes(
           actor_user: actor,
           actor_kind: 'admin',
@@ -92,6 +93,51 @@ RSpec.describe Analysis::RetryService do
           'new_run_status' => 'queued',
           'enqueued_job' => 'ReceiptOcrJob'
         )
+      end
+    end
+
+    it 'retry_operations_per_day上限到達時はrun作成をrollbackし、enqueueせず失敗auditを残す' do
+      create(:usage_counter, user: actor, key: 'retry_operations_per_day', used_count: 20)
+      run_count = ReceiptAnalysisRun.count
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'cap reached retry',
+          request: request_context,
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('usage_limit_exceeded')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun.count).to eq(run_count)
+        expect(receipt.reload).to be_completed
+        expect_no_analysis_job_enqueued
+        expect(UsageCounter.find_by!(user: actor, key: 'retry_operations_per_day').used_count).to eq(20)
+        expect(audit_log).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'usage_limit_exceeded',
+          reason: 'cap reached retry'
+        )
+        expect(audit_log.metadata).to include(
+          'retry_type' => 'full_reanalyze',
+          'failure_reason' => 'usage_limit_exceeded',
+          'source' => 'admin_retry',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(audit_log.attributes.to_json).not_to include('credential_id', 'public_key', 'challenge', 'raw_response', 'prompt')
       end
     end
 

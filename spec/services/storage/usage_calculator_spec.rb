@@ -106,6 +106,18 @@ RSpec.describe Storage::UsageCalculator do
   end
 
   describe '#can_add?' do
+    it 'user overrideのstorage_bytesを上限として使う' do
+      user.update!(storage_limit_bytes: 1.gigabyte)
+      create(:user_limit_override, user: user, key: 'storage_bytes', value: { 'value' => 2.megabytes })
+      receipt = create(:receipt, user:)
+      attach_blob(receipt, :image, 1.megabyte)
+
+      aggregate_failures do
+        expect(described_class.new(user).limit_bytes).to eq(2.megabytes)
+        expect(described_class.new(user).can_add?(1.megabyte + 1)).to be(false)
+      end
+    end
+
     it '上限内ならtrueを返す' do
       user.update!(storage_limit_bytes: 100.kilobytes)
       receipt = create(:receipt, user:)

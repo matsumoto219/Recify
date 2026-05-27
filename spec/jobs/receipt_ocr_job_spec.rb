@@ -104,6 +104,27 @@ RSpec.describe ReceiptOcrJob, type: :job do
         expect(ReceiptFinalizeJob).not_to have_been_enqueued
       end
     end
+
+    it '実行前にOCR上限が引き下げ済みならproviderを呼ばずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:usage_counter, user: receipt.user, key: 'ocr_jobs_per_day', used_count: 2)
+      create(:user_limit_override, user: receipt.user, key: 'ocr_jobs_per_day', value: { 'value' => 1 })
+      allow(ReceiptOcrService).to receive(:call)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('ocr')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
   end
 
   private
