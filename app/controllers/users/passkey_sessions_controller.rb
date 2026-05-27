@@ -46,6 +46,7 @@ class Users::PasskeySessionsController < ApplicationController
     sign_in(:user, user)
     store_user_session_version(user)
     UserSessions.record_sign_in(user: user, request: request, session: session, method: "passkey")
+    flash[:notice] = t("auth.sessions.messages.signed_in")
     render json: {
       ok: true,
       redirect_url: after_sign_in_path_for(user)

@@ -78,6 +78,7 @@ RSpec.describe 'User passkey sessions', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.parsed_body.fetch('ok')).to be(true)
         expect(response.parsed_body.fetch('redirect_url')).to be_present
+        expect(flash[:notice]).to eq(I18n.t('auth.sessions.messages.signed_in'))
         expect(session[:passkey_authentication_challenge]).to be_blank
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:user_session_version]).to eq(user.session_version)

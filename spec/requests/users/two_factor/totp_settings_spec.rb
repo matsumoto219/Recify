@@ -38,12 +38,24 @@ RSpec.describe 'User TOTP settings', type: :request do
       end.not_to change(AuditLog, :count)
       expect(response).to have_http_status(:success)
       secret = session[:totp_setup].fetch('secret')
+      document = Nokogiri::HTML(response.body)
+      qr_svg = document.at_css('[data-testid="totp-setup-qr"] svg')
+      qr_path = qr_svg&.at_css('path')
+      copy_button = document.at_css('[data-action="click->clipboard#copy"]')
 
       aggregate_failures do
         expect(response.body).to include('<svg')
+        expect(qr_svg).to be_present
+        expect(response.body).to include('viewBox=')
+        expect(qr_svg['width']).to eq('100%')
+        expect(qr_svg['height']).to eq('100%')
+        expect(qr_path&.[]('d')).to be_present
+        expect(qr_path&.[]('transform')).to include('scale(')
         expect(response.body).to include(secret)
         expect(response.body).not_to include('otpauth://')
         expect(response.body).to include(I18n.t('settings.security.auth.clipboard.copy'))
+        expect(copy_button['class']).to include('whitespace-nowrap')
+        expect(copy_button['class']).to include('shrink-0')
         expect(user.reload.totp_credential).to be_blank
         expect(response.headers['Cache-Control']).to include('no-store')
       end

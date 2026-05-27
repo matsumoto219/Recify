@@ -29,10 +29,18 @@ RSpec.describe TwoFactor do
       svg = described_class.totp_qr_svg(
         provisioning_uri: 'otpauth://totp/Recify:user@example.com?secret=ABC&issuer=Recify'
       )
+      document = Nokogiri::XML(svg)
+      svg_node = document.at_xpath('//*[local-name()="svg"]')
+      path_node = document.at_xpath('//*[local-name()="path"]')
 
       aggregate_failures do
         expect(svg).to include('<svg')
         expect(svg).to include('</svg>')
+        expect(svg_node['viewBox']).to match(/\A0 0 \d+ \d+\z/)
+        expect(svg_node['width']).to eq('100%')
+        expect(svg_node['height']).to eq('100%')
+        expect(path_node['d']).to be_present
+        expect(path_node['transform']).to include('scale(')
       end
     end
 

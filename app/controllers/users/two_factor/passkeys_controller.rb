@@ -56,6 +56,7 @@ class Users::TwoFactor::PasskeysController < ApplicationController
       sign_in_method: "password_passkey_step_up"
     )
 
+    flash[:notice] = t("auth.sessions.messages.signed_in")
     render json: {
       ok: true,
       redirect_url: after_sign_in_path_for(@pending_user)

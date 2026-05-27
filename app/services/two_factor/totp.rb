@@ -32,7 +32,12 @@ module TwoFactor
             shape_rendering: "crispEdges",
             module_size: 4,
             standalone: true,
-            use_path: true
+            use_path: true,
+            viewbox: true,
+            svg_attributes: {
+              width: "100%",
+              height: "100%"
+            }
           )
       end
 
