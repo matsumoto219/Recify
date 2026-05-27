@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_27_020621) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_27_200833) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -67,6 +67,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_020621) do
     t.index ["request_id"], name: "index_audit_logs_on_request_id"
     t.index ["target_type", "target_id", "created_at"], name: "index_audit_logs_on_target_type_and_target_id_and_created_at"
     t.index ["target_uid"], name: "index_audit_logs_on_target_uid"
+  end
+
+  create_table "contact_requests", force: :cascade do |t|
+    t.text "body", null: false
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.string "email_digest", null: false
+    t.datetime "handled_at"
+    t.bigint "handled_by_user_id"
+    t.inet "ip_address"
+    t.string "request_id"
+    t.string "request_uid", null: false
+    t.string "source", null: false
+    t.string "status", default: "open", null: false
+    t.string "subject", null: false
+    t.datetime "updated_at", null: false
+    t.text "user_agent"
+    t.bigint "user_id"
+    t.index ["category"], name: "index_contact_requests_on_category"
+    t.index ["created_at"], name: "index_contact_requests_on_created_at"
+    t.index ["email_digest"], name: "index_contact_requests_on_email_digest"
+    t.index ["handled_by_user_id"], name: "index_contact_requests_on_handled_by_user_id"
+    t.index ["request_uid"], name: "index_contact_requests_on_request_uid", unique: true
+    t.index ["status"], name: "index_contact_requests_on_status"
+    t.index ["user_id"], name: "index_contact_requests_on_user_id"
   end
 
   create_table "notifications", force: :cascade do |t|
@@ -148,7 +174,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_020621) do
     t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
     t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
     t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
-    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text]))"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
     t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
     t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
     t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
@@ -365,6 +391,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_020621) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "audit_logs", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "contact_requests", "users", column: "handled_by_user_id", on_delete: :nullify
+  add_foreign_key "contact_requests", "users", on_delete: :nullify
   add_foreign_key "notifications", "users"
   add_foreign_key "passkeys", "users"
   add_foreign_key "receipt_analysis_runs", "receipt_analysis_runs", column: "parent_run_id", on_delete: :nullify

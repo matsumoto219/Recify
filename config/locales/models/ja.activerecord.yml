@@ -7,6 +7,7 @@ ja:
       receipt_payment: 支払い
       receipt_tax_detail: 税内訳
       notification: 通知
+      contact_request: 問い合わせ
 
     attributes:
       receipt:
@@ -77,6 +78,14 @@ ja:
         action_path: 遷移先
         read_at: 既読日時
         metadata: メタデータ
+      contact_request:
+        user: ユーザー
+        email: 返信先メールアドレス
+        category: 種別
+        subject: 件名
+        body: 内容
+        status: ステータス
+        source: 送信元
       user:
         name: "ユーザー名"
         email: "メールアドレス"
@@ -124,6 +133,10 @@ ja:
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
             legal_agreement:
               accepted: "に同意してください"
+        contact_request:
+          attributes:
+            body:
+              too_many_urls: "にURLが多すぎます"
         receipt_item:
           attributes:
             quantity:

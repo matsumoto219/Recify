@@ -7,6 +7,7 @@ class User < ApplicationRecord
 
   has_many :receipts, dependent: :destroy
   has_many :notifications, dependent: :destroy
+  has_many :contact_requests, dependent: :nullify
   has_many :passkeys, dependent: :destroy
   has_many :user_sessions, dependent: :destroy
   has_many :user_limit_overrides, dependent: :destroy
