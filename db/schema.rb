@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_27_015402) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_27_020621) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -148,7 +148,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_015402) do
     t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
     t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
     t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
-    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text]))"
     t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
     t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
     t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
@@ -264,6 +264,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_015402) do
     t.index ["user_id"], name: "index_totp_credentials_on_user_id", unique: true
   end
 
+  create_table "usage_counters", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.string "period", null: false
+    t.datetime "period_start", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "used_bytes", default: 0, null: false
+    t.integer "used_count", default: 0, null: false
+    t.bigint "user_id", null: false
+    t.index ["key", "period", "period_start"], name: "index_usage_counters_on_key_and_period_and_period_start"
+    t.index ["user_id", "key", "period", "period_start"], name: "idx_on_user_id_key_period_period_start_e802a8f1d6", unique: true
+    t.index ["user_id"], name: "index_usage_counters_on_user_id"
+  end
+
+  create_table "user_limit_overrides", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "created_by_user_id"
+    t.boolean "enabled", default: true, null: false
+    t.datetime "expires_at"
+    t.string "key", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "updated_by_user_id"
+    t.bigint "user_id", null: false
+    t.jsonb "value", default: {}, null: false
+    t.index ["created_by_user_id"], name: "index_user_limit_overrides_on_created_by_user_id"
+    t.index ["expires_at"], name: "index_user_limit_overrides_on_expires_at"
+    t.index ["updated_by_user_id"], name: "index_user_limit_overrides_on_updated_by_user_id"
+    t.index ["user_id", "enabled"], name: "index_user_limit_overrides_on_user_id_and_enabled"
+    t.index ["user_id", "key"], name: "index_user_limit_overrides_on_user_id_and_key", unique: true
+    t.index ["user_id"], name: "index_user_limit_overrides_on_user_id"
+  end
+
   create_table "user_sessions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "expired_at"
@@ -343,5 +377,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_015402) do
   add_foreign_key "recovery_codes", "users"
   add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
   add_foreign_key "totp_credentials", "users"
+  add_foreign_key "usage_counters", "users"
+  add_foreign_key "user_limit_overrides", "users"
+  add_foreign_key "user_limit_overrides", "users", column: "created_by_user_id", on_delete: :nullify
+  add_foreign_key "user_limit_overrides", "users", column: "updated_by_user_id", on_delete: :nullify
   add_foreign_key "user_sessions", "users"
 end

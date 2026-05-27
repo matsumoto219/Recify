@@ -36,6 +36,22 @@ RSpec.describe Admin::SystemSettingsQuery do
       expect(result.records.map { |record| record[:key] }).to eq([ 'limits.receipt_upload_soft_limit' ])
     end
 
+    it 'usage limit filterを適用できる' do
+      result = described_class.call(category: 'usage_limit')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'limits.receipt_uploads_per_day',
+        'limits.batch_files_per_day',
+        'limits.ocr_jobs_per_day',
+        'limits.ai_jobs_per_day',
+        'limits.retry_operations_per_day',
+        'limits.guest_receipt_uploads_per_day',
+        'limits.guest_storage_bytes',
+        'limits.api_requests_per_minute',
+        'limits.api_requests_per_day'
+      )
+    end
+
     it 'unknown keyは空結果にする' do
       result = described_class.call(key: 'secret.provider_api_key')
 

@@ -9,7 +9,16 @@ RSpec.describe SystemSettings do
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
         'ui.maintenance_notice_enabled',
-        'limits.receipt_upload_soft_limit'
+        'limits.receipt_upload_soft_limit',
+        'limits.receipt_uploads_per_day',
+        'limits.batch_files_per_day',
+        'limits.ocr_jobs_per_day',
+        'limits.ai_jobs_per_day',
+        'limits.retry_operations_per_day',
+        'limits.guest_receipt_uploads_per_day',
+        'limits.guest_storage_bytes',
+        'limits.api_requests_per_minute',
+        'limits.api_requests_per_day'
       )
     end
 
@@ -186,6 +195,20 @@ RSpec.describe SystemSettings do
 
       expect(described_class.limit_for('limits.receipt_upload_soft_limit')).to eq(250)
     end
+
+    it 'usage limit defaultをintegerで返す' do
+      aggregate_failures do
+        expect(described_class.limit_for('limits.receipt_uploads_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.ocr_jobs_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.ai_jobs_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.retry_operations_per_day')).to eq(20)
+        expect(described_class.limit_for('limits.guest_receipt_uploads_per_day')).to eq(10)
+        expect(described_class.limit_for('limits.guest_storage_bytes')).to eq(100.megabytes)
+        expect(described_class.limit_for('limits.api_requests_per_minute')).to eq(60)
+        expect(described_class.limit_for('limits.api_requests_per_day')).to eq(1000)
+      end
+    end
   end
 
   describe 'evaluation side effects' do
@@ -242,8 +265,12 @@ RSpec.describe SystemSettings do
     it 'integerのmin/maxを検証する' do
       aggregate_failures do
         expect(described_class.cast_update_value('limits.receipt_upload_soft_limit', '250')).to eq(250)
+        expect(described_class.cast_update_value('limits.guest_storage_bytes', 10.megabytes.to_s)).to eq(10.megabytes)
         expect {
           described_class.cast_update_value('limits.receipt_upload_soft_limit', '1001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end

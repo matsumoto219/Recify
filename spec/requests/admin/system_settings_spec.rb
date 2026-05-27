@@ -126,6 +126,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('管理対象設定')
         expect(response.body).to include('feature.receipt_logo_display_enabled')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
+        expect(response.body).to include('limits.receipt_uploads_per_day')
+        expect(response.body).to include('limits.api_requests_per_day')
         expect(response.body).to include(admin_system_setting_path('feature.receipt_logo_display_enabled'))
         expect(response.body).not_to include('SENTRY_DSN')
         expect(response.body).not_to include('WEBAUTHN_RP_ID')
@@ -155,6 +157,27 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('soft_limit')
         expect(response.body).to include('100')
         expect(response.body).to include(admin_audit_logs_path(target_uid: 'limits.receipt_upload_soft_limit'))
+        expect(response.body).not_to include('SENTRY_DSN')
+        expect(response.body).not_to include('WEBAUTHN_RP_ID')
+        expect(response.body).not_to include('name="reason"')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('設定を更新')
+        expect_no_side_effects
+      end
+    end
+
+    it 'adminユーザーは新しいusage limit定義の詳細を閲覧できる' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('limits.receipt_uploads_per_day')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('limits.receipt_uploads_per_day')
+        expect(response.body).to include('usage_limit')
+        expect(response.body).to include('50')
+        expect(response.body).to include(admin_audit_logs_path(target_uid: 'limits.receipt_uploads_per_day'))
         expect(response.body).not_to include('SENTRY_DSN')
         expect(response.body).not_to include('WEBAUTHN_RP_ID')
         expect(response.body).not_to include('name="reason"')

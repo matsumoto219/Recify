@@ -58,6 +58,96 @@ module SystemSettings
         risk_level: "medium",
         min: 1,
         max: 1000
+      ),
+      Definition.new(
+        key: "limits.receipt_uploads_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.batch_files_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.ocr_jobs_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.ai_jobs_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.retry_operations_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 20,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 200
+      ),
+      Definition.new(
+        key: "limits.guest_receipt_uploads_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.guest_storage_bytes",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 100.megabytes,
+        editable: true,
+        risk_level: "medium",
+        min: 1.megabyte,
+        max: 1.gigabyte
+      ),
+      Definition.new(
+        key: "limits.api_requests_per_minute",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 60,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.api_requests_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100_000
       )
     ].index_by(&:key).freeze
 
