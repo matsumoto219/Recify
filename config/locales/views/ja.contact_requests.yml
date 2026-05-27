@@ -42,3 +42,17 @@ ja:
     messages:
       created: お問い合わせを受け付けました。
       create_failed: 入力内容を確認してください。
+    mailer:
+      admin_notification:
+        subject: "[Recify %{request_uid}] 問い合わせ: %{category}"
+        title: 新しい問い合わせを受け付けました
+        description: 問い合わせの詳細は管理画面で確認してください。
+        fields:
+          request_uid: 受付ID
+          category: 種別
+          subject: 件名
+          user_id: ユーザーID
+          email: 返信先
+          email_digest: 返信先識別子
+        body_notice: 本文は個人情報を含む可能性があるため、この通知メールには全文を載せていません。
+        open_admin: 管理画面で確認する

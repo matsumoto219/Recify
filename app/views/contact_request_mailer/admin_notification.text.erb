@@ -1,0 +1,11 @@
+<%= t("contact_requests.mailer.admin_notification.title") %>
+
+<%= t("contact_requests.mailer.admin_notification.fields.request_uid") %>: <%= @contact_request.request_uid %>
+<%= t("contact_requests.mailer.admin_notification.fields.category") %>: <%= t("contact_requests.categories.#{@contact_request.category}") %>
+<%= t("contact_requests.mailer.admin_notification.fields.subject") %>: <%= @contact_request.subject %>
+<%= t("contact_requests.mailer.admin_notification.fields.user_id") %>: <%= @contact_request.user_id || "-" %>
+<%= t("contact_requests.mailer.admin_notification.fields.email") %>: <%= @masked_email %>
+<%= t("contact_requests.mailer.admin_notification.fields.email_digest") %>: <%= @contact_request.email_digest.first(12) %>...
+
+<%= t("contact_requests.mailer.admin_notification.body_notice") %>
+<%= @admin_url %>

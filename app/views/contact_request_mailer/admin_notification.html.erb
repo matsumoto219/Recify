@@ -1,0 +1,46 @@
+<h2 style="margin: 0 0 16px; color: #1c1b1b; font-size: 20px;">
+  <%= t("contact_requests.mailer.admin_notification.title") %>
+</h2>
+
+<p style="margin: 0 0 20px; color: #4f4a5f; font-size: 14px; line-height: 1.7;">
+  <%= t("contact_requests.mailer.admin_notification.description") %>
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 24px;">
+  <tbody>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.request_uid") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= @contact_request.request_uid %></td>
+    </tr>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.category") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= t("contact_requests.categories.#{@contact_request.category}") %></td>
+    </tr>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.subject") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= @contact_request.subject %></td>
+    </tr>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.user_id") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= @contact_request.user_id || "-" %></td>
+    </tr>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.email") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= @masked_email %></td>
+    </tr>
+    <tr>
+      <th align="left" style="padding: 8px 0; color: #777184; font-size: 12px;"><%= t("contact_requests.mailer.admin_notification.fields.email_digest") %></th>
+      <td style="padding: 8px 0; color: #1c1b1b; font-size: 14px;"><%= @contact_request.email_digest.first(12) %>...</td>
+    </tr>
+  </tbody>
+</table>
+
+<p style="margin: 0 0 20px; color: #4f4a5f; font-size: 14px; line-height: 1.7;">
+  <%= t("contact_requests.mailer.admin_notification.body_notice") %>
+</p>
+
+<p style="margin: 0;">
+  <a href="<%= @admin_url %>" style="display: inline-block; background: #5b5ce2; color: #ffffff; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-size: 14px; font-weight: 700;">
+    <%= t("contact_requests.mailer.admin_notification.open_admin") %>
+  </a>
+</p>

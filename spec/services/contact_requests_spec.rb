@@ -1,6 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe ContactRequests do
+  include ActiveJob::TestHelper
 
   let(:request) do
     instance_double(
@@ -11,6 +12,22 @@ RSpec.describe ContactRequests do
     )
   end
 
+  around do |example|
+    original_adapter = ActiveJob::Base.queue_adapter
+    original_support_email = ENV["SUPPORT_NOTIFICATION_EMAIL"]
+    ActiveJob::Base.queue_adapter = :test
+    clear_enqueued_jobs
+    clear_performed_jobs
+    ENV.delete("SUPPORT_NOTIFICATION_EMAIL")
+
+    example.run
+  ensure
+    ENV["SUPPORT_NOTIFICATION_EMAIL"] = original_support_email if original_support_email
+    ENV.delete("SUPPORT_NOTIFICATION_EMAIL") unless original_support_email
+    clear_enqueued_jobs
+    clear_performed_jobs
+    ActiveJob::Base.queue_adapter = original_adapter
+  end
 
   def valid_params(overrides = {})
     {
@@ -107,5 +124,25 @@ RSpec.describe ContactRequests do
       end
     end
 
+    it '作成時にadmin通知メールをenqueueする' do
+      ENV["SUPPORT_NOTIFICATION_EMAIL"] = "support@example.com"
+
+      expect {
+        described_class.create(user: nil, params: valid_params(email: 'mail@example.com'), request: request)
+      }.to have_enqueued_mail(ContactRequestMailer, :admin_notification)
+    end
+
+    it 'SUPPORT_NOTIFICATION_EMAIL未設定でも問い合わせ保存は成功し、メールはenqueueしない' do
+      result = nil
+
+      expect {
+        result = described_class.create(user: nil, params: valid_params(email: 'no-mail@example.com'), request: request)
+      }.not_to have_enqueued_mail(ContactRequestMailer, :admin_notification)
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.contact_request).to be_persisted
+      end
+    end
   end
 end

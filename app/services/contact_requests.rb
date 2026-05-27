@@ -24,6 +24,7 @@ module ContactRequests
       apply_url_guard(contact_request)
 
       if contact_request.errors.blank? && contact_request.save
+        enqueue_admin_notification(contact_request)
         Result.new(contact_request: contact_request, submitted: true, spam: false)
       else
         Result.new(contact_request: contact_request, submitted: false, spam: false, error_code: "validation_failed")
@@ -91,6 +92,14 @@ module ContactRequests
       contact_request.errors.add(:body, :too_many_urls)
     end
 
+    def enqueue_admin_notification(contact_request)
+      unless ContactRequestMailer.admin_notification_enabled?
+        Rails.logger.warn("[ContactRequest] support_notification_email_missing request_uid=#{contact_request.request_uid}")
+        return
+      end
+
+      ContactRequestMailer.admin_notification(contact_request).deliver_later
+    end
 
     def hmac_secret
       Rails.application.key_generator.generate_key("recify/contact-requests/email", 32)
