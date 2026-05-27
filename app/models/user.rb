@@ -9,6 +9,8 @@ class User < ApplicationRecord
   has_many :notifications, dependent: :destroy
   has_many :passkeys, dependent: :destroy
   has_many :user_sessions, dependent: :destroy
+  has_one :totp_credential, dependent: :destroy
+  has_many :recovery_codes, dependent: :destroy
   has_many :requested_receipt_analysis_runs,
            class_name: "ReceiptAnalysisRun",
            foreign_key: :requested_by_user_id,

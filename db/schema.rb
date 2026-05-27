@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_233017) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_27_015402) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -231,6 +231,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_233017) do
     t.index ["user_id"], name: "index_receipts_on_user_id"
   end
 
+  create_table "recovery_codes", force: :cascade do |t|
+    t.string "code_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "used_at"
+    t.bigint "user_id", null: false
+    t.index ["code_digest"], name: "index_recovery_codes_on_code_digest", unique: true
+    t.index ["user_id"], name: "index_recovery_codes_on_user_id"
+  end
+
   create_table "system_settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -241,6 +251,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_233017) do
     t.index ["key"], name: "index_system_settings_on_key", unique: true
     t.index ["updated_at"], name: "index_system_settings_on_updated_at"
     t.index ["updated_by_user_id"], name: "index_system_settings_on_updated_by_user_id"
+  end
+
+  create_table "totp_credentials", force: :cascade do |t|
+    t.datetime "confirmed_at"
+    t.datetime "created_at", null: false
+    t.integer "last_accepted_time_step"
+    t.datetime "last_used_at"
+    t.text "totp_secret", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_totp_credentials_on_user_id", unique: true
   end
 
   create_table "user_sessions", force: :cascade do |t|
@@ -319,6 +340,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_233017) do
   add_foreign_key "receipt_payments", "receipts"
   add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "users"
+  add_foreign_key "recovery_codes", "users"
   add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
+  add_foreign_key "totp_credentials", "users"
   add_foreign_key "user_sessions", "users"
 end

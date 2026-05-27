@@ -26,6 +26,9 @@ gem "pagy"
 gem "rack-attack", "~> 6.8"
 # Server-side WebAuthn ceremony verification for future passkey support
 gem "webauthn", "~> 3.4"
+# TOTP and QR code support for authenticator-app setup
+gem "rotp", "~> 6.3"
+gem "rqrcode", "~> 3.2"
 # Error monitoring for production exceptions
 gem "sentry-ruby", "~> 6.5"
 gem "sentry-rails", "~> 6.5"
