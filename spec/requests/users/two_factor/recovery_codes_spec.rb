@@ -179,6 +179,9 @@ RSpec.describe 'User recovery codes', type: :request do
       end.not_to change(RecoveryCode, :count)
 
       new_codes = response.body.scan(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){4}/)
+      document = Nokogiri::HTML(response.body)
+      copy_button = document.at_css('[data-action="click->clipboard#copy"]')
+      copy_status = document.at_css('[data-clipboard-target="status"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:created)
@@ -187,6 +190,11 @@ RSpec.describe 'User recovery codes', type: :request do
         expect(user.recovery_codes.pluck(:code_digest).join("\n")).not_to include(*new_codes)
         old_codes.each { |code| expect(response.body).not_to include(code) }
         expect(response.headers['Cache-Control']).to include('no-store')
+        expect(copy_button['class']).to include('whitespace-nowrap')
+        expect(copy_button['class']).to include('shrink-0')
+        expect(copy_status.parent).to eq(copy_button.parent)
+        expect(copy_status.previous_element).to eq(copy_button)
+        expect(copy_status.parent['class']).to include('flex-col')
       end
 
       get settings_security_path

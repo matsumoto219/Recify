@@ -26,14 +26,17 @@
           <% end %>
         </div>
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p class="hidden text-sm token-text-success" data-clipboard-target="status"></p>
-          <%= render "shared/ui/actions/button",
-                label: t("settings.security.auth.clipboard.copy"),
-                variant: :secondary,
-                size: :compact,
-                icon: "content_copy",
-                data: { action: "click->clipboard#copy" } %>
+        <div class="flex justify-start sm:justify-end">
+          <div class="flex flex-col items-start gap-2 sm:items-end">
+            <%= render "shared/ui/actions/button",
+                  label: t("settings.security.auth.clipboard.copy"),
+                  variant: :secondary,
+                  size: :compact,
+                  icon: "content_copy",
+                  class: "shrink-0 whitespace-nowrap",
+                  data: { action: "click->clipboard#copy" } %>
+            <p class="hidden text-sm token-text-success" data-clipboard-target="status"></p>
+          </div>
         </div>
       </div>
 
