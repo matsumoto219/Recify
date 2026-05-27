@@ -122,4 +122,62 @@ RSpec.describe Recify::SentrySanitizer do
 
     expect(event.request.data).to eq(described_class::FILTERED)
   end
+
+  it 'filters authentication and digest material recursively while preserving safe counts' do
+    event = FakeEvent.new(
+      extra: {
+        credential_id: 'credential-id',
+        challenge: 'challenge',
+        session_uid: 'raw-session-uid',
+        session_uid_digest: 'session-digest',
+        code_digest: 'code-digest',
+        recovery_code: 'recovery-code',
+        recovery_codes_count: 2,
+        backup_codes_count: 1,
+        nested: {
+          credentialId: 'camel-credential-id',
+          sessionUid: 'camel-session-uid',
+          sessionUidDigest: 'camel-session-digest',
+          codeDigest: 'camel-code-digest'
+        },
+        array: [
+          {
+            challenge: 'array-challenge',
+            recoveryCode: 'array-recovery-code'
+          }
+        ]
+      },
+      contexts: {
+        security: {
+          publicKey: 'public-key',
+          totpSecret: 'totp-secret',
+          provisioningUri: 'otpauth://totp/Recify',
+          rawResponse: 'raw-response'
+        }
+      }
+    )
+
+    described_class.sanitize_event(event)
+
+    aggregate_failures do
+      expect(event.extra[:credential_id]).to eq(described_class::FILTERED)
+      expect(event.extra[:challenge]).to eq(described_class::FILTERED)
+      expect(event.extra[:session_uid]).to eq(described_class::FILTERED)
+      expect(event.extra[:session_uid_digest]).to eq(described_class::FILTERED)
+      expect(event.extra[:code_digest]).to eq(described_class::FILTERED)
+      expect(event.extra[:recovery_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:recovery_codes_count]).to eq(2)
+      expect(event.extra[:backup_codes_count]).to eq(1)
+      expect(event.extra[:nested][:credentialId]).to eq(described_class::FILTERED)
+      expect(event.extra[:nested][:sessionUid]).to eq(described_class::FILTERED)
+      expect(event.extra[:nested][:sessionUidDigest]).to eq(described_class::FILTERED)
+      expect(event.extra[:nested][:codeDigest]).to eq(described_class::FILTERED)
+      expect(event.extra[:array].first[:challenge]).to eq(described_class::FILTERED)
+      expect(event.extra[:array].first[:recoveryCode]).to eq(described_class::FILTERED)
+      expect(event.contexts[:security][:publicKey]).to eq(described_class::FILTERED)
+      expect(event.contexts[:security][:totpSecret]).to eq(described_class::FILTERED)
+      expect(event.contexts[:security][:provisioningUri]).to eq(described_class::FILTERED)
+      expect(event.contexts[:security][:rawResponse]).to eq(described_class::FILTERED)
+    end
+  end
 end

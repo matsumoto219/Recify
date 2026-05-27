@@ -353,11 +353,16 @@ class Receipt < ApplicationRecord
 
   def validate_image_dimensions
     return unless image.attached?
+    return unless ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
 
-    metadata = image.blob.metadata || {}
-    width = metadata["width"]
-    height = metadata["height"]
-    return if width.blank? || height.blank?
+    dimensions = ImageDimensions.extract(blob: image.blob, attached_change: attachment_changes["image"])
+    unless dimensions
+      errors.add(:image, :invalid_content_type)
+      return
+    end
+
+    width = dimensions.fetch(:width)
+    height = dimensions.fetch(:height)
 
     if width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION
       errors.add(:image, :image_too_small)

@@ -1,7 +1,30 @@
 require 'rails_helper'
+require 'zlib'
 
 RSpec.describe Receipt, type: :model do
   include ActiveSupport::Testing::TimeHelpers
+
+  def png_bytes(width:, height:)
+    chunk = lambda do |type, data|
+      [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
+    end
+    header = [ width, height, 8, 2, 0, 0, 0 ].pack('NNCCCCC')
+    row = "\x00".b + ("\xFF\xFF\xFF".b * width)
+    compressed = Zlib::Deflate.deflate(row * height)
+
+    "\x89PNG\r\n\x1A\n".b +
+      chunk.call('IHDR'.b, header) +
+      chunk.call('IDAT'.b, compressed) +
+      chunk.call('IEND'.b, ''.b)
+  end
+
+  def attach_png(receipt, width:, height:)
+    receipt.image.attach(
+      io: StringIO.new(png_bytes(width: width, height: height)),
+      filename: "receipt-#{width}x#{height}.png",
+      content_type: 'image/png'
+    )
+  end
 
   describe 'associations' do
     it 'destroy時に解析run履歴を削除する' do
@@ -337,6 +360,61 @@ RSpec.describe Receipt, type: :model do
         io: StringIO.new('webp image'),
         filename: 'receipt.webp',
         content_type: 'image/webp'
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it 'metadataにwidth/heightがなくても実画像から小さすぎるPNGを拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: 1, height: 1)
+
+      aggregate_failures do
+        expect(receipt.image.blob.metadata).not_to include('width', 'height')
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:image, :image_too_small)).to be(true)
+      end
+    end
+
+    it 'metadataにwidth/heightがなくても十分なdimensionのPNGを許可する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: 120, height: 120)
+
+      aggregate_failures do
+        expect(receipt.image.blob.metadata).not_to include('width', 'height')
+        expect(receipt).to be_valid
+      end
+    end
+
+    it 'metadataのdimensionが大きすぎる画像を拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: 120, height: 120)
+      receipt.image.blob.metadata['width'] = Receipt::MAX_IMAGE_DIMENSION + 1
+      receipt.image.blob.metadata['height'] = 120
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :image_too_large)).to be(true)
+    end
+
+    it '壊れた画像は安全側で拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      receipt.image.attach(
+        io: StringIO.new('not image'),
+        filename: 'broken.png',
+        content_type: 'image/png'
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it 'JPEGとして送られたSVG偽装画像を引き続き拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      receipt.image.attach(
+        io: StringIO.new('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+        filename: 'evil.jpg',
+        content_type: 'image/jpeg'
       )
 
       expect(receipt).not_to be_valid

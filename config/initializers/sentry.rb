@@ -13,11 +13,17 @@ module Recify
     AUTH_HEADER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]+/i
     OPENAI_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{10,}\b/
     LONG_SECRET_PATTERN = /\b[A-Za-z0-9+\/=_-]{40,}\b/
+    SAFE_COUNT_KEYS = %w[
+      backup_codes_count
+      recovery_codes_count
+    ].freeze
     SENSITIVE_KEY_PATTERN = /
       email|password|token|secret|authorization|cookie|api_key|access_token|refresh_token|
       signed_id|blob_key|active_storage_key|raw_text|\Alines\z|ocr_result|filtered_content|
       ai_raw_response|\Aprompt\z|messages|response_body|receipt_image|image|attachment|
-      active_storage|blob|file|upload|arguments
+      active_storage|blob|file|upload|arguments|credential_id|challenge|session_uid|
+      session_uid_digest|code_digest|recovery_code|recovery_codes|backup_code|backup_codes|
+      totp_secret|encrypted_totp_secret|provisioning_uri|otpauth|raw_response|public_key
     /ix
 
     module_function
@@ -51,8 +57,9 @@ module Recify
     end
 
     def sensitive_key?(key)
-      normalized_key = key.to_s.downcase.tr("-", "_")
+      normalized_key = key.to_s.underscore.downcase.tr("-", "_")
       return false if normalized_key.blank?
+      return false if SAFE_COUNT_KEYS.include?(normalized_key)
 
       normalized_key.end_with?("_key") || SENSITIVE_KEY_PATTERN.match?(normalized_key)
     end

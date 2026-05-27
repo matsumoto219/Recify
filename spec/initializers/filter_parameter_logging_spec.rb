@@ -62,8 +62,10 @@ RSpec.describe 'filter_parameter_logging' do
       encrypted_totp_secret: 'encrypted-secret',
       recovery_code: 'recovery-secret',
       recovery_codes: [ 'recovery-secret-1', 'recovery-secret-2' ],
+      recovery_codes_count: 2,
       backup_code: 'backup-secret',
       backup_codes: [ 'backup-secret' ],
+      backup_codes_count: 1,
       provisioning_uri: 'otpauth://totp/Recify',
       otpauth: 'otpauth://totp/Recify',
       two_factor: { enabled: true, totp_secret: 'nested-totp-secret' },
@@ -75,9 +77,43 @@ RSpec.describe 'filter_parameter_logging' do
     filtered = filter.filter(params)
 
     aggregate_failures do
-      expect(filtered.except(:id, :safe_count).values).to all(eq('[FILTERED]'))
+      expect(filtered.except(:id, :safe_count, :recovery_codes_count, :backup_codes_count).values).to all(eq('[FILTERED]'))
       expect(filtered[:id]).to eq('ordinary-id')
       expect(filtered[:safe_count]).to eq(2)
+      expect(filtered[:recovery_codes_count]).to eq(2)
+      expect(filtered[:backup_codes_count]).to eq(1)
+    end
+  end
+
+  it 'filters digest and session identifiers recursively' do
+    params = {
+      code_digest: 'code-digest',
+      session_uid: 'raw-session-uid',
+      session_uid_digest: 'session-digest',
+      nested: {
+        codeDigest: 'camel-code-digest',
+        sessionUid: 'camel-session-uid',
+        sessionUidDigest: 'camel-session-digest'
+      },
+      array: [
+        {
+          code_digest: 'array-code-digest',
+          session_uid_digest: 'array-session-digest'
+        }
+      ]
+    }
+
+    filtered = filter.filter(params)
+
+    aggregate_failures do
+      expect(filtered[:code_digest]).to eq('[FILTERED]')
+      expect(filtered[:session_uid]).to eq('[FILTERED]')
+      expect(filtered[:session_uid_digest]).to eq('[FILTERED]')
+      expect(filtered[:nested][:codeDigest]).to eq('[FILTERED]')
+      expect(filtered[:nested][:sessionUid]).to eq('[FILTERED]')
+      expect(filtered[:nested][:sessionUidDigest]).to eq('[FILTERED]')
+      expect(filtered[:array].first[:code_digest]).to eq('[FILTERED]')
+      expect(filtered[:array].first[:session_uid_digest]).to eq('[FILTERED]')
     end
   end
 end

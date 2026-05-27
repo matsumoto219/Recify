@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'zlib'
 
 RSpec.describe 'Receipts', type: :request do
   include ActiveJob::TestHelper
@@ -11,6 +12,32 @@ RSpec.describe 'Receipts', type: :request do
 
   def uploaded_receipt_fixture(filename = 'receipt_sample.jpg', content_type = 'image/jpeg')
     Rack::Test::UploadedFile.new(Rails.root.join('spec/fixtures/files', filename), content_type)
+  end
+
+  def png_bytes(width:, height:, minimum_byte_size: nil)
+    chunk = lambda do |type, data|
+      [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
+    end
+    header = [ width, height, 8, 2, 0, 0, 0 ].pack('NNCCCCC')
+    row = "\x00".b + ("\xFF\xFF\xFF".b * width)
+    compressed = Zlib::Deflate.deflate(row * height)
+
+    png = "\x89PNG\r\n\x1A\n".b +
+      chunk.call('IHDR'.b, header) +
+      chunk.call('IDAT'.b, compressed) +
+      chunk.call('IEND'.b, ''.b)
+    return png if minimum_byte_size.blank? || png.bytesize >= minimum_byte_size
+
+    png + ("\0".b * (minimum_byte_size - png.bytesize))
+  end
+
+  def uploaded_png(width:, height:)
+    tempfile = Tempfile.new([ "receipt-#{width}x#{height}", ".png" ])
+    tempfile.binmode
+    tempfile.write(png_bytes(width: width, height: height))
+    tempfile.rewind
+
+    Rack::Test::UploadedFile.new(tempfile.path, 'image/png')
   end
 
   def upload_ocr_result(overrides = {})
@@ -258,9 +285,9 @@ RSpec.describe 'Receipts', type: :request do
     it 'sidebarに実ストレージ使用量を表示する' do
       user.update!(storage_limit_bytes: 10.megabytes)
       my_receipt.image.attach(
-        io: StringIO.new('a' * 1.megabyte),
+        io: StringIO.new(png_bytes(width: 120, height: 120, minimum_byte_size: 1.megabyte)),
         filename: 'receipt-storage.jpg',
-        content_type: 'image/jpeg'
+        content_type: 'image/png'
       )
 
       get receipts_path
@@ -947,6 +974,22 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '小さすぎる画像はreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_png(width: 1, height: 1) } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.image_too_small'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
       end
     end
