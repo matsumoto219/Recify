@@ -1,12 +1,12 @@
-<% content_for :title, "管理者パスキー再認証" %>
+<% content_for :title, t("admin.passkey_reauthentications.new.title") %>
 
 <section class="mx-auto w-full max-w-4xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "管理者パスキー再認証",
-        subtitle: "高リスク操作を続ける前に、管理者本人確認を更新します。",
-        breadcrumb_label: "管理トップ",
+        title: t("admin.passkey_reauthentications.new.title"),
+        subtitle: t("admin.passkey_reauthentications.new.description"),
+        breadcrumb_label: t("admin.navigation.dashboard"),
         breadcrumb_path: admin_root_path,
         title_size: "text-3xl",
         subtitle_size: "text-sm" %>
@@ -14,17 +14,17 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <% if admin_passkey_reauthenticated? %>
       <div class="mb-5 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-success">
-        パスキー再認証済みです。
+        <%= t("admin.passkey_reauthentications.messages.succeeded") %>
       </div>
     <% end %>
 
     <% if current_user.passkeys.none? %>
       <div class="space-y-4">
-        <h2 class="text-lg font-bold token-text-base">パスキーが登録されていません</h2>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.passkey_reauthentications.new.no_passkeys_title") %></h2>
         <p class="text-sm token-text-muted leading-relaxed">
-          管理者の重要操作にはパスキー再認証が必要です。パスキー設定から登録してください。
+          <%= t("admin.passkey_reauthentications.new.no_passkeys_description") %>
         </p>
-        <%= link_to "パスキー登録へ",
+        <%= link_to t("admin.passkey_reauthentications.new.register_passkey"),
               settings_security_path(anchor: "passkeys"),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       </div>
@@ -34,22 +34,22 @@
         data-controller="passkey-session"
         data-passkey-session-options-url-value="<%= options_admin_passkey_reauthentication_path %>"
         data-passkey-session-create-url-value="<%= admin_passkey_reauthentication_path %>"
-        data-passkey-session-unsupported-message-value="このブラウザはパスキー再認証に対応していません。"
-        data-passkey-session-canceled-message-value="パスキー再認証がキャンセルされました。"
-        data-passkey-session-failure-message-value="パスキー再認証に失敗しました。"
-        data-passkey-session-request-failed-message-value="リクエストに失敗しました。"
+        data-passkey-session-unsupported-message-value="<%= t("admin.passkey_reauthentications.messages.unavailable") %>"
+        data-passkey-session-canceled-message-value="<%= t("admin.passkey_reauthentications.messages.canceled") %>"
+        data-passkey-session-failure-message-value="<%= t("admin.passkey_reauthentications.messages.failed") %>"
+        data-passkey-session-request-failed-message-value="<%= t("admin.passkey_reauthentications.messages.request_failed") %>"
         data-passkey-session-conditional-value="false">
         <div class="space-y-2">
-          <h2 class="text-lg font-bold token-text-base">パスキーで再認証</h2>
+          <h2 class="text-lg font-bold token-text-base"><%= t("admin.passkey_reauthentications.new.form_title") %></h2>
           <p class="text-sm token-text-muted leading-relaxed">
-            再認証は5分間有効です。認証に使う秘密情報は画面に表示しません。
+            <%= t("admin.passkey_reauthentications.new.form_description") %>
           </p>
         </div>
 
         <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
 
         <%= render "shared/ui/actions/button",
-              label: "パスキーで再認証",
+              label: t("admin.passkey_reauthentications.new.submit"),
               type: "button",
               variant: :primary,
               size: :lg,

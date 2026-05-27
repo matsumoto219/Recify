@@ -75,6 +75,25 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
       end
     end
 
+    it 'request開始時のlocaleが英語でも日本語固定で表示し、localeを汚染しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      original_locale = I18n.locale
+      I18n.locale = :en
+
+      get new_admin_passkey_reauthentication_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('管理者パスキー再認証')
+        expect(response.body).to include('パスキーが登録されていません')
+        expect(response.body).not_to include('translation missing')
+        expect(I18n.locale).to eq(:en)
+      end
+    ensure
+      I18n.locale = original_locale if defined?(original_locale)
+    end
+
     it 'admin passkey登録済みなら再認証UIを表示し、credential materialを出さない' do
       admin = create(:user, :admin)
       passkey = create(:passkey, user: admin, credential_id: 'credential-secret', public_key: 'public-key-secret')
@@ -210,7 +229,7 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('ok')).to be(false)
-        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.admin.passkey_reauthentication.messages.failure'))
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('admin.passkey_reauthentications.messages.failed', locale: :ja))
         expect(response.parsed_body.fetch('error')).not_to eq('Passkey reauthentication failed.')
         expect(session[:admin_passkey_reauthenticated_at]).to be_blank
         expect(session[:admin_passkey_reauthentication_method]).to be_blank
@@ -220,6 +239,28 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
         expect(audit_log.error_code).to eq('passkey_reauthentication_failed')
         expect(audit_log.metadata).to eq('method' => 'passkey')
       end
+    end
+
+    it 'request開始時のlocaleが英語でも失敗JSONは日本語固定で、localeを汚染しない' do
+      admin = create(:user, :admin)
+      create_passkey_with_fake_client(admin)
+      sign_in admin
+      original_locale = I18n.locale
+      I18n.locale = :en
+      reauthentication_options_payload
+
+      post admin_passkey_reauthentication_path,
+           params: { credential: { id: 'invalid-credential' } },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('admin.passkey_reauthentications.messages.failed', locale: :ja))
+        expect(response.parsed_body.fetch('error')).not_to include('translation missing')
+        expect(I18n.locale).to eq(:en)
+      end
+    ensure
+      I18n.locale = original_locale if defined?(original_locale)
     end
 
     it '期限切れchallengeを拒否する' do

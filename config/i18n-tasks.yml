@@ -15,6 +15,7 @@ data:
     - config/locales/**/%{locale}.*.yml
   write:
     - ["activerecord.*", "config/locales/models/%{locale}.activerecord.yml"]
+    - ["admin.*", "config/locales/views/%{locale}.admin.yml"]
     - ["enums.*", "config/locales/models/%{locale}.enums.yml"]
     - ["flash.*", "config/locales/messages/%{locale}.flash.yml"]
     - ["auth.*", "config/locales/views/%{locale}.auth.yml"]

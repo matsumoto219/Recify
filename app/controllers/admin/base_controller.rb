@@ -3,12 +3,21 @@ class Admin::BaseController < ApplicationController
   ADMIN_PASSKEY_REAUTHENTICATED_AT_SESSION_KEY = :admin_passkey_reauthenticated_at
   ADMIN_PASSKEY_REAUTHENTICATION_METHOD_SESSION_KEY = :admin_passkey_reauthentication_method
 
+  around_action :with_admin_locale
   before_action :authenticate_user!
   before_action :require_admin!
 
   helper_method :admin_passkey_reauthenticated?, :admin_reauthentication_context
 
   private
+
+  def with_admin_locale(&action)
+    I18n.with_locale(admin_locale, &action)
+  end
+
+  def admin_locale
+    :ja
+  end
 
   def require_admin!
     return if current_user&.admin? &&

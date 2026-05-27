@@ -159,6 +159,25 @@ RSpec.describe 'Admin dashboard', type: :request do
       end
     end
 
+    it 'request開始時のlocaleが英語でもadmin dashboardは日本語固定で、localeを汚染しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      original_locale = I18n.locale
+      I18n.locale = :en
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('管理トップ')
+        expect(response.body).to include('解析状況')
+        expect(response.body).not_to include('translation missing')
+        expect(I18n.locale).to eq(:en)
+      end
+    ensure
+      I18n.locale = original_locale if defined?(original_locale)
+    end
+
     it 'dashboard#show を/admin rootとして使う' do
       admin = create(:user, :admin)
       sign_in admin
