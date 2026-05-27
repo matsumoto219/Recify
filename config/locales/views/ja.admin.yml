@@ -459,6 +459,50 @@ ja:
           passkeys: passkeys
           latest_passkey_use: latest passkey use
           receipts: receipts
+        limits:
+          title: 利用量と上限
+          description: 現在の利用量、全体設定、ユーザー別上限の適用状況
+          storage_used: ストレージ使用量
+          storage_base: 基本ストレージ上限
+          storage_effective: 適用中のストレージ上限
+          api_reservation: API公開時の上限
+          columns:
+            limit: 項目
+            used: 今日の利用
+            applied: 適用上限
+            source: 適用元
+            expires_at: 期限
+          sources:
+            global_default: 全体設定
+            override: ユーザー別上限
+            user_storage_limit: ユーザー基本上限
+            guest_global_default: ゲスト上限
+          keys:
+            receipt_uploads_per_day: レシートアップロード数 / 日
+            batch_files_per_day: 複数画像アップロード数 / 日
+            ocr_jobs_per_day: OCR解析数 / 日
+            ai_jobs_per_day: AI補完数 / 日
+            retry_operations_per_day: 管理者retry数 / 日
+            storage_bytes: ストレージ容量
+            api_requests_per_minute: APIリクエスト数 / 分
+            api_requests_per_day: APIリクエスト数 / 日
+            guest_receipt_uploads_per_day: ゲストアップロード数 / 日
+          form:
+            title: ユーザー別上限の変更
+            description: 対象ユーザーにだけ適用する上限を設定します。変更には実行理由と確認文字列が必要です。
+            admin_forbidden: 管理者ユーザーの上限はこの画面から変更できません。
+            self_forbidden: 自分自身の上限はこの画面から変更できません。
+            reauthentication_required: 変更にはパスキー再認証が必要です。再認証後、入力内容をもう一度送信してください。
+            reauthentication_link: パスキー再認証
+            key_label: 対象上限
+            value_label: 上限値
+            enabled_label: 適用状態
+            enabled_true: 有効
+            enabled_false: 無効
+            expires_at_label: 期限
+            reason_label: 変更理由
+            confirmation_label: 確認文字列 %{confirmation}
+            submit: 上限を更新
         sessions:
           title: ログインセッション
           description: 現在有効なログイン状態と最終利用状況
@@ -540,3 +584,21 @@ ja:
           confirmation_required: 確認文字列が一致しません。
           confirmation_email_required: 確認用メールアドレスが一致しません。
           default: 管理操作を実行できませんでした。
+    user_limit_overrides:
+      messages:
+        reauthentication_required: この操作にはパスキー再認証が必要です。
+        reason_required: 変更理由を入力してください。
+        confirmation_required: 確認文字列を入力してください。
+        success: ユーザー別上限を更新しました。
+        failure:
+          unknown_key: 対象上限を確認してください。
+          invalid_integer: 上限値を整数で入力してください。
+          below_min: 上限値が下限を下回っています。
+          above_max: 上限値が上限を超えています。
+          expires_at_invalid: 期限の形式を確認してください。
+          reauthentication_required: パスキー再認証が必要です。
+          reason_required: 変更理由を入力してください。
+          confirmation_required: 確認文字列が一致しません。
+          self_limit_increase_forbidden: 自分自身の上限は増枠できません。
+          admin_target_forbidden: 管理者ユーザーの上限は変更できません。
+          default: ユーザー別上限を更新できませんでした。

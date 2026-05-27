@@ -33,13 +33,23 @@ RSpec.describe 'Admin users', type: :request do
     expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
     expect(SystemOperations).not_to have_received(:update_setting)
     expect(SystemOperations).not_to have_received(:execute_user_operation)
+    expect(SystemOperations).not_to have_received(:update_user_limit)
     expect(Analysis::RetryService).not_to have_received(:call)
+  end
+
+  def stub_fresh_admin_reauthentication
+    allow_any_instance_of(Admin::UsersController).to receive(:admin_passkey_reauthenticated?).and_return(true)
+    allow_any_instance_of(Admin::UsersController).to receive(:admin_reauthentication_context).and_return(
+      method: 'passkey',
+      reauthenticated_at: Time.current
+    )
   end
 
   before do
     allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
     allow(SystemOperations).to receive(:update_setting)
     allow(SystemOperations).to receive(:execute_user_operation)
+    allow(SystemOperations).to receive(:update_user_limit)
     allow(Analysis::RetryService).to receive(:call)
   end
 
@@ -171,6 +181,8 @@ RSpec.describe 'Admin users', type: :request do
       )
       create(:passkey, user: user, credential_id: 'hidden-credential-id', public_key: 'HIDDEN PUBLIC KEY', last_used_at: 30.minutes.ago)
       create_list(:receipt, 2, user: user)
+      create(:user_limit_override, user: user, key: 'receipt_uploads_per_day', value: { 'value' => 75 })
+      create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 3)
       active_session = UserSession.create!(
         user: user,
         session_uid_digest: 'hidden-session-digest',
@@ -210,6 +222,13 @@ RSpec.describe 'Admin users', type: :request do
         expect(document.at_css('[data-admin-user-passkeys-count]').text).to eq('1')
         expect(document.at_css('[data-admin-user-receipts-count]').text).to eq('2')
         expect(document.at_css('[data-admin-user-active-sessions-count]').text).to eq('1')
+        expect(response.body).to include('利用量と上限')
+        expect(response.body).to include('receipt_uploads_per_day')
+        expect(response.body).to include('レシートアップロード数 / 日')
+        expect(response.body).to include('ユーザー別上限')
+        expect(response.body).to include('API公開時の上限')
+        expect(document.at_css('[data-admin-user-limit-key="receipt_uploads_per_day"]').text).to include('75')
+        expect(document.at_css('[data-admin-user-limit-key="receipt_uploads_per_day"]').text).to include('3')
         expect(response.body).to include(I18n.l(active_session.last_seen_at, format: :short))
         expect(response.body).to include('203.0.113.40')
         expect(response.body).to include('Support Browser')
@@ -255,6 +274,25 @@ RSpec.describe 'Admin users', type: :request do
       expect(response.body).to include('管理操作')
       expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_user_path(user)))
       expect(response.body).not_to include(lock_operation_admin_user_path(user))
+      expect(response.body).not_to include(limit_overrides_admin_user_path(user))
+    end
+
+    it 'fresh reauth済みならユーザー別上限変更フォームを表示する' do
+      admin = create(:user, :admin)
+      user = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(user)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(limit_overrides_admin_user_path(user))
+        expect(response.body).to include('ユーザー別上限の変更')
+        expect(response.body).to include('name="key"')
+        expect(response.body).to include('name="value"')
+        expect(response.body).to include('UPDATE USER LIMIT')
+      end
     end
 
     it 'UIに開発者向け文言を出さない' do

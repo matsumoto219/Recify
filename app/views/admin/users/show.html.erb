@@ -3,8 +3,11 @@
 <%
   record = @record
   active_sessions = record[:active_sessions] || { count: 0, recent: [] }
+  usage_limits = record[:usage_limits] || { storage: {}, limits: [] }
   boolean_label = ->(value) { value ? t("admin.users.common.yes") : t("admin.users.common.no") }
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
+  limit_value_label = ->(row) { row[:storage] ? format_storage_size(row[:limit_value]) : number_with_delimiter(row[:limit_value]) }
+  used_value_label = ->(row) { row[:storage] ? format_storage_size(row[:used_bytes]) : number_with_delimiter(row[:used_count]) }
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -127,6 +130,122 @@
       </dl>
     <% end %>
   </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.limits.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.users.show.limits.description") %></p>
+    </div>
+
+    <dl class="mb-5 grid gap-3 text-sm md:grid-cols-3">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_used") %></dt>
+        <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-storage-used><%= format_storage_size(usage_limits.dig(:storage, :used_bytes)) %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_base") %></dt>
+        <dd class="font-mono token-text-base"><%= format_storage_size(usage_limits.dig(:storage, :base_limit_bytes)) %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_effective") %></dt>
+        <dd class="font-mono token-text-base" data-admin-user-storage-effective><%= format_storage_size(usage_limits.dig(:storage, :effective_limit_bytes)) %></dd>
+        <dd class="mt-1 text-xs token-text-muted"><%= t("admin.users.show.limits.sources.#{usage_limits.dig(:storage, :source)}", default: usage_limits.dig(:storage, :source).to_s) %></dd>
+      </div>
+    </dl>
+
+    <div class="overflow-x-auto" data-admin-user-usage-limits>
+      <table class="min-w-full text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.limit") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.used") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.applied") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.source") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.expires_at") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% usage_limits[:limits].each do |row| %>
+            <tr class="border-b token-border-soft" data-admin-user-limit-key="<%= row[:key] %>">
+              <td class="px-3 py-3 align-top">
+                <div class="font-semibold token-text-base"><%= t("admin.users.show.limits.keys.#{row[:key]}", default: row[:key]) %></div>
+                <div class="mt-1 max-w-full break-all font-mono text-xs token-text-muted"><%= row[:key] %></div>
+                <% if row[:api_reservation] %>
+                  <div class="mt-2 inline-flex rounded-full token-bg-info-soft px-2 py-1 text-xs font-semibold token-text-base"><%= t("admin.users.show.limits.api_reservation") %></div>
+                <% end %>
+              </td>
+              <td class="px-3 py-3 align-top font-mono token-text-base"><%= used_value_label.call(row) %></td>
+              <td class="px-3 py-3 align-top font-mono token-text-base"><%= limit_value_label.call(row) %></td>
+              <td class="px-3 py-3 align-top token-text-base"><%= t("admin.users.show.limits.sources.#{row[:source]}", default: row[:source].to_s) %></td>
+              <td class="px-3 py-3 align-top token-text-base"><%= timestamp_label.call(row[:expires_at]) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-6 border-t token-border-soft pt-5">
+      <h3 class="text-base font-bold token-text-base"><%= t("admin.users.show.limits.form.title") %></h3>
+      <p class="mt-1 text-sm token-text-muted"><%= t("admin.users.show.limits.form.description") %></p>
+
+      <% if record[:admin] %>
+        <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+          <%= t("admin.users.show.limits.form.admin_forbidden") %>
+        </p>
+      <% elsif record[:id] == current_user.id %>
+        <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+          <%= t("admin.users.show.limits.form.self_forbidden") %>
+        </p>
+      <% elsif !admin_passkey_reauthenticated? %>
+        <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <p class="mb-3 text-sm token-text-muted"><%= t("admin.users.show.limits.form.reauthentication_required") %></p>
+          <%= link_to t("admin.users.show.limits.form.reauthentication_link"),
+                new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
+                class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        </div>
+      <% else %>
+        <%= form_with url: limit_overrides_admin_user_path(record[:id]), method: :post, local: true, class: "mt-4 grid gap-4 lg:grid-cols-2" do |form| %>
+          <div class="space-y-1">
+            <%= form.label :key, t("admin.users.show.limits.form.key_label"), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.select :key,
+                  UserLimits.definitions.keys.map { |key| [ t("admin.users.show.limits.keys.#{key}", default: key), key ] },
+                  {},
+                  class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
+          </div>
+          <div class="space-y-1">
+            <%= form.label :value, t("admin.users.show.limits.form.value_label"), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.number_field :value, min: 1, required: true, class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
+          </div>
+          <div class="space-y-1">
+            <%= form.label :enabled, t("admin.users.show.limits.form.enabled_label"), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.select :enabled,
+                  [[ t("admin.users.show.limits.form.enabled_true"), "1" ], [ t("admin.users.show.limits.form.enabled_false"), "0" ]],
+                  {},
+                  class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
+          </div>
+          <div class="space-y-1">
+            <%= form.label :expires_at, t("admin.users.show.limits.form.expires_at_label"), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.datetime_field :expires_at, class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
+          </div>
+          <div class="space-y-1 lg:col-span-2">
+            <%= form.label :reason, t("admin.users.show.limits.form.reason_label"), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+          </div>
+          <div class="space-y-1">
+            <%= form.label :confirmation, t("admin.users.show.limits.form.confirmation_label", confirmation: user_limit_confirmation_text), class: "text-xs font-semibold token-text-muted" %>
+            <%= form.text_field :confirmation, required: true, autocomplete: "off", class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 font-mono text-sm token-text-base" %>
+          </div>
+          <div class="flex items-end">
+            <%= render "shared/ui/actions/button",
+                  label: t("admin.users.show.limits.form.submit"),
+                  type: "submit",
+                  size: :compact,
+                  icon: "sliders_horizontal" %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">

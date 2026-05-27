@@ -11,6 +11,7 @@ module SystemOperations
     :before_state,
     :after_state,
     :audit_log,
+    :user_limit_override,
     :error_code,
     :error_message,
     keyword_init: true
@@ -53,6 +54,21 @@ module SystemOperations
       UserOperationExecutor.call(
         operation: operation,
         user: user,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation
+      )
+    end
+
+    def update_user_limit(user:, key:, value:, enabled:, expires_at:, actor:, reason:, request:, reauthentication:, confirmation:)
+      UserLimitUpdateExecutor.call(
+        user: user,
+        key: key,
+        value: value,
+        enabled: enabled,
+        expires_at: expires_at,
         actor: actor,
         reason: reason,
         request: request,

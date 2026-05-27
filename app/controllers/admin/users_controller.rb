@@ -1,4 +1,8 @@
 class Admin::UsersController < Admin::BaseController
+  USER_LIMIT_CONFIRMATION_TEXT = SystemOperations::UserLimitUpdateExecutor::CONFIRMATION_TEXT
+
+  helper_method :user_limit_confirmation_text
+
   def index
     @filters = filter_params
     @result = Admin.users(**@filters)
@@ -31,5 +35,9 @@ class Admin::UsersController < Admin::BaseController
   def raise_not_found
     raise ActionController::RoutingError,
           "No route matches [#{request.request_method}] #{request.path}"
+  end
+
+  def user_limit_confirmation_text
+    USER_LIMIT_CONFIRMATION_TEXT
   end
 end

@@ -136,6 +136,35 @@ RSpec.describe Admin::UsersQuery do
         )
       end
     end
+
+    it 'show用recordに利用量とeffective limit summaryを含める' do
+      user = create(:user, storage_limit_bytes: 1.gigabyte)
+      create(:user_limit_override, user: user, key: 'receipt_uploads_per_day', value: { 'value' => 75 }, expires_at: 1.day.from_now)
+      create(:user_limit_override, user: user, key: 'storage_bytes', value: { 'value' => 2.gigabytes })
+      create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 3)
+      create(:usage_counter, user: user, key: 'api_requests_per_day', used_count: 10)
+
+      record = described_class.find(id: user.id)
+      limit_rows = record.dig(:usage_limits, :limits).index_by { |row| row[:key] }
+
+      aggregate_failures do
+        expect(record.dig(:usage_limits, :storage, :base_limit_bytes)).to eq(1.gigabyte)
+        expect(record.dig(:usage_limits, :storage, :effective_limit_bytes)).to eq(2.gigabytes)
+        expect(record.dig(:usage_limits, :storage, :source)).to eq('override')
+        expect(limit_rows.fetch('receipt_uploads_per_day')).to include(
+          limit_value: 75,
+          source: 'override',
+          used_count: 3
+        )
+        expect(limit_rows.fetch('api_requests_per_day')).to include(
+          limit_value: 1000,
+          source: 'global_default',
+          used_count: 10,
+          api_reservation: true
+        )
+        expect(record.to_json).not_to include('secret', 'credential_id', 'session_uid')
+      end
+    end
   end
 
   describe '.find' do

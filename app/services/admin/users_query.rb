@@ -140,6 +140,7 @@ module Admin
         }
       }
       record[:active_sessions] = active_session_summary_for(user) if include_session_summary?
+      record[:usage_limits] = usage_limit_summary_for(user) if include_session_summary?
       record
     end
 
@@ -168,6 +169,57 @@ module Admin
         ip_address: session.ip_address&.to_s,
         user_agent: session.user_agent
       }
+    end
+
+    def usage_limit_summary_for(user)
+      storage_usage = user.storage_usage
+      usage_entries = UsageCounters.summary_for(user: user)
+      limit_entries = UserLimits.summary_for(user: user)
+
+      {
+        storage: {
+          used_bytes: storage_usage.used_bytes,
+          base_limit_bytes: user.storage_limit_bytes,
+          effective_limit_bytes: storage_usage.limit_bytes,
+          source: limit_entries.find { |entry| entry.key == "storage_bytes" }&.source
+        },
+        limits: limit_entries.map { |entry| usage_limit_record(entry, usage_entries.fetch(entry.key)) } +
+          guest_limit_records(user, usage_entries)
+      }
+    end
+
+    def usage_limit_record(entry, usage_entry)
+      {
+        key: entry.key,
+        limit_value: entry.value,
+        source: entry.source,
+        used_count: entry.definition.storage ? nil : usage_entry.used_count,
+        used_bytes: entry.definition.storage ? entry.base_value : usage_entry.used_bytes,
+        storage: entry.definition.storage == true,
+        api_reservation: entry.api_reservation == true,
+        override_id: entry.override&.id,
+        override_enabled: entry.override&.enabled,
+        expires_at: entry.override&.expires_at
+      }
+    end
+
+    def guest_limit_records(user, usage_entries)
+      return [] unless user.guest?
+
+      [
+        {
+          key: "guest_receipt_uploads_per_day",
+          limit_value: SystemSettings.limit_for("limits.guest_receipt_uploads_per_day"),
+          source: "global_default",
+          used_count: usage_entries.fetch("guest_receipt_uploads_per_day").used_count,
+          used_bytes: usage_entries.fetch("guest_receipt_uploads_per_day").used_bytes,
+          storage: false,
+          api_reservation: false,
+          override_id: nil,
+          override_enabled: nil,
+          expires_at: nil
+        }
+      ]
     end
 
     def boolean_filter?(value)

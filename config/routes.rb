@@ -19,6 +19,7 @@ Rails.application.routes.draw do
       post "operations/force_passkey_reset", to: "user_operations#force_passkey_reset", as: :force_passkey_reset_operation, on: :member
       post "operations/revoke_sessions", to: "user_operations#revoke_sessions", as: :revoke_sessions_operation, on: :member
       post "operations/delete", to: "user_operations#delete", as: :delete_operation, on: :member
+      post "limit_overrides", to: "user_limit_overrides#create", as: :limit_overrides, on: :member
     end
     get "receipt_analysis_cleanup", to: "receipt_analysis_cleanup#show"
     post "receipt_analysis_cleanup/stale", to: "receipt_analysis_cleanup#execute_stale", as: :receipt_analysis_cleanup_stale

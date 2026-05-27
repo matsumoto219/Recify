@@ -88,4 +88,40 @@ RSpec.describe SystemOperations do
       end
     end
   end
+
+  describe '.update_user_limit' do
+    it 'UserLimitUpdateExecutorへ委譲する親入口である' do
+      allow(SystemOperations::UserLimitUpdateExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))
+      target_user = build_stubbed(:user)
+
+      result = described_class.update_user_limit(
+        user: target_user,
+        key: 'receipt_uploads_per_day',
+        value: '75',
+        enabled: '1',
+        expires_at: nil,
+        actor: build_stubbed(:user, :admin),
+        reason: 'support limit update',
+        request: nil,
+        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::UserLimitUpdateExecutor).to have_received(:call).with(
+          user: target_user,
+          key: 'receipt_uploads_per_day',
+          value: '75',
+          enabled: '1',
+          expires_at: nil,
+          actor: kind_of(User),
+          reason: 'support limit update',
+          request: nil,
+          reauthentication: hash_including(method: 'passkey'),
+          confirmation: 'UPDATE USER LIMIT'
+        )
+      end
+    end
+  end
 end
