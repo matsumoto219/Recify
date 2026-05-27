@@ -19,7 +19,7 @@ ja:
       notifications_label: 通知
       logout_confirm: ログアウトしますか？
     search:
-      placeholder: 店舗名・商品名・金額・日付を指定できます
+      placeholder: レシートを検索
       close_label: 検索を閉じる
     summary:
       count_suffix: 件
