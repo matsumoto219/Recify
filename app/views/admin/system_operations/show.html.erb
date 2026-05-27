@@ -1,18 +1,18 @@
-<% content_for :title, "システム運用" %>
+<% content_for :title, t("admin.system_operations.title") %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "システム運用",
-        subtitle: "管理操作の状態と関連画面を確認します",
+        title: t("admin.system_operations.title"),
+        subtitle: t("admin.system_operations.description"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">管理操作ポリシー</h2>
-      <p class="text-sm token-text-muted">重要な操作は専用画面で本人確認と理由入力を行ってから実行します。</p>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_operations.policy.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.system_operations.policy.description") %></p>
     </div>
 
     <ul class="grid gap-3 text-sm md:grid-cols-2">
@@ -24,24 +24,24 @@
 
   <div class="grid gap-6 lg:grid-cols-2">
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
-      <h2 class="mb-4 text-lg font-bold token-text-base">レシート解析操作</h2>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.receipt_analysis.title") %></h2>
       <div class="space-y-3 text-sm">
-        <p class="token-text-muted">再解析は解析run詳細から実行できます。実行にはパスキーによる再認証が必要です。</p>
+        <p class="token-text-muted"><%= t("admin.system_operations.receipt_analysis.description") %></p>
         <div class="flex flex-wrap gap-2">
-          <%= link_to "解析run管理", admin_receipt_analysis_runs_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to "再解析の監査ログ", admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to t("admin.system_operations.receipt_analysis.runs_link"), admin_receipt_analysis_runs_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to t("admin.system_operations.receipt_analysis.retry_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
         </div>
       </div>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
-      <h2 class="mb-4 text-lg font-bold token-text-base">Cleanup操作</h2>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.cleanup.title") %></h2>
       <div class="space-y-3 text-sm">
-        <p class="token-text-muted">Cleanup実行は専用画面で対象を確認し、理由入力と確認チェックを行ってから実行します。</p>
+        <p class="token-text-muted"><%= t("admin.system_operations.cleanup.description") %></p>
         <div class="flex flex-wrap gap-2">
-          <%= link_to "Cleanup確認 / 実行", admin_receipt_analysis_cleanup_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to "Cleanup実行ログ", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to "Cleanup確認ログ", admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.dry_run"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to t("admin.system_operations.cleanup.execute_link"), admin_receipt_analysis_cleanup_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to t("admin.system_operations.cleanup.execute_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= link_to t("admin.system_operations.cleanup.preview_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.dry_run"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
         </div>
       </div>
     <% end %>
@@ -49,13 +49,13 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">Queue / recurring jobs</h2>
-      <p class="text-sm token-text-muted">処理キューと定期実行の状態確認に使います。キュー操作はこの画面では行えません。</p>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_operations.jobs.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.system_operations.jobs.description") %></p>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
       <div>
-        <h3 class="mb-3 text-base font-bold token-text-base">Queues</h3>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.jobs.queues") %></h3>
         <ul class="grid gap-2 text-sm md:grid-cols-2">
           <% @dashboard.queues.each do |queue| %>
             <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= queue %></li>
@@ -64,18 +64,18 @@
       </div>
 
       <div>
-        <h3 class="mb-3 text-base font-bold token-text-base">定期確認タスク</h3>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.jobs.recurring_tasks") %></h3>
         <div class="space-y-2 text-sm">
           <% @dashboard.recurring_tasks.each do |task| %>
             <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
               <div class="font-mono text-xs token-text-muted"><%= task[:key] %></div>
               <div class="font-semibold token-text-base"><%= task[:class_name] %></div>
-              <div class="token-text-muted">queue=<span class="font-mono"><%= task[:queue] %></span> / schedule=<span class="font-mono"><%= task[:schedule] %></span> / preview=<span class="font-mono"><%= task[:dry_run] %></span></div>
+              <div class="token-text-muted"><%= t("admin.system_operations.jobs.recurring_task_detail", queue: task[:queue], schedule: task[:schedule], preview: task[:dry_run]) %></div>
             </div>
           <% end %>
 
           <% if @dashboard.recurring_tasks.empty? %>
-            <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-muted">定期確認タスクは見つかりません。</p>
+            <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-muted"><%= t("admin.system_operations.jobs.empty") %></p>
           <% end %>
         </div>
       </div>
@@ -83,18 +83,16 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">監査ログ</h2>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.audit_logs.title") %></h2>
     <div class="space-y-5">
       <div>
-        <h3 class="mb-3 text-base font-bold token-text-base">保存方針</h3>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.audit_logs.retention_policy") %></h3>
         <div class="grid gap-2 text-sm md:grid-cols-2">
           <% @dashboard.audit_log_retention_policies.each do |policy| %>
             <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
               <div class="font-semibold token-text-base"><%= policy[:label] %></div>
               <div class="mt-1 text-xs token-text-muted">
-                category=<span class="font-mono"><%= policy[:category] %></span> /
-                retention=<span class="font-mono"><%= policy[:retention] %></span> /
-                actions=<span class="font-mono"><%= policy[:actions_count] %></span>
+                <%= t("admin.system_operations.audit_logs.policy_detail", category: policy[:category], retention: policy[:retention], actions_count: policy[:actions_count]) %>
               </div>
             </div>
           <% end %>
@@ -102,7 +100,7 @@
       </div>
 
       <div>
-        <h3 class="mb-3 text-base font-bold token-text-base">確認リンク</h3>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.audit_logs.links") %></h3>
         <div class="grid gap-2 text-sm md:grid-cols-2">
           <% @dashboard.audit_actions.each do |action| %>
             <%= link_to action,
@@ -115,8 +113,8 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">制限中の操作</h2>
-    <p class="mb-4 text-sm token-text-muted">以下の操作は、専用の確認手順が整うまでこの画面からは実行できません。</p>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.locked_operations.title") %></h2>
+    <p class="mb-4 text-sm token-text-muted"><%= t("admin.system_operations.locked_operations.description") %></p>
     <ul class="grid gap-3 text-sm md:grid-cols-2">
       <% @dashboard.locked_future_operations.each do |operation| %>
         <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base"><%= operation %></li>

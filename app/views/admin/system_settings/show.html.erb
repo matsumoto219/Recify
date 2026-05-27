@@ -1,4 +1,4 @@
-<% content_for :title, "設定詳細: #{@record[:key]}" %>
+<% content_for :title, t("admin.system_settings.show.title", key: @record[:key]) %>
 
 <%
   admin_control_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
@@ -10,64 +10,64 @@
 
   <%= render "shared/ui/layout/section_header",
         title: @record[:key],
-        subtitle: "設定詳細",
+        subtitle: t("admin.system_settings.show.subtitle"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">現在値</h2>
-        <p class="text-sm token-text-muted">現在の設定値と既定値を確認できます。</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_settings.show.current.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.system_settings.show.current.description") %></p>
       </div>
-      <%= link_to "一覧へ戻る", admin_system_settings_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <%= link_to t("admin.system_settings.show.current.back"), admin_system_settings_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">現在値</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.current_value") %></dt>
         <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:current_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">既定値</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.default_value") %></dt>
         <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:default_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">参照元</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.source") %></dt>
         <dd class="font-semibold token-text-base"><%= @record[:source] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">最終更新者</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.updated_by") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:updated_by_user_id].presence || "-" %></dd>
       </div>
     </dl>
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">設定定義</h2>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_settings.show.definition.title") %></h2>
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">カテゴリ</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.category") %></dt>
         <dd class="token-text-base"><%= @record[:category] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">値の種類</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.value_type") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:value_type] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">変更対象</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.editable") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:editable] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">重要度</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.risk_level") %></dt>
         <dd class="token-text-base"><%= @record[:risk_level] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">min</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.min") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:min].presence || "-" %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">max</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.max") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:max].presence || "-" %></dd>
       </div>
     </dl>
@@ -75,30 +75,30 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">設定を変更</h2>
-      <p class="text-sm token-text-muted">変更にはパスキー再認証と変更理由が必要です。</p>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_settings.show.update.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.system_settings.show.update.description") %></p>
     </div>
 
     <% if @record[:editable] != true %>
       <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
-        この設定は確認のみです。
+        <%= t("admin.system_settings.show.update.readonly") %>
       </p>
     <% elsif !admin_passkey_reauthenticated? %>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
-        <p class="mb-3 text-sm token-text-muted">設定を変更するにはパスキー再認証が必要です。再認証後、変更内容と理由をもう一度入力してください。</p>
-        <%= link_to "パスキー再認証",
+        <p class="mb-3 text-sm token-text-muted"><%= t("admin.system_settings.show.update.reauthentication_required") %></p>
+        <%= link_to t("admin.system_settings.show.update.reauthentication_link"),
               new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       </div>
     <% else %>
       <%= form_with url: admin_system_setting_path(@record[:key]), method: :patch, local: true, class: "space-y-4" do |form| %>
         <div class="space-y-1">
-          <%= form.label :value, "新しい値", class: "text-xs font-semibold token-text-muted" %>
+          <%= form.label :value, t("admin.system_settings.show.update.value_label"), class: "text-xs font-semibold token-text-muted" %>
           <% current_value = @record[:current_value] %>
           <% case @record[:value_type].to_s %>
           <% when "boolean" %>
             <%= form.select :value,
-                  options_for_select([[ "有効", "true" ], [ "無効", "false" ]], current_value.to_s),
+                  options_for_select([[ t("admin.system_settings.show.update.enabled"), "true" ], [ t("admin.system_settings.show.update.disabled"), "false" ]], current_value.to_s),
                   {},
                   class: admin_select_class %>
           <% when "integer", "duration" %>
@@ -138,7 +138,7 @@
         </div>
 
         <div class="space-y-1">
-          <%= form.label :reason, "変更理由", class: "text-xs font-semibold token-text-muted" %>
+          <%= form.label :reason, t("admin.system_settings.show.update.reason_label"), class: "text-xs font-semibold token-text-muted" %>
           <%= form.text_area :reason,
                 rows: 3,
                 required: true,
@@ -148,12 +148,12 @@
         <% if @record[:requires_confirmation] %>
           <label class="flex items-start gap-3 text-sm token-text-base">
             <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span>内容と影響範囲を確認しました。</span>
+            <span><%= t("admin.system_settings.show.update.confirm_label") %></span>
           </label>
         <% end %>
 
         <%= render "shared/ui/actions/button",
-              label: "設定を更新",
+              label: t("admin.system_settings.show.update.submit"),
               type: "submit",
               size: :compact,
               icon: "save" %>
@@ -162,9 +162,9 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <h2 class="mb-4 text-lg font-bold token-text-base">監査ログ</h2>
-    <p class="mb-3 text-sm token-text-muted">この設定に関連する監査ログを確認できます。</p>
-    <%= link_to "このkeyの監査ログを見る",
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_settings.show.audit_logs.title") %></h2>
+    <p class="mb-3 text-sm token-text-muted"><%= t("admin.system_settings.show.audit_logs.description") %></p>
+    <%= link_to t("admin.system_settings.show.audit_logs.link"),
           admin_audit_logs_path(target_uid: @record[:key]),
           class: "text-sm font-semibold token-text-brand hover:underline" %>
   <% end %>

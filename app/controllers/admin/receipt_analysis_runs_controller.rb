@@ -24,7 +24,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
     unless admin_retry_enabled?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
-                  alert: "再解析にはパスキーによる再認証が必要です。",
+                  alert: t("admin.receipt_analysis_runs.messages.reauthentication_required"),
                   status: :see_other
       return
     end
@@ -33,17 +33,17 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     reason = params[:reason].to_s.strip
 
     unless RETRY_TYPES.include?(retry_type)
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析の種類を選択してください。"
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: t("admin.receipt_analysis_runs.messages.retry_type_required")
       return
     end
 
     if reason.blank?
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析理由を入力してください。"
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: t("admin.receipt_analysis_runs.messages.reason_required")
       return
     end
 
     unless params[:confirmation].to_s.strip == RETRY_CONFIRMATION_TEXT
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "確認文字列を入力してください。"
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: t("admin.receipt_analysis_runs.messages.confirmation_required")
       return
     end
 
@@ -61,9 +61,9 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     result = Analysis::RetryService.call(**retry_attributes)
 
     if result.success?
-      redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: "再解析を受け付けました。"
+      redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: t("admin.receipt_analysis_runs.messages.accepted")
     else
-      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "再解析を開始できませんでした: #{result.error_code}"
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: t("admin.receipt_analysis_runs.messages.failed", error_code: result.error_code)
     end
   end
 

@@ -1,4 +1,4 @@
-<% content_for :title, "監査ログ" %>
+<% content_for :title, t("admin.audit_logs.index.title") %>
 
 <%
   filters = @filters || {}
@@ -16,7 +16,7 @@
 
   actor_kind_options = AuditLog::ACTOR_KINDS.map { |value| [ value, value ] }
   outcome_options = AuditLog::OUTCOMES.map { |value| [ value, value ] }
-  limit_options = [ 25, 50, 100 ].map { |value| [ "#{value}件", value.to_s ] }
+  limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.audit_logs.index.filters.limit_unit", count: value), value.to_s ] }
   admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
 %>
 
@@ -24,75 +24,75 @@
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "監査ログ",
-        subtitle: "管理操作とシステム操作の記録一覧",
+        title: t("admin.audit_logs.index.title"),
+        subtitle: t("admin.audit_logs.index.description"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Filters</h2>
-        <p class="text-sm token-text-muted">空欄の条件は検索に使いません。</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.index.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.audit_logs.index.filters.description") %></p>
       </div>
 
-      <%= link_to "Reset", admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <%= link_to t("admin.audit_logs.index.filters.reset"), admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <%= form_with url: admin_audit_logs_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
       <div class="space-y-1">
-        <%= form.label :actor_user_id, "actor user id", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :actor_user_id, t("admin.audit_logs.index.filters.labels.actor_user_id"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :actor_user_id, value: filters[:actor_user_id], inputmode: "numeric", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :actor_kind, "actor kind", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :actor_kind, t("admin.audit_logs.index.filters.labels.actor_kind"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :actor_kind,
-              options_for_select([[ "すべて", "" ]] + actor_kind_options, filters[:actor_kind]),
+              options_for_select([[ t("admin.audit_logs.index.filters.all"), "" ]] + actor_kind_options, filters[:actor_kind]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :audit_action, "action", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :audit_action, t("admin.audit_logs.index.filters.labels.action"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :audit_action, value: filters[:action], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :outcome, "outcome", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :outcome, t("admin.audit_logs.index.filters.labels.outcome"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :outcome,
-              options_for_select([[ "すべて", "" ]] + outcome_options, filters[:outcome]),
+              options_for_select([[ t("admin.audit_logs.index.filters.all"), "" ]] + outcome_options, filters[:outcome]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :target_uid, "target uid", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :target_uid, t("admin.audit_logs.index.filters.labels.target_uid"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :target_uid, value: filters[:target_uid], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :request_id, "request id", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :request_id, t("admin.audit_logs.index.filters.labels.request_id"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :request_id, value: filters[:request_id], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :error_code, "error code", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :error_code, t("admin.audit_logs.index.filters.labels.error_code"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :error_code, value: filters[:error_code], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :created_from, "created from", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :created_from, t("admin.audit_logs.index.filters.labels.created_from"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.datetime_field :created_from, value: filters[:created_from], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :created_to, "created to", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :created_to, t("admin.audit_logs.index.filters.labels.created_to"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.datetime_field :created_to, value: filters[:created_to], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :limit, "表示件数", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :limit, t("admin.audit_logs.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :limit,
               options_for_select(limit_options, filters[:limit].presence || limit.to_s),
               {},
@@ -101,7 +101,7 @@
 
       <div class="flex items-end gap-3 md:col-span-2">
         <%= render "shared/ui/actions/button",
-              label: "絞り込む",
+              label: t("admin.audit_logs.index.filters.submit"),
               type: "submit",
               size: :compact,
               icon: "filter_alt" %>
@@ -109,7 +109,7 @@
         <%= render "shared/ui/actions/button",
               as: :link,
               href: admin_audit_logs_path,
-              label: "クリア",
+              label: t("admin.audit_logs.index.filters.clear"),
               variant: :secondary,
               size: :compact,
               icon: "restart_alt" %>
@@ -120,25 +120,25 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Latest audit logs</h2>
-        <p class="text-sm token-text-muted"><%= total_count %>件中 <%= start_number %>-<%= end_number %>件を表示</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.index.results.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.audit_logs.index.results.count_summary", total: total_count, start: start_number, end: end_number) %></p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
         <% if has_previous %>
-          <%= link_to "前へ",
+          <%= link_to t("admin.audit_logs.index.results.previous"),
                 admin_audit_logs_path(query_base.merge(limit: limit, offset: previous_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">前へ</span>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.audit_logs.index.results.previous") %></span>
         <% end %>
 
         <% if has_next %>
-          <%= link_to "次へ",
+          <%= link_to t("admin.audit_logs.index.results.next"),
                 admin_audit_logs_path(query_base.merge(limit: limit, offset: next_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">次へ</span>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.audit_logs.index.results.next") %></span>
         <% end %>
       </div>
     </div>
@@ -147,16 +147,16 @@
       <table class="min-w-full text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold">created</th>
-            <th class="px-3 py-2 font-semibold">actor</th>
-            <th class="px-3 py-2 font-semibold">action</th>
-            <th class="px-3 py-2 font-semibold">outcome</th>
-            <th class="px-3 py-2 font-semibold">target</th>
-            <th class="px-3 py-2 font-semibold">error</th>
-            <th class="px-3 py-2 font-semibold">request</th>
-            <th class="px-3 py-2 font-semibold">ip</th>
-            <th class="px-3 py-2 font-semibold">reason</th>
-            <th class="px-3 py-2 font-semibold">detail</th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.actor") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.action") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.outcome") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.target") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.error") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.request") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.ip") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.reason") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody>
@@ -177,13 +177,13 @@
               <td class="px-3 py-3 font-mono text-xs"><%= record[:request_id].to_s.first(12).presence || "-" %></td>
               <td class="px-3 py-3 font-mono text-xs"><%= record[:ip_address].presence || "-" %></td>
               <td class="px-3 py-3"><%= truncate(record[:reason].to_s, length: 40) %></td>
-              <td class="px-3 py-3"><%= link_to "詳細", admin_audit_log_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+              <td class="px-3 py-3"><%= link_to t("admin.audit_logs.index.table.detail_link"), admin_audit_log_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>
 
           <% if @result.records.empty? %>
             <tr>
-              <td colspan="10" class="px-3 py-10 text-center text-sm token-text-muted">該当する監査ログはありません。</td>
+              <td colspan="10" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.audit_logs.index.results.empty") %></td>
             </tr>
           <% end %>
         </tbody>

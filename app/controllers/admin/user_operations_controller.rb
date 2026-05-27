@@ -31,18 +31,18 @@ class Admin::UserOperationsController < Admin::BaseController
   def execute_user_operation(operation)
     unless admin_passkey_reauthenticated?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_user_path(@user)),
-                  alert: "この操作にはパスキー再認証が必要です。",
+                  alert: t("admin.user_operations.messages.reauthentication_required"),
                   status: :see_other
       return
     end
 
     if operation_params[:reason].to_s.strip.blank?
-      redirect_to admin_user_path(@user), alert: "実行理由を入力してください。", status: :see_other
+      redirect_to admin_user_path(@user), alert: t("admin.user_operations.messages.reason_required"), status: :see_other
       return
     end
 
     if operation_params[:confirmation].to_s.strip.blank?
-      redirect_to admin_user_path(@user), alert: "確認文字列を入力してください。", status: :see_other
+      redirect_to admin_user_path(@user), alert: t("admin.user_operations.messages.confirmation_required"), status: :see_other
       return
     end
 
@@ -83,41 +83,14 @@ class Admin::UserOperationsController < Admin::BaseController
   end
 
   def success_message(operation)
-    case operation
-    when "lock_user"
-      "ユーザーをロックしました。"
-    when "unlock_user"
-      "ユーザーのロックを解除しました。"
-    when "force_passkey_reset"
-      "登録済みパスキーをリセットしました。"
-    when "revoke_sessions"
-      "ログインセッションを失効しました。"
-    when "delete_user"
-      "ユーザーを削除しました。"
-    else
-      "管理操作を実行しました。"
-    end
+    t("admin.user_operations.messages.success.#{operation}", default: t("admin.user_operations.messages.success.default"))
   end
 
   def failure_message(result)
-    case result.error_code
-    when "admin_target_forbidden"
-      "管理者ユーザーにはこの操作を実行できません。"
-    when "self_operation_forbidden"
-      "自分自身にはこの操作を実行できません。"
-    when "target_already_locked"
-      "このユーザーはすでにロックされています。"
-    when "target_not_locked"
-      "このユーザーはロックされていません。"
-    when "passkeys_missing"
-      "リセット対象のパスキーがありません。"
-    when "confirmation_required"
-      "確認文字列が一致しません。"
-    when "confirmation_email_required"
-      "確認用メールアドレスが一致しません。"
-    else
-      "管理操作を実行できませんでした。"
-    end
+    t(
+      "admin.user_operations.messages.failure.#{result.error_code}",
+      default: t("admin.user_operations.messages.failure.default")
+    )
   end
 
   def raise_not_found

@@ -1,4 +1,4 @@
-<% content_for :title, "Cleanup確認" %>
+<% content_for :title, t("admin.receipt_analysis_cleanup.title") %>
 
 <%
   stale = @preview.stale
@@ -16,19 +16,19 @@
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "Cleanup確認",
-        subtitle: "stale / retention cleanup の対象候補を確認します",
+        title: t("admin.receipt_analysis_cleanup.title"),
+        subtitle: t("admin.receipt_analysis_cleanup.description"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="space-y-3">
-      <h2 class="text-lg font-bold token-text-base">対象候補の確認</h2>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.overview.title") %></h2>
       <p class="text-sm token-text-muted">
-        この画面では現在時点の対象候補を確認できます。確認だけではDB更新やrun削除は行いません。
+        <%= t("admin.receipt_analysis_cleanup.overview.readonly_description") %>
       </p>
       <p class="text-sm token-text-muted">
-        Cleanup実行は重要な管理操作です。パスキー再認証、理由入力、確認チェックが必要です。
+        <%= t("admin.receipt_analysis_cleanup.overview.execution_requirement") %>
       </p>
     </div>
   <% end %>
@@ -36,37 +36,37 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold token-text-base">確認条件</h2>
-        <p class="text-sm token-text-muted">limitは安全側の上限で丸めます。</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.filters.description") %></p>
       </div>
 
-      <%= link_to "Reset", admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <%= link_to t("admin.receipt_analysis_cleanup.filters.reset"), admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <%= form_with url: admin_receipt_analysis_cleanup_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
       <div class="space-y-1">
-        <%= form.label :stale_cutoff, "stale cutoff", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :stale_cutoff, t("admin.receipt_analysis_cleanup.filters.labels.stale_cutoff"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.datetime_field :stale_cutoff, value: stale_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :stale_limit, "stale limit", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :stale_limit, t("admin.receipt_analysis_cleanup.filters.labels.stale_limit"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.number_field :stale_limit, value: preview_params[:stale_limit], min: 1, max: 100, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :retention_cutoff, "retention cutoff", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :retention_cutoff, t("admin.receipt_analysis_cleanup.filters.labels.retention_cutoff"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.datetime_field :retention_cutoff, value: retention_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :retention_limit, "retention limit", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :retention_limit, t("admin.receipt_analysis_cleanup.filters.labels.retention_limit"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.number_field :retention_limit, value: preview_params[:retention_limit], min: 1, max: 1000, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="flex items-end gap-3 md:col-span-4">
         <%= render "shared/ui/actions/button",
-              label: "確認する",
+              label: t("admin.receipt_analysis_cleanup.filters.submit"),
               type: "submit",
               size: :compact,
               icon: "visibility" %>
@@ -74,7 +74,7 @@
         <%= render "shared/ui/actions/button",
               as: :link,
               href: admin_receipt_analysis_cleanup_path,
-              label: "クリア",
+              label: t("admin.receipt_analysis_cleanup.filters.clear"),
               variant: :secondary,
               size: :compact,
               icon: "restart_alt" %>
@@ -84,39 +84,39 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">Stale active runs</h2>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.stale.title") %></h2>
       <p class="text-sm token-text-muted">
-        queued / running のまま <%= l(stale[:cutoff], format: :short) %> 以前に更新されたrunを確認します。
+        <%= t("admin.receipt_analysis_cleanup.stale.description", cutoff: l(stale[:cutoff], format: :short)) %>
       </p>
     </div>
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">更新</dt>
-        <dd class="font-mono token-text-base">なし</dd>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.no_updates_label") %></dt>
+        <dd class="font-mono token-text-base"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">limit</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.limit") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:limit] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">stale_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stale_count") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:stale_count] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">skipped_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.skipped_count") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:skipped_count] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">failed_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.failed_count") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:failed_count] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">canceled_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.canceled_count") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:canceled_count] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 md:col-span-2">
-        <dt class="text-xs font-semibold token-text-muted">errors</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.errors") %></dt>
         <dd class="font-mono token-text-base"><%= Array(stale[:errors]).size %></dd>
       </div>
     </dl>
@@ -125,11 +125,11 @@
       <table class="min-w-full text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold">run_key</th>
-            <th class="px-3 py-2 font-semibold">status</th>
-            <th class="px-3 py-2 font-semibold">stage</th>
-            <th class="px-3 py-2 font-semibold">receipt_status</th>
-            <th class="px-3 py-2 font-semibold">updated_at</th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.receipt_status") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.stale.updated_at") %></th>
           </tr>
         </thead>
         <tbody>
@@ -147,7 +147,7 @@
 
           <% if stale_records.empty? %>
             <tr>
-              <td colspan="5" class="px-3 py-10 text-center text-sm token-text-muted">対象のstale active runはありません。</td>
+              <td colspan="5" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.empty") %></td>
             </tr>
           <% end %>
         </tbody>
@@ -155,9 +155,9 @@
     </div>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
-      <h3 class="mb-2 text-base font-bold token-text-base">Stale cleanupを実行</h3>
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.stale.execute_title") %></h3>
       <p class="mb-4 text-sm token-text-muted">
-        この操作は対象 active run を failed / canceled へ更新します。実行前に上の対象候補を確認してください。
+        <%= t("admin.receipt_analysis_cleanup.stale.execute_description") %>
       </p>
 
       <% if cleanup_execution_enabled? %>
@@ -168,24 +168,24 @@
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
           <div class="space-y-1">
-            <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :reason, t("admin.receipt_analysis_cleanup.common.reason_label"), class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
           </div>
 
           <label class="flex items-start gap-3 text-sm token-text-base">
             <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span>対象候補を確認し、stale cleanupを実行します。</span>
+            <span><%= t("admin.receipt_analysis_cleanup.stale.confirm_label") %></span>
           </label>
 
           <%= render "shared/ui/actions/button",
-                label: "Stale cleanupを実行",
+                label: t("admin.receipt_analysis_cleanup.stale.submit"),
                 type: "submit",
                 size: :compact,
                 icon: "warning" %>
         <% end %>
       <% else %>
-        <p class="mb-3 text-sm token-text-muted">実行にはパスキー再認証が必要です。再認証後、実行理由をもう一度入力してください。</p>
-        <%= link_to "パスキー再認証",
+        <p class="mb-3 text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.reauthentication_required") %></p>
+        <%= link_to t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
               new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       <% end %>
@@ -194,27 +194,27 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
-      <h2 class="text-lg font-bold token-text-base">Expired terminal runs</h2>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.retention.title") %></h2>
       <p class="text-sm token-text-muted">
-        terminal状態で <%= l(retention[:cutoff], format: :short) %> 以前に期限切れになったrunを確認します。
+        <%= t("admin.receipt_analysis_cleanup.retention.description", cutoff: l(retention[:cutoff], format: :short)) %>
       </p>
     </div>
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">更新</dt>
-        <dd class="font-mono token-text-base">なし</dd>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.no_updates_label") %></dt>
+        <dd class="font-mono token-text-base"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">limit</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.limit") %></dt>
         <dd class="font-mono token-text-base"><%= retention[:limit] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">expired_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.expired_count") %></dt>
         <dd class="font-mono token-text-base"><%= retention[:expired_count] %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">deleted_count</dt>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.deleted_count") %></dt>
         <dd class="font-mono token-text-base"><%= retention[:deleted_count] %></dd>
       </div>
     </dl>
@@ -223,10 +223,10 @@
       <table class="min-w-full text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold">run_key</th>
-            <th class="px-3 py-2 font-semibold">status</th>
-            <th class="px-3 py-2 font-semibold">stage</th>
-            <th class="px-3 py-2 font-semibold">expires_at</th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.retention.expires_at") %></th>
           </tr>
         </thead>
         <tbody>
@@ -243,7 +243,7 @@
 
           <% if retention_records.empty? %>
             <tr>
-              <td colspan="4" class="px-3 py-10 text-center text-sm token-text-muted">対象のexpired terminal runはありません。</td>
+              <td colspan="4" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.empty") %></td>
             </tr>
           <% end %>
         </tbody>
@@ -251,9 +251,9 @@
     </div>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
-      <h3 class="mb-2 text-base font-bold token-text-base">Retention cleanupを実行</h3>
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.retention.execute_title") %></h3>
       <p class="mb-4 text-sm token-text-muted">
-        この操作は期限切れ terminal run を削除します。削除を伴うため、低limitからの実行を推奨します。
+        <%= t("admin.receipt_analysis_cleanup.retention.execute_description") %>
       </p>
 
       <% if cleanup_execution_enabled? %>
@@ -264,29 +264,29 @@
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
           <div class="space-y-1">
-            <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :reason, t("admin.receipt_analysis_cleanup.common.reason_label"), class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
           </div>
 
           <label class="flex items-start gap-3 text-sm token-text-base">
             <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span>対象候補を確認し、retention cleanupを実行します。</span>
+            <span><%= t("admin.receipt_analysis_cleanup.retention.confirm_label") %></span>
           </label>
 
           <div class="space-y-1">
-            <%= form.label :confirmation_text, "確認文字列 DELETE EXPIRED RUNS", class: "text-xs font-semibold token-text-muted" %>
+            <%= form.label :confirmation_text, t("admin.receipt_analysis_cleanup.retention.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
             <%= form.text_field :confirmation_text, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
           </div>
 
           <%= render "shared/ui/actions/button",
-                label: "Retention cleanupを実行",
+                label: t("admin.receipt_analysis_cleanup.retention.submit"),
                 type: "submit",
                 size: :compact,
                 icon: "delete" %>
         <% end %>
       <% else %>
-        <p class="mb-3 text-sm token-text-muted">実行にはパスキー再認証が必要です。再認証後、実行理由をもう一度入力してください。</p>
-        <%= link_to "パスキー再認証",
+        <p class="mb-3 text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.reauthentication_required") %></p>
+        <%= link_to t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
               new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
               class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
       <% end %>

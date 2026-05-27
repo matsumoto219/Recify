@@ -1,12 +1,12 @@
-<% content_for :title, "監査ログ詳細" %>
+<% content_for :title, t("admin.audit_logs.show.title") %>
 
 <section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "監査ログ詳細",
+        title: t("admin.audit_logs.show.title"),
         subtitle: "##{@record[:id]}",
-        breadcrumb_label: "監査ログ",
+        breadcrumb_label: t("admin.audit_logs.index.title"),
         breadcrumb_path: admin_audit_logs_path,
         title_size: "text-3xl",
         subtitle_size: "text-sm" %>
@@ -14,64 +14,64 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="grid gap-6 lg:grid-cols-3">
       <section class="space-y-3">
-        <h2 class="text-lg font-bold token-text-base">Action</h2>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.action") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
-            <dt class="text-xs font-semibold token-text-muted">action</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.action") %></dt>
             <dd class="font-mono token-text-base break-all"><%= @record[:action] %></dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">outcome</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.outcome") %></dt>
             <dd class="token-text-base"><%= @record[:outcome] %></dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">error_code</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.error_code") %></dt>
             <dd class="token-text-base"><%= @record[:error_code].presence || "-" %></dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">created_at</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.created_at") %></dt>
             <dd class="token-text-base"><%= l(@record[:created_at], format: :short) %></dd>
           </div>
         </dl>
       </section>
 
       <section class="space-y-3">
-        <h2 class="text-lg font-bold token-text-base">Actor / Target</h2>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.actor_target") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
-            <dt class="text-xs font-semibold token-text-muted">actor</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.actor") %></dt>
             <dd class="token-text-base">
               <%= @record.dig(:actor, :kind) %>
               <span class="font-mono text-xs token-text-muted"><%= @record.dig(:actor, :user_id).present? ? "##{@record.dig(:actor, :user_id)}" : "-" %></span>
             </dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">target</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.target") %></dt>
             <dd class="token-text-base">
               <%= @record[:target_type].presence || "-" %>
               <span class="font-mono text-xs token-text-muted"><%= @record[:target_id].present? ? "##{@record[:target_id]}" : "-" %></span>
             </dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">target_uid</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.target_uid") %></dt>
             <dd class="font-mono token-text-base break-all"><%= @record[:target_uid].presence || "-" %></dd>
           </div>
         </dl>
       </section>
 
       <section class="space-y-3">
-        <h2 class="text-lg font-bold token-text-base">Request</h2>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.request") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
-            <dt class="text-xs font-semibold token-text-muted">request_id</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.request_id") %></dt>
             <dd class="font-mono token-text-base break-all"><%= @record[:request_id].presence || "-" %></dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">ip_address</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.ip_address") %></dt>
             <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
           </div>
           <div>
-            <dt class="text-xs font-semibold token-text-muted">user_agent</dt>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.user_agent") %></dt>
             <dd class="token-text-base break-all"><%= @record[:user_agent].presence || "-" %></dd>
           </div>
         </dl>
@@ -79,24 +79,24 @@
     </div>
 
     <div class="mt-6 border-t token-border-soft pt-4">
-      <h2 class="text-sm font-semibold token-text-muted">reason</h2>
+      <h2 class="text-sm font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.reason") %></h2>
       <p class="mt-2 whitespace-pre-wrap text-sm token-text-base"><%= @record[:reason].presence || "-" %></p>
     </div>
   <% end %>
 
   <div class="grid gap-6 lg:grid-cols-3">
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
-      <h2 class="mb-4 text-lg font-bold token-text-base">Metadata</h2>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.metadata") %></h2>
       <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:metadata]) %></pre>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
-      <h2 class="mb-4 text-lg font-bold token-text-base">Before state</h2>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.before_state") %></h2>
       <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:before_state]) %></pre>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
-      <h2 class="mb-4 text-lg font-bold token-text-base">After state</h2>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.after_state") %></h2>
       <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:after_state]) %></pre>
     <% end %>
   </div>

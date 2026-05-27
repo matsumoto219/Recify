@@ -1,22 +1,22 @@
-<% content_for :title, "システム設定" %>
+<% content_for :title, t("admin.system_settings.index.title") %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "システム設定",
-        subtitle: "管理対象として定義された設定一覧",
+        title: t("admin.system_settings.index.title"),
+        subtitle: t("admin.system_settings.index.description"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">管理対象設定</h2>
-        <p class="text-sm token-text-muted">この画面では現在値と既定値を確認できます。</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_settings.index.list_title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.system_settings.index.list_description") %></p>
       </div>
       <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted">
-        total <span class="font-mono"><%= @result.total_count %></span>
+        <%= t("admin.system_settings.index.total") %> <span class="font-mono"><%= @result.total_count %></span>
       </span>
     </div>
 
@@ -24,14 +24,14 @@
       <table class="min-w-full divide-y token-border-soft text-sm">
         <thead>
           <tr class="text-left text-xs uppercase tracking-wide token-text-muted">
-            <th class="px-3 py-2 font-semibold">設定キー</th>
-            <th class="px-3 py-2 font-semibold">カテゴリ</th>
-            <th class="px-3 py-2 font-semibold">値の種類</th>
-            <th class="px-3 py-2 font-semibold">現在値</th>
-            <th class="px-3 py-2 font-semibold">既定値</th>
-            <th class="px-3 py-2 font-semibold">参照元</th>
-            <th class="px-3 py-2 font-semibold">重要度</th>
-            <th class="px-3 py-2 font-semibold">詳細</th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.key") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.category") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.value_type") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.current_value") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.default_value") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.source") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.risk_level") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody class="divide-y token-border-soft">
@@ -45,7 +45,7 @@
               <td class="px-3 py-3 token-text-base"><%= record[:source] %></td>
               <td class="px-3 py-3 token-text-base"><%= record[:risk_level] %></td>
               <td class="px-3 py-3">
-                <%= link_to "詳細", admin_system_setting_path(record[:key]), class: "font-semibold token-text-brand hover:underline" %>
+                <%= link_to t("admin.system_settings.index.table.detail"), admin_system_setting_path(record[:key]), class: "font-semibold token-text-brand hover:underline" %>
               </td>
             </tr>
           <% end %>

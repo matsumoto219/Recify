@@ -118,7 +118,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('Filters')
+        expect(response.body).to include(I18n.t('admin.receipt_analysis_runs.index.filters.title', locale: :ja))
         expect(response.body).to include('name="status"')
         expect(response.body).to include('name="stage"')
         expect(response.body).to include('name="source"')

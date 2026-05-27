@@ -1,4 +1,4 @@
-<% content_for :title, "解析run管理" %>
+<% content_for :title, t("admin.receipt_analysis_runs.index.title") %>
 
 <%
   filters = @filters || {}
@@ -18,10 +18,10 @@
   source_options = ReceiptAnalysisRun::SOURCES.map { |value| [ value, value ] }
   receipt_status_options = Receipt.statuses.keys.map { |value| [ value, value ] }
   needs_attention_options = [
-    [ "指定なし", "" ],
-    [ "要対応のみ", "1" ]
+    [ t("admin.receipt_analysis_runs.index.filters.unspecified"), "" ],
+    [ t("admin.receipt_analysis_runs.index.filters.needs_attention_only"), "1" ]
   ]
-  limit_options = [ 25, 50, 100 ].map { |value| [ "#{value}件", value.to_s ] }
+  limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.receipt_analysis_runs.index.filters.limit_unit", count: value), value.to_s ] }
   admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
 %>
 
@@ -29,56 +29,56 @@
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: "解析run管理",
-        subtitle: "レシート解析runの状態一覧",
+        title: t("admin.receipt_analysis_runs.index.title"),
+        subtitle: t("admin.receipt_analysis_runs.index.description"),
         title_size: "text-3xl",
         subtitle_size: "text-base" %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Filters</h2>
-        <p class="text-sm token-text-muted">空欄の条件は検索に使いません。</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.index.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.index.filters.description") %></p>
       </div>
 
-      <%= link_to "Reset", admin_receipt_analysis_runs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <%= link_to t("admin.receipt_analysis_runs.index.filters.reset"), admin_receipt_analysis_runs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
     <%= form_with url: admin_receipt_analysis_runs_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
       <div class="space-y-1">
-        <%= form.label :status, "run status", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :status, t("admin.receipt_analysis_runs.index.filters.labels.status"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :status,
-              options_for_select([[ "すべて", "" ]] + status_options, filters[:status]),
+              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + status_options, filters[:status]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :stage, "stage", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :stage, t("admin.receipt_analysis_runs.index.filters.labels.stage"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :stage,
-              options_for_select([[ "すべて", "" ]] + stage_options, filters[:stage]),
+              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + stage_options, filters[:stage]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :source, "source", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :source, t("admin.receipt_analysis_runs.index.filters.labels.source"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :source,
-              options_for_select([[ "すべて", "" ]] + source_options, filters[:source]),
+              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + source_options, filters[:source]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :receipt_status, "receipt status", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :receipt_status, t("admin.receipt_analysis_runs.index.filters.labels.receipt_status"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :receipt_status,
-              options_for_select([[ "すべて", "" ]] + receipt_status_options, filters[:receipt_status]),
+              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + receipt_status_options, filters[:receipt_status]),
               {},
               class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :needs_attention, "needs attention", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :needs_attention, t("admin.receipt_analysis_runs.index.filters.labels.needs_attention"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :needs_attention,
               options_for_select(needs_attention_options, filters[:needs_attention]),
               {},
@@ -86,27 +86,27 @@
       </div>
 
       <div class="space-y-1">
-        <%= form.label :error_code, "error code", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :error_code, t("admin.receipt_analysis_runs.index.filters.labels.error_code"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :error_code, value: filters[:error_code], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :run_key, "run key", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :run_key, t("admin.receipt_analysis_runs.index.filters.labels.run_key"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :run_key, value: filters[:run_key], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :receipt_public_id, "receipt public_id", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :receipt_public_id, t("admin.receipt_analysis_runs.index.filters.labels.receipt_public_id"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :receipt_public_id, value: filters[:receipt_public_id], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :user_id, "user id", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :user_id, t("admin.receipt_analysis_runs.index.filters.labels.user_id"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.text_field :user_id, value: filters[:user_id], inputmode: "numeric", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
       </div>
 
       <div class="space-y-1">
-        <%= form.label :limit, "表示件数", class: "text-xs font-semibold token-text-muted" %>
+        <%= form.label :limit, t("admin.receipt_analysis_runs.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
         <%= form.select :limit,
               options_for_select(limit_options, filters[:limit].presence || limit.to_s),
               {},
@@ -115,7 +115,7 @@
 
       <div class="flex items-end gap-3 md:col-span-2">
         <%= render "shared/ui/actions/button",
-              label: "絞り込む",
+              label: t("admin.receipt_analysis_runs.index.filters.submit"),
               type: "submit",
               size: :compact,
               icon: "filter_alt" %>
@@ -123,7 +123,7 @@
         <%= render "shared/ui/actions/button",
               as: :link,
               href: admin_receipt_analysis_runs_path,
-              label: "クリア",
+              label: t("admin.receipt_analysis_runs.index.filters.clear"),
               variant: :secondary,
               size: :compact,
               icon: "restart_alt" %>
@@ -134,25 +134,25 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
-        <h2 class="text-lg font-bold token-text-base">Latest runs</h2>
-        <p class="text-sm token-text-muted"><%= total_count %>件中 <%= start_number %>-<%= end_number %>件を表示</p>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.index.results.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.index.results.count_summary", total: total_count, start: start_number, end: end_number) %></p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
         <% if has_previous %>
-          <%= link_to "前へ",
+          <%= link_to t("admin.receipt_analysis_runs.index.results.previous"),
                 admin_receipt_analysis_runs_path(query_base.merge(limit: limit, offset: previous_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">前へ</span>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.receipt_analysis_runs.index.results.previous") %></span>
         <% end %>
 
         <% if has_next %>
-          <%= link_to "次へ",
+          <%= link_to t("admin.receipt_analysis_runs.index.results.next"),
                 admin_receipt_analysis_runs_path(query_base.merge(limit: limit, offset: next_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60">次へ</span>
+          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.receipt_analysis_runs.index.results.next") %></span>
         <% end %>
       </div>
     </div>
@@ -161,14 +161,14 @@
       <table class="min-w-full text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold">run_key</th>
-            <th class="px-3 py-2 font-semibold">receipt</th>
-            <th class="px-3 py-2 font-semibold">user</th>
-            <th class="px-3 py-2 font-semibold">run</th>
-            <th class="px-3 py-2 font-semibold">receipt status</th>
-            <th class="px-3 py-2 font-semibold">source</th>
-            <th class="px-3 py-2 font-semibold">error</th>
-            <th class="px-3 py-2 font-semibold">created</th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.run_key") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.receipt") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.user") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.run") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.receipt_status") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.source") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.error") %></th>
+            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.created") %></th>
           </tr>
         </thead>
         <tbody>
@@ -183,7 +183,7 @@
               </td>
               <td class="px-3 py-3">
                 <div class="font-mono text-xs token-text-base">#<%= record.dig(:user_info, :id) %></div>
-                <div class="text-xs token-text-muted"><%= record.dig(:user_info, :guest) ? "guest" : "registered" %></div>
+                <div class="text-xs token-text-muted"><%= record.dig(:user_info, :guest) ? t("admin.receipt_analysis_runs.index.user_kind.guest") : t("admin.receipt_analysis_runs.index.user_kind.registered") %></div>
               </td>
               <td class="px-3 py-3">
                 <div class="token-text-base"><%= record[:stage] %> / <%= record[:status] %></div>
@@ -197,7 +197,7 @@
 
           <% if @result.records.empty? %>
             <tr>
-              <td colspan="8" class="px-3 py-10 text-center text-sm token-text-muted">該当するrunはありません。</td>
+              <td colspan="8" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.index.results.empty") %></td>
             </tr>
           <% end %>
         </tbody>

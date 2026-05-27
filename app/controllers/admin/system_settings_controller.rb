@@ -14,14 +14,14 @@ class Admin::SystemSettingsController < Admin::BaseController
 
     unless admin_passkey_reauthenticated?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
-                  alert: "設定変更にはパスキーによる再認証が必要です。",
+                  alert: t("admin.system_settings.messages.reauthentication_required"),
                   status: :see_other
       return
     end
 
     if update_params[:reason].to_s.strip.blank?
       redirect_to admin_system_setting_path(@record[:key]),
-                  alert: "変更理由を入力してください。",
+                  alert: t("admin.system_settings.messages.reason_required"),
                   status: :see_other
       return
     end
@@ -38,11 +38,11 @@ class Admin::SystemSettingsController < Admin::BaseController
 
     if result.success?
       redirect_to admin_system_setting_path(@record[:key]),
-                  notice: "設定を更新しました。",
+                  notice: t("admin.system_settings.messages.updated"),
                   status: :see_other
     else
       redirect_to admin_system_setting_path(@record[:key]),
-                  alert: "設定を更新できませんでした: #{result.error_code}",
+                  alert: t("admin.system_settings.messages.failed", error_code: result.error_code),
                   status: :see_other
     end
   end

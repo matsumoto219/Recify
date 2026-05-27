@@ -26,3 +26,517 @@ ja:
         unavailable: このブラウザはパスキー再認証に対応していません。
         canceled: パスキー再認証がキャンセルされました。
         request_failed: リクエストに失敗しました。
+    dashboard:
+      title: 管理トップ
+      description: 管理運用に必要な状態サマリと主要導線
+      receipt_analysis:
+        title: 解析状況
+        description: レシート解析の現在状態
+        link: 解析run管理
+        active_runs: 処理中run
+        failed_runs: 失敗run
+        review_needed_receipts: 要確認レシート
+        needs_attention: 対応が必要なrun
+        latest_run: 最新run
+      cleanup:
+        title: Cleanup / retention
+        description: 長時間残っている処理と保持期限切れrunの確認結果
+        link: Cleanup確認
+        stale_candidates: stale候補
+        expired_candidates: 期限切れ候補
+        cutoff_suffix: 基準
+        execution_requirement: 実行にはパスキー再認証、理由入力、確認チェックが必要です。
+      audit:
+        title: 監査ログ
+        description: 直近24時間の管理操作概要
+        link: 監査ログ
+        failed_admin_actions: 失敗した管理操作
+        retry_actions: 再解析操作
+        cleanup_execute: Cleanup実行
+        retry_logs: 再解析の監査ログ
+        cleanup_logs: Cleanup実行ログ
+      security:
+        title: セキュリティ / 再認証
+        description: 高リスク操作前の本人確認状態
+        link: パスキー再認証
+        admin_passkeys: 管理者パスキー
+        reauthentication_status: 再認証状態
+        active: 有効
+        expired: 期限切れ
+        passkey_settings: パスキー設定
+        reauthenticate: 再認証する
+      system_operations:
+        title: システム運用
+        description: queue / recurring の運用詳細は専用ページで確認します。
+        link: システム運用
+        queues: Queues
+        recurring_summary: 定期確認サマリ
+        recurring_tasks: 定期確認タスク
+      locked_operations:
+        title: 制限中の操作
+        description: 以下の操作は、専用の確認手順が整うまで管理トップからは実行できません。
+    receipt_analysis_runs:
+      index:
+        title: 解析run管理
+        description: レシート解析runの状態一覧
+        filters:
+          title: フィルター
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          all: すべて
+          unspecified: 指定なし
+          needs_attention_only: 要対応のみ
+          limit_unit: "%{count}件"
+          labels:
+            status: run status
+            stage: stage
+            source: source
+            receipt_status: receipt status
+            needs_attention: needs attention
+            error_code: error code
+            run_key: run key
+            receipt_public_id: receipt public_id
+            user_id: user id
+            limit: 表示件数
+          submit: 絞り込む
+          clear: クリア
+        results:
+          title: 最新run
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当するrunはありません。
+        table:
+          run_key: run_key
+          receipt: receipt
+          user: user
+          run: run
+          receipt_status: receipt status
+          source: source
+          error: error
+          created: created
+        user_kind:
+          guest: guest
+          registered: registered
+      show:
+        title: 解析run詳細
+        sections:
+          run: Run
+          receipt: Receipt
+          user: User
+          timing_provider: Timing / Provider
+          snapshot_presence: Snapshot presence
+          retry_options: Retry options
+          finalize_decision: Finalize decision
+          amount_calculation_profile: Amount calculation profile
+          summaries: Summaries
+        labels:
+          run_key: run_key
+          stage_status: stage / status
+          source: source
+          error: error
+          display_public_id: display / public id
+          receipt_status: receipt status
+          store_total: store / total
+          user_id: user id
+          kind: kind
+          admin: admin
+          latency: "%{name} latency"
+        user_kind:
+          guest: guest
+          registered: registered
+        boolean:
+          "true": "true"
+          "false": "false"
+        snapshot:
+          present: present
+          missing: missing
+        retry:
+          authenticated_guidance: パスキー再認証済みです。再解析には実行理由と確認文字列が必要です。
+          reauthentication_guidance: 再解析にはパスキー再認証が必要です。再認証後、再解析内容と理由をもう一度入力してください。
+          reauthentication_link: パスキー再認証
+          available: available
+          disabled: "disabled: %{reason}"
+          reason_label: 実行理由
+          reason_placeholder: 再解析理由
+          confirmation_label: "確認文字列 %{confirmation}"
+          execute: 再解析を実行
+      messages:
+        reauthentication_required: 再解析にはパスキーによる再認証が必要です。
+        retry_type_required: 再解析の種類を選択してください。
+        reason_required: 再解析理由を入力してください。
+        confirmation_required: 確認文字列を入力してください。
+        accepted: 再解析を受け付けました。
+        failed: "再解析を開始できませんでした: %{error_code}"
+    audit_logs:
+      index:
+        title: 監査ログ
+        description: 管理操作とシステム操作の記録一覧
+        filters:
+          title: フィルター
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          all: すべて
+          limit_unit: "%{count}件"
+          labels:
+            actor_user_id: actor user id
+            actor_kind: actor kind
+            action: action
+            outcome: outcome
+            target_uid: target uid
+            request_id: request id
+            error_code: error code
+            created_from: created from
+            created_to: created to
+            limit: 表示件数
+          submit: 絞り込む
+          clear: クリア
+        results:
+          title: 最新監査ログ
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当する監査ログはありません。
+        table:
+          created: created
+          actor: actor
+          action: action
+          outcome: outcome
+          target: target
+          error: error
+          request: request
+          ip: ip
+          reason: reason
+          detail: detail
+          detail_link: 詳細
+      show:
+        title: 監査ログ詳細
+        sections:
+          action: Action
+          actor_target: Actor / Target
+          request: Request
+          metadata: Metadata
+          before_state: Before state
+          after_state: After state
+        labels:
+          action: action
+          outcome: outcome
+          error_code: error_code
+          created_at: created_at
+          actor: actor
+          target: target
+          target_uid: target_uid
+          request_id: request_id
+          ip_address: ip_address
+          user_agent: user_agent
+          reason: reason
+    receipt_analysis_cleanup:
+      title: Cleanup確認
+      description: stale / retention cleanup の対象候補を確認します
+      overview:
+        title: 対象候補の確認
+        readonly_description: この画面では現在時点の対象候補を確認できます。確認だけではDB更新やrun削除は行いません。
+        execution_requirement: Cleanup実行は重要な管理操作です。パスキー再認証、理由入力、確認チェックが必要です。
+      filters:
+        title: 確認条件
+        description: limitは安全側の上限で丸めます。
+        reset: リセット
+        labels:
+          stale_cutoff: stale cutoff
+          stale_limit: stale limit
+          retention_cutoff: retention cutoff
+          retention_limit: retention limit
+        submit: 確認する
+        clear: クリア
+      common:
+        no_updates_label: 更新
+        no_updates_value: なし
+        limit: limit
+        run_key: run_key
+        status: status
+        stage: stage
+        receipt_status: receipt_status
+        reason_label: 実行理由
+        reauthentication_required: 実行にはパスキー再認証が必要です。再認証後、実行理由をもう一度入力してください。
+        reauthentication_link: パスキー再認証
+      stale:
+        title: Stale active runs
+        description: queued / running のまま %{cutoff} 以前に更新されたrunを確認します。
+        stale_count: stale_count
+        skipped_count: skipped_count
+        failed_count: failed_count
+        canceled_count: canceled_count
+        errors: errors
+        updated_at: updated_at
+        empty: 対象のstale active runはありません。
+        execute_title: Stale cleanupを実行
+        execute_description: この操作は対象 active run を failed / canceled へ更新します。実行前に上の対象候補を確認してください。
+        confirm_label: 対象候補を確認し、stale cleanupを実行します。
+        submit: Stale cleanupを実行
+      retention:
+        title: Expired terminal runs
+        description: terminal状態で %{cutoff} 以前に期限切れになったrunを確認します。
+        expired_count: expired_count
+        deleted_count: deleted_count
+        expires_at: expires_at
+        empty: 対象のexpired terminal runはありません。
+        execute_title: Retention cleanupを実行
+        execute_description: この操作は期限切れ terminal run を削除します。削除を伴うため、低limitからの実行を推奨します。
+        confirm_label: 対象候補を確認し、retention cleanupを実行します。
+        confirmation_label: 確認文字列 DELETE EXPIRED RUNS
+        submit: Retention cleanupを実行
+      messages:
+        reauthentication_required: Cleanup実行にはパスキーによる再認証が必要です。
+        reason_required: 実行理由を入力してください。
+        confirmation_required: 実行確認にチェックしてください。
+        failed: "Cleanupを実行できませんでした: %{error_code}"
+        stale_executed: "Stale cleanupを実行しました: failed=%{failed_count}, canceled=%{canceled_count}"
+        retention_executed: "Retention cleanupを実行しました: deleted=%{deleted_count}"
+    system_operations:
+      title: システム運用
+      description: 管理操作の状態と関連画面を確認します
+      policy:
+        title: 管理操作ポリシー
+        description: 重要な操作は専用画面で本人確認と理由入力を行ってから実行します。
+      receipt_analysis:
+        title: レシート解析操作
+        description: 再解析は解析run詳細から実行できます。実行にはパスキーによる再認証が必要です。
+        runs_link: 解析run管理
+        retry_logs_link: 再解析の監査ログ
+      cleanup:
+        title: Cleanup操作
+        description: Cleanup実行は専用画面で対象を確認し、理由入力と確認チェックを行ってから実行します。
+        execute_link: Cleanup確認 / 実行
+        execute_logs_link: Cleanup実行ログ
+        preview_logs_link: Cleanup確認ログ
+      jobs:
+        title: Queue / recurring jobs
+        description: 処理キューと定期実行の状態確認に使います。キュー操作はこの画面では行えません。
+        queues: Queues
+        recurring_tasks: 定期確認タスク
+        recurring_task_detail: "queue=%{queue} / schedule=%{schedule} / preview=%{preview}"
+        empty: 定期確認タスクは見つかりません。
+      audit_logs:
+        title: 監査ログ
+        retention_policy: 保存方針
+        policy_detail: "category=%{category} / retention=%{retention} / actions=%{actions_count}"
+        links: 確認リンク
+      locked_operations:
+        title: 制限中の操作
+        description: 以下の操作は、専用の確認手順が整うまでこの画面からは実行できません。
+    system_settings:
+      index:
+        title: システム設定
+        description: 管理対象として定義された設定一覧
+        list_title: 管理対象設定
+        list_description: この画面では現在値と既定値を確認できます。
+        total: total
+        table:
+          key: 設定キー
+          category: カテゴリ
+          value_type: 値の種類
+          current_value: 現在値
+          default_value: 既定値
+          source: 参照元
+          risk_level: 重要度
+          detail: 詳細
+      show:
+        title: "設定詳細: %{key}"
+        subtitle: 設定詳細
+        current:
+          title: 現在値
+          description: 現在の設定値と既定値を確認できます。
+          back: 一覧へ戻る
+          current_value: 現在値
+          default_value: 既定値
+          source: 参照元
+          updated_by: 最終更新者
+        definition:
+          title: 設定定義
+          category: カテゴリ
+          value_type: 値の種類
+          editable: 変更対象
+          risk_level: 重要度
+          min: min
+          max: max
+        update:
+          title: 設定を変更
+          description: 変更にはパスキー再認証と変更理由が必要です。
+          readonly: この設定は確認のみです。
+          reauthentication_required: 設定を変更するにはパスキー再認証が必要です。再認証後、変更内容と理由をもう一度入力してください。
+          reauthentication_link: パスキー再認証
+          value_label: 新しい値
+          reason_label: 変更理由
+          enabled: 有効
+          disabled: 無効
+          confirm_label: 内容と影響範囲を確認しました。
+          submit: 設定を更新
+        audit_logs:
+          title: 監査ログ
+          description: この設定に関連する監査ログを確認できます。
+          link: このkeyの監査ログを見る
+      messages:
+        reauthentication_required: 設定変更にはパスキーによる再認証が必要です。
+        reason_required: 変更理由を入力してください。
+        updated: 設定を更新しました。
+        failed: "設定を更新できませんでした: %{error_code}"
+    users:
+      common:
+        yes: はい
+        no: いいえ
+        all: すべて
+        limit_unit: "%{count}件"
+      index:
+        title: ユーザー管理
+        description: ユーザーの認証状態と利用状況
+        filters:
+          title: 絞り込み
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          labels:
+            email: email
+            admin: admin
+            guest: guest
+            confirmed: confirmed
+            locked: locked
+            passkey: passkey
+            limit: 表示件数
+          submit: 絞り込む
+        results:
+          title: ユーザー一覧
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当するユーザーはありません。
+        table:
+          id: id
+          email: email
+          admin: admin
+          guest: guest
+          confirmed: confirmed
+          locked: locked
+          passkeys: passkeys
+          receipts: receipts
+          sign_in: sign in
+          current: current
+          last: last
+          created: created
+          detail: detail
+          detail_link: 詳細
+      show:
+        title: ユーザー詳細
+        description: 認証状態と利用状況の確認
+        links:
+          back: ユーザー一覧へ戻る
+          receipt_analysis_runs: 関連する解析run
+          audit_logs: 関連する監査ログ
+        basic:
+          title: 基本情報
+          user_id: user id
+          email: email
+          admin: admin
+          guest: guest
+          created: created
+          updated: updated
+        security:
+          title: セキュリティ状態
+          confirmed: confirmed
+          unconfirmed_email: unconfirmed email
+          locked: locked
+          failed_attempts: failed attempts
+          unlock_sent: unlock sent
+          present: あり
+          absent: なし
+        sign_in:
+          title: サインイン情報
+          sign_in_count: sign in count
+          current_sign_in: current sign in
+          last_sign_in: last sign in
+          current_ip: current IP
+          last_ip: last IP
+        usage:
+          title: 利用状況
+          passkeys: passkeys
+          latest_passkey_use: latest passkey use
+          receipts: receipts
+        sessions:
+          title: ログインセッション
+          description: 現在有効なログイン状態と最終利用状況
+          active_sessions: active sessions
+          latest_seen: latest seen
+          latest_method: latest method
+          latest_ip: latest IP
+          started: started
+          last_seen: last seen
+          method: method
+          ip: IP
+          user_agent: user agent
+          version: version
+          empty: 有効なログインセッションはありません。
+        operations:
+          title: 管理操作
+          description: 本人からの依頼や復旧対応で必要な場合のみ実行します。
+          admin_forbidden: 管理者ユーザーへの操作は受け付けていません。
+          self_forbidden: 自分自身への操作は受け付けていません。
+          reauthentication_required: 操作にはパスキー再認証が必要です。再認証後、実行理由と確認文字列をもう一度入力してください。
+          reauthentication_link: パスキー再認証
+          reason_label: 実行理由
+          unlock:
+            title: ロック解除
+            description: ログイン制限を解除し、失敗回数をリセットします。
+            confirmation_label: 確認文字列 UNLOCK USER
+            submit: ロック解除を実行
+          lock:
+            title: ユーザーをロック
+            description: 対象ユーザーのログインを制限します。
+            confirmation_label: 確認文字列 LOCK USER
+            submit: ロックを実行
+          passkey_reset:
+            title: パスキーリセット
+            description: 本人からの復旧依頼がある場合に、登録済みパスキーをリセットします。
+            empty: 登録済みパスキーはありません。
+            confirmation_label: 確認文字列 RESET PASSKEYS
+            submit: パスキーリセットを実行
+          revoke_sessions:
+            title: セッション失効
+            description: 対象ユーザーのログイン状態を次のアクセス時に無効にします。
+            confirmation_label: 確認文字列 REVOKE SESSIONS
+            submit: セッション失効を実行
+          delete:
+            title: 退会代行
+            description: 通常は本人に設定画面から退会してもらいます。本人から強い削除依頼があり、他の復旧手段では対応できない場合のみ実行します。
+            email_label: 確認用メールアドレス
+            confirmation_label: 確認文字列 DELETE USER
+            submit: 退会代行を実行
+        audit_logs:
+          title: 最近の監査ログ
+          description: このユーザーが実行した管理操作
+          link: すべて見る
+          created: created
+          action: action
+          outcome: outcome
+          target: target
+          detail: detail
+          detail_link: 詳細
+          empty: 該当する監査ログはありません。
+    user_operations:
+      messages:
+        reauthentication_required: この操作にはパスキー再認証が必要です。
+        reason_required: 実行理由を入力してください。
+        confirmation_required: 確認文字列を入力してください。
+        success:
+          lock_user: ユーザーをロックしました。
+          unlock_user: ユーザーのロックを解除しました。
+          force_passkey_reset: 登録済みパスキーをリセットしました。
+          revoke_sessions: ログインセッションを失効しました。
+          delete_user: ユーザーを削除しました。
+          default: 管理操作を実行しました。
+        failure:
+          admin_target_forbidden: 管理者ユーザーにはこの操作を実行できません。
+          self_operation_forbidden: 自分自身にはこの操作を実行できません。
+          target_already_locked: このユーザーはすでにロックされています。
+          target_not_locked: このユーザーはロックされていません。
+          passkeys_missing: リセット対象のパスキーがありません。
+          confirmation_required: 確認文字列が一致しません。
+          confirmation_email_required: 確認用メールアドレスが一致しません。
+          default: 管理操作を実行できませんでした。

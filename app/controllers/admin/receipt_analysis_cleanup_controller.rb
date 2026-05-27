@@ -29,21 +29,21 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
   def execute_cleanup(operation:, cutoff:, limit:, confirmation_valid:)
     unless cleanup_execution_enabled?
       redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
-                  alert: "Cleanup実行にはパスキーによる再認証が必要です。",
+                  alert: t("admin.receipt_analysis_cleanup.messages.reauthentication_required"),
                   status: :see_other
       return
     end
 
     if execution_params[:reason].to_s.strip.blank?
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "実行理由を入力してください。",
+                  alert: t("admin.receipt_analysis_cleanup.messages.reason_required"),
                   status: :see_other
       return
     end
 
     unless confirmation_valid
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "実行確認にチェックしてください。",
+                  alert: t("admin.receipt_analysis_cleanup.messages.confirmation_required"),
                   status: :see_other
       return
     end
@@ -64,7 +64,7 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
                   status: :see_other
     else
       redirect_to admin_receipt_analysis_cleanup_path(redirect_preview_params),
-                  alert: "Cleanupを実行できませんでした: #{result.error_code}",
+                  alert: t("admin.receipt_analysis_cleanup.messages.failed", error_code: result.error_code),
                   status: :see_other
     end
   end
@@ -105,9 +105,13 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
 
   def cleanup_notice(operation, cleanup_result)
     if operation == "stale_cleanup"
-      "Stale cleanupを実行しました: failed=#{cleanup_result[:failed_count]}, canceled=#{cleanup_result[:canceled_count]}"
+      t(
+        "admin.receipt_analysis_cleanup.messages.stale_executed",
+        failed_count: cleanup_result[:failed_count],
+        canceled_count: cleanup_result[:canceled_count]
+      )
     else
-      "Retention cleanupを実行しました: deleted=#{cleanup_result[:deleted_count]}"
+      t("admin.receipt_analysis_cleanup.messages.retention_executed", deleted_count: cleanup_result[:deleted_count])
     end
   end
 end
