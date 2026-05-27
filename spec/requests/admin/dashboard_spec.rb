@@ -68,6 +68,51 @@ RSpec.describe 'Admin dashboard', type: :request do
       end
     end
 
+    it '既存sessionのadminがguest化された場合は404にする' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      admin.update!(guest: true)
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('解析状況')
+      end
+    end
+
+    it '既存sessionのadminがlockedになった場合はadmin画面を表示しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      admin.lock_access!(send_instructions: false)
+      get admin_root_path
+
+      aggregate_failures do
+        expect([ 302, 404 ]).to include(response.status)
+        expect(response).to redirect_to(new_user_session_path) if response.redirect?
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('解析状況')
+      end
+    end
+
+    it '既存sessionのadminがunconfirmedになった場合はadmin画面を表示しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      admin.update_column(:confirmed_at, nil)
+      get admin_root_path
+
+      aggregate_failures do
+        expect([ 302, 404 ]).to include(response.status)
+        expect(response).to redirect_to(new_user_session_path) if response.redirect?
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('解析状況')
+      end
+    end
+
     it 'adminユーザーは総合トップを閲覧できる' do
       admin = create(:user, :admin)
       create(:passkey, user: admin)

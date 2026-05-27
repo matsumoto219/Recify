@@ -124,10 +124,8 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">Retry options</h2>
-    <% if Rails.env.development? || Rails.env.test? %>
-      <p class="mb-4 text-sm token-text-muted">再解析を実行できます。実行理由を入力してください。</p>
-    <% elsif admin_passkey_reauthenticated? %>
-      <p class="mb-4 text-sm token-text-muted">パスキー再認証済みです。このセッション中に再解析を実行できます。</p>
+    <% if admin_retry_enabled? %>
+      <p class="mb-4 text-sm token-text-muted">パスキー再認証済みです。再解析には実行理由と確認文字列が必要です。</p>
     <% else %>
       <div class="mb-4 space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="text-sm token-text-muted">再解析にはパスキー再認証が必要です。再認証後、再解析内容と理由をもう一度入力してください。</p>
@@ -152,6 +150,11 @@
                     required: true,
                     class: "min-h-20 w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
                     placeholder: "再解析理由" %>
+              <%= form.label :confirmation, "確認文字列 #{retry_confirmation_text}", class: "text-xs font-semibold token-text-muted" %>
+              <%= form.text_field :confirmation,
+                    required: true,
+                    autocomplete: "off",
+                    class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 font-mono text-sm token-text-base" %>
               <%= form.submit "再解析を実行",
                     class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
             <% end %>

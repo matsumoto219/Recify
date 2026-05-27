@@ -11,7 +11,9 @@ class Admin::BaseController < ApplicationController
   private
 
   def require_admin!
-    return if current_user&.admin?
+    return if current_user&.admin? &&
+              current_user.active_for_authentication? &&
+              !current_user.guest?
 
     raise ActionController::RoutingError,
           "No route matches [#{request.request_method}] #{request.path}"

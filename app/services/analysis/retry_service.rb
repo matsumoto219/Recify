@@ -1,6 +1,8 @@
 module Analysis
   class RetryService
     SOURCE = "admin_retry".freeze
+    CONFIRMATION_TEXT = "RETRY ANALYSIS".freeze
+    REAUTHENTICATION_WINDOW = 5.minutes
     RETRY_TYPES = %w[
       full_reanalyze
       ocr_retry
@@ -20,7 +22,7 @@ module Analysis
     Eligibility = Struct.new(:retry_options, keyword_init: true)
 
     class << self
-      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil, reauthentication: nil)
+      def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil, reauthentication: nil, confirmation: nil)
         new(
           receipt: receipt,
           parent_run: parent_run,
@@ -28,7 +30,8 @@ module Analysis
           retry_type: retry_type,
           reason: reason,
           request: request,
-          reauthentication: reauthentication
+          reauthentication: reauthentication,
+          confirmation: confirmation
         ).call
       end
 
@@ -42,21 +45,23 @@ module Analysis
               retry_type: type,
               reason: nil,
               request: nil,
-              reauthentication: nil
+              reauthentication: nil,
+              confirmation: nil
             ).retry_option
           end
         )
       end
     end
 
-    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:)
+    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:, confirmation:)
       @receipt = receipt
       @parent_run = parent_run
       @actor = actor
       @retry_type = retry_type.to_s
-      @reason = reason
+      @reason = reason.to_s.strip
       @request = request
-      @reauthentication = reauthentication
+      @reauthentication = reauthentication.to_h.symbolize_keys
+      @confirmation = confirmation.to_s.strip
     end
 
     def call
@@ -70,6 +75,24 @@ module Analysis
 
       unless actor
         result = failure(:actor_required, "actor is required")
+        record_audit!(result)
+        return result
+      end
+
+      if reason.blank?
+        result = failure(:reason_required, "reason is required")
+        record_audit!(result)
+        return result
+      end
+
+      unless fresh_passkey_reauthentication?
+        result = failure(:reauthentication_required, "passkey reauthentication is required")
+        record_audit!(result)
+        return result
+      end
+
+      unless confirmation_valid?
+        result = failure(:confirmation_required, "confirmation is required")
         record_audit!(result)
         return result
       end
@@ -122,7 +145,26 @@ module Analysis
 
     private
 
-    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication
+    attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication, :confirmation
+
+    def fresh_passkey_reauthentication?
+      reauthentication[:method] == "passkey" &&
+        reauthenticated_at.present? &&
+        reauthenticated_at >= REAUTHENTICATION_WINDOW.ago
+    rescue ArgumentError, TypeError
+      false
+    end
+
+    def reauthenticated_at
+      value = reauthentication[:reauthenticated_at]
+      value.respond_to?(:>=) ? value : Time.zone.parse(value.to_s)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def confirmation_valid?
+      confirmation == CONFIRMATION_TEXT
+    end
 
     def parent_finalize_decision
       @parent_finalize_decision ||= ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
@@ -303,13 +345,12 @@ module Analysis
     end
 
     def reauthentication_metadata
-      context = reauthentication.to_h.symbolize_keys
-      return {} unless context[:method].present? && context[:reauthenticated_at].present?
+      return {} unless fresh_passkey_reauthentication?
 
       {
         reauthenticated: true,
-        reauthentication_method: context[:method],
-        reauthenticated_at: context[:reauthenticated_at]
+        reauthentication_method: reauthentication[:method],
+        reauthenticated_at: reauthenticated_at
       }
     end
 

@@ -96,18 +96,20 @@ RSpec.describe AuditLogs do
           safe: 'visible',
           raw_text: 'ocr raw',
           prompt: 'full prompt',
+          code_digest: 'digest-secret',
           nested: {
             messages: [ { role: 'user', content: 'secret prompt' } ],
             result: 'ok',
+            code_digest: 'nested-digest-secret',
             api_key: 'sk-test'
           },
           array: [
-            { token: 'hidden', value: 'kept' },
+            { token: 'hidden', code_digest: 'array-digest-secret', value: 'kept' },
             { authorization_header: 'Bearer secret', value: 'also kept' }
           ]
         },
-        before_state: { password: 'hidden', status: 'failed' },
-        after_state: { session: 'hidden', status: 'processing' }
+        before_state: { password: 'hidden', code_digest: 'before-digest-secret', status: 'failed' },
+        after_state: { session: 'hidden', code_digest: 'after-digest-secret', status: 'processing' }
       )
 
       expect(log.metadata).to eq(
@@ -120,7 +122,7 @@ RSpec.describe AuditLogs do
       )
       expect(log.before_state).to eq('status' => 'failed')
       expect(log.after_state).to eq('status' => 'processing')
-      expect(log.metadata.to_json).not_to include('ocr raw', 'full prompt', 'sk-test', 'Bearer secret')
+      expect(log.metadata.to_json).not_to include('ocr raw', 'full prompt', 'sk-test', 'Bearer secret', 'digest-secret')
     end
 
     it '長い文字列と配列を上限内に丸める' do
@@ -212,6 +214,7 @@ RSpec.describe AuditLogs do
           id: 'ordinary-id',
           recovery_codes_count: 10,
           backup_codes_count: 10,
+          code_digest: 'recovery-code-digest-secret',
           totp: '123456',
           otp: '654321',
           otp_attempt: '123456',
@@ -229,16 +232,19 @@ RSpec.describe AuditLogs do
           one_time_password: '999999',
           nested: {
             safe: 'visible',
+            code_digest: 'nested-code-digest-secret',
             account_recovery_code: 'nested-fragment-secret'
           }
         },
         before_state: {
           totp_enabled: false,
           recovery_codes_count: 0,
+          code_digest: 'before-code-digest-secret',
           id: 'safe-id'
         },
         after_state: {
           totp_enabled: true,
+          code_digest: 'after-code-digest-secret',
           recovery_codes_count: 10
         }
       )
@@ -259,6 +265,10 @@ RSpec.describe AuditLogs do
           'encrypted-totp-secret',
           'recovery-secret',
           'backup-secret',
+          'recovery-code-digest-secret',
+          'nested-code-digest-secret',
+          'before-code-digest-secret',
+          'after-code-digest-secret',
           'otpauth://totp/Recify',
           'nested-totp-secret',
           'nested-recovery-secret',

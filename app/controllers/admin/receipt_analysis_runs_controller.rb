@@ -1,7 +1,8 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   RETRY_TYPES = Analysis::RetryService::RETRY_TYPES.freeze
+  RETRY_CONFIRMATION_TEXT = Analysis::RetryService::CONFIRMATION_TEXT
 
-  helper_method :admin_retry_enabled?, :admin_retry_reauthentication_required?
+  helper_method :admin_retry_enabled?, :admin_retry_reauthentication_required?, :retry_confirmation_text
 
   def index
     @filters = filter_params
@@ -41,15 +42,21 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       return
     end
 
+    unless params[:confirmation].to_s.strip == RETRY_CONFIRMATION_TEXT
+      redirect_to admin_receipt_analysis_run_path(params[:run_key]), alert: "確認文字列を入力してください。"
+      return
+    end
+
     retry_attributes = {
       receipt: @record[:receipt],
       parent_run: @record[:run],
       actor: current_user,
       retry_type: retry_type,
       reason: reason,
-      request: request
+      request: request,
+      reauthentication: admin_reauthentication_context,
+      confirmation: params[:confirmation]
     }
-    retry_attributes[:reauthentication] = admin_reauthentication_context if admin_passkey_reauthenticated?
 
     result = Analysis::RetryService.call(**retry_attributes)
 
@@ -63,13 +70,15 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   private
 
   def admin_retry_enabled?
-    Rails.env.development? ||
-      Rails.env.test? ||
-      (current_user.passkeys.exists? && admin_passkey_reauthenticated?)
+    current_user.passkeys.exists? && admin_passkey_reauthenticated?
   end
 
   def admin_retry_reauthentication_required?
-    Rails.env.production? && !admin_passkey_reauthenticated?
+    !admin_retry_enabled?
+  end
+
+  def retry_confirmation_text
+    RETRY_CONFIRMATION_TEXT
   end
 
   def filter_params

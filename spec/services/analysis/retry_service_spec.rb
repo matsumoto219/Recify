@@ -38,7 +38,9 @@ RSpec.describe Analysis::RetryService do
           actor: actor,
           retry_type: :full_reanalyze,
           reason: '問い合わせ対応',
-          request: request_context
+          request: request_context,
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
       end.to change(AuditLog, :count).by(1)
 
@@ -101,7 +103,9 @@ RSpec.describe Analysis::RetryService do
         parent_run: parent_run,
         actor: actor,
         retry_type: :ocr_retry,
-        reason: 'OCRだけ再実行'
+        reason: 'OCRだけ再実行',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
       )
 
       aggregate_failures do
@@ -123,6 +127,7 @@ RSpec.describe Analysis::RetryService do
         actor: actor,
         retry_type: :full_reanalyze,
         reason: 'fresh passkey retry',
+        confirmation: retry_confirmation,
         reauthentication: {
           method: 'passkey',
           reauthenticated_at: reauthenticated_at,
@@ -149,6 +154,93 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'reauthentication nilを拒否し、enqueueしない' do
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'missing reauth retry',
+          confirmation: retry_confirmation,
+          reauthentication: nil
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('reauthentication_required')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'reauthentication_required'
+        )
+      end
+    end
+
+    it 'reason blankを拒否し、enqueueしない' do
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: ' ',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('reason_required')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect_no_analysis_job_enqueued
+      end
+    end
+
+    it 'confirmation missingを拒否し、enqueueしない' do
+      result = described_class.call(
+        receipt: receipt,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reason: 'missing confirmation retry',
+        reauthentication: reauthentication_context,
+        confirmation: nil
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('confirmation_required')
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect_no_analysis_job_enqueued
+      end
+    end
+
+    it 'confirmation mismatchを拒否し、enqueueしない' do
+      result = described_class.call(
+        receipt: receipt,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reason: 'wrong confirmation retry',
+        reauthentication: reauthentication_context,
+        confirmation: 'WRONG'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('confirmation_required')
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect_no_analysis_job_enqueued
+      end
+    end
+
     it 'ai_retryでOCR snapshotをコピーし、ReceiptAiEnrichmentJobをenqueueする' do
       parent_run = create(
         :receipt_analysis_run,
@@ -164,7 +256,9 @@ RSpec.describe Analysis::RetryService do
         parent_run: parent_run,
         actor: actor,
         retry_type: :ai_retry,
-        reason: 'AIだけ再実行'
+        reason: 'AIだけ再実行',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
       )
 
       run = result.run.reload
@@ -226,7 +320,9 @@ RSpec.describe Analysis::RetryService do
         parent_run: parent_run,
         actor: actor,
         retry_type: :finalize_retry,
-        reason: '保存だけ再実行'
+        reason: '保存だけ再実行',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
       )
 
       run = result.run.reload
@@ -267,7 +363,10 @@ RSpec.describe Analysis::RetryService do
           receipt: receipt,
           parent_run: nil,
           actor: actor,
-          retry_type: :full_reanalyze
+          retry_type: :full_reanalyze,
+          reason: 'active run retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
       end.to change(AuditLog, :count).by(1)
 
@@ -307,6 +406,8 @@ RSpec.describe Analysis::RetryService do
         parent_run: nil,
         actor: actor,
         retry_type: :full_reanalyze,
+        reason: 'failure with reauth',
+        confirmation: retry_confirmation,
         reauthentication: {
           method: 'passkey',
           reauthenticated_at: reauthenticated_at,
@@ -341,7 +442,10 @@ RSpec.describe Analysis::RetryService do
           receipt: receipt,
           parent_run: parent_run,
           actor: actor,
-          retry_type: :ai_retry
+          retry_type: :ai_retry,
+          reason: 'missing OCR snapshot retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
 
         expect(result).to be_failure
@@ -368,7 +472,10 @@ RSpec.describe Analysis::RetryService do
         result = described_class.call(
           receipt: receipt_without_image,
           actor: actor,
-          retry_type: :full_reanalyze
+          retry_type: :full_reanalyze,
+          reason: 'missing image retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
 
         expect(result).to be_failure
@@ -393,7 +500,10 @@ RSpec.describe Analysis::RetryService do
           receipt: receipt,
           parent_run: parent_run,
           actor: actor,
-          retry_type: :finalize_retry
+          retry_type: :finalize_retry,
+          reason: 'missing finalize decision retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
 
         expect(result).to be_failure
@@ -417,7 +527,10 @@ RSpec.describe Analysis::RetryService do
         receipt: receipt,
         parent_run: parent_run,
         actor: actor,
-        retry_type: :finalize_retry
+        retry_type: :finalize_retry,
+        reason: 'missing AI snapshot retry',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
       )
 
       aggregate_failures do
@@ -434,7 +547,10 @@ RSpec.describe Analysis::RetryService do
         result = described_class.call(
           receipt: receipt,
           actor: actor,
-          retry_type: :unknown_retry
+          retry_type: :unknown_retry,
+          reason: 'unknown retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
       end.to change(AuditLog, :count).by(1)
 
@@ -462,7 +578,10 @@ RSpec.describe Analysis::RetryService do
         described_class.call(
           receipt: receipt,
           actor: actor,
-          retry_type: :full_reanalyze
+          retry_type: :full_reanalyze,
+          reason: 'audit failure retry',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
         )
       end.to raise_error(ActiveRecord::RecordInvalid)
 
@@ -706,5 +825,16 @@ RSpec.describe Analysis::RetryService do
       remote_ip: '203.0.113.22',
       user_agent: 'RetryService Spec'
     )
+  end
+
+  def reauthentication_context
+    {
+      method: 'passkey',
+      reauthenticated_at: Time.current
+    }
+  end
+
+  def retry_confirmation
+    Analysis::RetryService::CONFIRMATION_TEXT
   end
 end

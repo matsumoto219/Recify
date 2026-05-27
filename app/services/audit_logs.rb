@@ -12,6 +12,7 @@ module AuditLogs
     blob_key
     challenge
     client_data_json
+    code_digest
     cookie
     credential_id
     encrypted_totp_secret
@@ -52,6 +53,7 @@ module AuditLogs
     blob_key
     challenge
     client_data_json
+    code_digest
     cookie
     credential_id
     encrypted_totp_secret
