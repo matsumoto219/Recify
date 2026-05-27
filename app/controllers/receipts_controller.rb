@@ -270,22 +270,10 @@ class ReceiptsController < ApplicationController
   def consume_single_upload_limit!
     UsageCounters.check_and_increment!(
       user: current_user,
-      key: upload_counter_key,
+      key: "receipt_uploads_per_day",
       amount: 1,
-      limit: upload_daily_limit
+      limit: UserLimits.effective_limit(user: current_user, key: "receipt_uploads_per_day")
     )
-  end
-
-  def upload_counter_key
-    current_user.guest? ? "guest_receipt_uploads_per_day" : "receipt_uploads_per_day"
-  end
-
-  def upload_daily_limit
-    if current_user.guest?
-      SystemSettings.limit_for("limits.guest_receipt_uploads_per_day")
-    else
-      UserLimits.effective_limit(user: current_user, key: "receipt_uploads_per_day")
-    end
   end
 
   def render_upload_usage_limit_exceeded

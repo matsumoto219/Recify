@@ -16,6 +16,9 @@ RSpec.describe SystemSettings do
         'limits.ai_jobs_per_day',
         'limits.retry_operations_per_day',
         'limits.guest_receipt_uploads_per_day',
+        'limits.guest_batch_files_per_day',
+        'limits.guest_ocr_jobs_per_day',
+        'limits.guest_ai_jobs_per_day',
         'limits.guest_storage_bytes',
         'limits.api_requests_per_minute',
         'limits.api_requests_per_day'
@@ -203,8 +206,11 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.ocr_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ai_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.retry_operations_per_day')).to eq(20)
-        expect(described_class.limit_for('limits.guest_receipt_uploads_per_day')).to eq(10)
-        expect(described_class.limit_for('limits.guest_storage_bytes')).to eq(100.megabytes)
+        expect(described_class.limit_for('limits.guest_receipt_uploads_per_day')).to eq(5)
+        expect(described_class.limit_for('limits.guest_batch_files_per_day')).to eq(5)
+        expect(described_class.limit_for('limits.guest_ocr_jobs_per_day')).to eq(5)
+        expect(described_class.limit_for('limits.guest_ai_jobs_per_day')).to eq(5)
+        expect(described_class.limit_for('limits.guest_storage_bytes')).to eq(50.megabytes)
         expect(described_class.limit_for('limits.api_requests_per_minute')).to eq(60)
         expect(described_class.limit_for('limits.api_requests_per_day')).to eq(1000)
       end

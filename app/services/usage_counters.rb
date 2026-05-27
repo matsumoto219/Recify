@@ -9,9 +9,7 @@ module UsageCounters
     keyword_init: true
   )
 
-  LIMIT_KEYS = (
-    UserLimits.definitions.keys + [ "guest_receipt_uploads_per_day" ]
-  ).freeze
+  LIMIT_KEYS = UserLimits.definitions.keys.freeze
 
   class << self
     def current(user:, key:, period: :day)

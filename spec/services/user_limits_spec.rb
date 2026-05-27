@@ -77,17 +77,36 @@ RSpec.describe UserLimits do
 
     it 'guest storageは既存storage limitとguest global capの小さい方を返す' do
       guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
-      create(
-        :system_setting,
-        key: 'limits.guest_storage_bytes',
-        value: SystemSettings.stored_value(25.megabytes)
-      )
 
       entry = described_class.entry_for(user: guest, key: 'storage_bytes')
 
       aggregate_failures do
-        expect(entry.value).to eq(25.megabytes)
+        expect(entry.value).to eq(50.megabytes)
         expect(entry.source).to eq('guest_global_default')
+      end
+    end
+
+    it 'guestにはguest用のupload / batch / OCR / AI limitを適用する' do
+      guest = create(:user, guest: true)
+
+      aggregate_failures do
+        %w[receipt_uploads_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
+          entry = described_class.entry_for(user: guest, key: key)
+          expect(entry.value).to eq(5)
+          expect(entry.source).to eq('guest_global_default')
+        end
+      end
+    end
+
+    it '本登録ユーザーには通常limitを適用する' do
+      user = create(:user)
+
+      aggregate_failures do
+        %w[receipt_uploads_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
+          entry = described_class.entry_for(user: user, key: key)
+          expect(entry.value).to eq(50)
+          expect(entry.source).to eq('global_default')
+        end
       end
     end
 
@@ -111,6 +130,28 @@ RSpec.describe UserLimits do
       aggregate_failures do
         expect(api_entry.value).to eq(1000)
         expect(api_entry.api_reservation).to be(true)
+      end
+    end
+
+    it 'guestから本登録化するとeffective limitだけ通常ユーザー側へ切り替わる' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      guest.avatar.attach(io: StringIO.new('avatar-bytes'), filename: 'avatar.png', content_type: 'image/png')
+      UsageCounters.increment!(user: guest, key: 'receipt_uploads_per_day', amount: 5)
+      used_bytes_before = guest.storage_usage.used_bytes
+
+      aggregate_failures do
+        expect(described_class.effective_limit(user: guest, key: 'storage_bytes')).to eq(50.megabytes)
+        expect(described_class.effective_limit(user: guest, key: 'receipt_uploads_per_day')).to eq(5)
+        expect(used_bytes_before).to be_positive
+      end
+
+      guest.update!(guest: false)
+
+      aggregate_failures do
+        expect(described_class.effective_limit(user: guest, key: 'storage_bytes')).to eq(1.gigabyte)
+        expect(described_class.effective_limit(user: guest, key: 'receipt_uploads_per_day')).to eq(50)
+        expect(guest.storage_usage.used_bytes).to eq(used_bytes_before)
+        expect(UsageCounter.find_by!(user: guest, key: 'receipt_uploads_per_day').used_count).to eq(5)
       end
     end
   end

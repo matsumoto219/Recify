@@ -183,8 +183,7 @@ module Admin
           effective_limit_bytes: storage_usage.limit_bytes,
           source: limit_entries.find { |entry| entry.key == "storage_bytes" }&.source
         },
-        limits: limit_entries.map { |entry| usage_limit_record(entry, usage_entries.fetch(entry.key)) } +
-          guest_limit_records(user, usage_entries)
+        limits: limit_entries.map { |entry| usage_limit_record(entry, usage_entries.fetch(entry.key)) }
       }
     end
 
@@ -201,25 +200,6 @@ module Admin
         override_enabled: entry.override&.enabled,
         expires_at: entry.override&.expires_at
       }
-    end
-
-    def guest_limit_records(user, usage_entries)
-      return [] unless user.guest?
-
-      [
-        {
-          key: "guest_receipt_uploads_per_day",
-          limit_value: SystemSettings.limit_for("limits.guest_receipt_uploads_per_day"),
-          source: "global_default",
-          used_count: usage_entries.fetch("guest_receipt_uploads_per_day").used_count,
-          used_bytes: usage_entries.fetch("guest_receipt_uploads_per_day").used_bytes,
-          storage: false,
-          api_reservation: false,
-          override_id: nil,
-          override_enabled: nil,
-          expires_at: nil
-        }
-      ]
     end
 
     def boolean_filter?(value)

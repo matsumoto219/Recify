@@ -1036,7 +1036,7 @@ RSpec.describe 'Receipts', type: :request do
     it 'guest単一uploadの日次上限はguest用limitで拒否する' do
       guest = create(:user, guest: true)
       sign_in guest
-      create(:usage_counter, user: guest, key: 'guest_receipt_uploads_per_day', used_count: 10)
+      create(:usage_counter, user: guest, key: 'receipt_uploads_per_day', used_count: 5)
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
@@ -1049,6 +1049,35 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.usage_limits.uploads_exceeded'))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(UsageCounter.find_by!(user: guest, key: 'receipt_uploads_per_day').used_count).to eq(5)
+      end
+    end
+
+    it 'guest OCR job日次上限到達時はrunを安全にfailedへ落としOCR jobをenqueueしない' do
+      guest = create(:user, guest: true)
+      sign_in guest
+      create(:usage_counter, user: guest, key: 'ocr_jobs_per_day', used_count: 5)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
+
+      run = ReceiptAnalysisRun.order(:id).last
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(run.status).to eq('failed')
+        expect(run.error_stage).to eq('ocr')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload).to be_failed
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(UsageCounter.find_by!(user: guest, key: 'ocr_jobs_per_day').used_count).to eq(5)
       end
     end
 

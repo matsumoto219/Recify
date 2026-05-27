@@ -98,6 +98,38 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
         expect(UsageCounter.find_by!(user: receipt.user, key: 'ai_jobs_per_day').used_count).to eq(50)
       end
     end
+
+    it 'guest AI上限到達時はproviderを呼ばずrunをfailedにする' do
+      guest = create(:user, guest: true)
+      receipt = create(:receipt, :processing, :with_image, user: guest)
+      run = create(
+        :receipt_analysis_run,
+        receipt: receipt,
+        stage: 'ai',
+        ocr_result_snapshot: {
+          'success' => true,
+          'lines' => [ 'テストストア', '合計 1000' ],
+          'candidates' => { 'store_name' => 'テストストア', 'total_amount' => 1000 },
+          'meta' => {}
+        }
+      )
+      create(:usage_counter, user: guest, key: 'ai_jobs_per_day', used_count: 5)
+      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('ai')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+        expect(UsageCounter.find_by!(user: guest, key: 'ai_jobs_per_day').used_count).to eq(5)
+      end
+    end
   end
 
   private

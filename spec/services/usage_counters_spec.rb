@@ -101,9 +101,25 @@ RSpec.describe UsageCounters do
       summary = described_class.summary_for(user: user)
 
       aggregate_failures do
-        expect(summary.keys).to include('receipt_uploads_per_day', 'guest_receipt_uploads_per_day', 'api_requests_per_day')
+        expect(summary.keys).to include('receipt_uploads_per_day', 'batch_files_per_day', 'api_requests_per_day')
+        expect(summary.keys).not_to include('guest_receipt_uploads_per_day')
         expect(summary.fetch('api_requests_per_day').used_count).to eq(10)
         expect(summary.fetch('receipt_uploads_per_day').used_count).to eq(0)
+      end
+    end
+  end
+
+  describe 'guest conversion' do
+    it 'guestから本登録化しても同じuser_idの日次counterをリセットしない' do
+      guest = create(:user, guest: true)
+
+      described_class.increment!(user: guest, key: 'receipt_uploads_per_day', amount: 5)
+      guest.update!(guest: false)
+
+      aggregate_failures do
+        expect(guest.reload).not_to be_guest
+        expect(described_class.current(user: guest, key: 'receipt_uploads_per_day').used_count).to eq(5)
+        expect(UsageCounter.where(user: guest, key: 'receipt_uploads_per_day').count).to eq(1)
       end
     end
   end

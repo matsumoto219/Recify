@@ -53,6 +53,18 @@ RSpec.describe GuestUserCleanupJob, type: :job do
       end
     end
 
+    it 'guestから本登録化したユーザーは削除しない' do
+      converted_user = create(:user, guest: true, last_sign_in_at: 8.days.ago)
+      converted_user.update!(guest: false)
+
+      result = described_class.perform_now
+
+      aggregate_failures do
+        expect(User.exists?(converted_user.id)).to be(true)
+        expect(result).to eq(deleted_count: 0, failed_count: 0)
+      end
+    end
+
     it 'unconfirmed guestは削除しない' do
       unconfirmed_guest = create(:user, :unconfirmed, guest: true, last_sign_in_at: 8.days.ago)
 

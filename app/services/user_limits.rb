@@ -10,6 +10,7 @@ module UserLimits
     :max,
     :storage,
     :api_reservation,
+    :guest_system_setting_key,
     keyword_init: true
   )
 
@@ -29,24 +30,28 @@ module UserLimits
     Definition.new(
       key: "receipt_uploads_per_day",
       system_setting_key: "limits.receipt_uploads_per_day",
+      guest_system_setting_key: "limits.guest_receipt_uploads_per_day",
       min: 1,
       max: 1000
     ),
     Definition.new(
       key: "batch_files_per_day",
       system_setting_key: "limits.batch_files_per_day",
+      guest_system_setting_key: "limits.guest_batch_files_per_day",
       min: 1,
       max: 1000
     ),
     Definition.new(
       key: "ocr_jobs_per_day",
       system_setting_key: "limits.ocr_jobs_per_day",
+      guest_system_setting_key: "limits.guest_ocr_jobs_per_day",
       min: 1,
       max: 1000
     ),
     Definition.new(
       key: "ai_jobs_per_day",
       system_setting_key: "limits.ai_jobs_per_day",
+      guest_system_setting_key: "limits.guest_ai_jobs_per_day",
       min: 1,
       max: 1000
     ),
@@ -178,6 +183,8 @@ module UserLimits
     def fallback_value_and_source(user, definition)
       if definition.storage
         storage_fallback(user)
+      elsif user&.guest? && definition.guest_system_setting_key.present?
+        [ SystemSettings.limit_for(definition.guest_system_setting_key), "guest_global_default" ]
       else
         [ global_value_for(definition), "global_default" ]
       end

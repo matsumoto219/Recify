@@ -486,7 +486,6 @@ ja:
             storage_bytes: ストレージ容量
             api_requests_per_minute: APIリクエスト数 / 分
             api_requests_per_day: APIリクエスト数 / 日
-            guest_receipt_uploads_per_day: ゲストアップロード数 / 日
           form:
             title: ユーザー別上限の変更
             description: 対象ユーザーにだけ適用する上限を設定します。変更には実行理由と確認文字列が必要です。

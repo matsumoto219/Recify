@@ -200,7 +200,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
-  it 'guest batchはguest_receipt_uploads_per_dayも消費する' do
+  it 'guest batchはguest用batch_files_per_dayを適用する' do
     guest = create(:user, guest: true)
     files = [ uploaded_receipt_fixture ]
 
@@ -209,7 +209,26 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     aggregate_failures do
       expect(result).to be_success
       expect(UsageCounter.find_by!(user: guest, key: 'batch_files_per_day').used_count).to eq(1)
-      expect(UsageCounter.find_by!(user: guest, key: 'guest_receipt_uploads_per_day').used_count).to eq(1)
+      expect(UsageCounter.where(user: guest, key: 'guest_receipt_uploads_per_day')).to be_empty
+    end
+  end
+
+  it 'guest batchは6ファイル相当になる場合にall-or-nothingで拒否する' do
+    guest = create(:user, guest: true)
+    files = [
+      uploaded_receipt_fixture,
+      uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
+    ]
+    create(:usage_counter, user: guest, key: 'batch_files_per_day', used_count: 4)
+
+    result = described_class.call(user: guest, files: files)
+
+    aggregate_failures do
+      expect(result).not_to be_success
+      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.usage_limit_exceeded'))
+      expect(guest.receipts.count).to eq(0)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      expect(UsageCounter.find_by!(user: guest, key: 'batch_files_per_day').used_count).to eq(4)
     end
   end
 end

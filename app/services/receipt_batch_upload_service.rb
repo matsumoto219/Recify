@@ -72,15 +72,6 @@ class ReceiptBatchUploadService
       amount: files.size,
       limit: UserLimits.effective_limit(user: user, key: "batch_files_per_day")
     )
-
-    return unless user.guest?
-
-    UsageCounters.check_and_increment!(
-      user: user,
-      key: "guest_receipt_uploads_per_day",
-      amount: files.size,
-      limit: SystemSettings.limit_for("limits.guest_receipt_uploads_per_day")
-    )
   end
 
   def enqueue_analysis_jobs(receipts)

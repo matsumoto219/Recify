@@ -46,6 +46,9 @@ RSpec.describe Admin::SystemSettingsQuery do
         'limits.ai_jobs_per_day',
         'limits.retry_operations_per_day',
         'limits.guest_receipt_uploads_per_day',
+        'limits.guest_batch_files_per_day',
+        'limits.guest_ocr_jobs_per_day',
+        'limits.guest_ai_jobs_per_day',
         'limits.guest_storage_bytes',
         'limits.api_requests_per_minute',
         'limits.api_requests_per_day'
