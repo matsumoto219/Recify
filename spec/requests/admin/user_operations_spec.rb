@@ -452,4 +452,178 @@ RSpec.describe 'Admin user operations', type: :request do
       end
     end
   end
+
+  describe 'POST /admin/users/:id/operations/delete' do
+    it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post delete_operation_admin_user_path(target),
+           params: { reason: 'account deletion request', confirmation_email: target.email, confirmation: 'DELETE USER' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_user_path(target)))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'reason blankではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post delete_operation_admin_user_path(target),
+           params: { reason: ' ', confirmation_email: target.email, confirmation: 'DELETE USER' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+        expect(User.where(id: target.id)).to exist
+      end
+    end
+
+    it 'fresh reauth + reason + confirmationでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      target = create(:user, email: 'delete-request@example.com')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      result = SystemOperations::Result.new(success: true)
+      allow(SystemOperations).to receive(:execute_user_operation).and_return(result)
+
+      post delete_operation_admin_user_path(target),
+           params: { reason: 'account deletion request', confirmation_email: 'delete-request@example.com', confirmation: 'DELETE USER' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_users_path)
+        expect(SystemOperations).to have_received(:execute_user_operation).with(
+          operation: 'delete_user',
+          user: target,
+          actor: admin,
+          reason: 'account deletion request',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey', reauthenticated_at: kind_of(ActiveSupport::TimeWithZone)),
+          confirmation: hash_including(text: 'DELETE USER', email: 'delete-request@example.com')
+        )
+      end
+    end
+
+    it '実SystemOperations経由でuserを削除し、success後はusers indexへredirectする' do
+      admin = create(:user, :admin)
+      target = create(:user, email: 'delete-real@example.com')
+      receipt = create(:receipt, :with_image, user: target)
+      passkey = create(:passkey, user: target, credential_id: 'credential-secret-delete-request', public_key: 'PUBLIC KEY DELETE REQUEST')
+      user_session = UserSession.create!(
+        user: target,
+        session_uid_digest: 'session-digest-secret-request',
+        session_version: target.session_version,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post delete_operation_admin_user_path(target),
+             params: { reason: 'account deletion request', confirmation_email: 'delete-real@example.com', confirmation: 'DELETE USER' }
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_users_path)
+        expect(User.where(id: target.id)).not_to exist
+        expect(Receipt.where(id: receipt.id)).not_to exist
+        expect(Passkey.where(id: passkey.id)).not_to exist
+        expect(UserSession.where(id: user_session.id)).not_to exist
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'admin.users.delete',
+          outcome: 'succeeded',
+          target_uid: "user:#{target.id}"
+        )
+        expect(audit_log.before_state).to include(
+          'user_id' => target.id,
+          'receipts_count' => 1,
+          'passkeys_count' => 1,
+          'user_sessions_count' => 1
+        )
+        expect(audit_log.after_state).to eq('deleted' => true)
+        expect(audit_payload).not_to include('delete-real@example.com')
+        expect(audit_payload).not_to include(passkey.credential_id, passkey.public_key, user_session.session_uid_digest)
+        expect(audit_payload).not_to include('confirmation_token', 'unlock_token', 'challenge')
+      end
+    end
+
+    it 'confirmation email不一致は削除せずfailed auditを残す' do
+      admin = create(:user, :admin)
+      target = create(:user, email: 'delete-mismatch@example.com')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post delete_operation_admin_user_path(target),
+             params: { reason: 'account deletion request', confirmation_email: 'wrong@example.com', confirmation: 'DELETE USER' }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(User.where(id: target.id)).to exist
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.delete',
+          outcome: 'failed',
+          error_code: 'confirmation_email_required',
+          target_uid: "user:#{target.id}"
+        )
+      end
+    end
+
+    it 'confirmation text不一致は削除せずfailed auditを残す' do
+      admin = create(:user, :admin)
+      target = create(:user, email: 'delete-text-mismatch@example.com')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post delete_operation_admin_user_path(target),
+             params: { reason: 'account deletion request', confirmation_email: target.email, confirmation: 'WRONG' }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(User.where(id: target.id)).to exist
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.delete',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+
+    it 'HTMLに退会代行フォームを表示し、秘匿情報や開発者向け文言を出さない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      passkey = create(:passkey, user: target, credential_id: 'credential-secret-delete-form', public_key: 'PUBLIC KEY DELETE FORM')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(target)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('退会代行')
+        expect(response.body).to include(delete_operation_admin_user_path(target))
+        expect(response.body).to include('DELETE USER')
+        expect(response.body).not_to include(passkey.credential_id)
+        expect(response.body).not_to include(passkey.public_key)
+        expect(response.body).not_to include('session_id')
+        expect(response.body).not_to include('challenge')
+        expect(response.body).not_to match(/v1\.0後|未実装|TODO|service\/facade|payload|development\/test|production/)
+      end
+    end
+  end
 end

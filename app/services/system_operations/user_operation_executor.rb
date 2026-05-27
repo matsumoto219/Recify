@@ -1,3 +1,5 @@
+require "openssl"
+
 module SystemOperations
   class UserOperationExecutor
     OPERATIONS = {
@@ -24,6 +26,13 @@ module SystemOperations
         confirmation: "REVOKE SESSIONS",
         self_forbidden: true,
         admin_target_forbidden: true
+      },
+      "delete_user" => {
+        action: "admin.users.delete",
+        confirmation: "DELETE USER",
+        self_forbidden: true,
+        admin_target_forbidden: true,
+        email_confirmation_required: true
       }
     }.freeze
 
@@ -50,20 +59,20 @@ module SystemOperations
       @reason = reason.to_s.strip
       @request = request
       @reauthentication = reauthentication.to_h.symbolize_keys
-      @confirmation = confirmation.to_s.strip
+      @confirmation = confirmation
     end
 
     def call
       validate!
 
       audit_log = nil
-      before_state = safe_user_state
+      before_state = before_state_for_operation
       after_state = nil
 
       User.transaction do
         execute_operation!
-        user.reload
-        after_state = safe_user_state
+        before_state = @account_deletion_summary if operation == "delete_user"
+        after_state = after_state_for_operation
         audit_log = record_success_audit!(before_state: before_state, after_state: after_state)
       end
 
@@ -104,6 +113,7 @@ module SystemOperations
       raise ValidationError, "target_already_locked" if operation == "lock_user" && user_locked?
       raise ValidationError, "target_not_locked" if operation == "unlock_user" && !user_locked?
       raise ValidationError, "passkeys_missing" if operation == "force_passkey_reset" && user.passkeys.none?
+      raise ValidationError, "confirmation_email_required" if email_confirmation_required? && !confirmation_email_valid?
     end
 
     def execute_operation!
@@ -117,6 +127,15 @@ module SystemOperations
       when "revoke_sessions"
         user.increment!(:session_version)
         @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+      when "delete_user"
+        deletion_result = Users.delete_account(
+          user: user,
+          actor: actor,
+          reason: reason,
+          request: request,
+          audit: false
+        )
+        @account_deletion_summary = deletion_result.summary
       end
     end
 
@@ -145,7 +164,7 @@ module SystemOperations
         outcome: "failed",
         error_code: error_code_for(error),
         metadata: failure_audit_metadata(error),
-        before_state: safe_user_state,
+        before_state: before_state_for_operation,
         after_state: {},
         request: request
       )
@@ -198,6 +217,43 @@ module SystemOperations
       {}
     end
 
+    def before_state_for_operation
+      return account_deletion_summary_for(user) if operation == "delete_user"
+
+      safe_user_state
+    end
+
+    def after_state_for_operation
+      return { deleted: true } if operation == "delete_user"
+
+      user.reload
+      safe_user_state
+    end
+
+    def account_deletion_summary_for(target_user)
+      return {} unless target_user
+
+      {
+        user_id: target_user.id,
+        email_digest: email_digest(target_user.email),
+        admin: target_user.admin?,
+        guest: target_user.guest?,
+        receipts_count: target_user.receipts.count,
+        passkeys_count: target_user.passkeys.count,
+        user_sessions_count: target_user.user_sessions.count,
+        notifications_count: target_user.notifications.count,
+        avatar_attached: target_user.avatar.attached?
+      }
+    end
+
+    def email_digest(email)
+      OpenSSL::HMAC.hexdigest(
+        "SHA256",
+        Rails.application.key_generator.generate_key(Users::AccountDeletionService::EMAIL_DIGEST_SALT, 32),
+        email.to_s.downcase
+      )
+    end
+
     def user_locked?
       user.locked_at.present?
     end
@@ -211,7 +267,43 @@ module SystemOperations
     end
 
     def confirmation_valid?
-      confirmation == operation_config.fetch(:confirmation)
+      confirmation_text == operation_config.fetch(:confirmation)
+    end
+
+    def email_confirmation_required?
+      operation_config.fetch(:email_confirmation_required, false)
+    end
+
+    def confirmation_email_valid?
+      ActiveSupport::SecurityUtils.secure_compare(
+        confirmation_email,
+        user.email.to_s
+      )
+    rescue ArgumentError
+      false
+    end
+
+    def confirmation_text
+      return confirmation_hash[:text].to_s.strip if confirmation_hash.present?
+
+      confirmation.to_s.strip
+    end
+
+    def confirmation_email
+      return confirmation_hash[:email].to_s.strip if confirmation_hash.present?
+
+      ""
+    end
+
+    def confirmation_hash
+      case confirmation
+      when ActionController::Parameters
+        confirmation.to_unsafe_h.with_indifferent_access
+      when Hash
+        confirmation.with_indifferent_access
+      else
+        {}
+      end
     end
 
     def reauthentication_metadata

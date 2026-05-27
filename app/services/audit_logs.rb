@@ -57,6 +57,7 @@ module AuditLogs
     revoked_sessions_count
     sample_session_ids
     session_version
+    user_sessions_count
   ].freeze
 
   class << self

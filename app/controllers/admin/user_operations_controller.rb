@@ -17,6 +17,10 @@ class Admin::UserOperationsController < Admin::BaseController
     execute_user_operation("revoke_sessions")
   end
 
+  def delete
+    execute_user_operation("delete_user")
+  end
+
   private
 
   def set_user
@@ -49,18 +53,33 @@ class Admin::UserOperationsController < Admin::BaseController
       reason: operation_params[:reason],
       request: request,
       reauthentication: admin_reauthentication_context,
-      confirmation: operation_params[:confirmation]
+      confirmation: confirmation_for(operation)
     )
 
     if result.success?
-      redirect_to admin_user_path(@user), notice: success_message(operation), status: :see_other
+      redirect_to success_redirect_path(operation), notice: success_message(operation), status: :see_other
     else
       redirect_to admin_user_path(@user), alert: failure_message(result), status: :see_other
     end
   end
 
   def operation_params
-    params.permit(:reason, :confirmation)
+    params.permit(:reason, :confirmation, :confirmation_email)
+  end
+
+  def confirmation_for(operation)
+    return operation_params[:confirmation] unless operation == "delete_user"
+
+    {
+      text: operation_params[:confirmation],
+      email: operation_params[:confirmation_email]
+    }
+  end
+
+  def success_redirect_path(operation)
+    return admin_users_path if operation == "delete_user"
+
+    admin_user_path(@user)
   end
 
   def success_message(operation)
@@ -73,6 +92,8 @@ class Admin::UserOperationsController < Admin::BaseController
       "登録済みパスキーをリセットしました。"
     when "revoke_sessions"
       "ログインセッションを失効しました。"
+    when "delete_user"
+      "ユーザーを削除しました。"
     else
       "管理操作を実行しました。"
     end
@@ -92,6 +113,8 @@ class Admin::UserOperationsController < Admin::BaseController
       "リセット対象のパスキーがありません。"
     when "confirmation_required"
       "確認文字列が一致しません。"
+    when "confirmation_email_required"
+      "確認用メールアドレスが一致しません。"
     else
       "管理操作を実行できませんでした。"
     end

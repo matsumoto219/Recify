@@ -296,6 +296,35 @@
                   icon: "logout" %>
           <% end %>
         </div>
+
+        <div class="rounded-lg border token-border-danger token-bg-danger-soft p-4 lg:col-span-2">
+          <h3 class="mb-2 text-base font-bold token-text-error">退会代行</h3>
+          <p class="mb-4 text-sm token-text-error-muted">
+            通常は本人に設定画面から退会してもらいます。本人から強い削除依頼があり、他の復旧手段では対応できない場合のみ実行します。
+          </p>
+          <%= form_with url: delete_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+            <div class="space-y-1">
+              <%= form.label :reason, "実行理由", class: "text-xs font-semibold token-text-muted" %>
+              <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <div class="space-y-1">
+                <%= form.label :confirmation_email, "確認用メールアドレス", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.email_field :confirmation_email, required: true, autocomplete: "off", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              </div>
+              <div class="space-y-1">
+                <%= form.label :confirmation, "確認文字列 DELETE USER", class: "text-xs font-semibold token-text-muted" %>
+                <%= form.text_field :confirmation, required: true, autocomplete: "off", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
+              </div>
+            </div>
+            <%= render "shared/ui/actions/button",
+                  label: "退会代行を実行",
+                  type: "submit",
+                  variant: :danger,
+                  size: :compact,
+                  icon: "delete" %>
+          <% end %>
+        </div>
       </div>
     <% end %>
   <% end %>
