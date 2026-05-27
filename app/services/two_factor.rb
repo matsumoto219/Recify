@@ -3,6 +3,7 @@ module TwoFactor
   VerificationError = Class.new(Error)
   SetupMaterial = Struct.new(:secret, :provisioning_uri, :qr_svg, keyword_init: true)
   SetupConfirmation = Struct.new(:credential, :recovery_codes, keyword_init: true)
+  RecoveryCodesStatus = Struct.new(:enabled, :unused_count, :status, keyword_init: true)
 
   class << self
     def prepare_totp_setup(user:)
@@ -47,6 +48,10 @@ module TwoFactor
 
     def verify_recovery_code(user:, code:)
       RecoveryCodes.verify(user: user, code: code)
+    end
+
+    def recovery_codes_status(user:)
+      RecoveryCodes.status(user: user)
     end
 
     def recovery_code_digest(code)

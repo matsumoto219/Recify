@@ -183,5 +183,72 @@ RSpec.describe TwoFactor do
         described_class.recovery_code_digest(dashed_code)
       )
     end
+
+    it 'TOTP未設定ならrecovery code statusはdisabledにする' do
+      user = create(:user)
+
+      status = described_class.recovery_codes_status(user: user)
+
+      aggregate_failures do
+        expect(status.enabled).to be(false)
+        expect(status.unused_count).to eq(0)
+        expect(status.status).to eq(:missing)
+      end
+    end
+
+    it '未使用codeが3件以上ならokにする' do
+      user = create(:user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      described_class.generate_recovery_codes_for(user: user)
+
+      status = described_class.recovery_codes_status(user: user)
+
+      aggregate_failures do
+        expect(status.enabled).to be(true)
+        expect(status.unused_count).to eq(10)
+        expect(status.status).to eq(:ok)
+      end
+    end
+
+    it '未使用codeが1〜2件ならlowにする' do
+      user = create(:user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      codes = described_class.generate_recovery_codes_for(user: user)
+      codes.first(8).each { |code| described_class.verify_recovery_code(user: user, code: code) }
+
+      status = described_class.recovery_codes_status(user: user)
+
+      aggregate_failures do
+        expect(status.unused_count).to eq(2)
+        expect(status.status).to eq(:low)
+      end
+    end
+
+    it '全code使用済みならemptyにする' do
+      user = create(:user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      codes = described_class.generate_recovery_codes_for(user: user)
+      codes.each { |code| described_class.verify_recovery_code(user: user, code: code) }
+
+      status = described_class.recovery_codes_status(user: user)
+
+      aggregate_failures do
+        expect(status.unused_count).to eq(0)
+        expect(status.status).to eq(:empty)
+      end
+    end
+
+    it 'TOTP有効でcode未発行ならmissingにする' do
+      user = create(:user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      status = described_class.recovery_codes_status(user: user)
+
+      aggregate_failures do
+        expect(status.enabled).to be(true)
+        expect(status.unused_count).to eq(0)
+        expect(status.status).to eq(:missing)
+      end
+    end
   end
 end

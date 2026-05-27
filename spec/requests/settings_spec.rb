@@ -374,6 +374,76 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'TOTP未設定ならrecovery code残数通知を表示しない' do
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include(I18n.t('settings.security.auth.recovery_codes.status.ok.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.auth.recovery_codes.status.low.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.auth.recovery_codes.status.empty.title'))
+        expect(response.body).not_to include(I18n.t('settings.security.auth.recovery_codes.status.missing.title'))
+      end
+    end
+
+    it 'recovery codeが3件以上なら通常表示にする' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      codes = TwoFactor.generate_recovery_codes_for(user: user)
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.ok.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.ok.body', count: 10))
+        expect(response.body).to include(settings_security_recovery_codes_regenerate_path)
+        codes.each { |code| expect(response.body).not_to include(code) }
+        expect(response.body).not_to include(user.recovery_codes.first.code_digest)
+      end
+    end
+
+    it 'recovery codeが1〜2件なら注意表示にする' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      codes = TwoFactor.generate_recovery_codes_for(user: user)
+      codes.first(8).each { |code| TwoFactor.verify_recovery_code(user: user, code: code) }
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.low.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.low.body', count: 2))
+      end
+    end
+
+    it 'recovery codeを全て使用済みなら警告表示にする' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      codes = TwoFactor.generate_recovery_codes_for(user: user)
+      codes.each { |code| TwoFactor.verify_recovery_code(user: user, code: code) }
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.empty.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.empty.body'))
+        expect(response.body).to include(settings_security_recovery_codes_regenerate_path)
+      end
+    end
+
+    it 'TOTP有効でrecovery code未発行なら発行導線を表示する' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.missing.title'))
+        expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.missing.body'))
+        expect(response.body).to include(settings_security_recovery_codes_regenerate_path)
+      end
+    end
+
     it 'guest本登録申請中の送信先を表示する' do
       sign_out user
       guest = User.guest!

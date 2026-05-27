@@ -2,6 +2,7 @@
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex flex-col justify-between border token-border-soft" do %>
     <% totp_credential = current_user.totp_credential %>
     <% totp_enabled = totp_credential&.confirmed? %>
+    <% recovery_codes_status = TwoFactor.recovery_codes_status(user: current_user) if totp_enabled %>
     <div class="space-y-5">
       <div class="flex items-center justify-between mb-4">
         <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
@@ -25,8 +26,27 @@
                   datetime: totp_credential.last_used_at.present? ? l(totp_credential.last_used_at, format: :short) : t("settings.security.auth.two_factor.unused")
                 ) %>
           </p>
-          <p>
-            <%= t("settings.security.auth.two_factor.recovery_codes_remaining", count: current_user.recovery_codes.where(used_at: nil).count) %>
+        </div>
+
+        <%
+          recovery_status_classes = case recovery_codes_status.status
+                                    when :empty
+                                      "token-state-error-soft token-text-error"
+                                    when :low, :missing
+                                      "token-state-warning-soft token-text-warning"
+                                    else
+                                      "token-bg-card-subtle token-text-muted"
+                                    end
+        %>
+        <div class="rounded-lg border token-border-soft p-3 text-sm <%= recovery_status_classes %>">
+          <p class="font-semibold token-text-base">
+            <%= t("settings.security.auth.recovery_codes.status.#{recovery_codes_status.status}.title") %>
+          </p>
+          <p class="mt-1">
+            <%= t(
+                  "settings.security.auth.recovery_codes.status.#{recovery_codes_status.status}.body",
+                  count: recovery_codes_status.unused_count
+                ) %>
           </p>
         </div>
       <% else %>

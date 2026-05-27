@@ -4,6 +4,7 @@ module TwoFactor
   class RecoveryCodes
     CODE_COUNT = 10
     CODE_LENGTH = 20
+    LOW_UNUSED_THRESHOLD = 2
 
     class << self
       def generate_for(user:)
@@ -32,6 +33,26 @@ module TwoFactor
         recovery_code
       rescue ActiveRecord::RecordNotFound
         raise VerificationError, "recovery_code_invalid"
+      end
+
+      def status(user:)
+        return RecoveryCodesStatus.new(enabled: false, unused_count: 0, status: :missing) unless user.totp_credential&.confirmed?
+
+        unused_count = user.recovery_codes.where(used_at: nil).count
+        status =
+          if user.recovery_codes.exists?
+            if unused_count.zero?
+              :empty
+            elsif unused_count <= LOW_UNUSED_THRESHOLD
+              :low
+            else
+              :ok
+            end
+          else
+            :missing
+          end
+
+        RecoveryCodesStatus.new(enabled: true, unused_count: unused_count, status: status)
       end
 
       def digest(code)
