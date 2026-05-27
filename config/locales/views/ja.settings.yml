@@ -15,6 +15,7 @@ ja:
         appearance: 外観
         usage: 利用設定
         storage: ストレージ
+        support: お問い合わせ
         account_actions: アカウント操作
       services:
         ocr: OCRサービス
@@ -44,6 +45,9 @@ ja:
         product_name_ai_completion:
           label: AI補完
           description_html: 商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください
+      support:
+        description: 困ったことや不具合をサポートへ連絡できます。
+        contact: お問い合わせを開く
       danger:
         delete_account: 退会
         confirm: |-

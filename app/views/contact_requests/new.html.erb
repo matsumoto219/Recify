@@ -1,0 +1,97 @@
+<section class="mx-auto max-w-3xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-12 md:pb-10">
+  <% unless user_signed_in? %>
+    <div class="flex justify-center">
+      <%= link_to root_path, class: "inline-flex items-center gap-2 text-sm font-semibold token-text-brand hover:underline" do %>
+        <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_back</span>
+        <%= t("contact_requests.navigation.back_to_top") %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("contact_requests.new.title"),
+        subtitle: t("contact_requests.new.subtitle"),
+        title_size: "text-2xl",
+        subtitle_size: "text-base",
+        align: :center %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-6 rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-base">
+      <p class="font-semibold token-text-warning"><%= t("contact_requests.new.safety_title") %></p>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed token-text-muted">
+        <% t("contact_requests.new.safety_items").each do |item| %>
+          <li><%= item %></li>
+        <% end %>
+      </ul>
+    </div>
+
+    <%= form_with model: @contact_request, url: contact_path, method: :post, local: true do |form| %>
+      <div class="space-y-5">
+        <% unless user_signed_in? && !current_user.guest? %>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :email,
+                label: t("contact_requests.fields.email"),
+                field_type: :email_field,
+                icon: "mail",
+                placeholder: t("contact_requests.placeholders.email"),
+                autocomplete: "email",
+                required: true,
+                size: :regular %>
+        <% end %>
+
+        <% if user_signed_in? && !current_user.guest? %>
+          <div class="rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3 text-sm">
+            <p class="text-xs font-bold uppercase tracking-wider token-text-muted"><%= t("contact_requests.fields.email") %></p>
+            <p class="mt-1 break-all token-text-base"><%= current_user.email %></p>
+          </div>
+        <% end %>
+
+        <%= render "shared/ui/form/select_field",
+              f: form,
+              attribute: :category,
+              label: t("contact_requests.fields.category"),
+              icon: "category",
+              options: ContactRequest::CATEGORIES.map { |category| [t("contact_requests.categories.#{category}"), category] },
+              include_blank: t("contact_requests.placeholders.category"),
+              required: true,
+              size: :regular %>
+
+        <%= render "shared/ui/form/text_field",
+              f: form,
+              attribute: :subject,
+              label: t("contact_requests.fields.subject"),
+              icon: "subject",
+              placeholder: t("contact_requests.placeholders.subject"),
+              required: true,
+              size: :regular,
+              html_options: { maxlength: 160 } %>
+
+        <%= render "shared/ui/form/textarea_field",
+              f: form,
+              attribute: :body,
+              label: t("contact_requests.fields.body"),
+              icon: "chat",
+              placeholder: t("contact_requests.placeholders.body"),
+              required: true,
+              rows: 8,
+              size: :tall,
+              html_options: { maxlength: 5000 } %>
+
+        <div class="hidden" aria-hidden="true">
+          <%= form.label :company_name, t("contact_requests.fields.company_name") %>
+          <%= form.text_field :company_name, tabindex: "-1", autocomplete: "off" %>
+        </div>
+
+        <%= render "shared/ui/actions/button",
+              label: t("contact_requests.buttons.submit"),
+              variant: :primary,
+              size: :lg,
+              type: "submit",
+              icon: "send",
+              full_width: true,
+              disable_with: t("contact_requests.buttons.submitting") %>
+      </div>
+    <% end %>
+  <% end %>
+</section>

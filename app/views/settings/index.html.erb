@@ -236,6 +236,24 @@
       </div>
     <% end %>
 
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
+            icon: "mail",
+            title: t("settings.index.sections.support"),
+            subtitle: t("settings.index.support.description"),
+            class: "mb-6" %>
+
+      <%= render "shared/ui/actions/button",
+            as: :link,
+            href: contact_path,
+            label: t("settings.index.support.contact"),
+            variant: :secondary,
+            full_width: true,
+            class: "px-4 text-left",
+            trailing_icon: "chevron_right",
+            trailing_icon_animated: true %>
+    <% end %>
+
     <%= render "shared/ui/layout/surface_card",
           variant: :danger,
           shadow_variant: :danger,

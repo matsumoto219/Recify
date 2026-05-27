@@ -24,12 +24,16 @@
   <div class="mt-auto">
     <div class="flex flex-col gap-1 mb-4">
       <%= render "shared/navigation/sidebar_nav_item",
+        path: contact_path,
+        icon: "mail",
+        label: t("dashboard.nav.contact"),
+        active: current_page?(contact_path) %>
+
+      <%= render "shared/navigation/sidebar_nav_item",
         path: settings_path,
         icon: "settings",
         label: t("dashboard.nav.settings"),
         active: current_page?(settings_path) %>
-
-      <%# TODO: 問い合わせ導線をここに追加（設定と同グループに配置） %>
     </div>
 
     <div class="px-4">

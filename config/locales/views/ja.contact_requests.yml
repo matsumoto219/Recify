@@ -1,0 +1,44 @@
+ja:
+  contact_requests:
+    navigation:
+      back_to_top: トップへ戻る
+    new:
+      title: お問い合わせ
+      subtitle: アカウント、レシート解析、不具合などについてサポートへ連絡できます。
+      safety_title: 安全のため、必要な範囲の情報のみ入力してください。
+      safety_items:
+        - パスワード、認証コード、復旧用コードは入力しないでください。
+        - クレジットカード番号など、本人確認に不要な情報は入力しないでください。
+        - レシート内容など個人情報を含む場合は、必要な範囲に絞って記載してください。
+    fields:
+      email: 返信先メールアドレス
+      category: 種別
+      subject: 件名
+      body: 内容
+      company_name: 会社名
+    placeholders:
+      email: you@example.com
+      category: 種別を選択
+      subject: 例）レシート解析結果について
+      body: 状況、発生日時、操作内容などを入力してください。
+    categories:
+      bug: 不具合
+      account: アカウント
+      receipt_analysis: レシート解析
+      security: セキュリティ
+      other: その他
+    statuses:
+      open: 未対応
+      in_progress: 対応中
+      resolved: 解決済み
+      closed: クローズ
+    sources:
+      authenticated: 本登録ユーザー
+      guest: ゲストユーザー
+      public: 未ログイン
+    buttons:
+      submit: 送信する
+      submitting: 送信中...
+    messages:
+      created: お問い合わせを受け付けました。
+      create_failed: 入力内容を確認してください。

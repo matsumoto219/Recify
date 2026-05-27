@@ -53,6 +53,8 @@ Rails.application.routes.draw do
   get "/users/two_factor/recovery_code", to: "users/two_factor/recovery_codes#new", as: :users_two_factor_recovery_code
   post "/users/two_factor/recovery_code", to: "users/two_factor/recovery_codes#create", as: :users_two_factor_recovery_code_create
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
+  get "/contact", to: "contact_requests#new", as: :contact
+  post "/contact", to: "contact_requests#create"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

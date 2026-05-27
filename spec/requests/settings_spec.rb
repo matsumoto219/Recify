@@ -52,6 +52,33 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'GET /settings' do
+    it '問い合わせ導線を表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      support_heading = document.xpath("//h2[normalize-space()='#{I18n.t('settings.index.sections.support')}']").first
+      support_icon = support_heading&.parent&.at_css('.material-symbols-outlined')&.text&.strip
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.sections.support'))
+        expect(document.at_css("a[href='#{contact_path}']")).to be_present
+        expect(support_icon).to eq('mail')
+      end
+    end
+
+    it 'sidebarは問い合わせの下に設定を表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      sidebar_hrefs = document.css('#desktop-sidebar a').map { |link| link['href'] }
+
+      aggregate_failures do
+        expect(sidebar_hrefs).to include(contact_path, settings_path)
+        expect(sidebar_hrefs.index(contact_path)).to be < sidebar_hrefs.index(settings_path)
+      end
+    end
+
     it 'shows delete confirmation toggle' do
       get settings_path
 
@@ -211,6 +238,7 @@ RSpec.describe 'Settings', type: :request do
         I18n.t('settings.index.sections.storage'),
         I18n.t('settings.index.sections.appearance'),
         I18n.t('settings.index.sections.usage'),
+        I18n.t('settings.index.sections.support'),
         I18n.t('settings.index.sections.account_actions')
       ]
 
