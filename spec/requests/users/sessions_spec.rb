@@ -13,6 +13,10 @@ RSpec.describe 'User password sessions', type: :request do
     Passkeys.verify_registration(user: user, credential: credential, challenge: options.challenge)
   end
 
+  def create_confirmed_totp(user)
+    create(:totp_credential, user: user, confirmed_at: Time.current)
+  end
+
   it 'passkey未登録userはpassword loginで従来通りログイン完了する' do
     user = create(:user)
 
@@ -63,6 +67,54 @@ RSpec.describe 'User password sessions', type: :request do
     get settings_path
 
     expect(response).to redirect_to(new_user_session_path)
+  end
+
+  it 'TOTPのみ登録済みuserはpassword login後にTOTP step-upへ進む' do
+    user = create(:user)
+    create_confirmed_totp(user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+
+    pending = session[:pending_second_factor]
+
+    aggregate_failures do
+      expect(response).to redirect_to(users_two_factor_totp_path)
+      expect(pending['user_id']).to eq(user.id)
+      expect(pending['allowed_methods']).to eq([ 'totp' ])
+      expect(user.reload.sign_in_count).to eq(0)
+    end
+  end
+
+  it 'recovery codeのみ登録済みuserはpassword login後にrecovery code step-upへ進む' do
+    user = create(:user)
+    TwoFactor.generate_recovery_codes_for(user: user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+
+    pending = session[:pending_second_factor]
+
+    aggregate_failures do
+      expect(response).to redirect_to(users_two_factor_recovery_code_path)
+      expect(pending['allowed_methods']).to eq([ 'recovery_code' ])
+      expect(user.reload.sign_in_count).to eq(0)
+    end
+  end
+
+  it 'passkeyとTOTP登録済みuserはpasskeyを主導線にしてfallback methodをpendingに持つ' do
+    user = create(:user)
+    create_passkey_with_fake_client(user)
+    create_confirmed_totp(user)
+    TwoFactor.generate_recovery_codes_for(user: user)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+
+    aggregate_failures do
+      expect(response).to redirect_to(users_two_factor_passkey_path)
+      expect(session[:pending_second_factor]['allowed_methods']).to eq(%w[passkey totp recovery_code])
+    end
   end
 
   it 'passkey reset後はpassword loginでstep-up不要のログインに戻る' do

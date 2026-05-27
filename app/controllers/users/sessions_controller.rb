@@ -25,10 +25,11 @@ class Users::SessionsController < Devise::SessionsController
     self.resource = warden.authenticate(password_auth_options)
 
     if resource
-      if passkey_step_up_required?(resource)
-        store_pending_second_factor(resource)
-        flash[:notice] = t("auth.two_factor.passkey.pending_notice")
-        redirect_to users_two_factor_passkey_path, status: :see_other
+      allowed_methods = second_factor_methods_for(resource)
+      if allowed_methods.any?
+        store_pending_second_factor(resource, allowed_methods: allowed_methods)
+        flash[:notice] = t("auth.two_factor.messages.pending_notice")
+        redirect_to second_factor_path_for(allowed_methods), status: :see_other
       else
         set_flash_message!(:notice, :signed_in)
         sign_in(resource_name, resource, force: true)
@@ -100,17 +101,30 @@ class Users::SessionsController < Devise::SessionsController
     auth_options.merge(store: false, run_callbacks: false)
   end
 
-  def passkey_step_up_required?(user)
-    !user.guest? && user.passkeys.exists?
+  def second_factor_methods_for(user)
+    return [] if user.guest?
+
+    methods = []
+    methods << "passkey" if user.passkeys.exists?
+    methods << "totp" if user.totp_credential&.confirmed?
+    methods << "recovery_code" if user.recovery_codes.where(used_at: nil).exists?
+    methods
   end
 
-  def store_pending_second_factor(user)
+  def second_factor_path_for(allowed_methods)
+    return users_two_factor_passkey_path if allowed_methods.include?("passkey")
+    return users_two_factor_totp_path if allowed_methods.include?("totp")
+
+    users_two_factor_recovery_code_path
+  end
+
+  def store_pending_second_factor(user, allowed_methods:)
     session[PENDING_SECOND_FACTOR_SESSION_KEY] = {
       "user_id" => user.id,
       "issued_at" => Time.current.iso8601,
       "remember_me" => ActiveModel::Type::Boolean.new.cast(params.dig(:user, :remember_me)) || false,
       "method" => "password",
-      "allowed_methods" => [ "passkey" ]
+      "allowed_methods" => allowed_methods
     }
   end
 

@@ -1,7 +1,101 @@
 require 'rails_helper'
 
 RSpec.describe 'User recovery codes', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:user) { create(:user) }
+
+  def start_pending_recovery_code(user)
+    post user_session_path,
+         params: {
+           user: {
+             email: user.email,
+             password: 'password'
+           }
+         }
+
+    expect(response).to redirect_to(users_two_factor_recovery_code_path)
+  end
+
+  describe 'GET /users/two_factor/recovery_code' do
+    it 'pending sessionがない場合はログインへ戻す' do
+      get users_two_factor_recovery_code_path
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+
+    it 'pending userだけrecovery code画面を表示し、code平文を出さない' do
+      codes = TwoFactor.generate_recovery_codes_for(user: user)
+      start_pending_recovery_code(user)
+
+      get users_two_factor_recovery_code_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.title'))
+        expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.button'))
+        codes.each { |code| expect(response.body).not_to include(code) }
+      end
+    end
+  end
+
+  describe 'POST /users/two_factor/recovery_code' do
+    it 'recovery code成功でログインし、使用済みにして再利用不可にする' do
+      code = TwoFactor.generate_recovery_codes_for(user: user).first
+      start_pending_recovery_code(user)
+
+      expect do
+        post users_two_factor_recovery_code_create_path, params: { code: code }
+      end.to change { user.reload.sign_in_count }.from(0).to(1)
+        .and change(UserSession, :count).by(1)
+
+      used_code = user.recovery_codes.find_by(code_digest: TwoFactor.recovery_code_digest(code))
+      user_session = UserSession.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(session[:pending_second_factor]).to be_blank
+        expect(used_code).to be_used
+        expect(user_session.sign_in_method).to eq('password_recovery_code_step_up')
+      end
+
+      sign_out user
+      post user_session_path, params: { user: { email: user.email, password: 'password' } }
+      post users_two_factor_recovery_code_create_path, params: { code: code }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(session[:pending_second_factor]).to be_present
+      end
+    end
+
+    it 'recovery code失敗ではpendingを維持する' do
+      TwoFactor.generate_recovery_codes_for(user: user)
+      start_pending_recovery_code(user)
+
+      post users_two_factor_recovery_code_create_path, params: { code: 'WRONG-CODE' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(session[:pending_second_factor]).to be_present
+        expect(user.reload.sign_in_count).to eq(0)
+      end
+    end
+
+    it 'pending TTL切れは拒否しpendingを削除する' do
+      code = TwoFactor.generate_recovery_codes_for(user: user).first
+      start_pending_recovery_code(user)
+
+      travel 6.minutes do
+        post users_two_factor_recovery_code_create_path, params: { code: code }
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:pending_second_factor]).to be_blank
+      end
+    end
+  end
 
   describe 'POST /settings/security/recovery_codes/regenerate' do
     it '非ログインはloginへ戻す' do

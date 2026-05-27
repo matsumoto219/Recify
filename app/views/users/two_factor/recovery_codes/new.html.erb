@@ -1,0 +1,70 @@
+<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+  <%= render "shared/ui/layout/ambient_background" %>
+
+  <div class="w-full max-w-[440px] z-10 space-y-8">
+    <section aria-labelledby="two-factor-recovery-code-title">
+      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/layout/section_header",
+            title: t("auth.two_factor.recovery_code.title"),
+            subtitle: t("auth.two_factor.recovery_code.subtitle"),
+            title_id: "two-factor-recovery-code-title",
+            align: :center,
+            title_size: "text-3xl",
+            subtitle_size: "text-sm",
+            spacing_class: "space-y-3" %>
+    </section>
+
+    <%= render "shared/ui/layout/surface_card", title_id: "two-factor-recovery-code-card-title" do %>
+      <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
+        <h2 id="two-factor-recovery-code-card-title" class="sr-only"><%= t("auth.two_factor.recovery_code.card_title") %></h2>
+
+        <p class="text-sm token-text-muted leading-relaxed">
+          <%= t("auth.two_factor.recovery_code.description") %>
+        </p>
+
+        <%= form_with url: users_two_factor_recovery_code_create_path, method: :post, local: true, class: "space-y-4" do |form| %>
+          <div class="space-y-2">
+            <%= form.label :code, t("auth.two_factor.recovery_code.code_label"), class: "block text-sm font-medium token-text-base" %>
+            <%= form.text_field :code,
+                  autocomplete: "one-time-code",
+                  required: true,
+                  class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 font-mono text-sm token-text-base",
+                  placeholder: t("auth.two_factor.recovery_code.code_placeholder") %>
+          </div>
+
+          <%= render "shared/ui/actions/button",
+                label: t("auth.two_factor.recovery_code.button"),
+                type: "submit",
+                variant: :primary,
+                size: :lg,
+                radius: :lg,
+                full_width: true,
+                icon: "key",
+                disable_with: t("auth.two_factor.recovery_code.submitting") %>
+        <% end %>
+
+        <% fallback_links = [] %>
+        <% if pending_second_factor_allowed_methods.include?("passkey") %>
+          <% fallback_links << link_to(t("auth.two_factor.links.passkey"), users_two_factor_passkey_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
+        <% end %>
+        <% if pending_second_factor_allowed_methods.include?("totp") %>
+          <% fallback_links << link_to(t("auth.two_factor.links.totp"), users_two_factor_totp_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
+        <% end %>
+        <% if fallback_links.any? %>
+          <div class="space-y-2 text-center">
+            <p class="text-xs token-text-muted"><%= t("auth.two_factor.links.heading") %></p>
+            <div class="flex flex-wrap justify-center gap-x-4 gap-y-2">
+              <%= safe_join(fallback_links) %>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="text-center">
+          <%= link_to t("auth.two_factor.recovery_code.back_to_login"),
+                new_user_session_path,
+                class: "text-sm token-text-brand font-medium hover:underline underline-offset-4" %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

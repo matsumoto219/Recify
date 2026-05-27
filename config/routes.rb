@@ -45,6 +45,10 @@ Rails.application.routes.draw do
   get "/users/two_factor/passkey", to: "users/two_factor/passkeys#new", as: :users_two_factor_passkey
   post "/users/two_factor/passkey/options", to: "users/two_factor/passkeys#options", as: :users_two_factor_passkey_options
   post "/users/two_factor/passkey", to: "users/two_factor/passkeys#create", as: :users_two_factor_passkey_create
+  get "/users/two_factor/totp", to: "users/two_factor/totps#new", as: :users_two_factor_totp
+  post "/users/two_factor/totp", to: "users/two_factor/totps#create", as: :users_two_factor_totp_create
+  get "/users/two_factor/recovery_code", to: "users/two_factor/recovery_codes#new", as: :users_two_factor_recovery_code
+  post "/users/two_factor/recovery_code", to: "users/two_factor/recovery_codes#create", as: :users_two_factor_recovery_code_create
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

@@ -158,7 +158,7 @@ RSpec.describe 'User passkey step-up', type: :request do
       end.to change { user.reload.remember_created_at }.from(nil)
     end
 
-    it 'step-up失敗でpending/challengeを削除する' do
+    it 'step-up失敗でpending sessionを維持しchallengeだけ削除する' do
       user = create(:user)
       create_passkey_with_fake_client(user)
       start_pending_step_up(user)
@@ -171,15 +171,15 @@ RSpec.describe 'User passkey step-up', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.passkey.messages.failure'))
-        expect(response.parsed_body.fetch('redirect_url')).to eq(new_user_session_path)
-        expect(session[:pending_second_factor]).to be_blank
+        expect(response.parsed_body.fetch('redirect_url')).to eq(users_two_factor_passkey_path)
+        expect(session[:pending_second_factor]).to be_present
         expect(session[:passkey_step_up_challenge]).to be_blank
         expect(user.reload.sign_in_count).to eq(0)
       end
     end
 
-    it '期限切れchallengeを拒否し、pending/challengeを削除する' do
-      stub_const('Users::TwoFactor::PasskeysController::PENDING_SECOND_FACTOR_TTL', 10.minutes)
+    it '期限切れchallengeを拒否し、pending sessionを維持する' do
+      stub_const('Users::SessionsController::PENDING_SECOND_FACTOR_TTL', 10.minutes)
       user = create(:user)
       passkey = create_passkey_with_fake_client(user)
       start_pending_step_up(user)
@@ -195,8 +195,24 @@ RSpec.describe 'User passkey step-up', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.passkey.messages.failure'))
-        expect(session[:pending_second_factor]).to be_blank
+        expect(session[:pending_second_factor]).to be_present
         expect(session[:passkey_step_up_challenge]).to be_blank
+      end
+    end
+
+    it 'TOTPとrecovery code fallback linkを表示する' do
+      user = create(:user)
+      create_passkey_with_fake_client(user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      start_pending_step_up(user)
+
+      get users_two_factor_passkey_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(users_two_factor_totp_path)
+        expect(response.body).to include(users_two_factor_recovery_code_path)
       end
     end
   end

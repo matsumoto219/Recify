@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Users::TwoFactor::PasskeysController < ApplicationController
+  include Users::TwoFactor::PendingSecondFactor
+
   PENDING_SECOND_FACTOR_SESSION_KEY = Users::SessionsController::PENDING_SECOND_FACTOR_SESSION_KEY
   PENDING_SECOND_FACTOR_TTL = Users::SessionsController::PENDING_SECOND_FACTOR_TTL
   STEP_UP_CHALLENGE_SESSION_KEY = :passkey_step_up_challenge
@@ -22,7 +24,7 @@ class Users::TwoFactor::PasskeysController < ApplicationController
              name: "passkey_step_up/create/ip",
              only: :create
 
-  before_action :require_pending_second_factor!, only: %i[new options create]
+  before_action -> { require_pending_second_factor!(method: "passkey") }, only: %i[new options create]
 
   def new
   end
@@ -49,12 +51,10 @@ class Users::TwoFactor::PasskeysController < ApplicationController
       raise Passkeys::AuthenticationError, "step_up_not_allowed" unless pending_user_still_allowed?(user)
     end
 
-    remember_me = pending_second_factor_session["remember_me"]
-    clear_pending_second_factor
-    @pending_user.remember_me = remember_me
-    sign_in(:user, @pending_user)
-    store_user_session_version(@pending_user)
-    UserSessions.record_sign_in(user: @pending_user, request: request, session: session, method: "password_passkey_step_up")
+    complete_pending_second_factor!(
+      user: @pending_user,
+      sign_in_method: "password_passkey_step_up"
+    )
 
     render json: {
       ok: true,
@@ -71,41 +71,8 @@ class Users::TwoFactor::PasskeysController < ApplicationController
 
   private
 
-  def require_pending_second_factor!
-    @pending_user = pending_second_factor_user
-    return if @pending_user.present?
-
-    clear_pending_second_factor
-
-    respond_to do |format|
-      format.html { redirect_to new_user_session_path, alert: t("auth.two_factor.passkey.messages.expired") }
-      format.json { render json: { ok: false, error: t("auth.two_factor.passkey.messages.expired") }, status: :unauthorized }
-    end
-  end
-
-  def pending_second_factor_user
-    pending = pending_second_factor_session
-    return if pending.blank?
-    return unless pending["allowed_methods"].to_a.include?("passkey")
-
-    issued_at = Time.zone.parse(pending["issued_at"].to_s)
-    return if issued_at.blank? || issued_at < PENDING_SECOND_FACTOR_TTL.ago
-
-    user = User.find_by(id: pending["user_id"])
-    return if user.blank?
-    return unless pending_user_still_allowed?(user)
-
-    user
-  rescue ArgumentError, TypeError
-    nil
-  end
-
   def pending_user_still_allowed?(user)
-    user.active_for_authentication? && !user.guest? && user.passkeys.exists?
-  end
-
-  def pending_second_factor_session
-    session[PENDING_SECOND_FACTOR_SESSION_KEY].to_h
+    super && user.passkeys.exists?
   end
 
   def consume_step_up_challenge
@@ -144,17 +111,12 @@ class Users::TwoFactor::PasskeysController < ApplicationController
   end
 
   def render_step_up_error
-    clear_pending_second_factor
+    session.delete(STEP_UP_CHALLENGE_SESSION_KEY)
 
     render json: {
       ok: false,
       error: t("auth.two_factor.passkey.messages.failure"),
-      redirect_url: new_user_session_path
+      redirect_url: users_two_factor_passkey_path
     }, status: :unprocessable_content
-  end
-
-  def clear_pending_second_factor
-    session.delete(PENDING_SECOND_FACTOR_SESSION_KEY)
-    session.delete(STEP_UP_CHALLENGE_SESSION_KEY)
   end
 end

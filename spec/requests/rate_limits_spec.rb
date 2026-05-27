@@ -258,6 +258,42 @@ RSpec.describe 'Rails rate limits', type: :request do
     end
   end
 
+  describe 'POST /users/two_factor/totp' do
+    it 'throttles TOTP step-up attempts by pending user and IP' do
+      5.times do
+        post users_two_factor_totp_create_path,
+             params: { code: '000000' },
+             headers: remote_addr('203.0.113.36')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post users_two_factor_totp_create_path,
+           params: { code: '000000' },
+           headers: remote_addr('203.0.113.36')
+
+      expect_rate_limited_response
+    end
+  end
+
+  describe 'POST /users/two_factor/recovery_code' do
+    it 'throttles recovery code step-up attempts by pending user and IP' do
+      5.times do
+        post users_two_factor_recovery_code_create_path,
+             params: { code: 'WRONG-CODE' },
+             headers: remote_addr('203.0.113.37')
+
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      post users_two_factor_recovery_code_create_path,
+           params: { code: 'WRONG-CODE' },
+           headers: remote_addr('203.0.113.37')
+
+      expect_rate_limited_response
+    end
+  end
+
   describe 'POST /admin/reauth/passkey/options' do
     it 'throttles admin passkey reauthentication options by IP' do
       admin = create(:user, :admin)

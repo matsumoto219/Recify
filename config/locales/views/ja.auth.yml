@@ -33,6 +33,14 @@ ja:
         description_line1: 一部機能をすぐに体験できます。
         description_line2: 一定期間利用がない場合、データは自動的に削除されます。
     two_factor:
+      messages:
+        pending_notice: 追加認証を完了してください。
+        expired: 追加認証の有効期限が切れました。もう一度ログインしてください。
+      links:
+        heading: 他の方法で認証できます
+        passkey: パスキーで認証
+        totp: 認証アプリのコードを使う
+        recovery_code: 回復コードを使う
       passkey:
         title: 追加認証
         subtitle: パスキーでログインを完了してください
@@ -40,13 +48,37 @@ ja:
         description: 続けるには、登録済みのパスキーでログインしてください。
         button: パスキーで認証
         back_to_login: ログインに戻る
-        pending_notice: パスキーで追加認証してください。
         messages:
           unsupported: このブラウザはパスキーでの認証に対応していません。
           canceled: パスキー認証がキャンセルされました。
-          failure: パスキー認証に失敗しました。もう一度ログインからお試しください。
-          expired: 追加認証の有効期限が切れました。もう一度ログインしてください。
+          failure: パスキー認証に失敗しました。別の方法でも認証できます。
           request_failed: リクエストに失敗しました。
+      totp:
+        title: 追加認証
+        subtitle: 認証アプリのコードでログインを完了してください
+        card_title: 認証アプリ追加認証
+        description: 認証アプリに表示された6桁のコードを入力してください。
+        code_label: 確認コード
+        code_placeholder: "123456"
+        button: 認証する
+        submitting: 確認中...
+        back_to_login: ログインに戻る
+        messages:
+          success: ログインしました。
+          failure: コードが一致しませんでした。もう一度入力してください。
+      recovery_code:
+        title: 追加認証
+        subtitle: 保存した回復コードでログインを完了してください
+        card_title: 回復コード追加認証
+        description: 認証アプリを使えない場合は、保存済みの回復コードを入力してください。
+        code_label: 回復コード
+        code_placeholder: "ABCD-EFGH-IJKL-MNOP-QRST"
+        button: 認証する
+        submitting: 確認中...
+        back_to_login: ログインに戻る
+        messages:
+          success: ログインしました。
+          failure: 回復コードが一致しませんでした。もう一度入力してください。
     registrations:
       new:
         title: 新規登録
