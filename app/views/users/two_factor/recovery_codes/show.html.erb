@@ -1,0 +1,51 @@
+<section class="max-w-3xl mx-auto space-y-8 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "shared/ui/layout/section_header",
+        title: t("settings.security.auth.recovery_codes.title"),
+        subtitle: t("settings.security.auth.recovery_codes.subtitle"),
+        title_size: "text-3xl",
+        subtitle_size: "text-base",
+        class: "px-4 md:px-0" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+    <div class="space-y-6">
+      <div class="rounded-lg border token-border-soft token-state-warning-soft p-4">
+        <h2 class="text-sm font-semibold token-text-base"><%= t("settings.security.auth.recovery_codes.notice_title") %></h2>
+        <p class="mt-1 text-sm token-text-muted"><%= t("settings.security.auth.recovery_codes.notice_body") %></p>
+      </div>
+
+      <div
+        class="space-y-4"
+        data-controller="clipboard"
+        data-clipboard-success-message-value="<%= t("settings.security.auth.clipboard.copied") %>"
+        data-clipboard-failure-message-value="<%= t("settings.security.auth.clipboard.failed") %>">
+        <div class="grid gap-3 sm:grid-cols-2" data-clipboard-target="source">
+          <% @recovery_codes.each do |code| %>
+            <code class="rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm font-semibold tracking-wide token-text-base">
+              <%= code %>
+            </code>
+          <% end %>
+        </div>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="hidden text-sm token-text-success" data-clipboard-target="status"></p>
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.auth.clipboard.copy"),
+                variant: :secondary,
+                size: :compact,
+                icon: "content_copy",
+                data: { action: "click->clipboard#copy" } %>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: settings_security_path(anchor: "two-factor"),
+              label: t("settings.security.auth.recovery_codes.done"),
+              variant: :primary,
+              size: :compact,
+              icon: "check" %>
+      </div>
+    </div>
+  <% end %>
+</section>

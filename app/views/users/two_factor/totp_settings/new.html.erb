@@ -1,0 +1,84 @@
+<section class="max-w-3xl mx-auto space-y-8 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "shared/ui/layout/section_header",
+        title: t("settings.security.auth.two_factor.setup.title"),
+        subtitle: t("settings.security.auth.two_factor.setup.subtitle"),
+        title_size: "text-3xl",
+        subtitle_size: "text-base",
+        class: "px-4 md:px-0" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
+    <div class="space-y-6">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <h2 class="text-sm font-semibold token-text-base"><%= t("settings.security.auth.two_factor.setup.scan_title") %></h2>
+        <p class="mt-1 text-sm token-text-muted"><%= t("settings.security.auth.two_factor.setup.scan_description") %></p>
+      </div>
+
+      <div class="flex justify-center rounded-xl border token-border-soft token-bg-input p-4">
+        <div class="max-w-[240px] overflow-hidden rounded-lg bg-white p-3">
+          <%= sanitize(
+                @totp_qr_svg,
+                tags: %w[svg path],
+                attributes: %w[xmlns width height viewBox shape-rendering fill d]
+              ) %>
+        </div>
+      </div>
+
+      <div
+        class="space-y-3"
+        data-controller="clipboard"
+        data-clipboard-success-message-value="<%= t("settings.security.auth.clipboard.copied") %>"
+        data-clipboard-failure-message-value="<%= t("settings.security.auth.clipboard.failed") %>">
+        <label for="totp-secret" class="block text-sm font-medium token-text-base">
+          <%= t("settings.security.auth.two_factor.setup.secret_label") %>
+        </label>
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <input
+            id="totp-secret"
+            type="text"
+            readonly
+            value="<%= @totp_secret %>"
+            class="w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 font-mono text-sm token-text-base"
+            data-clipboard-target="source">
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.auth.clipboard.copy"),
+                variant: :secondary,
+                size: :compact,
+                icon: "content_copy",
+                data: { action: "click->clipboard#copy" } %>
+        </div>
+        <p class="hidden text-sm token-text-success" data-clipboard-target="status"></p>
+      </div>
+
+      <%= form_with url: settings_security_totp_path, method: :post, local: true, class: "space-y-4" do |form| %>
+        <div class="space-y-2">
+          <%= form.label :code, t("settings.security.auth.two_factor.setup.code_label"), class: "block text-sm font-medium token-text-base" %>
+          <%= form.text_field :code,
+                inputmode: "numeric",
+                pattern: "[0-9]*",
+                autocomplete: "one-time-code",
+                maxlength: 6,
+                required: true,
+                class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
+                placeholder: t("settings.security.auth.two_factor.setup.code_placeholder") %>
+          <p class="text-xs token-text-muted"><%= t("settings.security.auth.two_factor.setup.code_hint") %></p>
+        </div>
+
+        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: settings_security_path(anchor: "two-factor"),
+                label: t("settings.security.auth.two_factor.setup.cancel"),
+                variant: :ghost,
+                size: :compact %>
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.auth.two_factor.setup.submit"),
+                variant: :primary,
+                size: :compact,
+                type: "submit",
+                icon: "verified_user",
+                disable_with: t("settings.security.auth.two_factor.setup.submitting") %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</section>

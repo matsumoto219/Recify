@@ -101,5 +101,11 @@ Rails.application.routes.draw do
   post "/settings/passkeys/options", to: "users/passkeys#options", as: :settings_passkeys_options
   post "/settings/passkeys", to: "users/passkeys#create", as: :settings_passkeys
   delete "/settings/passkeys/:id", to: "users/passkeys#destroy", as: :settings_passkey
+  get "/settings/security/totp/new", to: "users/two_factor/totp_settings#new", as: :new_settings_security_totp
+  post "/settings/security/totp", to: "users/two_factor/totp_settings#create", as: :settings_security_totp
+  delete "/settings/security/totp", to: "users/two_factor/totp_settings#destroy"
+  post "/settings/security/recovery_codes/regenerate",
+       to: "users/two_factor/recovery_codes#regenerate",
+       as: :settings_security_recovery_codes_regenerate
   patch "settings", to: "settings#update"
 end

@@ -36,6 +36,19 @@ RSpec.describe TwoFactor do
       end
     end
 
+    it 'setup materialをDB保存なしで生成する' do
+      user = create(:user, email: 'setup-user@example.com')
+
+      setup = described_class.prepare_totp_setup(user: user)
+
+      aggregate_failures do
+        expect(setup.secret).to match(/\A[A-Z2-7]+\z/)
+        expect(setup.provisioning_uri).to include('setup-user%40example.com')
+        expect(setup.qr_svg).to include('<svg')
+        expect(user.reload.totp_credential).to be_blank
+      end
+    end
+
     it 'setup verify成功でconfirmed_atとlast_accepted_time_stepを保存する' do
       user = create(:user)
       secret = described_class.generate_totp_secret
@@ -48,6 +61,34 @@ RSpec.describe TwoFactor do
         expect(credential).to be_confirmed
         expect(credential.last_used_at).to be_present
         expect(credential.last_accepted_time_step).to be_present
+      end
+    end
+
+    it 'transient secretのsetup確認成功でcredentialとrecovery codesを作成する' do
+      user = create(:user)
+      secret = described_class.generate_totp_secret
+      code = ROTP::TOTP.new(secret, issuer: 'Recify').now
+
+      confirmation = described_class.confirm_totp_setup(user: user, secret: secret, code: code)
+
+      aggregate_failures do
+        expect(confirmation.credential).to be_confirmed
+        expect(confirmation.credential.totp_secret).to eq(secret)
+        expect(confirmation.recovery_codes.size).to eq(10)
+        expect(user.reload.recovery_codes.count).to eq(10)
+      end
+    end
+
+    it 'setup確認失敗ではcredentialを作成しない' do
+      user = create(:user)
+
+      expect {
+        described_class.confirm_totp_setup(user: user, secret: described_class.generate_totp_secret, code: '000000')
+      }.to raise_error(TwoFactor::VerificationError, 'totp_code_invalid')
+
+      aggregate_failures do
+        expect(user.reload.totp_credential).to be_blank
+        expect(user.recovery_codes.count).to eq(0)
       end
     end
 
@@ -71,6 +112,19 @@ RSpec.describe TwoFactor do
       expect {
         described_class.verify_totp(user: user, code: '123456')
       }.to raise_error(TwoFactor::VerificationError, 'totp_credential_unconfirmed')
+    end
+
+    it 'TOTPを無効化するとcredentialとrecovery codesを削除する' do
+      user = create(:user)
+      create(:totp_credential, user: user)
+      described_class.generate_recovery_codes_for(user: user)
+
+      described_class.disable_totp_for(user: user)
+
+      aggregate_failures do
+        expect(user.reload.totp_credential).to be_blank
+        expect(user.recovery_codes.count).to eq(0)
+      end
     end
   end
 

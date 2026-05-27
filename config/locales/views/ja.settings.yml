@@ -120,10 +120,48 @@ ja:
         save: パスワードを保存
         saving: 保存中...
       auth:
+        clipboard:
+          copy: コピー
+          copied: コピーしました。
+          failed: コピーできませんでした。
         two_factor:
-          title: 2要素認証 (2FA)
-          subtitle: 認証アプリを使用して、セキュリティを強化します。
+          title: 認証アプリ
+          subtitle: 確認コードを使って、セキュリティを強化できます。
           action: 有効化する
+          empty: 認証アプリはまだ設定されていません。
+          enabled_at: "有効化: %{datetime}"
+          last_used_at: "最終使用: %{datetime}"
+          unused: 未使用
+          recovery_codes_remaining: "未使用の回復コード: %{count}件"
+          regenerate_recovery_codes: 回復コードを再生成
+          disable: 無効化する
+          disable_confirm: 認証アプリと回復コードを無効化しますか？
+          setup:
+            title: 認証アプリを設定
+            subtitle: 認証アプリでQRコードを読み取り、表示された6桁のコードを入力してください。
+            scan_title: QRコードを読み取る
+            scan_description: QRコードを読み取れない場合は、設定キーを手入力できます。
+            secret_label: 設定キー
+            code_label: 確認コード
+            code_placeholder: "123456"
+            code_hint: 認証アプリに表示された6桁のコードを入力してください。
+            cancel: 戻る
+            submit: 有効化する
+            submitting: 確認中...
+          messages:
+            unavailable: 本登録後にこの設定を利用できます。
+            already_enabled: 認証アプリはすでに有効です。
+            setup_expired: 認証アプリ設定の有効期限が切れました。もう一度お試しください。
+            setup_failed: 確認コードが一致しませんでした。もう一度入力してください。
+            not_enabled: 認証アプリを先に有効化してください。
+            disabled: 認証アプリを無効化しました。
+        recovery_codes:
+          title: 回復コード
+          subtitle: 認証アプリが使えない時のために、コードを安全な場所へ保存してください。
+          notice_title: この画面でのみ表示されます
+          notice_body: 回復コードはあとから再表示できません。保存後は安全な場所に保存してください。
+          done: 保存しました
+          regenerate_confirm: 現在の回復コードを無効にして、新しいコードを発行しますか？
         passkey:
           title: パスキー
           subtitle: パスワードマネージャーや対応端末を使って、安全にログインできます。

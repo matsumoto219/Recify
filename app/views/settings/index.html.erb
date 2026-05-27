@@ -103,14 +103,13 @@
         <% unless current_user.guest? %>
           <%= render "shared/ui/layout/section_divider" %>
           <div class="space-y-3">
-            <%# TODO: 2要素認証（2FA）を実装する。現状はダミー表示 %>
             <div class="flex items-center justify-between text-sm">
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined token-text-muted text-sm">info</span>
                 <span class="token-text-muted"><%= t("settings.index.security.two_factor") %></span>
               </div>
               <%= render "shared/ui/badge/setting_status_badge",
-                    state: :inactive,
+                    state: current_user.totp_credential&.confirmed? ? :active : :inactive,
                     variant: :text,
                     size: :lg %>
             </div>

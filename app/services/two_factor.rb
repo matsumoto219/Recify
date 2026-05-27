@@ -1,8 +1,14 @@
 module TwoFactor
   Error = Class.new(StandardError)
   VerificationError = Class.new(Error)
+  SetupMaterial = Struct.new(:secret, :provisioning_uri, :qr_svg, keyword_init: true)
+  SetupConfirmation = Struct.new(:credential, :recovery_codes, keyword_init: true)
 
   class << self
+    def prepare_totp_setup(user:)
+      Totp.prepare_setup(user: user)
+    end
+
     def generate_totp_secret
       Totp.generate_secret
     end
@@ -15,12 +21,20 @@ module TwoFactor
       Totp.qr_svg(provisioning_uri: provisioning_uri)
     end
 
-    def verify_totp_setup(user:, code:)
-      Totp.verify_setup(user: user, code: code)
+    def confirm_totp_setup(user:, secret:, code:)
+      Totp.confirm_setup(user: user, secret: secret, code: code)
+    end
+
+    def verify_totp_setup(user:, code:, secret: nil)
+      Totp.verify_setup(user: user, code: code, secret: secret)
     end
 
     def verify_totp(user:, code:)
       Totp.verify(user: user, code: code)
+    end
+
+    def disable_totp_for(user:)
+      Totp.disable_for(user: user)
     end
 
     def generate_recovery_codes_for(user:)
