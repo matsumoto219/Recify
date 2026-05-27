@@ -49,6 +49,12 @@ production:
     args: [ { dry_run: true, limit: 1000 } ]
     schedule: at 3:30am every day
 
+  audit_log_retention_cleanup_dry_run:
+    class: AuditLogRetentionCleanupJob
+    queue: default
+    args: [ { dry_run: true, limit: 1000 } ]
+    schedule: at 2:45am every day
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12

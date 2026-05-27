@@ -1,0 +1,101 @@
+module AuditLogs
+  module RetentionPolicy
+    USER_DELETE_ACTIONS = %w[
+      admin.users.delete
+    ].freeze
+
+    HIGH_RISK_ADMIN_ACTIONS = %w[
+      admin.users.lock
+      admin.users.unlock
+      admin.users.force_passkey_reset
+      admin.users.session_revoke
+      receipt_analysis.full_reanalyze
+      receipt_analysis.ocr_retry
+      receipt_analysis.ai_retry
+      receipt_analysis.finalize_retry
+      system_settings.update
+    ].freeze
+
+    CLEANUP_EXECUTE_ACTIONS = %w[
+      receipt_analysis_runs.cleanup_stale.execute
+      receipt_analysis_runs.cleanup_expired.execute
+    ].freeze
+
+    PASSKEY_REAUTH_ACTIONS = %w[
+      admin.passkey_reauthentication.succeeded
+      admin.passkey_reauthentication.failed
+    ].freeze
+
+    SYSTEM_DRY_RUN_ACTIONS = %w[
+      receipt_analysis_runs.cleanup_stale.dry_run
+      receipt_analysis_runs.cleanup_expired.dry_run
+      user_sessions.retention_cleanup.dry_run
+      audit_logs.retention_cleanup.dry_run
+    ].freeze
+
+    CLEANUP_ACTIONS = (
+      CLEANUP_EXECUTE_ACTIONS + SYSTEM_DRY_RUN_ACTIONS
+    ).freeze
+
+    RETENTIONS = {
+      user_delete: nil,
+      high_risk_admin: 365.days,
+      cleanup_execute: 365.days,
+      cleanup_failed: 180.days,
+      passkey_reauth: 90.days,
+      system_dry_run: 30.days,
+      routine_system: 90.days
+    }.freeze
+
+    ACTIONS = {
+      user_delete: USER_DELETE_ACTIONS,
+      high_risk_admin: HIGH_RISK_ADMIN_ACTIONS,
+      cleanup_execute: CLEANUP_EXECUTE_ACTIONS,
+      cleanup_failed: CLEANUP_ACTIONS,
+      passkey_reauth: PASSKEY_REAUTH_ACTIONS,
+      system_dry_run: SYSTEM_DRY_RUN_ACTIONS,
+      routine_system: []
+    }.freeze
+
+    class << self
+      def category_for(action:, outcome: nil)
+        action = action.to_s
+        return :user_delete if USER_DELETE_ACTIONS.include?(action)
+        return :cleanup_failed if outcome.to_s == "failed" && CLEANUP_ACTIONS.include?(action)
+        return :high_risk_admin if HIGH_RISK_ADMIN_ACTIONS.include?(action)
+        return :cleanup_execute if CLEANUP_EXECUTE_ACTIONS.include?(action)
+        return :passkey_reauth if PASSKEY_REAUTH_ACTIONS.include?(action)
+        return :system_dry_run if SYSTEM_DRY_RUN_ACTIONS.include?(action)
+
+        nil
+      end
+
+      def retention_for(category)
+        RETENTIONS.fetch(category.to_sym)
+      end
+
+      def excluded?(category)
+        category.to_sym == :user_delete
+      end
+
+      def categories
+        RETENTIONS.keys
+      end
+
+      def cleanup_categories
+        categories.reject { |category| excluded?(category) }
+      end
+
+      def actions_for(category)
+        ACTIONS.fetch(category.to_sym)
+      end
+
+      def cutoff_for(category, now: Time.current)
+        retention = retention_for(category)
+        return if retention.blank?
+
+        now - retention
+      end
+    end
+  end
+end

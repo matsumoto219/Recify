@@ -32,7 +32,8 @@ RSpec.describe 'Admin system operations', type: :request do
       ReceiptFinalizeJob,
       ReceiptAnalysisRunStaleCleanupJob,
       ReceiptAnalysisRunRetentionCleanupJob,
-      UserSessionRetentionCleanupJob
+      UserSessionRetentionCleanupJob,
+      AuditLogRetentionCleanupJob
     ]
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
@@ -92,7 +93,13 @@ RSpec.describe 'Admin system operations', type: :request do
         expect(response.body).to include('receipt_analysis_run_stale_cleanup_dry_run')
         expect(response.body).to include('receipt_analysis_run_retention_cleanup_dry_run')
         expect(response.body).to include('user_session_retention_cleanup_dry_run')
+        expect(response.body).to include('audit_log_retention_cleanup_dry_run')
         expect(response.body).to include('user_sessions.retention_cleanup.dry_run')
+        expect(response.body).to include('audit_logs.retention_cleanup.dry_run')
+        expect(response.body).to include('保存方針')
+        expect(response.body).to include('退会代行ログ')
+        expect(response.body).to include('自動整理の対象外')
+        expect(response.body).to include('重要な管理操作')
         expect(response.body).to include('orphan_blob_cleanup_dry_run')
         expect(response.body).to include('機能公開設定の変更')
         expect(response.body).to include('処理時間設定の変更')

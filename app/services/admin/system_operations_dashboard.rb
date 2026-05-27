@@ -13,6 +13,7 @@ module Admin
       "receipt_analysis_runs.cleanup_stale.dry_run",
       "receipt_analysis_runs.cleanup_expired.dry_run",
       "user_sessions.retention_cleanup.dry_run",
+      "audit_logs.retention_cleanup.dry_run",
       "receipt_analysis.full_reanalyze",
       "receipt_analysis.ocr_retry",
       "receipt_analysis.ai_retry",
@@ -44,6 +45,7 @@ module Admin
       :queues,
       :recurring_tasks,
       :audit_actions,
+      :audit_log_retention_policies,
       :locked_future_operations,
       keyword_init: true
     )
@@ -60,11 +62,45 @@ module Admin
         queues: QUEUES,
         recurring_tasks: recurring_tasks,
         audit_actions: AUDIT_ACTIONS,
+        audit_log_retention_policies: audit_log_retention_policies,
         locked_future_operations: LOCKED_FUTURE_OPERATIONS
       )
     end
 
     private
+
+    def audit_log_retention_policies
+      AuditLogs::RetentionPolicy.categories.map do |category|
+        {
+          category: category.to_s,
+          label: retention_category_label(category),
+          retention: retention_label(category),
+          actions_count: AuditLogs::RetentionPolicy.actions_for(category).size,
+          excluded: AuditLogs::RetentionPolicy.excluded?(category)
+        }
+      end
+    end
+
+    def retention_category_label(category)
+      {
+        user_delete: "退会代行ログ",
+        high_risk_admin: "重要な管理操作",
+        cleanup_execute: "Cleanup実行",
+        cleanup_failed: "Cleanup失敗",
+        passkey_reauth: "パスキー再認証",
+        system_dry_run: "定期確認ログ",
+        routine_system: "通常システム操作"
+      }.fetch(category, category.to_s)
+    end
+
+    def retention_label(category)
+      return "自動整理の対象外" if AuditLogs::RetentionPolicy.excluded?(category)
+
+      retention = AuditLogs::RetentionPolicy.retention_for(category)
+      return "-" if retention.blank?
+
+      "#{retention / 1.day}日"
+    end
 
     def recurring_tasks
       production_recurring_config.filter_map do |key, config|

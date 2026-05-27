@@ -84,12 +84,33 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base">監査ログ</h2>
-    <div class="grid gap-2 text-sm md:grid-cols-2">
-      <% @dashboard.audit_actions.each do |action| %>
-        <%= link_to action,
-              admin_audit_logs_path(audit_action: action),
-              class: "rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-brand hover:underline" %>
-      <% end %>
+    <div class="space-y-5">
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">保存方針</h3>
+        <div class="grid gap-2 text-sm md:grid-cols-2">
+          <% @dashboard.audit_log_retention_policies.each do |policy| %>
+            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+              <div class="font-semibold token-text-base"><%= policy[:label] %></div>
+              <div class="mt-1 text-xs token-text-muted">
+                category=<span class="font-mono"><%= policy[:category] %></span> /
+                retention=<span class="font-mono"><%= policy[:retention] %></span> /
+                actions=<span class="font-mono"><%= policy[:actions_count] %></span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="mb-3 text-base font-bold token-text-base">確認リンク</h3>
+        <div class="grid gap-2 text-sm md:grid-cols-2">
+          <% @dashboard.audit_actions.each do |action| %>
+            <%= link_to action,
+                  admin_audit_logs_path(audit_action: action),
+                  class: "rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-brand hover:underline" %>
+          <% end %>
+        </div>
+      </div>
     </div>
   <% end %>
 

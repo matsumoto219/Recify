@@ -95,6 +95,15 @@ module AuditLogs
       )
     end
 
+    def cleanup_retention(dry_run: true, categories: nil, now: Time.current, limit: 1000)
+      RetentionCleanup.call(
+        dry_run: dry_run,
+        categories: categories,
+        now: now,
+        limit: limit
+      )
+    end
+
     def sanitize(value)
       case value
       when Hash
