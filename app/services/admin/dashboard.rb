@@ -17,6 +17,7 @@ module Admin
       :receipt_analysis,
       :cleanup,
       :audit,
+      :contact_requests,
       :security,
       :system_operations,
       :locked_future_operations,
@@ -41,6 +42,7 @@ module Admin
         receipt_analysis: receipt_analysis_summary,
         cleanup: cleanup_summary(cleanup_preview),
         audit: audit_summary,
+        contact_requests: contact_requests_summary,
         security: security_summary,
         system_operations: system_operations_summary(system_dashboard),
         locked_future_operations: system_dashboard.locked_future_operations
@@ -76,6 +78,16 @@ module Admin
         recent_retry_actions_count: recent_admin_audit_logs.where(action: RETRY_AUDIT_ACTIONS).count,
         recent_cleanup_execute_count: recent_admin_audit_logs.where(action: CLEANUP_EXECUTE_AUDIT_ACTIONS).count,
         recent_since: RECENT_WINDOW.ago
+      }
+    end
+
+    def contact_requests_summary
+      {
+        unresolved_count: ContactRequest.unresolved.count,
+        open_count: ContactRequest.where(status: "open").count,
+        in_progress_count: ContactRequest.where(status: "in_progress").count,
+        security_open_count: ContactRequest.where(status: %w[open in_progress], category: "security").count,
+        latest_created_at: ContactRequest.order(created_at: :desc).pick(:created_at)
       }
     end
 

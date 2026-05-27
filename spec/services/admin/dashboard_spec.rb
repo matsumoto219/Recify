@@ -25,6 +25,9 @@ RSpec.describe Admin::Dashboard do
       create(:audit_log, action: 'receipt_analysis.ai_retry', actor_kind: 'admin', created_at: 20.minutes.ago)
       create(:audit_log, action: 'receipt_analysis_runs.cleanup_stale.execute', actor_kind: 'admin', created_at: 10.minutes.ago)
       create(:audit_log, :failed, actor_kind: 'system', created_at: 5.minutes.ago)
+      create(:contact_request, status: 'open', category: 'security', created_at: 15.minutes.ago)
+      create(:contact_request, status: 'in_progress', category: 'account', created_at: 10.minutes.ago)
+      create(:contact_request, status: 'closed', category: 'security', created_at: 5.minutes.ago)
 
       result = described_class.call(admin_user: admin)
 
@@ -44,6 +47,12 @@ RSpec.describe Admin::Dashboard do
           recent_failed_admin_actions_count: 1,
           recent_retry_actions_count: 1,
           recent_cleanup_execute_count: 1
+        )
+        expect(result.contact_requests).to include(
+          unresolved_count: 2,
+          open_count: 1,
+          in_progress_count: 1,
+          security_open_count: 1
         )
         expect(result.security).to include(admin_passkey_count: 1)
         expect(result.system_operations[:queues]).to contain_exactly(

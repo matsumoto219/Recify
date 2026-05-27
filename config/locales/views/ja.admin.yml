@@ -5,6 +5,7 @@ ja:
       dashboard: 管理トップ
       receipt_analysis_runs: 解析run管理
       audit_logs: 監査ログ
+      contact_requests: 問い合わせ
       users: ユーザー管理
       cleanup: Cleanup確認
       system_operations: システム運用
@@ -55,6 +56,14 @@ ja:
         cleanup_execute: Cleanup実行
         retry_logs: 再解析の監査ログ
         cleanup_logs: Cleanup実行ログ
+      contact_requests:
+        title: 問い合わせ
+        description: 未対応の問い合わせとセキュリティ関連の受付状況
+        link: 問い合わせ管理
+        unresolved: 未対応・対応中
+        open: 未対応
+        security: セキュリティ
+        latest: 最新受付
       security:
         title: セキュリティ / 再認証
         description: 高リスク操作前の本人確認状態
@@ -601,3 +610,84 @@ ja:
           self_limit_increase_forbidden: 自分自身の上限は増枠できません。
           admin_target_forbidden: 管理者ユーザーの上限は変更できません。
           default: ユーザー別上限を更新できませんでした。
+    contact_requests:
+      categories:
+        bug: 不具合
+        account: アカウント
+        receipt_analysis: レシート解析
+        security: セキュリティ
+        other: その他
+      statuses:
+        open: 未対応
+        in_progress: 対応中
+        resolved: 解決済み
+        closed: クローズ
+      sources:
+        authenticated: 本登録ユーザー
+        guest: ゲストユーザー
+        public: 未ログイン
+      index:
+        title: 問い合わせ管理
+        description: 受け付けた問い合わせを確認し、対応状態を管理します。
+        filters:
+          title: フィルター
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          all: すべて
+          limit_unit: "%{count}件"
+          labels:
+            status: ステータス
+            category: 種別
+            source: 送信元
+            user_id: ユーザーID
+            request_uid: 受付ID
+            email_digest: 返信先識別子
+            created_from: 受付日時（開始）
+            created_to: 受付日時（終了）
+            limit: 表示件数
+          submit: 絞り込む
+          clear: クリア
+        results:
+          title: 問い合わせ一覧
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当する問い合わせはありません。
+        table:
+          created: 作成日時
+          request_uid: 受付ID
+          status: ステータス
+          category: 種別
+          subject: 件名
+          user: ユーザー
+          email: 返信先
+          detail: 詳細
+          detail_link: 詳細
+      show:
+        title: 問い合わせ詳細
+        sections:
+          message: 問い合わせ内容
+          status_update: 対応状態
+          summary: 受付情報
+        labels:
+          request_uid: 受付ID
+          status: ステータス
+          category: 種別
+          source: 送信元
+          user: ユーザー
+          email_masked: 返信先
+          email_digest: 返信先識別子
+          subject: 件名
+          body: 本文
+          request_id: リクエストID
+          ip_address: IPアドレス
+          user_agent: ユーザーエージェント
+          created_at: 受付日時
+          handled_by: 更新者
+          handled_at: 更新日時
+        buttons:
+          update_status: 状態を更新
+        status_update_notice: 状態変更は監査ログに記録されます。本文や返信先メールアドレス全文は監査ログに保存しません。
+      messages:
+        status_updated: 問い合わせの状態を更新しました。
+        status_update_failed: 問い合わせの状態を更新できませんでした。

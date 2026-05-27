@@ -1,0 +1,118 @@
+<% content_for :title, t("admin.contact_requests.show.title") %>
+
+<%
+  status_options = ContactRequest::STATUSES.map { |value| [ t("admin.contact_requests.statuses.#{value}"), value ] }
+  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+%>
+
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.contact_requests.show.title"),
+        subtitle: @record[:request_uid],
+        breadcrumb_label: t("admin.contact_requests.index.title"),
+        breadcrumb_path: admin_contact_requests_path,
+        title_size: "text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "lg:col-span-2" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.message") %></h2>
+      <dl class="space-y-4 text-sm">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.subject") %></dt>
+          <dd class="mt-1 token-text-base break-words"><%= @record[:subject] %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.body") %></dt>
+          <dd class="mt-2 whitespace-pre-wrap break-words rounded-lg border token-border-soft token-bg-input p-4 token-text-base"><%= @record[:body] %></dd>
+        </div>
+      </dl>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.status_update") %></h2>
+      <%= form_with model: @record[:contact_request], url: admin_contact_request_path(@record[:id]), method: :patch, local: true, class: "space-y-4" do |form| %>
+        <div class="space-y-1">
+          <%= form.label :status, t("admin.contact_requests.show.labels.status"), class: "text-xs font-semibold token-text-muted" %>
+          <%= form.select :status,
+                options_for_select(status_options, @record[:status]),
+                {},
+                class: admin_select_class %>
+        </div>
+
+        <%= render "shared/ui/actions/button",
+              label: t("admin.contact_requests.show.buttons.update_status"),
+              type: "submit",
+              icon: "published_with_changes",
+              full_width: true %>
+      <% end %>
+      <p class="mt-3 text-xs token-text-muted"><%= t("admin.contact_requests.show.status_update_notice") %></p>
+    <% end %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.summary") %></h2>
+    <dl class="grid gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_uid") %></dt>
+        <dd class="font-mono token-text-base break-all"><%= @record[:request_uid] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.status") %></dt>
+        <dd class="token-text-base"><%= t("admin.contact_requests.statuses.#{@record[:status]}") %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.category") %></dt>
+        <dd class="token-text-base"><%= t("admin.contact_requests.categories.#{@record[:category]}") %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.source") %></dt>
+        <dd class="token-text-base"><%= t("admin.contact_requests.sources.#{@record[:source]}") %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user") %></dt>
+        <dd class="font-mono token-text-base">
+          <% if @record[:user_id].present? %>
+            <%= link_to "##{@record[:user_id]}", admin_user_path(@record[:user_id]), class: "token-text-brand hover:underline" %>
+          <% else %>
+            -
+          <% end %>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_masked") %></dt>
+        <dd class="font-mono token-text-base break-all"><%= @record[:email_masked] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_digest") %></dt>
+        <dd class="font-mono token-text-base break-all"><%= @record[:email_digest] %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.created_at") %></dt>
+        <dd class="token-text-base"><%= l(@record[:created_at], format: :short) %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_by") %></dt>
+        <dd class="font-mono token-text-base"><%= @record[:handled_by_user_id].present? ? "##{@record[:handled_by_user_id]}" : "-" %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_at") %></dt>
+        <dd class="token-text-base"><%= @record[:handled_at].present? ? l(@record[:handled_at], format: :short) : "-" %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_id") %></dt>
+        <dd class="font-mono token-text-base break-all"><%= @record[:request_id].presence || "-" %></dd>
+      </div>
+      <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.ip_address") %></dt>
+        <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
+      </div>
+      <div class="md:col-span-2 lg:col-span-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user_agent") %></dt>
+        <dd class="token-text-base break-all"><%= @record[:user_agent].presence || "-" %></dd>
+      </div>
+    </dl>
+  <% end %>
+</section>

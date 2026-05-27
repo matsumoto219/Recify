@@ -12,6 +12,14 @@ module Admin
       AuditLogsQuery.call(**filters)
     end
 
+    def contact_requests(**filters)
+      ContactRequestsQuery.call(**filters)
+    end
+
+    def contact_request(id:)
+      ContactRequestsQuery.find(id: id)
+    end
+
     def users(**filters)
       UsersQuery.call(**filters)
     end

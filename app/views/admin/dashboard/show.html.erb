@@ -4,6 +4,7 @@
   receipt_analysis = @dashboard.receipt_analysis
   cleanup = @dashboard.cleanup
   audit = @dashboard.audit
+  contact_requests = @dashboard.contact_requests
   security = @dashboard.security
   system_operations = @dashboard.system_operations
   reauth_context = admin_reauthentication_context
@@ -52,6 +53,38 @@
         <%= t("admin.dashboard.receipt_analysis.latest_run") %>:
         <span class="font-mono token-text-base">
           <%= receipt_analysis[:latest_run_at].present? ? l(receipt_analysis[:latest_run_at], format: :short) : "-" %>
+        </span>
+      </p>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.contact_requests.title") %></h2>
+          <p class="text-sm token-text-muted"><%= t("admin.dashboard.contact_requests.description") %></p>
+        </div>
+        <%= link_to t("admin.dashboard.contact_requests.link"), admin_contact_requests_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-3">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.unresolved") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-contact-requests-unresolved-count><%= contact_requests[:unresolved_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.open") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= contact_requests[:open_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.security") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= contact_requests[:security_open_count] %></dd>
+        </div>
+      </dl>
+
+      <p class="mt-4 text-sm token-text-muted">
+        <%= t("admin.dashboard.contact_requests.latest") %>:
+        <span class="font-mono token-text-base">
+          <%= contact_requests[:latest_created_at].present? ? l(contact_requests[:latest_created_at], format: :short) : "-" %>
         </span>
       </p>
     <% end %>
