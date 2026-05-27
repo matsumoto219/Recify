@@ -20,7 +20,7 @@ ja:
       email: you@example.com
       category: 種別を選択
       subject: 例）レシート解析結果について
-      body: 状況、発生日時、操作内容などを入力してください。
+      body: 状況、発生日時、レシートID、操作内容などを入力してください。
     categories:
       bug: 不具合
       account: アカウント
