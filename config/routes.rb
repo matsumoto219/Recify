@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  post "/rails/active_storage/direct_uploads", to: "errors#not_found"
+
   namespace :admin do
     root "dashboard#show"
     resource :system_operations, only: %i[show]
