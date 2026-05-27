@@ -17,6 +17,7 @@
   actor_kind_options = AuditLog::ACTOR_KINDS.map { |value| [ value, value ] }
   outcome_options = AuditLog::OUTCOMES.map { |value| [ value, value ] }
   limit_options = [ 25, 50, 100 ].map { |value| [ "#{value}件", value.to_s ] }
+  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -49,7 +50,7 @@
         <%= form.select :actor_kind,
               options_for_select([[ "すべて", "" ]] + actor_kind_options, filters[:actor_kind]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -62,7 +63,7 @@
         <%= form.select :outcome,
               options_for_select([[ "すべて", "" ]] + outcome_options, filters[:outcome]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -95,7 +96,7 @@
         <%= form.select :limit,
               options_for_select(limit_options, filters[:limit].presence || limit.to_s),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="flex items-end gap-3 md:col-span-2">

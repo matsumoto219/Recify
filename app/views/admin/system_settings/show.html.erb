@@ -1,5 +1,10 @@
 <% content_for :title, "設定詳細: #{@record[:key]}" %>
 
+<%
+  admin_control_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  admin_select_class = admin_control_class
+%>
+
 <section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
@@ -95,26 +100,26 @@
             <%= form.select :value,
                   options_for_select([[ "有効", "true" ], [ "無効", "false" ]], current_value.to_s),
                   {},
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+                  class: admin_select_class %>
           <% when "integer", "duration" %>
             <%= form.number_field :value,
                   value: current_value,
                   min: @record[:min],
                   max: @record[:max],
                   step: 1,
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+                  class: admin_control_class %>
           <% when "decimal", "percentage" %>
             <%= form.number_field :value,
                   value: current_value,
                   min: @record[:min],
                   max: @record[:max],
                   step: :any,
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+                  class: admin_control_class %>
           <% when "enum" %>
             <%= form.select :value,
                   options_for_select(Array(@record[:allowed_values]).map { |value| [ value, value ] }, current_value.to_s),
                   {},
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+                  class: admin_select_class %>
           <% when "user_allowlist" %>
             <%= form.text_area :value,
                   value: Array(current_value).join("\n"),
@@ -128,7 +133,7 @@
           <% else %>
             <%= form.text_field :value,
                   value: current_value,
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+                  class: admin_control_class %>
           <% end %>
         </div>
 

@@ -22,6 +22,7 @@
     [ "要対応のみ", "1" ]
   ]
   limit_options = [ 25, 50, 100 ].map { |value| [ "#{value}件", value.to_s ] }
+  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -49,7 +50,7 @@
         <%= form.select :status,
               options_for_select([[ "すべて", "" ]] + status_options, filters[:status]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -57,7 +58,7 @@
         <%= form.select :stage,
               options_for_select([[ "すべて", "" ]] + stage_options, filters[:stage]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -65,7 +66,7 @@
         <%= form.select :source,
               options_for_select([[ "すべて", "" ]] + source_options, filters[:source]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -73,7 +74,7 @@
         <%= form.select :receipt_status,
               options_for_select([[ "すべて", "" ]] + receipt_status_options, filters[:receipt_status]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -81,7 +82,7 @@
         <%= form.select :needs_attention,
               options_for_select(needs_attention_options, filters[:needs_attention]),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="space-y-1">
@@ -109,7 +110,7 @@
         <%= form.select :limit,
               options_for_select(limit_options, filters[:limit].presence || limit.to_s),
               {},
-              class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
+              class: admin_select_class %>
       </div>
 
       <div class="flex items-end gap-3 md:col-span-2">

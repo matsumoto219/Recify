@@ -17,13 +17,13 @@
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
   spacing_class = local_assigns.fetch(:spacing_class, "space-y-1")
   breadcrumb_wrapper_class = [
-    "flex flex-wrap items-center text-sm token-text-muted mb-2 space-x-2",
+    "flex min-w-0 max-w-full flex-wrap items-center text-sm token-text-muted mb-2 gap-x-2 gap-y-1",
     center_breadcrumb && align == :center ? "justify-center" : nil,
     center_breadcrumb && responsive_align == :center ? "md:justify-center" : nil,
     center_breadcrumb && responsive_align == :left ? "md:justify-start" : nil
   ].compact.join(" ")
   breadcrumb_link_class = "token-text-muted section-header-breadcrumb-link transition-colors"
-  breadcrumb_current_class = "token-text-brand font-medium"
+  breadcrumb_current_class = "min-w-0 token-text-brand font-medium break-words [overflow-wrap:anywhere]"
   breadcrumb_separator_class = "text-xs token-text-muted"
 
   align_class = case align
@@ -74,14 +74,26 @@
          end
 
   resolved_icon_class = [tone[:icon], icon_class].compact.join(" ")
-  title_class = [title_size, "font-extrabold", "tracking-tight", "leading-tight", tone[:title]].join(" ")
+  title_class = [
+    "min-w-0 max-w-full break-words [overflow-wrap:anywhere]",
+    title_size,
+    "font-extrabold",
+    "tracking-tight",
+    "leading-tight",
+    tone[:title]
+  ].join(" ")
   resolved_title_suffix_class = [
     "inline-flex items-center rounded-full section-header-title-suffix px-2.5 py-1 text-xs font-bold",
     title_suffix_class
   ].compact.join(" ")
-  subtitle_class = [subtitle_size, "leading-relaxed", tone[:subtitle]].join(" ")
-  header_classes = [spacing_class, align_class, responsive_align_class, wrapper_class].compact.join(" ")
-  title_row_class = ["flex items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
+  subtitle_class = [
+    "min-w-0 max-w-full break-words [overflow-wrap:anywhere]",
+    subtitle_size,
+    "leading-relaxed",
+    tone[:subtitle]
+  ].join(" ")
+  header_classes = ["min-w-0 max-w-full", spacing_class, align_class, responsive_align_class, wrapper_class].compact.join(" ")
+  title_row_class = ["flex min-w-0 max-w-full flex-wrap items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
 %>
 
 <div class="<%= header_classes %>">
