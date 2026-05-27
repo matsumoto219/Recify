@@ -182,6 +182,7 @@ RSpec.describe 'User recovery codes', type: :request do
       document = Nokogiri::HTML(response.body)
       copy_button = document.at_css('[data-action="click->clipboard#copy"]')
       copy_status = document.at_css('[data-clipboard-target="status"]')
+      copy_row = copy_button.parent.parent
 
       aggregate_failures do
         expect(response).to have_http_status(:created)
@@ -195,6 +196,10 @@ RSpec.describe 'User recovery codes', type: :request do
         expect(copy_status.parent).to eq(copy_button.parent)
         expect(copy_status.previous_element).to eq(copy_button)
         expect(copy_status.parent['class']).to include('flex-col')
+        expect(copy_status.parent['class']).to include('items-start')
+        expect(copy_status.parent['class']).not_to include('sm:items-end')
+        expect(copy_row['class']).to include('justify-start')
+        expect(copy_row['class']).not_to include('sm:justify-end')
       end
 
       get settings_security_path
