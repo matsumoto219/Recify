@@ -74,6 +74,31 @@ module SystemSettings
       fetch(key).current_value
     end
 
+    def values_for(keys)
+      normalized_keys = Array(keys).map { |key| normalize_key(key) }.uniq
+      definitions_by_key = normalized_keys.index_with { |key| definition_for(key) }
+      settings_by_key = SystemSetting.where(key: normalized_keys).index_by(&:key)
+
+      definitions_by_key.transform_values do |definition|
+        setting = settings_by_key[definition.key]
+        setting ? cast_stored_value(definition, setting.value) : definition.default
+      end
+    end
+
+    def limits_for(keys)
+      values = values_for(keys)
+
+      values.each_with_object({}) do |(key, value), limits|
+        definition = definition_for(key)
+        limits[key] =
+          begin
+            Integer(value)
+          rescue ArgumentError, TypeError
+            Integer(definition.default)
+          end
+      end
+    end
+
     def enabled?(key, user: nil, context: {})
       definition = definition_for(key)
       value = value_for(key, user: user, context: context)

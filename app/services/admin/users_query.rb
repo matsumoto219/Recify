@@ -175,13 +175,14 @@ module Admin
       storage_usage = user.storage_usage
       usage_entries = UsageCounters.summary_for(user: user)
       limit_entries = UserLimits.summary_for(user: user)
+      storage_limit_entry = limit_entries.find { |entry| entry.key == "storage_bytes" }
 
       {
         storage: {
           used_bytes: storage_usage.used_bytes,
           base_limit_bytes: user.storage_limit_bytes,
-          effective_limit_bytes: storage_usage.limit_bytes,
-          source: limit_entries.find { |entry| entry.key == "storage_bytes" }&.source
+          effective_limit_bytes: storage_limit_entry&.value,
+          source: storage_limit_entry&.source
         },
         limits: limit_entries.map { |entry| usage_limit_record(entry, usage_entries.fetch(entry.key)) }
       }

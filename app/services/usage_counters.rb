@@ -55,8 +55,18 @@ module UsageCounters
     end
 
     def summary_for(user:, period: :day)
+      normalized_period = normalize_period(period)
+      period_start = period_start_for(normalized_period)
+      counters = UsageCounter.where(
+        user: user,
+        key: LIMIT_KEYS,
+        period: normalized_period,
+        period_start: period_start
+      ).index_by(&:key)
+
       LIMIT_KEYS.index_with do |key|
-        current(user: user, key: key, period: period)
+        counter = counters[key] || build_counter(user: user, key: key, period: normalized_period, period_start: period_start)
+        entry_for(counter)
       end
     end
 

@@ -107,6 +107,20 @@ RSpec.describe UsageCounters do
         expect(summary.fetch('receipt_uploads_per_day').used_count).to eq(0)
       end
     end
+
+    it '対象periodのcounterを一括取得する' do
+      user = create(:user)
+      create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 3)
+      create(:usage_counter, user: user, key: 'ocr_jobs_per_day', used_count: 2)
+
+      queries = count_sql_queries do
+        summary = described_class.summary_for(user: user)
+        expect(summary.fetch('receipt_uploads_per_day').used_count).to eq(3)
+      end
+
+      usage_counter_queries = queries.select { |sql| sql.include?('"usage_counters"') }
+      expect(usage_counter_queries.size).to eq(1)
+    end
   end
 
   describe 'guest conversion' do
@@ -122,5 +136,24 @@ RSpec.describe UsageCounters do
         expect(UsageCounter.where(user: guest, key: 'receipt_uploads_per_day').count).to eq(1)
       end
     end
+  end
+
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s.squish
+      next if name == 'SCHEMA' || name == 'TRANSACTION' || payload[:cached]
+      next if sql.include?('schema_migrations') || sql.include?('ar_internal_metadata')
+
+      queries << sql
+    end
+
+    ActiveRecord::Base.uncached do
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        yield
+      end
+    end
+    queries
   end
 end

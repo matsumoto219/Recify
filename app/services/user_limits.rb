@@ -98,21 +98,24 @@ module UserLimits
       definitions.key?(normalize_key(key))
     end
 
-    def override_for(user:, key:)
+    def override_for(user:, key:, override_cache: nil)
       return unless user
+
+      definition = definition_for(key)
+      return override_cache[definition.key] if override_cache
 
       user.user_limit_overrides
           .active
-          .find_by(key: definition_for(key).key)
+          .find_by(key: definition.key)
     end
 
     def effective_limit(user:, key:)
       entry_for(user: user, key: key).value
     end
 
-    def entry_for(user:, key:)
+    def entry_for(user:, key:, override_cache: nil, system_limit_cache: nil)
       definition = definition_for(key)
-      override = override_for(user: user, key: definition.key)
+      override = override_for(user: user, key: definition.key, override_cache: override_cache)
 
       if override
         return Entry.new(
@@ -121,13 +124,13 @@ module UserLimits
           source: "override",
           definition: definition,
           override: override,
-          global_value: global_value_for(definition),
+          global_value: global_value_for(definition, system_limit_cache: system_limit_cache),
           base_value: base_value_for(user, definition),
           api_reservation: definition.api_reservation == true
         )
       end
 
-      value, source = fallback_value_and_source(user, definition)
+      value, source = fallback_value_and_source(user, definition, system_limit_cache: system_limit_cache)
 
       Entry.new(
         key: definition.key,
@@ -135,14 +138,19 @@ module UserLimits
         source: source,
         definition: definition,
         override: nil,
-        global_value: global_value_for(definition),
+        global_value: global_value_for(definition, system_limit_cache: system_limit_cache),
         base_value: base_value_for(user, definition),
         api_reservation: definition.api_reservation == true
       )
     end
 
     def summary_for(user:)
-      definitions.keys.map { |key| entry_for(user: user, key: key) }
+      override_cache = active_override_cache_for(user)
+      system_limit_cache = system_limit_cache_for_summary
+
+      definitions.keys.map do |key|
+        entry_for(user: user, key: key, override_cache: override_cache, system_limit_cache: system_limit_cache)
+      end
     end
 
     def cast_value(key, value)
@@ -180,28 +188,51 @@ module UserLimits
       value
     end
 
-    def fallback_value_and_source(user, definition)
+    def fallback_value_and_source(user, definition, system_limit_cache: nil)
       if definition.storage
-        storage_fallback(user)
+        storage_fallback(user, system_limit_cache: system_limit_cache)
       elsif user&.guest? && definition.guest_system_setting_key.present?
-        [ SystemSettings.limit_for(definition.guest_system_setting_key), "guest_global_default" ]
+        [ system_limit_for(definition.guest_system_setting_key, system_limit_cache: system_limit_cache), "guest_global_default" ]
       else
-        [ global_value_for(definition), "global_default" ]
+        [ global_value_for(definition, system_limit_cache: system_limit_cache), "global_default" ]
       end
     end
 
-    def storage_fallback(user)
+    def storage_fallback(user, system_limit_cache: nil)
       base_value = Integer(user.storage_limit_bytes)
       return [ base_value, "user_storage_limit" ] unless user.guest?
 
-      guest_global_value = SystemSettings.limit_for("limits.guest_storage_bytes")
+      guest_global_value = system_limit_for("limits.guest_storage_bytes", system_limit_cache: system_limit_cache)
       [ [ base_value, guest_global_value ].min, "guest_global_default" ]
     end
 
-    def global_value_for(definition)
+    def global_value_for(definition, system_limit_cache: nil)
       return unless definition.system_setting_key
 
-      SystemSettings.limit_for(definition.system_setting_key)
+      system_limit_for(definition.system_setting_key, system_limit_cache: system_limit_cache)
+    end
+
+    def system_limit_for(key, system_limit_cache: nil)
+      return system_limit_cache.fetch(key) if system_limit_cache&.key?(key)
+
+      SystemSettings.limit_for(key)
+    end
+
+    def active_override_cache_for(user)
+      return {} unless user
+
+      user.user_limit_overrides
+          .active
+          .where(key: definitions.keys)
+          .index_by(&:key)
+    end
+
+    def system_limit_cache_for_summary
+      keys = definitions.values.flat_map do |definition|
+        [ definition.system_setting_key, definition.guest_system_setting_key ]
+      end.compact.uniq
+
+      SystemSettings.limits_for(keys)
     end
 
     def base_value_for(user, definition)

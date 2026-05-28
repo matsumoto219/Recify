@@ -133,6 +133,21 @@ RSpec.describe UserLimits do
       end
     end
 
+    it 'summary_forはoverrideとglobal limitを一括取得する' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_uploads_per_day', value: { 'value' => 90 })
+
+      queries = count_sql_queries do
+        summary = described_class.summary_for(user: user)
+        expect(summary.find { |entry| entry.key == 'receipt_uploads_per_day' }.value).to eq(90)
+      end
+
+      aggregate_failures do
+        expect(queries.count { |sql| sql.include?('"user_limit_overrides"') }).to eq(1)
+        expect(queries.count { |sql| sql.include?('"system_settings"') }).to eq(1)
+      end
+    end
+
     it 'guestから本登録化するとeffective limitだけ通常ユーザー側へ切り替わる' do
       guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
       guest.avatar.attach(io: StringIO.new('avatar-bytes'), filename: 'avatar.png', content_type: 'image/png')
@@ -168,5 +183,24 @@ RSpec.describe UserLimits do
         }.to raise_error(UserLimits::ValidationError, 'unknown_key')
       end
     end
+  end
+
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s.squish
+      next if name == 'SCHEMA' || name == 'TRANSACTION' || payload[:cached]
+      next if sql.include?('schema_migrations') || sql.include?('ar_internal_metadata')
+
+      queries << sql
+    end
+
+    ActiveRecord::Base.uncached do
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        yield
+      end
+    end
+    queries
   end
 end

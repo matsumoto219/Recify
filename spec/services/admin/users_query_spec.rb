@@ -165,6 +165,23 @@ RSpec.describe Admin::UsersQuery do
         expect(record.to_json).not_to include('secret', 'credential_id', 'session_uid')
       end
     end
+
+    it 'show用recordのusage/limit summaryをkeyごとの個別queryにしない' do
+      user = create(:user, storage_limit_bytes: 1.gigabyte)
+      create(:user_limit_override, user: user, key: 'receipt_uploads_per_day', value: { 'value' => 75 }, expires_at: 1.day.from_now)
+      create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 3)
+
+      queries = count_sql_queries do
+        record = described_class.find(id: user.id)
+        expect(record.dig(:usage_limits, :limits).size).to eq(UserLimits.definitions.size)
+      end
+
+      aggregate_failures do
+        expect(queries.count { |sql| sql.include?('"usage_counters"') }).to eq(1)
+        expect(queries.count { |sql| sql.include?('"user_limit_overrides"') }).to be <= 2
+        expect(queries.count { |sql| sql.include?('"system_settings"') }).to eq(1)
+      end
+    end
   end
 
   describe '.find' do
@@ -177,5 +194,24 @@ RSpec.describe Admin::UsersQuery do
     it '存在しないidはnilを返す' do
       expect(described_class.find(id: 999_999)).to be_nil
     end
+  end
+
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s.squish
+      next if name == 'SCHEMA' || name == 'TRANSACTION' || payload[:cached]
+      next if sql.include?('schema_migrations') || sql.include?('ar_internal_metadata')
+
+      queries << sql
+    end
+
+    ActiveRecord::Base.uncached do
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        yield
+      end
+    end
+    queries
   end
 end
