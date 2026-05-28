@@ -17,6 +17,14 @@ RSpec.describe 'User password sessions', type: :request do
     create(:totp_credential, user: user, confirmed_at: Time.current)
   end
 
+  def expect_no_dashboard_shell
+    aggregate_failures do
+      expect(response.body).not_to include('id="desktop-sidebar"')
+      expect(response.body).not_to include('id="dashboard-header"')
+      expect(response.body).not_to include('data-controller="search"')
+    end
+  end
+
   it 'passkey未登録userはpassword loginで従来通りログイン完了する' do
     user = create(:user)
 
@@ -31,6 +39,8 @@ RSpec.describe 'User password sessions', type: :request do
     aggregate_failures do
       expect(response).to have_http_status(:see_other)
       expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq(I18n.t('auth.sessions.messages.signed_in'))
+      expect(flash[:alert]).to be_nil
       expect(session[:pending_second_factor]).to be_blank
       expect(session[:user_session_version]).to eq(user.session_version)
       expect(session[:user_session_uid]).to be_present
@@ -39,6 +49,81 @@ RSpec.describe 'User password sessions', type: :request do
       expect(user_session.session_uid_digest).not_to eq(session[:user_session_uid])
       expect(user.current_sign_in_at).to be_present
       expect(user.current_sign_in_ip).to be_present
+    end
+
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include('id="desktop-sidebar"')
+      expect(response.body).to include('id="dashboard-header"')
+    end
+  end
+
+  it 'unconfirmed userは2FA要素があってもpassword loginでpendingへ進まない' do
+    user = create(:user, :unconfirmed)
+    create(:passkey, user: user)
+    create_confirmed_totp(user)
+
+    expect do
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+    end.not_to change(UserSession, :count)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to be_blank
+      expect(session[:user_session_uid]).to be_blank
+      expect(flash[:alert]).to eq(I18n.t('devise.failure.unconfirmed'))
+      expect(flash[:notice]).to be_nil
+      expect(response.body).not_to include(I18n.t('auth.two_factor.messages.pending_notice'))
+      expect(response.body).not_to include(I18n.t('auth.sessions.messages.signed_in'))
+      expect_no_dashboard_shell
+      expect(user.reload.sign_in_count).to eq(0)
+    end
+  end
+
+  it 'locked userは正しいpasswordでもnoticeなしで拒否される' do
+    user = create(:user)
+    user.lock_access!
+
+    expect do
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+    end.not_to change(UserSession, :count)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(flash[:alert]).to eq(I18n.t('devise.failure.locked'))
+      expect(flash[:notice]).to be_nil
+      expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to be_blank
+      expect(session[:user_session_uid]).to be_blank
+      expect(response.body).not_to include(I18n.t('auth.sessions.messages.signed_in'))
+      expect_no_dashboard_shell
+      expect(user.reload.sign_in_count).to eq(0)
+    end
+  end
+
+  it 'password誤りではnoticeなしでdashboard shellを表示しない' do
+    user = create(:user)
+
+    expect do
+      post user_session_path,
+           params: { user: { email: user.email, password: 'wrong-password' } }
+    end.not_to change(UserSession, :count)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(flash[:alert]).to be_present
+      expect(flash[:notice]).to be_nil
+      expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to be_blank
+      expect(session[:user_session_uid]).to be_blank
+      expect(response.body).not_to include(I18n.t('auth.sessions.messages.signed_in'))
+      expect_no_dashboard_shell
+      expect(user.reload.sign_in_count).to eq(0)
     end
   end
 

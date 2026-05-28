@@ -53,6 +53,14 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
+  def expect_no_dashboard_shell
+    aggregate_failures do
+      expect(response.body).not_to include('id="desktop-sidebar"')
+      expect(response.body).not_to include('id="dashboard-header"')
+      expect(response.body).not_to include('data-controller="search"')
+    end
+  end
+
   describe 'GET /users/sign_in' do
     it 'renders login copy through locale keys and keeps guest login action' do
       get new_user_session_path
@@ -106,6 +114,9 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(email_error)
         expect(response.body).to include(password_error)
+        expect(flash[:alert]).to be_present
+        expect(flash[:notice]).to be_nil
+        expect_no_dashboard_shell
       end
     end
 
@@ -144,6 +155,8 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq(I18n.t('auth.sessions.messages.signed_in'))
+        expect(flash[:alert]).to be_nil
         expect(user.reload.current_sign_in_at).to be_present
         expect(user.last_sign_in_at).to be_present
         expect(user.current_sign_in_ip).to be_present
@@ -154,18 +167,32 @@ RSpec.describe 'Auth pages', type: :request do
     it 'unconfirmed user sign in shows unconfirmed failure' do
       user = create(:user, :unconfirmed)
 
-      post user_session_path,
-        params: {
-          user: {
-            email: user.email,
-            password: 'password'
+      expect do
+        post user_session_path,
+          params: {
+            user: {
+              email: user.email,
+              password: 'password'
+            }
           }
-        }
+      end.not_to change(UserSession, :count)
 
       aggregate_failures do
-        expect(response).to redirect_to(new_user_session_path)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to eq(I18n.t('devise.failure.unconfirmed'))
+        expect(flash[:notice]).to be_nil
+        expect(response.body).to include(I18n.t('devise.failure.unconfirmed'))
+        expect(response.body).not_to include(I18n.t('auth.sessions.messages.signed_in'))
+        expect_no_dashboard_shell
+        expect(session[:pending_second_factor]).to be_blank
+        expect(session[:user_session_version]).to be_blank
+        expect(session[:user_session_uid]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
       end
+
+      get settings_path
+
+      expect(response).to redirect_to(new_user_session_path)
     end
 
     it 'lockable failure warns on last attempt and sends unlock mail when locked' do
@@ -183,6 +210,8 @@ RSpec.describe 'Auth pages', type: :request do
         aggregate_failures do
           expect(response).to have_http_status(:unprocessable_content)
           expect(flash[:alert]).to eq(I18n.t('devise.failure.last_attempt'))
+          expect(flash[:notice]).to be_nil
+          expect_no_dashboard_shell
           expect(user.reload.failed_attempts).to eq(1)
           expect(ActionMailer::Base.deliveries).to be_empty
         end
@@ -198,6 +227,8 @@ RSpec.describe 'Auth pages', type: :request do
         aggregate_failures do
           expect(response).to have_http_status(:unprocessable_content)
           expect(flash[:alert]).to eq(I18n.t('devise.failure.locked'))
+          expect(flash[:notice]).to be_nil
+          expect_no_dashboard_shell
           expect(user.reload).to be_access_locked
           expect(user.unlock_token).to be_present
           expect(ActionMailer::Base.deliveries.size).to eq(1)

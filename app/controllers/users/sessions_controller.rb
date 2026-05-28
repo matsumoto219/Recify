@@ -25,14 +25,19 @@ class Users::SessionsController < Devise::SessionsController
     self.resource = warden.authenticate(password_auth_options)
 
     if resource
+      unless resource.active_for_authentication?
+        handle_inactive_resource(resource)
+        return
+      end
+
       allowed_methods = second_factor_methods_for(resource)
       if allowed_methods.any?
         store_pending_second_factor(resource, allowed_methods: allowed_methods)
         flash[:notice] = t("auth.two_factor.messages.pending_notice")
         redirect_to second_factor_path_for(allowed_methods), status: :see_other
       else
-        set_flash_message!(:notice, :signed_in)
         sign_in(resource_name, resource, force: true)
+        set_flash_message!(:notice, :signed_in)
         store_user_session_version(resource)
         UserSessions.record_sign_in(user: resource, request: request, session: session, method: "password")
         respond_with resource, location: after_sign_in_path_for(resource)
@@ -56,6 +61,24 @@ class Users::SessionsController < Devise::SessionsController
   end
 
   protected
+
+  def handle_inactive_resource(inactive_resource)
+    failure_message = inactive_resource.inactive_message
+    self.resource = resource_class.new(sign_in_params)
+    clear_inactive_authentication_state
+    flash.now[:alert] = sign_in_failure_message(failure_message)
+    clean_up_passwords(resource)
+    set_minimum_password_length
+    render :new, status: :unprocessable_content
+  end
+
+  def clear_inactive_authentication_state
+    # `warden.authenticate(store: false)` can still memoize the inactive user for this request.
+    warden.instance_variable_get(:@users)&.delete(resource_name)
+    warden.clear_strategies_cache!(scope: resource_name)
+    warden.lock!
+    remove_instance_variable(:@current_user) if instance_variable_defined?(:@current_user)
+  end
 
   def apply_sign_in_error_states
     email_value = sign_in_params[:email].to_s.strip
