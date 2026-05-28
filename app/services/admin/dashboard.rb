@@ -19,6 +19,8 @@ module Admin
       :audit,
       :contact_requests,
       :security,
+      :external_services,
+      :storage,
       :system_operations,
       :locked_future_operations,
       keyword_init: true
@@ -44,6 +46,8 @@ module Admin
         audit: audit_summary,
         contact_requests: contact_requests_summary,
         security: security_summary,
+        external_services: ExternalServices.status_snapshot,
+        storage: Storage.system_usage_snapshot,
         system_operations: system_operations_summary(system_dashboard),
         locked_future_operations: system_dashboard.locked_future_operations
       )

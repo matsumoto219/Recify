@@ -30,6 +30,30 @@ ja:
     dashboard:
       title: 管理トップ
       description: 管理運用に必要な状態サマリと主要導線
+      common:
+        not_available: "-"
+      external_services:
+        title: 外部サービス状態
+        description: OCR / AI の状態とアップロード可否を表示します。
+        monitoring: 復旧監視中
+        checked_at: 最終確認
+        next_check_at: 次回確認
+        upload: レシート画像アップロード
+        upload_allowed: 受付可
+        upload_blocked: OCR停止中のため停止
+        ocr_only_fallback: AI停止中はOCR-only fallbackで受付します。
+      storage:
+        title: ストレージ状態
+        description: ActiveStorage全体のread-only集計です。
+        total_blob_count: total blobs
+        attached_blob_count: attached
+        orphan_blob_count: unattached
+        total_blob_bytes: total bytes
+        attached_blob_bytes: attached bytes
+        orphan_blob_bytes: unattached bytes
+        user_count: users
+        quota_usage: quota used / total
+        readonly_note: このカードでは削除やcleanupは実行しません。
       receipt_analysis:
         title: 解析状況
         description: レシート解析の現在状態

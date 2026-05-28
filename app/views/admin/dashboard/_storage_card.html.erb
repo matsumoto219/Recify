@@ -1,0 +1,35 @@
+<%
+  snapshot = (storage || {}).with_indifferent_access
+
+  storage_metrics = [
+    [ t("admin.dashboard.storage.total_blob_count"), number_with_delimiter(snapshot[:total_blob_count].to_i) ],
+    [ t("admin.dashboard.storage.attached_blob_count"), number_with_delimiter(snapshot[:attached_blob_count].to_i) ],
+    [ t("admin.dashboard.storage.orphan_blob_count"), number_with_delimiter(snapshot[:orphan_blob_count].to_i) ],
+    [ t("admin.dashboard.storage.total_blob_bytes"), format_storage_size(snapshot[:total_blob_bytes]) ],
+    [ t("admin.dashboard.storage.attached_blob_bytes"), format_storage_size(snapshot[:attached_blob_bytes]) ],
+    [ t("admin.dashboard.storage.orphan_blob_bytes"), format_storage_size(snapshot[:orphan_blob_bytes]) ],
+    [ t("admin.dashboard.storage.user_count"), number_with_delimiter(snapshot[:user_count].to_i) ],
+    [
+      t("admin.dashboard.storage.quota_usage"),
+      "#{format_storage_size(snapshot[:quota_used_bytes])} / #{format_storage_size(snapshot[:quota_total_bytes])}"
+    ]
+  ]
+%>
+
+<%= render "shared/ui/layout/surface_card", padding: :md do %>
+  <div class="mb-4">
+    <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.storage.title") %></h2>
+    <p class="text-sm token-text-muted"><%= t("admin.dashboard.storage.description") %></p>
+  </div>
+
+  <dl class="grid gap-3 text-sm md:grid-cols-2">
+    <% storage_metrics.each do |label, value| %>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
+        <dd class="break-words font-mono text-xl font-bold token-text-base [overflow-wrap:anywhere] md:text-2xl"><%= value %></dd>
+      </div>
+    <% end %>
+  </dl>
+
+  <p class="mt-4 text-sm token-text-muted"><%= t("admin.dashboard.storage.readonly_note") %></p>
+<% end %>

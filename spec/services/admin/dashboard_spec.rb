@@ -10,6 +10,25 @@ RSpec.describe Admin::Dashboard do
   describe '.call' do
     it 'admin総合トップ用の軽量summaryを返す' do
       admin = create(:user, :admin)
+      external_services_snapshot = {
+        ocr: { state: 'down' },
+        ai: { state: 'ok' },
+        upload: { allowed: false },
+        notices: { ocr_down: true }
+      }
+      storage_snapshot = {
+        total_blob_count: 3,
+        attached_blob_count: 2,
+        orphan_blob_count: 1,
+        total_blob_bytes: 24.kilobytes,
+        attached_blob_bytes: 20.kilobytes,
+        orphan_blob_bytes: 4.kilobytes,
+        user_count: 2,
+        quota_total_bytes: 3.gigabytes,
+        quota_used_bytes: 20.kilobytes
+      }
+      allow(ExternalServices).to receive(:status_snapshot).and_return(external_services_snapshot)
+      allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
       create(:passkey, user: admin)
       active_run = create(:receipt_analysis_run, :running, updated_at: 7.hours.ago)
       failed_run = create(:receipt_analysis_run, :failed, created_at: 1.hour.ago)
@@ -55,6 +74,8 @@ RSpec.describe Admin::Dashboard do
           security_open_count: 1
         )
         expect(result.security).to include(admin_passkey_count: 1)
+        expect(result.external_services).to eq(external_services_snapshot)
+        expect(result.storage).to eq(storage_snapshot)
         expect(result.system_operations[:queues]).to contain_exactly(
           'default',
           'receipt_ocr',

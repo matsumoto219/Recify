@@ -124,6 +124,35 @@ RSpec.describe 'Admin dashboard', type: :request do
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
       allow(Analysis::RetryService).to receive(:call)
+      allow(ExternalServices).to receive(:status_snapshot).and_return(
+        ocr: {
+          state: 'down',
+          text: I18n.t('shared.service_status.down'),
+          monitoring: true,
+          checked_at: '2026-05-26T12:00:00+09:00',
+          next_check_at: '2026-05-26T12:05:00+09:00'
+        },
+        ai: {
+          state: 'ok',
+          text: I18n.t('shared.service_status.ok'),
+          monitoring: false,
+          checked_at: '2026-05-26T12:00:00+09:00',
+          next_check_at: nil
+        },
+        upload: { allowed: false, ocr_available: false },
+        notices: { ocr_down: true, ai_down: false }
+      )
+      allow(Storage).to receive(:system_usage_snapshot).and_return(
+        total_blob_count: 3,
+        attached_blob_count: 2,
+        orphan_blob_count: 1,
+        total_blob_bytes: 24.kilobytes,
+        attached_blob_bytes: 20.kilobytes,
+        orphan_blob_bytes: 4.kilobytes,
+        user_count: 1,
+        quota_total_bytes: 1.gigabyte,
+        quota_used_bytes: 20.kilobytes
+      )
 
       get admin_root_path
 
@@ -135,6 +164,16 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('監査ログ')
         expect(response.body).to include('問い合わせ')
         expect(response.body).to include('セキュリティ / 再認証')
+        expect(response.body).to include('外部サービス状態')
+        expect(response.body).to include('OCRサービス')
+        expect(response.body).to include('AIサービス')
+        expect(response.body).to include('停止中')
+        expect(response.body).to include('OCR停止中のため停止')
+        expect(response.body).to include('ストレージ状態')
+        expect(response.body).to include('total blobs')
+        expect(response.body).to include('unattached')
+        expect(response.body).to include('24KB')
+        expect(response.body).to include('4KB')
         expect(response.body).to include('システム運用')
         expect(response.body).to include('制限中の操作')
         expect(response.body).to include(admin_receipt_analysis_runs_path)
