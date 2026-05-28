@@ -3,6 +3,7 @@ class Notification < ApplicationRecord
   UID_RANDOM_LENGTH = 16
   UID_FORMAT = /\A#{UID_PREFIX}[A-Za-z0-9]{#{UID_RANDOM_LENGTH}}\z/
   UID_RETRY_LIMIT = 10
+  UID_UNIQUE_INDEX_NAME = "index_notifications_on_uid"
 
   KINDS = %w[
     receipt_completed
@@ -36,6 +37,14 @@ class Notification < ApplicationRecord
   after_create_commit :prune_user_notifications_after_create
   after_update_commit :broadcast_realtime_surfaces_after_read_change, if: :saved_change_to_read_at?
   after_destroy_commit :broadcast_realtime_surfaces_after_destroy
+
+  def save(*args, **kwargs, &block)
+    save_with_uid_retry { super(*args, **kwargs, &block) }
+  end
+
+  def save!(*args, **kwargs, &block)
+    save_with_uid_retry { super(*args, **kwargs, &block) }
+  end
 
   class << self
     def broadcast_realtime_surfaces_for(user)
@@ -184,6 +193,26 @@ class Notification < ApplicationRecord
     end
 
     raise ActiveRecord::RecordNotUnique, "Could not generate unique notification uid"
+  end
+
+  def save_with_uid_retry
+    retry_count = 0
+
+    begin
+      yield
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless new_record? && uid_collision_error?(e)
+
+      retry_count += 1
+      raise if retry_count > UID_RETRY_LIMIT
+
+      self.uid = generate_unique_uid
+      retry
+    end
+  end
+
+  def uid_collision_error?(error)
+    error.message.to_s.include?(UID_UNIQUE_INDEX_NAME)
   end
 
   def internal_action_path?

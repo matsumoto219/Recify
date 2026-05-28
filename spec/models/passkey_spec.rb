@@ -41,6 +41,18 @@ RSpec.describe Passkey, type: :model do
       expect(passkey.errors[:uid]).to be_present
     end
 
+    it 'uid生成時に既存値との衝突を避ける' do
+      duplicate_random = 'ABCDEFGHJKLMNPQR'
+      unique_random = 'STUVWXYZabcdefgh'
+      create(:passkey, uid: "psk_#{duplicate_random}")
+
+      allow(SecureRandom).to receive(:base58).and_return(duplicate_random, unique_random)
+
+      passkey = create(:passkey)
+
+      expect(passkey.uid).to eq("psk_#{unique_random}")
+    end
+
     it 'credential_idの重複を不正にする' do
       create(:passkey, credential_id: 'duplicate-credential')
       passkey = build(:passkey, credential_id: 'duplicate-credential')
@@ -89,6 +101,28 @@ RSpec.describe Passkey, type: :model do
 
       expect(index).to be_present
       expect(index.unique).to be(true)
+    end
+  end
+
+  describe 'uniqueness' do
+    it 'uidのDB unique index衝突時はuidを再生成して保存する' do
+      existing = create(:passkey)
+      unique_random = 'STUVWXYZabcdefgh'
+      passkey = build(:passkey, uid: existing.uid)
+
+      allow(SecureRandom).to receive(:base58).and_return(unique_random)
+
+      expect(passkey.save!(validate: false)).to be(true)
+      expect(passkey.uid).to eq("psk_#{unique_random}")
+    end
+
+    it 'uid以外のDB unique index衝突は再raiseする' do
+      existing = create(:passkey)
+      duplicate = build(:passkey, credential_id: existing.credential_id, uid: 'psk_STUVWXYZabcdefgh')
+
+      expect {
+        duplicate.save!(validate: false)
+      }.to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
 end

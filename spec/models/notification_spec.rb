@@ -19,6 +19,18 @@ RSpec.describe Notification, type: :model do
       expect(duplicate.errors[:uid]).to be_present
     end
 
+    it 'uid生成時に既存値との衝突を避ける' do
+      duplicate_random = 'ABCDEFGHJKLMNPQR'
+      unique_random = 'STUVWXYZabcdefgh'
+      create(:notification, uid: "ntf_#{duplicate_random}")
+
+      allow(SecureRandom).to receive(:base58).and_return(duplicate_random, unique_random)
+
+      notification = create(:notification)
+
+      expect(notification.uid).to eq("ntf_#{unique_random}")
+    end
+
     it 'allowed kindだけを許可する' do
       notification = build(:notification, kind: 'receipt_completed')
       invalid_notification = build(:notification, kind: 'unknown')
@@ -56,6 +68,27 @@ RSpec.describe Notification, type: :model do
   end
 
   describe 'uniqueness' do
+    it 'uidのDB unique index衝突時はuidを再生成して保存する' do
+      existing = create(:notification)
+      unique_random = 'STUVWXYZabcdefgh'
+      notification = build(:notification, uid: existing.uid)
+
+      allow(SecureRandom).to receive(:base58).and_return(unique_random)
+
+      expect(notification.save!(validate: false)).to be(true)
+      expect(notification.uid).to eq("ntf_#{unique_random}")
+    end
+
+    it 'uid以外のDB unique index衝突は再raiseする' do
+      receipt = create(:receipt, :completed)
+      create(:notification, user: receipt.user, kind: 'receipt_completed', notifiable: receipt)
+      duplicate = build(:notification, user: receipt.user, kind: 'receipt_completed', notifiable: receipt, uid: 'ntf_STUVWXYZabcdefgh')
+
+      expect {
+        duplicate.save!(validate: false)
+      }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+
     it '同じuser/kind/notifiableの通知はDBで重複作成できない' do
       receipt = create(:receipt, :completed)
       timestamp = Time.current
