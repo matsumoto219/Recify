@@ -21,19 +21,23 @@ RSpec.describe 'Auth pages', type: :request do
   end
 
   def confirmation_token_from(message)
-    message.body.encoded.match(/confirmation_token=([^"'\s]+)/)[1]
+    mail_html_body(message).match(/confirmation_token=([^"'\s]+)/)[1]
   end
 
   def unlock_token_from(message)
-    message.body.encoded.match(/unlock_token=([^"'\s]+)/)[1]
+    mail_html_body(message).match(/unlock_token=([^"'\s]+)/)[1]
   end
 
   def reset_password_token
     'reset-password-token'
   end
 
+  def mail_html_body(message)
+    message.html_part&.body&.decoded || message.body.decoded
+  end
+
   def expect_common_mail_layout(message)
-    body = message.body.decoded
+    body = mail_html_body(message)
 
     aggregate_failures do
       expect(body).to include('<!DOCTYPE html>')
@@ -44,7 +48,7 @@ RSpec.describe 'Auth pages', type: :request do
   end
 
   def expect_mail_cta_with_fallback(message, action_label)
-    body = message.body.decoded
+    body = mail_html_body(message)
 
     aggregate_failures do
       expect_common_mail_layout(message)

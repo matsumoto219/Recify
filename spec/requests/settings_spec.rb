@@ -17,11 +17,15 @@ RSpec.describe 'Settings', type: :request do
   end
 
   def confirmation_token_from(message)
-    message.body.decoded.match(/confirmation_token=([^"'\s]+)/)[1]
+    mail_html_body(message).match(/confirmation_token=([^"'\s]+)/)[1]
+  end
+
+  def mail_html_body(message)
+    message.html_part&.body&.decoded || message.body.decoded
   end
 
   def expect_common_mail_layout(message)
-    body = message.body.decoded
+    body = mail_html_body(message)
 
     aggregate_failures do
       expect(body).to include('<!DOCTYPE html>')
@@ -32,7 +36,7 @@ RSpec.describe 'Settings', type: :request do
   end
 
   def expect_mail_cta_with_fallback(message, action_label)
-    body = message.body.decoded
+    body = mail_html_body(message)
 
     aggregate_failures do
       expect_common_mail_layout(message)
@@ -748,7 +752,7 @@ RSpec.describe 'Settings', type: :request do
 
       guest.reload
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
-      delivered_body = ActionMailer::Base.deliveries.last.body.decoded
+      delivered_body = mail_html_body(ActionMailer::Base.deliveries.last)
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
@@ -954,11 +958,11 @@ RSpec.describe 'Settings', type: :request do
         expect(user.unconfirmed_email).to eq('reconfirmable-new@example.com')
         expect(delivered_recipients).to include('reconfirmable-new@example.com')
         expect(delivered_recipients).to include(old_email)
-        expect(confirmation_mail.body.decoded).to include('reconfirmable-new@example.com')
+        expect(mail_html_body(confirmation_mail)).to include('reconfirmable-new@example.com')
         expect_mail_cta_with_fallback(confirmation_mail, I18n.t('auth.mailer.confirmation_instructions.action'))
         expect_common_mail_layout(email_changed_mail)
-        expect(email_changed_mail.body.decoded).to include(I18n.t('auth.mailer.email_changed.title'))
-        expect(email_changed_mail.body.decoded).not_to include(I18n.t('auth.mailer.common.fallback_url'))
+        expect(mail_html_body(email_changed_mail)).to include(I18n.t('auth.mailer.email_changed.title'))
+        expect(mail_html_body(email_changed_mail)).not_to include(I18n.t('auth.mailer.common.fallback_url'))
       end
 
       token = confirmation_token_from(confirmation_mail)

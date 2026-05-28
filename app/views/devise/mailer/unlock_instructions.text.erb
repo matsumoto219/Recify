@@ -1,0 +1,10 @@
+<% unlock_url_value = unlock_url(@resource, unlock_token: @token) %>
+<%= t("auth.mailer.unlock_instructions.title") %>
+
+<%= t("auth.mailer.greeting", email: @resource.display_email) %>
+
+<%= t("auth.mailer.unlock_instructions.body") %>
+<%= t("auth.mailer.unlock_instructions.instructions") %>
+<%= unlock_url_value %>
+
+<%= t("auth.mailer.confirmation_instructions.ignore") %>

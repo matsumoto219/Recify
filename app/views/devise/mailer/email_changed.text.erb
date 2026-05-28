@@ -1,0 +1,9 @@
+<%= t("auth.mailer.email_changed.title") %>
+
+<%= t("auth.mailer.greeting", email: @email) %>
+
+<% if @resource.try(:unconfirmed_email?) %>
+<%= t("auth.mailer.email_changed.changing", email: @resource.unconfirmed_email) %>
+<% else %>
+<%= t("auth.mailer.email_changed.changed", email: @resource.display_email) %>
+<% end %>
