@@ -92,6 +92,19 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'アカウント操作section headerに退会系アイコンを表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      account_actions_heading = document.xpath("//h2[normalize-space()='#{I18n.t('settings.index.sections.account_actions')}']").first
+      account_actions_icon = account_actions_heading&.parent&.at_css('.material-symbols-outlined')&.text&.strip
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(account_actions_icon).to eq('person_off')
+      end
+    end
+
     it '通知設定toggleを表示する' do
       get settings_path
 

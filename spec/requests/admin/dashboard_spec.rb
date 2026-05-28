@@ -130,7 +130,8 @@ RSpec.describe 'Admin dashboard', type: :request do
           text: I18n.t('shared.service_status.down'),
           monitoring: true,
           checked_at: '2026-05-26T12:00:00+09:00',
-          next_check_at: '2026-05-26T12:05:00+09:00'
+          next_check_at: '2026-05-26T12:05:00+09:00',
+          message: 'https://status.example.test/providers/ocr/service-status?incident=very-long-provider-message'
         },
         ai: {
           state: 'ok',
@@ -187,7 +188,17 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('receipt_ocr')
         expect(response.body).to include('receipt_ai')
         expect(response.body).to include('receipt_finalize')
+        expect(response.body).to include('min-w-0 max-w-full break-all rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]')
+        expect(response.body).to include('min-w-0 max-w-full break-all rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted [overflow-wrap:anywhere]')
+        expect(response.body).to include('receipt_analysis_run_stale_cleanup_dry_run')
+        expect(response.body).to include('flex min-w-0 items-center justify-between gap-3')
+        expect(response.body).to include('shrink-0 whitespace-nowrap font-mono token-text-base')
+        expect(response.body).to include('break-words text-xs leading-relaxed token-text-muted [overflow-wrap:anywhere]')
         expect(response.body).to include('機能公開設定の変更')
+        expect(response.body).not_to include('_HORIZONTAL')
+        expect(response.body).not_to include('sliders_horizontal')
+        expect(response.body).not_to include('token-border-danger')
+        expect(response.body).not_to include('token-bg-danger-soft')
         expect(response.body).not_to include('RAW OCR RESPONSE')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('RAW AI RESPONSE')

@@ -292,6 +292,9 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('name="key"')
         expect(response.body).to include('name="value"')
         expect(response.body).to include('UPDATE USER LIMIT')
+        expect(response.body).to include('tune')
+        expect(response.body).not_to include('sliders_horizontal')
+        expect(response.body).not_to include('_HORIZONTAL')
       end
     end
 

@@ -219,7 +219,7 @@
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.dashboard.system_operations.queues") %></h3>
         <ul class="grid gap-2 text-sm md:grid-cols-2">
           <% system_operations[:queues].each do |queue| %>
-            <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= queue %></li>
+            <li class="min-w-0 max-w-full break-all rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
           <% end %>
         </ul>
       </div>
@@ -232,7 +232,7 @@
         </p>
         <div class="mt-3 flex flex-wrap gap-2 text-sm">
           <% system_operations[:recurring_tasks].first(3).each do |task| %>
-            <span class="rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted"><%= task[:key] %></span>
+            <span class="min-w-0 max-w-full break-all rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></span>
           <% end %>
         </div>
       </div>

@@ -119,9 +119,9 @@
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.snapshot_presence") %></h2>
       <div class="grid gap-2 md:grid-cols-2">
         <% @record[:snapshot_presence].each do |name, present| %>
-          <div class="flex items-center justify-between rounded-lg border token-border-soft token-bg-card-subtle px-3 py-2 text-sm">
-            <span class="font-mono text-xs token-text-base"><%= name %></span>
-            <span class="<%= present ? "token-text-success" : "token-text-muted" %>"><%= present ? t("admin.receipt_analysis_runs.show.snapshot.present") : t("admin.receipt_analysis_runs.show.snapshot.missing") %></span>
+          <div class="flex min-w-0 items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card-subtle px-3 py-2 text-sm">
+            <span class="min-w-0 break-all font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= name %></span>
+            <span class="shrink-0 whitespace-nowrap <%= present ? "token-text-success" : "token-text-muted" %>"><%= present ? t("admin.receipt_analysis_runs.show.snapshot.present") : t("admin.receipt_analysis_runs.show.snapshot.missing") %></span>
           </div>
         <% end %>
       </div>
