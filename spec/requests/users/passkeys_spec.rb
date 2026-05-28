@@ -151,7 +151,7 @@ RSpec.describe 'User passkeys', type: :request do
     end
   end
 
-  describe 'DELETE /settings/passkeys/:id' do
+  describe 'DELETE /settings/passkeys/:uid' do
     before { sign_in user }
 
     it '自分のpasskeyを削除できる' do
@@ -161,7 +161,20 @@ RSpec.describe 'User passkeys', type: :request do
         delete settings_passkey_path(passkey)
       end.to change(user.passkeys, :count).by(-1)
 
-      expect(response).to redirect_to(settings_security_path(anchor: 'passkeys'))
+      aggregate_failures do
+        expect(settings_passkey_path(passkey)).to eq("/settings/passkeys/#{passkey.uid}")
+        expect(response).to redirect_to(settings_security_path(anchor: 'passkeys'))
+      end
+    end
+
+    it '内部IDのURLでは削除できない' do
+      passkey = create(:passkey, user: user)
+
+      expect do
+        delete "/settings/passkeys/#{passkey.id}"
+      end.not_to change(user.passkeys, :count)
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it '他人のpasskeyは削除できない' do
@@ -205,6 +218,8 @@ RSpec.describe 'User passkeys', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('MacBook Touch ID')
         expect(response.body).to include(I18n.t('settings.security.auth.passkey.action'))
+        expect(response.body).to include(settings_passkey_path(passkey))
+        expect(response.body).not_to include("/settings/passkeys/#{passkey.id}")
         expect(response.body).not_to include(passkey.credential_id)
         expect(response.body).not_to include(passkey.public_key)
         expect(response.body).not_to include('backup_eligible')

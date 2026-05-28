@@ -1,4 +1,9 @@
 class Notification < ApplicationRecord
+  UID_PREFIX = "ntf_"
+  UID_RANDOM_LENGTH = 16
+  UID_FORMAT = /\A#{UID_PREFIX}[A-Za-z0-9]{#{UID_RANDOM_LENGTH}}\z/
+  UID_RETRY_LIMIT = 10
+
   KINDS = %w[
     receipt_completed
     receipt_review_needed
@@ -8,6 +13,13 @@ class Notification < ApplicationRecord
   belongs_to :user
   belongs_to :notifiable, polymorphic: true, optional: true
 
+  before_validation :assign_uid, on: :create
+
+  validates :uid,
+            presence: true,
+            uniqueness: true,
+            length: { maximum: 32 },
+            format: { with: UID_FORMAT }
   validates :kind, presence: true, inclusion: { in: KINDS }
   validates :title, presence: true
 
@@ -155,7 +167,24 @@ class Notification < ApplicationRecord
     internal_action_path? && !stale_notifiable?
   end
 
+  def to_param
+    uid
+  end
+
   private
+
+  def assign_uid
+    self.uid ||= generate_unique_uid
+  end
+
+  def generate_unique_uid
+    UID_RETRY_LIMIT.times do
+      candidate = "#{UID_PREFIX}#{SecureRandom.base58(UID_RANDOM_LENGTH)}"
+      return candidate unless self.class.unscoped.exists?(uid: candidate)
+    end
+
+    raise ActiveRecord::RecordNotUnique, "Could not generate unique notification uid"
+  end
 
   def internal_action_path?
     path = action_path.to_s

@@ -10,6 +10,15 @@ RSpec.describe Passkey, type: :model do
   end
 
   describe 'defaults' do
+    it 'uidを自動生成する' do
+      passkey = create(:passkey)
+
+      aggregate_failures do
+        expect(passkey.uid).to match(/\Apsk_[A-Za-z0-9]{16}\z/)
+        expect(passkey.to_param).to eq(passkey.uid)
+      end
+    end
+
     it 'sign_countは0を初期値にする' do
       passkey = described_class.create!(user: create(:user), credential_id: 'credential-default-count', public_key: 'public-key')
 
@@ -24,6 +33,14 @@ RSpec.describe Passkey, type: :model do
   end
 
   describe 'validations' do
+    it 'uidの重複を不正にする' do
+      existing = create(:passkey)
+      passkey = build(:passkey, uid: existing.uid)
+
+      expect(passkey).not_to be_valid
+      expect(passkey.errors[:uid]).to be_present
+    end
+
     it 'credential_idの重複を不正にする' do
       create(:passkey, credential_id: 'duplicate-credential')
       passkey = build(:passkey, credential_id: 'duplicate-credential')
@@ -56,6 +73,15 @@ RSpec.describe Passkey, type: :model do
   end
 
   describe 'indexes' do
+    it 'uidにunique indexを持つ' do
+      index = ActiveRecord::Base.connection.indexes(:passkeys).find do |candidate|
+        candidate.name == 'index_passkeys_on_uid'
+      end
+
+      expect(index).to be_present
+      expect(index.unique).to be(true)
+    end
+
     it 'credential_idにunique indexを持つ' do
       index = ActiveRecord::Base.connection.indexes(:passkeys).find do |candidate|
         candidate.name == 'index_passkeys_on_credential_id'

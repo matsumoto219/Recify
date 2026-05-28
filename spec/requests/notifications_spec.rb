@@ -54,6 +54,7 @@ RSpec.describe 'Notifications', type: :request do
       delete_button = delete_forms.first.at_css('button')
       first_item = delete_forms.first.parent
       first_read_link = dropdown.at_css("a[href='#{read_notification_path(notifications.first)}']")
+      internal_id_path = "/notifications/#{notifications.first.id}"
 
       aggregate_failures do
         expect(dropdown).to be_present
@@ -72,9 +73,13 @@ RSpec.describe 'Notifications', type: :request do
         expect(dropdown.at_css(%([aria-label="#{I18n.t('shared.notifications.unread_aria')}"]))).to be_present
         expect(titles).to eq([ '通知1', '通知2', '通知3', '通知4', '通知5' ])
         expect(titles).not_to include('通知6')
+        expect(read_notification_path(notifications.first)).to eq("/notifications/#{notifications.first.uid}/read")
+        expect(notification_path(notifications.first)).to eq("/notifications/#{notifications.first.uid}")
         expect(first_read_link).to be_present
         expect(first_read_link['data-turbo-method']).to eq('patch')
         expect(dropdown.at_css(%(a[href="#{notifications.first.action_path}"]))).to be_nil
+        expect(dropdown.to_html).not_to include("#{internal_id_path}/read")
+        expect(dropdown.to_html).not_to include(internal_id_path)
         expect(delete_forms.size).to eq(5)
         expect(delete_forms.first['class']).to include('contents')
         expect(delete_forms.first.at_css('input[name="_method"]')['value']).to eq('delete')
@@ -166,6 +171,7 @@ RSpec.describe 'Notifications', type: :request do
       notification_item = document.at_css("#notification_#{notification.id}")
       delete_form = notification_item.at_css("form[action='#{notification_path(notification)}'][method='post']")
       delete_button = delete_form.at_css('button')
+      internal_id_path = "/notifications/#{notification.id}"
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -174,6 +180,9 @@ RSpec.describe 'Notifications', type: :request do
         expect(response.body).to include('自分の通知')
         expect(response.body).to include('確認できます')
         expect(response.body).not_to include('他人の通知')
+        expect(notification_path(notification)).to eq("/notifications/#{notification.uid}")
+        expect(response.body).not_to include("#{internal_id_path}/read")
+        expect(response.body).not_to include(%(action="#{internal_id_path}"))
         expect(notification_item['data-controller'].to_s).not_to include('swipe-action')
         expect(notification_item.at_css('.swipe-action-background')).to be_nil
         expect(delete_form).to be_present
@@ -221,7 +230,7 @@ RSpec.describe 'Notifications', type: :request do
     end
   end
 
-  describe 'PATCH /notifications/:id/read' do
+  describe 'PATCH /notifications/:uid/read' do
     it '通知を既読化してaction_pathへ遷移する' do
       receipt = create(:receipt, :completed, user:)
       notification = create(
@@ -239,6 +248,17 @@ RSpec.describe 'Notifications', type: :request do
         expect(notification.action_path).to eq("/receipts/#{receipt.public_id}")
         expect(response).to redirect_to(receipt_path(receipt))
         expect(notification.reload).to be_read
+      end
+    end
+
+    it '内部IDのURLでは既読化できない' do
+      notification = create(:notification, user:, read_at: nil)
+
+      patch "/notifications/#{notification.id}/read"
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(notification.reload).to be_unread
       end
     end
 
@@ -287,7 +307,7 @@ RSpec.describe 'Notifications', type: :request do
     end
   end
 
-  describe 'DELETE /notifications/:id' do
+  describe 'DELETE /notifications/:uid' do
     it '自分の未読通知を削除し、未読件数も減らす' do
       notification = create(:notification, user:, read_at: nil)
 
@@ -310,6 +330,16 @@ RSpec.describe 'Notifications', type: :request do
       }.to change(user.notifications, :count).by(-1)
 
       expect(response).to redirect_to(notifications_path)
+    end
+
+    it '内部IDのURLでは削除できない' do
+      notification = create(:notification, user:)
+
+      expect {
+        delete "/notifications/#{notification.id}"
+      }.not_to change(Notification, :count)
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it '削除済みreceiptに紐づくstale通知も削除できる' do

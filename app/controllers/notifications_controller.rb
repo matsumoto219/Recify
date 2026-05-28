@@ -7,7 +7,7 @@ class NotificationsController < ApplicationController
   end
 
   def read
-    notification = current_user.notifications.find(params[:id])
+    notification = current_user.notifications.find_by!(uid: params[:uid])
     notification.mark_as_read!
 
     redirect_options = notification.stale_notifiable? ? { alert: t("notifications.item.deleted_target") } : {}
@@ -25,7 +25,7 @@ class NotificationsController < ApplicationController
   end
 
   def destroy
-    notification = current_user.notifications.find(params[:id])
+    notification = current_user.notifications.find_by!(uid: params[:uid])
     notification.destroy!
 
     respond_to do |format|

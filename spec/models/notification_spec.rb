@@ -2,6 +2,23 @@ require 'rails_helper'
 
 RSpec.describe Notification, type: :model do
   describe 'validations' do
+    it 'uidを自動生成し、形式を検証する' do
+      notification = create(:notification)
+
+      aggregate_failures do
+        expect(notification.uid).to match(/\Antf_[A-Za-z0-9]{16}\z/)
+        expect(notification.to_param).to eq(notification.uid)
+      end
+    end
+
+    it 'uidの重複を不正にする' do
+      existing = create(:notification)
+      duplicate = build(:notification, uid: existing.uid)
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors[:uid]).to be_present
+    end
+
     it 'allowed kindだけを許可する' do
       notification = build(:notification, kind: 'receipt_completed')
       invalid_notification = build(:notification, kind: 'unknown')
@@ -15,6 +32,15 @@ RSpec.describe Notification, type: :model do
   end
 
   describe 'query indexes' do
+    it 'uidにunique indexを持つ' do
+      index = ActiveRecord::Base.connection.indexes(:notifications).find do |candidate|
+        candidate.name == 'index_notifications_on_uid'
+      end
+
+      expect(index).to be_present
+      expect(index.unique).to be(true)
+    end
+
     it 'receipt通知用の重複防止unique indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:notifications)
       index = indexes.find { |candidate| candidate.name == 'index_notifications_on_user_kind_notifiable_unique' }
@@ -35,6 +61,7 @@ RSpec.describe Notification, type: :model do
       timestamp = Time.current
       attributes = {
         user_id: receipt.user_id,
+        uid: 'ntf_ABCDEFGHJKLMNPQR',
         kind: 'receipt_completed',
         notifiable_type: 'Receipt',
         notifiable_id: receipt.id,
@@ -49,7 +76,7 @@ RSpec.describe Notification, type: :model do
       described_class.insert_all!([ attributes ])
 
       expect {
-        described_class.insert_all!([ attributes.merge(created_at: timestamp + 1.second, updated_at: timestamp + 1.second) ])
+        described_class.insert_all!([ attributes.merge(uid: 'ntf_STUVWXYZabcdefgh', created_at: timestamp + 1.second, updated_at: timestamp + 1.second) ])
       }.to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
@@ -250,6 +277,7 @@ RSpec.describe Notification, type: :model do
       created_at = created_at_start + index.minutes
       {
         user_id: user.id,
+        uid: "ntf_#{SecureRandom.base58(16)}",
         kind: 'receipt_completed',
         title: "通知#{index}",
         body: '本文',

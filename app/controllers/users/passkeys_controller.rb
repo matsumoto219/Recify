@@ -40,7 +40,7 @@ class Users::PasskeysController < ApplicationController
   end
 
   def destroy
-    passkey = current_user.passkeys.find(params[:id])
+    passkey = current_user.passkeys.find_by!(uid: params[:uid])
     passkey.destroy!
 
     redirect_to settings_security_path(anchor: "passkeys"), notice: t("settings.security.auth.passkey.messages.deleted")

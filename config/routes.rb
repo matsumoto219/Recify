@@ -86,7 +86,7 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :notifications, only: [ :index, :destroy ] do
+  resources :notifications, only: [ :index, :destroy ], param: :uid do
     member do
       patch :read
     end
@@ -110,7 +110,7 @@ Rails.application.routes.draw do
   get "/settings/security", to: "settings#security", as: :settings_security
   post "/settings/passkeys/options", to: "users/passkeys#options", as: :settings_passkeys_options
   post "/settings/passkeys", to: "users/passkeys#create", as: :settings_passkeys
-  delete "/settings/passkeys/:id", to: "users/passkeys#destroy", as: :settings_passkey
+  delete "/settings/passkeys/:uid", to: "users/passkeys#destroy", as: :settings_passkey
   get "/settings/security/totp/new", to: "users/two_factor/totp_settings#new", as: :new_settings_security_totp
   post "/settings/security/totp", to: "users/two_factor/totp_settings#create", as: :settings_security_totp
   delete "/settings/security/totp", to: "users/two_factor/totp_settings#destroy"
