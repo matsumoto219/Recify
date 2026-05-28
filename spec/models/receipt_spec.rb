@@ -26,6 +26,24 @@ RSpec.describe Receipt, type: :model do
     )
   end
 
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s
+      next if %w[SCHEMA TRANSACTION CACHE].include?(name)
+      next if sql.match?(/\A(?:BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/i)
+
+      queries << sql
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+      yield
+    end
+
+    queries
+  end
+
   describe 'associations' do
     it 'destroy時に解析run履歴を削除する' do
       receipt = create(:receipt)
@@ -75,6 +93,22 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it 'empty scope returns zero summary values' do
+      user = create(:user)
+
+      summary = described_class.summary_for(user, scope: described_class.none)
+
+      aggregate_failures do
+        expect(summary[:receipts_count]).to eq(0)
+        expect(summary[:current_month_total]).to eq(0)
+        expect(summary[:previous_month_total]).to eq(0)
+        expect(summary[:overall_total]).to eq(0)
+        expect(summary[:processing_count]).to eq(0)
+        expect(summary[:review_needed_count]).to eq(0)
+        expect(summary[:failed_count]).to eq(0)
+      end
+    end
+
     it '今月/先月の金額差分を対象statusだけで計算する' do
       user = create(:user)
       current_month = Time.zone.local(2026, 5, 16, 12, 0, 0)
@@ -95,6 +129,41 @@ RSpec.describe Receipt, type: :model do
           expect(summary[:monthly_change_icon]).to eq('trending_up')
         end
       end
+    end
+
+    it 'summary aggregates are loaded with one receipt query per call' do
+      user = create(:user)
+      create(:receipt, :completed, user:, total_amount: 1000)
+      create(:receipt, :processing, :with_image, user:, total_amount: 2000)
+      create(:receipt, :failed, user:, total_amount: 3000)
+
+      summary = nil
+      queries = count_sql_queries do
+        summary = described_class.summary_for(user)
+      end
+      receipt_queries = queries.select { |sql| sql.include?('FROM "receipts"') }
+
+      aggregate_failures do
+        expect(receipt_queries.size).to eq(1)
+        expect(summary[:receipts_count]).to eq(3)
+        expect(summary[:current_month_total]).to eq(1000)
+        expect(summary[:overall_total]).to eq(1000)
+        expect(summary[:processing_count]).to eq(1)
+        expect(summary[:failed_count]).to eq(1)
+      end
+    end
+
+    it 'repeated summary calls avoid the previous seven-query aggregate pattern' do
+      user = create(:user)
+      create(:receipt, :completed, user:, total_amount: 1000)
+      create(:receipt, :review_needed, user:, total_amount: 2000)
+
+      queries = count_sql_queries do
+        2.times { described_class.summary_for(user) }
+      end
+      receipt_queries = queries.select { |sql| sql.include?('FROM "receipts"') }
+
+      expect(receipt_queries.size).to eq(2)
     end
   end
 

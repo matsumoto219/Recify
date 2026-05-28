@@ -21,6 +21,24 @@ RSpec.describe Storage::UsageCalculator do
     blob
   end
 
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s
+      next if %w[SCHEMA TRANSACTION CACHE].include?(name)
+      next if sql.match?(/\A(?:BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/i)
+
+      queries << sql
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+      yield
+    end
+
+    queries
+  end
+
   describe '#used_bytes' do
     it 'receipt image byte_sizeを含む' do
       receipt = create(:receipt, user:)
@@ -203,6 +221,38 @@ RSpec.describe Storage::UsageCalculator do
         expect(registered_usage.used_bytes).to eq(used_bytes_before)
         expect(registered_usage.limit_bytes).to eq(1.gigabyte)
         expect(registered_usage.state).to eq(:normal)
+      end
+    end
+  end
+
+  describe 'memoization' do
+    it 'derived values do not repeat storage sum or limit lookups on the same calculator' do
+      receipt = create(:receipt, user:)
+      attach_blob(receipt, :image, 12.kilobytes)
+      usage = described_class.new(user)
+
+      allow(UserLimits).to receive(:effective_limit).and_call_original
+
+      queries = count_sql_queries do
+        usage.used_bytes
+        usage.limit_bytes
+        usage.remaining_bytes
+        usage.usage_percentage
+        usage.state
+        usage.can_add?(1.kilobyte)
+      end
+
+      attachment_sum_queries = queries.select do |sql|
+        sql.include?('active_storage_attachments') && sql.match?(/SUM/i)
+      end
+
+      aggregate_failures do
+        expect(UserLimits).to have_received(:effective_limit).once
+        expect(attachment_sum_queries.size).to eq(1)
+        expect(usage.used_bytes).to eq(12.kilobytes)
+        expect(usage.limit_bytes).to eq(1.gigabyte)
+        expect(usage.remaining_bytes).to eq(1.gigabyte - 12.kilobytes)
+        expect(usage.state).to eq(:normal)
       end
     end
   end

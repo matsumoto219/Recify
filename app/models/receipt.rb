@@ -393,29 +393,80 @@ class Receipt < ApplicationRecord
   public
 
   def self.summary_for(user, scope: nil)
-    receipts = scope || user.receipts
-    amount_receipts = receipts.where(status: KPI_AMOUNT_STATUSES)
     current_month_range = Time.current.beginning_of_month..Time.current.end_of_month
     previous_month = 1.month.ago
     previous_month_range = previous_month.beginning_of_month..previous_month.end_of_month
+    aggregates = summary_aggregates_for(scope || user.receipts, current_month_range, previous_month_range)
 
-    current_month_total = amount_receipts.where(purchased_at: current_month_range).sum(:total_amount)
-    previous_month_total = amount_receipts.where(purchased_at: previous_month_range).sum(:total_amount)
-    monthly_change = monthly_change_summary(current_month_total, previous_month_total)
+    monthly_change = monthly_change_summary(aggregates[:current_month_total], aggregates[:previous_month_total])
 
     {
-      receipts_count: receipts.count,
-      current_month_total: current_month_total,
-      previous_month_total: previous_month_total,
-      overall_total: amount_receipts.sum(:total_amount),
-      processing_count: receipts.where(status: "processing").count,
-      review_needed_count: receipts.where(status: "review_needed").count,
-      failed_count: receipts.where(status: "failed").count,
+      receipts_count: aggregates[:receipts_count],
+      current_month_total: aggregates[:current_month_total],
+      previous_month_total: aggregates[:previous_month_total],
+      overall_total: aggregates[:overall_total],
+      processing_count: aggregates[:processing_count],
+      review_needed_count: aggregates[:review_needed_count],
+      failed_count: aggregates[:failed_count],
       monthly_change_label: monthly_change[:label],
       monthly_change_icon: monthly_change[:icon],
       monthly_change_icon_class: monthly_change[:icon_class]
     }
   end
+
+  def self.summary_aggregates_for(receipts, current_month_range, previous_month_range)
+    row = receipts.reorder(nil).pick(
+      Arel.sql("COUNT(*)"),
+      Arel.sql(summary_sum_sql(amount_status_condition, :total_amount)),
+      Arel.sql(summary_sum_sql("#{amount_status_condition} AND #{summary_range_condition(:purchased_at, current_month_range)}", :total_amount)),
+      Arel.sql(summary_sum_sql("#{amount_status_condition} AND #{summary_range_condition(:purchased_at, previous_month_range)}", :total_amount)),
+      Arel.sql(summary_count_sql(summary_status_condition("processing"))),
+      Arel.sql(summary_count_sql(summary_status_condition("review_needed"))),
+      Arel.sql(summary_count_sql(summary_status_condition("failed")))
+    )
+    row ||= []
+
+    {
+      receipts_count: row[0].to_i,
+      overall_total: row[1].to_i,
+      current_month_total: row[2].to_i,
+      previous_month_total: row[3].to_i,
+      processing_count: row[4].to_i,
+      review_needed_count: row[5].to_i,
+      failed_count: row[6].to_i
+    }
+  end
+  private_class_method :summary_aggregates_for
+
+  def self.summary_sum_sql(condition, column)
+    "COALESCE(SUM(CASE WHEN #{condition} THEN #{summary_column(column)} ELSE 0 END), 0)"
+  end
+  private_class_method :summary_sum_sql
+
+  def self.summary_count_sql(condition)
+    "COALESCE(SUM(CASE WHEN #{condition} THEN 1 ELSE 0 END), 0)"
+  end
+  private_class_method :summary_count_sql
+
+  def self.amount_status_condition
+    "#{summary_column(:status)} IN (#{KPI_AMOUNT_STATUSES.map { |status| connection.quote(status) }.join(', ')})"
+  end
+  private_class_method :amount_status_condition
+
+  def self.summary_status_condition(status)
+    "#{summary_column(:status)} = #{connection.quote(status)}"
+  end
+  private_class_method :summary_status_condition
+
+  def self.summary_range_condition(column, range)
+    "#{summary_column(column)} BETWEEN #{connection.quote(range.begin)} AND #{connection.quote(range.end)}"
+  end
+  private_class_method :summary_range_condition
+
+  def self.summary_column(column)
+    "#{quoted_table_name}.#{connection.quote_column_name(column)}"
+  end
+  private_class_method :summary_column
 
   def self.category_summary_for(user, scope: nil)
     receipts = (scope || user.receipts).where(user_id: user.id).reorder(nil)

@@ -17,32 +17,43 @@ module Storage
     end
 
     def limit_bytes
-      UserLimits.effective_limit(user: user, key: "storage_bytes").to_i
+      @limit_bytes ||= UserLimits.effective_limit(user: user, key: "storage_bytes").to_i
     end
 
     def remaining_bytes
-      limit_bytes - used_bytes
+      @remaining_bytes ||= limit_bytes - used_bytes
     end
 
     def usage_ratio
-      return 0.0 if limit_bytes <= 0
-
-      used_bytes.to_f / limit_bytes
+      @usage_ratio ||= begin
+        current_limit = limit_bytes
+        if current_limit <= 0
+          0.0
+        else
+          used_bytes.to_f / current_limit
+        end
+      end
     end
 
     def usage_percentage
-      usage_ratio * 100
+      @usage_percentage ||= usage_ratio * 100
     end
 
     def state
-      return :error if error?
-      return :warning if warning?
-
-      :normal
+      @state ||= begin
+        if error?
+          :error
+        elsif warning?
+          :warning
+        else
+          :normal
+        end
+      end
     end
 
     def can_add?(byte_size, excluding_blob: nil)
-      candidate_used_bytes = used_bytes_excluding(excluding_blob) + byte_size.to_i
+      current_used_bytes = excluding_blob ? used_bytes_excluding(excluding_blob) : used_bytes
+      candidate_used_bytes = current_used_bytes + byte_size.to_i
 
       candidate_used_bytes <= limit_bytes
     end
