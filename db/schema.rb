@@ -354,6 +354,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_200833) do
     t.datetime "current_sign_in_at"
     t.inet "current_sign_in_ip"
     t.boolean "delete_confirmation_enabled", default: true, null: false
+    t.string "discount_rounding_mode", default: "round", null: false
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
     t.integer "failed_attempts", default: 0, null: false
@@ -372,6 +373,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_27_200833) do
     t.integer "session_version", default: 0, null: false
     t.integer "sign_in_count", default: 0, null: false
     t.bigint "storage_limit_bytes", default: 1073741824, null: false
+    t.string "tax_rounding_mode", default: "floor", null: false
     t.datetime "terms_accepted_at"
     t.string "terms_version"
     t.string "theme_preference", default: "system", null: false

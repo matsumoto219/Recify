@@ -24,6 +24,15 @@ RSpec.describe User, type: :model do
       expect(user.delete_confirmation_enabled).to be(true)
     end
 
+    it 'rounding mode は税額floor・割引額roundを初期値にする' do
+      user = create(:user)
+
+      aggregate_failures do
+        expect(user.tax_rounding_mode).to eq('floor')
+        expect(user.discount_rounding_mode).to eq('round')
+      end
+    end
+
     it 'admin は初期値falseにする' do
       user = create(:user)
 
@@ -393,6 +402,28 @@ RSpec.describe User, type: :model do
   describe 'storage_limit_bytes validation' do
     it '0以下は不正にする' do
       user = build(:user, storage_limit_bytes: 0)
+
+      expect(user).not_to be_valid
+    end
+  end
+
+  describe 'rounding mode validation' do
+    it 'floor / round / ceil を有効にする' do
+      User::ROUNDING_MODES.each do |rounding_mode|
+        user = build(:user, tax_rounding_mode: rounding_mode, discount_rounding_mode: rounding_mode)
+
+        expect(user).to be_valid
+      end
+    end
+
+    it '不正な税額rounding modeは無効にする' do
+      user = build(:user, tax_rounding_mode: 'bankers')
+
+      expect(user).not_to be_valid
+    end
+
+    it '不正な割引rounding modeは無効にする' do
+      user = build(:user, discount_rounding_mode: 'bankers')
 
       expect(user).not_to be_valid
     end

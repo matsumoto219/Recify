@@ -444,8 +444,8 @@ class ReceiptsController < ApplicationController
       receipt_items: amount_receipt_items(permitted),
       receipt_tax_details: amount_receipt_tax_details(context),
       context: context,
-      tax_rounding_mode: :floor,
-      discount_rounding_mode: :round
+      tax_rounding_mode: current_user.tax_rounding_mode,
+      discount_rounding_mode: current_user.discount_rounding_mode
     )
 
     resolved = result[:resolved]

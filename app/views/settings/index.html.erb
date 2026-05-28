@@ -201,6 +201,69 @@
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%
+        rounding_mode_options = [
+          { label: t("settings.index.calculation.rounding_options.floor"), value: "floor" },
+          { label: t("settings.index.calculation.rounding_options.round"), value: "round" },
+          { label: t("settings.index.calculation.rounding_options.ceil"), value: "ceil" }
+        ]
+      %>
+      <%= render "shared/ui/layout/section_header",
+            icon: "calculate",
+            title: t("settings.index.sections.calculation"),
+            subtitle: t("settings.index.calculation.description"),
+            class: "mb-6" %>
+
+      <div class="space-y-6">
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold token-text-base"><%= t("settings.index.calculation.tax_rounding.label") %></h3>
+            <p class="text-xs token-text-muted leading-relaxed">
+              <%= t("settings.index.calculation.tax_rounding.description") %>
+            </p>
+          </div>
+
+          <%= render "shared/ui/form/segmented_control",
+                name: "tax_rounding_mode",
+                value: current_user.tax_rounding_mode,
+                url: settings_path,
+                method: :patch,
+                remote: true,
+                size: :sm,
+                full_width: true,
+                wrapper_class: "md:w-auto",
+                options: rounding_mode_options %>
+        </div>
+
+        <%= render "shared/ui/layout/section_divider" %>
+
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold token-text-base"><%= t("settings.index.calculation.discount_rounding.label") %></h3>
+            <p class="text-xs token-text-muted leading-relaxed">
+              <%= t("settings.index.calculation.discount_rounding.description") %>
+            </p>
+          </div>
+
+          <%= render "shared/ui/form/segmented_control",
+                name: "discount_rounding_mode",
+                value: current_user.discount_rounding_mode,
+                url: settings_path,
+                method: :patch,
+                remote: true,
+                size: :sm,
+                full_width: true,
+                wrapper_class: "md:w-auto",
+                options: rounding_mode_options %>
+        </div>
+      </div>
+
+      <p class="text-[11px] token-text-subtle leading-relaxed mt-4">
+        <%= t("settings.index.calculation.hint") %>
+      </p>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <%= render "shared/ui/layout/section_header",
             icon: "settings",
             title: t("settings.index.sections.usage"),

@@ -29,6 +29,7 @@ class User < ApplicationRecord
             numericality: { only_integer: true, greater_than: 0 }
 
   THEME_PREFERENCES = %w[system light dark].freeze
+  ROUNDING_MODES = %w[floor round ceil].freeze
   GUEST_CLEANUP_RETENTION_PERIOD = 7.days
   LEGAL_TERMS_VERSION = "2026-05-23"
   LEGAL_PRIVACY_VERSION = "2026-05-23"
@@ -37,6 +38,9 @@ class User < ApplicationRecord
 
   validates :theme_preference,
             inclusion: { in: THEME_PREFERENCES }
+  validates :tax_rounding_mode,
+            :discount_rounding_mode,
+            inclusion: { in: ROUNDING_MODES }
 
   validate :pending_email_must_be_available, if: -> { pending_email_candidate.present? }
   validate :legal_agreement_must_be_accepted, if: :legal_agreement_required?

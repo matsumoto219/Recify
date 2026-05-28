@@ -652,6 +652,21 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'current_userのrounding modeをform data属性へ渡す' do
+      user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
+
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(form['data-receipt-form-rounding-mode-value']).to eq('ceil')
+        expect(form['data-receipt-form-discount-rounding-mode-value']).to eq('floor')
+      end
+    end
+
     it '手動登録モードでも画面を取得できる' do
       get new_receipt_path, params: { mode: 'manual' }
 
@@ -1671,6 +1686,46 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(216)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(item.line_total).to eq(216)
+      end
+    end
+
+    it '手動作成時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
+      user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
+      observed_kwargs = nil
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        observed_kwargs = kwargs
+        original.call(**kwargs)
+      end
+
+      post receipts_path, params: {
+        receipt: {
+          store_name: '丸め設定作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '丸め設定商品',
+              price: 999,
+              quantity: 1,
+              quantity_unit: '個',
+              discount_rate: 10.5,
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(observed_kwargs[:context]).to eq(:manual)
+        expect(observed_kwargs[:tax_rounding_mode]).to eq('ceil')
+        expect(observed_kwargs[:discount_rounding_mode]).to eq('floor')
+        expect(item.discount_amount).to eq(104)
+        expect(receipt.tax_amount).to eq(82)
       end
     end
 
@@ -3933,6 +3988,53 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.tax_amount).to eq(19)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(item.line_total).to eq(216)
+      end
+    end
+
+    it '手動更新時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
+      user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
+      item = receipt.receipt_items.create!(
+        confirmed_name: '丸め設定更新前',
+        price: 108,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 108,
+        needs_review: false
+      )
+      observed_kwargs = nil
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        observed_kwargs = kwargs
+        original.call(**kwargs)
+      end
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '丸め設定更新後',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: '丸め設定更新後商品',
+              price: 108,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(observed_kwargs[:context]).to eq(:edit_save)
+        expect(observed_kwargs[:tax_rounding_mode]).to eq('ceil')
+        expect(observed_kwargs[:discount_rounding_mode]).to eq('floor')
+        expect(receipt.tax_amount).to eq(10)
       end
     end
 

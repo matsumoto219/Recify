@@ -99,6 +99,8 @@ ja:
         push_notification_enabled: "通知"
         product_name_ai_completion_enabled: "AI補完"
         theme_preference: "表示テーマ"
+        tax_rounding_mode: "税額の端数処理"
+        discount_rounding_mode: "割引額の端数処理"
         delete_confirmation_enabled: "削除確認"
         storage_limit_bytes: "ストレージ上限"
 

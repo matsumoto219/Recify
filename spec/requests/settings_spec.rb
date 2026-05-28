@@ -105,6 +105,21 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '計算設定を表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.sections.calculation'))
+        expect(response.body).to include(I18n.t('settings.index.calculation.description'))
+        expect(response.body).to include(I18n.t('settings.index.calculation.hint'))
+        expect(document.at_css('input[name="tax_rounding_mode"][value="floor"]')).to be_present
+        expect(document.at_css('input[name="discount_rounding_mode"][value="round"]')).to be_present
+      end
+    end
+
     it 'renders settings index copy through locale keys' do
       get settings_path
 
@@ -115,6 +130,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.index.sections.system_status'))
         expect(response.body).to include(I18n.t('settings.index.sections.security'))
         expect(response.body).to include(I18n.t('settings.index.sections.appearance'))
+        expect(response.body).to include(I18n.t('settings.index.sections.calculation'))
         expect(response.body).to include(I18n.t('settings.index.sections.usage'))
         expect(response.body).to include(I18n.t('settings.index.danger.delete_account'))
       end
@@ -237,6 +253,7 @@ RSpec.describe 'Settings', type: :request do
         I18n.t('settings.index.sections.system_status'),
         I18n.t('settings.index.sections.storage'),
         I18n.t('settings.index.sections.appearance'),
+        I18n.t('settings.index.sections.calculation'),
         I18n.t('settings.index.sections.usage'),
         I18n.t('settings.index.sections.support'),
         I18n.t('settings.index.sections.account_actions')
@@ -1228,6 +1245,76 @@ RSpec.describe 'Settings', type: :request do
           'ok' => true,
           'message' => I18n.t('flash.settings.update_success')
         )
+      end
+    end
+
+    it '税額rounding modeを更新できる' do
+      patch settings_path,
+            params: { user: { tax_rounding_mode: 'ceil' } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.tax_rounding_mode).to eq('ceil')
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'tax_rounding_mode' => 'ceil'
+        )
+      end
+    end
+
+    it '割引額rounding modeを更新できる' do
+      patch settings_path,
+            params: { user: { discount_rounding_mode: 'floor' } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.discount_rounding_mode).to eq('floor')
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'discount_rounding_mode' => 'floor'
+        )
+      end
+    end
+
+    it '不正なrounding modeは更新できない' do
+      patch settings_path,
+            params: { user: { tax_rounding_mode: 'bankers' } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.tax_rounding_mode).to eq('floor')
+        expect(response.parsed_body).to include(
+          'ok' => false,
+          'message' => I18n.t('flash.settings.update_failure')
+        )
+      end
+    end
+
+    it 'ゲストでもrounding modeを更新でき、本登録後も設定を維持する' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+
+      patch settings_path,
+            params: { user: { tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor' } },
+            as: :json
+
+      guest.start_guest_registration(
+        email: 'rounding-guest@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      guest.confirm
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(guest.reload).not_to be_guest
+        expect(guest.tax_rounding_mode).to eq('ceil')
+        expect(guest.discount_rounding_mode).to eq('floor')
       end
     end
 

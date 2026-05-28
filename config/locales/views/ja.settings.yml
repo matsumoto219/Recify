@@ -13,6 +13,7 @@ ja:
         system_status: システム状態
         security: セキュリティ
         appearance: 外観
+        calculation: 計算設定
         usage: 利用設定
         storage: ストレージ
         support: お問い合わせ
@@ -35,6 +36,19 @@ ja:
           light: ライト
           dark: ダーク
         theme_hint: ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
+      calculation:
+        description: 手動入力・編集時の自動計算に適用します
+        hint: ※ OCR/AI解析結果の丸め推定には今回は適用しません。
+        rounding_options:
+          floor: 切り捨て
+          round: 四捨五入
+          ceil: 切り上げ
+        tax_rounding:
+          label: 税額の端数処理
+          description: 手動入力・編集時に税額を自動計算する際の丸め方です。
+        discount_rounding:
+          label: 割引額の端数処理
+          description: 手動入力・編集時に割引率から割引額を自動計算する際の丸め方です。
       usage:
         push_notification:
           label: 通知

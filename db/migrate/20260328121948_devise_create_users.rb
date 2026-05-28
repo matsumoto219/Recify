@@ -35,6 +35,10 @@ class DeviseCreateUsers < ActiveRecord::Migration[8.1]
       ## Guest
       t.boolean :guest, default: false, null: false
 
+      ## Amount calculation settings
+      t.string :tax_rounding_mode, null: false, default: "floor"
+      t.string :discount_rounding_mode, null: false, default: "round"
+
       t.timestamps null: false
     end
 
