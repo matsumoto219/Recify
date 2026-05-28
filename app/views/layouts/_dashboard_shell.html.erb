@@ -1,7 +1,7 @@
 <div class="relative isolate flex min-h-screen token-bg-page">
   <%= render "shared/ui/layout/ambient_background" %>
 
-  <!-- サイドバー（デスクトップ用） -->
+  <%# サイドバー（デスクトップ用） %>
   <%= render "shared/navigation/sidebar" %>
 
   <div
@@ -10,12 +10,12 @@
     data-search-error-title-value="<%= t("search.realtime.error_title") %>"
     data-search-error-message-value="<%= t("search.realtime.error_message") %>"
     data-search-error-close-label-value="<%= t("search.realtime.close_label") %>">
-    <!-- ヘッダー（上部固定ナビ） -->
+    <%# ヘッダー（上部固定ナビ） %>
     <%= render "shared/header" %>
     <%= render "shared/search/mobile_search_overlay" %>
     <%= render "shared/notifications/dropdown_overlay" if user_signed_in? %>
 
-    <!-- メインコンテンツ（各ページの内容が入る） -->
+    <%# メインコンテンツ（各ページの内容が入る） %>
     <main class="
       mt-16 p-4 md:p-10 flex-1 flex flex-col
       <%= content_for?(:mobile_bottom_actions) ? 'pb-55' : 'pb-28' %>
@@ -28,5 +28,5 @@
   </div>
 </div>
 
-<!-- モバイル用下部ナビゲーション -->
+<%# モバイル用下部ナビゲーション %>
 <%= render "shared/navigation/mobile_bottom_nav" %>

@@ -79,8 +79,8 @@
           </div>
 
           <% if show_download %>
-            <!-- アクション（ダウンロード） -->
-            <!-- TODO ファイル名や拡張子の仕様を決める -->
+            <%# アクション（ダウンロード） %>
+            <%# TODO ファイル名や拡張子の仕様を決める %>
             <div class="mt-3 flex justify-end">
               <%= link_to url_for(displayable_image),
                     download: displayable_image.filename.to_s,

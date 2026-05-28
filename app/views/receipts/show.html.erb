@@ -78,7 +78,7 @@
               <h2 class="text-2xl font-bold token-text-base truncate"><%= @receipt.store_name.presence || t("receipts.show.store_name_missing") %></h2>
               <p class="truncate text-sm token-text-muted mt-1" title="<%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %>"><%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %></p>
 
-              <!-- mobile only: ID + status -->
+              <%# mobile only: ID + status %>
               <div class="flex items-center justify-between mt-2 md:hidden gap-3">
                 <p class="text-xs token-text-muted truncate" title="ID: <%= @receipt.display_id %>">ID: <%= @receipt.display_id %></p>
                 <%= render "shared/ui/badge/receipt_status_badge",

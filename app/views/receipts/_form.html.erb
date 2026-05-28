@@ -28,8 +28,8 @@
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
 
-  <!-- TODO: error_flags生成ロジックはViewからロジックを排除するため将来的に model または presenter（例 receipt.error_flags）へ移動する -->
-  <!-- TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する -->
+  <%# TODO: error_flags生成ロジックはViewからロジックを排除するため将来的に model または presenter（例 receipt.error_flags）へ移動する %>
+  <%# TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する %>
 
   <%
     item_tax_rates = receipt.receipt_items.filter_map(&:tax_rate).uniq
@@ -196,7 +196,7 @@
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
-              <!-- NOTE: labels are short, no change needed but reserved for future -->
+              <%# NOTE: labels are short, no change needed but reserved for future %>
               <div class="col-span-6"><%= t("receipts.form.item_columns.name") %></div>
               <div class="col-span-2"><%= t("receipts.form.item_columns.quantity") %></div>
               <div class="col-span-2"><%= t("receipts.form.item_columns.unit_price") %></div>
