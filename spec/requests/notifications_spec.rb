@@ -338,18 +338,17 @@ RSpec.describe 'Notifications', type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    it 'Turbo requestでは通知surfaceを更新する' do
+    it 'Turbo requestではcontroller responseに重複通知surfaceを含めない' do
       notification = create(:notification, user:, read_at: nil)
 
       delete notification_path(notification), headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.media_type).to eq(Mime[:turbo_stream].to_s)
-        expect(response.body).to include('notifications_unread_badge')
-        expect(response.body).to include('notifications_dropdown_content')
-        expect(response.body).to include('notifications_index_header')
-        expect(response.body).to include('notifications_list')
+        expect(response.body).not_to include('notifications_unread_badge')
+        expect(response.body).not_to include('notifications_dropdown_content')
+        expect(response.body).not_to include('notifications_index_header')
+        expect(response.body).not_to include('notifications_list')
         expect(Notification.exists?(notification.id)).to be(false)
       end
     end
