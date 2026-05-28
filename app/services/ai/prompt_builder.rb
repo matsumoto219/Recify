@@ -160,32 +160,32 @@ module Ai
 
     def purchase_context_lines
       candidates = filtered_reference_lines.select do |line|
-        purchase_context_line?(line)
+        line_profile(line)[:purchase_context_line]
       end
 
       return candidates.first(8) if candidates.present?
 
-      lines.select { |line| purchase_context_line?(line) }.uniq.first(8)
+      lines.select { |line| line_profile(line)[:purchase_context_line] }.uniq.first(8)
     end
 
     def payment_context_lines
       candidates = filtered_reference_lines.select do |line|
-        payment_context_line?(line)
+        line_profile(line)[:payment_context_line]
       end
 
       return candidates.first(8) if candidates.present?
 
-      lines.select { |line| payment_context_line?(line) }.uniq.first(8)
+      lines.select { |line| line_profile(line)[:payment_context_line] }.uniq.first(8)
     end
 
     def tax_context_lines
       candidates = filtered_reference_lines.select do |line|
-        tax_context_line?(line)
+        line_profile(line)[:tax_context_line]
       end
 
       return candidates.first(8) if candidates.present?
 
-      lines.select { |line| tax_context_line?(line) }.uniq.first(8)
+      lines.select { |line| line_profile(line)[:tax_context_line] }.uniq.first(8)
     end
 
     def branch_name_candidates
@@ -200,12 +200,12 @@ module Ai
 
     def address_candidates
       candidates = filtered_reference_lines.select do |line|
-        address_candidate?(line)
+        line_profile(line)[:address_candidate]
       end
 
       return candidates.uniq.first(5) if candidates.present?
 
-      lines.select { |line| address_candidate?(line) }.uniq.first(5)
+      lines.select { |line| line_profile(line)[:address_candidate] }.uniq.first(5)
     end
 
     def store_name_candidates
@@ -221,9 +221,10 @@ module Ai
       cleaned = candidates.filter_map do |line|
         text = line.to_s.strip
         next if text.empty?
-        next if address_candidate?(text)
-        next if payment_context_line?(text)
-        next if purchase_context_line?(text)
+        profile = line_profile(text)
+        next if profile[:address_candidate]
+        next if profile[:payment_context_line]
+        next if profile[:purchase_context_line]
         next if text.match?(/tel|電話|レジ|伝票|領収|日時|合計|小計/i)
         next if text.match?(/^\d+[\d\s\-\/:]*$/)
 
@@ -256,18 +257,33 @@ module Ai
     end
 
     def item_content_lines(raw_text)
-      return [] if raw_text.to_s.strip.empty?
-
-      candidates = item_related_lines(filtered_reference_lines, raw_text)
-      return candidates.first(5) if candidates.present?
-
-      item_related_lines(lines, raw_text).first(5)
+      item_matching_lines(raw_text)[:content_lines].dup
     end
 
     def item_filtered_content_lines(raw_text)
-      return [] if raw_text.to_s.strip.empty?
+      item_matching_lines(raw_text)[:filtered_content_lines].dup
+    end
 
-      item_related_lines(filtered_reference_lines, raw_text).first(5)
+    def item_matching_lines(raw_text)
+      @item_matching_lines ||= {}
+      key = text_cache_key(raw_text)
+
+      @item_matching_lines[key] ||= begin
+        if raw_text.to_s.strip.empty?
+          {
+            content_lines: [].freeze,
+            filtered_content_lines: [].freeze
+          }.freeze
+        else
+          filtered_matches = item_related_lines(filtered_reference_lines, raw_text)
+          content_matches = filtered_matches.present? ? filtered_matches : item_related_lines(lines, raw_text)
+
+          {
+            content_lines: content_matches.first(5).freeze,
+            filtered_content_lines: filtered_matches.first(5).freeze
+          }.freeze
+        end
+      end
     end
 
     def item_related_lines(source_lines, raw_text)
@@ -280,34 +296,57 @@ module Ai
     end
 
     def item_related_line?(line, normalized_raw_text)
-      text = line.to_s.strip
+      profile = line_profile(line)
+      text = profile[:text]
       return false if text.empty?
 
-      normalized_line = normalize_item_text(text)
+      normalized_line = profile[:normalized_text]
       return false if normalized_line.empty?
-      return false if address_candidate?(text)
-      return false if payment_context_line?(text)
-      return false if purchase_context_line?(text)
+      return false if profile[:address_candidate]
+      return false if profile[:payment_context_line]
+      return false if profile[:purchase_context_line]
 
       normalized_line.include?(normalized_raw_text) ||
         normalized_raw_text.include?(normalized_line) ||
-        shared_item_tokens?(normalized_line, normalized_raw_text)
+        shared_item_token_arrays?(
+          profile[:item_tokens],
+          item_tokens_for_normalized_text(normalized_raw_text)
+        )
     end
 
     def shared_item_tokens?(normalized_line, normalized_raw_text)
-      line_tokens = normalized_line.scan(/[a-z0-9\p{Han}\p{Hiragana}\p{Katakana}]+/i)
-      raw_tokens = normalized_raw_text.scan(/[a-z0-9\p{Han}\p{Hiragana}\p{Katakana}]+/i)
+      line_tokens = item_tokens_for_normalized_text(normalized_line)
+      raw_tokens = item_tokens_for_normalized_text(normalized_raw_text)
+      shared_item_token_arrays?(line_tokens, raw_tokens)
+    end
+
+    def shared_item_token_arrays?(line_tokens, raw_tokens)
       return false if line_tokens.empty? || raw_tokens.empty?
 
       (line_tokens & raw_tokens).any? { |token| token.length >= 2 }
     end
 
     def normalize_item_text(text)
-      text.to_s.downcase.gsub(/[^a-z0-9\p{Han}\p{Hiragana}\p{Katakana}]/i, "")
+      @normalized_item_texts ||= {}
+      key = text_cache_key(text)
+      @normalized_item_texts[key] ||= key.downcase.gsub(/[^a-z0-9\p{Han}\p{Hiragana}\p{Katakana}]/i, "").freeze
+    end
+
+    def item_tokens_for_normalized_text(text)
+      @item_tokens_for_normalized_text ||= {}
+      key = text_cache_key(text)
+      @item_tokens_for_normalized_text[key] ||= key.scan(/[a-z0-9\p{Han}\p{Hiragana}\p{Katakana}]+/i).freeze
     end
 
     def item_raw_text_candidates
       @item_raw_text_candidates ||= build_items_payload.filter_map { |item| item[:raw_text] }
+    end
+
+    def normalized_item_raw_text_candidates
+      @normalized_item_raw_text_candidates ||= item_raw_text_candidates.filter_map do |raw_text|
+        normalized = normalize_item_text(raw_text)
+        normalized if normalized.present?
+      end
     end
 
     def item_like_line?(text)
@@ -316,22 +355,24 @@ module Ai
 
       # OCR item 原文ベースでの除外は、商品明細ノイズを減らすための一次フィルタ。
       # ここで取り切れない「ポイント情報」「取引番号」「金額付き行」は branch_name_candidate? 側で追加除外する。
-      item_raw_text_candidates.any? do |raw_text|
-        normalized_raw_text = normalize_item_text(raw_text)
-        next false if normalized_raw_text.empty?
-
+      normalized_text_tokens = item_tokens_for_normalized_text(normalized_text)
+      normalized_item_raw_text_candidates.any? do |normalized_raw_text|
         normalized_text.include?(normalized_raw_text) ||
           normalized_raw_text.include?(normalized_text) ||
-          shared_item_tokens?(normalized_text, normalized_raw_text)
+          shared_item_token_arrays?(
+            normalized_text_tokens,
+            item_tokens_for_normalized_text(normalized_raw_text)
+          )
       end
     end
 
     def branch_name_candidate?(line)
-      text = line.to_s.strip
+      profile = line_profile(line)
+      text = profile[:text]
       return false if text.empty?
-      return false if address_candidate?(text)
-      return false if date_time_line?(text)
-      return false if payment_context_line?(text)
+      return false if profile[:address_candidate]
+      return false if profile[:date_time_line]
+      return false if profile[:payment_context_line]
       # item OCR原文と近い行は支店名候補から除外する。
       # ただし店舗名と商品名が同一になる特殊ケースはあり得るため、最終判定は filtered_content も参照する AI に委ねる。
       return false if item_like_line?(text)
@@ -363,6 +404,26 @@ module Ai
 
     def filtered_reference_lines
       @filtered_reference_lines ||= filtered_content_lines
+    end
+
+    def line_profile(line)
+      @line_profiles ||= {}
+      text = text_cache_key(line.to_s.strip)
+
+      @line_profiles[text] ||= begin
+        normalized_text = normalize_item_text(text)
+
+        {
+          text: text,
+          normalized_text: normalized_text,
+          item_tokens: item_tokens_for_normalized_text(normalized_text),
+          address_candidate: text.present? && address_candidate?(text),
+          date_time_line: text.present? && date_time_line?(text),
+          payment_context_line: text.present? && payment_context_line?(text),
+          purchase_context_line: text.present? && purchase_context_line?(text),
+          tax_context_line: text.present? && tax_context_line?(text)
+        }.freeze
+      end
     end
 
     def date_time_line?(line)
@@ -499,6 +560,10 @@ module Ai
       return nil unless object.respond_to?(:[])
 
       object[key] || object[key.to_s] || object[key.to_sym]
+    end
+
+    def text_cache_key(text)
+      -text.to_s
     end
   end
 end

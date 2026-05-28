@@ -132,5 +132,26 @@ RSpec.describe Ai::PromptBuilder do
 
       expect(builder).to have_received(:removable_noise_line?).exactly(ocr_result[:lines].size).times
     end
+
+    it 'filtered item matchingをmatched_content_linesとmatched_filtered_content_linesで共有する' do
+      builder = described_class.new(ocr_result)
+
+      allow(builder).to receive(:item_related_lines).and_call_original
+
+      builder.build
+
+      expect(builder).to have_received(:item_related_lines).exactly(2).times
+    end
+
+    it 'matched line配列は出力内で共有しない' do
+      result = described_class.build(ocr_result)
+      item = result[:items].first
+
+      aggregate_failures do
+        expect(item[:matched_content_lines]).to eq([ 'コーヒー 180' ])
+        expect(item[:matched_filtered_content_lines]).to eq([ 'コーヒー 180' ])
+        expect(item[:matched_content_lines]).not_to equal(item[:matched_filtered_content_lines])
+      end
+    end
   end
 end
