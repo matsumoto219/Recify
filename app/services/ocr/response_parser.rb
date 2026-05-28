@@ -1,15 +1,23 @@
 class Ocr::ResponseParser
+  PAYMENT_METHOD_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|master|jcb|amex|american\s*express|suica|pasmo|icoca|waon|nanaco|edy|\bid\b|quickpay|quicpay|paypay|楽天ペイ|rakuten\s*pay|d払い|au\s*pay|メルペイ|line\s*pay|デビット|debit/i.freeze
+  POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
+  PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakutenpay|d払い|aupay|メルペイ|linepay|デビット|debit|カード|支払|決済/i.freeze
+  CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
+  VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
+  SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
+
   def initialize(response:, provider: nil)
     @response = response
     @provider = provider
   end
 
   def call
-    parsed_response = normalize_response(@response)
+    reset_cached_response_state!
+    parsed_response = (@parsed_response = normalize_response(@response))
     validate_response_shape!(parsed_response)
     raw_text = extract_raw_text(parsed_response)
     normalized_raw_text = normalize_text(raw_text)
-    normalized_lines = extract_lines(parsed_response).map { |line| normalize_text(line) }.reject(&:empty?)
+    normalized_lines = normalized_lines(parsed_response)
 
     {
       success: normalized_raw_text.present? || normalized_lines.any?,
@@ -90,11 +98,19 @@ class Ocr::ResponseParser
   InvalidOcrResponseError = Class.new(StandardError)
 
   def extract_analyze_result(parsed_response)
-    parsed_response["analyzeResult"] || {}
+    return @analyze_result if cacheable_response?(parsed_response) && defined?(@analyze_result)
+
+    result = parsed_response["analyzeResult"] || {}
+    @analyze_result = result if cacheable_response?(parsed_response)
+    result
   end
 
   def extract_document(parsed_response)
-    Array(extract_analyze_result(parsed_response)["documents"]).first || {}
+    return @document if cacheable_response?(parsed_response) && defined?(@document)
+
+    document = Array(extract_analyze_result(parsed_response)["documents"]).first || {}
+    @document = document if cacheable_response?(parsed_response)
+    document
   end
 
   def validate_response_shape!(parsed_response)
@@ -132,7 +148,11 @@ class Ocr::ResponseParser
   # - parserでは「安全に取れるものだけ扱う」
   # - 不安定なフィールドは後段（AI or Service層）で扱う
   def extract_fields(parsed_response)
-    extract_document(parsed_response)["fields"] || parsed_response["fields"] || {}
+    return @fields if cacheable_response?(parsed_response) && defined?(@fields)
+
+    fields = extract_document(parsed_response)["fields"] || parsed_response["fields"] || {}
+    @fields = fields if cacheable_response?(parsed_response)
+    fields
   end
 
   def extract_model_id(parsed_response)
@@ -164,29 +184,42 @@ class Ocr::ResponseParser
   end
 
   def extract_lines(parsed_response)
+    return @raw_lines if cacheable_response?(parsed_response) && defined?(@raw_lines)
+
     azure_lines = Array(extract_analyze_result(parsed_response)["pages"]).flat_map do |page|
       Array(page["lines"]).filter_map { |line| line["content"] }
     end
-    return azure_lines if azure_lines.any?
+    return cache_lines(parsed_response, azure_lines) if azure_lines.any?
 
     explicit_lines = parsed_response["lines"] || parsed_response.dig("result", "lines")
-    return explicit_lines if explicit_lines.is_a?(Array)
+    return cache_lines(parsed_response, explicit_lines) if explicit_lines.is_a?(Array)
 
     raw_text = parsed_response["raw_text"] ||
       extract_analyze_result(parsed_response)["content"] ||
       parsed_response["text"] ||
       parsed_response["full_text"]
-    return [] if raw_text.blank?
+    return cache_lines(parsed_response, []) if raw_text.blank?
 
-    raw_text.to_s.lines.map(&:chomp)
+    cache_lines(parsed_response, raw_text.to_s.lines.map(&:chomp))
+  end
+
+  def normalized_lines(parsed_response)
+    return @normalized_lines if cacheable_response?(parsed_response) && defined?(@normalized_lines)
+
+    lines = extract_lines(parsed_response).map { |line| normalize_text(line) }.reject(&:empty?)
+    @normalized_lines = lines if cacheable_response?(parsed_response)
+    lines
   end
 
   def normalize_text(text)
-    text.to_s
+    @normalized_texts ||= {}
+    key = text_cache_key(text)
+    @normalized_texts[key] ||= key
       .unicode_normalize(:nfkc)
       .downcase
       .gsub(/[[:space:]]+/, " ")
       .strip
+      .freeze
   end
 
   def extract_store_name(parsed_response, lines)
@@ -264,7 +297,9 @@ class Ocr::ResponseParser
   def normalize_store_name_candidate(text)
     return nil if text.blank?
 
-    text.to_s.unicode_normalize(:nfkc).strip.presence
+    @normalized_store_name_candidates ||= {}
+    key = text_cache_key(text)
+    @normalized_store_name_candidates[key] ||= key.unicode_normalize(:nfkc).strip.presence&.freeze
   end
 
   def branch_like_store_name?(text)
@@ -364,7 +399,7 @@ class Ocr::ResponseParser
   end
 
   def settlement_line?(line)
-    line.to_s.match?(/お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/)
+    payment_line_profile(line)[:settlement]
   end
 
   def extract_subtotal_amount(parsed_response, lines)
@@ -419,85 +454,105 @@ class Ocr::ResponseParser
     query_field_names.each do |field_name|
       value = fields.dig(field_name, "valueString") || fields.dig(field_name, "content")
       normalized_value = normalize_payment_text(value)
-      return normalized_value if normalized_value.present? && !point_or_membership_only_text?(normalized_value)
+      return normalized_value if normalized_value.present? && !point_or_membership_only_payment_text?(normalized_value)
     end
 
     strong_line = extract_payment_method_from_lines(lines)
     return strong_line if strong_line.present?
 
     normalized_raw_match = normalize_payment_text(raw_text.to_s.match(payment_method_pattern)&.[](0))
-    return normalized_raw_match if normalized_raw_match.present? && !point_or_membership_only_text?(normalized_raw_match)
+    return normalized_raw_match if normalized_raw_match.present? && !point_or_membership_only_payment_text?(normalized_raw_match)
 
     nil
   end
 
   def extract_payment_method_from_lines(lines)
-    normalized_lines = Array(lines).map { |line| normalize_payment_text(line) }.compact
+    profiles = Array(lines).filter_map do |line|
+      profile = payment_line_profile(line)
+      profile if profile[:payment_text].present?
+    end
 
-    return "現金" if normalized_lines.any? { |line| cash_total_line?(line) }
-    return "商品券" if normalized_lines.any? { |line| voucher_payment_line?(line) }
+    return "現金" if profiles.any? { |profile| profile[:cash_total] }
+    return "商品券" if profiles.any? { |profile| profile[:voucher] }
 
-    card_slip_index = normalized_lines.find_index do |line|
-      line.match?(/クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i)
+    card_slip_index = profiles.find_index do |profile|
+      profile[:payment_text].match?(/クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i)
     end
 
     if card_slip_index
-      focused_lines = normalized_lines[[ card_slip_index - 2, 0 ].max..[ card_slip_index + 5, normalized_lines.length - 1 ].min]
-      focused_match = focused_lines.find do |line|
-        next false if point_or_membership_only_text?(line)
+      focused_profiles = profiles[[ card_slip_index - 2, 0 ].max..[ card_slip_index + 5, profiles.length - 1 ].min]
+      focused_match = focused_profiles.find do |profile|
+        next false if profile[:point_only]
 
-        line.match?(payment_method_pattern)
+        profile[:payment_match].present?
       end
-      return focused_match.match(payment_method_pattern)&.[](0) if focused_match.present?
+      return focused_match[:payment_match] if focused_match.present?
     end
 
-    payment_line = normalized_lines.find do |line|
-      next false if point_or_membership_only_text?(line)
+    payment_line = profiles.find do |profile|
+      next false if profile[:point_only]
 
-      line.match?(/支払|決済|payment/i) && line.match?(payment_method_pattern)
+      profile[:payment_text].match?(/支払|決済|payment/i) && profile[:payment_match].present?
     end
-    return payment_line.match(payment_method_pattern)&.[](0) if payment_line.present?
+    return payment_line[:payment_match] if payment_line.present?
 
-    general_match = normalized_lines.find do |line|
-      next false if point_or_membership_only_text?(line)
+    general_match = profiles.find do |profile|
+      next false if profile[:point_only]
 
-      line.match?(payment_method_pattern)
+      profile[:payment_match].present?
     end
-    general_match.match(payment_method_pattern)&.[](0) if general_match.present?
+    general_match[:payment_match] if general_match.present?
   end
 
   def cash_total_line?(line)
-    normalized = normalize_payment_text(line)
-    return false if normalized.blank?
-
-    normalized.match?(/現計|現金計|現金合計/)
+    payment_line_profile(line)[:cash_total]
   end
 
   def voucher_payment_line?(line)
-    normalized = normalize_payment_text(line)
-    return false if normalized.blank?
-
-    normalized.match?(/商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i)
+    payment_line_profile(line)[:voucher]
   end
 
   def normalize_payment_text(text)
     return nil if text.blank?
 
-    text.to_s.gsub(/[[:space:]]+/, "").presence
+    @normalized_payment_texts ||= {}
+    key = text_cache_key(text)
+    @normalized_payment_texts[key] ||= key.gsub(/[[:space:]]+/, "").presence&.freeze
   end
 
   def point_or_membership_only_text?(text)
     normalized = normalize_payment_text(text)
     return false if normalized.blank?
 
-    point_keywords = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i
-    payment_keywords = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakutenpay|d払い|aupay|メルペイ|linepay|デビット|debit|カード|支払|決済/i
+    point_or_membership_only_payment_text?(normalized)
+  end
 
-    normalized.match?(point_keywords) && !normalized.match?(payment_keywords)
+  def point_or_membership_only_payment_text?(normalized)
+    normalized.match?(POINT_KEYWORDS_PATTERN) && !normalized.match?(PAYMENT_KEYWORDS_PATTERN)
   end
 
   def payment_method_pattern
-    /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|master|jcb|amex|american\s*express|suica|pasmo|icoca|waon|nanaco|edy|\bid\b|quickpay|quicpay|paypay|楽天ペイ|rakuten\s*pay|d払い|au\s*pay|メルペイ|line\s*pay|デビット|debit/i
+    PAYMENT_METHOD_PATTERN
+  end
+
+  def payment_line_profile(line)
+    @payment_line_profiles ||= {}
+    raw = text_cache_key(line)
+
+    @payment_line_profiles[raw] ||= begin
+      payment_text = normalize_payment_text(raw)
+
+      {
+        raw: raw,
+        normalized: raw,
+        payment_text: payment_text,
+        point_only: payment_text.present? && point_or_membership_only_payment_text?(payment_text),
+        cash_total: payment_text.present? && payment_text.match?(CASH_TOTAL_PATTERN),
+        voucher: payment_text.present? && payment_text.match?(VOUCHER_PAYMENT_PATTERN),
+        settlement: raw.match?(SETTLEMENT_LINE_PATTERN),
+        payment_match: payment_text.present? ? payment_text.match(payment_method_pattern)&.[](0) : nil
+      }.freeze
+    end
   end
 
   def extract_tip_amount(parsed_response)
@@ -610,7 +665,7 @@ class Ocr::ResponseParser
   # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
   # 割引額・割引率・割引前金額を直前itemへ紐付ける。
   def extract_discount_details_by_item_index(items, lines)
-    normalized_lines = Array(lines).map { |line| normalize_text(line) }
+    normalized_lines = Array(lines)
     return {} if normalized_lines.blank?
 
     item_labels = items.map do |item|
@@ -710,5 +765,24 @@ class Ocr::ResponseParser
       provider: provider,
       model_id: nil
     )
+  end
+
+  def cacheable_response?(parsed_response)
+    defined?(@parsed_response) && parsed_response.equal?(@parsed_response)
+  end
+
+  def cache_lines(parsed_response, lines)
+    @raw_lines = lines if cacheable_response?(parsed_response)
+    lines
+  end
+
+  def reset_cached_response_state!
+    %i[@analyze_result @document @fields @raw_lines @normalized_lines].each do |ivar|
+      remove_instance_variable(ivar) if instance_variable_defined?(ivar)
+    end
+  end
+
+  def text_cache_key(text)
+    -text.to_s
   end
 end

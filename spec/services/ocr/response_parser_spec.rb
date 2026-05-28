@@ -324,6 +324,64 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '長いレシートfixtureの抽出結果を維持する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/long_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      candidates = result[:candidates]
+
+      aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(result[:lines].size).to eq(139)
+        expect(candidates[:store_name]).to eq('くらしのパートナー みどりスーパー 新宿南口店')
+        expect(candidates[:total_amount]).to eq(8_808)
+        expect(candidates[:subtotal_amount]).to eq(8_156)
+        expect(candidates[:tax_amount]).to eq(8)
+        expect(candidates[:tax_rate]).to eq(0.08)
+        expect(candidates[:payment_method_text]).to eq('quicpay')
+        expect(candidates[:items].size).to eq(33)
+        expect(candidates[:items].first).to include(
+          raw_text: '香ばしバターロール6個入(マーガリン)',
+          line_total: 178,
+          original_line_total: 178,
+          confidence: 0.925
+        )
+        expect(candidates[:tax_details]).to include(
+          hash_including(description: '外税額', amount: 652, rate: 0.08, net_amount: 8_156)
+        )
+      end
+    end
+
+    it '割引の多いfixtureの割引情報を維持する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      discounted_items = result.dig(:candidates, :items).select { |item| item[:discount_amount].present? }
+
+      aggregate_failures do
+        expect(result[:success]).to eq(true)
+        expect(result.dig(:candidates, :payment_method_text)).to eq('クレジット')
+        expect(discounted_items).to include(
+          hash_including(
+            raw_text: "たまご Mサイズ 6個入\n国産豚こま切れ肉",
+            original_line_total: 128,
+            discount_amount: 50,
+            discount_rate: nil,
+            line_total: 78
+          )
+        )
+        expect(discounted_items).to include(
+          hash_including(
+            raw_text: '夜間割引(20%)',
+            original_line_total: 100,
+            discount_amount: 345_909,
+            discount_rate: BigDecimal('0.08'),
+            line_total: 0
+          )
+        )
+      end
+    end
+
     it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
       broken_response = raw_response.deep_dup
       fields = broken_response.dig('analyzeResult', 'documents', 0, 'fields')
