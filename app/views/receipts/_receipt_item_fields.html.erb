@@ -32,6 +32,11 @@
   line_total_value = new_record ? nil : item.line_total
   line_total_display = receipt_detail_amount_display(line_total_value)
   original_line_total_value = new_record ? 0 : (item.original_line_total.presence || item.line_total.to_i)
+  line_total_data = {
+    receipt_form_target: "lineTotalInput",
+    original_line_total: original_line_total_value
+  }
+  line_total_data[:original_saved_line_total] = line_total_value unless new_record || line_total_value.nil?
   selected_unit = new_record ? ReceiptItem::DEFAULT_QUANTITY_UNIT : item.quantity_unit.presence || ReceiptItem::DEFAULT_QUANTITY_UNIT
   quantity_value = new_record ? "1" : (item.formatted_quantity_for_input.presence || "1")
   quantity_step = ReceiptItem.quantity_step_for(selected_unit)
@@ -318,17 +323,11 @@
   <% if new_record %>
     <%= item_form.hidden_field :line_total,
           value: 0,
-          data: {
-            receipt_form_target: "lineTotalInput",
-            original_line_total: original_line_total_value
-          } %>
+          data: line_total_data %>
     <%= item_form.hidden_field :needs_review, value: false %>
   <% else %>
     <%= item_form.hidden_field :line_total,
-          data: {
-            receipt_form_target: "lineTotalInput",
-            original_line_total: original_line_total_value
-          } %>
+          data: line_total_data %>
     <%= item_form.hidden_field :needs_review %>
     <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
   <% end %>

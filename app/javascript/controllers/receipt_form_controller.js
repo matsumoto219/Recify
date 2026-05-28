@@ -453,7 +453,7 @@ export default class extends Controller {
 
   lineTotalFor ({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput }) {
     if (this.shouldPreserveExistingLineTotal({ originalLineTotal, discountRateInput, lineTotalInput })) {
-      return this.lineTotalInputValue(lineTotalInput)
+      return this.preservedLineTotalInputValue(lineTotalInput)
     }
 
     return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
@@ -485,6 +485,15 @@ export default class extends Controller {
 
   lineTotalInputValue (lineTotalInput) {
     return this.parseIntegerInput(lineTotalInput?.value)
+  }
+
+  preservedLineTotalInputValue (lineTotalInput) {
+    const savedValue = lineTotalInput?.dataset.originalSavedLineTotal
+    if (String(savedValue ?? '').trim() !== '') {
+      return this.parseIntegerInput(savedValue)
+    }
+
+    return this.lineTotalInputValue(lineTotalInput)
   }
 
   originalLineTotalInputValue (lineTotalInput) {

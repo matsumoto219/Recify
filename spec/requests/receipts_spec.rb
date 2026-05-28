@@ -3496,8 +3496,25 @@ RSpec.describe 'Receipts', type: :request do
         expect(discount_rate_input['data-original-discount-rate']).to eq('10.5')
         expect(line_total_input['value']).to eq('895')
         expect(line_total_input['data-original-line-total']).to eq('999')
+        expect(line_total_input['data-original-saved-line-total']).to eq('895')
         expect(controller_source).to include('shouldPreserveExistingLineTotal')
         expect(controller_source).to include('discountRateWasEdited')
+        expect(controller_source).to include('preservedLineTotalInputValue')
+        expect(controller_source).to include('originalSavedLineTotal')
+      end
+    end
+
+    it '新規明細行には保存済みline_total保持用のdata属性を出さない' do
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      line_total_input = document.at_css('template input[name$="[line_total]"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(line_total_input['data-receipt-form-target']).to eq('lineTotalInput')
+        expect(line_total_input['data-original-line-total']).to eq('0')
+        expect(line_total_input['data-original-saved-line-total']).to be_nil
       end
     end
 
