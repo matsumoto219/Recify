@@ -1,10 +1,14 @@
-<%# =========================
-   locals:
-   - status: 必須
-   - label: 任意（なければstatusから生成）
-   - size: :sm / :md / :lg（default: :md）
-   - class: 追加クラス
-   ========================= %>
+<%#
+  レシートステータスバッジ
+
+  必須:
+  - status: レシートステータス
+
+  任意:
+  - label: 表示ラベル。未指定時は status から生成
+  - size: バッジサイズ。:sm / :md / :lg。未指定時は :md
+  - class: 追加CSSクラス
+%>
 
 <%
 status = local_assigns[:status].to_s
@@ -12,7 +16,7 @@ label  = local_assigns[:label] || status.humanize
 size   = (local_assigns[:size] || :md).to_sym
 extra_class = local_assigns[:class]
 
-# --- ステータスカラー ---
+# ステータスカラー
 status_classes =
   case status
   when "completed"
@@ -27,7 +31,7 @@ status_classes =
     "receipt-status-default"
   end
 
-# --- サイズ ---
+# サイズ
 size_classes =
   case size
   when :sm

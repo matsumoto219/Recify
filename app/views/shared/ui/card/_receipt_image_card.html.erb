@@ -1,3 +1,29 @@
+<%#
+  レシート画像カード
+
+  必須:
+  - receipt: 画像を表示するレシートオブジェクト
+
+  任意:
+  - title: カード見出し。未指定時は shared.receipt_image_card.default_title
+  - form_builder: 画像アップロード欄を出す場合の form builder
+  - show_toggle: 画像の開閉トグルを表示する場合は true。未指定時は false
+  - show_modal: 画像プレビューのモーダルを有効にする場合は true。未指定時は false
+  - show_download: ダウンロードリンクを表示する場合は true。未指定時は false
+  - show_upload: アップロードUIを表示する場合は true。未指定時は false
+  - initially_open: 初期表示で画像を開く場合は true。未指定時は false
+  - collapse_on_mobile: モバイルで折りたたむ場合は true。未指定時は false
+  - keep_image_enabled: 画像保持が有効な場合は true。未指定時は true
+  - empty_message: 画像なし状態の表示文言
+  - helper_text: アップロード欄の補足テキスト
+  - accept: file input の accept 属性
+  - preview_width_class: プレビュー幅のCSSクラス。未指定時は w-[220px]
+  - preview_height_class: プレビュー高さのCSSクラス。未指定時は h-[320px]
+  - storage_usage: 容量判定に使うストレージ使用量オブジェクト
+  - storage_excluding_blob_bytes: 容量判定から除外する現在画像サイズ
+  - quota_exceeded_message: 容量超過時の表示文言
+%>
+
 <%
   receipt = local_assigns.fetch(:receipt)
   title = local_assigns.fetch(:title, t("shared.receipt_image_card.default_title"))

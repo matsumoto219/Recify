@@ -1,3 +1,16 @@
+<%#
+  トースト通知
+
+  必須:
+  - なし
+
+  任意:
+  - notice_type: 通知種別。未指定時は :info
+  - message: 本文テキスト
+  - body: 本文HTML。指定時は message より優先
+  - surface_id: ルート要素の id。未指定時はランダム生成
+%>
+
 <%
   notice_type = local_assigns.fetch(:notice_type, :info)
   message = local_assigns[:message]

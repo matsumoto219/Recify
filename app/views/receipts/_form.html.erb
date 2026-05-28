@@ -1,3 +1,13 @@
+<%#
+  レシート作成・編集フォーム
+
+  必須:
+  - receipt: 作成または編集するレシートオブジェクト
+
+  任意:
+  - なし
+%>
+
 <% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.public_id}" : "new_receipt_form" %>
 <%= form_with model: receipt,
               html: {
@@ -196,7 +206,7 @@
 
           <div class="p-6 space-y-4" data-receipt-form-target="itemsContainer">
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
-              <%# NOTE: labels are short, no change needed but reserved for future %>
+              <%# 補足: ラベルは短いため現状は調整不要。将来の拡張用に残す %>
               <div class="col-span-6"><%= t("receipts.form.item_columns.name") %></div>
               <div class="col-span-2"><%= t("receipts.form.item_columns.quantity") %></div>
               <div class="col-span-2"><%= t("receipts.form.item_columns.unit_price") %></div>

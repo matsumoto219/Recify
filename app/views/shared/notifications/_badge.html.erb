@@ -1,3 +1,13 @@
+<%#
+  通知未読バッジ
+
+  必須:
+  - unread_count: 未読通知数
+
+  任意:
+  - なし
+%>
+
 <%
   count = unread_count.to_i
   label = count > 99 ? "99+" : count.to_s

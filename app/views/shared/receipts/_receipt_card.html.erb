@@ -1,3 +1,13 @@
+<%#
+  レシート一覧カード
+
+  必須:
+  - receipt: 表示するレシートオブジェクト
+
+  任意:
+  - status_label: ステータスバッジに表示する文言。未指定時は receipt の状態から取得
+%>
+
 <%
   receipt = local_assigns.fetch(:receipt)
   status_label = local_assigns[:status_label] || (receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status)

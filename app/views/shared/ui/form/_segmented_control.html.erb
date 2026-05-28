@@ -1,21 +1,21 @@
 <%#
-  Segmented control for choosing one value from a small set of options.
+  セグメントコントロール
 
-  Required locals:
-    name:    form field name
-    value:   currently selected value
-    options: array of hashes, e.g. [{ label: "ライト", value: "light" }]
+  必須:
+  - name: form field name
+  - value: 現在選択中の値
+  - options: 選択肢配列。各要素は label / value を持つ Hash。icon も指定可能
 
-  Optional locals:
-    size:          :sm | :md | :lg
-    legend:        accessible label text
-    wrapper_class: extra classes for the outer wrapper
-    item_class:    extra classes for each segment label
-    full_width:    true makes the control stretch horizontally
-    data:          data attributes for the outer wrapper
-    remote:        true enables remote submit on change
-    url:           remote submit endpoint
-    method:        remote submit HTTP method
+  任意:
+  - size: サイズ。:sm / :md / :lg。未指定時は :md
+  - legend: アクセシブルラベル
+  - wrapper_class: 外側ラッパーに追加するCSSクラス
+  - item_class: 各選択肢ラベルに追加するCSSクラス
+  - full_width: 横幅いっぱいに表示する場合は true。未指定時は false
+  - data: 外側ラッパーに付与する data 属性
+  - remote: 変更時にリモート送信する場合は true。未指定時は false
+  - url: remote 送信先
+  - method: remote 送信のHTTPメソッド。未指定時は :patch
 %>
 
 <% name = local_assigns.fetch(:name) %>

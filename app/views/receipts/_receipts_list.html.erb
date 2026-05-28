@@ -1,3 +1,13 @@
+<%#
+  レシートカード一覧
+
+  必須:
+  - receipts: 表示するレシートコレクション
+
+  任意:
+  - query: 検索結果の空状態で表示する検索語
+%>
+
 <section id="receipts-list-grid" class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5">
   <% receipts.each do |receipt| %>
     <%= render "shared/receipts/receipt_card", receipt: receipt %>

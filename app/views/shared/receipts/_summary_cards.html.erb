@@ -1,3 +1,22 @@
+<%#
+  レシート集計カード群
+
+  必須:
+  - receipts_count: レシート総数
+  - current_month_total: 今月の合計金額
+  - overall_total: 全期間の合計金額
+  - processing_count: 処理中レシート数
+  - review_needed_count: 確認が必要なレシート数
+  - failed_count: 失敗したレシート数
+  - monthly_change_label: 今月合計の補足表示
+  - monthly_change_icon: 今月合計の補足アイコン名
+
+  任意:
+  - monthly_change_icon_class: 今月合計の補足アイコンCSSクラス。未指定時は token-text-muted
+  - hide_on_mobile: モバイルで非表示にする場合は true。未指定時は false
+  - animate_on_connect: 接続時アニメーションを有効にする場合は true。未指定時は false
+%>
+
 <%
   hide_on_mobile = local_assigns.fetch(:hide_on_mobile, false)
   animate_on_connect = local_assigns.fetch(:animate_on_connect, false)

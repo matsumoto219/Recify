@@ -1,3 +1,17 @@
+<%#
+  サイドバーのナビゲーション項目
+
+  必須:
+  - path: リンク先
+  - icon: 表示する Material Symbols アイコン名
+  - label: 表示ラベル
+
+  任意:
+  - active: 現在のページとして表示する場合は true。未指定時は false
+  - show_label: ラベルを表示する場合は true。未指定時は true
+  - class: 追加CSSクラス
+%>
+
 <%
   path = local_assigns.fetch(:path)
   icon = local_assigns.fetch(:icon)

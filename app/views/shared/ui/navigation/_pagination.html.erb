@@ -1,4 +1,14 @@
-<%# Pagy v43.x: avoid calling protected series directly; build the displayed page list from public page/last values. %>
+<%#
+  ページネーション
+
+  必須:
+  - pagy: Pagy オブジェクト
+
+  任意:
+  - なし
+
+  Pagy v43.x では protected な series を直接呼ばず、公開されている page / last から表示ページを組み立てる。
+%>
 <% pagy = local_assigns.fetch(:pagy) %>
 <% page_key = pagy.options.fetch(:page_key, "page") %>
 <% page_url = ->(page) { url_for(request.query_parameters.merge(page_key => page, only_path: true)) } %>

@@ -1,3 +1,13 @@
+<%#
+  JavaScript 無効時の案内バナー
+
+  必須:
+  - なし
+
+  任意:
+  - layout: 表示場所に応じた余白・枠線の種類。:page / :dashboard。未指定時は :page
+%>
+
 <%
   layout = local_assigns.fetch(:layout, :page).to_sym
   banner_classes = case layout

@@ -1,3 +1,15 @@
+<%#
+  ナビゲーションリンク
+
+  必須:
+  - path: リンク先
+  - text: 表示テキスト
+
+  任意:
+  - arrow: 矢印の向き。:left / :right。未指定時は :left
+  - align: 外側の揃え。:center の場合は中央寄せ。未指定時は :center
+%>
+
 <%
   arrow ||= :left
   align = local_assigns.fetch(:align, :center)

@@ -1,3 +1,26 @@
+<%#
+  通知サーフェス
+
+  必須:
+  - なし
+
+  任意:
+  - notice_type: 通知種別。未指定時は :info
+  - tone: 表示トーン設定Hash。指定時は notice_type からの自動設定より優先
+  - surface_id: ルート要素の id
+  - title: 見出し。未指定時は tone の title
+  - message: 本文テキスト
+  - body: 本文HTML。指定時は message より優先
+  - dismissible: 閉じるボタンを表示する場合は true。未指定時は false
+  - animated: 表示アニメーションを使う場合は true。未指定時は false
+  - animation_name: アニメーション名。slide_down / slide_right。未指定時は "slide_down"
+  - auto_dismiss: 自動で閉じる場合は true。未指定時は false
+  - auto_dismiss_delay: 自動で閉じるまでのミリ秒
+  - max_visible: 同時表示上限。未指定時は 1
+  - align: 内容の縦位置。:start / :center。未指定時は :start
+  - class: 追加CSSクラス
+%>
+
 <%
   notice_type = local_assigns.fetch(:notice_type, :info).to_s
 

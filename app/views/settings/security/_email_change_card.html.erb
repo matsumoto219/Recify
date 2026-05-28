@@ -1,3 +1,14 @@
+<%#
+  メールアドレス変更カード
+
+  必須:
+  - resource: Devise のフォーム対象リソース
+  - resource_name: Devise のフォーム対象名
+
+  任意:
+  - update_context: メール変更フォームの再表示判定に使う文脈。未指定時は空文字
+%>
+
 <%
   form_resource = local_assigns.fetch(:resource)
   form_resource_name = local_assigns.fetch(:resource_name)

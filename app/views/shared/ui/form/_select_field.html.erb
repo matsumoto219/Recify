@@ -1,25 +1,26 @@
 <%#
-  Shared UI select field
+  共通セレクト入力欄
 
-  Required locals:
-  - f
-  - attribute
-  - label
-  - options
+  必須:
+  - f: form builder
+  - attribute: フィールド名
+  - label: ラベル文言
+  - options: select の選択肢
 
-  Optional locals:
-  - selected
-  - include_blank
-  - required
-  - show_label
-  - with_icon
-  - icon
-  - highlight_variant
-  - show_error_message
-  - select_class
-  - select_wrapper_class
-  - label_class
-  - error_message_class
+  任意:
+  - selected: 選択中の値。未指定時は f.object から取得
+  - include_blank: 空選択肢
+  - required: required 属性を付ける場合は true。未指定時は false
+  - show_label: ラベルを表示する場合は true。未指定時は true
+  - with_icon: アイコン領域を表示する場合は true。未指定時は icon の有無で決定
+  - icon: 表示する Material Symbols アイコン名
+  - highlight_variant: 強調表示。:error を指定するとエラー表示
+  - show_error_message: エラーメッセージを表示する場合は true。未指定時は true
+  - select_class: select に追加するCSSクラス
+  - select_wrapper_class: select ラッパーに追加するCSSクラス
+  - label_class: ラベルに追加するCSSクラス
+  - error_message_class: エラーメッセージに追加するCSSクラス
+  - size: 入力欄サイズ。:md / :regular / :dense。未指定時は :md
 %>
 
 <%

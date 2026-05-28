@@ -1,3 +1,22 @@
+<%#
+  検索ボックス
+
+  必須:
+  - なし
+
+  任意:
+  - placeholder: 入力欄の placeholder。未指定時は dashboard.search.placeholder
+  - wrapper_class: 外側ラッパーに追加するCSSクラス
+  - input_class: input に追加するCSSクラス
+  - input_data: input に付与する data 属性。action は既定の検索アクションに追加される
+  - name: input の name 属性。未指定時は q
+  - id: input の id 属性
+  - variant: 表示種別。:desktop / :mobile。未指定時は :desktop
+  - close_action: mobile variant の閉じるボタンに付与する data-action
+  - panel_data: 外側ラッパーに付与する data 属性
+  - help_id: ヘルプ要素の id。未指定時は variant に応じた id
+%>
+
 <%
   placeholder = local_assigns.fetch(:placeholder, t("dashboard.search.placeholder"))
   wrapper_class = local_assigns[:wrapper_class]

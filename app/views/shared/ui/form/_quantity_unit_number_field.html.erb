@@ -1,9 +1,11 @@
-<%# 数量 + 単位 一体型入力欄
-    必須locals:
+<%#
+  数量 + 単位 一体型入力欄
+
+  必須:
     - f: form builder
     - label: ラベル文言
 
-    任意locals:
+  任意:
     - quantity_attribute: 数量属性（default: :quantity）
     - unit_attribute: 単位属性（default: :quantity_unit）
     - value: 数量inputの表示値
@@ -16,7 +18,8 @@
     - input_class: 数量input用追加class
     - html_options: 数量inputへ渡す追加HTML属性（例: data, aria）
     - unit_data: 単位selectへ渡すdata属性
-    - unit_aria_label: 単位selectのaria-label %>
+    - unit_aria_label: 単位selectのaria-label
+%>
 <%
   quantity_attribute = local_assigns.fetch(:quantity_attribute, :quantity)
   unit_attribute = local_assigns.fetch(:unit_attribute, :quantity_unit)

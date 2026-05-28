@@ -1,3 +1,15 @@
+<%#
+  外部サービス状態バッジ
+
+  必須:
+  - label: サービス名または項目名
+  - state: 状態。:ok / :degraded / :down
+
+  任意:
+  - text: 状態の表示テキスト。未指定時は state から翻訳文を表示
+  - class: 追加CSSクラス
+%>
+
 <%
   label = local_assigns.fetch(:label)
   state = local_assigns.fetch(:state).to_sym

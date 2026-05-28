@@ -1,10 +1,12 @@
-<%# 共通数値入力欄
-    必須locals:
+<%#
+  共通数値入力欄
+
+  必須:
     - f: form builder
     - attribute: フィールド名（例: :quantity, :price, :tax_rate）
     - label: ラベル文言
 
-    任意locals:
+  任意:
     - placeholder: placeholder文言
     - value: inputの表示値を明示指定する場合に使用
     - min: min属性
@@ -24,11 +26,14 @@
     - hide_spinner: true/false（default: true）
     - show_stepper_buttons: true/false（default: false）
     - stepper_button_class: +/-ボタン用追加class（例: "md:hidden"）
+    - stepper_button_size_class: +/-ボタンサイズ用追加class
+    - size: 入力欄サイズ（例: :dense, :regular, :prominent, :comfortable。default: :md）
     - input_class: 追加class
     - input_wrapper_class: 入力欄ラッパー用class
     - label_class: ラベル用追加class
     - error_message_class: エラーメッセージ用追加class
-    - html_options: inputへ渡す追加HTML属性（例: data, aria） %>
+    - html_options: inputへ渡す追加HTML属性（例: data, aria）
+%>
 <%
   placeholder = local_assigns[:placeholder]
   value = local_assigns[:value]
@@ -83,9 +88,9 @@
                      end
 
   prefix_spacing_class = prefix.present? ? "pl-8" : "pl-4"
-  # when steppers are enabled, do not override spacing; let caller decide via input_class
+  # ステッパー表示時は余白を上書きせず、呼び出し側の input_class に委ねる
   suffix_spacing_class = suffix.present? ? "pr-8" : "pr-4"
-  # when steppers are enabled, do not override spacing; let caller decide via input_class
+  # ステッパー表示時は余白を上書きせず、呼び出し側の input_class に委ねる
   spinner_class = hide_spinner ? "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" : nil
   input_spacing_class = size == :dense ? "h-10 px-3 py-2" : nil
 

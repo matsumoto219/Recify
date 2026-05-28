@@ -1,3 +1,13 @@
+<%#
+  flash メッセージ表示
+
+  必須:
+  - なし
+
+  任意:
+  - flash_messages: 表示対象の flash Hash。未指定時は Rails の flash
+%>
+
 <%
   flash_source = local_assigns.fetch(:flash_messages, flash.to_hash)
 
@@ -10,7 +20,7 @@
 %>
 
 <% if grouped_messages.any? %>
-  <%# Toast Container %>
+  <%# トーストコンテナ %>
   <div class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm">
     <% grouped_messages.each_with_index do |(type, messages), i| %>
       <% body_content = if messages.many? %>

@@ -1,4 +1,25 @@
-<%# 共通カードパーツ %>
+<%#
+  共通カードパーツ
+
+  必須:
+  - なし
+
+  任意:
+  - variant: 状態の種類。:default / :danger / :warning。未指定時は :default
+  - surface_variant: 背景の種類。:bg_card / :bg_elevated / :bg_card_subtle / :bg_input / :bg_floating
+  - shadow_variant: 影の種類。:default / :indigo / :danger / :warning。未指定時は :default
+  - hoverable: hover 表示を有効にする場合は true。未指定時は false
+  - padding: 余白。:sm / :md / :lg / :responsive / :card
+  - class: 追加CSSクラス
+  - style: 追加 style 属性
+  - accent: アクセント色。:brand / :warning / :error。未指定時は :brand
+  - accent_width_class: アクセント幅判定に使うCSSクラス
+  - accent_width: アクセント線幅。未指定時は accent_width_class から決定
+  - accent_side: アクセントを表示する辺
+  - accent_sides: アクセントを表示する辺の配列。:all も指定可能
+  - id: section に付与する id
+  - title_id: aria-labelledby に指定する id
+%>
 <%
   variant = local_assigns.fetch(:variant, :default).to_sym
   surface_variant = local_assigns[:surface_variant]&.to_sym

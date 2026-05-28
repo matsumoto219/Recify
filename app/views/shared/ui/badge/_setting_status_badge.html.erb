@@ -1,12 +1,14 @@
 <%#
-  Setting status badge
+  設定状態バッジ
 
-  Options:
-    state:     Status key. Supported: :active, :inactive, :pending, :warning
-    label:     Optional display label. Defaults are resolved from state.
-    size:      Optional size key. Supported: :sm, :md, :lg. Default: :sm
-    variant:   Optional display style. Supported: :pill, :text. Default: :pill
-    class:     Optional additional CSS classes.
+  必須:
+  - state: 状態。:active / :inactive / :pending / :warning
+
+  任意:
+  - label: 表示ラベル。未指定時は state から翻訳文を表示
+  - size: バッジサイズ。:sm / :md / :lg。未指定時は :sm
+  - variant: 表示形式。:pill / :text。未指定時は :pill
+  - class: 追加CSSクラス
 %>
 
 <%

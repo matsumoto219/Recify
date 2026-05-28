@@ -1,3 +1,22 @@
+<%#
+  トグルスイッチ
+
+  必須:
+  - label: 表示ラベル
+
+  任意:
+  - description: 補足テキスト
+  - checked: ON 状態にする場合は true。未指定時は false
+  - disabled: 無効化する場合は true。未指定時は false
+  - name: hidden input の name 属性
+  - id: hidden input の id 属性。未指定時は name
+  - class: 外側ラッパーに追加するCSSクラス
+  - label_class: ラベルに追加するCSSクラス
+  - description_class: 補足テキストに追加するCSSクラス
+  - remote: クリック時にリモート更新する場合は true。未指定時は false
+  - url: remote 更新先
+%>
+
 <%
   label = local_assigns.fetch(:label)
   description = local_assigns[:description]

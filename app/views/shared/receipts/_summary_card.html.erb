@@ -1,3 +1,23 @@
+<%#
+  レシート集計カード
+
+  必須:
+  - title: カード見出し
+  - value: メイン表示値
+
+  任意:
+  - subtext: 補足テキスト
+  - subtext_icon: 補足テキスト横の Material Symbols アイコン名
+  - subtext_icon_class: 補足アイコンのCSSクラス。未指定時は token-text-muted
+  - accent: 左アクセントの色種別。未指定時は :brand
+  - title_id / value_id / subtext_id: 各要素の id
+  - title_data / value_data / subtext_data: 各要素へ付与する data 属性
+  - action_label: 右上アクションボタンのラベル
+  - action_onclick: 右上アクションボタンの onclick 属性
+  - action_data: 右上アクションボタンへ付与する data 属性
+  - class: カードに追加するCSSクラス
+%>
+
 <%
   title = local_assigns.fetch(:title)
   value = local_assigns.fetch(:value)

@@ -1,3 +1,15 @@
+<%#
+  ストレージ使用量メーター
+
+  必須:
+  - usage: 使用量・上限・状態を持つストレージ使用量オブジェクト
+
+  任意:
+  - compact: コンパクト表示にする場合は true。未指定時は false
+  - context: 表示文脈。settings の場合は設定画面用の表示。未指定時は "default"
+  - title: 見出し。未指定時は shared.storage_usage.title
+%>
+
 <%
   usage = local_assigns.fetch(:usage)
   compact = local_assigns.fetch(:compact, false)

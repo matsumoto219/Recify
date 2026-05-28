@@ -1,3 +1,13 @@
+<%#
+  通知一覧ヘッダー
+
+  必須:
+  - なし
+
+  任意:
+  - unread_count: 未読通知数。未指定時は0
+%>
+
 <%
   unread_count = local_assigns.fetch(:unread_count, 0).to_i
 %>

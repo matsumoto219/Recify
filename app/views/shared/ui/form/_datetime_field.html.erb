@@ -1,24 +1,26 @@
 <%#
-  Shared UI datetime field
+  共通日時入力欄
 
-  Required locals:
-  - name
-  - id
-  - label
-  - type
+  必須:
+  - name: input の name 属性
+  - id: input の id 属性
+  - label: ラベル文言
+  - type: input の type
 
-  Optional locals:
-  - value
-  - icon
-  - required
-  - show_label
-  - with_icon
-  - field_class
-  - field_wrapper_class
-  - label_class
-  - error_message
-  - error_message_class
-  - show_error_message
+  任意:
+  - value: input の表示値
+  - icon: 表示する Material Symbols アイコン名
+  - required: required 属性を付ける場合は true。未指定時は false
+  - show_label: ラベルを表示する場合は true。未指定時は true
+  - with_icon: アイコン領域を表示する場合は true。未指定時は icon の有無で決定
+  - field_class: input に追加するCSSクラス
+  - field_wrapper_class: 入力欄ラッパーに追加するCSSクラス
+  - label_class: ラベルに追加するCSSクラス
+  - highlight_variant: 強調表示。:error を指定するとエラー表示
+  - error_message: 表示するエラーメッセージ
+  - error_message_class: エラーメッセージに追加するCSSクラス
+  - show_error_message: エラーメッセージを表示する場合は true。未指定時は true
+  - size: 入力欄サイズ。:md / :regular。未指定時は :md
 %>
 
 <%

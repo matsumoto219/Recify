@@ -1,8 +1,12 @@
 <%#
-  NOTE:
-  この partial には最小限の locals のみ渡す。
-  warning / review / display 用の派生値は partial 内で計算する。
-  JS target / hidden field は itemRow 内に1セットだけ維持する。
+  レシート明細入力行
+
+  必須:
+  - item_form: 明細用の form builder
+  - item: 表示・編集するレシート明細オブジェクト
+
+  任意:
+  - new_record: 新規明細行として扱う場合は true。未指定時は false
 %>
 
 <%

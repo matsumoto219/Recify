@@ -1,12 +1,16 @@
-<%# 共通テキスト入力欄
-    必須locals:
-    - f: form builder（standalone入力では不要）
-    - attribute: フィールド名（例: :email, :password。standalone入力では不要）
+<%#
+  共通テキスト入力欄
+
+  必須:
     - label: ラベル文言
-    - icon: Material Symbols名
-    任意locals:
+    - f / form と attribute: form builder の入力欄として使う場合に指定
+    - name: standalone入力として使う場合に指定
+    - icon: with_icon が true の場合に表示する Material Symbols アイコン名
+
+  任意:
     - name / id: form builderを使わないstandalone入力で使用
     - field_type: :email_field / :password_field / :text_field（default: :text_field）
+    - type: standalone入力の type 属性。未指定時は field_type から決定
     - placeholder: placeholder文言
     - value: inputの表示値を明示指定する場合に使用
     - autocomplete: autocomplete属性
@@ -21,7 +25,9 @@
     - input_wrapper_class: 入力欄ラッパー用class
     - label_class: ラベル用追加class
     - error_message_class: エラーメッセージ用追加class
-    - html_options: inputへ渡す追加HTML属性（例: inputmode, pattern, data, aria） %>
+    - size: 入力欄サイズ（例: :dense, :regular, :prominent, :comfortable。default: :md）
+    - html_options: inputへ渡す追加HTML属性（例: inputmode, pattern, data, aria）
+%>
 <%
   f = local_assigns[:f] || local_assigns[:form]
   attribute = local_assigns[:attribute]

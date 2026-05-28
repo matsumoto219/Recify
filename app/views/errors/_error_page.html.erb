@@ -1,3 +1,21 @@
+<%#
+  エラーページ共通パーシャル
+
+  必須:
+  - status_code: 表示するHTTPステータスコード
+  - icon: 表示する Material Symbols アイコン名
+  - title: 見出しテキスト
+  - description: 説明文
+  - primary_label: 主ボタンのラベル
+  - primary_path: 主ボタンの遷移先
+
+  任意:
+  - secondary_label: 補助ボタンのラベル
+  - secondary_path: 補助ボタンの遷移先
+  - support_message: サポート案内文
+  - support_id: 問い合わせ用の識別子
+%>
+
 <%
   status_code = local_assigns.fetch(:status_code)
   icon = local_assigns.fetch(:icon)

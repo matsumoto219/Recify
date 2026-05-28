@@ -1,3 +1,22 @@
+<%#
+  選択カード
+
+  必須:
+  - path: 選択時の遷移先
+  - title: カード見出し
+  - description: 説明文
+  - icon: 表示する Material Symbols アイコン名
+
+  任意:
+  - variant: 見た目の種類。:primary / :secondary。未指定時は :secondary
+  - mobile_badge: モバイルで表示するバッジ文言
+  - desktop_badge: デスクトップで表示するバッジ文言
+  - disabled: 無効状態で表示する場合は true。未指定時は false
+  - data: link または div に付与する data 属性
+  - title_size: 見出しサイズのCSSクラス
+  - description_size: 説明文サイズのCSSクラス
+%>
+
 <%
   path = local_assigns.fetch(:path)
   title = local_assigns.fetch(:title)

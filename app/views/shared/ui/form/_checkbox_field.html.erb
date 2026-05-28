@@ -1,26 +1,27 @@
 <%#
-  Shared UI checkbox field
+  共通チェックボックス入力
 
-  Optional locals:
-  - f / form: form builder
-  - attribute: form builder field name
-  - name: check_box_tag name
-  - value: check_box_tag checked value (default: "1")
-  - checked_value / unchecked_value: form.check_box values (defaults: "1" / "0")
-  - label
-  - hint
-  - checked
-  - required
-  - disabled
-  - include_hidden
-  - wrapper_class
-  - checkbox_class
-  - content_class
-  - label_class
-  - hint_class
-  - error_message_class
-  - show_error_message
-  - html_options
+  必須:
+  - f / form と attribute: form builder のチェックボックスとして使う場合に指定
+  - name: check_box_tag として使う場合に指定
+
+  任意:
+  - value: check_box_tag の checked value。未指定時は "1"
+  - checked_value / unchecked_value: form.check_box の値。未指定時は "1" / "0"
+  - label: ラベル本文
+  - hint: 補足テキスト
+  - checked: check_box_tag のチェック状態。未指定時は false
+  - required: required 属性を付ける場合は true。未指定時は false
+  - disabled: disabled 属性を付ける場合は true。未指定時は false
+  - include_hidden: form.check_box の hidden input 出力設定
+  - wrapper_class: ラベル全体に追加するCSSクラス
+  - checkbox_class: checkbox に追加するCSSクラス
+  - content_class: ラベル本文ラッパーに追加するCSSクラス
+  - label_class: ラベル本文に追加するCSSクラス
+  - hint_class: 補足テキストに追加するCSSクラス
+  - error_message_class: エラーメッセージに追加するCSSクラス
+  - show_error_message: エラーメッセージを表示する場合は true。未指定時は true
+  - html_options: checkbox に追加するHTML属性
 %>
 
 <%

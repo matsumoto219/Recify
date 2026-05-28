@@ -1,3 +1,28 @@
+<%#
+  セクションヘッダー
+
+  必須:
+  - title: 見出しテキスト
+
+  任意:
+  - subtitle: 補足テキスト
+  - title_id: 見出しに付与する id
+  - title_suffix: 見出し横に表示する補助ラベル
+  - breadcrumb_label: パンくずの戻り先ラベル
+  - breadcrumb_path: パンくずの戻り先パス
+  - icon: 表示する Material Symbols アイコン名
+  - variant: 表示トーン。:default / :danger。未指定時は :default
+  - align: 水平方向の揃え。:left / :center。未指定時は :left
+  - responsive_align: md 以上での揃え。:left / :center
+  - center_breadcrumb: 中央揃え時にパンくずも中央寄せする場合は true。未指定時は false
+  - class: 外側ラッパーに追加するCSSクラス
+  - icon_class: アイコンに追加するCSSクラス
+  - title_suffix_class: title_suffix に追加するCSSクラス
+  - title_size: 見出しサイズのCSSクラス。未指定時は text-lg
+  - subtitle_size: 補足テキストサイズのCSSクラス。未指定時は text-sm
+  - spacing_class: 縦余白のCSSクラス。未指定時は space-y-1
+%>
+
 <%
   title = local_assigns.fetch(:title)
   subtitle = local_assigns[:subtitle]

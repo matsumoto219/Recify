@@ -1,25 +1,26 @@
 <%#
-  Shared UI textarea field
+  共通テキストエリア
 
-  Required locals:
-  - f
-  - attribute
-  - label
+  必須:
+  - f: form builder
+  - attribute: フィールド名
+  - label: ラベル文言
 
-  Optional locals:
-  - placeholder
-  - value
-  - rows
-  - required
-  - show_label
-  - with_icon
-  - icon
-  - highlight_variant
-  - show_error_message
-  - textarea_class
-  - textarea_wrapper_class
-  - label_class
-  - error_message_class
+  任意:
+  - placeholder: placeholder文言
+  - value: textarea の表示値
+  - rows: 行数。未指定時は 4
+  - required: required 属性を付ける場合は true。未指定時は false
+  - show_label: ラベルを表示する場合は true。未指定時は true
+  - with_icon: アイコン領域を表示する場合は true。未指定時は icon の有無で決定
+  - icon: 表示する Material Symbols アイコン名
+  - highlight_variant: 強調表示。:error を指定するとエラー表示
+  - show_error_message: エラーメッセージを表示する場合は true。未指定時は true
+  - textarea_class: textarea に追加するCSSクラス
+  - textarea_wrapper_class: textarea ラッパーに追加するCSSクラス
+  - label_class: ラベルに追加するCSSクラス
+  - error_message_class: エラーメッセージに追加するCSSクラス
+  - size: 入力欄サイズ。:md / :regular / :dense。未指定時は :md
   - html_options: textareaへ渡す追加HTML属性（例: data, aria, maxlength）
 %>
 

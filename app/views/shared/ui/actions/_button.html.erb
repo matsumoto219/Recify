@@ -1,3 +1,32 @@
+<%#
+  共通ボタンパーシャル
+
+  必須:
+  - label: ボタンに表示するテキスト
+
+  任意:
+  - variant: 見た目の種類。:primary / :secondary / :ghost / :danger。未指定時は :primary
+  - size: ボタンサイズ。:sm / :md / :compact / :lg。未指定時は :md
+  - weight: 文字の太さ。:medium / :bold。未指定時は :medium
+  - radius: 角丸サイズ。:lg / :xl
+  - type: button 要素の type。未指定時は "button"
+  - as: 出力形式。:button / :link / :content。未指定時は :button
+  - href: as: :link の場合の遷移先
+  - data: button または link に付与する data 属性
+  - full_width: 横幅いっぱいに表示する場合は true。未指定時は false
+  - disabled: 無効化する場合は true。未指定時は false
+  - loading: 送信中表示にする場合は true。未指定時は false
+  - icon: 表示する Material Symbols アイコン名
+  - icon_position: icon の位置。:left / :right。未指定時は :left
+  - trailing_icon: 右端に表示する Material Symbols アイコン名
+  - trailing_icon_animated: trailing_icon を hover 時に動かす場合は true。未指定時は false
+  - class: 追加CSSクラス
+  - disable_with: 送信中に表示するテキスト
+  - form: button 要素に付与する form 属性
+  - html_options: button 要素に追加するHTML属性
+  - unstyled: 既定のボタンスタイルを使わない場合は true。未指定時は false
+%>
+
 <%
   label = local_assigns.fetch(:label)
   variant = local_assigns.fetch(:variant, :primary).to_sym
@@ -22,18 +51,18 @@
   html_options = local_assigns.fetch(:html_options, {})
   unstyled = local_assigns.fetch(:unstyled, false)
 
-  # Theme token based button variants
+  # テーマトークンに基づくボタン種別
   variant_classes = case variant
-                    # Elevated surface button
+                    # 面を持つ補助ボタン
                     when :secondary
                       "btn-secondary border"
-                    # Transparent ghost button
+                    # 透明背景のボタン
                     when :ghost
                       "btn-ghost border"
-                    # Error state button
+                    # 危険操作用ボタン
                     when :danger
                       "btn-danger border border-transparent"
-                    # Primary CTA button
+                    # 主操作ボタン
                     else
                       "btn-primary border-none overflow-hidden"
                     end

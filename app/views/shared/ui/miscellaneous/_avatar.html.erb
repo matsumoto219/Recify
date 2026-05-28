@@ -1,3 +1,17 @@
+<%#
+  ユーザーアバター
+
+  必須:
+  - user: 表示対象ユーザー
+
+  任意:
+  - size: 表示サイズ(px)。未指定時は 40
+  - class: 追加CSSクラス
+  - background_class: 画像なし時の背景CSSクラス。未指定時は token-bg-elevated
+  - preview: 画像プレビュー用 target を付ける場合は true。未指定時は false
+  - alt: 画像の alt。未指定時は shared.avatar.default_alt
+%>
+
 <%
   user = local_assigns.fetch(:user)
   size = local_assigns.fetch(:size, 40).to_i

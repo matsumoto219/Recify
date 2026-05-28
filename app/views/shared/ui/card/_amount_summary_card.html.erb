@@ -1,3 +1,25 @@
+<%#
+  金額サマリーカード
+
+  必須:
+  - なし
+
+  任意:
+  - title: カード見出し。未指定時は shared.amount_summary_card.default_title
+  - amount: 合計金額
+  - currency_prefix: 金額の接頭辞。未指定時は "¥"
+  - icon: 背景に表示する Material Symbols アイコン名。未指定時は "payments"
+  - subtotal: 小計
+  - tax_amount: 税額
+  - tax_rate: 税率
+  - tax_rate_summary: 税率の表示文言。指定時は tax_rate より優先
+  - subtotal_target: 小計表示へ付与する receipt-form target 名
+  - tax_amount_target: 税額表示へ付与する receipt-form target 名
+  - tax_rate_target: 税率表示へ付与する receipt-form target 名
+  - tax_details: 税率別内訳の配列
+  - class: カードに追加するCSSクラス
+%>
+
 <%
   title = local_assigns.fetch(:title, t("shared.amount_summary_card.default_title"))
   amount = local_assigns[:amount]

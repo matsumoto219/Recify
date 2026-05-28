@@ -1,3 +1,14 @@
+<%#
+  確認必須レビュー理由カード
+
+  必須:
+  - receipt: レビュー理由を表示するレシートオブジェクト
+  - description: カード上部に表示する説明文
+
+  任意:
+  - なし
+%>
+
 <%
   review_groups = ReviewReasonSource.group_by_source(receipt.blocking_review_reason_codes).select { |_source, reasons| reasons.any? }
   review_items = receipt.review_items
