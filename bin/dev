@@ -1,5 +1,19 @@
 #!/usr/bin/env sh
 
+if [ -f "public/assets/.manifest.json" ]; then
+  cat >&2 <<'MSG'
+Development precompiled assets were found.
+This can make Rails load stale JS/CSS in development.
+
+Run:
+  bin/rails assets:clobber
+  bin/dev
+
+Do not run assets:precompile during normal development.
+MSG
+  exit 1
+fi
+
 if ! gem list foreman -i --silent; then
   echo "Installing foreman..."
   gem install foreman
