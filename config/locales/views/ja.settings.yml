@@ -38,7 +38,7 @@ ja:
         theme_hint: ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
       calculation:
         description: 手動入力・編集時の自動計算に適用します
-        hint: ※ OCR/AI解析結果の丸め推定には今回は適用しません。
+        hint: ※ OCR/AI解析結果の端数処理には適用されません。
         rounding_options:
           floor: 切り捨て
           round: 四捨五入
