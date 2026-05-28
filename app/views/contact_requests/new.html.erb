@@ -1,10 +1,13 @@
 <section class="mx-auto max-w-3xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-12 md:pb-10">
   <% unless user_signed_in? %>
     <div class="flex justify-center">
-      <%= link_to root_path, class: "inline-flex items-center gap-2 text-sm font-semibold token-text-brand hover:underline" do %>
-        <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_back</span>
-        <%= t("contact_requests.navigation.back_to_top") %>
-      <% end %>
+      <%= render "shared/ui/actions/button",
+            as: :link,
+            href: root_path,
+            label: t("contact_requests.navigation.back_to_top"),
+            variant: :ghost,
+            size: :sm,
+            icon: "arrow_back" %>
     </div>
   <% end %>
 

@@ -23,14 +23,17 @@
         </p>
 
         <%= form_with url: users_two_factor_recovery_code_create_path, method: :post, local: true, class: "space-y-4" do |form| %>
-          <div class="space-y-2">
-            <%= form.label :code, t("auth.two_factor.recovery_code.code_label"), class: "block text-sm font-medium token-text-base" %>
-            <%= form.text_field :code,
-                  autocomplete: "one-time-code",
-                  required: true,
-                  class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 font-mono text-sm token-text-base",
-                  placeholder: t("auth.two_factor.recovery_code.code_placeholder") %>
-          </div>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :code,
+                label: t("auth.two_factor.recovery_code.code_label"),
+                placeholder: t("auth.two_factor.recovery_code.code_placeholder"),
+                autocomplete: "one-time-code",
+                required: true,
+                with_icon: false,
+                size: :dense,
+                label_class: "block text-sm font-medium token-text-base normal-case tracking-normal px-0",
+                input_class: "rounded-lg font-mono text-sm" %>
 
           <%= render "shared/ui/actions/button",
                 label: t("auth.two_factor.recovery_code.button"),

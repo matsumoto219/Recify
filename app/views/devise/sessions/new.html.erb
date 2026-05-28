@@ -61,10 +61,13 @@
           </div>
 
           <% if devise_mapping.rememberable? %>
-            <div class="flex items-center gap-3 px-1">
-              <%= f.check_box :remember_me, class: "rounded token-checkbox" %>
-              <%= f.label :remember_me, t("auth.sessions.remember_me"), class: "text-sm token-text-muted" %>
-            </div>
+            <%= render "shared/ui/form/checkbox_field",
+                  f: f,
+                  attribute: :remember_me,
+                  label: t("auth.sessions.remember_me"),
+                  wrapper_class: "items-center px-1",
+                  checkbox_class: "rounded token-checkbox",
+                  label_class: "text-sm token-text-muted" %>
           <% end %>
 
           <div class="space-y-4">
@@ -108,14 +111,15 @@
         <section class="space-y-4" aria-labelledby="guest-login-title">
           <h3 id="guest-login-title" class="sr-only"><%= t("auth.sessions.guest.title") %></h3>
 
-          <%= button_to guest_sign_in_path,
+          <%= form_with url: guest_sign_in_path,
                         method: :post,
-                        class: "w-full border-0 bg-transparent p-0 cursor-pointer" do %>
+                        local: true,
+                        class: "w-full" do %>
             <%= render "shared/ui/actions/button",
-                  as: :content,
                   label: t("auth.sessions.guest.button"),
                   variant: :secondary,
                   size: :lg,
+                  type: "submit",
                   full_width: true,
                   icon: "person_search",
                   class: "py-3.5" %>

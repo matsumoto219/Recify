@@ -23,7 +23,11 @@
 %>
 
 <%
-  selected = local_assigns.fetch(:selected, f.object.public_send(attribute))
+  selected = if local_assigns.key?(:selected)
+               local_assigns[:selected]
+             else
+               f.object&.public_send(attribute)
+             end
   include_blank = local_assigns.fetch(:include_blank, nil)
   required = local_assigns.fetch(:required, false)
   show_label = local_assigns.fetch(:show_label, true)

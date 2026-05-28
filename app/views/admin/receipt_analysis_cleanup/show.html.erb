@@ -10,6 +10,9 @@
 
   stale_records = Array(stale[:records])
   retention_records = Array(retention[:records])
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -44,25 +47,47 @@
     </div>
 
     <%= form_with url: admin_receipt_analysis_cleanup_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
-      <div class="space-y-1">
-        <%= form.label :stale_cutoff, t("admin.receipt_analysis_cleanup.filters.labels.stale_cutoff"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :stale_cutoff, value: stale_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :stale_cutoff,
+            id: :stale_cutoff,
+            type: "datetime-local",
+            label: t("admin.receipt_analysis_cleanup.filters.labels.stale_cutoff"),
+            value: stale_cutoff_value,
+            label_class: admin_label_class,
+            field_class: "h-10 min-h-10 #{admin_control_class}" %>
 
-      <div class="space-y-1">
-        <%= form.label :stale_limit, t("admin.receipt_analysis_cleanup.filters.labels.stale_limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.number_field :stale_limit, value: preview_params[:stale_limit], min: 1, max: 100, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/number_field",
+            f: form,
+            attribute: :stale_limit,
+            label: t("admin.receipt_analysis_cleanup.filters.labels.stale_limit"),
+            value: preview_params[:stale_limit],
+            min: 1,
+            max: 100,
+            size: :dense,
+            text_align: :left,
+            label_class: admin_label_class,
+            input_class: admin_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :retention_cutoff, t("admin.receipt_analysis_cleanup.filters.labels.retention_cutoff"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :retention_cutoff, value: retention_cutoff_value, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :retention_cutoff,
+            id: :retention_cutoff,
+            type: "datetime-local",
+            label: t("admin.receipt_analysis_cleanup.filters.labels.retention_cutoff"),
+            value: retention_cutoff_value,
+            label_class: admin_label_class,
+            field_class: "h-10 min-h-10 #{admin_control_class}" %>
 
-      <div class="space-y-1">
-        <%= form.label :retention_limit, t("admin.receipt_analysis_cleanup.filters.labels.retention_limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.number_field :retention_limit, value: preview_params[:retention_limit], min: 1, max: 1000, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/number_field",
+            f: form,
+            attribute: :retention_limit,
+            label: t("admin.receipt_analysis_cleanup.filters.labels.retention_limit"),
+            value: preview_params[:retention_limit],
+            min: 1,
+            max: 1000,
+            size: :dense,
+            text_align: :left,
+            label_class: admin_label_class,
+            input_class: admin_control_class %>
 
       <div class="flex items-end gap-3 md:col-span-4">
         <%= render "shared/ui/actions/button",
@@ -167,15 +192,22 @@
           <%= form.hidden_field :retention_cutoff, value: retention_cutoff_value %>
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
-          <div class="space-y-1">
-            <%= form.label :reason, t("admin.receipt_analysis_cleanup.common.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-          </div>
+          <%= render "shared/ui/form/textarea_field",
+                f: form,
+                attribute: :reason,
+                label: t("admin.receipt_analysis_cleanup.common.reason_label"),
+                rows: 3,
+                required: true,
+                with_icon: false,
+                label_class: admin_label_class,
+                textarea_class: admin_control_class %>
 
-          <label class="flex items-start gap-3 text-sm token-text-base">
-            <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span><%= t("admin.receipt_analysis_cleanup.stale.confirm_label") %></span>
-          </label>
+          <%= render "shared/ui/form/checkbox_field",
+                f: form,
+                attribute: :confirm,
+                label: t("admin.receipt_analysis_cleanup.stale.confirm_label"),
+                required: true,
+                checkbox_class: "mt-1" %>
 
           <%= render "shared/ui/actions/button",
                 label: t("admin.receipt_analysis_cleanup.stale.submit"),
@@ -185,9 +217,12 @@
         <% end %>
       <% else %>
         <p class="mb-3 text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.reauthentication_required") %></p>
-        <%= link_to t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
-              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
+              label: t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
+              size: :compact,
+              icon: "passkey" %>
       <% end %>
     </div>
   <% end %>
@@ -263,20 +298,32 @@
           <%= form.hidden_field :retention_cutoff, value: retention_cutoff_value %>
           <%= form.hidden_field :retention_limit, value: preview_params[:retention_limit] %>
 
-          <div class="space-y-1">
-            <%= form.label :reason, t("admin.receipt_analysis_cleanup.common.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-          </div>
+          <%= render "shared/ui/form/textarea_field",
+                f: form,
+                attribute: :reason,
+                label: t("admin.receipt_analysis_cleanup.common.reason_label"),
+                rows: 3,
+                required: true,
+                with_icon: false,
+                label_class: admin_label_class,
+                textarea_class: admin_control_class %>
 
-          <label class="flex items-start gap-3 text-sm token-text-base">
-            <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span><%= t("admin.receipt_analysis_cleanup.retention.confirm_label") %></span>
-          </label>
+          <%= render "shared/ui/form/checkbox_field",
+                f: form,
+                attribute: :confirm,
+                label: t("admin.receipt_analysis_cleanup.retention.confirm_label"),
+                required: true,
+                checkbox_class: "mt-1" %>
 
-          <div class="space-y-1">
-            <%= form.label :confirmation_text, t("admin.receipt_analysis_cleanup.retention.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.text_field :confirmation_text, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-          </div>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :confirmation_text,
+                label: t("admin.receipt_analysis_cleanup.retention.confirmation_label"),
+                required: true,
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                input_class: admin_mono_control_class %>
 
           <%= render "shared/ui/actions/button",
                 label: t("admin.receipt_analysis_cleanup.retention.submit"),
@@ -286,9 +333,12 @@
         <% end %>
       <% else %>
         <p class="mb-3 text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.reauthentication_required") %></p>
-        <%= link_to t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
-              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_cleanup_path),
+              label: t("admin.receipt_analysis_cleanup.common.reauthentication_link"),
+              size: :compact,
+              icon: "passkey" %>
       <% end %>
     </div>
   <% end %>

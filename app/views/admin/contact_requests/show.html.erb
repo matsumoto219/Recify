@@ -2,7 +2,8 @@
 
 <%
   status_options = ContactRequest::STATUSES.map { |value| [ t("admin.contact_requests.statuses.#{value}"), value ] }
-  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
 %>
 
 <section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -34,13 +35,16 @@
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.status_update") %></h2>
       <%= form_with model: @record[:contact_request], url: admin_contact_request_path(@record[:id]), method: :patch, local: true, class: "space-y-4" do |form| %>
-        <div class="space-y-1">
-          <%= form.label :status, t("admin.contact_requests.show.labels.status"), class: "text-xs font-semibold token-text-muted" %>
-          <%= form.select :status,
-                options_for_select(status_options, @record[:status]),
-                {},
-                class: admin_select_class %>
-        </div>
+        <%= render "shared/ui/form/select_field",
+              f: form,
+              attribute: :status,
+              label: t("admin.contact_requests.show.labels.status"),
+              options: status_options,
+              selected: @record[:status],
+              with_icon: false,
+              size: :dense,
+              label_class: admin_label_class,
+              select_class: admin_control_class %>
 
         <%= render "shared/ui/actions/button",
               label: t("admin.contact_requests.show.buttons.update_status"),

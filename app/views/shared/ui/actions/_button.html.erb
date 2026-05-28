@@ -19,6 +19,8 @@
   extra_classes = local_assigns[:class]
   disable_with = local_assigns[:disable_with]
   form = local_assigns[:form]
+  html_options = local_assigns.fetch(:html_options, {})
+  unstyled = local_assigns.fetch(:unstyled, false)
 
   # Theme token based button variants
   variant_classes = case variant
@@ -59,7 +61,11 @@
   width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
   weight_classes = weight == :bold ? "font-bold" : "font-medium"
   state_classes = "group items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-  button_classes = [width_classes, state_classes, weight_classes, variant_classes, size_classes, radius_classes, extra_classes].compact.join(" ")
+  button_classes = if unstyled
+                     extra_classes.to_s
+                   else
+                     [width_classes, state_classes, weight_classes, variant_classes, size_classes, radius_classes, extra_classes].compact.join(" ")
+                   end
 
   current_label = loading ? (disable_with.presence || label) : label
   trailing_icon_class = [
@@ -99,7 +105,8 @@
     <% end %>
     <%= "disabled" if disabled || loading %>
     <% if disable_with.present? %> data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
-    <% data_attributes.each do |key, value| %> data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>>
+    <% data_attributes.each do |key, value| %> data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>
+    <%= tag.attributes(html_options) if html_options.present? %>>
     <%= content %>
   </button>
 <% end %>

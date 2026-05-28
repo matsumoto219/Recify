@@ -24,9 +24,11 @@
         <p class="text-sm token-text-muted leading-relaxed">
           <%= t("admin.passkey_reauthentications.new.no_passkeys_description") %>
         </p>
-        <%= link_to t("admin.passkey_reauthentications.new.register_passkey"),
-              settings_security_path(anchor: "passkeys"),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: settings_security_path(anchor: "passkeys"),
+              label: t("admin.passkey_reauthentications.new.register_passkey"),
+              size: :compact %>
       </div>
     <% else %>
       <div

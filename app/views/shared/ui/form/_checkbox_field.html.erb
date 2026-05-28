@@ -1,0 +1,103 @@
+<%#
+  Shared UI checkbox field
+
+  Optional locals:
+  - f / form: form builder
+  - attribute: form builder field name
+  - name: check_box_tag name
+  - value: check_box_tag checked value (default: "1")
+  - checked_value / unchecked_value: form.check_box values (defaults: "1" / "0")
+  - label
+  - hint
+  - checked
+  - required
+  - disabled
+  - include_hidden
+  - wrapper_class
+  - checkbox_class
+  - content_class
+  - label_class
+  - hint_class
+  - error_message_class
+  - show_error_message
+  - html_options
+%>
+
+<%
+  form_builder = local_assigns[:f] || local_assigns[:form]
+  attribute = local_assigns[:attribute]
+  name = local_assigns[:name]
+  value = local_assigns.fetch(:value, "1")
+  checked_value = local_assigns.fetch(:checked_value, "1")
+  unchecked_value = local_assigns.fetch(:unchecked_value, "0")
+  label = local_assigns[:label]
+  hint = local_assigns[:hint]
+  checked = local_assigns.fetch(:checked, false)
+  required = local_assigns.fetch(:required, false)
+  disabled = local_assigns.fetch(:disabled, false)
+  show_error_message = local_assigns.fetch(:show_error_message, true)
+  html_options = local_assigns.fetch(:html_options, {}).dup
+  include_hidden = local_assigns[:include_hidden]
+
+  wrapper_class = local_assigns[:wrapper_class]
+  checkbox_class = local_assigns[:checkbox_class]
+  content_class = local_assigns[:content_class]
+  label_class = local_assigns[:label_class]
+  hint_class = local_assigns[:hint_class]
+  error_message_class = local_assigns[:error_message_class]
+
+  option_class = html_options.delete(:class)
+  checkbox_classes = [
+    "mt-0.5 h-4 w-4 rounded border token-border-strong token-bg-input token-text-brand focus:ring-2 token-focus-ring-brand",
+    checkbox_class,
+    option_class
+  ].compact.join(" ")
+
+  field_options = html_options.merge(
+    class: checkbox_classes,
+    required: required,
+    disabled: disabled
+  ).compact
+  field_options[:include_hidden] = include_hidden unless include_hidden.nil?
+
+  checkbox_input =
+    if form_builder.present? && attribute.present?
+      form_builder.check_box(attribute, field_options, checked_value, unchecked_value)
+    else
+      check_box_tag(name, value, checked, field_options)
+    end
+
+  attribute_errors =
+    if form_builder.present? && attribute.present? && form_builder.object.respond_to?(:errors)
+      Array(form_builder.object.errors.full_messages_for(attribute))
+    else
+      []
+    end
+
+  wrapper_classes = [
+    "flex items-start gap-3 text-sm token-text-base",
+    wrapper_class
+  ].compact.join(" ")
+  content_classes = ["min-w-0", content_class].compact.join(" ")
+  label_classes = ["block leading-relaxed", label_class].compact.join(" ")
+  hint_classes = ["mt-1 block text-xs token-text-muted leading-relaxed", hint_class].compact.join(" ")
+  error_classes = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")
+%>
+
+<div class="space-y-2">
+  <label class="<%= wrapper_classes %>">
+    <%= checkbox_input %>
+    <span class="<%= content_classes %>">
+      <% if label.present? %>
+        <span class="<%= label_classes %>"><%= label %></span>
+      <% end %>
+      <% if hint.present? %>
+        <span class="<%= hint_classes %>"><%= hint %></span>
+      <% end %>
+    </span>
+  </label>
+
+  <% if show_error_message && attribute_errors.any? %>
+    <p class="<%= error_classes %>"><%= attribute_errors.first %></p>
+  <% end %>
+</div>

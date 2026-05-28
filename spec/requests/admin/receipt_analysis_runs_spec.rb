@@ -349,7 +349,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('再解析理由')
         expect(response.body).to include('確認文字列 RETRY ANALYSIS')
         expect(response.body).to include('name="confirmation"')
-        expect(response.body).to include('value="再解析を実行"')
+        expect(response.body).to include('再解析を実行')
       end
     end
   end

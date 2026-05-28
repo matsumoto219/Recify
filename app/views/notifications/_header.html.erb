@@ -13,9 +13,13 @@
     wrapper_class: "mt-1" %>
 
   <% if unread_count.positive? %>
-    <%= button_to t("notifications.index.mark_all_as_read"),
-      read_all_notifications_path,
-      method: :patch,
-      class: "inline-flex items-center justify-center rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-4 py-2 text-sm font-semibold token-text-base transition-colors cursor-pointer" %>
+    <%= form_with url: read_all_notifications_path, method: :patch, local: true do %>
+      <%= render "shared/ui/actions/button",
+            label: t("notifications.index.mark_all_as_read"),
+            variant: :secondary,
+            size: :sm,
+            type: "submit",
+            class: "px-4" %>
+    <% end %>
   <% end %>
 </section>

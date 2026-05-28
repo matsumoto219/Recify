@@ -22,7 +22,9 @@
     [ t("admin.receipt_analysis_runs.index.filters.needs_attention_only"), "1" ]
   ]
   limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.receipt_analysis_runs.index.filters.limit_unit", count: value), value.to_s ] }
-  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -45,73 +47,122 @@
     </div>
 
     <%= form_with url: admin_receipt_analysis_runs_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
-      <div class="space-y-1">
-        <%= form.label :status, t("admin.receipt_analysis_runs.index.filters.labels.status"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :status,
-              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + status_options, filters[:status]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :status,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.status"),
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + status_options,
+            selected: filters[:status],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :stage, t("admin.receipt_analysis_runs.index.filters.labels.stage"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :stage,
-              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + stage_options, filters[:stage]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :stage,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.stage"),
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + stage_options,
+            selected: filters[:stage],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :source, t("admin.receipt_analysis_runs.index.filters.labels.source"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :source,
-              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + source_options, filters[:source]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :source,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.source"),
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + source_options,
+            selected: filters[:source],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :receipt_status, t("admin.receipt_analysis_runs.index.filters.labels.receipt_status"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :receipt_status,
-              options_for_select([[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + receipt_status_options, filters[:receipt_status]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :receipt_status,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.receipt_status"),
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + receipt_status_options,
+            selected: filters[:receipt_status],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :needs_attention, t("admin.receipt_analysis_runs.index.filters.labels.needs_attention"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :needs_attention,
-              options_for_select(needs_attention_options, filters[:needs_attention]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :needs_attention,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.needs_attention"),
+            options: needs_attention_options,
+            selected: filters[:needs_attention],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :error_code, t("admin.receipt_analysis_runs.index.filters.labels.error_code"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :error_code, value: filters[:error_code], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :error_code,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.error_code"),
+            value: filters[:error_code],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :run_key, t("admin.receipt_analysis_runs.index.filters.labels.run_key"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :run_key, value: filters[:run_key], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :run_key,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.run_key"),
+            value: filters[:run_key],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :receipt_public_id, t("admin.receipt_analysis_runs.index.filters.labels.receipt_public_id"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :receipt_public_id, value: filters[:receipt_public_id], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :receipt_public_id,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.receipt_public_id"),
+            value: filters[:receipt_public_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :user_id, t("admin.receipt_analysis_runs.index.filters.labels.user_id"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :user_id, value: filters[:user_id], inputmode: "numeric", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :user_id,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.user_id"),
+            value: filters[:user_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
 
-      <div class="space-y-1">
-        <%= form.label :limit, t("admin.receipt_analysis_runs.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :limit,
-              options_for_select(limit_options, filters[:limit].presence || limit.to_s),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.receipt_analysis_runs.index.filters.labels.limit"),
+            options: limit_options,
+            selected: filters[:limit].presence || limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
       <div class="flex items-end gap-3 md:col-span-2">
         <%= render "shared/ui/actions/button",

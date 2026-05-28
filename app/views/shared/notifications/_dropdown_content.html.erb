@@ -24,8 +24,11 @@
   </div>
 
   <div class="border-t token-border-glass px-3 py-3 text-center">
-    <%= link_to t("notifications.dropdown.view_all"),
-      notifications_path,
-      class: "inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-bold token-text-brand header-text-hover transition-colors" %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: notifications_path,
+          label: t("notifications.dropdown.view_all"),
+          unstyled: true,
+          class: "inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-bold token-text-brand header-text-hover transition-colors" %>
   </div>
 </div>

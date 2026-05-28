@@ -16,7 +16,9 @@
   category_options = ContactRequest::CATEGORIES.map { |value| [ t("admin.contact_requests.categories.#{value}"), value ] }
   source_options = ContactRequest::SOURCES.map { |value| [ t("admin.contact_requests.sources.#{value}"), value ] }
   limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.contact_requests.index.filters.limit_unit", count: value), value.to_s ] }
-  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -39,62 +41,107 @@
     </div>
 
     <%= form_with url: admin_contact_requests_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
-      <div class="space-y-1">
-        <%= form.label :status, t("admin.contact_requests.index.filters.labels.status"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :status,
-              options_for_select([[ t("admin.contact_requests.index.filters.all"), "" ]] + status_options, filters[:status]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :status,
+            label: t("admin.contact_requests.index.filters.labels.status"),
+            options: [[ t("admin.contact_requests.index.filters.all"), "" ]] + status_options,
+            selected: filters[:status],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :category, t("admin.contact_requests.index.filters.labels.category"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :category,
-              options_for_select([[ t("admin.contact_requests.index.filters.all"), "" ]] + category_options, filters[:category]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :category,
+            label: t("admin.contact_requests.index.filters.labels.category"),
+            options: [[ t("admin.contact_requests.index.filters.all"), "" ]] + category_options,
+            selected: filters[:category],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :source, t("admin.contact_requests.index.filters.labels.source"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :source,
-              options_for_select([[ t("admin.contact_requests.index.filters.all"), "" ]] + source_options, filters[:source]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :source,
+            label: t("admin.contact_requests.index.filters.labels.source"),
+            options: [[ t("admin.contact_requests.index.filters.all"), "" ]] + source_options,
+            selected: filters[:source],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :user_id, t("admin.contact_requests.index.filters.labels.user_id"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :user_id, value: filters[:user_id], inputmode: "numeric", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :user_id,
+            label: t("admin.contact_requests.index.filters.labels.user_id"),
+            value: filters[:user_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
 
-      <div class="space-y-1">
-        <%= form.label :request_uid, t("admin.contact_requests.index.filters.labels.request_uid"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :request_uid, value: filters[:request_uid], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :request_uid,
+            label: t("admin.contact_requests.index.filters.labels.request_uid"),
+            value: filters[:request_uid],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :email_digest, t("admin.contact_requests.index.filters.labels.email_digest"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :email_digest, value: filters[:email_digest], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :email_digest,
+            label: t("admin.contact_requests.index.filters.labels.email_digest"),
+            value: filters[:email_digest],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :created_from, t("admin.contact_requests.index.filters.labels.created_from"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :created_from, value: filters[:created_from], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_from,
+            id: :created_from,
+            type: "datetime-local",
+            label: t("admin.contact_requests.index.filters.labels.created_from"),
+            value: filters[:created_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
 
-      <div class="space-y-1">
-        <%= form.label :created_to, t("admin.contact_requests.index.filters.labels.created_to"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :created_to, value: filters[:created_to], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_to,
+            id: :created_to,
+            type: "datetime-local",
+            label: t("admin.contact_requests.index.filters.labels.created_to"),
+            value: filters[:created_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
 
-      <div class="space-y-1">
-        <%= form.label :limit, t("admin.contact_requests.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :limit,
-              options_for_select(limit_options, filters[:limit].presence || limit.to_s),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.contact_requests.index.filters.labels.limit"),
+            options: limit_options,
+            selected: filters[:limit].presence || limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
       <div class="flex items-end gap-3 md:col-span-2">
         <%= render "shared/ui/actions/button",

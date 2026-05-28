@@ -266,14 +266,15 @@
 
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row gap-4">
-          <%= button_to user_registration_path,
+          <%= form_with url: user_registration_path,
                         method: :delete,
+                        local: true,
                         data: { turbo_confirm: t("settings.index.danger.confirm") },
                         class: "contents" do %>
             <%= render "shared/ui/actions/button",
-                  as: :content,
                   label: t("settings.index.danger.delete_account"),
                   variant: :danger,
+                  type: "submit",
                   size: :compact %>
           <% end %>
         </div>

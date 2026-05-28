@@ -163,18 +163,21 @@
         <% end %>
 
         <% if has_image %>
-          <label class="flex items-start gap-3 rounded-lg border token-border-soft token-bg-card-subtle px-3 py-3 text-left cursor-pointer select-none">
-            <%= check_box_tag "receipt[remove_image]", "1", false,
-                  class: "mt-0.5 h-4 w-4 rounded border token-border-strong token-bg-input token-text-brand focus:ring-2 token-focus-ring-brand",
+          <%= render "shared/ui/form/checkbox_field",
+                name: "receipt[remove_image]",
+                value: "1",
+                checked: false,
+                label: t("shared.receipt_image_card.remove_label"),
+                hint: t("shared.receipt_image_card.remove_description"),
+                wrapper_class: "rounded-lg border token-border-soft token-bg-card-subtle px-3 py-3 text-left cursor-pointer select-none",
+                content_class: "space-y-1",
+                label_class: "text-sm font-medium token-text-base",
+                html_options: {
                   data: {
                     receipt_image_card_target: "removeImageField",
                     action: "change->receipt-image-card#toggleRemoveImage"
-                  } %>
-            <span class="space-y-1 min-w-0">
-              <span class="block text-sm font-medium token-text-base"><%= t("shared.receipt_image_card.remove_label") %></span>
-              <span class="block text-xs token-text-muted leading-relaxed"><%= t("shared.receipt_image_card.remove_description") %></span>
-            </span>
-          </label>
+                  }
+                } %>
         <% end %>
       </div>
     <% end %>

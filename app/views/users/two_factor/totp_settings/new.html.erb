@@ -52,15 +52,18 @@
 
       <%= form_with url: settings_security_totp_path, method: :post, local: true, class: "space-y-4" do |form| %>
         <div class="space-y-2">
-          <%= form.label :code, t("settings.security.auth.two_factor.setup.code_label"), class: "block text-sm font-medium token-text-base" %>
-          <%= form.text_field :code,
-                inputmode: "numeric",
-                pattern: "[0-9]*",
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :code,
+                label: t("settings.security.auth.two_factor.setup.code_label"),
+                placeholder: t("settings.security.auth.two_factor.setup.code_placeholder"),
                 autocomplete: "one-time-code",
-                maxlength: 6,
                 required: true,
-                class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
-                placeholder: t("settings.security.auth.two_factor.setup.code_placeholder") %>
+                with_icon: false,
+                size: :dense,
+                label_class: "block text-sm font-medium token-text-base normal-case tracking-normal px-0",
+                input_class: "rounded-lg text-sm",
+                html_options: { inputmode: "numeric", pattern: "[0-9]*", maxlength: 6 } %>
           <p class="text-xs token-text-muted"><%= t("settings.security.auth.two_factor.setup.code_hint") %></p>
         </div>
 

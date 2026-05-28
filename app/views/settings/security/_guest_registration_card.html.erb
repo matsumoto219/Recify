@@ -98,20 +98,23 @@
           legal_agreement_error = legal_agreement_errors.first
         %>
         <section aria-label="<%= t("settings.security.guest_registration.legal_agreement.aria_label") %>" class="space-y-2">
-          <label class="flex items-start gap-3 rounded-lg border token-border-soft px-4 py-3 text-sm token-text-muted">
-            <%= f.check_box :legal_agreement,
-                  { class: "mt-0.5 rounded token-checkbox", required: true },
-                  "1",
-                  "0" %>
-            <span class="leading-relaxed">
-              <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
-              <%= t("settings.security.guest_registration.legal_agreement.prefix") %>
-              <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.terms") %></span>
-              <%= t("settings.security.guest_registration.legal_agreement.connector") %>
-              <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.privacy") %></span>
-              <%= t("settings.security.guest_registration.legal_agreement.suffix") %>
-            </span>
-          </label>
+          <% legal_agreement_label = capture do %>
+            <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
+            <%= t("settings.security.guest_registration.legal_agreement.prefix") %>
+            <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.terms") %></span>
+            <%= t("settings.security.guest_registration.legal_agreement.connector") %>
+            <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.privacy") %></span>
+            <%= t("settings.security.guest_registration.legal_agreement.suffix") %>
+          <% end %>
+          <%= render "shared/ui/form/checkbox_field",
+                f: f,
+                attribute: :legal_agreement,
+                label: legal_agreement_label,
+                required: true,
+                show_error_message: false,
+                wrapper_class: "rounded-lg border token-border-soft px-4 py-3 token-text-muted",
+                checkbox_class: "rounded token-checkbox",
+                label_class: "leading-relaxed" %>
           <% if legal_agreement_error.present? %>
             <p class="px-1 text-xs token-text-error leading-relaxed"><%= legal_agreement_error %></p>
           <% end %>

@@ -46,7 +46,7 @@ ja:
           label: AI補完
           description_html: 商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください
       support:
-        description: 困ったことや不具合をサポートへ連絡できます。
+        description: 困ったことや不具合等をサポートへ連絡できます。
         contact: お問い合わせを開く
       danger:
         delete_account: 退会

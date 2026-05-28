@@ -23,17 +23,18 @@
         </p>
 
         <%= form_with url: users_two_factor_totp_create_path, method: :post, local: true, class: "space-y-4" do |form| %>
-          <div class="space-y-2">
-            <%= form.label :code, t("auth.two_factor.totp.code_label"), class: "block text-sm font-medium token-text-base" %>
-            <%= form.text_field :code,
-                  inputmode: "numeric",
-                  pattern: "[0-9]*",
-                  autocomplete: "one-time-code",
-                  maxlength: 6,
-                  required: true,
-                  class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
-                  placeholder: t("auth.two_factor.totp.code_placeholder") %>
-          </div>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :code,
+                label: t("auth.two_factor.totp.code_label"),
+                placeholder: t("auth.two_factor.totp.code_placeholder"),
+                autocomplete: "one-time-code",
+                required: true,
+                with_icon: false,
+                size: :dense,
+                label_class: "block text-sm font-medium token-text-base normal-case tracking-normal px-0",
+                input_class: "rounded-lg text-sm",
+                html_options: { inputmode: "numeric", pattern: "[0-9]*", maxlength: 6 } %>
 
           <%= render "shared/ui/actions/button",
                 label: t("auth.two_factor.totp.button"),

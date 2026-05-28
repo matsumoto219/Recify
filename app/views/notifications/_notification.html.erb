@@ -2,7 +2,6 @@
   unread = notification.unread?
   stale_notifiable = notification.stale_notifiable?
   delete_confirm_data = notification.user.delete_confirmation_enabled? ? { turbo_confirm: t("notifications.item.delete_confirm") } : {}
-  action_button_classes = "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg token-border-soft token-bg-card token-hover-bg-card-subtle px-3 text-xs font-semibold transition-colors"
   item_classes = [
     "token-bg-card",
     "token-border-soft",
@@ -36,26 +35,40 @@
 
     <div class="flex shrink-0 items-center gap-2">
       <% if unread %>
-        <%= button_to t("notifications.item.mark_as_read"),
-          read_notification_path(notification),
-          method: :patch,
-          form: { class: "contents" },
-          class: "#{action_button_classes} token-text-base cursor-pointer" %>
+        <%= form_with url: read_notification_path(notification), method: :patch, local: true, class: "contents" do %>
+          <%= render "shared/ui/actions/button",
+                label: t("notifications.item.mark_as_read"),
+                variant: :secondary,
+                size: :sm,
+                type: "submit",
+                class: "h-9 whitespace-nowrap px-3 text-xs" %>
+        <% end %>
       <% elsif notification.action_available? %>
-        <%= link_to t("notifications.item.open"),
-          notification.action_path,
-          class: "#{action_button_classes} token-text-base" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: notification.action_path,
+              label: t("notifications.item.open"),
+              variant: :secondary,
+              size: :sm,
+              class: "h-9 whitespace-nowrap px-3 text-xs" %>
       <% end %>
 
-      <%= button_to notification_path(notification),
+      <%= form_with url: notification_path(notification),
         method: :delete,
-        form: { class: "contents" },
-        data: delete_confirm_data,
-        class: "#{action_button_classes} token-text-error cursor-pointer",
-        aria: { label: t("notifications.item.delete_aria", title: notification.title) },
-        title: t("notifications.item.delete_aria", title: notification.title) do %>
-        <span class="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">close</span>
-        <span><%= t("notifications.item.delete") %></span>
+        local: true,
+        class: "contents" do %>
+        <%= render "shared/ui/actions/button",
+              label: t("notifications.item.delete"),
+              variant: :danger,
+              size: :sm,
+              type: "submit",
+              icon: "close",
+              data: delete_confirm_data,
+              class: "h-9 whitespace-nowrap px-3 text-xs",
+              html_options: {
+                "aria-label": t("notifications.item.delete_aria", title: notification.title),
+                title: t("notifications.item.delete_aria", title: notification.title)
+              } %>
       <% end %>
     </div>
   </div>

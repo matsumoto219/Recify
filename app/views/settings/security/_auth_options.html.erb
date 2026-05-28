@@ -58,16 +58,29 @@
 
     <div class="mt-5 space-y-3">
       <% if totp_enabled %>
-        <%= button_to t("settings.security.auth.two_factor.regenerate_recovery_codes"),
-              settings_security_recovery_codes_regenerate_path,
+        <%= form_with url: settings_security_recovery_codes_regenerate_path,
               method: :post,
-              form: { data: { turbo_confirm: t("settings.security.auth.recovery_codes.regenerate_confirm") } },
-              class: "btn-secondary border w-full flex justify-center items-center gap-2 cursor-pointer transition-all active:scale-[0.98] px-6 py-2.5 text-sm rounded-lg font-medium token-border-brand-soft" %>
-        <%= button_to t("settings.security.auth.two_factor.disable"),
-              settings_security_totp_path,
+              local: true,
+              data: { turbo_confirm: t("settings.security.auth.recovery_codes.regenerate_confirm") } do %>
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.auth.two_factor.regenerate_recovery_codes"),
+                variant: :secondary,
+                size: :compact,
+                type: "submit",
+                full_width: true,
+                class: "token-border-brand-soft" %>
+        <% end %>
+        <%= form_with url: settings_security_totp_path,
               method: :delete,
-              form: { data: { turbo_confirm: t("settings.security.auth.two_factor.disable_confirm") } },
-              class: "btn-ghost border w-full flex justify-center items-center gap-2 cursor-pointer transition-all active:scale-[0.98] px-6 py-2.5 text-sm rounded-lg font-medium" %>
+              local: true,
+              data: { turbo_confirm: t("settings.security.auth.two_factor.disable_confirm") } do %>
+          <%= render "shared/ui/actions/button",
+                label: t("settings.security.auth.two_factor.disable"),
+                variant: :ghost,
+                size: :compact,
+                type: "submit",
+                full_width: true %>
+        <% end %>
       <% else %>
         <%= render "shared/ui/actions/button",
               as: :link,
@@ -125,11 +138,17 @@
                   </p>
                 </div>
 
-                <%= button_to t("settings.security.auth.passkey.delete"),
-                      settings_passkey_path(passkey),
+                <%= form_with url: settings_passkey_path(passkey),
                       method: :delete,
-                      form: { data: { turbo_confirm: t("settings.security.auth.passkey.delete_confirm") } },
-                      class: "btn-ghost border px-3 py-1.5 text-xs rounded-lg font-medium transition-all" %>
+                      local: true,
+                      data: { turbo_confirm: t("settings.security.auth.passkey.delete_confirm") } do %>
+                  <%= render "shared/ui/actions/button",
+                        label: t("settings.security.auth.passkey.delete"),
+                        variant: :ghost,
+                        size: :sm,
+                        type: "submit",
+                        class: "px-3 py-1.5 text-xs" %>
+                <% end %>
               </div>
             </div>
           <% end %>
@@ -141,16 +160,18 @@
       </div>
 
       <div class="space-y-3">
-        <label class="block text-sm font-medium token-text-base" for="passkey-label-input">
-          <%= t("settings.security.auth.passkey.label") %>
-        </label>
-        <input
-          id="passkey-label-input"
-          type="text"
-          maxlength="80"
-          placeholder="<%= t("settings.security.auth.passkey.label_placeholder") %>"
-          class="w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base"
-          data-passkey-target="label">
+        <%= render "shared/ui/form/text_field",
+              id: "passkey-label-input",
+              label: t("settings.security.auth.passkey.label"),
+              placeholder: t("settings.security.auth.passkey.label_placeholder"),
+              with_icon: false,
+              size: :dense,
+              label_class: "text-sm font-medium token-text-base normal-case tracking-normal px-0",
+              input_class: "rounded-lg text-sm",
+              html_options: {
+                maxlength: 80,
+                data: { passkey_target: "label" }
+              } %>
 
         <p class="hidden text-sm token-text-error" data-passkey-target="error"></p>
         <p class="hidden text-sm token-text-success" data-passkey-target="success"></p>

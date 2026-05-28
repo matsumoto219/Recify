@@ -17,7 +17,9 @@
   actor_kind_options = AuditLog::ACTOR_KINDS.map { |value| [ value, value ] }
   outcome_options = AuditLog::OUTCOMES.map { |value| [ value, value ] }
   limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.audit_logs.index.filters.limit_unit", count: value), value.to_s ] }
-  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -40,64 +42,117 @@
     </div>
 
     <%= form_with url: admin_audit_logs_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
-      <div class="space-y-1">
-        <%= form.label :actor_user_id, t("admin.audit_logs.index.filters.labels.actor_user_id"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :actor_user_id, value: filters[:actor_user_id], inputmode: "numeric", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :actor_user_id,
+            label: t("admin.audit_logs.index.filters.labels.actor_user_id"),
+            value: filters[:actor_user_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
 
-      <div class="space-y-1">
-        <%= form.label :actor_kind, t("admin.audit_logs.index.filters.labels.actor_kind"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :actor_kind,
-              options_for_select([[ t("admin.audit_logs.index.filters.all"), "" ]] + actor_kind_options, filters[:actor_kind]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :actor_kind,
+            label: t("admin.audit_logs.index.filters.labels.actor_kind"),
+            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + actor_kind_options,
+            selected: filters[:actor_kind],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :audit_action, t("admin.audit_logs.index.filters.labels.action"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :audit_action, value: filters[:action], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :audit_action,
+            label: t("admin.audit_logs.index.filters.labels.action"),
+            value: filters[:action],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :outcome, t("admin.audit_logs.index.filters.labels.outcome"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :outcome,
-              options_for_select([[ t("admin.audit_logs.index.filters.all"), "" ]] + outcome_options, filters[:outcome]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :outcome,
+            label: t("admin.audit_logs.index.filters.labels.outcome"),
+            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + outcome_options,
+            selected: filters[:outcome],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :target_uid, t("admin.audit_logs.index.filters.labels.target_uid"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :target_uid, value: filters[:target_uid], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :target_uid,
+            label: t("admin.audit_logs.index.filters.labels.target_uid"),
+            value: filters[:target_uid],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :request_id, t("admin.audit_logs.index.filters.labels.request_id"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :request_id, value: filters[:request_id], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :request_id,
+            label: t("admin.audit_logs.index.filters.labels.request_id"),
+            value: filters[:request_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :error_code, t("admin.audit_logs.index.filters.labels.error_code"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :error_code, value: filters[:error_code], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :error_code,
+            label: t("admin.audit_logs.index.filters.labels.error_code"),
+            value: filters[:error_code],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :created_from, t("admin.audit_logs.index.filters.labels.created_from"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :created_from, value: filters[:created_from], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_from,
+            id: :created_from,
+            type: "datetime-local",
+            label: t("admin.audit_logs.index.filters.labels.created_from"),
+            value: filters[:created_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
 
-      <div class="space-y-1">
-        <%= form.label :created_to, t("admin.audit_logs.index.filters.labels.created_to"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.datetime_field :created_to, value: filters[:created_to], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_to,
+            id: :created_to,
+            type: "datetime-local",
+            label: t("admin.audit_logs.index.filters.labels.created_to"),
+            value: filters[:created_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
 
-      <div class="space-y-1">
-        <%= form.label :limit, t("admin.audit_logs.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :limit,
-              options_for_select(limit_options, filters[:limit].presence || limit.to_s),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.audit_logs.index.filters.labels.limit"),
+            options: limit_options,
+            selected: filters[:limit].presence || limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
       <div class="flex items-end gap-3 md:col-span-2">
         <%= render "shared/ui/actions/button",

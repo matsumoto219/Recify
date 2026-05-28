@@ -14,7 +14,9 @@
   has_next = next_offset < total_count
   boolean_options = [[ t("admin.users.common.all"), "" ], [ t("admin.users.common.yes"), "true" ], [ t("admin.users.common.no"), "false" ]]
   limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.users.common.limit_unit", count: value), value.to_s ] }
-  admin_select_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
   boolean_label = ->(value) { value ? t("admin.users.common.yes") : t("admin.users.common.no") }
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
 %>
@@ -39,58 +41,88 @@
     </div>
 
     <%= form_with url: admin_users_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
-      <div class="space-y-1">
-        <%= form.label :email, t("admin.users.index.filters.labels.email"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.text_field :email, value: filters[:email], class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-      </div>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :email,
+            label: t("admin.users.index.filters.labels.email"),
+            value: filters[:email],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :admin, t("admin.users.index.filters.labels.admin"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :admin,
-              options_for_select(boolean_options, filters[:admin]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :admin,
+            label: t("admin.users.index.filters.labels.admin"),
+            options: boolean_options,
+            selected: filters[:admin],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :guest, t("admin.users.index.filters.labels.guest"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :guest,
-              options_for_select(boolean_options, filters[:guest]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :guest,
+            label: t("admin.users.index.filters.labels.guest"),
+            options: boolean_options,
+            selected: filters[:guest],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :confirmed, t("admin.users.index.filters.labels.confirmed"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :confirmed,
-              options_for_select(boolean_options, filters[:confirmed]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :confirmed,
+            label: t("admin.users.index.filters.labels.confirmed"),
+            options: boolean_options,
+            selected: filters[:confirmed],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :locked, t("admin.users.index.filters.labels.locked"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :locked,
-              options_for_select(boolean_options, filters[:locked]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :locked,
+            label: t("admin.users.index.filters.labels.locked"),
+            options: boolean_options,
+            selected: filters[:locked],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :has_passkey, t("admin.users.index.filters.labels.passkey"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :has_passkey,
-              options_for_select(boolean_options, filters[:has_passkey]),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :has_passkey,
+            label: t("admin.users.index.filters.labels.passkey"),
+            options: boolean_options,
+            selected: filters[:has_passkey],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
-      <div class="space-y-1">
-        <%= form.label :limit, t("admin.users.index.filters.labels.limit"), class: "text-xs font-semibold token-text-muted" %>
-        <%= form.select :limit,
-              options_for_select(limit_options, filters[:limit].presence || limit.to_s),
-              {},
-              class: admin_select_class %>
-      </div>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.users.index.filters.labels.limit"),
+            options: limit_options,
+            selected: filters[:limit].presence || limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
 
       <div class="flex items-end gap-3 md:col-span-1">
         <%= render "shared/ui/actions/button",

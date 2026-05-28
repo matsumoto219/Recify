@@ -1,5 +1,11 @@
 <% content_for :title, t("admin.receipt_analysis_runs.show.title") %>
 
+<%
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
+%>
+
 <section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
@@ -129,9 +135,12 @@
     <% else %>
       <div class="mb-4 space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.show.retry.reauthentication_guidance") %></p>
-        <%= link_to t("admin.receipt_analysis_runs.show.retry.reauthentication_link"),
-              new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
+              label: t("admin.receipt_analysis_runs.show.retry.reauthentication_link"),
+              size: :compact,
+              icon: "passkey" %>
       </div>
     <% end %>
     <div class="grid gap-3 md:grid-cols-2">
@@ -144,19 +153,31 @@
           <% if admin_retry_enabled? && option[:possible] %>
             <%= form_with url: retry_admin_receipt_analysis_run_path(@record[:run_key]), method: :post, local: true, class: "space-y-2" do |form| %>
               <%= hidden_field_tag :retry_kind, option[:type] %>
-              <%= form.label :reason, t("admin.receipt_analysis_runs.show.retry.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-              <%= form.text_area :reason,
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.receipt_analysis_runs.show.retry.reason_label"),
+                    placeholder: t("admin.receipt_analysis_runs.show.retry.reason_placeholder"),
                     rows: 2,
                     required: true,
-                    class: "min-h-20 w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base",
-                    placeholder: t("admin.receipt_analysis_runs.show.retry.reason_placeholder") %>
-              <%= form.label :confirmation, t("admin.receipt_analysis_runs.show.retry.confirmation_label", confirmation: retry_confirmation_text), class: "text-xs font-semibold token-text-muted" %>
-              <%= form.text_field :confirmation,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: "min-h-20 #{admin_control_class}" %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.receipt_analysis_runs.show.retry.confirmation_label", confirmation: retry_confirmation_text),
                     required: true,
                     autocomplete: "off",
-                    class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 font-mono text-sm token-text-base" %>
-              <%= form.submit t("admin.receipt_analysis_runs.show.retry.execute"),
-                    class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
+              <%= render "shared/ui/actions/button",
+                    label: t("admin.receipt_analysis_runs.show.retry.execute"),
+                    type: "submit",
+                    size: :compact,
+                    icon: "replay" %>
             <% end %>
           <% end %>
         </div>

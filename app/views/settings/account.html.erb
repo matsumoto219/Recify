@@ -44,18 +44,21 @@
             </p>
 
             <% if form_resource.respond_to?(:avatar) && form_resource.avatar.attached? && form_resource.avatar.blob&.persisted? %>
-              <label class="mt-4 flex items-start gap-3 text-left cursor-pointer select-none min-w-0">
-                <%= check_box_tag :remove_avatar, "1", false,
-                      class: "mt-0.5 h-4 w-4 rounded border token-border-strong token-bg-input token-text-brand focus:ring-2 token-focus-ring-brand",
+              <%= render "shared/ui/form/checkbox_field",
+                    name: :remove_avatar,
+                    value: "1",
+                    checked: false,
+                    label: t("settings.account.avatar.remove_label"),
+                    hint: t("settings.account.avatar.remove_description"),
+                    wrapper_class: "mt-4 text-left cursor-pointer select-none min-w-0",
+                    content_class: "space-y-1",
+                    label_class: "text-sm font-medium token-text-base",
+                    html_options: {
                       data: {
                         avatar_preview_target: "removeCheckbox",
                         action: "change->avatar-preview#toggleRemove"
-                      } %>
-                <span class="space-y-1 min-w-0">
-                  <span class="block text-sm font-medium token-text-base"><%= t("settings.account.avatar.remove_label") %></span>
-                  <span class="block text-xs token-text-muted leading-relaxed"><%= t("settings.account.avatar.remove_description") %></span>
-                </span>
-              </label>
+                      }
+                    } %>
             <% end %>
 
             <% if form_resource.errors[:avatar].any? %>

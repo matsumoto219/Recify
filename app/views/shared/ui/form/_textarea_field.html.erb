@@ -8,6 +8,7 @@
 
   Optional locals:
   - placeholder
+  - value
   - rows
   - required
   - show_label
@@ -24,6 +25,7 @@
 
 <%
   placeholder = local_assigns[:placeholder]
+  value = local_assigns[:value]
   rows = local_assigns.fetch(:rows, 4)
   required = local_assigns.fetch(:required, false)
   show_label = local_assigns.fetch(:show_label, true)
@@ -61,6 +63,7 @@
 
   field_options = {
     placeholder: placeholder,
+    value: value,
     rows: rows,
     required: required,
     class: merged_textarea_class

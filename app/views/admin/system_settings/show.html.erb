@@ -1,8 +1,9 @@
 <% content_for :title, t("admin.system_settings.show.title", key: @record[:key]) %>
 
 <%
-  admin_control_class = "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base"
-  admin_select_class = admin_control_class
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
 <section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -86,70 +87,116 @@
     <% elsif !admin_passkey_reauthenticated? %>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="mb-3 text-sm token-text-muted"><%= t("admin.system_settings.show.update.reauthentication_required") %></p>
-        <%= link_to t("admin.system_settings.show.update.reauthentication_link"),
-              new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
+              label: t("admin.system_settings.show.update.reauthentication_link"),
+              size: :compact,
+              icon: "passkey" %>
       </div>
     <% else %>
       <%= form_with url: admin_system_setting_path(@record[:key]), method: :patch, local: true, class: "space-y-4" do |form| %>
-        <div class="space-y-1">
-          <%= form.label :value, t("admin.system_settings.show.update.value_label"), class: "text-xs font-semibold token-text-muted" %>
-          <% current_value = @record[:current_value] %>
-          <% case @record[:value_type].to_s %>
-          <% when "boolean" %>
-            <%= form.select :value,
-                  options_for_select([[ t("admin.system_settings.show.update.enabled"), "true" ], [ t("admin.system_settings.show.update.disabled"), "false" ]], current_value.to_s),
-                  {},
-                  class: admin_select_class %>
-          <% when "integer", "duration" %>
-            <%= form.number_field :value,
-                  value: current_value,
-                  min: @record[:min],
-                  max: @record[:max],
-                  step: 1,
-                  class: admin_control_class %>
-          <% when "decimal", "percentage" %>
-            <%= form.number_field :value,
-                  value: current_value,
-                  min: @record[:min],
-                  max: @record[:max],
-                  step: :any,
-                  class: admin_control_class %>
-          <% when "enum" %>
-            <%= form.select :value,
-                  options_for_select(Array(@record[:allowed_values]).map { |value| [ value, value ] }, current_value.to_s),
-                  {},
-                  class: admin_select_class %>
-          <% when "user_allowlist" %>
-            <%= form.text_area :value,
-                  value: Array(current_value).join("\n"),
-                  rows: 5,
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-          <% when "feature_flag" %>
-            <%= form.text_area :value,
-                  value: JSON.pretty_generate(current_value),
-                  rows: 8,
-                  class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-          <% else %>
-            <%= form.text_field :value,
-                  value: current_value,
-                  class: admin_control_class %>
-          <% end %>
-        </div>
-
-        <div class="space-y-1">
-          <%= form.label :reason, t("admin.system_settings.show.update.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-          <%= form.text_area :reason,
-                rows: 3,
+        <% current_value = @record[:current_value] %>
+        <% case @record[:value_type].to_s %>
+        <% when "boolean" %>
+          <%= render "shared/ui/form/select_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                options: [[ t("admin.system_settings.show.update.enabled"), "true" ], [ t("admin.system_settings.show.update.disabled"), "false" ]],
+                selected: current_value.to_s,
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                select_class: admin_control_class %>
+        <% when "integer", "duration" %>
+          <%= render "shared/ui/form/number_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                value: current_value,
+                min: @record[:min],
+                max: @record[:max],
+                step: 1,
                 required: true,
-                class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-        </div>
+                size: :dense,
+                text_align: :left,
+                label_class: admin_label_class,
+                input_class: admin_control_class %>
+        <% when "decimal", "percentage" %>
+          <%= render "shared/ui/form/number_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                value: current_value,
+                min: @record[:min],
+                max: @record[:max],
+                step: :any,
+                required: true,
+                size: :dense,
+                text_align: :left,
+                label_class: admin_label_class,
+                input_class: admin_control_class %>
+        <% when "enum" %>
+          <%= render "shared/ui/form/select_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                options: Array(@record[:allowed_values]).map { |value| [ value, value ] },
+                selected: current_value.to_s,
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                select_class: admin_control_class %>
+        <% when "user_allowlist" %>
+          <%= render "shared/ui/form/textarea_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                value: Array(current_value).join("\n"),
+                rows: 5,
+                with_icon: false,
+                label_class: admin_label_class,
+                textarea_class: admin_control_class %>
+        <% when "feature_flag" %>
+          <%= render "shared/ui/form/textarea_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                value: JSON.pretty_generate(current_value),
+                rows: 8,
+                with_icon: false,
+                label_class: admin_label_class,
+                textarea_class: admin_mono_control_class %>
+        <% else %>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.system_settings.show.update.value_label"),
+                value: current_value,
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                input_class: admin_control_class %>
+        <% end %>
+
+        <%= render "shared/ui/form/textarea_field",
+              f: form,
+              attribute: :reason,
+              label: t("admin.system_settings.show.update.reason_label"),
+              rows: 3,
+              required: true,
+              with_icon: false,
+              label_class: admin_label_class,
+              textarea_class: admin_control_class %>
 
         <% if @record[:requires_confirmation] %>
-          <label class="flex items-start gap-3 text-sm token-text-base">
-            <%= form.check_box :confirm, required: true, class: "mt-1" %>
-            <span><%= t("admin.system_settings.show.update.confirm_label") %></span>
-          </label>
+          <%= render "shared/ui/form/checkbox_field",
+                f: form,
+                attribute: :confirm,
+                label: t("admin.system_settings.show.update.confirm_label"),
+                required: true,
+                checkbox_class: "mt-1" %>
         <% end %>
 
         <%= render "shared/ui/actions/button",

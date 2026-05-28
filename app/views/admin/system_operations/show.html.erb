@@ -28,8 +28,18 @@
       <div class="space-y-3 text-sm">
         <p class="token-text-muted"><%= t("admin.system_operations.receipt_analysis.description") %></p>
         <div class="flex flex-wrap gap-2">
-          <%= link_to t("admin.system_operations.receipt_analysis.runs_link"), admin_receipt_analysis_runs_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to t("admin.system_operations.receipt_analysis.retry_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: admin_receipt_analysis_runs_path,
+                label: t("admin.system_operations.receipt_analysis.runs_link"),
+                variant: :secondary,
+                size: :sm %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"),
+                label: t("admin.system_operations.receipt_analysis.retry_logs_link"),
+                variant: :secondary,
+                size: :sm %>
         </div>
       </div>
     <% end %>
@@ -39,9 +49,24 @@
       <div class="space-y-3 text-sm">
         <p class="token-text-muted"><%= t("admin.system_operations.cleanup.description") %></p>
         <div class="flex flex-wrap gap-2">
-          <%= link_to t("admin.system_operations.cleanup.execute_link"), admin_receipt_analysis_cleanup_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to t("admin.system_operations.cleanup.execute_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-          <%= link_to t("admin.system_operations.cleanup.preview_logs_link"), admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.dry_run"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: admin_receipt_analysis_cleanup_path,
+                label: t("admin.system_operations.cleanup.execute_link"),
+                variant: :secondary,
+                size: :sm %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"),
+                label: t("admin.system_operations.cleanup.execute_logs_link"),
+                variant: :secondary,
+                size: :sm %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.dry_run"),
+                label: t("admin.system_operations.cleanup.preview_logs_link"),
+                variant: :secondary,
+                size: :sm %>
         </div>
       </div>
     <% end %>

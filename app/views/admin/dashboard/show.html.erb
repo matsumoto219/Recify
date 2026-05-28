@@ -143,8 +143,18 @@
       </dl>
 
       <div class="mt-4 flex flex-wrap gap-2 text-sm">
-        <%= link_to t("admin.dashboard.audit.retry_logs"), admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-        <%= link_to t("admin.dashboard.audit.cleanup_logs"), admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"),
+              label: t("admin.dashboard.audit.retry_logs"),
+              variant: :secondary,
+              size: :sm %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"),
+              label: t("admin.dashboard.audit.cleanup_logs"),
+              variant: :secondary,
+              size: :sm %>
       </div>
     <% end %>
 
@@ -172,8 +182,18 @@
       </dl>
 
       <div class="mt-4 flex flex-wrap gap-2 text-sm">
-        <%= link_to t("admin.dashboard.security.passkey_settings"), settings_security_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-        <%= link_to t("admin.dashboard.security.reauthenticate"), new_admin_passkey_reauthentication_path(return_to: admin_root_path), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: settings_security_path,
+              label: t("admin.dashboard.security.passkey_settings"),
+              variant: :secondary,
+              size: :sm %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_root_path),
+              label: t("admin.dashboard.security.reauthenticate"),
+              variant: :secondary,
+              size: :sm %>
       </div>
     <% end %>
   </div>

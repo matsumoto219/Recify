@@ -8,6 +8,9 @@
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
   limit_value_label = ->(row) { row[:storage] ? format_storage_size(row[:limit_value]) : number_with_delimiter(row[:limit_value]) }
   used_value_label = ->(row) { row[:storage] ? format_storage_size(row[:used_bytes]) : number_with_delimiter(row[:used_count]) }
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -20,9 +23,24 @@
         subtitle_size: "text-base" %>
 
   <div class="flex flex-wrap gap-2 text-sm">
-    <%= link_to t("admin.users.show.links.back"), admin_users_path, class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-    <%= link_to t("admin.users.show.links.receipt_analysis_runs"), admin_receipt_analysis_runs_path(user_id: record[:id]), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
-    <%= link_to t("admin.users.show.links.audit_logs"), admin_audit_logs_path(actor_user_id: record[:id]), class: "rounded-lg border token-border-soft px-3 py-2 font-semibold token-text-brand hover:underline" %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_users_path,
+          label: t("admin.users.show.links.back"),
+          variant: :secondary,
+          size: :sm %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_receipt_analysis_runs_path(user_id: record[:id]),
+          label: t("admin.users.show.links.receipt_analysis_runs"),
+          variant: :secondary,
+          size: :sm %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_audit_logs_path(actor_user_id: record[:id]),
+          label: t("admin.users.show.links.audit_logs"),
+          variant: :secondary,
+          size: :sm %>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
@@ -199,42 +217,71 @@
       <% elsif !admin_passkey_reauthenticated? %>
         <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <p class="mb-3 text-sm token-text-muted"><%= t("admin.users.show.limits.form.reauthentication_required") %></p>
-          <%= link_to t("admin.users.show.limits.form.reauthentication_link"),
-                new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
-                class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
+                label: t("admin.users.show.limits.form.reauthentication_link"),
+                size: :compact,
+                icon: "passkey" %>
         </div>
       <% else %>
         <%= form_with url: limit_overrides_admin_user_path(record[:id]), method: :post, local: true, class: "mt-4 grid gap-4 lg:grid-cols-2" do |form| %>
-          <div class="space-y-1">
-            <%= form.label :key, t("admin.users.show.limits.form.key_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.select :key,
-                  UserLimits.definitions.keys.map { |key| [ t("admin.users.show.limits.keys.#{key}", default: key), key ] },
-                  {},
-                  class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
+          <%= render "shared/ui/form/select_field",
+                f: form,
+                attribute: :key,
+                label: t("admin.users.show.limits.form.key_label"),
+                options: UserLimits.definitions.keys.map { |key| [ t("admin.users.show.limits.keys.#{key}", default: key), key ] },
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                select_class: admin_control_class %>
+          <%= render "shared/ui/form/number_field",
+                f: form,
+                attribute: :value,
+                label: t("admin.users.show.limits.form.value_label"),
+                min: 1,
+                required: true,
+                size: :dense,
+                text_align: :left,
+                label_class: admin_label_class,
+                input_class: admin_control_class %>
+          <%= render "shared/ui/form/select_field",
+                f: form,
+                attribute: :enabled,
+                label: t("admin.users.show.limits.form.enabled_label"),
+                options: [[ t("admin.users.show.limits.form.enabled_true"), "1" ], [ t("admin.users.show.limits.form.enabled_false"), "0" ]],
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                select_class: admin_control_class %>
+          <%= render "shared/ui/form/datetime_field",
+                name: :expires_at,
+                id: :expires_at,
+                type: "datetime-local",
+                label: t("admin.users.show.limits.form.expires_at_label"),
+                label_class: admin_label_class,
+                field_class: "h-10 min-h-10 #{admin_control_class}" %>
+          <div class="lg:col-span-2">
+            <%= render "shared/ui/form/textarea_field",
+                  f: form,
+                  attribute: :reason,
+                  label: t("admin.users.show.limits.form.reason_label"),
+                  rows: 3,
+                  required: true,
+                  with_icon: false,
+                  label_class: admin_label_class,
+                  textarea_class: admin_control_class %>
           </div>
-          <div class="space-y-1">
-            <%= form.label :value, t("admin.users.show.limits.form.value_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.number_field :value, min: 1, required: true, class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
-          </div>
-          <div class="space-y-1">
-            <%= form.label :enabled, t("admin.users.show.limits.form.enabled_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.select :enabled,
-                  [[ t("admin.users.show.limits.form.enabled_true"), "1" ], [ t("admin.users.show.limits.form.enabled_false"), "0" ]],
-                  {},
-                  class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
-          </div>
-          <div class="space-y-1">
-            <%= form.label :expires_at, t("admin.users.show.limits.form.expires_at_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.datetime_field :expires_at, class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 text-sm token-text-base" %>
-          </div>
-          <div class="space-y-1 lg:col-span-2">
-            <%= form.label :reason, t("admin.users.show.limits.form.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-          </div>
-          <div class="space-y-1">
-            <%= form.label :confirmation, t("admin.users.show.limits.form.confirmation_label", confirmation: user_limit_confirmation_text), class: "text-xs font-semibold token-text-muted" %>
-            <%= form.text_field :confirmation, required: true, autocomplete: "off", class: "h-10 w-full rounded-lg token-bg-input token-border-soft border px-3 font-mono text-sm token-text-base" %>
-          </div>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :confirmation,
+                label: t("admin.users.show.limits.form.confirmation_label", confirmation: user_limit_confirmation_text),
+                required: true,
+                autocomplete: "off",
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                input_class: admin_mono_control_class %>
           <div class="flex items-end">
             <%= render "shared/ui/actions/button",
                   label: t("admin.users.show.limits.form.submit"),
@@ -323,9 +370,12 @@
     <% elsif !admin_passkey_reauthenticated? %>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="mb-3 text-sm token-text-muted"><%= t("admin.users.show.operations.reauthentication_required") %></p>
-        <%= link_to t("admin.users.show.operations.reauthentication_link"),
-              new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
-              class: "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold token-bg-primary token-text-inverse hover:opacity-90" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_user_path(record[:id])),
+              label: t("admin.users.show.operations.reauthentication_link"),
+              size: :compact,
+              icon: "passkey" %>
       </div>
     <% else %>
       <div class="grid gap-4 lg:grid-cols-2">
@@ -334,14 +384,24 @@
             <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.unlock.title") %></h3>
             <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.unlock.description") %></p>
             <%= form_with url: unlock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
-              <div class="space-y-1">
-                <%= form.label :reason, t("admin.users.show.operations.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-              </div>
-              <div class="space-y-1">
-                <%= form.label :confirmation, t("admin.users.show.operations.unlock.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-              </div>
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.users.show.operations.reason_label"),
+                    rows: 3,
+                    required: true,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: admin_control_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.users.show.operations.unlock.confirmation_label"),
+                    required: true,
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
               <%= render "shared/ui/actions/button",
                     label: t("admin.users.show.operations.unlock.submit"),
                     type: "submit",
@@ -354,14 +414,24 @@
             <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.lock.title") %></h3>
             <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.lock.description") %></p>
             <%= form_with url: lock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
-              <div class="space-y-1">
-                <%= form.label :reason, t("admin.users.show.operations.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-              </div>
-              <div class="space-y-1">
-                <%= form.label :confirmation, t("admin.users.show.operations.lock.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-              </div>
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.users.show.operations.reason_label"),
+                    rows: 3,
+                    required: true,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: admin_control_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.users.show.operations.lock.confirmation_label"),
+                    required: true,
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
               <%= render "shared/ui/actions/button",
                     label: t("admin.users.show.operations.lock.submit"),
                     type: "submit",
@@ -379,14 +449,24 @@
             <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.passkey_reset.empty") %></p>
           <% else %>
             <%= form_with url: force_passkey_reset_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
-              <div class="space-y-1">
-                <%= form.label :reason, t("admin.users.show.operations.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-              </div>
-              <div class="space-y-1">
-                <%= form.label :confirmation, t("admin.users.show.operations.passkey_reset.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-              </div>
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.users.show.operations.reason_label"),
+                    rows: 3,
+                    required: true,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: admin_control_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.users.show.operations.passkey_reset.confirmation_label"),
+                    required: true,
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
               <%= render "shared/ui/actions/button",
                     label: t("admin.users.show.operations.passkey_reset.submit"),
                     type: "submit",
@@ -400,14 +480,24 @@
           <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.revoke_sessions.title") %></h3>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.revoke_sessions.description") %></p>
           <%= form_with url: revoke_sessions_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :reason, t("admin.users.show.operations.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-              <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-            </div>
-            <div class="space-y-1">
-              <%= form.label :confirmation, t("admin.users.show.operations.revoke_sessions.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-              <%= form.text_field :confirmation, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-            </div>
+            <%= render "shared/ui/form/textarea_field",
+                  f: form,
+                  attribute: :reason,
+                  label: t("admin.users.show.operations.reason_label"),
+                  rows: 3,
+                  required: true,
+                  with_icon: false,
+                  label_class: admin_label_class,
+                  textarea_class: admin_control_class %>
+            <%= render "shared/ui/form/text_field",
+                  f: form,
+                  attribute: :confirmation,
+                  label: t("admin.users.show.operations.revoke_sessions.confirmation_label"),
+                  required: true,
+                  with_icon: false,
+                  size: :dense,
+                  label_class: admin_label_class,
+                  input_class: admin_mono_control_class %>
             <%= render "shared/ui/actions/button",
                   label: t("admin.users.show.operations.revoke_sessions.submit"),
                   type: "submit",
@@ -422,19 +512,37 @@
             <%= t("admin.users.show.operations.delete.description") %>
           </p>
           <%= form_with url: delete_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :reason, t("admin.users.show.operations.reason_label"), class: "text-xs font-semibold token-text-muted" %>
-              <%= form.text_area :reason, rows: 3, required: true, class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-            </div>
+            <%= render "shared/ui/form/textarea_field",
+                  f: form,
+                  attribute: :reason,
+                  label: t("admin.users.show.operations.reason_label"),
+                  rows: 3,
+                  required: true,
+                  with_icon: false,
+                  label_class: admin_label_class,
+                  textarea_class: admin_control_class %>
             <div class="grid gap-3 md:grid-cols-2">
-              <div class="space-y-1">
-                <%= form.label :confirmation_email, t("admin.users.show.operations.delete.email_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.email_field :confirmation_email, required: true, autocomplete: "off", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 text-sm token-text-base" %>
-              </div>
-              <div class="space-y-1">
-                <%= form.label :confirmation, t("admin.users.show.operations.delete.confirmation_label"), class: "text-xs font-semibold token-text-muted" %>
-                <%= form.text_field :confirmation, required: true, autocomplete: "off", class: "w-full rounded-lg token-bg-input token-border-soft border px-3 py-2 font-mono text-sm token-text-base" %>
-              </div>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation_email,
+                    label: t("admin.users.show.operations.delete.email_label"),
+                    field_type: :email_field,
+                    required: true,
+                    autocomplete: "off",
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_control_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.users.show.operations.delete.confirmation_label"),
+                    required: true,
+                    autocomplete: "off",
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
             </div>
             <%= render "shared/ui/actions/button",
                   label: t("admin.users.show.operations.delete.submit"),
