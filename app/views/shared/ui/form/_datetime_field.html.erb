@@ -20,7 +20,7 @@
   - error_message: 表示するエラーメッセージ
   - error_message_class: エラーメッセージに追加するCSSクラス
   - show_error_message: エラーメッセージを表示する場合は true。未指定時は true
-  - size: 入力欄サイズ。:md / :regular。未指定時は :md
+  - size: 入力欄サイズ。:md / :regular / :dense。未指定時は :md
 %>
 
 <%
@@ -45,20 +45,18 @@
 
   highlight_classes = has_error ? "input-field-error" : nil
 
-  # TODO: 将来的にフォーム入力欄の高さ・余白・WebKit向け補正はCSS側へ寄せる
-  # iOS Safari の input[type="date/time"] は h-11 を無視して高さが崩れるため、
-  # 暫定的に ::-webkit-date-and-time-value へ min-height / line-height を指定している
-  base_field_class = "w-full rounded-lg input-field text-base leading-none appearance-none outline-none transition-all [&::-webkit-date-and-time-value]:min-h-[1.5rem] [&::-webkit-date-and-time-value]:leading-[1.5rem] #{highlight_classes}"
-  field_spacing_class = case size
-                        when :regular
-                          with_icon ? "h-11 min-h-11 py-2.5 pl-10 pr-4" : "h-11 min-h-11 py-2.5 px-4"
-                        else
-                          with_icon ? "pl-10 pr-4" : "px-4"
-                        end
+  base_field_class = "w-full rounded-lg input-field input-field-datetime text-base outline-none transition-all #{highlight_classes}"
+  field_size_class = case size
+                     when :regular
+                       "input-field-datetime-regular"
+                     when :dense
+                       "input-field-datetime-dense"
+                     end
+  field_spacing_class = with_icon ? "pl-10 pr-4" : "px-4"
 
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
-  merged_field_class = [base_field_class, field_spacing_class, field_class].compact.join(" ")
+  merged_field_class = [base_field_class, field_size_class, field_spacing_class, field_class].compact.join(" ")
   merged_error_class = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")
 %>
 
