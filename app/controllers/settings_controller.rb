@@ -75,7 +75,11 @@ class SettingsController < ApplicationController
       turbo_stream.replace(
         "notifications_dropdown_content",
         partial: "shared/notifications/dropdown_content",
-        locals: { notifications: current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a }
+        locals: {
+          notifications: Notification.preload_known_notifiables(
+            current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a
+          )
+        }
       )
     ]
   end

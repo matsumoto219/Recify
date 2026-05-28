@@ -69,6 +69,34 @@ RSpec.describe Notification, type: :model do
     end
   end
 
+  describe '.preload_known_notifiables' do
+    it '既知のnotifiableを一括preloadし、stale判定のN+1を避ける' do
+      user = create(:user)
+      receipts = create_list(:receipt, 3, user: user)
+      notifications = receipts.map do |receipt|
+        create(:notification, user: user, notifiable: receipt, action_path: "/receipts/#{receipt.public_id}")
+      end
+      notifications = described_class.where(id: notifications.map(&:id)).to_a
+
+      queries = count_sql_queries do
+        described_class.preload_known_notifiables(notifications)
+        notifications.each { |notification| expect(notification.stale_notifiable?).to be(false) }
+      end
+
+      receipt_queries = queries.select { |sql| sql.include?('"receipts"') }
+      expect(receipt_queries.size).to eq(1)
+    end
+
+    it '未知のnotifiable_typeはpreload対象にせず、stale扱いのまま落とさない' do
+      notification = create(:notification, notifiable_type: 'RemovedNotificationTarget', notifiable_id: 123_456)
+
+      expect {
+        described_class.preload_known_notifiables([ notification ])
+      }.not_to raise_error
+      expect(notification.stale_notifiable?).to be(true)
+    end
+  end
+
   describe '#read? / #unread? / #mark_as_read!' do
     it '既読状態を扱える' do
       notification = create(:notification, read_at: nil)
@@ -236,5 +264,24 @@ RSpec.describe Notification, type: :model do
     described_class.insert_all!(attributes, returning: %w[id]).rows.map.with_index do |row, index|
       attributes[index].merge(id: row.first)
     end
+  end
+
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s.squish
+      next if name == 'SCHEMA' || name == 'TRANSACTION' || payload[:cached]
+      next if sql.include?('schema_migrations') || sql.include?('ar_internal_metadata')
+
+      queries << sql
+    end
+
+    ActiveRecord::Base.uncached do
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        yield
+      end
+    end
+    queries
   end
 end

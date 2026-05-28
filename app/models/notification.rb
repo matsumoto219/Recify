@@ -39,6 +39,14 @@ class Notification < ApplicationRecord
       broadcast_index_list_for(user, notifications: index_notifications)
     end
 
+    def preload_known_notifiables(notifications)
+      records = Array(notifications)
+      preloadable_records = records.select { |notification| preloadable_notifiable?(notification) }
+      ActiveRecord::Associations::Preloader.new(records: preloadable_records, associations: :notifiable).call if preloadable_records.any?
+
+      records
+    end
+
     def cleanup_old!(now: Time.current)
       threshold = now - READ_RETENTION_DAYS.days
       affected_user_ids = read.where("read_at < ?", threshold).distinct.pluck(:user_id)
@@ -70,6 +78,13 @@ class Notification < ApplicationRecord
     end
 
     private
+
+    def preloadable_notifiable?(notification)
+      return false if notification.notifiable_type.blank? || notification.notifiable_id.blank?
+
+      klass = notification.notifiable_type.safe_constantize
+      klass && klass < ActiveRecord::Base
+    end
 
     def broadcast_cleanup_for(user_ids)
       User.where(id: user_ids).find_each do |user|

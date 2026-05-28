@@ -2,7 +2,7 @@ class NotificationsController < ApplicationController
   before_action :authenticate_user!
 
   def index
-    @notifications = current_user.notifications.recent.limit(50)
+    @notifications = Notification.preload_known_notifiables(current_user.notifications.recent.limit(50).to_a)
     @unread_count = current_user.notifications.unread.count
   end
 
