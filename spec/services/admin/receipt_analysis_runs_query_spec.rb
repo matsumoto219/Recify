@@ -138,6 +138,18 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       expect(ReceiptAnalysisRun).to have_received(:includes).with(:requested_by_user, receipt: :user)
     end
 
+    it '一覧向けrecordではretry_optionsを作らない' do
+      create(:receipt_analysis_run, :succeeded)
+      allow(Analysis::RetryService).to receive(:eligibility).and_call_original
+
+      record = described_class.call.records.first
+
+      aggregate_failures do
+        expect(record).not_to have_key(:retry_options)
+        expect(Analysis::RetryService).not_to have_received(:eligibility)
+      end
+    end
+
     it 'summaryからrawやsecret系のキーを除外する' do
       run = create(
         :receipt_analysis_run,
@@ -178,7 +190,7 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       end
     end
 
-    it 'RetryServiceのread-only eligibilityをrecordに含め、enqueueしない' do
+    it 'include_retry_optionsが有効な場合だけRetryServiceのread-only eligibilityをrecordに含め、enqueueしない' do
       receipt = create(:receipt, :completed, :with_image)
       run = create(
         :receipt_analysis_run,
@@ -209,7 +221,7 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       allow(ReceiptAiEnrichmentJob).to receive(:perform_later)
       allow(ReceiptFinalizeJob).to receive(:perform_later)
 
-      record = described_class.call(receipt: receipt).records.first
+      record = described_class.call(receipt: receipt, include_retry_options: true).records.first
 
       aggregate_failures do
         expect(Analysis::RetryService).to have_received(:eligibility).with(receipt: receipt, parent_run: run)

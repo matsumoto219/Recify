@@ -9,6 +9,7 @@ module Analysis
       ai_retry
       finalize_retry
     ].freeze
+    ACTIVE_RUN_UNSET = Object.new.freeze
 
     Result = Struct.new(:run, :enqueued_job, :retry_type, :error_code, :error_message, keyword_init: true) do
       def success?
@@ -36,6 +37,8 @@ module Analysis
       end
 
       def eligibility(receipt:, parent_run:)
+        active_run = receipt&.receipt_analysis_runs&.active&.order(created_at: :desc)&.first
+
         Eligibility.new(
           retry_options: RETRY_TYPES.map do |type|
             new(
@@ -46,14 +49,15 @@ module Analysis
               reason: nil,
               request: nil,
               reauthentication: nil,
-              confirmation: nil
+              confirmation: nil,
+              active_run: active_run
             ).retry_option
           end
         )
       end
     end
 
-    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:, confirmation:)
+    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:, confirmation:, active_run: ACTIVE_RUN_UNSET)
       @receipt = receipt
       @parent_run = parent_run
       @actor = actor
@@ -62,6 +66,7 @@ module Analysis
       @request = request
       @reauthentication = reauthentication.to_h.symbolize_keys
       @confirmation = confirmation.to_s.strip
+      @active_run = active_run unless active_run.equal?(ACTIVE_RUN_UNSET)
     end
 
     def call
@@ -206,9 +211,10 @@ module Analysis
     end
 
     def active_run
+      return @active_run if instance_variable_defined?(:@active_run)
       return unless receipt
 
-      @active_run ||= receipt.receipt_analysis_runs.active.order(created_at: :desc).first
+      @active_run = receipt.receipt_analysis_runs.active.order(created_at: :desc).first
     end
 
     def disabled_run_for(disabled_reason)

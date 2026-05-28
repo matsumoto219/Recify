@@ -680,6 +680,22 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'active run lookupをretry typeごとに繰り返さない' do
+      create(:receipt_analysis_run, :running, receipt: receipt)
+
+      queries = count_sql_queries do
+        described_class.eligibility(receipt: receipt, parent_run: nil)
+      end
+      active_run_queries = queries.select do |sql|
+        sql.include?('"receipt_analysis_runs"') &&
+          sql.include?('"status"') &&
+          sql.include?('ORDER BY') &&
+          sql.include?('LIMIT')
+      end
+
+      expect(active_run_queries.size).to eq(1)
+    end
+
     it '画像がない場合はfull_reanalyze / ocr_retryを不可にする' do
       receipt_without_image = create(:receipt, :completed)
 
@@ -862,6 +878,23 @@ RSpec.describe Analysis::RetryService do
 
   def options_by_type(result)
     result.retry_options.index_by { |option| option[:type] }
+  end
+
+  def count_sql_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _id, payload|
+      name = payload[:name].to_s
+      sql = payload[:sql].to_s.squish
+      next if name == 'SCHEMA' || name == 'TRANSACTION' || payload[:cached]
+      next if sql.include?('schema_migrations') || sql.include?('ar_internal_metadata')
+
+      queries << sql
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+      yield
+    end
+    queries
   end
 
   def request_context

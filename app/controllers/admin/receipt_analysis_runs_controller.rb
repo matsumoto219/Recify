@@ -10,7 +10,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   end
 
   def show
-    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1)
+    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1, include_retry_options: true)
     @record = @result.records.first
     return if @record.present?
 
@@ -18,7 +18,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   end
 
   def retry
-    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1)
+    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1, include_retry_options: true)
     @record = @result.records.first
     raise_not_found if @record.blank?
 

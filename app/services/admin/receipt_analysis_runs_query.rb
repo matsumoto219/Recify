@@ -45,6 +45,7 @@ module Admin
       needs_attention: false,
       expires_before: nil,
       expires_within: nil,
+      include_retry_options: false,
       limit: DEFAULT_LIMIT,
       offset: 0
     )
@@ -62,6 +63,7 @@ module Admin
       @needs_attention = needs_attention
       @expires_before = expires_before
       @expires_within = expires_within
+      @include_retry_options = ActiveModel::Type::Boolean.new.cast(include_retry_options)
       @limit = normalize_limit(limit)
       @offset = normalize_offset(offset)
     end
@@ -175,7 +177,7 @@ module Admin
       receipt_status = receipt_status_for(run)
       processing_error_code = processing_error_code_for(run)
 
-      {
+      record = {
         run: run,
         run_key: run.run_key,
         receipt: receipt,
@@ -216,9 +218,10 @@ module Admin
         },
         snapshot_presence: snapshot_presence(run),
         finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {}),
-        amount_calculation_profile: safe_summary(receipt.amount_calculation_profile || {}),
-        retry_options: Analysis::RetryService.eligibility(receipt: receipt, parent_run: run).retry_options
+        amount_calculation_profile: safe_summary(receipt.amount_calculation_profile || {})
       }
+      record[:retry_options] = Analysis::RetryService.eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
+      record
     end
 
     def receipt_info(receipt)
@@ -281,6 +284,10 @@ module Admin
 
     def normalize_offset(value)
       [ value.to_i, 0 ].max
+    end
+
+    def include_retry_options?
+      @include_retry_options
     end
 
     def safe_summary(value)
