@@ -297,6 +297,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(root_path)
         expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(flash[:notice]).not_to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(user).not_to be_confirmed
         expect(user.confirmation_token).to be_present
         expect(user.terms_accepted_at).to eq(accepted_at)
@@ -648,6 +649,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
@@ -674,6 +676,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-confirmation@example.com')
       end
@@ -694,6 +697,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'email'))
+        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('normal-resend-confirmation@example.com')
       end

@@ -1,5 +1,7 @@
 ja:
   devise:
+    confirmations:
+      send_instructions: 確認メールを送信しました。
     failure:
       invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
