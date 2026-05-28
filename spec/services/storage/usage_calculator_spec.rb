@@ -64,6 +64,55 @@ RSpec.describe Storage::UsageCalculator do
   end
 
   describe '#state' do
+    it 'ゲスト50MBで使用量0ならnormalを返す' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      usage = described_class.new(guest)
+
+      aggregate_failures do
+        expect(usage.limit_bytes).to eq(50.megabytes)
+        expect(usage.used_bytes).to eq(0)
+        expect(usage.remaining_bytes).to eq(50.megabytes)
+        expect(usage.usage_percentage).to eq(0)
+        expect(usage.state).to eq(:normal)
+      end
+    end
+
+    it 'ゲスト50MBで1MB使用ならnormalを返す' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      attach_blob(guest, :avatar, 1.megabyte)
+
+      aggregate_failures do
+        expect(described_class.new(guest).usage_percentage).to eq(2.0)
+        expect(described_class.new(guest).state).to eq(:normal)
+      end
+    end
+
+    it 'ゲスト50MBで使用率80%以上ならwarningを返す' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      attach_blob(guest, :avatar, 40.megabytes)
+
+      aggregate_failures do
+        expect(described_class.new(guest).usage_percentage).to eq(80.0)
+        expect(described_class.new(guest).state).to eq(:warning)
+      end
+    end
+
+    it 'ゲスト50MBで使用率95%以上ならerrorを返す' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      attach_blob(guest, :avatar, 48.megabytes)
+
+      aggregate_failures do
+        expect(described_class.new(guest).usage_percentage).to eq(96.0)
+        expect(described_class.new(guest).state).to eq(:error)
+      end
+    end
+
+    it '通常ユーザー1GBで使用量0ならnormalを返す' do
+      user.update!(storage_limit_bytes: 1.gigabyte)
+
+      expect(described_class.new(user).state).to eq(:normal)
+    end
+
     it '通常範囲ではnormalを返す' do
       user.update!(storage_limit_bytes: 1.gigabyte)
       receipt = create(:receipt, user:)
@@ -96,12 +145,65 @@ RSpec.describe Storage::UsageCalculator do
       expect(described_class.new(user).state).to eq(:error)
     end
 
-    it '残容量が50MB未満ならerrorを返す' do
+    it '大容量上限では残容量が50MB未満ならerrorを返す' do
       user.update!(storage_limit_bytes: 1.gigabyte)
       receipt = create(:receipt, user:)
       attach_blob(receipt, :image, 980.megabytes)
 
       expect(described_class.new(user).state).to eq(:error)
+    end
+
+    it '個別上限100MBで使用量0ならnormalを返す' do
+      user.update!(storage_limit_bytes: 100.megabytes)
+      usage = described_class.new(user)
+
+      aggregate_failures do
+        expect(usage.limit_bytes).to eq(100.megabytes)
+        expect(usage.used_bytes).to eq(0)
+        expect(usage.state).to eq(:normal)
+      end
+    end
+
+    it '個別上限100MBで使用率80%以上ならwarningを返す' do
+      user.update!(storage_limit_bytes: 100.megabytes)
+      attach_blob(user, :avatar, 80.megabytes)
+
+      aggregate_failures do
+        expect(described_class.new(user).usage_percentage).to eq(80.0)
+        expect(described_class.new(user).state).to eq(:warning)
+      end
+    end
+
+    it '個別上限100MBで使用率95%以上ならerrorを返す' do
+      user.update!(storage_limit_bytes: 100.megabytes)
+      attach_blob(user, :avatar, 95.megabytes)
+
+      aggregate_failures do
+        expect(described_class.new(user).usage_percentage).to eq(95.0)
+        expect(described_class.new(user).state).to eq(:error)
+      end
+    end
+
+    it 'ゲストから本登録に切り替わると通常上限でstateを再計算する' do
+      guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
+      attach_blob(guest, :avatar, 40.megabytes)
+
+      guest_usage = described_class.new(guest)
+      used_bytes_before = guest_usage.used_bytes
+
+      aggregate_failures do
+        expect(guest_usage.limit_bytes).to eq(50.megabytes)
+        expect(guest_usage.state).to eq(:warning)
+      end
+
+      guest.update!(guest: false)
+      registered_usage = described_class.new(guest)
+
+      aggregate_failures do
+        expect(registered_usage.used_bytes).to eq(used_bytes_before)
+        expect(registered_usage.limit_bytes).to eq(1.gigabyte)
+        expect(registered_usage.state).to eq(:normal)
+      end
     end
   end
 

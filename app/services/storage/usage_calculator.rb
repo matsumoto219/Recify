@@ -51,12 +51,16 @@ module Storage
 
     def error?
       usage_percentage >= ERROR_USAGE_PERCENTAGE ||
-        remaining_bytes < ERROR_REMAINING_BYTES
+        (large_storage_limit? && remaining_bytes < ERROR_REMAINING_BYTES)
     end
 
     def warning?
-      remaining_bytes < WARNING_REMAINING_BYTES ||
-        (usage_percentage >= WARNING_USAGE_PERCENTAGE && remaining_bytes < WARNING_REMAINING_LIMIT_BYTES)
+      usage_percentage >= WARNING_USAGE_PERCENTAGE ||
+        (large_storage_limit? && remaining_bytes < WARNING_REMAINING_BYTES)
+    end
+
+    def large_storage_limit?
+      limit_bytes >= WARNING_REMAINING_LIMIT_BYTES
     end
 
     def used_bytes_excluding(blob)
