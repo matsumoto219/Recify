@@ -176,7 +176,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('24KB')
         expect(response.body).to include('4KB')
         expect(response.body).to include('システム運用')
-        expect(response.body).to include('制限中の操作')
+        expect(response.body).to include('管理トップでは直接実行しない操作')
         expect(response.body).to include(admin_receipt_analysis_runs_path)
         expect(response.body).to include(admin_receipt_analysis_cleanup_path)
         expect(response.body).to include(admin_audit_logs_path)

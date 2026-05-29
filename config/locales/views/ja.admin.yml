@@ -106,8 +106,8 @@ ja:
         recurring_summary: 定期確認サマリ
         recurring_tasks: 定期確認タスク
       locked_operations:
-        title: 制限中の操作
-        description: 以下の操作は、専用の確認手順が整うまで管理トップからは実行できません。
+        title: 管理トップでは直接実行しない操作
+        description: 以下の操作は、専用画面または運用手順で扱います。管理トップでは実行しません。
     receipt_analysis_runs:
       index:
         title: 解析run管理
@@ -355,8 +355,8 @@ ja:
         policy_detail: "category=%{category} / retention=%{retention} / actions=%{actions_count}"
         links: 確認リンク
       locked_operations:
-        title: 制限中の操作
-        description: 以下の操作は、専用の確認手順が整うまでこの画面からは実行できません。
+        title: 本画面では直接実行しない操作
+        description: 以下の操作は、専用画面、専用画面または運用手順で扱います。この画面では実行フォームを提供しません。
     system_settings:
       index:
         title: システム設定
