@@ -506,7 +506,10 @@ class ReceiptAnalysisPipeline
 
     return if details.blank?
 
-    "AI補完に失敗したためOCR結果で保存しました (#{details.join(', ')})"
+    I18n.t(
+      "receipts.processing_errors.ai_fallback_saved",
+      details: details.join(", ")
+    )
   end
 
   def ai_fallback_reason(raw_message)

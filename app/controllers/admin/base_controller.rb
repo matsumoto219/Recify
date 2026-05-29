@@ -46,7 +46,7 @@ class Admin::BaseController < ApplicationController
     return if admin_passkey_reauthenticated?
 
     redirect_to new_admin_passkey_reauthentication_path(return_to: request.fullpath),
-                alert: "この操作にはパスキーによる再認証が必要です。",
+                alert: t("admin.passkey_reauthentications.messages.required"),
                 status: :see_other
   end
 

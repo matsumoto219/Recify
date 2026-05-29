@@ -178,6 +178,8 @@ ja:
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。
       ai_error: AI補完に失敗しました。OCR結果を確認・修正してください。
       system_error: 処理に失敗しました。時間をおいて再試行するか、手動で修正してください。
+      unexpected_failure: 解析処理中にエラーが発生しました。再試行してください。
+      ai_fallback_saved: "AI補完に失敗したためOCR結果で保存しました (%{details})"
     processing_error_codes:
       no_text_detected: 画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。
       receipt_not_detected: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。

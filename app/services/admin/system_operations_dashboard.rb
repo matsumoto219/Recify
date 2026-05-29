@@ -22,22 +22,22 @@ module Admin
       "admin.passkey_reauthentication.failed"
     ].freeze
 
-    LOCKED_FUTURE_OPERATIONS = [
-      "機能公開設定の変更",
-      "処理時間設定の変更",
-      "キューの一時停止・再開",
-      "外部サービス状態の切り替え",
-      "システム設定の変更",
-      "管理者権限の変更",
-      "ユーザー利用制限・削除"
+    LOCKED_FUTURE_OPERATION_KEYS = %i[
+      feature_flags
+      timeouts
+      queue_control
+      external_service_override
+      system_settings
+      admin_roles
+      user_limits_and_deletion
     ].freeze
 
-    POLICY_ITEMS = [
-      "パスキーによる再認証が必要",
-      "実行理由の入力が必要",
-      "監査ログに記録",
-      "専用の管理手順で実行",
-      "OCR原文・AI応答・機密情報は表示しない"
+    POLICY_ITEM_KEYS = %i[
+      passkey_reauthentication
+      reason_required
+      audit_log
+      dedicated_procedure
+      secrets_hidden
     ].freeze
 
     Result = Struct.new(
@@ -58,16 +58,28 @@ module Admin
 
     def call
       Result.new(
-        policy_items: POLICY_ITEMS,
+        policy_items: policy_items,
         queues: QUEUES,
         recurring_tasks: recurring_tasks,
         audit_actions: AUDIT_ACTIONS,
         audit_log_retention_policies: audit_log_retention_policies,
-        locked_future_operations: LOCKED_FUTURE_OPERATIONS
+        locked_future_operations: locked_future_operations
       )
     end
 
     private
+
+    def policy_items
+      POLICY_ITEM_KEYS.map do |key|
+        I18n.t("admin.system_operations_dashboard.policy_items.#{key}")
+      end
+    end
+
+    def locked_future_operations
+      LOCKED_FUTURE_OPERATION_KEYS.map do |key|
+        I18n.t("admin.system_operations_dashboard.locked_future_operations.#{key}")
+      end
+    end
 
     def audit_log_retention_policies
       AuditLogs::RetentionPolicy.categories.map do |category|
@@ -82,24 +94,19 @@ module Admin
     end
 
     def retention_category_label(category)
-      {
-        user_delete: "退会代行ログ",
-        high_risk_admin: "重要な管理操作",
-        cleanup_execute: "Cleanup実行",
-        cleanup_failed: "Cleanup失敗",
-        passkey_reauth: "パスキー再認証",
-        system_dry_run: "定期確認ログ",
-        routine_system: "通常システム操作"
-      }.fetch(category, category.to_s)
+      I18n.t(
+        "admin.system_operations_dashboard.retention_categories.#{category}",
+        default: category.to_s
+      )
     end
 
     def retention_label(category)
-      return "自動整理の対象外" if AuditLogs::RetentionPolicy.excluded?(category)
+      return I18n.t("admin.system_operations_dashboard.retention.excluded") if AuditLogs::RetentionPolicy.excluded?(category)
 
       retention = AuditLogs::RetentionPolicy.retention_for(category)
       return "-" if retention.blank?
 
-      "#{retention / 1.day}日"
+      I18n.t("admin.system_operations_dashboard.retention.days", count: retention / 1.day)
     end
 
     def recurring_tasks

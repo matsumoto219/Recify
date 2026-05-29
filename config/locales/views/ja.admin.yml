@@ -27,6 +27,33 @@ ja:
         unavailable: このブラウザはパスキー再認証に対応していません。
         canceled: パスキー再認証がキャンセルされました。
         request_failed: リクエストに失敗しました。
+        required: この操作にはパスキーによる再認証が必要です。
+    system_operations_dashboard:
+      locked_future_operations:
+        feature_flags: 機能公開設定の変更
+        timeouts: 処理時間設定の変更
+        queue_control: キューの一時停止・再開
+        external_service_override: 外部サービス状態の切り替え
+        system_settings: システム設定の変更
+        admin_roles: 管理者権限の変更
+        user_limits_and_deletion: ユーザー利用制限・削除
+      policy_items:
+        passkey_reauthentication: パスキーによる再認証が必要
+        reason_required: 実行理由の入力が必要
+        audit_log: 監査ログに記録
+        dedicated_procedure: 専用の管理手順で実行
+        secrets_hidden: OCR原文・AI応答・機密情報は表示しない
+      retention_categories:
+        user_delete: 退会代行ログ
+        high_risk_admin: 重要な管理操作
+        cleanup_execute: Cleanup実行
+        cleanup_failed: Cleanup失敗
+        passkey_reauth: パスキー再認証
+        system_dry_run: 定期確認ログ
+        routine_system: 通常システム操作
+      retention:
+        excluded: 自動整理の対象外
+        days: "%{count}日"
     dashboard:
       title: 管理トップ
       description: 管理運用に必要な状態サマリと主要導線
