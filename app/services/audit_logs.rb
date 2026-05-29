@@ -87,9 +87,13 @@ module AuditLogs
     recovery_codes_count_after
     recovery_codes_count_before
     recovery_codes_count
+    reset_password_sent_at_after
+    reset_password_sent_at_before
     revoked_sessions_count
     sample_session_ids
     session_version
+    session_version_after
+    session_version_before
     totp_credential_present
     totp_enabled
     unused_recovery_codes_count_after

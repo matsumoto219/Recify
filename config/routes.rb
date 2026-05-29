@@ -20,6 +20,8 @@ Rails.application.routes.draw do
       post "operations/unlock", to: "user_operations#unlock", as: :unlock_operation, on: :member
       post "operations/force_passkey_reset", to: "user_operations#force_passkey_reset", as: :force_passkey_reset_operation, on: :member
       post "operations/force_two_factor_reset", to: "user_operations#force_two_factor_reset", as: :force_two_factor_reset_operation, on: :member
+      post "operations/force_password_reset_instruction", to: "user_operations#force_password_reset_instruction", as: :force_password_reset_instruction_operation, on: :member
+      post "operations/admin_email_change_recovery", to: "user_operations#admin_email_change_recovery", as: :admin_email_change_recovery_operation, on: :member
       post "operations/revoke_sessions", to: "user_operations#revoke_sessions", as: :revoke_sessions_operation, on: :member
       post "operations/delete", to: "user_operations#delete", as: :delete_operation, on: :member
       post "limit_overrides", to: "user_limit_overrides#create", as: :limit_overrides, on: :member

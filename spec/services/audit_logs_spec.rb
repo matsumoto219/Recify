@@ -205,6 +205,64 @@ RSpec.describe AuditLogs do
       end
     end
 
+    it 'password reset instructionのsafe metadataだけを残し、tokenやURLを保存しない' do
+      reset_sent_at_before = 1.day.ago
+      reset_sent_at_after = Time.current
+
+      log = described_class.record_admin_action!(
+        actor: create(:user, :admin),
+        action: 'admin.users.force_password_reset_instruction',
+        outcome: 'succeeded',
+        metadata: {
+          operation: 'force_password_reset_instruction',
+          email_digest: 'safe-email-digest',
+          reset_password_sent_at_before: reset_sent_at_before,
+          reset_password_sent_at_after: reset_sent_at_after,
+          delivery_requested: true,
+          reset_password_token: 'raw-reset-token-secret',
+          reset_password_url: 'https://example.com/users/password/edit?reset_password_token=raw-reset-token-secret'
+        }
+      )
+
+      aggregate_failures do
+        expect(log.metadata).to eq(
+          'operation' => 'force_password_reset_instruction',
+          'email_digest' => 'safe-email-digest',
+          'reset_password_sent_at_before' => reset_sent_at_before.iso8601,
+          'reset_password_sent_at_after' => reset_sent_at_after.iso8601,
+          'delivery_requested' => true
+        )
+        expect(log.attributes.to_json).not_to include('raw-reset-token-secret', '/users/password/edit')
+      end
+    end
+
+    it 'account recovery email changeのdigest metadataだけを残し、メール平文を保存しない' do
+      log = described_class.record_admin_action!(
+        actor: create(:user, :admin),
+        action: 'admin.users.account_recovery_email_change',
+        outcome: 'succeeded',
+        metadata: {
+          operation: 'admin_email_change_recovery',
+          old_email_digest: 'old-safe-digest',
+          new_email_digest: 'new-safe-digest',
+          unconfirmed_email_digest: 'unconfirmed-safe-digest',
+          session_version_before: 2,
+          session_version_after: 3,
+          revoked_sessions_count: 1
+        }
+      )
+
+      expect(log.metadata).to eq(
+        'operation' => 'admin_email_change_recovery',
+        'old_email_digest' => 'old-safe-digest',
+        'new_email_digest' => 'new-safe-digest',
+        'unconfirmed_email_digest' => 'unconfirmed-safe-digest',
+        'session_version_before' => 2,
+        'session_version_after' => 3,
+        'revoked_sessions_count' => 1
+      )
+    end
+
     it 'TOTP secret / code / recovery code materialを保存しない' do
       log = described_class.record_admin_action!(
         actor: create(:user, :admin),

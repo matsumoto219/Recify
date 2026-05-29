@@ -558,6 +558,9 @@ ja:
           reauthentication_required: 操作にはパスキー再認証が必要です。再認証後、実行理由と確認文字列をもう一度入力してください。
           reauthentication_link: パスキー再認証
           reason_label: 実行理由
+          emergency_recovery:
+            title: 緊急復旧操作
+            description: 登録メールアドレスや認証要素を失った場合の補助操作です。本人確認済みの場合のみ使用します。
           unlock:
             title: ロック解除
             description: ログイン制限を解除し、失敗回数をリセットします。
@@ -580,6 +583,21 @@ ja:
             empty: リセット対象の2要素認証またはリカバリーコードはありません。
             confirmation_label: 確認文字列 RESET 2FA
             submit: 2要素認証リセットを実行
+          password_reset_instruction:
+            title: パスワード再設定メール送信
+            description: 対象ユーザーの登録メールアドレスへパスワード再設定メールを送信します。管理者がパスワードを設定することはありません。
+            guest_forbidden: ゲストユーザーにはパスワード再設定メールを送信できません。
+            unconfirmed_forbidden: メールアドレス未確認ユーザーにはパスワード再設定メールを送信できません。
+            confirmation_label: 確認文字列 SEND PASSWORD RESET
+            submit: パスワード再設定メールを送信
+          email_change_recovery:
+            title: 復旧用メールアドレス変更
+            description: 新しいメールアドレスへ確認メールを送信します。確認完了まで現在の登録メールアドレスは変更されません。
+            new_email_label: 新しいメールアドレス
+            guest_forbidden: ゲストユーザーには復旧用メールアドレス変更を実行できません。
+            unconfirmed_forbidden: メールアドレス未確認ユーザーには復旧用メールアドレス変更を実行できません。
+            confirmation_label: 確認文字列 CHANGE RECOVERY EMAIL
+            submit: 復旧用メールアドレス変更を開始
           revoke_sessions:
             title: セッション失効
             description: 対象ユーザーのログイン状態を次のアクセス時に無効にします。
@@ -612,6 +630,8 @@ ja:
           unlock_user: ユーザーのロックを解除しました。
           force_passkey_reset: 登録済みパスキーをリセットしました。
           force_two_factor_reset: 2要素認証とリカバリーコードをリセットしました。
+          force_password_reset_instruction: パスワード再設定メールを送信しました。
+          admin_email_change_recovery: 復旧用メールアドレス確認メールを送信しました。
           revoke_sessions: ログインセッションを失効しました。
           delete_user: ユーザーを削除しました。
           default: 管理操作を実行しました。
@@ -622,6 +642,12 @@ ja:
           target_not_locked: このユーザーはロックされていません。
           passkeys_missing: リセット対象のパスキーがありません。
           two_factor_missing: リセット対象の2要素認証またはリカバリーコードがありません。
+          guest_target_forbidden: ゲストユーザーにはこの操作を実行できません。
+          unconfirmed_target_forbidden: メールアドレス未確認ユーザーにはこの操作を実行できません。
+          recovery_email_required: 新しいメールアドレスを入力してください。
+          recovery_email_invalid: 新しいメールアドレスの形式を確認してください。
+          recovery_email_taken: このメールアドレスは利用できません。
+          recovery_email_unchanged: 現在のメールアドレスとは別のメールアドレスを入力してください。
           confirmation_required: 確認文字列が一致しません。
           confirmation_email_required: 確認用メールアドレスが一致しません。
           default: 管理操作を実行できませんでした。

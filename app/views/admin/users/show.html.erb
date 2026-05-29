@@ -541,6 +541,104 @@
           <% end %>
         </div>
 
+        <details class="group rounded-lg border token-border-soft token-bg-card-subtle p-4 lg:col-span-2" data-admin-user-emergency-recovery>
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+            <span>
+              <span class="block text-base font-bold token-text-base"><%= t("admin.users.show.operations.emergency_recovery.title") %></span>
+              <span class="mt-1 block text-sm token-text-muted"><%= t("admin.users.show.operations.emergency_recovery.description") %></span>
+            </span>
+            <span class="material-symbols-outlined shrink-0 text-xl token-text-muted transition-transform duration-150 group-open:rotate-180" aria-hidden="true">expand_more</span>
+          </summary>
+
+          <div class="mt-5 grid gap-4 lg:grid-cols-2">
+            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+              <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.password_reset_instruction.title") %></h3>
+              <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.password_reset_instruction.description") %></p>
+
+              <% if record[:guest] %>
+                <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.password_reset_instruction.guest_forbidden") %></p>
+              <% elsif !record[:confirmed] %>
+                <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.password_reset_instruction.unconfirmed_forbidden") %></p>
+              <% else %>
+                <%= form_with url: force_password_reset_instruction_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+                  <%= render "shared/ui/form/textarea_field",
+                        f: form,
+                        attribute: :reason,
+                        label: t("admin.users.show.operations.reason_label"),
+                        rows: 3,
+                        required: true,
+                        with_icon: false,
+                        label_class: admin_label_class,
+                        textarea_class: admin_control_class %>
+                  <%= render "shared/ui/form/text_field",
+                        f: form,
+                        attribute: :confirmation,
+                        label: t("admin.users.show.operations.password_reset_instruction.confirmation_label"),
+                        required: true,
+                        with_icon: false,
+                        size: :dense,
+                        label_class: admin_label_class,
+                        input_class: admin_mono_control_class %>
+                  <%= render "shared/ui/actions/button",
+                        label: t("admin.users.show.operations.password_reset_instruction.submit"),
+                        type: "submit",
+                        size: :compact,
+                        icon: "mail" %>
+                <% end %>
+              <% end %>
+            </div>
+
+            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+              <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.email_change_recovery.title") %></h3>
+              <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.email_change_recovery.description") %></p>
+
+              <% if record[:guest] %>
+                <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.email_change_recovery.guest_forbidden") %></p>
+              <% elsif !record[:confirmed] %>
+                <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.email_change_recovery.unconfirmed_forbidden") %></p>
+              <% else %>
+                <%= form_with url: admin_email_change_recovery_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+                  <%= render "shared/ui/form/text_field",
+                        f: form,
+                        attribute: :new_email,
+                        field_type: :email_field,
+                        label: t("admin.users.show.operations.email_change_recovery.new_email_label"),
+                        required: true,
+                        autocomplete: "off",
+                        with_icon: false,
+                        size: :dense,
+                        label_class: admin_label_class,
+                        input_class: admin_control_class %>
+                  <%= render "shared/ui/form/textarea_field",
+                        f: form,
+                        attribute: :reason,
+                        label: t("admin.users.show.operations.reason_label"),
+                        rows: 3,
+                        required: true,
+                        with_icon: false,
+                        label_class: admin_label_class,
+                        textarea_class: admin_control_class %>
+                  <%= render "shared/ui/form/text_field",
+                        f: form,
+                        attribute: :confirmation,
+                        label: t("admin.users.show.operations.email_change_recovery.confirmation_label"),
+                        required: true,
+                        autocomplete: "off",
+                        with_icon: false,
+                        size: :dense,
+                        label_class: admin_label_class,
+                        input_class: admin_mono_control_class %>
+                  <%= render "shared/ui/actions/button",
+                        label: t("admin.users.show.operations.email_change_recovery.submit"),
+                        type: "submit",
+                        size: :compact,
+                        icon: "mail" %>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        </details>
+
         <div class="rounded-lg border surface-card-danger p-4 lg:col-span-2">
           <h3 class="mb-2 text-base font-bold token-text-error"><%= t("admin.users.show.operations.delete.title") %></h3>
           <p class="mb-4 text-sm token-text-error-muted">

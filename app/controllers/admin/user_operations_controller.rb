@@ -17,6 +17,14 @@ class Admin::UserOperationsController < Admin::BaseController
     execute_user_operation("force_two_factor_reset")
   end
 
+  def force_password_reset_instruction
+    execute_user_operation("force_password_reset_instruction")
+  end
+
+  def admin_email_change_recovery
+    execute_user_operation("admin_email_change_recovery")
+  end
+
   def revoke_sessions
     execute_user_operation("revoke_sessions")
   end
@@ -68,15 +76,23 @@ class Admin::UserOperationsController < Admin::BaseController
   end
 
   def operation_params
-    params.permit(:reason, :confirmation, :confirmation_email)
+    params.permit(:reason, :confirmation, :confirmation_email, :new_email)
   end
 
   def confirmation_for(operation)
+    return recovery_email_confirmation if operation == "admin_email_change_recovery"
     return operation_params[:confirmation] unless operation == "delete_user"
 
     {
       text: operation_params[:confirmation],
       email: operation_params[:confirmation_email]
+    }
+  end
+
+  def recovery_email_confirmation
+    {
+      text: operation_params[:confirmation],
+      new_email: operation_params[:new_email]
     }
   end
 

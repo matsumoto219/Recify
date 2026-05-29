@@ -27,6 +27,23 @@ module SystemOperations
         self_forbidden: true,
         admin_target_forbidden: true
       },
+      "force_password_reset_instruction" => {
+        action: "admin.users.force_password_reset_instruction",
+        confirmation: "SEND PASSWORD RESET",
+        self_forbidden: true,
+        admin_target_forbidden: true,
+        guest_target_forbidden: true,
+        unconfirmed_target_forbidden: true
+      },
+      "admin_email_change_recovery" => {
+        action: "admin.users.account_recovery_email_change",
+        confirmation: "CHANGE RECOVERY EMAIL",
+        self_forbidden: true,
+        admin_target_forbidden: true,
+        guest_target_forbidden: true,
+        unconfirmed_target_forbidden: true,
+        recovery_email_required: true
+      },
       "revoke_sessions" => {
         action: "admin.users.session_revoke",
         confirmation: "REVOKE SESSIONS",
@@ -75,11 +92,17 @@ module SystemOperations
       before_state = before_state_for_operation
       after_state = nil
 
-      User.transaction do
+      if operation == "force_password_reset_instruction"
         execute_operation!
-        before_state = @account_deletion_summary if operation == "delete_user"
         after_state = after_state_for_operation
         audit_log = record_success_audit!(before_state: before_state, after_state: after_state)
+      else
+        User.transaction do
+          execute_operation!
+          before_state = @account_deletion_summary if operation == "delete_user"
+          after_state = after_state_for_operation
+          audit_log = record_success_audit!(before_state: before_state, after_state: after_state)
+        end
       end
 
       Result.new(
@@ -116,10 +139,13 @@ module SystemOperations
       raise ValidationError, "confirmation_required" unless confirmation_valid?
       raise ValidationError, "self_operation_forbidden" if self_operation_forbidden?
       raise ValidationError, "admin_target_forbidden" if admin_target_forbidden?
+      raise ValidationError, "guest_target_forbidden" if guest_target_forbidden?
+      raise ValidationError, "unconfirmed_target_forbidden" if unconfirmed_target_forbidden?
       raise ValidationError, "target_already_locked" if operation == "lock_user" && user_locked?
       raise ValidationError, "target_not_locked" if operation == "unlock_user" && !user_locked?
       raise ValidationError, "passkeys_missing" if operation == "force_passkey_reset" && user.passkeys.none?
       raise ValidationError, "two_factor_missing" if operation == "force_two_factor_reset" && two_factor_missing?
+      validate_recovery_email! if recovery_email_required?
       raise ValidationError, "confirmation_email_required" if email_confirmation_required? && !confirmation_email_valid?
     end
 
@@ -136,6 +162,21 @@ module SystemOperations
         user.recovery_codes.delete_all
         user.increment!(:session_version)
         @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+      when "force_password_reset_instruction"
+        @reset_password_sent_at_before = user.reset_password_sent_at
+        _raw_reset_token = user.send_reset_password_instructions
+        @reset_password_delivery_requested = true
+        @reset_password_sent_at_after = user.reload.reset_password_sent_at
+      when "admin_email_change_recovery"
+        @old_email_digest = email_digest(user.email)
+        @new_email_digest = email_digest(recovery_email)
+        @session_version_before = user.session_version
+        user.update!(email: recovery_email)
+        user.increment!(:session_version)
+        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+        user.reload
+        @unconfirmed_email_digest = email_digest(user.unconfirmed_email)
+        @session_version_after = user.session_version
       when "revoke_sessions"
         user.increment!(:session_version)
         @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
@@ -206,6 +247,22 @@ module SystemOperations
           recovery_codes_count_after: after_state[:recovery_codes_count],
           unused_recovery_codes_count_before: before_state[:unused_recovery_codes_count],
           unused_recovery_codes_count_after: after_state[:unused_recovery_codes_count],
+          revoked_sessions_count: @revoked_sessions_count.to_i
+        )
+      when "force_password_reset_instruction"
+        metadata.merge(
+          email_digest: email_digest(user.email),
+          reset_password_sent_at_before: @reset_password_sent_at_before,
+          reset_password_sent_at_after: @reset_password_sent_at_after,
+          delivery_requested: @reset_password_delivery_requested == true
+        )
+      when "admin_email_change_recovery"
+        metadata.merge(
+          old_email_digest: @old_email_digest,
+          new_email_digest: @new_email_digest,
+          unconfirmed_email_digest: @unconfirmed_email_digest,
+          session_version_before: @session_version_before,
+          session_version_after: @session_version_after,
           revoked_sessions_count: @revoked_sessions_count.to_i
         )
       when "revoke_sessions"
@@ -296,12 +353,40 @@ module SystemOperations
       operation_config.fetch(:admin_target_forbidden) && user.admin?
     end
 
+    def guest_target_forbidden?
+      operation_config.fetch(:guest_target_forbidden, false) && user.guest?
+    end
+
+    def unconfirmed_target_forbidden?
+      operation_config.fetch(:unconfirmed_target_forbidden, false) && !user.confirmed?
+    end
+
     def confirmation_valid?
       confirmation_text == operation_config.fetch(:confirmation)
     end
 
     def email_confirmation_required?
       operation_config.fetch(:email_confirmation_required, false)
+    end
+
+    def recovery_email_required?
+      operation_config.fetch(:recovery_email_required, false)
+    end
+
+    def validate_recovery_email!
+      raise ValidationError, "recovery_email_required" if recovery_email.blank?
+      raise ValidationError, "recovery_email_invalid" unless recovery_email.match?(Devise.email_regexp)
+      raise ValidationError, "recovery_email_unchanged" if recovery_email == user.email.to_s.strip.downcase
+      raise ValidationError, "recovery_email_taken" if recovery_email_taken?
+    end
+
+    def recovery_email_taken?
+      normalized = recovery_email
+      registered = User.where("LOWER(email) = ?", normalized)
+      pending = User.where("LOWER(unconfirmed_email) = ?", normalized)
+      registered = registered.where.not(id: user.id)
+      pending = pending.where.not(id: user.id)
+      registered.exists? || pending.exists?
     end
 
     def confirmation_email_valid?
@@ -323,6 +408,10 @@ module SystemOperations
       return confirmation_hash[:email].to_s.strip if confirmation_hash.present?
 
       ""
+    end
+
+    def recovery_email
+      confirmation_hash[:new_email].to_s.strip.downcase
     end
 
     def confirmation_hash

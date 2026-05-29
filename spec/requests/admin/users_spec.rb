@@ -275,6 +275,8 @@ RSpec.describe 'Admin users', type: :request do
       expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_user_path(user)))
       expect(response.body).not_to include(lock_operation_admin_user_path(user))
       expect(response.body).not_to include(force_two_factor_reset_operation_admin_user_path(user))
+      expect(response.body).not_to include(force_password_reset_instruction_operation_admin_user_path(user))
+      expect(response.body).not_to include(admin_email_change_recovery_operation_admin_user_path(user))
       expect(response.body).not_to include(limit_overrides_admin_user_path(user))
     end
 
@@ -298,6 +300,14 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include(force_two_factor_reset_operation_admin_user_path(user))
         expect(response.body).to include('2要素認証リセット')
         expect(response.body).to include('RESET 2FA')
+        expect(response.body).to include(force_password_reset_instruction_operation_admin_user_path(user))
+        expect(response.body).to include('パスワード再設定メール送信')
+        expect(response.body).to include('SEND PASSWORD RESET')
+        expect(response.body).to include(admin_email_change_recovery_operation_admin_user_path(user))
+        expect(response.body).to include('緊急復旧操作')
+        expect(response.body).to include('CHANGE RECOVERY EMAIL')
+        expect(response.body).to include('material-symbols-outlined')
+        expect(response.body).not_to include('material-symbols-rounded')
         expect(response.body).not_to include('TOTP-SECRET-VALUE')
         expect(response.body).not_to include(recovery_code.code_digest)
         expect(response.body).not_to include('totp_secret')

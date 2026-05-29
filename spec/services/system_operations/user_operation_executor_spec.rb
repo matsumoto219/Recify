@@ -21,6 +21,14 @@ RSpec.describe SystemOperations::UserOperationExecutor do
     travel_to(Time.zone.parse('2026-05-27 10:00:00')) { example.run }
   end
 
+  before do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  after do
+    ActionMailer::Base.deliveries.clear
+  end
+
   describe '.call' do
     it 'lock_userで対象ユーザーをロックし、success auditを保存する' do
       result = described_class.call(
@@ -269,6 +277,123 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(audit_payload).not_to include(unused_code.code_digest, used_code.code_digest)
         expect(audit_payload).not_to include('session-uid-digest-secret')
         expect(audit_payload).not_to include('totp_secret', 'provisioning_uri', 'code_digest', 'cookie', 'token', 'secret')
+      end
+    end
+
+    it 'force_password_reset_instructionでreset mailを送り、tokenやemail平文なしでsuccess auditを保存する' do
+      previous_sent_at = 2.days.ago
+      target_user.update!(reset_password_sent_at: previous_sent_at)
+
+      result = nil
+      expect do
+        result = described_class.call(
+          operation: 'force_password_reset_instruction',
+          user: target_user,
+          actor: actor,
+          reason: 'password recovery support request',
+          request: request,
+          reauthentication: reauthentication,
+          confirmation: 'SEND PASSWORD RESET'
+        )
+      end.to change(ActionMailer::Base.deliveries, :count).by(1)
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+      mail_body = ActionMailer::Base.deliveries.last.parts.map { |part| part.body.decoded }.join("\n")
+      raw_token = mail_body[/reset_password_token=([^\s]+)/, 1]
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(target_user.reload.reset_password_sent_at).to eq(Time.current)
+        expect(target_user.reset_password_token).to be_present
+        expect(audit_log).to have_attributes(
+          actor_user: actor,
+          action: 'admin.users.force_password_reset_instruction',
+          outcome: 'succeeded',
+          target_type: 'User',
+          target_id: target_user.id,
+          target_uid: "user:#{target_user.id}",
+          reason: 'password recovery support request'
+        )
+        expect(audit_log.metadata).to include(
+          'operation' => 'force_password_reset_instruction',
+          'email_digest' => be_present,
+          'reset_password_sent_at_before' => previous_sent_at.iso8601,
+          'reset_password_sent_at_after' => Time.current.iso8601,
+          'delivery_requested' => true,
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(audit_log.after_state).to include('user_id' => target_user.id)
+        expect(raw_token).to be_present
+        expect(audit_payload).not_to include(raw_token)
+        expect(audit_payload).not_to include(target_user.email)
+        expect(audit_payload).not_to include('reset_password_token', 'reset_password_url', '/users/password')
+        expect(audit_payload).not_to include('cookie-secret', 'session-uid-secret')
+      end
+    end
+
+    it 'admin_email_change_recoveryでunconfirmed_emailだけを設定し、sessionを失効してsuccess auditを保存する' do
+      old_email = target_user.email
+      user_session = UserSession.create!(
+        user: target_user,
+        session_uid_digest: 'email-change-session-digest-secret',
+        session_version: target_user.session_version,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
+      new_email = 'recovery-change@example.com'
+
+      result = nil
+      expect do
+        result = described_class.call(
+          operation: 'admin_email_change_recovery',
+          user: target_user,
+          actor: actor,
+          reason: 'verified account recovery request',
+          request: request,
+          reauthentication: reauthentication,
+          confirmation: { text: 'CHANGE RECOVERY EMAIL', new_email: new_email }
+        )
+      end.to change(ActionMailer::Base.deliveries, :count).by(2)
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+      delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+      confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?(new_email) }
+      confirmation_body = confirmation_mail.parts.map { |part| part.body.decoded }.join("\n")
+      confirmation_token = confirmation_body[/confirmation_token=([^\s]+)/, 1]
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(target_user.reload.email).to eq(old_email)
+        expect(target_user.unconfirmed_email).to eq(new_email)
+        expect(target_user.session_version).to eq(1)
+        expect(user_session.reload.revoked_at).to be_present
+        expect(delivered_recipients).to include(new_email, old_email)
+        expect(audit_log).to have_attributes(
+          actor_user: actor,
+          action: 'admin.users.account_recovery_email_change',
+          outcome: 'succeeded',
+          target_type: 'User',
+          target_id: target_user.id,
+          target_uid: "user:#{target_user.id}",
+          reason: 'verified account recovery request'
+        )
+        expect(audit_log.metadata).to include(
+          'operation' => 'admin_email_change_recovery',
+          'old_email_digest' => be_present,
+          'new_email_digest' => be_present,
+          'unconfirmed_email_digest' => be_present,
+          'session_version_before' => 0,
+          'session_version_after' => 1,
+          'revoked_sessions_count' => 1,
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(confirmation_token).to be_present
+        expect(audit_payload).not_to include(old_email, new_email, confirmation_token)
+        expect(audit_payload).not_to include('confirmation_token', 'email-change-session-digest-secret')
       end
     end
 
@@ -599,6 +724,154 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
+    it 'guest対象ユーザーへのforce_password_reset_instructionを拒否する' do
+      guest = User.guest!
+
+      result = described_class.call(
+        operation: 'force_password_reset_instruction',
+        user: guest,
+        actor: actor,
+        reason: 'password recovery support request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'SEND PASSWORD RESET'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('guest_target_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(guest.reload.reset_password_sent_at).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_password_reset_instruction',
+          outcome: 'failed',
+          error_code: 'guest_target_forbidden'
+        )
+      end
+    end
+
+    it 'unconfirmed対象ユーザーへのforce_password_reset_instructionを拒否する' do
+      unconfirmed_user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+
+      result = described_class.call(
+        operation: 'force_password_reset_instruction',
+        user: unconfirmed_user,
+        actor: actor,
+        reason: 'password recovery support request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'SEND PASSWORD RESET'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('unconfirmed_target_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(unconfirmed_user.reload.reset_password_sent_at).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_password_reset_instruction',
+          outcome: 'failed',
+          error_code: 'unconfirmed_target_forbidden'
+        )
+      end
+    end
+
+    it 'admin_email_change_recoveryのnew email blankを拒否する' do
+      result = described_class.call(
+        operation: 'admin_email_change_recovery',
+        user: target_user,
+        actor: actor,
+        reason: 'verified account recovery request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: { text: 'CHANGE RECOVERY EMAIL', new_email: ' ' }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('recovery_email_required')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(target_user.reload.unconfirmed_email).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.account_recovery_email_change',
+          outcome: 'failed',
+          error_code: 'recovery_email_required'
+        )
+      end
+    end
+
+    it 'admin_email_change_recoveryのduplicate emailを拒否する' do
+      existing = create(:user, email: 'existing-recovery@example.com')
+
+      result = described_class.call(
+        operation: 'admin_email_change_recovery',
+        user: target_user,
+        actor: actor,
+        reason: 'verified account recovery request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: { text: 'CHANGE RECOVERY EMAIL', new_email: existing.email }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('recovery_email_taken')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(target_user.reload.unconfirmed_email).to be_nil
+        expect(AuditLog.last.error_code).to eq('recovery_email_taken')
+      end
+    end
+
+    it 'admin_email_change_recoveryのconfirmation不一致を拒否する' do
+      result = described_class.call(
+        operation: 'admin_email_change_recovery',
+        user: target_user,
+        actor: actor,
+        reason: 'verified account recovery request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: { text: 'WRONG', new_email: 'recovery-change@example.com' }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('confirmation_required')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(target_user.reload.unconfirmed_email).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.account_recovery_email_change',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+
+    it 'locked userへのforce_password_reset_instructionはunlockしない' do
+      target_user.lock_access!(send_instructions: false)
+      locked_at = target_user.locked_at
+
+      result = described_class.call(
+        operation: 'force_password_reset_instruction',
+        user: target_user,
+        actor: actor,
+        reason: 'password recovery support request',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'SEND PASSWORD RESET'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(target_user.reload.locked_at).to eq(locked_at)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_password_reset_instruction',
+          outcome: 'succeeded'
+        )
+      end
+    end
+
     it '自分自身へのlock_userを拒否する' do
       result = described_class.call(
         operation: 'lock_user',
@@ -656,6 +929,46 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(result).to be_failure
         expect(result.error_code).to eq('self_operation_forbidden')
         expect(actor.reload.totp_credential).to be_present
+        expect(AuditLog.last.error_code).to eq('self_operation_forbidden')
+      end
+    end
+
+    it '自分自身へのforce_password_reset_instructionを拒否する' do
+      result = described_class.call(
+        operation: 'force_password_reset_instruction',
+        user: actor,
+        actor: actor,
+        reason: 'self reset',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'SEND PASSWORD RESET'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('self_operation_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(actor.reload.reset_password_sent_at).to be_nil
+        expect(AuditLog.last.error_code).to eq('self_operation_forbidden')
+      end
+    end
+
+    it '自分自身へのadmin_email_change_recoveryを拒否する' do
+      result = described_class.call(
+        operation: 'admin_email_change_recovery',
+        user: actor,
+        actor: actor,
+        reason: 'self email recovery',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: { text: 'CHANGE RECOVERY EMAIL', new_email: 'self-recovery@example.com' }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('self_operation_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(actor.reload.unconfirmed_email).to be_nil
         expect(AuditLog.last.error_code).to eq('self_operation_forbidden')
       end
     end
@@ -725,6 +1038,50 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(result).to be_failure
         expect(result.error_code).to eq('admin_target_forbidden')
         expect(admin_target.reload.totp_credential).to be_present
+        expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
+      end
+    end
+
+    it 'admin対象ユーザーへのforce_password_reset_instructionを拒否する' do
+      admin_target = create(:user, :admin)
+
+      result = described_class.call(
+        operation: 'force_password_reset_instruction',
+        user: admin_target,
+        actor: actor,
+        reason: 'admin target',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'SEND PASSWORD RESET'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('admin_target_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(admin_target.reload.reset_password_sent_at).to be_nil
+        expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
+      end
+    end
+
+    it 'admin対象ユーザーへのadmin_email_change_recoveryを拒否する' do
+      admin_target = create(:user, :admin)
+
+      result = described_class.call(
+        operation: 'admin_email_change_recovery',
+        user: admin_target,
+        actor: actor,
+        reason: 'admin target',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: { text: 'CHANGE RECOVERY EMAIL', new_email: 'admin-recovery@example.com' }
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('admin_target_forbidden')
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(admin_target.reload.unconfirmed_email).to be_nil
         expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
       end
     end
