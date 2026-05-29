@@ -115,6 +115,14 @@ class ReceiptsController < ApplicationController
     @receipt.assign_attributes(create_params)
     @receipt.status = "completed"
 
+    if manual_receipt_items_missing?(create_params, context: :manual)
+      prepare_manual_receipt_items_missing_error!(create_params)
+      build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+      flash.now[:alert] = @receipt.errors.full_messages
+      render :new, status: :unprocessable_content, formats: :html
+      return
+    end
+
     if @receipt.save
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
@@ -140,6 +148,14 @@ class ReceiptsController < ApplicationController
     clear_review_flags_for_edited_items!(update_params)
     apply_amount_calculation!(update_params, context: :edit_save)
     clear_processing_error_after_manual_update!(update_params)
+
+    if manual_receipt_items_missing?(update_params, context: :edit_save)
+      @receipt.assign_attributes(update_params)
+      prepare_manual_receipt_items_missing_error!(update_params)
+      flash.now[:alert] = @receipt.errors.full_messages
+      render :edit, status: :unprocessable_content, formats: :html
+      return
+    end
 
     if @receipt.update(update_params)
       purge_receipt_image_if_requested!
@@ -494,6 +510,27 @@ class ReceiptsController < ApplicationController
     @receipt.receipt_items.build
   end
 
+  def manual_receipt_items_missing?(permitted, context:)
+    if context == :edit_save && permitted["receipt_items_attributes"].blank?
+      return false
+    end
+
+    amount_receipt_items(permitted).empty?
+  end
+
+  def prepare_manual_receipt_items_missing_error!(permitted)
+    @receipt.valid?
+    replace_manual_amount_errors!(permitted)
+    add_manual_receipt_items_error!
+  end
+
+  def add_manual_receipt_items_error!
+    message = t("receipts.form.errors.items_required")
+    return if @receipt.errors.full_messages.include?(message)
+
+    @receipt.errors.add(:base, message)
+  end
+
   def apply_amount_calculation!(permitted, context:)
     clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context)
     result = ReceiptAmountService.call(
@@ -532,16 +569,16 @@ class ReceiptsController < ApplicationController
       calc = calculated_items[index]
       next if calc.blank?
 
-      quantity = calc[:quantity] || calc["quantity"]
-      price = calc[:price] || calc["price"]
-      line_total = calc[:line_total] || calc["line_total"]
+      quantity = calculated_item_value(calc, :quantity)
+      price = calculated_item_value(calc, :price)
+      line_total = calculated_item_value(calc, :line_total)
       original_line_total = calculated_item_value(calc, :original_line_total)
       discount_amount = calculated_item_value(calc, :discount_amount)
       discount_rate = calculated_item_value(calc, :discount_rate)
 
-      item_attr["quantity"] = quantity unless quantity.nil?
-      item_attr["price"] = price unless price.nil?
-      item_attr["line_total"] = line_total unless line_total.nil?
+      item_attr["quantity"] = quantity if calculated_item_key?(calc, :quantity) && !quantity.nil?
+      item_attr["price"] = price if calculated_item_key?(calc, :price) && !price.nil?
+      item_attr["line_total"] = line_total if calculated_item_key?(calc, :line_total) && !line_total.nil?
       item_attr["original_line_total"] = original_line_total unless original_line_total.nil?
       item_attr["discount_amount"] = discount_amount if calculated_item_key?(calc, :discount_amount)
       item_attr["discount_rate"] = discount_rate if calculated_item_key?(calc, :discount_rate)

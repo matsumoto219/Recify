@@ -61,6 +61,8 @@ module Amounts
     end
 
     def item_line_total(item)
+      return countable_unit_line_total(item) if manual_countable_unit_price_input?(item)
+
       line_total_value = fetch_value(item, :line_total)
       return to_i(line_total_value) if value_present?(line_total_value)
 
@@ -151,6 +153,12 @@ module Amounts
 
     def countable_quantity_unit?(unit)
       ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
+    end
+
+    def manual_countable_unit_price_input?(item)
+      manual_input_context? &&
+        countable_quantity_unit?(fetch_value(item, :quantity_unit)) &&
+        value_present?(fetch_value(item, :price))
     end
 
     def normalize_context(value)

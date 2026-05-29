@@ -9,6 +9,8 @@
 %>
 
 <% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.public_id}" : "new_receipt_form" %>
+<% visible_receipt_items = receipt.receipt_items.reject(&:marked_for_destruction?) %>
+<% destroyed_receipt_items = receipt.receipt_items.select(&:marked_for_destruction?) %>
 <%= form_with model: receipt,
               html: {
                 id: form_dom_id,
@@ -43,7 +45,7 @@
   <%# TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する %>
 
   <%
-    item_tax_rates = receipt.receipt_items.filter_map(&:tax_rate).uniq
+    item_tax_rates = visible_receipt_items.filter_map(&:tax_rate).uniq
     tax_rate_summary = if item_tax_rates.empty?
                          nil
                        elsif item_tax_rates.one?
@@ -215,13 +217,18 @@
               <div class="col-span-1"></div>
             </div>
 
-            <% if receipt.receipt_items.any? %>
-              <%= f.fields_for :receipt_items do |item_form| %>
+            <% if visible_receipt_items.any? %>
+              <%= f.fields_for :receipt_items, visible_receipt_items do |item_form| %>
                 <%= render "receipts/receipt_item_fields",
                       item_form: item_form,
                       item: item_form.object,
                       new_record: false %>
               <% end %>
+            <% end %>
+
+            <% destroyed_receipt_items.each do |item| %>
+              <%= hidden_field_tag "receipt[receipt_items_attributes][destroy_#{item.id}][id]", item.id %>
+              <%= hidden_field_tag "receipt[receipt_items_attributes][destroy_#{item.id}][_destroy]", "1" %>
             <% end %>
 
             <button type="button"

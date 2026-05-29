@@ -1127,6 +1127,36 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'recalculates manual countable items from zero price even when submitted line_total is stale' do
+      result = call_service(
+        receipt: {
+          total_amount: 1,
+          subtotal_amount: 1,
+          tax_amount: 0
+        },
+        receipt_items: [
+          {
+            price: 0,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :edit_save
+      )
+
+      item = result[:computed][:items].first
+
+      aggregate_failures do
+        expect(item[:price]).to eq(0)
+        expect(item[:line_total]).to eq(0)
+        expect(result[:resolved][:total]).to eq(0)
+        expect(result[:resolved][:subtotal]).to eq(0)
+        expect(result[:resolved][:tax]).to eq(0)
+      end
+    end
+
     it 'infers discount_rate from OCR discount_amount when rate is missing' do
       result = call_service(
         receipt: {},

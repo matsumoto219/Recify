@@ -1415,7 +1415,17 @@ RSpec.describe 'Receipts', type: :request do
           store_name: 'テスト',
           total_amount: 1000,
           payment_method: 'cash',
-          status: 'uploaded'
+          status: 'uploaded',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: 'テスト商品',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 1000,
+              needs_review: false
+            }
+          }
         }
       }
     end
@@ -1509,7 +1519,17 @@ RSpec.describe 'Receipts', type: :request do
             store_name: '画像付きレシート',
             total_amount: 1500,
             payment_method: 'cash',
-            image: uploaded_image
+            image: uploaded_image,
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '画像付き商品',
+                price: 1500,
+                quantity: 1,
+                quantity_unit: '個',
+                line_total: 1500,
+                needs_review: false
+              }
+            }
           }
         }
       end.to change(Receipt, :count).by(1)
@@ -1531,7 +1551,17 @@ RSpec.describe 'Receipts', type: :request do
           store_name: '解析しない画像付きレシート',
           total_amount: 1800,
           payment_method: 'cash',
-          image: uploaded_image
+          image: uploaded_image,
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '解析しない画像付き商品',
+              price: 1800,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 1800,
+              needs_review: false
+            }
+          }
         }
       }
 
@@ -1887,7 +1917,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '空の新規明細行はline_total 0の明細として保存しない' do
+    it '空の新規明細行だけでは保存せずline_total 0の明細も作らない' do
       expect do
         post receipts_path, params: {
           receipt: {
@@ -1912,16 +1942,14 @@ RSpec.describe 'Receipts', type: :request do
             }
           }
         }
-      end.to change(Receipt, :count).by(1)
+      end.not_to change(Receipt, :count)
 
-      receipt = Receipt.order(:id).last
-
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
       aggregate_failures do
-        expect(response).to redirect_to(receipts_path)
-        expect(receipt.receipt_items).to be_empty
-        expect(receipt.total_amount).to eq(500)
-        expect(receipt.subtotal_amount).to eq(455)
-        expect(receipt.tax_amount).to eq(45)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(rendered_receipt_item_rows(document).size).to eq(1)
       end
     end
 
@@ -1988,6 +2016,40 @@ RSpec.describe 'Receipts', type: :request do
         expect(item.price).to eq(0)
         expect(item.quantity).to eq(BigDecimal('1'))
         expect(item.line_total).to eq(0)
+      end
+    end
+
+    it '0円明細作成時はhidden line_totalが古くても単価0から0円で保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '0円明細作成 stale total',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '0円商品',
+              price: '0',
+              quantity: '1',
+              quantity_unit: '個',
+              discount_rate: '',
+              tax_rate: '',
+              line_total: '1',
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(item.confirmed_name).to eq('0円商品')
+        expect(item.price).to eq(0)
+        expect(item.line_total).to eq(0)
+        expect(receipt.total_amount).to eq(0)
+        expect(receipt.subtotal_amount).to eq(0)
+        expect(receipt.tax_amount).to eq(0)
       end
     end
 
@@ -2245,48 +2307,52 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '明細なし手動作成時は入力金額を尊重する' do
-      post receipts_path, params: {
-        receipt: {
-          store_name: '明細なし作成',
-          payment_method: 'cash',
-          total_amount: 1_100,
-          subtotal_amount: 1_000,
-          tax_amount: 100,
-          tax_rate: 0.1
+    it '明細なし手動作成時は入力金額があっても保存しない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '明細なし作成',
+            payment_method: 'cash',
+            total_amount: 1_100,
+            subtotal_amount: 1_000,
+            tax_amount: 100,
+            tax_rate: 0.1
+          }
         }
-      }
+      end.not_to change(Receipt, :count)
 
-      receipt = Receipt.order(:id).last
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to redirect_to(receipts_path)
-        expect(receipt.total_amount).to eq(1_100)
-        expect(receipt.subtotal_amount).to eq(1_000)
-        expect(receipt.tax_amount).to eq(100)
-        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(notice_surface.text).not_to include('合計金額を入力してください')
+        expect(notice_surface.text).not_to include('合計金額は数値で入力してください')
       end
     end
 
-    it '明細なし手動作成時のcomma区切り入力金額を正しく保存する' do
-      post receipts_path, params: {
-        receipt: {
-          store_name: 'comma金額作成',
-          payment_method: 'cash',
-          total_amount: '5,000',
-          subtotal_amount: '4,546',
-          tax_amount: '454',
-          tax_rate: 0.1
+    it '明細なし手動作成時はcomma区切り入力金額があっても保存しない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: 'comma金額作成',
+            payment_method: 'cash',
+            total_amount: '5,000',
+            subtotal_amount: '4,546',
+            tax_amount: '454',
+            tax_rate: 0.1
+          }
         }
-      }
+      end.not_to change(Receipt, :count)
 
-      receipt = Receipt.order(:id).last
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to redirect_to(receipts_path)
-        expect(receipt.total_amount).to eq(5_000)
-        expect(receipt.subtotal_amount).to eq(4_546)
-        expect(receipt.tax_amount).to eq(454)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(notice_surface.text).not_to include('合計金額を入力してください')
       end
     end
 
@@ -3869,6 +3935,26 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '明細パラメータがない通常編集は既存明細があれば保存できる' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '既存商品',
+        price: 700,
+        quantity: 2,
+        quantity_unit: '個',
+        line_total: 1400,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: valid_update_params
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.store_name).to eq('更新後')
+        expect(receipt.receipt_items).to contain_exactly(item)
+      end
+    end
+
     it '通知OFFなら更新成功のredirect flashを表示しない' do
       user.update!(push_notification_enabled: false)
 
@@ -4172,7 +4258,58 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '既存明細を全削除して保存すると旧金額を残さず0円状態にする' do
+    it '既存明細を0円商品へ変更した場合はhidden line_totalが古くても0円で保存する' do
+      receipt.update!(
+        store_name: '1円レシート',
+        total_amount: 1,
+        subtotal_amount: 1,
+        tax_amount: 0,
+        tax_rate: nil,
+        status: 'completed'
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '1円商品',
+        price: 1,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 1,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '0円レシート',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: '0円商品',
+              price: 0,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: '',
+              line_total: 1,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.confirmed_name).to eq('0円商品')
+        expect(item.price).to eq(0)
+        expect(item.line_total).to eq(0)
+        expect(receipt.total_amount).to eq(0)
+        expect(receipt.subtotal_amount).to eq(0)
+        expect(receipt.tax_amount).to eq(0)
+      end
+    end
+
+    it '既存明細を全削除して保存しようとすると保存せず空状態でフォームを戻す' do
       receipt.update!(
         store_name: '1円レシート',
         total_amount: 1,
@@ -4210,25 +4347,24 @@ RSpec.describe 'Receipts', type: :request do
       }
 
       receipt.reload
-      follow_redirect!
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to have_http_status(:success)
-        expect(receipt.receipt_items).to be_empty
-        expect(receipt.subtotal_amount).to eq(0)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(rendered_receipt_item_rows(document)).to be_empty
+        expect(response.body).to include("receipt[receipt_items_attributes][destroy_#{item.id}][_destroy]")
+        expect(receipt.receipt_items.count).to eq(1)
+        expect(receipt.subtotal_amount).to eq(1)
         expect(receipt.tax_amount).to eq(0)
-        expect(receipt.total_amount).to eq(0)
+        expect(receipt.total_amount).to eq(1)
         expect(receipt.tax_rate).to be_nil
         expect(receipt.receipt_tax_details).to be_empty
-        expect(receipt.amount_calculation_profile).to include(
-          'context' => 'edit_save',
-          'resolved' => include('total_amount' => 0, 'subtotal_amount' => 0, 'tax_amount' => 0)
-        )
-        expect(response.body).to include('¥0')
       end
     end
 
-    it '税内訳つきreceiptの既存明細を全削除しても旧税内訳を残さない' do
+    it '税内訳つきreceiptの既存明細を全削除しようとすると保存しない' do
       receipt.update!(
         store_name: '税内訳つき',
         subtotal_amount: 100,
@@ -4274,19 +4410,23 @@ RSpec.describe 'Receipts', type: :request do
       }
 
       receipt.reload
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to redirect_to(receipt_path(receipt))
-        expect(receipt.receipt_items).to be_empty
-        expect(receipt.subtotal_amount).to eq(0)
-        expect(receipt.tax_amount).to eq(0)
-        expect(receipt.total_amount).to eq(0)
-        expect(receipt.tax_rate).to be_nil
-        expect(receipt.receipt_tax_details).to be_empty
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(rendered_receipt_item_rows(document)).to be_empty
+        expect(receipt.receipt_items.count).to eq(1)
+        expect(receipt.subtotal_amount).to eq(100)
+        expect(receipt.tax_amount).to eq(10)
+        expect(receipt.total_amount).to eq(110)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(receipt.receipt_tax_details.count).to eq(1)
       end
     end
 
-    it 'OCR/AI解析由来のcompleted receiptでも既存明細全削除時に旧金額を残さない' do
+    it 'OCR/AI解析由来のcompleted receiptでも既存明細全削除は保存しない' do
       receipt.update!(
         store_name: '解析済み',
         subtotal_amount: 1_164,
@@ -4333,15 +4473,19 @@ RSpec.describe 'Receipts', type: :request do
       }
 
       receipt.reload
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to redirect_to(receipt_path(receipt))
-        expect(receipt.receipt_items).to be_empty
-        expect(receipt.subtotal_amount).to eq(0)
-        expect(receipt.tax_amount).to eq(0)
-        expect(receipt.total_amount).to eq(0)
-        expect(receipt.tax_rate).to be_nil
-        expect(receipt.receipt_tax_details).to be_empty
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(rendered_receipt_item_rows(document)).to be_empty
+        expect(receipt.receipt_items.count).to eq(1)
+        expect(receipt.subtotal_amount).to eq(1_164)
+        expect(receipt.tax_amount).to eq(116)
+        expect(receipt.total_amount).to eq(1_280)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(receipt.receipt_tax_details.count).to eq(1)
       end
     end
 

@@ -274,6 +274,7 @@ module Amounts
     def resolve_tax_total(item_tax_total, tax_detail_total, total: nil, subtotal: nil)
       return item_tax_total if item_tax_total.positive?
       return tax_detail_total if tax_detail_total.positive?
+      return 0 if manual_zero_item_total_authoritative?(to_i(total))
 
       receipt_tax_amount = to_i(@receipt[:tax_amount])
       return receipt_tax_amount if receipt_tax_amount.positive?
@@ -293,6 +294,7 @@ module Amounts
 
     def resolve_subtotal(item_total, item_subtotal, tax_total, total: nil, tax_rate: BigDecimal("0"), tax_detail_subtotal: 0)
       return item_subtotal if item_subtotal.positive? && item_subtotal <= item_total
+      return item_subtotal if manual_zero_item_total_authoritative?(item_total)
 
       receipt_subtotal = to_i(@receipt[:subtotal_amount])
       return receipt_subtotal if receipt_subtotal.positive?
@@ -310,6 +312,7 @@ module Amounts
 
     def resolve_total(item_total, subtotal, tax_total)
       return item_total if item_total.positive?
+      return item_total if manual_zero_item_total_authoritative?(item_total)
 
       receipt_total = to_i(@receipt[:total_amount])
       return receipt_total if receipt_total.positive?
@@ -469,6 +472,35 @@ module Amounts
 
     def countable_quantity_unit?(unit)
       ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
+    end
+
+    def manual_input_context?
+      %i[edit_save manual].include?(@context)
+    end
+
+    def manual_zero_item_total_authoritative?(item_total)
+      manual_input_context? &&
+        to_i(item_total).zero? &&
+        @items.any? { |item| explicit_zero_amount_item?(item) }
+    end
+
+    def explicit_zero_amount_item?(item)
+      explicit_zero_line_total?(item) || explicit_zero_price_total?(item)
+    end
+
+    def explicit_zero_line_total?(item)
+      line_total_present?(item) && to_i(item[:line_total]).zero?
+    end
+
+    def explicit_zero_price_total?(item)
+      value_was_present?(item, :price) && to_i(item[:price]).zero?
+    end
+
+    def value_was_present?(item, key)
+      flag = item[:"amount_#{key}_present"]
+      return flag if [ true, false ].include?(flag)
+
+      !blank?(item[key])
     end
   end
 end
