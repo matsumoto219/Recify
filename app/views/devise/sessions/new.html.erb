@@ -37,6 +37,7 @@
                 placeholder: t("auth.sessions.fields.email_placeholder"),
                 autocomplete: "username webauthn",
                 autofocus: true,
+                required: true,
                 size: :prominent,
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
@@ -55,6 +56,7 @@
                   field_type: :password_field,
                   placeholder: t("auth.sessions.fields.password_placeholder"),
                   autocomplete: "current-password",
+                  required: true,
                   show_label: false,
                   size: :prominent,
                   error_message_class: "px-1 text-xs leading-relaxed" %>

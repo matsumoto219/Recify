@@ -377,6 +377,10 @@ RSpec.describe 'Settings', type: :request do
       document = Nokogiri::HTML(response.body)
       update_context_values = document.css('input[type="hidden"][name="update_context"]').map { |input| input['value'] }
       email_change_control_row = document.at_css('[data-email-change-control-row]')
+      password_form = form_for_update_context(document, 'security')
+      current_password_input = password_form.at_css('input[name="user[current_password]"]')
+      password_input = password_form.at_css('input[name="user[password]"]')
+      password_confirmation_input = password_form.at_css('input[name="user[password_confirmation]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -392,6 +396,9 @@ RSpec.describe 'Settings', type: :request do
         expect(email_change_control_row['class']).to include('md:grid')
         expect(email_change_control_row['class']).to include('md:grid-cols-2')
         expect(email_change_control_row['class']).to include('md:items-end')
+        expect(current_password_input.attribute('required')).to be_present
+        expect(password_input.attribute('required')).to be_present
+        expect(password_confirmation_input.attribute('required')).to be_present
       end
     end
 

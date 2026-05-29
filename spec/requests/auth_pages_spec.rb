@@ -74,6 +74,7 @@ RSpec.describe 'Auth pages', type: :request do
       forgot_password_link = document.at_css("a[href='#{new_user_password_path}']")
       sign_up_link = document.at_css("a[href='#{new_user_registration_path}']")
       email_input = document.at_css('input[name="user[email]"]')
+      password_input = document.at_css('input[name="user[password]"]')
       passkey_controller = document.at_css('[data-controller~="passkey-session"]')
       passkey_button = document.at_css('[data-action="click->passkey-session#login"]')
       noscript_banner = document.at_css('noscript')
@@ -93,6 +94,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('shared.footer.terms'))
         expect(response.body).to include(I18n.t('shared.footer.privacy'))
         expect(email_input['autocomplete']).to eq('username webauthn')
+        expect(email_input.attribute('required')).to be_present
+        expect(password_input.attribute('required')).to be_present
         expect(passkey_controller).to be_present
         expect(passkey_button).to be_present
         expect(guest_form).to be_present
@@ -259,6 +262,9 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
+      email_input = document.at_css('input[name="user[email]"]')
+      password_input = document.at_css('input[name="user[password]"]')
+      password_confirmation_input = document.at_css('input[name="user[password_confirmation]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -270,6 +276,9 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
+        expect(email_input.attribute('required')).to be_present
+        expect(password_input.attribute('required')).to be_present
+        expect(password_confirmation_input.attribute('required')).to be_present
         expect(login_link).to be_present
       end
     end
@@ -536,6 +545,8 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
+      password_input = document.at_css("input[type='password'][name='user[password]']")
+      password_confirmation_input = document.at_css("input[type='password'][name='user[password_confirmation]']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -546,8 +557,10 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.passwords.edit.fields.password_confirmation'))
         expect(response.body).to include(I18n.t('auth.passwords.edit.buttons.submit'))
         expect(document.at_css("input[type='hidden'][name='user[reset_password_token]']")['value']).to eq(reset_password_token)
-        expect(document.at_css("input[type='password'][name='user[password]']")).to be_present
-        expect(document.at_css("input[type='password'][name='user[password_confirmation]']")).to be_present
+        expect(password_input).to be_present
+        expect(password_input.attribute('required')).to be_present
+        expect(password_confirmation_input).to be_present
+        expect(password_confirmation_input.attribute('required')).to be_present
         expect(login_link).to be_present
       end
     end
