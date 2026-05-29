@@ -172,7 +172,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('OCR停止中のため停止')
         expect(response.body).to include('data-controller="service-status-polling"')
         expect(response.body).to include(%(data-service-status-polling-status-url-value="#{admin_external_services_status_path}"))
-        expect(response.body).to include('data-service-status-polling-target="adminExternalServicesCard"')
+        expect(response.body).to include('data-service-status-polling-target="serviceStatusCard"')
         expect(response.body).to include('data-action="service-status-polling#pollNow"')
         expect(response.body).to include('更新')
         expect(response.body).to include('ストレージ状態')

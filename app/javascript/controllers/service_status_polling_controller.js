@@ -9,7 +9,7 @@ export default class extends Controller {
     'uploadSubmit',
     'ocrGatedLink',
     'serviceBadge',
-    'adminExternalServicesCard'
+    'serviceStatusCard'
   ]
 
   static values = {
@@ -87,18 +87,18 @@ export default class extends Controller {
   applyPayload (payload) {
     const uploadAllowed = payload?.upload?.allowed !== false
 
-    this.updateAdminExternalServicesCard(payload)
+    this.updateServiceStatusCard(payload)
     this.updateNotices(payload?.notices || {})
     this.updateUploadAvailability(uploadAllowed)
     this.updateOcrGatedLinks(uploadAllowed)
     this.updateServiceBadges(payload)
   }
 
-  updateAdminExternalServicesCard (payload) {
+  updateServiceStatusCard (payload) {
     const html = payload?.html
     if (!html) return
 
-    this.adminExternalServicesCardTargets.forEach((container) => {
+    this.serviceStatusCardTargets.forEach((container) => {
       container.innerHTML = html
     })
   }
