@@ -34,6 +34,7 @@ module Ocr
         tax_details: [],
         payment_method_text: nil,
         items: [],
+        review_reasons: [],
         confidence_summary: empty_confidence_summary
       }
     end

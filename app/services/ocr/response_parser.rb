@@ -5,6 +5,19 @@ class Ocr::ResponseParser
   CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
   VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
   SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
+  MULTIPLE_RECEIPTS_REVIEW_REASON = "multiple_receipts_suspected"
+  MULTIPLE_RECEIPTS_MIN_LINES = 8
+  MULTIPLE_RECEIPTS_MIN_CLUSTER_RATIO = 0.2
+  MULTIPLE_RECEIPTS_HORIZONTAL_GAP_RATIO = 0.08
+  MULTIPLE_RECEIPTS_VERTICAL_GAP_RATIO = 0.1
+  MULTIPLE_RECEIPTS_MIN_ANCHOR_LINES = 4
+  MULTIPLE_RECEIPTS_MIN_ANCHOR_CATEGORIES = 4
+  MERCHANT_ANCHOR_PATTERN = /店舗|店名|店|マーケット|スーパー|株式会社|有限会社|住所|所在地|電話|tel|market|store|mart|shop/i.freeze
+  DATETIME_ANCHOR_PATTERN = /(?:\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?)|(?:\d{1,2}[:：]\d{2})/.freeze
+  SUBTOTAL_ANCHOR_PATTERN = /小\s*計|subtotal/i.freeze
+  TOTAL_ANCHOR_PATTERN = /合\s*計|総合計|total/i.freeze
+  TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
+  PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
 
   def initialize(response:, provider: nil)
     @response = response
@@ -39,6 +52,7 @@ class Ocr::ResponseParser
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
         items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
+        review_reasons: extract_review_reasons(parsed_response),
         confidence_summary: extract_confidence_summary(parsed_response)
       },
       error_code: nil,
@@ -584,6 +598,147 @@ class Ocr::ResponseParser
     fields.dig("ReceiptType", "valueString")
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def extract_review_reasons(parsed_response)
+    reasons = []
+    reasons << MULTIPLE_RECEIPTS_REVIEW_REASON if multiple_receipts_suspected?(parsed_response)
+    reasons
+  end
+
+  def multiple_receipts_suspected?(parsed_response)
+    Array(extract_analyze_result(parsed_response)["pages"]).any? do |page|
+      line_boxes = receipt_line_boxes(page)
+      separated_receipt_clusters?(line_boxes, page)
+    end
+  rescue NoMethodError, TypeError
+    false
+  end
+
+  def receipt_line_boxes(page)
+    Array(page["lines"]).filter_map do |line|
+      content = line["content"].to_s.strip
+      box = line_polygon_box(line["polygon"])
+      next if content.blank? || box.blank?
+
+      box.merge(content: content)
+    end
+  end
+
+  def line_polygon_box(polygon)
+    points = Array(polygon).each_slice(2).filter_map do |x, y|
+      next if x.nil? || y.nil?
+
+      [ x.to_f, y.to_f ]
+    end
+    return if points.size < 4
+
+    xs = points.map(&:first)
+    ys = points.map(&:last)
+
+    {
+      min_x: xs.min,
+      max_x: xs.max,
+      min_y: ys.min,
+      max_y: ys.max,
+      center_x: xs.sum / xs.size,
+      center_y: ys.sum / ys.size
+    }
+  end
+
+  def separated_receipt_clusters?(line_boxes, page)
+    return false if line_boxes.size < MULTIPLE_RECEIPTS_MIN_LINES * 2
+
+    page_width = page["width"].to_f
+    page_height = page["height"].to_f
+
+    horizontal_split = horizontal_cluster_split(line_boxes, page_width)
+    return true if receipt_clusters?(line_boxes, horizontal_split, axis: :x)
+
+    vertical_split = vertical_cluster_split(line_boxes, page_height)
+    receipt_clusters?(line_boxes, vertical_split, axis: :y)
+  end
+
+  def horizontal_cluster_split(line_boxes, page_width)
+    return if page_width <= 0
+
+    gap = interval_gaps(line_boxes, :min_x, :max_x).max_by { |candidate| candidate[:gap] }
+    return if gap.blank?
+    return if gap[:gap] < page_width * MULTIPLE_RECEIPTS_HORIZONTAL_GAP_RATIO
+
+    (gap[:before_end] + gap[:after_start]) / 2.0
+  end
+
+  def vertical_cluster_split(line_boxes, page_height)
+    return if page_height <= 0
+
+    centers = line_boxes.map { |line| line[:center_y] }.sort
+    gap = centers.each_cons(2).map { |before, after| { gap: after - before, before: before, after: after } }.max_by { |candidate| candidate[:gap] }
+    return if gap.blank?
+    return if gap[:gap] < page_height * MULTIPLE_RECEIPTS_VERTICAL_GAP_RATIO
+
+    (gap[:before] + gap[:after]) / 2.0
+  end
+
+  def interval_gaps(line_boxes, min_key, max_key)
+    intervals = line_boxes
+      .map { |line| [ line[min_key], line[max_key] ] }
+      .sort_by(&:first)
+
+    merged = []
+    intervals.each do |start_position, end_position|
+      if merged.empty? || start_position > merged.last.last
+        merged << [ start_position, end_position ]
+      else
+        merged.last[1] = [ merged.last.last, end_position ].max
+      end
+    end
+
+    merged.each_cons(2).map do |before, after|
+      {
+        gap: after.first - before.last,
+        before_end: before.last,
+        after_start: after.first
+      }
+    end
+  end
+
+  def receipt_clusters?(line_boxes, split_position, axis:)
+    return false if split_position.blank?
+
+    center_key = axis == :x ? :center_x : :center_y
+    first_cluster, second_cluster = line_boxes.partition { |line| line[center_key] < split_position }
+    return false unless plausible_receipt_cluster_size?(first_cluster, line_boxes.size)
+    return false unless plausible_receipt_cluster_size?(second_cluster, line_boxes.size)
+
+    receipt_anchor_cluster?(first_cluster) && receipt_anchor_cluster?(second_cluster)
+  end
+
+  def plausible_receipt_cluster_size?(cluster, total_line_count)
+    cluster.size >= MULTIPLE_RECEIPTS_MIN_LINES &&
+      cluster.size >= (total_line_count * MULTIPLE_RECEIPTS_MIN_CLUSTER_RATIO)
+  end
+
+  def receipt_anchor_cluster?(cluster)
+    anchor_lines = cluster.count { |line| receipt_anchor_categories(line[:content]).any? }
+    categories = cluster.flat_map { |line| receipt_anchor_categories(line[:content]) }.uniq
+
+    anchor_lines >= MULTIPLE_RECEIPTS_MIN_ANCHOR_LINES &&
+      categories.size >= MULTIPLE_RECEIPTS_MIN_ANCHOR_CATEGORIES &&
+      categories.include?(:date_time) &&
+      (categories.include?(:total) || categories.include?(:subtotal))
+  end
+
+  def receipt_anchor_categories(content)
+    text = content.to_s
+    categories = []
+    categories << :merchant if text.match?(MERCHANT_ANCHOR_PATTERN)
+    categories << :date_time if text.match?(DATETIME_ANCHOR_PATTERN)
+    categories << :subtotal if text.match?(SUBTOTAL_ANCHOR_PATTERN)
+    categories << :total if text.match?(TOTAL_ANCHOR_PATTERN)
+    categories << :tax if text.match?(TAX_ANCHOR_PATTERN)
+    categories << :payment if text.match?(PAYMENT_ANCHOR_PATTERN)
+    categories
   end
 
   # NOTE: 実レシートでは未取得が多く、現在は payment_method_text fallback を優先使用

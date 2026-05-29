@@ -1410,6 +1410,38 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '1画像内の複数レシート疑いはblocking review reasonとしてreview_neededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('multi_receipts_in_one_image')
+      ai_result = ai_success_result_for(ocr_result)
+      captured_amount_result = nil
+
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_amount_result = original.call(**kwargs)
+      end
+
+      expect do
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(
+            :ai_success,
+            ocr_result: ocr_result,
+            ai_result: ai_result
+          )
+        )
+      end.not_to change(Receipt, :count)
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(ocr_result.dig(:candidates, :review_reasons)).to include('multiple_receipts_suspected')
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('multiple_receipts_suspected')
+        expect(receipt.receipt_items.count).to eq(6)
+        expect(captured_amount_result[:needs_review]).to be(true)
+      end
+    end
+
     it '外税レシートはtax_detailsを優先しreview不要にする' do
       receipt, amount = run_finalize_ocr_fixture('external_tax_receipt')
       tax_detail = receipt.receipt_tax_details.first

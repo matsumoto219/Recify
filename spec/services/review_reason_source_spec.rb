@@ -16,6 +16,7 @@ RSpec.describe ReviewReasonSource do
       aggregate_failures do
         expect(described_class.source_for('ocr_unreadable')).to eq(:ocr)
         expect(described_class.source_for(:ocr_low_confidence)).to eq(:ocr)
+        expect(described_class.source_for('multiple_receipts_suspected')).to eq(:ocr)
       end
     end
 
@@ -60,11 +61,11 @@ RSpec.describe ReviewReasonSource do
       ])
 
       aggregate_failures do
-        expect(result[:ai]).to eq(['item_name_uncertain'])
-        expect(result[:ocr]).to eq(['ocr_low_confidence'])
-        expect(result[:amount]).to eq(['tax_detail_mismatch'])
-        expect(result[:system]).to eq(['unexpected_error'])
-        expect(result[:unknown]).to eq(['custom_reason'])
+        expect(result[:ai]).to eq([ 'item_name_uncertain' ])
+        expect(result[:ocr]).to eq([ 'ocr_low_confidence' ])
+        expect(result[:amount]).to eq([ 'tax_detail_mismatch' ])
+        expect(result[:system]).to eq([ 'unexpected_error' ])
+        expect(result[:unknown]).to eq([ 'custom_reason' ])
       end
     end
 
@@ -131,6 +132,7 @@ RSpec.describe ReviewReasonSource do
     it 'keeps user-facing blocking reasons only' do
       result = described_class.blocking_reasons_for_user([
         'ocr_low_confidence',
+        'multiple_receipts_suspected',
         'item_tax_rate_uncertain',
         'item_name_uncertain',
         'tax_detail_mismatch',
@@ -138,6 +140,7 @@ RSpec.describe ReviewReasonSource do
       ])
 
       expect(result).to eq([
+        'multiple_receipts_suspected',
         'item_name_uncertain',
         'tax_detail_mismatch'
       ])
@@ -156,6 +159,14 @@ RSpec.describe ReviewReasonSource do
         'analysis_missing_keys',
         'unexpected_error'
       ])
+    end
+  end
+
+  describe 'locale' do
+    it '複数レシート疑いの表示文言を持つ' do
+      expect(I18n.t('enums.receipt_item.review_reason.multiple_receipts_suspected')).to eq(
+        '1枚の画像に複数のレシートが含まれている可能性があります'
+      )
     end
   end
 end

@@ -310,6 +310,7 @@ module ReceiptAnalysisRuns
         payments: limited_ocr_payments(candidates[:payments]),
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
         items: limited_ocr_items(candidates[:items]),
+        review_reasons: limited_strings(candidates[:review_reasons], MAX_REVIEW_REASONS),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
     end

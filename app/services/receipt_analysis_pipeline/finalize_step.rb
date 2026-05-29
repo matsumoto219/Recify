@@ -128,7 +128,7 @@ class ReceiptAnalysisPipeline
       # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
       # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
-      ocr_review_reasons = []
+      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if ocr_low_quality
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -145,6 +145,7 @@ class ReceiptAnalysisPipeline
         items_attributes: params[:receipt_items_attributes],
         ai_needs_review: ai_result[:needs_review],
         amount_needs_review: amount_result[:needs_review],
+        ocr_review_reasons: ocr_review_reasons,
         ocr_low_quality: ocr_low_quality
       )
       items_attributes = apply_amount_item_totals(
@@ -198,7 +199,7 @@ class ReceiptAnalysisPipeline
 
       # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
       # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
-      ocr_review_reasons = []
+      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -255,7 +256,7 @@ class ReceiptAnalysisPipeline
 
       # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
       # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
-      ocr_review_reasons = []
+      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -357,9 +358,10 @@ class ReceiptAnalysisPipeline
       end
     end
 
-    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, ocr_low_quality: nil)
+    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, ocr_review_reasons: [], ocr_low_quality: nil)
       return "review_needed" if amount_needs_review
       return "review_needed" if ai_needs_review
+      return "review_needed" if ReviewReasonSource.blocking_reasons_for_user(ocr_review_reasons).any?
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes) if ocr_low_quality.nil?
       return "review_needed" if ocr_low_quality
       return "review_needed" if receipt_attributes[:store_name].blank?
@@ -389,6 +391,11 @@ class ReceiptAnalysisPipeline
       else
         Array(amount_result[:inconsistencies])
       end
+    end
+
+    def ocr_review_reasons_for(ocr_result)
+      candidates = ocr_candidates(ocr_result)
+      ReviewReasonSource.review_reasons_for_user(candidates[:review_reasons])
     end
 
     def amount_calculation_profile_snapshot(amount_result)

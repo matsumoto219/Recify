@@ -23,6 +23,7 @@ module ReviewReasonSource
   OCR_REASONS = %w[
     ocr_unreadable
     ocr_low_confidence
+    multiple_receipts_suspected
   ].freeze
 
   AMOUNT_REASONS = %w[

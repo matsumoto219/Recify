@@ -352,6 +352,38 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '1画像内の複数レシート疑いをpolygonクラスタから検知する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/multi_receipts_in_one_image.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(fixture_response.dig('analyzeResult', 'documents').size).to eq(1)
+        expect(fixture_response.dig('analyzeResult', 'pages').size).to eq(1)
+        expect(fixture_response.dig('analyzeResult', 'documents', 0, 'confidence')).to be > 0.98
+        expect(result.dig(:candidates, :review_reasons)).to include('multiple_receipts_suspected')
+      end
+    end
+
+    it '単体レシートfixturesでは複数レシート疑いを付けない' do
+      fixture_names = %w[
+        single_tax_receipt
+        long_receipt
+        rotated_receipt
+        blurred_receipt
+      ]
+
+      fixture_names.each do |fixture_name|
+        fixture_response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{fixture_name}.json").read)
+        result = described_class.new(response: fixture_response, provider: :fixture).call
+
+        aggregate_failures(fixture_name) do
+          expect(result[:success]).to eq(true)
+          expect(result.dig(:candidates, :review_reasons)).not_to include('multiple_receipts_suspected')
+        end
+      end
+    end
+
     it '割引の多いfixtureの割引情報を維持する' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
 

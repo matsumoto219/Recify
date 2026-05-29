@@ -47,6 +47,7 @@ ja:
         item_tax_rate_uncertain: "税率の判定に不確実性があります"
         ocr_unreadable: "画像が読み取れませんでした"
         ocr_low_confidence: "画像の精度が低い可能性があります"
+        multiple_receipts_suspected: "1枚の画像に複数のレシートが含まれている可能性があります"
         total_mismatch: "合計金額が一致していません"
         item_total_mismatch: "明細合計と合計金額が一致していません"
         tax_amount_mismatch: "税額が一致していません"
