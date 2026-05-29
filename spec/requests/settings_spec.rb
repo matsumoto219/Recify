@@ -1088,6 +1088,25 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path)
         expect(user.reload).to be_valid_password('new-password123')
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.password_change.subject'))
+      end
+
+      password_change_mail = ActionMailer::Base.deliveries.last
+      decoded_body = [
+        password_change_mail.text_part&.body&.decoded,
+        password_change_mail.html_part&.body&.decoded
+      ].compact.join("\n")
+
+      aggregate_failures do
+        expect(password_change_mail).to be_multipart
+        expect(password_change_mail.parts.map(&:mime_type)).to eq([ 'text/plain', 'text/html' ])
+        expect(password_change_mail.text_part).to be_present
+        expect(password_change_mail.html_part).to be_present
+        expect(mail_html_body(password_change_mail)).to include(I18n.t('auth.mailer.password_change.title'))
+        expect(decoded_body).to include(I18n.t('auth.mailer.password_change.body'))
+        expect(decoded_body).not_to include('new-password123')
+        expect(decoded_body).not_to match(/token|secret|session|cookie/i)
       end
     end
 
