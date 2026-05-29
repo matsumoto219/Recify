@@ -313,6 +313,140 @@ RSpec.describe 'Admin user operations', type: :request do
     end
   end
 
+  describe 'POST /admin/users/:id/operations/force_two_factor_reset' do
+    it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:totp_credential, user: target)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post force_two_factor_reset_operation_admin_user_path(target),
+           params: { reason: 'all second factors lost', confirmation: 'RESET 2FA' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_user_path(target)))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'reason blankではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:totp_credential, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(SystemOperations).to receive(:execute_user_operation)
+
+      post force_two_factor_reset_operation_admin_user_path(target),
+           params: { reason: ' ', confirmation: 'RESET 2FA' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).not_to have_received(:execute_user_operation)
+      end
+    end
+
+    it 'fresh reauth + reason + confirmationでSystemOperations経由で実行する' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:totp_credential, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      result = SystemOperations::Result.new(success: true)
+      allow(SystemOperations).to receive(:execute_user_operation).and_return(result)
+
+      post force_two_factor_reset_operation_admin_user_path(target),
+           params: { reason: 'all second factors lost', confirmation: 'RESET 2FA' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(SystemOperations).to have_received(:execute_user_operation).with(
+          operation: 'force_two_factor_reset',
+          user: target,
+          actor: admin,
+          reason: 'all second factors lost',
+          request: kind_of(ActionDispatch::Request),
+          reauthentication: hash_including(method: 'passkey', reauthenticated_at: kind_of(ActiveSupport::TimeWithZone)),
+          confirmation: 'RESET 2FA'
+        )
+      end
+    end
+
+    it '実SystemOperations経由でTOTP/recovery codesを削除し、sessionを失効してAuditLogを作成する' do
+      admin = create(:user, :admin)
+      target = create(:user, session_version: 2)
+      totp = create(:totp_credential, user: target, totp_secret: 'TOTP-SECRET-VALUE')
+      recovery_code = create(:recovery_code, user: target, code_digest: 'code-digest-secret')
+      user_session = UserSession.create!(
+        user: target,
+        session_uid_digest: 'session-digest-secret',
+        session_version: 2,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post force_two_factor_reset_operation_admin_user_path(target),
+             params: { reason: 'all second factors lost', confirmation: 'RESET 2FA' }
+      end.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.reload.totp_credential).to be_nil
+        expect(target.recovery_codes.reload).to be_empty
+        expect(target.session_version).to eq(3)
+        expect(user_session.reload.revoked_at).to be_present
+        expect(audit_log).to have_attributes(
+          action: 'admin.users.force_two_factor_reset',
+          outcome: 'succeeded',
+          target_uid: "user:#{target.id}"
+        )
+        expect(audit_log.metadata).to include(
+          'had_totp_before' => true,
+          'had_totp_after' => false,
+          'recovery_codes_count_before' => 1,
+          'recovery_codes_count_after' => 0,
+          'revoked_sessions_count' => 1
+        )
+        expect(audit_payload).not_to include(totp.totp_secret)
+        expect(audit_payload).not_to include(recovery_code.code_digest)
+        expect(audit_payload).not_to include('session-digest-secret')
+        expect(audit_payload).not_to include('totp_secret', 'provisioning_uri', 'code_digest', 'cookie', 'token')
+      end
+    end
+
+    it 'confirmation不一致はSystemOperationsで拒否し、TOTP/recovery codesを残す' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:totp_credential, user: target)
+      create(:recovery_code, user: target)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post force_two_factor_reset_operation_admin_user_path(target),
+             params: { reason: 'all second factors lost', confirmation: 'WRONG' }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(target.reload.totp_credential).to be_present
+        expect(target.recovery_codes.count).to eq(1)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_two_factor_reset',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+  end
+
   describe 'POST /admin/users/:id/operations/revoke_sessions' do
     it 'fresh reauthなしではSystemOperationsを呼ばずreauthへredirectする' do
       admin = create(:user, :admin)

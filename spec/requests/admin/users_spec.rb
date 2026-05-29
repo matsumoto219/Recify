@@ -274,12 +274,15 @@ RSpec.describe 'Admin users', type: :request do
       expect(response.body).to include('管理操作')
       expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_user_path(user)))
       expect(response.body).not_to include(lock_operation_admin_user_path(user))
+      expect(response.body).not_to include(force_two_factor_reset_operation_admin_user_path(user))
       expect(response.body).not_to include(limit_overrides_admin_user_path(user))
     end
 
     it 'fresh reauth済みならユーザー別上限変更フォームを表示する' do
       admin = create(:user, :admin)
       user = create(:user)
+      create(:totp_credential, user: user, totp_secret: 'TOTP-SECRET-VALUE')
+      recovery_code = create(:recovery_code, user: user, code_digest: 'code-digest-secret')
       sign_in admin
       stub_fresh_admin_reauthentication
 
@@ -292,6 +295,13 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('name="key"')
         expect(response.body).to include('name="value"')
         expect(response.body).to include('UPDATE USER LIMIT')
+        expect(response.body).to include(force_two_factor_reset_operation_admin_user_path(user))
+        expect(response.body).to include('2要素認証リセット')
+        expect(response.body).to include('RESET 2FA')
+        expect(response.body).not_to include('TOTP-SECRET-VALUE')
+        expect(response.body).not_to include(recovery_code.code_digest)
+        expect(response.body).not_to include('totp_secret')
+        expect(response.body).not_to include('code_digest')
         expect(response.body).to include('tune')
         expect(response.body).not_to include('sliders_horizontal')
         expect(response.body).not_to include('_HORIZONTAL')

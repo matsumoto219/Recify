@@ -82,10 +82,19 @@ module AuditLogs
 
   ALLOWED_SENSITIVE_FRAGMENT_KEYS = %w[
     backup_codes_count
+    had_totp_after
+    had_totp_before
+    recovery_codes_count_after
+    recovery_codes_count_before
     recovery_codes_count
     revoked_sessions_count
     sample_session_ids
     session_version
+    totp_credential_present
+    totp_enabled
+    unused_recovery_codes_count_after
+    unused_recovery_codes_count_before
+    unused_recovery_codes_count
     user_sessions_count
   ].freeze
 

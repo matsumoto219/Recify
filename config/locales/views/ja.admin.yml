@@ -574,6 +574,12 @@ ja:
             empty: 登録済みパスキーはありません。
             confirmation_label: 確認文字列 RESET PASSKEYS
             submit: パスキーリセットを実行
+          two_factor_reset:
+            title: 2要素認証リセット
+            description: 2要素認証とリカバリーコードを無効化し、再設定が必要な状態にします。
+            empty: リセット対象の2要素認証またはリカバリーコードはありません。
+            confirmation_label: 確認文字列 RESET 2FA
+            submit: 2要素認証リセットを実行
           revoke_sessions:
             title: セッション失効
             description: 対象ユーザーのログイン状態を次のアクセス時に無効にします。
@@ -605,6 +611,7 @@ ja:
           lock_user: ユーザーをロックしました。
           unlock_user: ユーザーのロックを解除しました。
           force_passkey_reset: 登録済みパスキーをリセットしました。
+          force_two_factor_reset: 2要素認証とリカバリーコードをリセットしました。
           revoke_sessions: ログインセッションを失効しました。
           delete_user: ユーザーを削除しました。
           default: 管理操作を実行しました。
@@ -614,6 +621,7 @@ ja:
           target_already_locked: このユーザーはすでにロックされています。
           target_not_locked: このユーザーはロックされていません。
           passkeys_missing: リセット対象のパスキーがありません。
+          two_factor_missing: リセット対象の2要素認証またはリカバリーコードがありません。
           confirmation_required: 確認文字列が一致しません。
           confirmation_email_required: 確認用メールアドレスが一致しません。
           default: 管理操作を実行できませんでした。

@@ -197,6 +197,81 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
+    it 'force_two_factor_resetでTOTP/recovery codesを削除し、sessionを失効してsuccess auditを保存する' do
+      target_user.update!(session_version: 7)
+      totp = create(:totp_credential, user: target_user, totp_secret: 'TOTP-SECRET-VALUE')
+      unused_code = create(:recovery_code, user: target_user, code_digest: 'code-digest-secret-unused')
+      used_code = create(:recovery_code, user: target_user, code_digest: 'code-digest-secret-used', used_at: 1.day.ago)
+      user_session = UserSession.create!(
+        user: target_user,
+        session_uid_digest: 'session-uid-digest-secret',
+        session_version: 7,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
+
+      result = described_class.call(
+        operation: 'force_two_factor_reset',
+        user: target_user,
+        actor: actor,
+        reason: 'all second factors lost',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'RESET 2FA'
+      )
+
+      audit_log = AuditLog.last
+      audit_payload = audit_log.attributes.to_json
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(target_user.reload.totp_credential).to be_nil
+        expect(target_user.recovery_codes.reload).to be_empty
+        expect(target_user.session_version).to eq(8)
+        expect(user_session.reload.revoked_at).to be_present
+        expect(UserSessions.active_for(user: target_user)).to be_empty
+        expect(audit_log).to have_attributes(
+          actor_user: actor,
+          action: 'admin.users.force_two_factor_reset',
+          outcome: 'succeeded',
+          target_type: 'User',
+          target_id: target_user.id,
+          target_uid: "user:#{target_user.id}",
+          reason: 'all second factors lost'
+        )
+        expect(audit_log.metadata).to include(
+          'operation' => 'force_two_factor_reset',
+          'had_totp_before' => true,
+          'had_totp_after' => false,
+          'recovery_codes_count_before' => 2,
+          'recovery_codes_count_after' => 0,
+          'unused_recovery_codes_count_before' => 1,
+          'unused_recovery_codes_count_after' => 0,
+          'revoked_sessions_count' => 1,
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(audit_log.before_state).to include(
+          'totp_credential_present' => true,
+          'totp_enabled' => true,
+          'recovery_codes_count' => 2,
+          'unused_recovery_codes_count' => 1,
+          'session_version' => 7
+        )
+        expect(audit_log.after_state).to include(
+          'totp_credential_present' => false,
+          'totp_enabled' => false,
+          'recovery_codes_count' => 0,
+          'unused_recovery_codes_count' => 0,
+          'session_version' => 8
+        )
+        expect(audit_payload).not_to include(totp.totp_secret)
+        expect(audit_payload).not_to include(unused_code.code_digest, used_code.code_digest)
+        expect(audit_payload).not_to include('session-uid-digest-secret')
+        expect(audit_payload).not_to include('totp_secret', 'provisioning_uri', 'code_digest', 'cookie', 'token', 'secret')
+      end
+    end
+
     it 'delete_userで対象ユーザーを削除し、target_uidで追跡できるsuccess auditを保存する' do
       receipt = create(:receipt, :with_image, user: target_user)
       owned_run = create(:receipt_analysis_run, :succeeded, receipt: receipt)
@@ -501,6 +576,29 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       end
     end
 
+    it 'TOTP/recovery codes 0件のforce_two_factor_resetは失敗auditを残す' do
+      result = described_class.call(
+        operation: 'force_two_factor_reset',
+        user: target_user,
+        actor: actor,
+        reason: 'all second factors lost',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'RESET 2FA'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('two_factor_missing')
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.force_two_factor_reset',
+          outcome: 'failed',
+          error_code: 'two_factor_missing',
+          target_uid: "user:#{target_user.id}"
+        )
+      end
+    end
+
     it '自分自身へのlock_userを拒否する' do
       result = described_class.call(
         operation: 'lock_user',
@@ -537,6 +635,27 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(result).to be_failure
         expect(result.error_code).to eq('self_operation_forbidden')
         expect(actor.passkeys.reload.count).to eq(1)
+        expect(AuditLog.last.error_code).to eq('self_operation_forbidden')
+      end
+    end
+
+    it '自分自身へのforce_two_factor_resetを拒否する' do
+      create(:totp_credential, user: actor)
+
+      result = described_class.call(
+        operation: 'force_two_factor_reset',
+        user: actor,
+        actor: actor,
+        reason: 'self reset',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'RESET 2FA'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('self_operation_forbidden')
+        expect(actor.reload.totp_credential).to be_present
         expect(AuditLog.last.error_code).to eq('self_operation_forbidden')
       end
     end
@@ -584,6 +703,28 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(result).to be_failure
         expect(result.error_code).to eq('admin_target_forbidden')
         expect(admin_target.passkeys.reload.count).to eq(1)
+        expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
+      end
+    end
+
+    it 'admin対象ユーザーへのforce_two_factor_resetを拒否する' do
+      admin_target = create(:user, :admin)
+      create(:totp_credential, user: admin_target)
+
+      result = described_class.call(
+        operation: 'force_two_factor_reset',
+        user: admin_target,
+        actor: actor,
+        reason: 'admin target',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'RESET 2FA'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('admin_target_forbidden')
+        expect(admin_target.reload.totp_credential).to be_present
         expect(AuditLog.last.error_code).to eq('admin_target_forbidden')
       end
     end

@@ -8,6 +8,7 @@ module AuditLogs
       admin.users.lock
       admin.users.unlock
       admin.users.force_passkey_reset
+      admin.users.force_two_factor_reset
       admin.users.session_revoke
       receipt_analysis.full_reanalyze
       receipt_analysis.ocr_retry

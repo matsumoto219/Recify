@@ -212,7 +212,14 @@ RSpec.describe AuditLogs do
         outcome: 'succeeded',
         metadata: {
           id: 'ordinary-id',
+          had_totp_before: true,
+          had_totp_after: false,
           recovery_codes_count: 10,
+          recovery_codes_count_before: 10,
+          recovery_codes_count_after: 0,
+          unused_recovery_codes_count: 7,
+          unused_recovery_codes_count_before: 7,
+          unused_recovery_codes_count_after: 0,
           backup_codes_count: 10,
           code_digest: 'recovery-code-digest-secret',
           totp: '123456',
@@ -252,12 +259,19 @@ RSpec.describe AuditLogs do
       aggregate_failures do
         expect(log.metadata).to eq(
           'id' => 'ordinary-id',
+          'had_totp_before' => true,
+          'had_totp_after' => false,
           'recovery_codes_count' => 10,
+          'recovery_codes_count_before' => 10,
+          'recovery_codes_count_after' => 0,
+          'unused_recovery_codes_count' => 7,
+          'unused_recovery_codes_count_before' => 7,
+          'unused_recovery_codes_count_after' => 0,
           'backup_codes_count' => 10,
           'nested' => { 'safe' => 'visible' }
         )
-        expect(log.before_state).to eq('recovery_codes_count' => 0, 'id' => 'safe-id')
-        expect(log.after_state).to eq('recovery_codes_count' => 10)
+        expect(log.before_state).to eq('totp_enabled' => false, 'recovery_codes_count' => 0, 'id' => 'safe-id')
+        expect(log.after_state).to eq('totp_enabled' => true, 'recovery_codes_count' => 10)
         expect(log.attributes.to_json).not_to include(
           '123456',
           '654321',

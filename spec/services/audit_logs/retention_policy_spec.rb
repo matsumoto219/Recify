@@ -6,6 +6,7 @@ RSpec.describe AuditLogs::RetentionPolicy do
       aggregate_failures do
         expect(described_class.category_for(action: 'admin.users.delete')).to eq(:user_delete)
         expect(described_class.category_for(action: 'admin.users.lock')).to eq(:high_risk_admin)
+        expect(described_class.category_for(action: 'admin.users.force_two_factor_reset')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'system_settings.update')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'receipt_analysis_runs.cleanup_stale.execute')).to eq(:cleanup_execute)
         expect(described_class.category_for(action: 'admin.passkey_reauthentication.succeeded')).to eq(:passkey_reauth)

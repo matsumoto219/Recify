@@ -104,7 +104,10 @@ module Admin
       {
         passkeys_count: Passkey.where(user_id: user_ids).group(:user_id).count,
         receipts_count: Receipt.where(user_id: user_ids).group(:user_id).count,
-        latest_passkey_last_used_at: Passkey.where(user_id: user_ids).group(:user_id).maximum(:last_used_at)
+        latest_passkey_last_used_at: Passkey.where(user_id: user_ids).group(:user_id).maximum(:last_used_at),
+        totp_credentials_count: TotpCredential.where(user_id: user_ids).group(:user_id).count,
+        recovery_codes_count: RecoveryCode.where(user_id: user_ids).group(:user_id).count,
+        unused_recovery_codes_count: RecoveryCode.where(user_id: user_ids, used_at: nil).group(:user_id).count
       }
     end
 
@@ -133,6 +136,9 @@ module Admin
         },
         passkeys_count: aggregates[:passkeys_count].fetch(user.id, 0),
         latest_passkey_last_used_at: aggregates[:latest_passkey_last_used_at][user.id],
+        totp_credentials_count: aggregates[:totp_credentials_count].fetch(user.id, 0),
+        recovery_codes_count: aggregates[:recovery_codes_count].fetch(user.id, 0),
+        unused_recovery_codes_count: aggregates[:unused_recovery_codes_count].fetch(user.id, 0),
         receipts_count: aggregates[:receipts_count].fetch(user.id, 0),
         timestamps: {
           created_at: user.created_at,

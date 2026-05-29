@@ -13,6 +13,10 @@ class Admin::UserOperationsController < Admin::BaseController
     execute_user_operation("force_passkey_reset")
   end
 
+  def force_two_factor_reset
+    execute_user_operation("force_two_factor_reset")
+  end
+
   def revoke_sessions
     execute_user_operation("revoke_sessions")
   end

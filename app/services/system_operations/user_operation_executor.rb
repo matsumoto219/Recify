@@ -21,6 +21,12 @@ module SystemOperations
         self_forbidden: true,
         admin_target_forbidden: true
       },
+      "force_two_factor_reset" => {
+        action: "admin.users.force_two_factor_reset",
+        confirmation: "RESET 2FA",
+        self_forbidden: true,
+        admin_target_forbidden: true
+      },
       "revoke_sessions" => {
         action: "admin.users.session_revoke",
         confirmation: "REVOKE SESSIONS",
@@ -113,6 +119,7 @@ module SystemOperations
       raise ValidationError, "target_already_locked" if operation == "lock_user" && user_locked?
       raise ValidationError, "target_not_locked" if operation == "unlock_user" && !user_locked?
       raise ValidationError, "passkeys_missing" if operation == "force_passkey_reset" && user.passkeys.none?
+      raise ValidationError, "two_factor_missing" if operation == "force_two_factor_reset" && two_factor_missing?
       raise ValidationError, "confirmation_email_required" if email_confirmation_required? && !confirmation_email_valid?
     end
 
@@ -124,6 +131,11 @@ module SystemOperations
         user.unlock_access!
       when "force_passkey_reset"
         user.passkeys.destroy_all
+      when "force_two_factor_reset"
+        user.totp_credential&.destroy!
+        user.recovery_codes.delete_all
+        user.increment!(:session_version)
+        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
       when "revoke_sessions"
         user.increment!(:session_version)
         @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
@@ -186,6 +198,16 @@ module SystemOperations
           passkeys_count_after: after_state[:passkeys_count],
           latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at]
         )
+      when "force_two_factor_reset"
+        metadata.merge(
+          had_totp_before: before_state[:totp_credential_present],
+          had_totp_after: after_state[:totp_credential_present],
+          recovery_codes_count_before: before_state[:recovery_codes_count],
+          recovery_codes_count_after: after_state[:recovery_codes_count],
+          unused_recovery_codes_count_before: before_state[:unused_recovery_codes_count],
+          unused_recovery_codes_count_after: after_state[:unused_recovery_codes_count],
+          revoked_sessions_count: @revoked_sessions_count.to_i
+        )
       when "revoke_sessions"
         metadata.merge(revoked_sessions_count: @revoked_sessions_count.to_i)
       else
@@ -209,7 +231,11 @@ module SystemOperations
         failed_attempts: current_user.failed_attempts,
         locked_at: current_user.locked_at,
         passkeys_count: current_user.passkeys.count,
-        latest_passkey_last_used_at: current_user.passkeys.maximum(:last_used_at)
+        latest_passkey_last_used_at: current_user.passkeys.maximum(:last_used_at),
+        totp_credential_present: current_user.totp_credential.present?,
+        totp_enabled: current_user.totp_credential&.confirmed? == true,
+        recovery_codes_count: current_user.recovery_codes.count,
+        unused_recovery_codes_count: current_user.recovery_codes.where(used_at: nil).count
       }.tap do |state|
         state[:session_version] = current_user.session_version if current_user.has_attribute?(:session_version)
       end
@@ -256,6 +282,10 @@ module SystemOperations
 
     def user_locked?
       user.locked_at.present?
+    end
+
+    def two_factor_missing?
+      user.totp_credential.blank? && user.recovery_codes.none?
     end
 
     def self_operation_forbidden?

@@ -477,6 +477,41 @@
         </div>
 
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.two_factor_reset.title") %></h3>
+          <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.two_factor_reset.description") %></p>
+
+          <% if record[:totp_credentials_count].to_i.zero? && record[:recovery_codes_count].to_i.zero? %>
+            <p class="text-sm token-text-muted"><%= t("admin.users.show.operations.two_factor_reset.empty") %></p>
+          <% else %>
+            <%= form_with url: force_two_factor_reset_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.users.show.operations.reason_label"),
+                    rows: 3,
+                    required: true,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: admin_control_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.users.show.operations.two_factor_reset.confirmation_label"),
+                    required: true,
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
+              <%= render "shared/ui/actions/button",
+                    label: t("admin.users.show.operations.two_factor_reset.submit"),
+                    type: "submit",
+                    size: :compact,
+                    icon: "security" %>
+            <% end %>
+          <% end %>
+        </div>
+
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.revoke_sessions.title") %></h3>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.revoke_sessions.description") %></p>
           <%= form_with url: revoke_sessions_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
