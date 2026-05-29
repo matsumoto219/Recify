@@ -3,6 +3,7 @@ module ReceiptAnalysisRuns
     TERMINAL_STATUSES = %w[succeeded failed skipped superseded canceled].freeze
     STARTABLE_STAGES = %w[ocr ocr_validation ai finalize].freeze
     FINISHABLE_STAGES = %w[ocr ocr_validation ai finalize].freeze
+    SAFE_RECEIPT_FAILURE_MESSAGE = "解析処理中にエラーが発生しました。再試行してください。".freeze
     NEXT_STAGE = {
       "ocr" => "ocr_validation",
       "ocr_validation" => "ai",
@@ -182,13 +183,15 @@ module ReceiptAnalysisRuns
     end
 
     def fail(error_stage:, error_code:, error_message: nil, at: Time.current)
-      terminate!(
+      failed_run = terminate!(
         "failed",
         at: at,
         error_stage: error_stage,
         error_code: error_code,
         error_message: error_message
       )
+      sync_processing_receipt_failure!(failed_run)
+      failed_run
     end
 
     def supersede(at: Time.current)
@@ -361,6 +364,25 @@ module ReceiptAnalysisRuns
           false
         end
       end
+    end
+
+    def sync_processing_receipt_failure!(failed_run)
+      receipt = failed_run.receipt
+      receipt.with_lock do
+        receipt.reload
+        return unless receipt.processing?
+
+        receipt.update!(
+          status: "failed",
+          processing_error_code: safe_receipt_error_code(failed_run.error_code),
+          processing_error_message: SAFE_RECEIPT_FAILURE_MESSAGE,
+          review_reasons: []
+        )
+      end
+    end
+
+    def safe_receipt_error_code(error_code)
+      error_code.presence || "unexpected_error"
     end
 
     def final_receipt_status(locked_run)

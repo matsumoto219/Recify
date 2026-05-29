@@ -443,6 +443,25 @@ RSpec.describe ReceiptAnalysisPipeline do
         end
       end
     end
+
+    it 'OCR stepの予期しない例外ではrunとprocessing receiptをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      allow(ReceiptOcrService).to receive(:call).and_raise(StandardError, 'OCR raw token=secret')
+
+      expect { described_class.run_ocr(run) }.to raise_error(StandardError, 'OCR raw token=secret')
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('ocr')
+        expect(run.error_code).to eq('unexpected_error')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('unexpected_error')
+        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+        expect(receipt.processing_error_message).not_to include('token', 'secret', 'OCR raw')
+      end
+    end
   end
 
   describe '.run_ai' do
@@ -545,6 +564,26 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.next_step).to eq(:finalize)
         expect(result.finalize_decision.finalize_strategy).to eq('ai_success')
         expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
+      end
+    end
+
+    it 'AI stepの予期しない例外ではrunとprocessing receiptをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(StandardError, 'AI prompt sk-test')
+
+      expect { described_class.run_ai(run) }.to raise_error(StandardError, 'AI prompt sk-test')
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('ai')
+        expect(run.error_code).to eq('unexpected_error')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('unexpected_error')
+        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+        expect(receipt.processing_error_message).not_to include('prompt', 'sk-test')
       end
     end
 
@@ -755,7 +794,67 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.reload.status).to eq('failed')
         expect(run.error_stage).to eq('finalize')
         expect(run.error_code).to eq('finalize_decision_missing')
-        expect(receipt.reload.status).to eq('processing')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('finalize_decision_missing')
+        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+      end
+    end
+
+    it 'finalize保存中のRecordInvalidではrollback後にprocessing receiptをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        ).deep_merge(
+          computed: {
+            items: [
+              {
+                price: -2160,
+                quantity: 1,
+                line_total: -2160
+              }
+            ]
+          }
+        )
+      )
+
+      expect { described_class.run_finalize(run) }.to raise_error(ActiveRecord::RecordInvalid)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('finalize')
+        expect(run.error_code).to eq('unexpected_error')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.processing_error_code).to eq('unexpected_error')
+        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+      end
+    end
+
+    it 'すでにcompletedのreceiptはrun失敗同期で上書きしない' do
+      receipt = create(:receipt, :completed, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+
+      ReceiptAnalysisRuns.fail(
+        run,
+        error_stage: 'finalize',
+        error_code: 'unexpected_error',
+        error_message: 'stacktrace token=secret'
+      )
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.processing_error_message).to be_nil
       end
     end
   end
