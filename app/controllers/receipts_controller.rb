@@ -495,10 +495,11 @@ class ReceiptsController < ApplicationController
   end
 
   def apply_amount_calculation!(permitted, context:)
+    clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context)
     result = ReceiptAmountService.call(
-      receipt: amount_receipt(permitted, context),
+      receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
       receipt_items: amount_receipt_items(permitted),
-      receipt_tax_details: amount_receipt_tax_details(context),
+      receipt_tax_details: clear_amounts ? [] : amount_receipt_tax_details(context),
       context: context,
       tax_rounding_mode: current_user.tax_rounding_mode,
       discount_rounding_mode: current_user.discount_rounding_mode
@@ -598,7 +599,8 @@ class ReceiptsController < ApplicationController
     end
   end
 
-  def amount_receipt(permitted, context)
+  def amount_receipt(permitted, context, clear_amounts: false)
+    return permitted.except("subtotal_amount", "tax_amount", "total_amount", "tax_rate") if clear_amounts
     return permitted unless context == :edit_save
     return permitted unless @receipt&.persisted?
 
@@ -611,6 +613,19 @@ class ReceiptsController < ApplicationController
 
     existing_amounts.merge(permitted) do |_key, existing_value, permitted_value|
       permitted_value.presence || existing_value
+    end
+  end
+
+  def clear_amounts_for_deleted_receipt_items?(permitted, context)
+    return false unless context == :edit_save
+    return false unless @receipt&.persisted?
+
+    items_attributes = permitted["receipt_items_attributes"]
+    return false if items_attributes.blank?
+    return false if amount_receipt_items(permitted).present?
+
+    items_attributes.values.any? do |item_attributes|
+      item_attributes["id"].present? && ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
     end
   end
 

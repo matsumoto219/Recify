@@ -4172,6 +4172,179 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '既存明細を全削除して保存すると旧金額を残さず0円状態にする' do
+      receipt.update!(
+        store_name: '1円レシート',
+        total_amount: 1,
+        subtotal_amount: 1,
+        tax_amount: 0,
+        tax_rate: nil,
+        status: 'completed'
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '1円商品',
+        price: 1,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 1,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '1円レシート',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 1,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 1,
+              needs_review: false,
+              _destroy: '1'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      follow_redirect!
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.subtotal_amount).to eq(0)
+        expect(receipt.tax_amount).to eq(0)
+        expect(receipt.total_amount).to eq(0)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_tax_details).to be_empty
+        expect(receipt.amount_calculation_profile).to include(
+          'context' => 'edit_save',
+          'resolved' => include('total_amount' => 0, 'subtotal_amount' => 0, 'tax_amount' => 0)
+        )
+        expect(response.body).to include('¥0')
+      end
+    end
+
+    it '税内訳つきreceiptの既存明細を全削除しても旧税内訳を残さない' do
+      receipt.update!(
+        store_name: '税内訳つき',
+        subtotal_amount: 100,
+        tax_amount: 10,
+        total_amount: 110,
+        tax_rate: BigDecimal('0.1'),
+        status: 'completed'
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '税込商品',
+        price: 110,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 110,
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.1'),
+        net_amount: 100,
+        amount: 10,
+        description: '10%対象'
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '税内訳つき',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 110,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: 110,
+              needs_review: false,
+              _destroy: '1'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.subtotal_amount).to eq(0)
+        expect(receipt.tax_amount).to eq(0)
+        expect(receipt.total_amount).to eq(0)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
+    it 'OCR/AI解析由来のcompleted receiptでも既存明細全削除時に旧金額を残さない' do
+      receipt.update!(
+        store_name: '解析済み',
+        subtotal_amount: 1_164,
+        tax_amount: 116,
+        total_amount: 1_280,
+        tax_rate: BigDecimal('0.1'),
+        status: 'completed'
+      )
+      create(:receipt_analysis_run, :succeeded, receipt: receipt, source: 'upload')
+      item = receipt.receipt_items.create!(
+        confirmed_name: '解析商品',
+        price: 1_280,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_280,
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.1'),
+        net_amount: 1_164,
+        amount: 116,
+        description: '10%対象'
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '解析済み',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: 1_280,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: 1_280,
+              needs_review: false,
+              _destroy: '1'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.subtotal_amount).to eq(0)
+        expect(receipt.tax_amount).to eq(0)
+        expect(receipt.total_amount).to eq(0)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
     it '手動更新時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
       user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
       item = receipt.receipt_items.create!(
