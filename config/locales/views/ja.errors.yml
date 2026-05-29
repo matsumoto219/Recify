@@ -2,7 +2,7 @@ ja:
   errors:
     layout:
       title: Recify
-      copyright: © 2026 Recify
+      copyright: © %{year} Recify
     common:
       signed_in_primary_cta: レシート一覧へ戻る
       signed_out_primary_cta: ログインへ戻る

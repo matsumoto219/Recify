@@ -27,7 +27,7 @@ RSpec.describe 'Error pages', type: :request do
       expect(document.at_css('a[href="' + primary_href + '"]')).to have_attributes(text: include(primary_cta))
       expect(document.text).to include(secondary_cta) if secondary_cta.present?
       expect(document.text).to include('Recify')
-      expect(document.text).to include('© 2026 Recify')
+      expect(document.text).to include("© #{Time.current.year} Recify")
       expect(response.body).not_to match(/translation missing/i)
     end
   end
