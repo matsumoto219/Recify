@@ -336,6 +336,26 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'receipt cardは長い店舗名でステータスを押し出さない構造にする' do
+      my_receipt.update!(store_name: 'とても長い店舗名' * 12)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{my_receipt.public_id}")
+      header_row = card.at_css('.flex.min-w-0.items-start.justify-between.gap-4')
+      text_group = header_row.at_css('.flex.flex-1.items-start.gap-3.min-w-0')
+      status_badge = header_row.css('span').find { |node| node.text.strip == my_receipt.status_label }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(header_row).to be_present
+        expect(text_group).to be_present
+        expect(status_badge['class']).to include('shrink-0')
+        expect(card.at_css('h2')['class']).to include('truncate')
+      end
+    end
+
     it 'receipt cardはnil合計を未設定、明示0合計を¥0として表示する' do
       nil_amount_receipt = create(:receipt, user: user, store_name: '未設定金額', total_amount: 1_000, status: 'completed')
       nil_amount_receipt.update_columns(total_amount: nil)
@@ -2380,6 +2400,45 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).not_to include("#RCP-#{receipt.id.to_s.rjust(6, '0')}")
         expect(response.body).not_to include("/receipts/#{receipt.id}")
         expect(response.body).not_to include("receipt_#{receipt.id}")
+      end
+    end
+
+    it '詳細ヘッダーは長い店舗名と住所を省略し、statusとIDを共通メタ領域に1回だけ表示する' do
+      receipt.update!(
+        store_name: 'とても長い店舗名' * 10,
+        store_address: '東京都千代田区とても長い住所' * 10
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      main = document.at_css('#receipt-detail-main')
+      store_heading = main.css('h2').find { |node| node.text.include?(receipt.store_name) }
+      text_column = store_heading.parent
+      address = text_column.css('p').find { |node| node.text.include?(receipt.store_address) }
+      id_nodes = main.css('p').select { |node| node.text.strip == "ID: #{receipt.display_id}" }
+      meta = id_nodes.first.parent
+      status_badge = meta.css('span').find { |node| node.text.strip == receipt.status_label }
+      mobile_only_id_rows = main.css('div').select do |node|
+        node['class'].to_s.include?('md:hidden') && node.text.include?("ID: #{receipt.display_id}")
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(text_column['class']).to include('flex-1')
+        expect(text_column['class']).to include('min-w-0')
+        expect(text_column['class']).to include('max-w-full')
+        expect(text_column['class']).to include('overflow-hidden')
+        expect(store_heading['class']).to include('truncate')
+        expect(store_heading['title']).to eq(receipt.store_name)
+        expect(address['class']).to include('truncate')
+        expect(address['title']).to eq(receipt.store_address)
+        expect(id_nodes.size).to eq(1)
+        expect(meta['class']).to include('shrink-0')
+        expect(meta['class']).to include('whitespace-nowrap')
+        expect(meta['class']).to include('text-right')
+        expect(status_badge['class']).to include('shrink-0')
+        expect(mobile_only_id_rows).to be_empty
       end
     end
 

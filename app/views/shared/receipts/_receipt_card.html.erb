@@ -36,8 +36,8 @@
   class: card_classes,
   hoverable: !processing do %>
 
-  <div class="flex items-start justify-between gap-4">
-    <div class="flex items-start gap-3 min-w-0">
+  <div class="flex min-w-0 items-start justify-between gap-4">
+    <div class="flex flex-1 items-start gap-3 min-w-0">
       <div class="<%= icon_box_class %>">
         <% if processing %>
           <span class="material-symbols-outlined animate-spin">autorenew</span>
@@ -63,7 +63,8 @@
 
     <%= render "shared/ui/badge/receipt_status_badge",
       status: receipt.status,
-      label: status_label %>
+      label: status_label,
+      class: "shrink-0" %>
   </div>
 
   <div class="flex justify-between items-end mt-2 gap-4">
