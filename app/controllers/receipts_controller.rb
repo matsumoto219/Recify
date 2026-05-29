@@ -146,7 +146,8 @@ class ReceiptsController < ApplicationController
 
     update_params = normalized_receipt_params.to_h
     clear_review_flags_for_edited_items!(update_params)
-    apply_amount_calculation!(update_params, context: :edit_save)
+    amount_result = apply_amount_calculation!(update_params, context: :edit_save)
+    rebuild_review_state_after_manual_update!(update_params, amount_result)
     clear_processing_error_after_manual_update!(update_params)
 
     if manual_receipt_items_missing?(update_params, context: :edit_save)
@@ -533,14 +534,11 @@ class ReceiptsController < ApplicationController
 
   def apply_amount_calculation!(permitted, context:)
     clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context)
-    result = ReceiptAmountService.call(
-      receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
-      receipt_items: amount_receipt_items(permitted),
-      receipt_tax_details: clear_amounts ? [] : amount_receipt_tax_details(context),
-      context: context,
-      tax_rounding_mode: current_user.tax_rounding_mode,
-      discount_rounding_mode: current_user.discount_rounding_mode
-    )
+    receipt_tax_details = clear_amounts ? [] : amount_receipt_tax_details(context)
+    result = calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
+    if recalculate_tax_details_after_manual_item_update?(permitted, result, clear_amounts)
+      result = calculate_receipt_amounts(permitted, context, clear_amounts, [])
+    end
 
     resolved = result[:resolved]
     permitted["subtotal_amount"] = resolved[:subtotal]
@@ -551,6 +549,25 @@ class ReceiptsController < ApplicationController
     # 明細の quantity / line_total を計算結果で上書き（複数行対応）
     apply_item_totals!(permitted, result.dig(:computed, :items))
     permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+    result
+  end
+
+  def calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
+    ReceiptAmountService.call(
+      receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
+      receipt_items: amount_receipt_items(permitted),
+      receipt_tax_details: receipt_tax_details,
+      context: context,
+      tax_rounding_mode: current_user.tax_rounding_mode,
+      discount_rounding_mode: current_user.discount_rounding_mode
+    )
+  end
+
+  def recalculate_tax_details_after_manual_item_update?(permitted, result, clear_amounts)
+    return false if clear_amounts
+    return false if permitted["receipt_items_attributes"].blank?
+
+    Array(result[:blocking_inconsistencies]).map(&:to_sym).include?(:tax_detail_mismatch)
   end
 
   def apply_item_totals!(permitted, calculated_items)
@@ -604,7 +621,85 @@ class ReceiptsController < ApplicationController
 
     permitted["processing_error_code"] = nil
     permitted["processing_error_message"] = nil
-    permitted["status"] = "completed" if @receipt.failed?
+    permitted["status"] = "completed" if @receipt.failed? && !permitted.key?("status")
+  end
+
+  def rebuild_review_state_after_manual_update!(permitted, amount_result)
+    return unless manual_review_state_rebuild_target?(permitted)
+
+    blocking_reasons = manual_update_blocking_review_reasons(amount_result)
+    permitted["review_reasons"] = blocking_reasons
+    permitted["status"] =
+      if blocking_reasons.empty? && !manual_update_item_review_remaining?(permitted)
+        "completed"
+      else
+        "review_needed"
+      end
+  end
+
+  def manual_review_state_rebuild_target?(permitted)
+    return false if permitted["receipt_items_attributes"].blank?
+
+    @receipt.completed? || @receipt.review_needed? || @receipt.failed? || @receipt.has_processing_error?
+  end
+
+  def manual_update_blocking_review_reasons(amount_result)
+    reasons =
+      if amount_result.respond_to?(:key?) && amount_result.key?(:blocking_inconsistencies)
+        amount_result[:blocking_inconsistencies]
+      else
+        amount_result[:inconsistencies]
+      end
+
+    ReviewReasonSource.blocking_reasons_for_user(reasons)
+  end
+
+  def manual_update_item_review_remaining?(permitted)
+    manual_update_item_review_states(permitted).any? do |state|
+      state[:needs_review] || ReviewReasonSource.blocking_reasons_for_user(state[:review_reasons]).any?
+    end
+  end
+
+  def manual_update_item_review_states(permitted)
+    states = @receipt.receipt_items.each_with_object({}) do |item, result|
+      result[item.id.to_s] = {
+        needs_review: item.needs_review?,
+        review_reasons: Array(item.review_reasons).map(&:to_s)
+      }
+    end
+
+    items_attributes = permitted["receipt_items_attributes"]
+    return states.values if items_attributes.blank?
+
+    items_attributes.each_with_index do |(_param_key, item_attributes), index|
+      item_id = item_attributes["id"].to_s
+
+      if ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+        states.delete(item_id) if item_id.present?
+        next
+      end
+
+      state_key = item_id.presence || "new_#{index}"
+      existing_state = states[state_key] || { needs_review: false, review_reasons: [] }
+      states[state_key] = {
+        needs_review: manual_update_item_needs_review?(item_attributes, existing_state),
+        review_reasons: manual_update_item_review_reasons(item_attributes, existing_state)
+      }
+    end
+
+    states.values
+  end
+
+  def manual_update_item_needs_review?(item_attributes, existing_state)
+    return existing_state[:needs_review] unless item_attributes.key?("needs_review")
+
+    ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"])
+  end
+
+  def manual_update_item_review_reasons(item_attributes, existing_state)
+    return existing_state[:review_reasons] unless item_attributes.key?("review_reasons")
+
+    Array(item_attributes["review_reasons"]).reject(&:blank?).map(&:to_s)
   end
 
   def destroy_existing_receipt_tax_details
