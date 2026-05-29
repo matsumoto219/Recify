@@ -8,7 +8,8 @@ export default class extends Controller {
     'uploadControl',
     'uploadSubmit',
     'ocrGatedLink',
-    'serviceBadge'
+    'serviceBadge',
+    'adminExternalServicesCard'
   ]
 
   static values = {
@@ -78,13 +79,28 @@ export default class extends Controller {
     }
   }
 
+  pollNow (event) {
+    if (event) event.preventDefault()
+    this.poll()
+  }
+
   applyPayload (payload) {
     const uploadAllowed = payload?.upload?.allowed !== false
 
+    this.updateAdminExternalServicesCard(payload)
     this.updateNotices(payload?.notices || {})
     this.updateUploadAvailability(uploadAllowed)
     this.updateOcrGatedLinks(uploadAllowed)
     this.updateServiceBadges(payload)
+  }
+
+  updateAdminExternalServicesCard (payload) {
+    const html = payload?.html
+    if (!html) return
+
+    this.adminExternalServicesCardTargets.forEach((container) => {
+      container.innerHTML = html
+    })
   }
 
   updateNotices (notices) {

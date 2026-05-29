@@ -170,6 +170,11 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('AIサービス')
         expect(response.body).to include('停止中')
         expect(response.body).to include('OCR停止中のため停止')
+        expect(response.body).to include('data-controller="service-status-polling"')
+        expect(response.body).to include(%(data-service-status-polling-status-url-value="#{admin_external_services_status_path}"))
+        expect(response.body).to include('data-service-status-polling-target="adminExternalServicesCard"')
+        expect(response.body).to include('data-action="service-status-polling#pollNow"')
+        expect(response.body).to include('更新')
         expect(response.body).to include('ストレージ状態')
         expect(response.body).to include('total blobs')
         expect(response.body).to include('unattached')
@@ -242,6 +247,64 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('管理運用に必要な状態サマリ')
         expect(response.body).not_to include('Latest runs')
         expect(response.body).not_to include('Filters')
+      end
+    end
+  end
+
+  describe 'GET /admin/external_services/status' do
+    it 'admin向けに外部サービスカードHTMLをJSONで返す' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(ExternalServices).to receive(:status_snapshot).and_return(
+        ocr: {
+          state: 'down',
+          text: I18n.t('shared.service_status.down'),
+          monitoring: true,
+          checked_at: '2026-05-26T12:00:00+09:00',
+          next_check_at: '2026-05-26T12:05:00+09:00'
+        },
+        ai: {
+          state: 'ok',
+          text: I18n.t('shared.service_status.ok'),
+          monitoring: false,
+          checked_at: '2026-05-26T12:00:00+09:00',
+          next_check_at: nil
+        },
+        upload: { allowed: false, ocr_available: false },
+        notices: { ocr_down: true, ai_down: false }
+      )
+
+      get admin_external_services_status_path, as: :json
+
+      html = response.parsed_body['html']
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(html).to include('外部サービス状態')
+        expect(html).to include('OCRサービス')
+        expect(html).to include('AIサービス')
+        expect(html).to include('停止中')
+        expect(html).to include('OCR停止中のため停止')
+        expect(html).to include('data-action="service-status-polling#pollNow"')
+      end
+    end
+
+    it '未ログインユーザーはログインへリダイレクトする' do
+      get admin_external_services_status_path
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+
+    it '一般ユーザーは404にする' do
+      user = create(:user)
+      sign_in user
+
+      get admin_external_services_status_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include('外部サービス状態')
       end
     end
   end

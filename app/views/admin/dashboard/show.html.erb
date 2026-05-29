@@ -23,7 +23,14 @@
         subtitle_size: "text-base" %>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "admin/dashboard/external_services_card", external_services: external_services %>
+    <div
+      data-controller="service-status-polling"
+      data-service-status-polling-status-url-value="<%= admin_external_services_status_path %>"
+      data-service-status-polling-interval-value="30000">
+      <div data-service-status-polling-target="adminExternalServicesCard">
+        <%= render "admin/dashboard/external_services_card", external_services: external_services %>
+      </div>
+    </div>
     <%= render "admin/dashboard/storage_card", storage: storage %>
   </div>
 

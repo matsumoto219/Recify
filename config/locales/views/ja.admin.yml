@@ -35,6 +35,7 @@ ja:
       external_services:
         title: 外部サービス状態
         description: OCR / AI の状態とアップロード可否を表示します。
+        refresh: 更新
         monitoring: 復旧監視中
         checked_at: 最終確認
         next_check_at: 次回確認
