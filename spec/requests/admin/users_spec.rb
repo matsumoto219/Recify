@@ -318,6 +318,38 @@ RSpec.describe 'Admin users', type: :request do
       end
     end
 
+    it 'fresh reauth済みならadmin自身にもユーザー別上限変更フォームを表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(admin)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(limit_overrides_admin_user_path(admin))
+        expect(response.body).to include('ユーザー別上限の変更')
+        expect(response.body).to include('UPDATE USER LIMIT')
+        expect(response.body).not_to include('他の管理者ユーザーの上限はこの画面から変更できません。')
+        expect(response.body).not_to include('自分自身の上限はこの画面から変更できません。')
+      end
+    end
+
+    it 'fresh reauth済みでも他admin targetにはユーザー別上限変更フォームを表示しない' do
+      admin = create(:user, :admin)
+      other_admin = create(:user, :admin)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      get admin_user_path(other_admin)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('他の管理者ユーザーの上限はこの画面から変更できません。')
+        expect(response.body).not_to include(limit_overrides_admin_user_path(other_admin))
+      end
+    end
+
     it 'UIに開発者向け文言を出さない' do
       admin = create(:user, :admin)
       user = create(:user)

@@ -87,7 +87,7 @@ module SystemOperations
       parsed_expires_at
 
       raise ValidationError, "self_limit_increase_forbidden" if self_target_increase?
-      raise ValidationError, "admin_target_forbidden" if user.admin?
+      raise ValidationError, "admin_target_forbidden" if other_admin_target?
     end
 
     def update_override!
@@ -178,10 +178,19 @@ module SystemOperations
     end
 
     def self_target_increase?
+      return false if admin_self_target?
       return false unless actor.id == user.id
       return false unless enabled_value
 
       casted_value > UserLimits.effective_limit(user: user, key: key)
+    end
+
+    def admin_self_target?
+      actor.id == user.id && actor.admin? && user.admin?
+    end
+
+    def other_admin_target?
+      user.admin? && actor.id != user.id
     end
 
     def casted_value

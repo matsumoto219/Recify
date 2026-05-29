@@ -206,11 +206,11 @@
       <h3 class="text-base font-bold token-text-base"><%= t("admin.users.show.limits.form.title") %></h3>
       <p class="mt-1 text-sm token-text-muted"><%= t("admin.users.show.limits.form.description") %></p>
 
-      <% if record[:admin] %>
+      <% if record[:admin] && record[:id] != current_user.id %>
         <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
           <%= t("admin.users.show.limits.form.admin_forbidden") %>
         </p>
-      <% elsif record[:id] == current_user.id %>
+      <% elsif record[:id] == current_user.id && !current_user.admin? %>
         <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
           <%= t("admin.users.show.limits.form.self_forbidden") %>
         </p>

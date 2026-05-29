@@ -205,7 +205,7 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
       expect(result.error_code).to eq('above_max')
     end
 
-    it 'self targetの増枠を拒否する' do
+    it 'admin自身の増枠を許可する' do
       actor.update!(storage_limit_bytes: 1.gigabyte)
 
       result = described_class.call(
@@ -221,10 +221,39 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
         confirmation: 'UPDATE USER LIMIT'
       )
 
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.user_limit_override.integer_value).to eq(2.gigabytes)
+        expect(AuditLog.last).to have_attributes(
+          actor_user: actor,
+          action: 'admin.users.limit_update',
+          outcome: 'succeeded',
+          target_id: actor.id,
+          target_uid: "user:#{actor.id}"
+        )
+      end
+    end
+
+    it '非admin自身の増枠は防御的に拒否する' do
+      non_admin = create(:user, storage_limit_bytes: 1.gigabyte)
+
+      result = described_class.call(
+        user: non_admin,
+        key: 'storage_bytes',
+        value: 2.gigabytes.to_s,
+        enabled: '1',
+        expires_at: nil,
+        actor: non_admin,
+        reason: 'self increase',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
       expect(result.error_code).to eq('self_limit_increase_forbidden')
     end
 
-    it 'admin targetを拒否する' do
+    it '他admin targetを拒否する' do
       admin_target = create(:user, :admin)
 
       result = described_class.call(

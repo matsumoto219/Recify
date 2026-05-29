@@ -127,6 +127,62 @@ RSpec.describe 'Admin user limit overrides', type: :request do
       end
     end
 
+    it 'admin自身のoverride更新を許可し、AuditLogを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post limit_overrides_admin_user_path(admin),
+             params: {
+               key: 'receipt_uploads_per_day',
+               value: '80',
+               enabled: '1',
+               reason: 'admin self limit tuning',
+               confirmation: 'UPDATE USER LIMIT'
+             }
+      end.to change(AuditLog, :count).by(1)
+
+      override = UserLimitOverride.find_by!(user: admin, key: 'receipt_uploads_per_day')
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(admin))
+        expect(override.integer_value).to eq(80)
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'admin.users.limit_update',
+          outcome: 'succeeded',
+          target_uid: "user:#{admin.id}"
+        )
+      end
+    end
+
+    it '他admin targetのoverride更新は拒否する' do
+      admin = create(:user, :admin)
+      other_admin = create(:user, :admin)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post limit_overrides_admin_user_path(other_admin),
+             params: {
+               key: 'receipt_uploads_per_day',
+               value: '80',
+               enabled: '1',
+               reason: 'other admin limit tuning',
+               confirmation: 'UPDATE USER LIMIT'
+             }
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(other_admin))
+        expect(flash[:alert]).to include('管理者ユーザー')
+        expect(UserLimitOverride.where(user: other_admin)).to be_empty
+        expect(AuditLog.last).to have_attributes(action: 'admin.users.limit_update', outcome: 'failed', error_code: 'admin_target_forbidden')
+      end
+    end
+
     it 'SystemOperations失敗時はalertで戻す' do
       admin = create(:user, :admin)
       target = create(:user)
