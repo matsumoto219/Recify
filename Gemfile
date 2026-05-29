@@ -19,18 +19,21 @@ gem "stimulus-rails"
 gem "tailwindcss-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
+# 外部API HTTPクライアント [https://github.com/lostisland/faraday]
 gem "faraday"
 # Pagination [https://github.com/ddnexus/pagy]
 gem "pagy"
-# Rack middleware for throttling abusive requests
+# リクエスト制限ミドルウェア [https://github.com/rack/rack-attack]
 gem "rack-attack", "~> 6.8"
-# Server-side WebAuthn ceremony verification for future passkey support
+# Passkey/WebAuthn検証 [https://github.com/cedarcode/webauthn-ruby]
 gem "webauthn", "~> 3.4"
-# TOTP and QR code support for authenticator-app setup
+# TOTP生成・検証 [https://github.com/mdp/rotp]
 gem "rotp", "~> 6.3"
+# QRコード生成 [https://github.com/whomwah/rqrcode]
 gem "rqrcode", "~> 3.2"
-# Error monitoring for production exceptions
+# Sentry Ruby SDK [https://github.com/getsentry/sentry-ruby]
 gem "sentry-ruby", "~> 6.5"
+# Sentry Rails連携 [https://github.com/getsentry/sentry-ruby]
 gem "sentry-rails", "~> 6.5"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
@@ -56,7 +59,7 @@ gem "thruster", require: false
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 gem "image_processing", "~> 1.2"
 
-# I18n（多言語対応/日本語化）
+# Rails標準文言の日本語化 [https://github.com/svenfuchs/rails-i18n]
 gem "rails-i18n"
 
 group :development, :test do
@@ -98,5 +101,7 @@ group :test do
   gem "webmock"
 end
 
+# 認証基盤 [https://github.com/heartcombo/devise]
 gem "devise", "~> 5.0"
+# Devise日本語化 [https://github.com/devise-i18n/devise-i18n]
 gem "devise-i18n"
