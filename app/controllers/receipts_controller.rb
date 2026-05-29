@@ -106,6 +106,7 @@ class ReceiptsController < ApplicationController
   end
 
   def create
+    rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
     create_params = normalized_receipt_params.to_h
     @receipt = current_user.receipts.new
 
@@ -117,6 +118,8 @@ class ReceiptsController < ApplicationController
     if @receipt.save
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
+      replace_manual_amount_errors!(create_params)
+      build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content, formats: :html
     end
@@ -436,6 +439,59 @@ class ReceiptsController < ApplicationController
     BigDecimal(value.to_s).positive?
   rescue ArgumentError
     false
+  end
+
+  def blank_new_receipt_item_rows_submitted?
+    item_attribute_values = submitted_receipt_item_attribute_values
+    return false if item_attribute_values.blank?
+
+    item_attribute_values.all? do |item_attributes|
+      next false unless item_attributes.respond_to?(:stringify_keys)
+
+      blank_new_receipt_item_attributes?(item_attributes.stringify_keys)
+    end
+  end
+
+  def submitted_receipt_item_attribute_values
+    items_attributes = params.dig(:receipt, :receipt_items_attributes)
+    return [] if items_attributes.blank?
+
+    values =
+      if items_attributes.respond_to?(:values)
+        items_attributes.values
+      else
+        Array(items_attributes)
+      end
+
+    values.map do |item_attributes|
+      if item_attributes.respond_to?(:to_unsafe_h)
+        item_attributes.to_unsafe_h
+      elsif item_attributes.respond_to?(:to_h)
+        item_attributes.to_h
+      else
+        item_attributes
+      end
+    end
+  end
+
+  def replace_manual_amount_errors!(permitted)
+    return unless permitted["total_amount"].blank?
+    return if @receipt.errors[:total_amount].blank?
+
+    @receipt.errors.delete(:total_amount)
+    @receipt.errors.add(:base, manual_amount_error_message(permitted))
+  end
+
+  def manual_amount_error_message(permitted)
+    if amount_receipt_items(permitted).empty?
+      t("receipts.form.errors.items_required")
+    else
+      t("receipts.form.errors.item_amount_required")
+    end
+  end
+
+  def build_receipt_item_row_for_render
+    @receipt.receipt_items.build
   end
 
   def apply_amount_calculation!(permitted, context:)

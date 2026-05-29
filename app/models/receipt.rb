@@ -94,9 +94,10 @@ class Receipt < ApplicationRecord
             format: { with: DISPLAY_ID_FORMAT }
 
   # 合計金額数値と範囲指定
+  validates :total_amount, presence: true, unless: :allow_partial_ocr_data?
   validates :total_amount,
-            presence: true,
             numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 },
+            allow_blank: true,
             unless: :allow_partial_ocr_data?
 
   validates :store_name, presence: true, unless: :allow_partial_ocr_data?

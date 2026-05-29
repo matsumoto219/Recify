@@ -40,6 +40,10 @@ RSpec.describe 'Receipts', type: :request do
     Rack::Test::UploadedFile.new(tempfile.path, 'image/png')
   end
 
+  def rendered_receipt_item_rows(document)
+    document.css('[data-receipt-form-target="itemsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="itemRow"]')
+  end
+
   def upload_ocr_result(overrides = {})
     {
       success: true,
@@ -1574,6 +1578,107 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq(I18n.t('receipts.common.unset'))
         expect(document.at_css('[data-receipt-form-target="subtotalAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
         expect(document.at_css('[data-receipt-form-target="taxAmount"]').text.strip).to eq(I18n.t('receipts.common.not_available'))
+      end
+    end
+
+    it '空の初期明細行だけで手動保存した場合は明細向けエラーを表示し明細行を再表示する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '',
+                category: '',
+                price: '',
+                quantity: '1',
+                quantity_unit: '個',
+                product_code: '',
+                discount_rate: '',
+                tax_rate: '',
+                line_total: '0',
+                needs_review: false,
+                _destroy: '0'
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(notice_surface.text).not_to include('合計金額を入力してください')
+        expect(notice_surface.text).not_to include('合計金額は数値で入力してください')
+        expect(rendered_receipt_item_rows(document).size).to eq(1)
+      end
+    end
+
+    it '明細行を意図的に全削除して手動保存した場合は空状態を維持する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '',
+                price: '',
+                quantity: '1',
+                quantity_unit: '個',
+                line_total: '0',
+                needs_review: false,
+                _destroy: '1'
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(notice_surface.text).to include(I18n.t('receipts.form.errors.items_required'))
+        expect(notice_surface.text).not_to include('合計金額を入力してください')
+        expect(rendered_receipt_item_rows(document)).to be_empty
+      end
+    end
+
+    it '入力済み明細があるvalidation失敗では入力内容を保持する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '保持する商品',
+                price: '120',
+                quantity: '2',
+                quantity_unit: '個',
+                tax_rate: '10',
+                line_total: '',
+                needs_review: false
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      item_row = rendered_receipt_item_rows(document).first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(rendered_receipt_item_rows(document).size).to eq(1)
+        expect(item_row.at_css('input[name*="[confirmed_name]"]')['value']).to eq('保持する商品')
+        expect(item_row.at_css('input[name*="[price]"]')['value']).to eq('120')
       end
     end
 

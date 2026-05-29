@@ -97,6 +97,9 @@ ja:
         subtotal: 小計
         unset: 未設定
         multiple_tax_rates: 複数税率
+      errors:
+        items_required: 明細を1件以上入力してください。
+        item_amount_required: 明細の金額を入力してください。
     item_fields:
       name: 品名
       name_placeholder: 品名を入力
