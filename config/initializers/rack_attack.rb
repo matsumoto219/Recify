@@ -7,7 +7,24 @@ class Rack::Attack
   Rack::Attack.throttled_response_retry_after_header = true
 
   BASIC_THROTTLE_SKIP_PATH = %r{\A/(?:up\z|assets/|rails/active_storage/|favicon\.ico\z|robots\.txt\z|letter_opener)}.freeze
-  SCANNER_PATH = %r{(?:\A|/)(?:\.env|wp-login\.php|wp-admin|xmlrpc\.php|phpmyadmin|pma|etc/passwd|vendor/phpunit|cgi-bin)}i.freeze
+  ADMIN_PROBE_MAXRETRY = 20
+  ADMIN_PROBE_FINDTIME = 10.minutes
+  ADMIN_PROBE_BANTIME = 30.minutes
+  ADMIN_PROBE_PATH = %r{\A/admin(?:\z|/)}.freeze
+  ADMIN_SERVICE_STATUS_PATH = %r{\A/admin/external_services/status(?:\z|[/?#])}.freeze
+  ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
+  SCANNER_PATH = %r{
+    (?:\A|/)(?:\.env|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
+    |(?:\A|/)(?:wp-admin|phpmyadmin|pma|vendor/phpunit|cgi-bin)(?:\z|[/?#])
+    |(?:\A|/)(?:config/(?:master\.key|credentials\.yml\.enc|database\.yml)|db/(?:production|development)\.sqlite3|backup\.sql|dump\.sql)(?:\z|[/?#])
+    |(?:\A|/)rails/(?:info/(?:routes|properties)|mailers|conductor)(?:\z|[/?#])
+    |(?:\A|/)(?:sidekiq|admin/sidekiq|solid_queue|admin/solid_queue)(?:\z|[/?#])
+    |\.(?:bak|old|backup|orig|save|swp)(?:\z|[/?#])
+    |\.\.(?:/|\\|%2f|%5c)
+    |%(?:25)?2e%(?:25)?2e(?:/|\\|%(?:25)?2f|%(?:25)?5c)
+    |\.\.%(?:25)?2f
+    |\.\.%(?:25)?5c
+  }ix.freeze
 
   class << self
     def throttleable_request?(request)
@@ -21,6 +38,19 @@ class Rack::Attack
       SCANNER_PATH.match?(path) || SCANNER_PATH.match?(query)
     rescue ArgumentError
       SCANNER_PATH.match?(path)
+    end
+
+    def admin_probe_request?(request)
+      path = request.path.to_s
+
+      return false unless ADMIN_PROBE_PATH.match?(path)
+      return false if ADMIN_SERVICE_STATUS_PATH.match?(path) && json_request?(request)
+
+      true
+    end
+
+    def active_storage_direct_upload_probe?(request)
+      request.post? && request.path.to_s == ACTIVE_STORAGE_DIRECT_UPLOAD_PATH
     end
 
     def json_request?(request)
@@ -80,6 +110,24 @@ class Rack::Attack
   blocklist("fail2ban/scanner_paths") do |request|
     Rack::Attack::Fail2Ban.filter("scanner:#{request.ip}", maxretry: 3, findtime: 10.minutes, bantime: 30.minutes) do
       Rack::Attack.scanner_request?(request)
+    end
+  end
+
+  blocklist("fail2ban/admin_probes") do |request|
+    Rack::Attack::Allow2Ban.filter(
+      "admin_probe:#{request.ip}",
+      maxretry: ADMIN_PROBE_MAXRETRY,
+      findtime: ADMIN_PROBE_FINDTIME,
+      bantime: ADMIN_PROBE_BANTIME
+    ) do
+      Rack::Attack.admin_probe_request?(request)
+    end
+  end
+
+  # Direct uploads are intentionally unavailable. Remove this rule if direct uploads are enabled.
+  blocklist("fail2ban/active_storage_direct_uploads") do |request|
+    Rack::Attack::Fail2Ban.filter("direct_upload_probe:#{request.ip}", maxretry: 3, findtime: 10.minutes, bantime: 30.minutes) do
+      Rack::Attack.active_storage_direct_upload_probe?(request)
     end
   end
 

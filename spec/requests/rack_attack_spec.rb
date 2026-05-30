@@ -35,6 +35,10 @@ RSpec.describe 'Rack::Attack', type: :request do
     }
   end
 
+  def scanner_request_for(path)
+    Rack::Attack::Request.new(Rack::MockRequest.env_for(path))
+  end
+
   def expect_throttled_html_response
     retry_after = response.headers['Retry-After'].to_i
     retry_after_minutes = (retry_after / 60.0).ceil
@@ -238,6 +242,137 @@ RSpec.describe 'Rack::Attack', type: :request do
     3.times do
       get '/wp-login.php', headers: remote_addr(ip)
       expect_blocklisted_html_response(path: 'wp-login.php')
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    expect_blocklisted_html_response
+  end
+
+  it 'treats Rails and secret file probes as scanner requests' do
+    paths = [
+      '/.git/config',
+      '/config/master.key',
+      '/backup.sql',
+      '/assets/application.css.bak'
+    ]
+
+    aggregate_failures do
+      paths.each do |path|
+        expect(Rack::Attack.scanner_request?(scanner_request_for(path))).to be(true), "#{path} should be a scanner path"
+      end
+    end
+  end
+
+  it 'treats encoded path traversal probes as scanner requests' do
+    paths = [
+      '/../../etc/passwd',
+      '/?file=..%2F..%2Fetc%2Fpasswd',
+      '/?path=%252e%252e%252fconfig%252fmaster.key',
+      '/download?file=..%5Cwindows%5Cwin.ini'
+    ]
+
+    aggregate_failures do
+      paths.each do |path|
+        expect(Rack::Attack.scanner_request?(scanner_request_for(path))).to be(true), "#{path} should be a scanner path"
+      end
+    end
+  end
+
+  it 'treats Rails debug and mounted app probes as scanner requests' do
+    paths = [
+      '/rails/info/routes',
+      '/rails/info/properties',
+      '/rails/mailers',
+      '/rails/conductor',
+      '/sidekiq',
+      '/admin/sidekiq',
+      '/solid_queue',
+      '/admin/solid_queue'
+    ]
+
+    aggregate_failures do
+      paths.each do |path|
+        expect(Rack::Attack.scanner_request?(scanner_request_for(path))).to be(true), "#{path} should be a scanner path"
+      end
+    end
+  end
+
+  it 'does not treat normal application paths as scanner requests' do
+    paths = [
+      '/receipts',
+      '/users/sign_in'
+    ]
+
+    aggregate_failures do
+      paths.each do |path|
+        expect(Rack::Attack.scanner_request?(scanner_request_for(path))).to be(false), "#{path} should not be a scanner path"
+      end
+    end
+  end
+
+  it 'blocks new scanner probes with the existing fail2ban response' do
+    ip = '203.0.113.19'
+
+    3.times do
+      get '/.git/config', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: '.git/config')
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    expect_blocklisted_html_response
+  end
+
+  it 'blocks Rails debug probes with the existing fail2ban response' do
+    ip = '203.0.113.20'
+
+    3.times do
+      get '/rails/info/routes', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'rails/info/routes')
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    expect_blocklisted_html_response
+  end
+
+  it 'counts admin probes separately and only blocks after the higher threshold' do
+    ip = '203.0.113.21'
+
+    Rack::Attack::ADMIN_PROBE_MAXRETRY.times do
+      get '/admin', headers: remote_addr(ip)
+      expect(response).not_to have_http_status(:forbidden)
+    end
+
+    get '/admin/dashboard', headers: remote_addr(ip)
+
+    expect_blocklisted_html_response(path: 'admin/dashboard')
+  end
+
+  it 'does not count the admin service status JSON polling endpoint as an admin probe' do
+    request = Rack::Attack::Request.new(
+      Rack::MockRequest.env_for('/admin/external_services/status', 'HTTP_ACCEPT' => 'application/json')
+    )
+
+    aggregate_failures do
+      expect(Rack::Attack.admin_probe_request?(request)).to be(false)
+      expect(Rack::Attack.scanner_request?(request)).to be(false)
+    end
+  end
+
+  it 'counts direct HTML hits to the admin service status endpoint as admin probes' do
+    request = scanner_request_for('/admin/external_services/status')
+
+    expect(Rack::Attack.admin_probe_request?(request)).to be(true)
+  end
+
+  it 'blocks repeated ActiveStorage direct upload probes' do
+    ip = '203.0.113.22'
+
+    3.times do
+      post '/rails/active_storage/direct_uploads', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'rails/active_storage/direct_uploads')
     end
 
     get root_path, headers: remote_addr(ip)
