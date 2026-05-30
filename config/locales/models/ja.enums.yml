@@ -78,7 +78,7 @@ ja:
 
     receipt_adjustment:
       kind:
-        receipt_discount: レシート全体値引き
+        receipt_discount: 全体値引き
         coupon: クーポン
         point_usage: ポイント利用
         return_refund: 返品・返金
