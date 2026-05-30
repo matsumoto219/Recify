@@ -333,7 +333,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'item_discount二重控除疑いはblockingにする' do
+    it 'allowlist外のitem_discountはother相当の不確実な調整行として扱う' do
       result = call_service(
         receipt: { total_amount: 900 },
         receipt_items: [
@@ -344,7 +344,7 @@ RSpec.describe ReceiptAmountService do
         ]
       )
 
-      expect(result[:blocking_inconsistencies]).to include(:adjustment_duplicate_item_discount)
+      expect(result[:blocking_inconsistencies]).to include(:adjustment_uncertain)
     end
 
     it 'corrects total_amount from subtotal_amount plus tax_amount' do

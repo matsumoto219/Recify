@@ -11,7 +11,6 @@ module Amounts
       tax_detail_mismatch
       invalid_amount_relation
       adjustment_uncertain
-      adjustment_duplicate_item_discount
       insufficient_data
     ].freeze
 

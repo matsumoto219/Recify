@@ -17,8 +17,7 @@ module Amounts
       zero_amount_item_incomplete: "ZERO_AMOUNT_ITEM_INCOMPLETE",
       discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE",
       adjustment_uncertain: "ADJUSTMENT_UNCERTAIN",
-      adjustment_tax_rate_missing: "ADJUSTMENT_TAX_RATE_MISSING",
-      adjustment_duplicate_item_discount: "ADJUSTMENT_DUPLICATE_ITEM_DISCOUNT"
+      adjustment_tax_rate_missing: "ADJUSTMENT_TAX_RATE_MISSING"
     }.freeze
 
     def self.code(symbol)

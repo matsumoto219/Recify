@@ -3,11 +3,9 @@
 module Amounts
   class AdjustmentTotalAggregator
     PAYMENT_ADJUSTMENT_KINDS = %w[point_usage].freeze
-    DUPLICATE_SENSITIVE_KINDS = %w[item_discount].freeze
 
     def initialize(adjustments:, items: [], rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, receipt_tax_basis: :total_includes_tax)
       @adjustments = Array(adjustments).map { |adjustment| normalize_adjustment(adjustment) }
-      @items = Array(items)
       @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE)
       @receipt_tax_basis = normalize_receipt_tax_basis(receipt_tax_basis)
     end
@@ -23,10 +21,6 @@ module Amounts
           totals[:payment_adjustment_total] += signed_amount(adjustment)
           next
         end
-
-        duplicate_item_discount = duplicate_item_discount?(adjustment)
-        totals[:duplicate_item_discount_suspected] ||= duplicate_item_discount
-        next if duplicate_item_discount
 
         signed = signed_amount(adjustment)
         totals[:receipt_total_delta] += signed
@@ -67,7 +61,7 @@ module Amounts
 
     private
 
-    attr_reader :adjustments, :items, :rounding_mode, :receipt_tax_basis
+    attr_reader :adjustments, :rounding_mode, :receipt_tax_basis
 
     def empty_totals
       {
@@ -82,8 +76,7 @@ module Amounts
         taxable_delta_by_rate: {},
         payment_adjustment_total: 0,
         tax_rate_missing_adjustment_total: 0,
-        uncertain_adjustments: [],
-        duplicate_item_discount_suspected: false
+        uncertain_adjustments: []
       }
     end
 
@@ -107,14 +100,6 @@ module Amounts
 
     def payment_adjustment?(adjustment)
       PAYMENT_ADJUSTMENT_KINDS.include?(adjustment[:kind].to_s)
-    end
-
-    def duplicate_item_discount?(adjustment)
-      DUPLICATE_SENSITIVE_KINDS.include?(adjustment[:kind].to_s) && item_discount_data_present?
-    end
-
-    def item_discount_data_present?
-      items.any? { |item| to_i(fetch_value(item, :discount_amount)).positive? }
     end
 
     def uncertain_adjustment?(adjustment)

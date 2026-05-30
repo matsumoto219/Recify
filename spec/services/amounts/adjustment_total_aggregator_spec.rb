@@ -89,23 +89,6 @@ RSpec.describe Amounts::AdjustmentTotalAggregator do
     end
   end
 
-  it 'item_discountは既存item discountとの二重控除疑いとして計算から除外する' do
-    result = aggregate(
-      items: [
-        { line_total: 900, discount_amount: 100 }
-      ],
-      adjustments: [
-        { kind: 'item_discount', sign: 'discount', amount: 100, tax_rate: BigDecimal('0.1') }
-      ]
-    )
-
-    aggregate_failures do
-      expect(result[:duplicate_item_discount_suspected]).to eq(true)
-      expect(result[:receipt_total_delta]).to eq(0)
-      expect(result[:discount_total]).to eq(0)
-    end
-  end
-
   it 'otherやneeds_review adjustmentを不確実として返す' do
     result = aggregate(
       adjustments: [

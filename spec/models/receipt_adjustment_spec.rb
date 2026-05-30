@@ -1,6 +1,10 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAdjustment do
+  it '商品単位割引をreceipt_adjustmentsのkindとして扱わない' do
+    expect(described_class::KINDS).not_to include('item_discount')
+  end
+
   it 'validates allowlisted kind, sign, and source' do
     adjustment = build(:receipt_adjustment, kind: 'invalid', sign: 'bad', source: 'unknown')
 

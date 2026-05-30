@@ -9,7 +9,6 @@ RSpec.describe Amounts::MismatchSeverity do
         expect(described_class.severity(:tax_amount_mismatch)).to eq(:blocking)
         expect(described_class.severity(:tax_detail_mismatch)).to eq(:blocking)
         expect(described_class.severity(:adjustment_uncertain)).to eq(:blocking)
-        expect(described_class.severity(:adjustment_duplicate_item_discount)).to eq(:blocking)
         expect(described_class.severity(:insufficient_data)).to eq(:blocking)
       end
     end

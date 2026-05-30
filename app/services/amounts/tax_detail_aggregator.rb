@@ -67,7 +67,6 @@ module Amounts
       @adjustments.each_with_object({}) do |adjustment, grouped|
         normalized = normalize_adjustment(adjustment)
         next if payment_adjustment?(normalized)
-        next if duplicate_item_discount?(normalized)
 
         tax_rate = normalize_tax_rate(normalized[:tax_rate])
         amount = normalized[:amount].to_i
@@ -154,11 +153,6 @@ module Amounts
 
     def payment_adjustment?(adjustment)
       adjustment[:kind] == "point_usage"
-    end
-
-    def duplicate_item_discount?(adjustment)
-      adjustment[:kind] == "item_discount" &&
-        @items.any? { |item| to_i(fetch_value(item, :discount_amount)).positive? }
     end
 
     def signed_amount(adjustment)

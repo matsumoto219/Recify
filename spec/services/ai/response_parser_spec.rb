@@ -140,6 +140,30 @@ RSpec.describe Ai::ResponseParser do
         )
       end
 
+      it 'item_discountをallowlist外としてotherとneeds_reviewへ安全化する' do
+        payload['receipt_adjustments'] = [
+          {
+            'kind' => 'item_discount',
+            'amount' => 100,
+            'sign' => 'discount',
+            'source_text' => '商品値引き -100',
+            'source_line_index' => 6
+          }
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:receipt_adjustments_attributes]).to include(
+          include(
+            kind: 'other',
+            amount: 100,
+            sign: 'discount',
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          )
+        )
+      end
+
       it 'is_receipt true のconfidenceをmetaに保持する' do
         payload['is_receipt_confidence'] = 0.55
 

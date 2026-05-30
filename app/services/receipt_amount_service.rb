@@ -541,7 +541,6 @@ class ReceiptAmountService
     inconsistencies = []
     inconsistencies << :adjustment_uncertain if summary[:uncertain_adjustments].present?
     inconsistencies << :adjustment_tax_rate_missing if summary[:tax_rate_missing_adjustment_total].to_i.positive?
-    inconsistencies << :adjustment_duplicate_item_discount if summary[:duplicate_item_discount_suspected]
     inconsistencies
   end
 

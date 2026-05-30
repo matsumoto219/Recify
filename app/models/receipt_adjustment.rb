@@ -1,7 +1,6 @@
 class ReceiptAdjustment < ApplicationRecord
   KINDS = %w[
     receipt_discount
-    item_discount
     coupon
     point_usage
     return_refund
