@@ -27,7 +27,11 @@ class ReceiptAnalysisRunStaleCleanupJob < ApplicationJob
       "[ReceiptAnalysisRunStaleCleanupJob] completed " \
       "dry_run=#{result[:dry_run]} stale_count=#{result[:stale_count]} " \
       "failed_count=#{result[:failed_count]} canceled_count=#{result[:canceled_count]} " \
-      "skipped_count=#{result[:skipped_count]} errors=#{result[:errors].size}"
+      "skipped_count=#{result[:skipped_count]} " \
+      "stuck_processing_count=#{result[:stuck_processing_count].to_i} " \
+      "stuck_processing_failed_count=#{result[:stuck_processing_failed_count].to_i} " \
+      "stuck_processing_skipped_count=#{result[:stuck_processing_skipped_count].to_i} " \
+      "errors=#{result[:errors].size}"
     )
   end
 
@@ -43,6 +47,9 @@ class ReceiptAnalysisRunStaleCleanupJob < ApplicationJob
         failed_count: result[:failed_count],
         canceled_count: result[:canceled_count],
         skipped_count: result[:skipped_count],
+        stuck_processing_count: result[:stuck_processing_count].to_i,
+        stuck_processing_failed_count: result[:stuck_processing_failed_count].to_i,
+        stuck_processing_skipped_count: result[:stuck_processing_skipped_count].to_i,
         sample_run_keys: sample_run_keys(result)
       }
     )

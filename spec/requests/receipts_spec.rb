@@ -6184,6 +6184,20 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to redirect_to(receipts_path)
     end
 
+    it 'stuck processing cleanupでfailed化されたレシートを削除できる' do
+      stuck_receipt = create(:receipt, :with_image, :processing, user: user)
+      stuck_receipt.update_columns(updated_at: 7.hours.ago)
+      ReceiptAnalysisRuns.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      expect(stuck_receipt.reload.status).to eq('failed')
+
+      expect do
+        delete receipt_path(stuck_receipt)
+      end.to change(Receipt, :count).by(-1)
+
+      expect(response).to redirect_to(receipts_path)
+    end
+
     it '通知OFFなら削除成功のredirect flashを表示しない' do
       user.update!(push_notification_enabled: false)
 

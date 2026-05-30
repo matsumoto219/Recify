@@ -327,6 +327,9 @@ ja:
         skipped_count: skipped_count
         failed_count: failed_count
         canceled_count: canceled_count
+        stuck_processing_count: stuck_processing_count
+        stuck_processing_failed_count: stuck_processing_failed_count
+        stuck_processing_skipped_count: stuck_processing_skipped_count
         errors: errors
         updated_at: updated_at
         empty: 対象のstale active runはありません。
@@ -351,7 +354,7 @@ ja:
         reason_required: 実行理由を入力してください。
         confirmation_required: 実行確認にチェックしてください。
         failed: "Cleanupを実行できませんでした: %{error_code}"
-        stale_executed: "Stale cleanupを実行しました: failed=%{failed_count}, canceled=%{canceled_count}"
+        stale_executed: "Stale cleanupを実行しました: failed=%{failed_count}, canceled=%{canceled_count}, stuck_processing_failed=%{stuck_processing_failed_count}"
         retention_executed: "Retention cleanupを実行しました: deleted=%{deleted_count}"
     system_operations:
       title: システム運用

@@ -805,6 +805,112 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(after_options.find { |option| option[:type] == 'ocr_retry' }).to include(possible: true, disabled_reason: nil)
       end
     end
+
+    it 'latest run failed + old processing receipt はstuck processingとしてfailedへ同期する' do
+      receipt = create_old_processing_receipt
+      latest_run = create(:receipt_analysis_run, :failed, receipt:, stage: 'ai')
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+      receipt.reload
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(0)
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(1)
+        expect(result[:stuck_processing_records]).to contain_exactly(
+          include(
+            receipt_id: receipt.id,
+            receipt_public_id: receipt.public_id,
+            receipt_status: 'failed',
+            latest_run_key: latest_run.run_key,
+            latest_run_status: 'failed'
+          )
+        )
+        expect(receipt.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('analysis_stale_run')
+        expect(receipt.processing_error_message).to eq(I18n.t('receipts.processing_errors.unexpected_failure'))
+        expect(receipt.processing_error_message).not_to include('RAW', 'secret', 'backtrace')
+        expect(receipt.review_reasons).to eq([])
+      end
+    end
+
+    it 'latest run canceled / superseded + old processing receipt はfailedへ同期する' do
+      canceled_receipt = create_old_processing_receipt
+      superseded_receipt = create_old_processing_receipt
+      create(:receipt_analysis_run, status: 'canceled', receipt: canceled_receipt)
+      create(:receipt_analysis_run, status: 'superseded', receipt: superseded_receipt)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(2)
+        expect(result[:stuck_processing_failed_count]).to eq(2)
+        expect(canceled_receipt.reload.status).to eq('failed')
+        expect(superseded_receipt.reload.status).to eq('failed')
+      end
+    end
+
+    it 'runなし + old processing receipt はfailedへ同期する' do
+      receipt = create_old_processing_receipt
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(1)
+        expect(result[:stuck_processing_records]).to contain_exactly(
+          include(
+            receipt_id: receipt.id,
+            latest_run_key: nil,
+            latest_run_status: nil
+          )
+        )
+        expect(receipt.reload.status).to eq('failed')
+      end
+    end
+
+    it 'new processing receipt はstuck processing対象外にする' do
+      receipt = create(:receipt, :with_image, :processing)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(0)
+        expect(receipt.reload.status).to eq('processing')
+      end
+    end
+
+    it 'active queued/running runありのprocessing receiptはstuck processing側では触らない' do
+      receipt = create_old_processing_receipt
+      active_run = create(:receipt_analysis_run, receipt:, status: 'queued', stage: 'queued')
+      active_run.update_columns(updated_at: 1.hour.ago)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(0)
+        expect(result[:stuck_processing_count]).to eq(0)
+        expect(receipt.reload.status).to eq('processing')
+        expect(active_run.reload.status).to eq('queued')
+      end
+    end
+
+    it 'stuck processing dry_runでは更新せず件数だけ返す' do
+      receipt = create_old_processing_receipt
+      create(:receipt_analysis_run, :failed, receipt:)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: true)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_skipped_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(0)
+        expect(result[:stuck_processing_records]).to contain_exactly(
+          include(receipt_id: receipt.id, receipt_status: 'processing')
+        )
+        expect(receipt.reload.status).to eq('processing')
+      end
+    end
   end
 
   describe '.cleanup_expired' do
@@ -866,5 +972,11 @@ RSpec.describe ReceiptAnalysisRuns do
     run = create(:receipt_analysis_run, receipt:, status:, stage:)
     run.update_columns(updated_at: 7.hours.ago)
     run
+  end
+
+  def create_old_processing_receipt
+    receipt = create(:receipt, :with_image, :processing)
+    receipt.update_columns(updated_at: 7.hours.ago)
+    receipt
   end
 end

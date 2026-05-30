@@ -108,7 +108,8 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
       t(
         "admin.receipt_analysis_cleanup.messages.stale_executed",
         failed_count: cleanup_result[:failed_count],
-        canceled_count: cleanup_result[:canceled_count]
+        canceled_count: cleanup_result[:canceled_count],
+        stuck_processing_failed_count: cleanup_result[:stuck_processing_failed_count].to_i
       )
     else
       t("admin.receipt_analysis_cleanup.messages.retention_executed", deleted_count: cleanup_result[:deleted_count])

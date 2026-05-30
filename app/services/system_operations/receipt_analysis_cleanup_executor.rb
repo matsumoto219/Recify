@@ -141,7 +141,10 @@ module SystemOperations
           stale_count: cleanup_result[:stale_count],
           failed_count: cleanup_result[:failed_count],
           canceled_count: cleanup_result[:canceled_count],
-          skipped_count: cleanup_result[:skipped_count]
+          skipped_count: cleanup_result[:skipped_count],
+          stuck_processing_count: cleanup_result[:stuck_processing_count].to_i,
+          stuck_processing_failed_count: cleanup_result[:stuck_processing_failed_count].to_i,
+          stuck_processing_skipped_count: cleanup_result[:stuck_processing_skipped_count].to_i
         }
       else
         {

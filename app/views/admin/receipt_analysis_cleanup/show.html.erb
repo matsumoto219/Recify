@@ -140,6 +140,18 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.canceled_count") %></dt>
         <dd class="font-mono token-text-base"><%= stale[:canceled_count] %></dd>
       </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_count") %></dt>
+        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_count].to_i %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_failed_count") %></dt>
+        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_failed_count].to_i %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_skipped_count") %></dt>
+        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_skipped_count].to_i %></dd>
+      </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 md:col-span-2">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.errors") %></dt>
         <dd class="font-mono token-text-base"><%= Array(stale[:errors]).size %></dd>

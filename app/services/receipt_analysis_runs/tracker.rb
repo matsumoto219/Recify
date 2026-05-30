@@ -356,7 +356,7 @@ module ReceiptAnalysisRuns
           receipt.update!(
             status: "failed",
             processing_error_code: "analysis_stale_run",
-            processing_error_message: "analysis_stale_run",
+            processing_error_message: safe_receipt_failure_message,
             review_reasons: []
           )
           true

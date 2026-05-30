@@ -10,6 +10,12 @@ module ReceiptAnalysisRuns
   end
 
   STALE_ERROR_CODE = "analysis_stale_run".freeze
+  STUCK_PROCESSING_TERMINAL_RUN_STATUSES = %w[
+    failed
+    canceled
+    superseded
+  ].freeze
+  STUCK_PROCESSING_RECEIPT_MESSAGE_KEY = "receipts.processing_errors.unexpected_failure".freeze
 
   class << self
     def start(receipt:, source:, requested_by_user: nil, request_reason: nil, parent_run: nil)
@@ -125,7 +131,9 @@ module ReceiptAnalysisRuns
       limit = normalize_positive_integer(limit, 100)
       dry_run = normalize_boolean(dry_run)
       runs = stale_runs(cutoff:, limit:)
+      stuck_processing_receipts = stuck_processing_receipts(cutoff:, limit:)
       records = runs.map { |run| cleanup_run_record(run) }
+      stuck_processing_records = stuck_processing_receipts.map { |receipt| stuck_processing_receipt_record(receipt) }
       result = {
         dry_run: dry_run,
         cutoff: cutoff,
@@ -134,7 +142,11 @@ module ReceiptAnalysisRuns
         failed_count: 0,
         canceled_count: 0,
         skipped_count: dry_run ? runs.size : 0,
+        stuck_processing_count: stuck_processing_receipts.size,
+        stuck_processing_failed_count: 0,
+        stuck_processing_skipped_count: dry_run ? stuck_processing_receipts.size : 0,
         records: records,
+        stuck_processing_records: stuck_processing_records,
         errors: []
       }
 
@@ -154,7 +166,17 @@ module ReceiptAnalysisRuns
         result[:errors] << cleanup_error_record(run, e)
       end
 
+      stuck_processing_receipts.each_with_index do |receipt, index|
+        marked_failed = mark_stuck_processing_receipt_failed!(receipt)
+        receipt.reload
+        stuck_processing_records[index] = stuck_processing_receipt_record(receipt)
+        result[:stuck_processing_failed_count] += 1 if marked_failed
+      rescue StandardError => e
+        result[:errors] << stuck_processing_cleanup_error_record(receipt, e)
+      end
+
       result[:skipped_count] = 0
+      result[:stuck_processing_skipped_count] = 0
       result
     end
 
@@ -204,6 +226,45 @@ module ReceiptAnalysisRuns
         .to_a
     end
 
+    def stuck_processing_receipts(cutoff:, limit:)
+      Receipt
+        .includes(:receipt_analysis_runs)
+        .where(status: "processing")
+        .where(updated_at: ..cutoff)
+        .where.not(id: ReceiptAnalysisRun.active.select(:receipt_id))
+        .order(:updated_at, :id)
+        .limit(limit)
+        .to_a
+        .select { |receipt| stuck_processing_receipt?(receipt) }
+    end
+
+    def stuck_processing_receipt?(receipt)
+      latest_run = latest_analysis_run_for(receipt)
+
+      latest_run.blank? || STUCK_PROCESSING_TERMINAL_RUN_STATUSES.include?(latest_run.status)
+    end
+
+    def latest_analysis_run_for(receipt)
+      receipt.receipt_analysis_runs.max_by(&:created_at)
+    end
+
+    def mark_stuck_processing_receipt_failed!(receipt)
+      receipt.with_lock do
+        receipt.reload
+        return false unless receipt.processing?
+        return false if receipt.receipt_analysis_runs.active.exists?
+        return false unless stuck_processing_receipt?(receipt)
+
+        receipt.update!(
+          status: "failed",
+          processing_error_code: STALE_ERROR_CODE,
+          processing_error_message: I18n.t(STUCK_PROCESSING_RECEIPT_MESSAGE_KEY),
+          review_reasons: []
+        )
+        true
+      end
+    end
+
     def expired_terminal_runs(cutoff:, limit:)
       ReceiptAnalysisRun
         .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
@@ -227,6 +288,20 @@ module ReceiptAnalysisRuns
       }
     end
 
+    def stuck_processing_receipt_record(receipt)
+      latest_run = latest_analysis_run_for(receipt)
+
+      {
+        receipt_id: receipt.id,
+        receipt_public_id: receipt.public_id,
+        receipt_status: receipt.status,
+        latest_run_key: latest_run&.run_key,
+        latest_run_status: latest_run&.status,
+        latest_run_stage: latest_run&.stage,
+        updated_at: receipt.updated_at
+      }
+    end
+
     def expired_run_record(run)
       {
         id: run.id,
@@ -241,6 +316,15 @@ module ReceiptAnalysisRuns
       {
         id: run&.id,
         run_key: run&.run_key,
+        error_class: error.class.name,
+        error_message: error.message
+      }
+    end
+
+    def stuck_processing_cleanup_error_record(receipt, error)
+      {
+        receipt_id: receipt&.id,
+        receipt_public_id: receipt&.public_id,
         error_class: error.class.name,
         error_message: error.message
       }
