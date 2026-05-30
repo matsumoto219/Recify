@@ -66,6 +66,10 @@ RSpec.describe Ai::PromptTemplate do
     it '印字された税率別内訳を注記より優先するよう指示する' do
       aggregate_failures do
         expect(user_prompt).to include('Printed tax breakdown lines are stronger evidence than generic tax notes.')
+        expect(user_prompt).to include('tax.tax_details target/net amount and tax amount that uniquely match')
+        expect(user_prompt).to include('tax_rate_reason = tax_detail_amount_match')
+        expect(user_prompt).to include('Footnotes and symbols apply only to the item/adjustment they clearly mark.')
+        expect(user_prompt).to include('This is language-agnostic: VAT breakdowns, tax summaries')
         expect(user_prompt).to include('use that printed rate for all taxable items and taxable adjustments')
         expect(user_prompt).to include('do not classify all items as 8% from a generic reduced-rate note alone')
       end
@@ -75,7 +79,8 @@ RSpec.describe Ai::PromptTemplate do
       aggregate_failures do
         expect(user_prompt).to include('tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.')
         expect(user_prompt).to include('tax_rate_reason MUST be a short enum-like string when returned.')
-        expect(user_prompt).to include('standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain')
+        expect(user_prompt).to include('tax_detail_amount_match, printed_item_tax_marker, tax_summary_rate_match')
+        expect(user_prompt).to include('standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain, ambiguous_tax_rate')
         expect(user_prompt).to include('tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.')
       end
     end

@@ -297,6 +297,209 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it '税詳細対象額合計が調整後明細合計と一致し税額も内税として整合する場合はgross basisで税を足し直さない' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 2_204,
+          total_amount: 5_000
+        },
+        receipt_items: [
+          { line_total: 4_320, tax_rate: BigDecimal('0.08') },
+          { line_total: 44, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160 },
+          { rate: BigDecimal('0.1'), net_amount: 44, amount: 4 }
+        ],
+        receipt_adjustments: [
+          { kind: 'receipt_discount', sign: 'discount', amount: 2_160, tax_rate: BigDecimal('0.08'), source: 'ai' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(2_204)
+        expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 2_204, tax: 164, total: 2_204)
+        expect(result[:tax_details]).to contain_exactly(
+          include(rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160),
+          include(rate: BigDecimal('0.1'), net_amount: 44, amount: 4)
+        )
+        expect(result[:warning_inconsistencies]).to include(:ocr_total_mismatch)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it '外税単一税率で対象額と税額の合計がOCR totalに一致する場合はgross basisにしない' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it '外税複数税率で対象額と税額の合計がOCR totalに一致する場合はgross basisにしない' do
+      result = call_service(
+        receipt: {
+          total_amount: 3_280
+        },
+        receipt_items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.08') },
+          { line_total: 2_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 1_000, amount: 80 },
+          { rate: BigDecimal('0.1'), net_amount: 2_000, amount: 200 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 3_000, tax: 280, total: 3_280)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it '加算adjustment込み外税で対象額と税額の合計がOCR totalに一致する場合はgross basisにしない' do
+      result = call_service(
+        receipt: {
+          total_amount: 2_750
+        },
+        receipt_items: [
+          { line_total: 2_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 2_500, amount: 250 }
+        ],
+        receipt_adjustments: [
+          { kind: 'service_charge', sign: 'surcharge', amount: 500, tax_rate: BigDecimal('0.1'), source: 'ai' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(2_500)
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 2_500, tax: 250, total: 2_750)
+      end
+    end
+
+    it '減算adjustment込み外税で対象額と税額の合計がOCR totalに一致する場合はgross basisにしない' do
+      result = call_service(
+        receipt: {
+          total_amount: 2_750
+        },
+        receipt_items: [
+          { line_total: 3_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 2_500, amount: 250 }
+        ],
+        receipt_adjustments: [
+          { kind: 'receipt_discount', sign: 'discount', amount: 500, tax_rate: BigDecimal('0.1'), source: 'ai' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(2_500)
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 2_500, tax: 250, total: 2_750)
+      end
+    end
+
+    it '税詳細対象額が調整後明細合計と一致してもOCR totalがない場合は安易にgross basisにしない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
+      end
+    end
+
+    it '税詳細対象額と税額の合計がOCR totalに一致する場合はnet basisを優先する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
+      end
+    end
+
+    it '税詳細対象額がOCR totalと一致し税額も内税として整合する場合はgross basis候補にする' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { line_total: 1_100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_100, amount: 100 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 1_100, tax: 100, total: 1_100)
+        expect(result[:blocking_inconsistencies]).not_to include(:total_mismatch, :tax_detail_mismatch)
+      end
+    end
+
+    it '預かり金額をOCR totalとして誤認してもsubtotalと税詳細対象額が調整後明細合計に一致する場合はgross basisで補正する' do
+      result = call_service(
+        receipt: {
+          total_amount: 5_000,
+          subtotal_amount: 2_204
+        },
+        receipt_items: [
+          { line_total: 4_320, tax_rate: BigDecimal('0.08') },
+          { line_total: 44, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160 },
+          { rate: BigDecimal('0.1'), net_amount: 44, amount: 4 }
+        ],
+        receipt_adjustments: [
+          { kind: 'receipt_discount', sign: 'discount', amount: 2_160, tax_rate: BigDecimal('0.08'), source: 'ai' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
+        expect(result[:resolved]).to include(subtotal: 2_204, tax: 164, total: 2_204)
+        expect(result[:warning_inconsistencies]).to include(:ocr_total_mismatch)
+        expect(result[:blocking_inconsistencies]).not_to include(:total_mismatch)
+      end
+    end
+
     it 'point_usageは税内訳を変えず支払調整として保持する' do
       result = call_service(
         receipt: { total_amount: 1_100 },

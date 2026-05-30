@@ -225,10 +225,18 @@ module Ai
         - tax_rate MUST be a decimal rate such as 0.01 or 0.1. Do NOT return percentage strings such as "1%" or "10%".
         - tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.
         - tax_rate_reason MUST be a short enum-like string when returned.
-        - tax_rate_reason SHOULD be one of: standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain.
+        - tax_rate_reason SHOULD be one of: tax_detail_amount_match, printed_item_tax_marker, tax_summary_rate_match, standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain, ambiguous_tax_rate.
         - tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.
         - When the receipt has multiple tax rates, assign tax_rate to each item whenever supported by the receipt context.
         - When the receipt has a single clear tax rate, return that same tax_rate for each item.
+        - Priority for item/adjustment tax_rate evidence is:
+          1. tax.tax_details target/net amount and tax amount that uniquely match the item's line_total or a receipt_adjustment amount.
+          2. explicit printed tax rate or tax marker on the item/adjustment line.
+          3. footnotes, generic notes, or item-name inference.
+        - In multi-rate receipts, first match each tax.tax_details target/net amount to exactly one item line_total or one taxable receipt_adjustment amount. If there is a unique amount match, use that tax detail's rate and set tax_rate_reason = tax_detail_amount_match.
+        - If two or more items/adjustments share the same amount, or if the tax detail target amount is a sum of multiple items, do not guess from that amount match. Use needs_review when the rate remains uncertain.
+        - Footnotes and symbols apply only to the item/adjustment they clearly mark. Do not spread a reduced-rate, VAT, tax-exempt, or generic footnote to every item.
+        - This is language-agnostic: VAT breakdowns, tax summaries, rate amount lines, reduced/standard rate summaries, and similar printed tax breakdowns are stronger evidence than product-name guesses.
         - Printed tax breakdown lines are stronger evidence than generic tax notes. Treat notes such as reduced-rate markers as supporting context only.
         - If a printed tax breakdown shows the receipt total amount as a single tax-rate target, use that printed rate for all taxable items and taxable adjustments, even when a nearby note appears to mention a reduced tax rate.
         - For example, if the final tax breakdown says the whole total is a 10% target with a printed included tax amount, do not classify all items as 8% from a generic reduced-rate note alone.

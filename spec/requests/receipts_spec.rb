@@ -44,6 +44,16 @@ RSpec.describe 'Receipts', type: :request do
     document.css('[data-receipt-form-target="itemsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="itemRow"]')
   end
 
+  def amount_summary_tax_rate_value(document)
+    tax_rate_label = I18n.t('shared.amount_summary_card.tax_rate')
+    row = document.css('div').find do |node|
+      spans = node.xpath('./span')
+      spans.first&.text&.strip == tax_rate_label
+    end
+
+    row&.xpath('./span')&.last&.text&.strip
+  end
+
   def upload_ocr_result(overrides = {})
     {
       success: true,
@@ -3188,6 +3198,96 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '詳細画面の税率表示はreceipt_tax_detailsが複数なら明細税率より優先して複数税率を表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: 'MIX SWEETS',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: 'アウトレット袋S',
+        price: 44,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 44,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.08'),
+        net_amount: 2_160,
+        amount: 160,
+        description: '8%対象'
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.10'),
+        net_amount: 44,
+        amount: 4,
+        description: '10%対象'
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+      end
+    end
+
+    it '詳細画面の税率表示はreceipt_tax_detailsが1件ならitemsと矛盾してもtax_detailsのrateを表示する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '税率推定ミス商品',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 1_000,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.10'),
+        net_amount: 1_000,
+        amount: 91,
+        description: '10%対象'
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq('10%')
+      end
+    end
+
+    it '詳細画面の税率表示はreceipt_tax_detailsが空なら従来通りitemsのtax_rateから推定する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '軽減税率商品',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 1_000,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq('8%')
+      end
+    end
+
     it '詳細画面はdisplay_idを表示し、receiptの内部IDをURLやDOMに出さない' do
       get receipt_path(receipt)
 
@@ -3851,6 +3951,48 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+      end
+    end
+
+    it '編集画面の税率サマリーもreceipt_tax_detailsを優先する' do
+      receipt.receipt_items.create!(
+        confirmed_name: 'MIX SWEETS',
+        price: 14_400,
+        quantity: BigDecimal('0.300'),
+        quantity_unit: 'kg',
+        line_total: 4_320,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: 'アウトレット袋S',
+        price: 44,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 44,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.08'),
+        net_amount: 2_160,
+        amount: 160,
+        description: '8%対象'
+      )
+      receipt.receipt_tax_details.create!(
+        rate: BigDecimal('0.10'),
+        net_amount: 44,
+        amount: 4,
+        description: '10%対象'
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq(I18n.t('receipts.common.multiple_tax_rates'))
       end
     end
 

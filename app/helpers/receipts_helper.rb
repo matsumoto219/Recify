@@ -49,6 +49,18 @@ module ReceiptsHelper
     rate.to_s.presence || t("receipts.common.not_available")
   end
 
+  def receipt_tax_rate_summary(receipt, items: nil, tax_details: nil)
+    tax_detail_rates = normalized_receipt_tax_detail_rates(tax_details || receipt.receipt_tax_details)
+    return t("receipts.common.multiple_tax_rates") if tax_detail_rates.many?
+    return receipt_rate_display(tax_detail_rates.first) if tax_detail_rates.one?
+
+    item_rates = normalized_receipt_item_tax_rates(items || receipt.receipt_items)
+    return nil if item_rates.empty?
+    return receipt_rate_display(item_rates.first) if item_rates.one?
+
+    t("receipts.common.multiple_tax_rates")
+  end
+
   def receipt_item_discount_label(item)
     discount_amount = item.discount_amount.to_i
     return nil unless discount_amount.positive?
@@ -75,5 +87,36 @@ module ReceiptsHelper
     receipt_item_warning_reason_codes(item).map do |reason|
       t("enums.receipt_item.review_reason.#{reason}", default: reason.to_s.humanize)
     end
+  end
+
+  private
+
+  def normalized_receipt_tax_detail_rates(tax_details)
+    Array(tax_details).filter_map do |tax_detail|
+      normalize_receipt_display_rate(read_receipt_rate(tax_detail, :rate))
+    end.uniq
+  end
+
+  def normalized_receipt_item_tax_rates(items)
+    Array(items).filter_map do |item|
+      normalize_receipt_display_rate(read_receipt_rate(item, :tax_rate))
+    end.uniq
+  end
+
+  def read_receipt_rate(record, key)
+    return record.public_send(key) if record.respond_to?(key)
+    return record[key] if record.respond_to?(:key?) && record.key?(key)
+    return record[key.to_s] if record.respond_to?(:key?) && record.key?(key.to_s)
+
+    nil
+  end
+
+  def normalize_receipt_display_rate(rate)
+    return nil if rate.blank?
+
+    normalized = BigDecimal(rate.to_s)
+    normalized > 1 ? normalized / 100 : normalized
+  rescue ArgumentError, TypeError
+    nil
   end
 end

@@ -42,7 +42,8 @@ module Amounts
         tax_rounding_mode: normalize_scalar(profile[:tax_rounding_mode]),
         discount_rounding_mode: normalize_scalar(profile[:discount_rounding_mode]),
         receipt_tax_basis: normalize_scalar(profile[:receipt_tax_basis]),
-        item_amount_basis: normalize_scalar(profile[:item_amount_basis])
+        item_amount_basis: normalize_scalar(profile[:item_amount_basis]),
+        tax_detail_amount_basis: normalize_scalar(profile[:tax_detail_amount_basis])
       }.compact
 
       assignments = sanitized_assignments(profile[:item_amount_basis_assignments])
@@ -77,7 +78,8 @@ module Amounts
         adjustment_discount_total: normalize_value(amounts[:adjustment_discount_total]),
         adjustment_surcharge_total: normalize_value(amounts[:adjustment_surcharge_total]),
         payment_adjustment_total: normalize_value(amounts[:payment_adjustment_total]),
-        adjustment_tax_rate_missing_total: normalize_value(amounts[:adjustment_tax_rate_missing_total])
+        adjustment_tax_rate_missing_total: normalize_value(amounts[:adjustment_tax_rate_missing_total]),
+        tax_detail_amount_basis: normalize_scalar(amounts[:tax_detail_amount_basis])
       }.compact
     end
 

@@ -23,7 +23,7 @@ module Amounts
     def call
       errors = []
 
-      if to_i(@resolved[:subtotal]) + to_i(@resolved[:tax]) != to_i(@resolved[:total])
+      if !gross_tax_detail_amount_basis? && to_i(@resolved[:subtotal]) + to_i(@resolved[:tax]) != to_i(@resolved[:total])
         errors << :total_mismatch
       end
 
@@ -90,6 +90,10 @@ module Amounts
 
     def item_data_present?
       @item_count.positive?
+    end
+
+    def gross_tax_detail_amount_basis?
+      @computed[:tax_detail_amount_basis].to_s == "gross"
     end
 
     def item_total_mismatch?

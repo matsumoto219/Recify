@@ -36,7 +36,11 @@ module Analysis
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
-        tax_rate_correction = apply_single_tax_detail_rate_policy(
+        tax_rate_correction = apply_tax_detail_amount_match_policy(
+          receipt_items_attributes,
+          receipt_adjustments_attributes,
+          receipt_tax_details_attributes
+        ) || apply_single_tax_detail_rate_policy(
           receipt_items_attributes,
           receipt_adjustments_attributes,
           receipt_tax_details_attributes,
@@ -346,6 +350,88 @@ module Analysis
 
         apply_single_tax_detail_rate_to_unrated_items(items, tax_details)
         nil
+      end
+
+      def apply_tax_detail_amount_match_policy(items, adjustments, tax_details)
+        usable_tax_details = usable_tax_details_with_target_amount(tax_details)
+        return nil unless usable_tax_details.size > 1
+
+        entries_by_amount = tax_rate_match_entries(items, adjustments).group_by { |entry| entry[:amount] }
+        tax_details_by_amount = usable_tax_details.group_by { |tax_detail| tax_detail[:target_amount] }
+        matches = []
+
+        usable_tax_details.each do |tax_detail|
+          next unless tax_details_by_amount[tax_detail[:target_amount]].one?
+
+          entries = entries_by_amount[tax_detail[:target_amount]]
+          next unless entries&.one?
+
+          entry = entries.first
+          current_rate = normalize_rate(entry[:record][:tax_rate])
+          next if current_rate == tax_detail[:rate]
+
+          entry[:record][:tax_rate] = tax_detail[:rate]
+          matches << {
+            target: entry[:type],
+            amount: tax_detail[:target_amount],
+            rate: tax_detail[:rate].to_s("F")
+          }
+        end
+
+        return nil if matches.blank?
+
+        {
+          reason: "tax_detail_amount_match",
+          source: "printed_tax_detail",
+          matches: matches,
+          item_count: matches.count { |match| match[:target] == "item" },
+          adjustment_count: matches.count { |match| match[:target] == "adjustment" }
+        }
+      end
+
+      def usable_tax_details_with_target_amount(tax_details)
+        Array(tax_details).filter_map do |tax_detail|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])
+          target_amount = normalize_amount(tax_detail[:net_amount])
+          next unless rate&.positive?
+          next unless amount&.positive?
+          next unless target_amount&.positive?
+
+          {
+            rate: rate,
+            amount: amount,
+            target_amount: target_amount.to_i
+          }
+        end
+      end
+
+      def tax_rate_match_entries(items, adjustments)
+        item_entries = Array(items).filter_map do |item|
+          amount = normalize_amount(item[:line_total])
+          next unless amount&.positive?
+
+          {
+            type: "item",
+            amount: amount.to_i,
+            record: item
+          }
+        end
+
+        adjustment_entries = Array(adjustments).filter_map do |adjustment|
+          next unless taxable_adjustment?(adjustment)
+
+          amount = normalize_amount(adjustment[:amount])
+          next unless amount&.positive?
+
+          {
+            type: "adjustment",
+            amount: amount.to_i,
+            record: adjustment
+          }
+        end
+
+        item_entries + adjustment_entries
       end
 
       def apply_single_tax_detail_rate_to_unrated_items(items, tax_details)

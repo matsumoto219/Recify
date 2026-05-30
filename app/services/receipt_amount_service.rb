@@ -122,7 +122,7 @@ class ReceiptAmountService
           amount: tax_detail[:amount]
         }
       end
-    elsif calc[:external_tax] || calc[:tax_details_primary]
+    elsif calc[:external_tax] || calc[:tax_details_primary] || calc[:tax_detail_amount_basis] == :gross
       source_tax_details_for_external_tax.map do |t|
         {
           description: "#{(t[:rate].to_f * 100).to_i}%対象",
@@ -173,6 +173,7 @@ class ReceiptAmountService
         tax_rate: calc[:tax_rate],
         receipt_tax_basis: calc[:receipt_tax_basis],
         item_amount_basis: calc[:item_amount_basis],
+        tax_detail_amount_basis: calc[:tax_detail_amount_basis],
         adjustment_discount_total: calc[:adjustment_discount_total],
         adjustment_surcharge_total: calc[:adjustment_surcharge_total],
         payment_adjustment_total: calc[:payment_adjustment_total],

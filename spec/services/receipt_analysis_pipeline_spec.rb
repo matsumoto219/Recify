@@ -1025,7 +1025,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ]
       )
 
-      receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -1033,6 +1033,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'bag_fee', 10, 'surcharge' ],
           [ 'delivery_fee', 550, 'surcharge' ]
         )
+        expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
 
@@ -1061,7 +1062,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ]
       )
 
-      receipt, = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -1069,6 +1070,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'service_charge', 486, 'surcharge' ],
           [ 'late_night_charge', 486, 'surcharge' ]
         )
+        expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
 
@@ -1803,6 +1805,144 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '値引き後の税率別対象額が合計に一致する内税レシートは税を足し直さない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "Sample Sweets\nMIX SWEETS\n0.300 kg Net. × 14,400\n4,320 軽\nShort Dated Stock Discount\n-2,160\nアウトレット袋S\n44\n小計 [2]\n2,204\nお預かり\n5,000\nお釣り\n-2,796\n軽 8% ¥2,160 消費税 ¥160\n10% ¥44 消費税 ¥4",
+        lines: [
+          'Sample Sweets',
+          'MIX SWEETS',
+          '0.300 kg Net. × 14,400',
+          '4,320 軽',
+          'Short Dated Stock Discount',
+          '-2,160',
+          'アウトレット袋S',
+          '44',
+          '小計 [2]',
+          '2,204',
+          'お預かり',
+          '5,000',
+          'お釣り',
+          '-2,796',
+          '軽 8% ¥2,160 消費税 ¥160',
+          '10% ¥44 消費税 ¥4'
+        ],
+        candidates: {
+          store_name: 'Sample Sweets',
+          purchased_at_text: '2025/11/03 13:36',
+          subtotal_amount: 2_204,
+          total_amount: 5_000,
+          tax_amount: 164,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            {
+              raw_text: 'MIX SWEETS',
+              price: 14_400,
+              quantity: BigDecimal('0.300'),
+              quantity_unit: 'kg',
+              line_total: 4_320,
+              tax_rate: 8,
+              confidence: 0.95
+            },
+            {
+              raw_text: 'Short Dated Stock Discount',
+              line_total: -2_160,
+              tax_rate: 8,
+              confidence: 0.94
+            },
+            {
+              raw_text: 'アウトレット袋S',
+              price: 44,
+              quantity: 1,
+              line_total: 44,
+              tax_rate: 10,
+              confidence: 0.95
+            }
+          ],
+          payments: [
+            { method: 'Cash', amount: 5_000 }
+          ],
+          tax_details: [
+            { description: '軽 8%対象', net_amount: 2_160, amount: 160, rate: 8 },
+            { description: '10%対象', net_amount: 44, amount: 4, rate: 10 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: {
+          store_name: 'Sample Sweets',
+          purchased_at: Time.zone.local(2025, 11, 3, 13, 36, 0),
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'MIX SWEETS', category: 'food', tax_rate: 0.08, needs_review: false },
+          { index: 2, suggested_name: 'アウトレット袋S', category: 'daily_goods', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.9, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'receipt_discount',
+            label: 'Short Dated Stock Discount',
+            amount: 2_160,
+            sign: 'discount',
+            tax_rate: 0.1,
+            source_text: 'Short Dated Stock Discount',
+            source_line_index: 4,
+            confidence: 0.98,
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_items.pluck(:suggested_name, :line_total, :tax_rate)).to contain_exactly(
+          [ 'MIX SWEETS', 4_320, BigDecimal('0.08') ],
+          [ 'アウトレット袋S', 44, BigDecimal('0.1') ]
+        )
+        expect(receipt.receipt_items.pluck(:raw_text)).not_to include('Short Dated Stock Discount')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign, :tax_rate)).to eq([
+          [ 'receipt_discount', 2_160, 'discount', BigDecimal('0.08') ]
+        ])
+        expect(receipt.receipt_tax_details.pluck(:description, :net_amount, :amount, :rate)).to contain_exactly(
+          [ '8%対象', 2_160, 160, BigDecimal('0.08') ],
+          [ '10%対象', 44, 4, BigDecimal('0.1') ]
+        )
+        expect(receipt.subtotal_amount).to eq(2_204)
+        expect(receipt.tax_amount).to eq(164)
+        expect(receipt.total_amount).to eq(2_204)
+        expect(receipt.amount_calculation_profile.dig('computed', 'tax_detail_amount_basis')).to eq('gross')
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to eq(2_204)
+        expect(receipt.amount_calculation_profile.dig('profile', 'tax_rate_correction')).to include(
+          'reason' => 'tax_detail_amount_match',
+          'source' => 'printed_tax_detail',
+          'item_count' => 1,
+          'adjustment_count' => 1
+        )
+      end
+    end
+
     it '複数税率レシートはblocking mismatchでreview_neededにする' do
       receipt, amount = run_finalize_ocr_fixture('multiple_tax_receipt')
 
@@ -1827,6 +1967,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           :ocr_total_mismatch,
           :price_tax_inclusion_uncertain
         ])
+        expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
 
@@ -1877,6 +2018,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(tax_detail.amount).to eq(92)
         expect(amount[:needs_review]).to be(false)
         expect(amount[:mismatch_codes]).to be_empty
+        expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
 

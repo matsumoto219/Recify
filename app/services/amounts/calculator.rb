@@ -31,6 +31,7 @@ module Amounts
       tax_detail_subtotal = calculate_tax_detail_subtotal
       detection_adjustment_summary = adjustment_summary_for(:total_includes_tax)
       adjusted_item_total_for_detection = [ item_total + detection_adjustment_summary[:receipt_total_delta], 0 ].max
+      tax_detail_amount_basis = resolve_tax_detail_amount_basis(adjusted_item_total_for_detection, tax_detail_subtotal, tax_detail_total)
       fallback_tax_rate = resolve_fallback_tax_rate(adjusted_item_total_for_detection, tax_detail_total)
 
       if @item_amount_basis == :mixed_by_tax_rate_group && @item_amount_basis_assignments.present?
@@ -53,6 +54,7 @@ module Amounts
           tax_details_primary: false,
           receipt_tax_basis: @receipt_tax_basis == :tax_added_to_subtotal ? :tax_added_to_subtotal : :total_includes_tax,
           item_amount_basis: :mixed_by_tax_rate_group,
+          tax_detail_amount_basis: tax_detail_amount_basis,
           item_amount_basis_assignments: @item_amount_basis_assignments,
           adjustment_summary: adjustment_summary,
           adjustment_discount_total: adjustment_summary[:discount_total],
@@ -83,6 +85,7 @@ module Amounts
           tax_details_primary: false,
           receipt_tax_basis: :tax_added_to_subtotal,
           item_amount_basis: :line_total_as_net,
+          tax_detail_amount_basis: :net,
           adjustment_summary: adjustment_summary,
           adjustment_discount_total: adjustment_summary[:discount_total],
           adjustment_surcharge_total: adjustment_summary[:surcharge_total],
@@ -92,10 +95,18 @@ module Amounts
       end
 
       external_tax = resolve_external_tax(adjusted_item_total_for_detection, tax_detail_subtotal, tax_detail_total)
+      external_tax = false if tax_detail_amount_basis == :gross
       tax_details_primary = resolve_tax_details_primary(adjusted_item_total_for_detection, tax_detail_subtotal, tax_detail_total)
+      tax_details_primary = false if tax_detail_amount_basis == :gross
       adjustment_summary = adjustment_summary_for(external_tax ? :tax_added_to_subtotal : :total_includes_tax)
 
-      if external_tax || tax_details_primary
+      if tax_detail_amount_basis == :gross
+        item_subtotal = adjusted_item_total_for_detection
+        item_tax_total = tax_detail_total
+        subtotal = adjusted_item_total_for_detection
+        tax_total = tax_detail_total
+        total = adjusted_item_total_for_detection
+      elsif external_tax || tax_details_primary
         item_subtotal = tax_detail_subtotal
         item_tax_total = tax_detail_total
         subtotal = tax_detail_subtotal
@@ -130,6 +141,7 @@ module Amounts
         tax_details_primary: tax_details_primary,
         receipt_tax_basis: external_tax ? :tax_added_to_subtotal : :total_includes_tax,
         item_amount_basis: :line_total_as_recorded,
+        tax_detail_amount_basis: tax_detail_amount_basis,
         adjustment_summary: adjustment_summary,
         adjustment_discount_total: adjustment_summary[:discount_total],
         adjustment_surcharge_total: adjustment_summary[:surcharge_total],
@@ -271,6 +283,23 @@ module Amounts
       tax_details_primary?(item_total, tax_detail_subtotal, tax_detail_total)
     end
 
+    def resolve_tax_detail_amount_basis(adjusted_item_total, tax_detail_subtotal, tax_detail_total)
+      return :unknown unless @receipt_tax_basis == :auto || @receipt_tax_basis == :total_includes_tax
+      return :unknown unless adjusted_item_total.to_i.positive?
+      return :unknown unless tax_detail_subtotal.to_i.positive?
+      return :unknown unless tax_detail_total.to_i.positive?
+      return :net if external_tax_description?
+
+      receipt_total = to_i(@receipt[:total_amount])
+      return :net if receipt_total.positive? && receipt_total == tax_detail_subtotal + tax_detail_total
+
+      return :unknown unless tax_detail_subtotal == adjusted_item_total
+      return :unknown unless gross_tax_detail_amounts_match?
+      return :unknown unless gross_tax_detail_receipt_evidence?(adjusted_item_total)
+
+      :gross
+    end
+
     def external_tax_description?
       @tax_details.any? do |tax_detail|
         description = tax_detail[:description].to_s
@@ -290,6 +319,35 @@ module Amounts
       item_tax_rates = positive_item_tax_rates
 
       tax_detail_rates.many? || item_tax_rates.empty?
+    end
+
+    def gross_tax_detail_amounts_match?
+      complete_tax_details = @tax_details.select do |tax_detail|
+        normalize_tax_rate(tax_detail[:rate]).positive? &&
+          to_i(tax_detail[:net_amount]).positive? &&
+          to_i(tax_detail[:amount]).positive?
+      end
+      return false if complete_tax_details.blank?
+
+      complete_tax_details.all? do |tax_detail|
+        rate = normalize_tax_rate(tax_detail[:rate])
+        gross = to_i(tax_detail[:net_amount])
+        printed_tax = to_i(tax_detail[:amount])
+
+        %i[floor round ceil].any? do |rounding_mode|
+          rounded_tax_from_gross(gross, rate, rounding_mode) == printed_tax
+        end
+      end
+    end
+
+    def gross_tax_detail_receipt_evidence?(adjusted_item_total)
+      receipt_total = to_i(@receipt[:total_amount])
+      receipt_subtotal = to_i(@receipt[:subtotal_amount])
+
+      return true if receipt_total.positive? && receipt_total == adjusted_item_total
+      return true if receipt_subtotal.positive? && receipt_subtotal == adjusted_item_total
+
+      false
     end
 
     # -----------------------------
@@ -445,8 +503,8 @@ module Amounts
       BigDecimal("0")
     end
 
-    def rounded_tax_from_gross(gross_total, tax_rate)
-      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), @tax_rounding_mode)
+    def rounded_tax_from_gross(gross_total, tax_rate, rounding_mode = @tax_rounding_mode)
+      Amounts::Rounding.apply_rounding(BigDecimal(gross_total.to_s) * tax_rate / (BigDecimal("1") + tax_rate), rounding_mode)
     end
 
     def normalize_context(value)

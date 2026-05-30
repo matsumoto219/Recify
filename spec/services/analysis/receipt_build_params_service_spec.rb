@@ -395,6 +395,154 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '複数税率の税率別対象額が明細/調整額へ一意一致する場合はAI税率より優先する' do
+        lindt_like_ocr_result = {
+          candidates: {
+            store_name: 'Sample Sweets',
+            total_amount: 5_000,
+            subtotal_amount: 2_204,
+            tax_amount: 164,
+            country_region: 'JPN',
+            items: [
+              { raw_text: 'MIX SWEETS', price: 14_400, quantity: 0.3, quantity_unit: 'kg', line_total: 4_320, confidence: 0.95 },
+              { raw_text: 'Short Dated Stock Discount', line_total: -2_160, confidence: 0.94 },
+              { raw_text: 'アウトレット袋S', price: 44, quantity: 1, line_total: 44, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: '軽', rate: 8, net_amount: 2_160, amount: 160 },
+              { description: '10%', rate: 10, net_amount: 44, amount: 4 }
+            ]
+          },
+          lines: [
+            'MIX SWEETS',
+            '4,320 軽',
+            'Short Dated Stock Discount',
+            '-2,160',
+            'アウトレット袋S',
+            '44',
+            '軽 8%',
+            '¥2,160',
+            '¥160',
+            '10%',
+            '¥44',
+            '¥4'
+          ]
+        }
+        ai_result = {
+          receipt_items_attributes: [
+            { index: 0, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.96 },
+            { index: 2, category: 'daily_goods', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.9 }
+          ],
+          receipt_adjustments_attributes: [
+            {
+              kind: 'receipt_discount',
+              label: 'Short Dated Stock Discount',
+              amount: 2_160,
+              sign: 'discount',
+              tax_rate: 0.1,
+              source_text: 'Short Dated Stock Discount',
+              source_line_index: 2,
+              confidence: 0.98
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: lindt_like_ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total, :tax_rate)).to contain_exactly(
+            [ 'MIX SWEETS', 4_320, BigDecimal('0.08') ],
+            [ 'アウトレット袋S', 44, BigDecimal('0.1') ]
+          )
+          expect(params[:receipt_adjustments_attributes].pluck(:kind, :amount, :tax_rate)).to eq([
+            [ 'receipt_discount', 2_160, BigDecimal('0.08') ]
+          ])
+          expect(params[:tax_rate_correction]).to include(
+            reason: 'tax_detail_amount_match',
+            source: 'printed_tax_detail',
+            item_count: 1,
+            adjustment_count: 1
+          )
+          expect(params[:tax_rate_correction][:matches]).to contain_exactly(
+            { target: 'item', amount: 44, rate: '0.1' },
+            { target: 'adjustment', amount: 2_160, rate: '0.08' }
+          )
+        end
+      end
+
+      it '海外風VAT summaryでも税率別対象額と明細額の一致を優先する' do
+        vat_ocr_result = {
+          candidates: {
+            store_name: 'Sample Store',
+            total_amount: 2_204,
+            tax_amount: 164,
+            country_region: 'USA',
+            items: [
+              { raw_text: 'Item A', line_total: 2_160, confidence: 0.95 },
+              { raw_text: 'Bag fee', line_total: 44, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: 'VAT 8% taxable amount', rate: 8, net_amount: 2_160, amount: 160 },
+              { description: 'VAT 10% taxable amount', rate: 10, net_amount: 44, amount: 4 }
+            ]
+          },
+          lines: []
+        }
+
+        params = described_class.call(ocr_result: vat_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes].pluck(:raw_text, :tax_rate)).to contain_exactly(
+          [ 'Item A', BigDecimal('0.08') ],
+          [ 'Bag fee', BigDecimal('0.1') ]
+        )
+      end
+
+      it '税率別対象額に同額明細が複数ある場合は補正しない' do
+        ambiguous_ocr_result = {
+          candidates: {
+            items: [
+              { raw_text: 'Item A', line_total: 44, confidence: 0.95 },
+              { raw_text: 'Item B', line_total: 44, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: 'VAT 10%', rate: 10, net_amount: 44, amount: 4 },
+              { description: 'VAT 8%', rate: 8, net_amount: 100, amount: 7 }
+            ]
+          },
+          lines: []
+        }
+
+        params = described_class.call(ocr_result: ambiguous_ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+          expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
+      it '税率別対象額が複数明細の合算にしか一致しない場合は補正しない' do
+        summed_ocr_result = {
+          candidates: {
+            items: [
+              { raw_text: 'Item A', line_total: 600, confidence: 0.95 },
+              { raw_text: 'Item B', line_total: 400, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: 'VAT 8%', rate: 8, net_amount: 1_000, amount: 80 },
+              { description: 'VAT 10%', rate: 10, net_amount: 44, amount: 4 }
+            ]
+          },
+          lines: []
+        }
+
+        params = described_class.call(ocr_result: summed_ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+          expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
       it '複数税率のtax_detailsではitem tax_rateを補完しない' do
         ocr_result[:candidates][:tax_details] = [
           { description: '8%対象', amount: 40, rate: 8, net_amount: 500 },

@@ -53,14 +53,7 @@
   <%# TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する %>
 
   <%
-    item_tax_rates = visible_receipt_items.filter_map(&:tax_rate).uniq
-    tax_rate_summary = if item_tax_rates.empty?
-                         nil
-                       elsif item_tax_rates.one?
-                         "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
-                       else
-                         t("receipts.common.multiple_tax_rates")
-                       end
+    tax_rate_summary = receipt_tax_rate_summary(receipt, items: visible_receipt_items)
 
     receipt_review_reason_codes = Array(receipt.review_reasons).map(&:to_s)
     receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }

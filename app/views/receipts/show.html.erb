@@ -1,13 +1,6 @@
 <section class="w-full min-w-0 max-w-7xl mx-auto px-0 md:px-2 py-2">
   <%
-    item_tax_rates = @receipt.receipt_items.filter_map(&:tax_rate).uniq
-    tax_rate_summary = if item_tax_rates.empty?
-                         nil
-                       elsif item_tax_rates.one?
-                         "#{number_with_precision(item_tax_rates.first * 100, precision: 1, strip_insignificant_zeros: true)}%"
-                       else
-                         t("receipts.common.multiple_tax_rates")
-                       end
+    tax_rate_summary = receipt_tax_rate_summary(@receipt)
     edit_from = params[:from].to_s == "index" ? "index" : "show"
     has_alert_cards = @receipt.has_processing_error? || @receipt.has_blocking_review_notes? || @receipt.has_warning_notes?
   %>
