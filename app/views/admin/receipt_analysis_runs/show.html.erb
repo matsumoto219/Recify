@@ -9,6 +9,25 @@
 <section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
+  <%
+    receipt = @record[:receipt]
+    receipt_image = receipt.image if receipt&.image&.attached?
+    receipt_image_blob = receipt_image&.blob
+    receipt_image_attachment = receipt_image&.attachment
+    receipt_image_metadata = receipt_image_blob&.metadata.to_h
+    receipt_image_width = receipt_image_metadata["width"] || receipt_image_metadata[:width]
+    receipt_image_height = receipt_image_metadata["height"] || receipt_image_metadata[:height]
+    receipt_image_dimensions = if receipt_image_width.present? && receipt_image_height.present?
+                                 t(
+                                   "admin.receipt_analysis_runs.show.image_metadata.dimensions_value",
+                                   width: receipt_image_width,
+                                   height: receipt_image_height
+                                 )
+                               else
+                                 "-"
+                               end
+  %>
+
   <%= render "shared/ui/layout/section_header",
         title: t("admin.receipt_analysis_runs.show.title"),
         subtitle: @record[:run_key],
@@ -85,6 +104,51 @@
       </section>
     </div>
   <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/card/receipt_image_card",
+          receipt: receipt,
+          title: t("admin.receipt_analysis_runs.show.sections.original_image"),
+          show_toggle: true,
+          show_modal: true,
+          show_download: false,
+          initially_open: false,
+          collapse_on_mobile: true,
+          keep_image_enabled: true,
+          preview_width_class: "w-full max-w-[320px]",
+          preview_height_class: "h-[420px]",
+          empty_message: t("admin.receipt_analysis_runs.show.image_metadata.empty") %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.image_metadata") %></h2>
+      <dl class="grid gap-4 text-sm md:grid-cols-2">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.filename") %></dt>
+          <dd class="break-all font-mono text-xs token-text-base"><%= receipt_image_blob&.filename&.to_s.presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.content_type") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt_image_blob&.content_type.presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.byte_size") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt_image_blob.present? ? number_to_human_size(receipt_image_blob.byte_size) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.dimensions") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt_image_dimensions %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.attached_at") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt_image_attachment&.created_at.present? ? l(receipt_image_attachment.created_at, format: :short) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image") %></dt>
+          <dd class="text-xs token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image_not_implemented") %></dd>
+        </div>
+      </dl>
+    <% end %>
+  </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
     <%= render "shared/ui/layout/surface_card", padding: :md do %>

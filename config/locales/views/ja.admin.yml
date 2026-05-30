@@ -185,6 +185,8 @@ ja:
           run: Run
           receipt: Receipt
           user: User
+          original_image: オリジナル画像
+          image_metadata: 画像メタ情報
           timing_provider: Timing / Provider
           snapshot_presence: Snapshot presence
           retry_options: Retry options
@@ -209,6 +211,16 @@ ja:
         boolean:
           "true": "true"
           "false": "false"
+        image_metadata:
+          empty: 画像はありません
+          filename: filename
+          content_type: content type
+          byte_size: byte size
+          dimensions: dimensions
+          dimensions_value: "%{width} x %{height}"
+          attached_at: attached at
+          ocr_input_image: OCR input image
+          ocr_input_image_not_implemented: 未実装。現在はオリジナル画像をOCRへ送信します。
         snapshot:
           present: present
           missing: missing

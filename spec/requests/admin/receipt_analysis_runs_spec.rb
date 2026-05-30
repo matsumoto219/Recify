@@ -273,6 +273,65 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
+    it '画像付きreceiptならオリジナル画像カードと安全なmetadataを表示する' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt, :completed, :with_image)
+      receipt.image.blob.update!(metadata: receipt.image.blob.metadata.merge('width' => 640, 'height' => 480))
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+      sign_in admin
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      document = Nokogiri::HTML(response.body)
+      byte_size_label = ActiveSupport::NumberHelper.number_to_human_size(receipt.image.blob.byte_size)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('オリジナル画像')
+        expect(response.body).to include('画像メタ情報')
+        expect(response.body).to include('receipt_sample.jpg')
+        expect(response.body).to include('image/jpeg')
+        expect(response.body).to include(byte_size_label)
+        expect(response.body).to include('640 x 480')
+        expect(response.body).to include('OCR input image')
+        expect(response.body).to include('未実装。現在はオリジナル画像をOCRへ送信します。')
+        expect(document.at_css('img[data-receipt-image-card-target="previewImage"]')).to be_present
+        expect(document.css('a[download]')).to be_empty
+        expect(response.body).not_to include(receipt.image.blob.key)
+        expect(response.body).not_to include('signed_id')
+        expect(response.body).not_to include('blob_key')
+      end
+    end
+
+    it '画像なしreceiptでもオリジナル画像カードを安全に表示する' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt, :completed)
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+      sign_in admin
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('オリジナル画像')
+        expect(response.body).to include('画像はありません')
+        expect(response.body).to include('画像メタ情報')
+      end
+    end
+
+    it '非adminはshowを閲覧できない' do
+      user = create(:user)
+      run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))
+      sign_in user
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+      end
+    end
+
     it '存在しないrun_keyは既存404へ流す' do
       admin = create(:user, :admin)
       sign_in admin
