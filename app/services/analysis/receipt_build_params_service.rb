@@ -8,6 +8,7 @@ module Analysis
     FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
     FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
     ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
+    OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
@@ -30,6 +31,7 @@ module Analysis
         receipt_tax_details_attributes = build_receipt_tax_details_attributes(candidates)
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
+          candidates[:adjustment_candidates],
           lines
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
@@ -216,8 +218,15 @@ module Analysis
         end
       end
 
-      def build_receipt_adjustments_attributes(ai_adjustments, lines)
-        Array(ai_adjustments).filter_map.with_index do |adjustment, index|
+      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines)
+        source = Array(ai_adjustments).present? ? "ai" : "ocr"
+        adjustments = if source == "ai"
+          Array(ai_adjustments)
+        else
+          fallback_ocr_adjustments(ocr_adjustment_candidates)
+        end
+
+        Array(adjustments).filter_map.with_index do |adjustment, index|
           next unless adjustment.is_a?(Hash) || adjustment.respond_to?(:to_h)
 
           normalized = (adjustment.is_a?(Hash) ? adjustment : adjustment.to_h).with_indifferent_access
@@ -228,10 +237,11 @@ module Analysis
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
 
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
-          sign = ReceiptAdjustment::SIGNS.include?(normalized[:sign].to_s) ? normalized[:sign].to_s : default_adjustment_sign(kind)
+          sign_value = normalized[:sign].presence || normalized[:sign_hint]
+          sign = ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
-          needs_review = normalized[:needs_review] == true
-          if kind == "other" || normalized[:kind].blank? || normalized[:sign].blank?
+          needs_review = source == "ocr" || normalized[:needs_review] == true
+          if kind == "other" || normalized[:kind].blank? || sign_value.blank?
             needs_review = true
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
@@ -241,8 +251,8 @@ module Analysis
             label: normalized[:label].to_s.strip.presence,
             amount: amount,
             sign: sign,
-            tax_rate: normalize_rate(normalized[:tax_rate]),
-            source: "ai",
+            tax_rate: normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]),
+            source: source,
             source_text: normalized[:source_text].to_s.strip.presence || lines[source_line_index],
             source_line_index: source_line_index,
             confidence: normalize_confidence(normalized[:confidence]),
@@ -250,6 +260,36 @@ module Analysis
             review_reasons: review_reasons.uniq,
             position_index: normalized[:position_index] || index + 1
           }.compact
+        end
+      end
+
+      def fallback_ocr_adjustments(ocr_adjustment_candidates)
+        Array(ocr_adjustment_candidates).filter_map do |candidate|
+          next unless candidate.is_a?(Hash) || candidate.respond_to?(:to_h)
+
+          normalized = (candidate.is_a?(Hash) ? candidate : candidate.to_h).with_indifferent_access
+          confidence = normalize_confidence(normalized[:confidence])
+          next if confidence.nil? || BigDecimal(confidence.to_s) < OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD
+
+          sign = normalized[:sign_hint].to_s
+          next unless ReceiptAdjustment::SIGNS.include?(sign)
+
+          amount = normalize_amount(normalized[:amount]).to_i.abs
+          next unless amount.positive?
+
+          source_text = normalized[:source_text].to_s.strip
+          {
+            kind: infer_ocr_adjustment_kind(source_text, sign),
+            label: source_text.presence,
+            amount: amount,
+            sign: sign,
+            tax_rate: normalized[:tax_rate_hint],
+            source_text: source_text.presence,
+            source_line_index: normalized[:source_line_index],
+            confidence: confidence,
+            needs_review: true,
+            review_reasons: [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+          }
         end
       end
 
@@ -458,6 +498,21 @@ module Analysis
 
       def default_adjustment_sign(kind)
         %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
+      end
+
+      def infer_ocr_adjustment_kind(source_text, sign)
+        text = source_text.to_s
+        return "return_refund" if text.match?(/返品|返金|返却|refund|return/i)
+        return "coupon" if text.match?(/クーポン|coupon/i)
+        return "point_usage" if text.match?(/ポイント利用|point\s*use|points?\s*redeemed/i)
+        return "receipt_discount" if text.match?(/値引|割引|discount|off/i)
+        return "late_night_charge" if text.match?(/深夜|late.?night|midnight|after.?hours/i)
+        return "service_charge" if text.match?(/サービス料|service\s*charge/i)
+        return "delivery_fee" if text.match?(/配送料|送料|delivery|shipping/i)
+        return "bag_fee" if text.match?(/レジ袋|袋代|bag/i)
+        return "handling_fee" if text.match?(/手数料|handling|fee|charge/i) && sign == "surcharge"
+
+        "other"
       end
 
       def normalize_non_negative_integer(value)

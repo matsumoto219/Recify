@@ -100,7 +100,9 @@ RSpec.describe Ai::PromptBuilder do
             }
           ]
         )
+        expect(result[:adjustment_candidates]).to eq([])
         expect(result.dig(:meta, :item_count)).to eq(2)
+        expect(result.dig(:meta, :adjustment_candidate_count)).to eq(0)
         expect(result.dig(:meta, :confidence_summary, :items_average)).to eq(0.75)
       end
     end
@@ -163,6 +165,32 @@ RSpec.describe Ai::PromptBuilder do
         expect(texts).to include('サービス料10%', '¥486', '深夜料金10%')
         expect(result[:filtered_content]).not_to include('¥486')
         expect(full_context_texts).to include('サービス料10%', '¥486', '深夜料金10%')
+      end
+    end
+
+    it 'OCR parserのadjustment_candidatesをAI入力へ渡す' do
+      raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/service_and_late_night_receipt.json').read)
+      parsed_ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+
+      result = described_class.build(parsed_ocr_result)
+
+      aggregate_failures do
+        expect(result[:adjustment_candidates]).to include(
+          hash_including(
+            source_text: 'サービス料10%',
+            amount: 486,
+            sign_hint: 'surcharge',
+            tax_rate_hint: BigDecimal('0.1'),
+            neighboring_texts: hash_including(next_text: '¥486')
+          ),
+          hash_including(
+            source_text: '深夜料金10%',
+            amount: 486,
+            sign_hint: 'surcharge',
+            tax_rate_hint: BigDecimal('0.1')
+          )
+        )
+        expect(result.dig(:meta, :adjustment_candidate_count)).to eq(2)
       end
     end
 

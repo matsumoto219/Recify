@@ -1148,6 +1148,27 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'ocr_only decisionでも高信頼OCR adjustment candidateを保存しreview_neededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('service_and_late_night_receipt')
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign, :source)).to contain_exactly(
+          [ 'service_charge', 486, 'surcharge', 'ocr' ],
+          [ 'late_night_charge', 486, 'surcharge', 'ocr' ]
+        )
+        expect(receipt.review_reasons).to include('adjustment_uncertain')
+      end
+    end
+
     it 'ai_fallback decisionはreview_needed固定でerror_codeを保存する' do
       receipt = create(:receipt, :processing, :with_image)
       allow(ReceiptAmountService).to receive(:call).and_return(
@@ -1234,6 +1255,28 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.receipt_payments.size).to eq(1)
         expect(payment.method).to eq('CreditCard')
         expect(payment.amount).to eq(1280)
+      end
+    end
+
+    it 'AI失敗fallbackでは高信頼OCR adjustment candidateを保存しreview_neededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: 'analysis_missing_keys')
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('analysis_missing_keys')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign, :source)).to contain_exactly(
+          [ 'bag_fee', 10, 'surcharge', 'ocr' ],
+          [ 'delivery_fee', 550, 'surcharge', 'ocr' ]
+        )
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: true))
+        expect(receipt.review_reasons).to include('adjustment_uncertain')
       end
     end
 

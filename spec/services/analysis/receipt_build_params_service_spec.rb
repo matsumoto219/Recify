@@ -1327,6 +1327,105 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         )
       end
 
+      it 'AI adjustmentがない場合だけ高信頼OCR candidateをsource ocrとしてfallback採用する' do
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: '配送料',
+            source_line_index: 4,
+            neighboring_texts: { previous_text: '¥10', next_text: '¥550' },
+            amount: 550,
+            sign_hint: 'surcharge',
+            tax_rate_hint: BigDecimal('0.1'),
+            confidence: BigDecimal('0.86'),
+            candidate_reason: 'label_next_amount',
+            needs_review: true
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 550,
+            sign: 'surcharge',
+            tax_rate: BigDecimal('0.1'),
+            source: 'ocr',
+            needs_review: true,
+            review_reasons: include('adjustment_uncertain')
+          )
+        )
+      end
+
+      it 'AI adjustmentがある場合はOCR candidateへfallbackしない' do
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: '配送料',
+            source_line_index: 4,
+            amount: 550,
+            sign_hint: 'surcharge',
+            confidence: BigDecimal('0.86')
+          }
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代',
+              source_line_index: 2
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'bag_fee', amount: 10, source: 'ai')
+        )
+      end
+
+      it '低信頼または符号不明のOCR candidateはfallback採用しない' do
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: '配送料',
+            source_line_index: 4,
+            amount: 550,
+            sign_hint: 'surcharge',
+            confidence: BigDecimal('0.6')
+          },
+          {
+            source_text: '不明調整',
+            source_line_index: 2,
+            amount: 10,
+            confidence: BigDecimal('0.9')
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_adjustments_attributes]).to eq([])
+      end
+
+      it 'OCR近傍に存在しない金額のcandidateはfallback採用しない' do
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: '配送料',
+            source_line_index: 4,
+            amount: 999,
+            sign_hint: 'surcharge',
+            confidence: BigDecimal('0.9')
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_adjustments_attributes]).to eq([])
+      end
+
       it '負値itemを通常明細から除外し、adjustmentがない場合は確認理由を付ける' do
         ocr_result[:candidates][:items] = [
           { raw_text: 'Short Dated Stock', line_total: -2160 }

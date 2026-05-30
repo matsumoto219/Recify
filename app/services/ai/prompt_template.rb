@@ -240,6 +240,8 @@ module Ai
         For receipt_adjustments:
         - Return receipt_adjustments for special receipt-level or item-level adjustment rows such as discounts, coupons, point usage, returns/refunds, service charges, late-night charges, delivery fees, bag fees, handling fees, or similar context-specific adjustments.
         - Search the entire full_context_lines list for adjustment rows. Do NOT rely on filtered_content because it may omit amount-only, percentage, short symbol, or foreign-language lines.
+        - adjustment_candidates are OCR parser hints only. Treat them as suspicious candidates to verify, not as final facts.
+        - If adjustment_candidates conflict with full_context_lines, tax details, totals, or item rows, prefer the full receipt context.
         - Do NOT limit detection to known keywords. Use receipt context, signs, totals, neighboring lines, labels, and payment context to interpret Japanese, English, overseas, abbreviated, or unknown adjustment wording.
         - adjustment_context_lines may be present for compatibility, but full_context_lines is the source of truth.
         - Labels and amounts may be split across neighboring OCR lines. Use previous_text and next_text around the source_line_index to connect a label line with its amount line.

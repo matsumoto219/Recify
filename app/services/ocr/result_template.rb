@@ -32,6 +32,7 @@ module Ocr
         receipt_type: nil,
         payments: [],
         tax_details: [],
+        adjustment_candidates: [],
         payment_method_text: nil,
         items: [],
         review_reasons: [],

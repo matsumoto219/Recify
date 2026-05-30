@@ -414,6 +414,55 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '特殊加減算fixtureからOCR adjustment candidatesを抽出する' do
+      expectations = {
+        'return_receipt' => [
+          { source_text: '返品(液体洗剤)', amount: 980, sign_hint: 'discount', candidate_reason: 'label_signed_neighbor_amount' }
+        ],
+        'delivery_and_bag_fee_receipt' => [
+          { source_text: 'レジ袋代', amount: 10, sign_hint: 'surcharge', candidate_reason: 'label_next_amount' },
+          { source_text: '配送料', amount: 550, sign_hint: 'surcharge', candidate_reason: 'label_next_amount' }
+        ],
+        'service_and_late_night_receipt' => [
+          { source_text: 'サービス料10%', amount: 486, sign_hint: 'surcharge', tax_rate_hint: BigDecimal('0.1') },
+          { source_text: '深夜料金10%', amount: 486, sign_hint: 'surcharge', tax_rate_hint: BigDecimal('0.1') }
+        ]
+      }
+
+      expectations.each do |fixture_name, expected_candidates|
+        fixture_response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{fixture_name}.json").read)
+        result = described_class.new(response: fixture_response, provider: :fixture).call
+        candidates = result.dig(:candidates, :adjustment_candidates)
+
+        aggregate_failures(fixture_name) do
+          expect(candidates).to include(*expected_candidates.map { |candidate| hash_including(candidate) })
+          expect(candidates).to all(include(needs_review: true))
+          expect(candidates).to all(include(:source_line_index, :neighboring_texts, :confidence))
+        end
+      end
+    end
+
+    it '通常・税詳細fixtureでは税額や合計行をadjustment candidatesにしない' do
+      fixture_names = %w[
+        single_tax_receipt
+        multiple_tax_receipt
+        external_tax_receipt
+        long_receipt
+        blurred_receipt
+        rotated_receipt
+      ]
+
+      fixture_names.each do |fixture_name|
+        fixture_response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{fixture_name}.json").read)
+        result = described_class.new(response: fixture_response, provider: :fixture).call
+
+        aggregate_failures(fixture_name) do
+          expect(result[:success]).to eq(true)
+          expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+        end
+      end
+    end
+
     it '壊れた配列構造でも payments / tax_details / items は空配列で安全に返す' do
       broken_response = raw_response.deep_dup
       fields = broken_response.dig('analyzeResult', 'documents', 0, 'fields')

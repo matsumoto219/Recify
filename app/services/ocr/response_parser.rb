@@ -12,6 +12,14 @@ class Ocr::ResponseParser
   MULTIPLE_RECEIPTS_VERTICAL_GAP_RATIO = 0.1
   MULTIPLE_RECEIPTS_MIN_ANCHOR_LINES = 4
   MULTIPLE_RECEIPTS_MIN_ANCHOR_CATEGORIES = 4
+  ADJUSTMENT_MONEY_PATTERN = /[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
+  ADJUSTMENT_SIGNED_MONEY_PATTERN = /(?:\A|[\s　])(?:[▲△]|[\-−]\s*)[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
+  ADJUSTMENT_AMOUNT_ONLY_PATTERN = /\A\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?\s*\z/.freeze
+  ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /返品|返金|取消|キャンセル|値引|割引|クーポン|coupon|discount|refund|return/i.freeze
+  ADJUSTMENT_SURCHARGE_LABEL_PATTERN = /深夜|サービス料|配送料|送料|レジ袋|袋代|手数料|チャージ|fee|charge|surcharge|delivery|shipping|bag|handling/i.freeze
+  ADJUSTMENT_EXCLUDED_LINE_PATTERN = /小計|商品小計|合計|総合計|税抜合計|税込合計|対象|消費税|税額|税率|内税|外税|お預かり|お預り|預り|釣銭|お釣り|つり銭|支払|お支払|決済|現金|カード|au\s*pay|paypay|楽天ペイ|ポイント|獲得|利用可能|残高|カード番号|取引番号|レシート|領収|tel|電話|住所|登録番号|返品はお受け|返品.*(?:不可|致しかね)|お受け致しかね|barcode|qr|total|subtotal|tax|payment|change|point/i.freeze
+  ADJUSTMENT_ZONE_START_PATTERN = /小計|商品小計|税抜合計|内税品計|subtotal/i.freeze
+  ADJUSTMENT_ZONE_END_PATTERN = /合計|総合計|total/i.freeze
   MERCHANT_ANCHOR_PATTERN = /店舗|店名|店|マーケット|スーパー|株式会社|有限会社|住所|所在地|電話|tel|market|store|mart|shop/i.freeze
   DATETIME_ANCHOR_PATTERN = /(?:\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?)|(?:\d{1,2}[:：]\d{2})/.freeze
   SUBTOTAL_ANCHOR_PATTERN = /小\s*計|subtotal/i.freeze
@@ -51,6 +59,7 @@ class Ocr::ResponseParser
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
+        adjustment_candidates: extract_adjustment_candidates(parsed_response, normalized_lines),
         items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
         review_reasons: extract_review_reasons(parsed_response),
         confidence_summary: extract_confidence_summary(parsed_response)
@@ -604,6 +613,229 @@ class Ocr::ResponseParser
     reasons = []
     reasons << MULTIPLE_RECEIPTS_REVIEW_REASON if multiple_receipts_suspected?(parsed_response)
     reasons
+  end
+
+  def extract_adjustment_candidates(parsed_response, lines)
+    items = extract_items(parsed_response, lines)
+    candidates = []
+
+    Array(lines).each_with_index do |line, index|
+      next if line.blank?
+
+      candidates << signed_amount_candidate(lines, index, items)
+      candidates << label_amount_candidate(lines, index, items)
+    end
+
+    candidates.compact
+      .uniq { |candidate| [ candidate[:source_line_index], candidate[:amount], candidate[:source_text] ] }
+      .first(10)
+  rescue NoMethodError, TypeError
+    []
+  end
+
+  def signed_amount_candidate(lines, index, items)
+    line = lines[index].to_s
+    return nil unless amount_only_line?(line)
+    return nil unless line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+
+    label_index = nearest_label_line_index(lines, index)
+    return nil if label_index.nil?
+
+    label = lines[label_index].to_s
+    return nil if adjustment_excluded_line?(label)
+    return nil if item_line_candidate?(label, items) && !known_adjustment_label?(label)
+
+    amount = adjustment_amounts_in_line(line).first
+    return nil unless amount&.positive?
+
+    sign_hint = adjustment_sign_hint(label, line)
+    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+
+    confidence = known_adjustment_label?(label) ? 0.9 : 0.72
+
+    build_adjustment_candidate(
+      lines: lines,
+      source_line_index: label_index,
+      amount: amount,
+      sign_hint: sign_hint,
+      confidence: confidence,
+      candidate_reason: "signed_amount_neighbor_label"
+    )
+  end
+
+  def label_amount_candidate(lines, index, items)
+    line = lines[index].to_s
+    return nil if amount_only_line?(line)
+    return nil if adjustment_excluded_line?(line)
+    return nil if line.match?(/\d{4}[\/\-年]\s*\d{1,2}|\d{1,2}[:：]\d{2}/)
+
+    known_label = known_adjustment_label?(line)
+    signed_same_line = line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if item_line_candidate?(line, items) && !known_label && !signed_same_line
+
+    unknown_zone_label = !known_label && adjustment_zone_label?(lines, index)
+    return nil unless known_label || unknown_zone_label || signed_same_line
+
+    amount = adjustment_amounts_in_line(line).first
+    reason = "label_same_line_amount"
+    neighbor_signed = false
+
+    if amount.blank?
+      neighbor = neighboring_amount_line(lines, index)
+      return nil if neighbor.blank?
+
+      amount = neighbor[:amount]
+      neighbor_signed = neighbor[:signed]
+      reason = neighbor[:signed] ? "label_signed_neighbor_amount" : "label_next_amount"
+    end
+
+    return nil unless amount&.positive?
+
+    sign_hint = adjustment_sign_hint(line, lines[index + 1], lines[index - 1])
+    return nil if sign_hint == "discount" && reason != "label_same_line_amount" && !neighbor_signed
+    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+
+    confidence = if known_label
+      sign_hint.present? ? 0.86 : 0.78
+    elsif signed_same_line
+      0.78
+    else
+      0.55
+    end
+
+    build_adjustment_candidate(
+      lines: lines,
+      source_line_index: index,
+      amount: amount,
+      sign_hint: sign_hint,
+      confidence: confidence,
+      candidate_reason: reason
+    )
+  end
+
+  def build_adjustment_candidate(lines:, source_line_index:, amount:, sign_hint:, confidence:, candidate_reason:)
+    source_text = lines[source_line_index].to_s
+
+    {
+      source_text: source_text,
+      source_line_index: source_line_index,
+      neighboring_texts: {
+        previous_text: source_line_index.positive? ? lines[source_line_index - 1] : nil,
+        next_text: lines[source_line_index + 1]
+      }.compact,
+      amount: amount.to_i.abs,
+      sign_hint: sign_hint,
+      tax_rate_hint: adjustment_tax_rate_hint(lines, source_line_index),
+      confidence: confidence,
+      candidate_reason: candidate_reason,
+      needs_review: true
+    }.compact
+  end
+
+  def nearest_label_line_index(lines, index)
+    [ index - 1, index + 1 ].find do |candidate_index|
+      next false if candidate_index.negative?
+
+      candidate = lines[candidate_index].to_s
+      candidate.present? && !amount_only_line?(candidate)
+    end
+  end
+
+  def neighboring_amount_line(lines, index)
+    [ index + 1, index - 1 ].filter_map do |candidate_index|
+      next if candidate_index.negative?
+
+      line = lines[candidate_index].to_s
+      next unless amount_only_line?(line)
+
+      amount = adjustment_amounts_in_line(line).first
+      next unless amount&.positive?
+
+      { amount: amount, signed: line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN) }
+    end.first
+  end
+
+  def adjustment_amounts_in_line(line)
+    text = line.to_s
+    text.to_enum(:scan, ADJUSTMENT_MONEY_PATTERN).filter_map do |match|
+      matched = Regexp.last_match
+      next if percentage_amount_match?(text, matched)
+
+      amount = ReceiptAmountService.parse_amount_or_nil(match)
+      amount&.to_i&.abs
+    end.select(&:positive?)
+  end
+
+  def percentage_amount_match?(text, match)
+    after = text[match.end(0)..]
+    after.to_s.lstrip.start_with?("%", "％")
+  end
+
+  def amount_only_line?(line)
+    line.to_s.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+  end
+
+  def known_adjustment_label?(line)
+    text = line.to_s
+    text.match?(ADJUSTMENT_DISCOUNT_LABEL_PATTERN) || text.match?(ADJUSTMENT_SURCHARGE_LABEL_PATTERN)
+  end
+
+  def adjustment_zone_label?(lines, index)
+    line = lines[index].to_s
+    return false if line.length > 40
+    return false if line.match?(/\d{4}[\/\-年]|\d{1,2}[:：]\d{2}/)
+
+    before_lines = lines[[ index - 4, 0 ].max...index].to_a
+    after_lines = lines[(index + 1)..[ index + 5, lines.length - 1 ].min].to_a
+
+    before_lines.any? { |candidate| candidate.to_s.match?(ADJUSTMENT_ZONE_START_PATTERN) } &&
+      after_lines.any? { |candidate| candidate.to_s.match?(ADJUSTMENT_ZONE_END_PATTERN) }
+  end
+
+  def adjustment_excluded_line?(line)
+    line.to_s.match?(ADJUSTMENT_EXCLUDED_LINE_PATTERN)
+  end
+
+  def item_line_candidate?(line, items)
+    normalized_line = normalize_text(line)
+    Array(items).any? do |item|
+      item_text = normalize_text(item[:raw_text])
+      next false if item_text.blank?
+
+      normalized_line == item_text || normalized_line.include?(item_text) || item_text.include?(normalized_line)
+    end
+  end
+
+  def item_discount_amount?(amount, items)
+    amount = amount.to_i.abs
+    return false unless amount.positive?
+
+    Array(items).any? do |item|
+      item.respond_to?(:[]) && item[:discount_amount].to_i.abs == amount
+    end
+  end
+
+  def adjustment_sign_hint(*texts)
+    joined = texts.compact.join(" ")
+    return "discount" if joined.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return "discount" if joined.match?(ADJUSTMENT_DISCOUNT_LABEL_PATTERN)
+    return "surcharge" if joined.match?(ADJUSTMENT_SURCHARGE_LABEL_PATTERN)
+
+    nil
+  end
+
+  def adjustment_tax_rate_hint(lines, source_line_index)
+    context = lines[[ source_line_index - 6, 0 ].max..[ source_line_index + 6, lines.length - 1 ].min].to_a
+    rates = context.filter_map do |line|
+      line.to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).map do |match|
+        rate = BigDecimal(match.first) / 100
+        rate.positive? ? rate : nil
+      end
+    end.flatten.compact.uniq
+
+    rates.one? ? rates.first : nil
+  rescue ArgumentError
+    nil
   end
 
   def multiple_receipts_suspected?(parsed_response)

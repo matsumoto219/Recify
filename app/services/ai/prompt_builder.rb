@@ -27,6 +27,7 @@ module Ai
         payment: build_payment_payload,
         tax: build_tax_payload,
         items: build_items_payload,
+        adjustment_candidates: build_adjustment_candidates_payload,
         adjustment_context_lines: build_adjustment_context_lines,
         meta: build_meta
       }
@@ -104,6 +105,24 @@ module Ai
       @adjustment_context_lines ||= build_full_context_lines
     end
 
+    def build_adjustment_candidates_payload
+      @adjustment_candidates_payload ||= Array(candidate_value(:adjustment_candidates)).filter_map do |candidate|
+        next unless candidate.is_a?(Hash)
+
+        {
+          source_text: fetch(candidate, :source_text),
+          source_line_index: normalize_number(fetch(candidate, :source_line_index)),
+          neighboring_texts: normalize_neighboring_texts(fetch(candidate, :neighboring_texts)),
+          amount: normalize_number(fetch(candidate, :amount)),
+          sign_hint: fetch(candidate, :sign_hint),
+          tax_rate_hint: normalize_tax_rate(fetch(candidate, :tax_rate_hint)),
+          confidence: normalize_decimal(fetch(candidate, :confidence)),
+          candidate_reason: fetch(candidate, :candidate_reason),
+          needs_review: fetch(candidate, :needs_review)
+        }.compact
+      end
+    end
+
     def build_full_context_lines
       @full_context_lines ||= lines.first(MAX_FULL_CONTEXT_LINES).map.with_index do |line, index|
         {
@@ -143,6 +162,7 @@ module Ai
         raw_text_length: raw_text.length,
         line_count: lines.length,
         item_count: build_items_payload.length,
+        adjustment_candidate_count: build_adjustment_candidates_payload.length,
         confidence_summary: build_confidence_summary,
         ai_name_completion_enabled: ai_name_completion_enabled
       }.compact
@@ -476,6 +496,15 @@ module Ai
           net_amount: normalize_number(fetch(tax_detail, :net_amount))
         }.compact
       end
+    end
+
+    def normalize_neighboring_texts(value)
+      return unless value.is_a?(Hash)
+
+      {
+        previous_text: fetch(value, :previous_text),
+        next_text: fetch(value, :next_text)
+      }.compact.presence
     end
 
     def items_average_confidence
