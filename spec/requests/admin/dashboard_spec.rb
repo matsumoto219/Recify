@@ -40,10 +40,76 @@ RSpec.describe 'Admin dashboard', type: :request do
   end
 
   describe 'GET /admin' do
-    it '非ログインユーザーはログインへリダイレクトする' do
+    it '非ログインユーザーには既存404と同じbody/headerを返す' do
+      get '/__recify_missing_route__'
+      expected_body = response.body
+      expected_headers = comparable_headers
+
       get admin_root_path
 
-      expect(response).to redirect_to(new_user_session_path)
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.content_type).to eq('text/html; charset=utf-8')
+        expect(response.body).to eq(expected_body)
+        expect(comparable_headers).to eq(expected_headers)
+        expect(response.location).to be_nil
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include(new_user_session_path)
+        expect(response.body).not_to include('admin')
+        expect(response.body).not_to include('管理者')
+        expect(response.body).not_to include('forbidden')
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('解析状況')
+      end
+    end
+
+    it '非ログインユーザーのadmin配下既存routeと未定義routeは通常404と判別しづらい' do
+      paths = [
+        admin_root_path,
+        admin_users_path,
+        admin_receipt_analysis_runs_path,
+        admin_system_settings_path,
+        admin_contact_requests_path,
+        admin_external_services_status_path,
+        '/admin/anything'
+      ]
+
+      get '/no_such_page'
+      expected_body = response.body
+      expected_headers = comparable_headers
+
+      paths.each do |path|
+        get path
+
+        aggregate_failures path do
+          expect(response).to have_http_status(:not_found)
+          expect(response.content_type).to eq('text/html; charset=utf-8')
+          expect(response.body).to eq(expected_body)
+          expect(comparable_headers).to eq(expected_headers)
+          expect(response.location).to be_nil
+          expect(response.body).not_to include(new_user_session_path)
+          expect(response.body).not_to include('admin')
+          expect(response.body).not_to include('管理者')
+          expect(response.body).not_to include('forbidden')
+        end
+      end
+    end
+
+    it '非ログインユーザーのadmin JSON requestも通常404と同じ応答にする' do
+      json_headers = { 'ACCEPT' => 'application/json' }
+
+      get '/no_such_page', headers: json_headers
+      expected_body = response.body
+      expected_headers = comparable_headers
+
+      get admin_root_path, headers: json_headers
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to eq(expected_body)
+        expect(comparable_headers).to eq(expected_headers)
+        expect(response.location).to be_nil
+      end
     end
 
     it '一般ユーザーには既存404と同じbody/headerを返す' do
@@ -73,6 +139,20 @@ RSpec.describe 'Admin dashboard', type: :request do
       sign_in admin
 
       admin.update!(guest: true)
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include('管理トップ')
+        expect(response.body).not_to include('解析状況')
+      end
+    end
+
+    it 'guestユーザーには404を返す' do
+      guest = create(:user, guest: true)
+      sign_in guest
+
       get admin_root_path
 
       aggregate_failures do
@@ -295,10 +375,15 @@ RSpec.describe 'Admin dashboard', type: :request do
       end
     end
 
-    it '未ログインユーザーはログインへリダイレクトする' do
+    it '未ログインユーザーには404を返す' do
       get admin_external_services_status_path
 
-      expect(response).to redirect_to(new_user_session_path)
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.location).to be_nil
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include('外部サービス状態')
+      end
     end
 
     it '一般ユーザーは404にする' do

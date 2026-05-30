@@ -69,9 +69,11 @@ RSpec.describe 'Error pages', type: :request do
         status_code: :not_found,
         icon: 'travel_explore',
         title: I18n.t('errors.not_found.title'),
-        primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
-        primary_href: new_user_session_path
+        primary_cta: nil,
+        primary_href: nil
       )
+      expect(Nokogiri::HTML(response.body).at_css('main a')).to be_nil
+      expect(response.body).not_to include(new_user_session_path)
       expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
     end
 
@@ -267,9 +269,11 @@ RSpec.describe 'Error pages', type: :request do
       status_code: :not_found,
       icon: 'travel_explore',
       title: I18n.t('errors.not_found.title'),
-      primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
-      primary_href: new_user_session_path
+      primary_cta: nil,
+      primary_href: nil
     )
+    expect(Nokogiri::HTML(response.body).at_css('main a')).to be_nil
+    expect(response.body).not_to include(new_user_session_path)
     expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
   end
 

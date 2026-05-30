@@ -14,7 +14,28 @@ RSpec.describe 'Admin contact requests', type: :request do
     Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = original_show_detailed_exceptions
   end
 
+  def comparable_headers
+    response.headers.to_h.except('x-request-id', 'x-runtime')
+  end
+
   describe 'GET /admin/contact_requests' do
+    it '非ログインユーザーには既存404と同じbody/headerを返す' do
+      get '/__recify_missing_route__'
+      expected_body = response.body
+      expected_headers = comparable_headers
+
+      get admin_contact_requests_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.content_type).to eq('text/html; charset=utf-8')
+        expect(response.body).to eq(expected_body)
+        expect(comparable_headers).to eq(expected_headers)
+        expect(response.location).to be_nil
+        expect(response.body).not_to include(I18n.t('admin.contact_requests.index.title'))
+      end
+    end
+
     it 'non-adminを拒否する' do
       sign_in create(:user)
 

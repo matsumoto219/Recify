@@ -43,10 +43,15 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
   end
 
   describe 'GET /admin/reauth/passkey/new' do
-    it '非ログインユーザーはログインへリダイレクトする' do
+    it '非ログインユーザーには404を返す' do
       get new_admin_passkey_reauthentication_path
 
-      expect(response).to redirect_to(new_user_session_path)
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.location).to be_nil
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+        expect(response.body).not_to include('管理者パスキー再認証')
+      end
     end
 
     it '非adminには既存404を返す' do

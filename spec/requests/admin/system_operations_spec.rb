@@ -42,10 +42,21 @@ RSpec.describe 'Admin system operations', type: :request do
   end
 
   describe 'GET /admin/system_operations' do
-    it '非ログインユーザーはログインへリダイレクトする' do
+    it '非ログインユーザーには既存404と同じbody/headerを返す' do
+      get '/__recify_missing_route__'
+      expected_body = response.body
+      expected_headers = comparable_headers
+
       get admin_system_operations_path
 
-      expect(response).to redirect_to(new_user_session_path)
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.content_type).to eq('text/html; charset=utf-8')
+        expect(response.body).to eq(expected_body)
+        expect(comparable_headers).to eq(expected_headers)
+        expect(response.location).to be_nil
+        expect(response.body).not_to include('システム運用')
+      end
     end
 
     it '一般ユーザーには既存404と同じbody/headerを返す' do

@@ -4,7 +4,6 @@ class Admin::BaseController < ApplicationController
   ADMIN_PASSKEY_REAUTHENTICATION_METHOD_SESSION_KEY = :admin_passkey_reauthentication_method
 
   around_action :with_admin_locale
-  before_action :authenticate_user!
   before_action :require_admin!
 
   helper_method :admin_passkey_reauthenticated?, :admin_reauthentication_context
