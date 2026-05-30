@@ -38,7 +38,38 @@ class Rack::Attack
       remaining.positive? ? remaining : 1
     end
 
-    def rack_response(request, status:, i18n_scope:, headers: {})
+    def too_many_requests_html(retry_after)
+      ApplicationController.render(
+        template: "errors/too_many_requests",
+        layout: "error",
+        locals: { retry_after: retry_after }
+      )
+    end
+
+    def basic_error_html(status:, title:, description:)
+      escaped_title = ERB::Util.html_escape(title)
+      escaped_description = ERB::Util.html_escape(description)
+
+      <<~HTML
+        <!doctype html>
+        <html lang="ja">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>#{escaped_title}</title>
+          </head>
+          <body>
+            <main>
+              <h1>#{escaped_title}</h1>
+              <p>#{escaped_description}</p>
+              <p>Error Code: #{status}</p>
+            </main>
+          </body>
+        </html>
+      HTML
+    end
+
+    def rack_response(request, status:, i18n_scope:, headers: {}, retry_after: nil)
       title = I18n.t("errors.#{i18n_scope}.title")
       description = I18n.t("errors.#{i18n_scope}.description")
       response_headers = {
@@ -47,24 +78,13 @@ class Rack::Attack
 
       body =
         if json_request?(request)
-          JSON.generate(error: title, message: description, status: status)
+          payload = { error: title, message: description, status: status }
+          payload[:retry_after] = retry_after.to_i if retry_after.to_i.positive?
+          JSON.generate(payload)
+        elsif status == 429 && i18n_scope == :too_many_requests
+          too_many_requests_html(retry_after)
         else
-          <<~HTML
-            <!doctype html>
-            <html lang="ja">
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>#{ERB::Util.html_escape(title)}</title>
-              </head>
-              <body>
-                <main>
-                  <h1>#{ERB::Util.html_escape(title)}</h1>
-                  <p>#{ERB::Util.html_escape(description)}</p>
-                </main>
-              </body>
-            </html>
-          HTML
+          basic_error_html(status: status, title: title, description: description)
         end
 
       [ status, response_headers, [ body ] ]
@@ -116,7 +136,8 @@ class Rack::Attack
       request,
       status: 429,
       i18n_scope: :too_many_requests,
-      headers: { "Retry-After" => retry_after.to_s }
+      headers: { "Retry-After" => retry_after.to_s },
+      retry_after: retry_after
     )
   end
 

@@ -20,7 +20,9 @@ ja:
       description: このリクエストは安全のためブロックされました。
     too_many_requests:
       title: アクセスが集中しています
-      description: しばらく時間をおいてから、もう一度お試しください。
+      description: 短時間に多くのリクエストを受け取りました。
+      retry_after: "%{minutes}分後に再度お試しください。"
+      login_link: ログイン画面へ戻る
     internal_server_error:
       page_title: 予期しないエラーが発生しました
       title: 予期しないエラーが発生しました
