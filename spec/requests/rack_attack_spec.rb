@@ -66,6 +66,32 @@ RSpec.describe 'Rack::Attack', type: :request do
     end
   end
 
+  def expect_blocklisted_html_response(path: nil)
+    aggregate_failures do
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers['Turbo-Visit-Control']).to eq('reload')
+      expect(response.media_type).to eq('text/html')
+      expect(response.body).to include(I18n.t('errors.forbidden.title'))
+      expect(response.body).to include(I18n.t('errors.forbidden.description'))
+      expect(response.body).to include('Error Code: 403')
+      expect(response.body).to include('token-bg-page')
+      expect(response.body).to include('glass-panel')
+      expect(response.body).to include('material-symbols-outlined')
+      expect(response.body).to include('block')
+      expect(response.body).to include('type="importmap"')
+      expect(response.body).to include('@hotwired/turbo-rails')
+      expect(response.body).not_to include('<style>')
+      expect(response.body).not_to include(I18n.t('errors.common.signed_out_primary_cta'))
+      expect(response.body).not_to include(new_user_session_path)
+      expect(response.body).not_to include(I18n.t('errors.too_many_requests.back_link'))
+      expect(response.body).not_to include('rack.attack')
+      expect(response.body).not_to include('REMOTE_ADDR')
+      expect(response.body).not_to include('scanner:')
+      expect(response.body).not_to include('fail2ban')
+      expect(response.body).not_to include(path) if path.present?
+    end
+  end
+
   it 'expected throttle rules are configured' do
     expect(Rack::Attack.throttles.keys).to include(
       'requests/ip',
@@ -211,16 +237,12 @@ RSpec.describe 'Rack::Attack', type: :request do
 
     3.times do
       get '/wp-login.php', headers: remote_addr(ip)
-      expect(response).to have_http_status(:forbidden)
+      expect_blocklisted_html_response(path: 'wp-login.php')
     end
 
     get root_path, headers: remote_addr(ip)
 
-    aggregate_failures do
-      expect(response).to have_http_status(:forbidden)
-      expect(response.body).to include(I18n.t('errors.forbidden.title'))
-      expect(response.body).to include(I18n.t('errors.forbidden.description'))
-    end
+    expect_blocklisted_html_response
   end
 
   it 'returns JSON for throttled JSON requests' do
@@ -242,6 +264,28 @@ RSpec.describe 'Rack::Attack', type: :request do
         'status' => 429,
         'retry_after' => headers['Retry-After'].to_i
       )
+    end
+  end
+
+  it 'returns JSON for blocklisted JSON requests' do
+    env = Rack::MockRequest.env_for('/wp-login.php', 'HTTP_ACCEPT' => 'application/json')
+    request = Rack::Attack::Request.new(env)
+
+    status, headers, body = Rack::Attack.blocklisted_responder.call(request)
+    json = JSON.parse(body.join)
+
+    aggregate_failures do
+      expect(status).to eq(403)
+      expect(headers['Content-Type']).to eq('application/json; charset=utf-8')
+      expect(headers).not_to include('Turbo-Visit-Control')
+      expect(json).to include(
+        'error' => I18n.t('errors.forbidden.title'),
+        'message' => I18n.t('errors.forbidden.description'),
+        'status' => 403
+      )
+      expect(body.join).not_to include('wp-login.php')
+      expect(body.join).not_to include('scanner:')
+      expect(body.join).not_to include('fail2ban')
     end
   end
 end

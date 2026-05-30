@@ -46,27 +46,11 @@ class Rack::Attack
       )
     end
 
-    def basic_error_html(status:, title:, description:)
-      escaped_title = ERB::Util.html_escape(title)
-      escaped_description = ERB::Util.html_escape(description)
-
-      <<~HTML
-        <!doctype html>
-        <html lang="ja">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>#{escaped_title}</title>
-          </head>
-          <body>
-            <main>
-              <h1>#{escaped_title}</h1>
-              <p>#{escaped_description}</p>
-              <p>Error Code: #{status}</p>
-            </main>
-          </body>
-        </html>
-      HTML
+    def forbidden_html
+      ApplicationController.render(
+        template: "errors/forbidden",
+        layout: "error"
+      )
     end
 
     def rack_response(request, status:, i18n_scope:, headers: {}, retry_after: nil)
@@ -83,8 +67,10 @@ class Rack::Attack
           JSON.generate(payload)
         elsif status == 429 && i18n_scope == :too_many_requests
           too_many_requests_html(retry_after)
+        elsif status == 403 && i18n_scope == :forbidden
+          forbidden_html
         else
-          basic_error_html(status: status, title: title, description: description)
+          raise ArgumentError, "Unsupported Rack::Attack HTML error response: status=#{status} scope=#{i18n_scope}"
         end
 
       [ status, response_headers, [ body ] ]
@@ -144,6 +130,14 @@ class Rack::Attack
   end
 
   self.blocklisted_responder = lambda do |request|
-    Rack::Attack.rack_response(request, status: 403, i18n_scope: :forbidden)
+    response_headers = {}
+    response_headers["Turbo-Visit-Control"] = "reload" unless Rack::Attack.json_request?(request)
+
+    Rack::Attack.rack_response(
+      request,
+      status: 403,
+      i18n_scope: :forbidden,
+      headers: response_headers
+    )
   end
 end

@@ -24,7 +24,9 @@ RSpec.describe 'Error pages', type: :request do
       expect(document.at_css('.material-symbols-outlined').text).to include(icon)
       expect(document.text).to include(title)
       expect(document.text).to include("Error Code: #{Rack::Utils.status_code(status_code)}")
-      expect(document.at_css('a[href="' + primary_href + '"]')).to have_attributes(text: include(primary_cta))
+      if primary_cta.present? && primary_href.present?
+        expect(document.at_css('a[href="' + primary_href + '"]')).to have_attributes(text: include(primary_cta))
+      end
       expect(document.text).to include(secondary_cta) if secondary_cta.present?
       expect(document.text).to include('Recify')
       expect(document.text).to include("© #{Time.current.year} Recify")
@@ -70,6 +72,23 @@ RSpec.describe 'Error pages', type: :request do
         primary_cta: I18n.t('errors.common.signed_out_primary_cta'),
         primary_href: new_user_session_path
       )
+      expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
+    end
+
+    it 'GET /403 はRecify error layoutで表示される' do
+      get '/403'
+
+      expect_error_page(
+        status_code: :forbidden,
+        icon: 'block',
+        title: I18n.t('errors.forbidden.title'),
+        primary_cta: nil,
+        primary_href: nil
+      )
+      expect(response.body).to include(I18n.t('errors.forbidden.description'))
+      expect(Nokogiri::HTML(response.body).at_css('main a')).to be_nil
+      expect(response.body).not_to include(I18n.t('errors.common.signed_out_primary_cta'))
+      expect(response.body).not_to include(new_user_session_path)
       expect(response.body).not_to include('問い合わせ時はこのIDをお知らせください')
     end
 

@@ -1,6 +1,7 @@
 module Recify
   class ErrorPageStaticBypass
     ERROR_ROUTES = {
+      "/403" => "/errors/forbidden",
       "/404" => "/errors/not_found",
       "/422" => "/errors/unprocessable",
       "/500" => "/errors/internal_server_error"

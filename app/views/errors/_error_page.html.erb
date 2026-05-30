@@ -6,10 +6,10 @@
   - icon: 表示する Material Symbols アイコン名
   - title: 見出しテキスト
   - description: 説明文
-  - primary_label: 主ボタンのラベル
-  - primary_path: 主ボタンの遷移先
 
   任意:
+  - primary_label: 主ボタンのラベル
+  - primary_path: 主ボタンの遷移先
   - primary_data: 主ボタンに付与するdata属性
   - secondary_label: 補助ボタンのラベル
   - secondary_path: 補助ボタンの遷移先
@@ -22,13 +22,16 @@
   icon = local_assigns.fetch(:icon)
   title = local_assigns.fetch(:title)
   description = local_assigns.fetch(:description)
-  primary_label = local_assigns.fetch(:primary_label)
-  primary_path = local_assigns.fetch(:primary_path)
+  primary_label = local_assigns[:primary_label]
+  primary_path = local_assigns[:primary_path]
   primary_data = local_assigns[:primary_data] || {}
   secondary_label = local_assigns[:secondary_label]
   secondary_path = local_assigns[:secondary_path]
   support_message = local_assigns[:support_message]
   support_id = local_assigns[:support_id]
+  has_primary_action = primary_label.present? && primary_path.present?
+  has_secondary_action = secondary_label.present? && secondary_path.present?
+  has_actions = has_primary_action || has_secondary_action
 %>
 
 <main class="flex flex-1 items-center justify-center px-6 py-12 md:py-16">
@@ -53,31 +56,35 @@
         </p>
       </div>
 
-      <div class="mt-10 flex flex-col gap-3">
-        <%= render "shared/ui/actions/button",
-          as: :link,
-          href: primary_path,
-          label: primary_label,
-          variant: :primary,
-          size: :lg,
-          full_width: true,
-          icon: "arrow_back",
-          data: primary_data %>
+      <% if has_actions %>
+        <div class="mt-10 flex flex-col gap-3">
+          <% if has_primary_action %>
+            <%= render "shared/ui/actions/button",
+              as: :link,
+              href: primary_path,
+              label: primary_label,
+              variant: :primary,
+              size: :lg,
+              full_width: true,
+              icon: "arrow_back",
+              data: primary_data %>
+          <% end %>
 
-        <% if secondary_label.present? && secondary_path.present? %>
-          <%= render "shared/ui/actions/button",
-            as: :link,
-            href: secondary_path,
-            label: secondary_label,
-            variant: :secondary,
-            size: :lg,
-            full_width: true,
-            icon: "refresh",
-            data: { turbo: false } %>
-        <% end %>
-      </div>
+          <% if has_secondary_action %>
+            <%= render "shared/ui/actions/button",
+              as: :link,
+              href: secondary_path,
+              label: secondary_label,
+              variant: :secondary,
+              size: :lg,
+              full_width: true,
+              icon: "refresh",
+              data: { turbo: false } %>
+          <% end %>
+        </div>
+      <% end %>
 
-      <p class="mt-8 font-mono text-xs token-text-muted">
+      <p class="<%= has_actions ? "mt-8" : "mt-10" %> font-mono text-xs token-text-muted">
         <%= t("errors.error_code", status_code: status_code) %>
       </p>
 

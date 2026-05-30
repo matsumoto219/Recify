@@ -7,6 +7,11 @@ class ErrorsController < ApplicationController
     render status: :not_found, formats: :html
   end
 
+  def forbidden
+    log_error_page(status: 403, level: :warn)
+    render status: :forbidden, formats: :html
+  end
+
   def unprocessable
     log_error_page(status: 422, level: :warn)
     render status: :unprocessable_content, formats: :html

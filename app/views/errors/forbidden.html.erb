@@ -1,0 +1,7 @@
+<% content_for :title, t("errors.forbidden.title") %>
+
+<%= render "errors/error_page",
+  status_code: 403,
+  icon: "block",
+  title: t("errors.forbidden.title"),
+  description: t("errors.forbidden.description") %>
