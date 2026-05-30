@@ -8,10 +8,9 @@
       safe_join(
         [
           tag.span(t("errors.too_many_requests.description")),
-          " ",
           tag.span(t("errors.too_many_requests.retry_after", minutes: minutes), class: "font-bold token-text-base")
         ],
-        ""
+        tag.br
       )
     else
       t("errors.too_many_requests.description")
@@ -23,5 +22,9 @@
   icon: "timer",
   title: t("errors.too_many_requests.title"),
   description: description,
-  primary_label: t("errors.too_many_requests.login_link"),
-  primary_path: new_user_session_path %>
+  primary_label: t("errors.too_many_requests.back_link"),
+  primary_path: root_path,
+  primary_data: {
+    controller: "history-back",
+    action: "history-back#go"
+  } %>

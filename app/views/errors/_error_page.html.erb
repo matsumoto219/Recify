@@ -10,6 +10,7 @@
   - primary_path: 主ボタンの遷移先
 
   任意:
+  - primary_data: 主ボタンに付与するdata属性
   - secondary_label: 補助ボタンのラベル
   - secondary_path: 補助ボタンの遷移先
   - support_message: サポート案内文
@@ -23,6 +24,7 @@
   description = local_assigns.fetch(:description)
   primary_label = local_assigns.fetch(:primary_label)
   primary_path = local_assigns.fetch(:primary_path)
+  primary_data = local_assigns[:primary_data] || {}
   secondary_label = local_assigns[:secondary_label]
   secondary_path = local_assigns[:secondary_path]
   support_message = local_assigns[:support_message]
@@ -59,7 +61,8 @@
           variant: :primary,
           size: :lg,
           full_width: true,
-          icon: "arrow_back" %>
+          icon: "arrow_back",
+          data: primary_data %>
 
         <% if secondary_label.present? && secondary_path.present? %>
           <%= render "shared/ui/actions/button",
