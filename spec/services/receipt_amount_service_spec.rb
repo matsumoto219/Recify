@@ -183,6 +183,170 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'サービス料と深夜料金を外税の税内訳と合計整合に反映する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 5_832,
+          tax_amount: 583,
+          total_amount: 6_415
+        },
+        receipt_items: [
+          { line_total: 4_860, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 5_832, amount: 583 }
+        ],
+        receipt_adjustments: [
+          { kind: 'service_charge', sign: 'surcharge', amount: 486, tax_rate: BigDecimal('0.1') },
+          { kind: 'late_night_charge', sign: 'surcharge', amount: 486, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :receipt_tax_basis)).to eq(:tax_added_to_subtotal)
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(5_832)
+        expect(result[:resolved]).to include(subtotal: 5_832, tax: 583, total: 6_415)
+        expect(result[:tax_details]).to include(include(rate: BigDecimal('0.1'), net_amount: 5_832, amount: 583))
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it '配送料と袋代を外税の税内訳と合計整合に反映する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_640,
+          tax_amount: 164,
+          total_amount: 1_804
+        },
+        receipt_items: [
+          { line_total: 1_080, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_640, amount: 164 }
+        ],
+        receipt_adjustments: [
+          { kind: 'bag_fee', sign: 'surcharge', amount: 10, tax_rate: BigDecimal('0.1') },
+          { kind: 'delivery_fee', sign: 'surcharge', amount: 550, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(1_640)
+        expect(result[:resolved]).to include(subtotal: 1_640, tax: 164, total: 1_804)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it '返品行を負値itemなしで外税の税内訳と合計整合に反映する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 530,
+          tax_amount: 53,
+          total_amount: 583
+        },
+        receipt_items: [
+          { line_total: 1_510, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 530, amount: 53 }
+        ],
+        receipt_adjustments: [
+          { kind: 'return_refund', sign: 'discount', amount: 980, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(530)
+        expect(result[:resolved]).to include(subtotal: 530, tax: 53, total: 583)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+      end
+    end
+
+    it 'point_usageは税内訳を変えず支払調整として保持する' do
+      result = call_service(
+        receipt: { total_amount: 1_100 },
+        receipt_items: [
+          { line_total: 1_100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_adjustments: [
+          { kind: 'point_usage', sign: 'discount', amount: 500, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :payment_adjustment_total)).to eq(-500)
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(1_100)
+        expect(result[:tax_details]).to include(include(rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100))
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it '単一10%対象が合計全体に一致するレシートは深夜料金込みで税額126円へ整合する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_391,
+          tax_amount: 126,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { line_total: 900, tax_rate: BigDecimal('0.1') },
+          { line_total: 400, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), amount: 126, description: '内消費税' }
+        ],
+        receipt_adjustments: [
+          { kind: 'late_night_charge', sign: 'surcharge', amount: 91, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 1_265, tax: 126, total: 1_391, tax_rate: BigDecimal('0.1'))
+        expect(result[:tax_details]).to eq([
+          {
+            description: '10%対象',
+            rate: BigDecimal('0.1'),
+            net_amount: 1_265,
+            amount: 126
+          }
+        ])
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_incomplete)
+      end
+    end
+
+    it 'tax_rateなしadjustmentはwarningに留める' do
+      result = call_service(
+        receipt: { total_amount: 1_300 },
+        receipt_items: [
+          { line_total: 1_000 }
+        ],
+        receipt_adjustments: [
+          { kind: 'handling_fee', sign: 'surcharge', amount: 300 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:warning_inconsistencies]).to include(:adjustment_tax_rate_missing)
+        expect(result[:blocking_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
+        expect(result.dig(:computed, :adjustment_tax_rate_missing_total)).to eq(300)
+      end
+    end
+
+    it 'item_discount二重控除疑いはblockingにする' do
+      result = call_service(
+        receipt: { total_amount: 900 },
+        receipt_items: [
+          { original_line_total: 1_000, line_total: 900, discount_amount: 100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_adjustments: [
+          { kind: 'item_discount', sign: 'discount', amount: 100, tax_rate: BigDecimal('0.1') }
+        ]
+      )
+
+      expect(result[:blocking_inconsistencies]).to include(:adjustment_duplicate_item_discount)
+    end
+
     it 'corrects total_amount from subtotal_amount plus tax_amount' do
       result = call_service(
         receipt: {

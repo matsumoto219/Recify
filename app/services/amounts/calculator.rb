@@ -2,10 +2,11 @@
 
 module Amounts
   class Calculator
-    def initialize(receipt:, items:, tax_details:, context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, receipt_tax_basis: :auto, item_amount_basis: :line_total_as_recorded, item_amount_basis_assignments: nil)
+    def initialize(receipt:, items:, tax_details:, adjustments: [], context: :analysis, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, tax_rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, receipt_tax_basis: :auto, item_amount_basis: :line_total_as_recorded, item_amount_basis_assignments: nil)
       @receipt = receipt
       @items = items
       @tax_details = tax_details
+      @adjustments = Array(adjustments)
       @context = normalize_context(context)
       @receipt_tax_basis = normalize_receipt_tax_basis(receipt_tax_basis)
       @item_amount_basis = normalize_item_amount_basis(item_amount_basis)
@@ -28,39 +29,49 @@ module Amounts
       item_total = item_result[:total]
       tax_detail_total = calculate_tax_detail_total
       tax_detail_subtotal = calculate_tax_detail_subtotal
-      fallback_tax_rate = resolve_fallback_tax_rate(item_total, tax_detail_total)
+      detection_adjustment_summary = adjustment_summary_for(:total_includes_tax)
+      adjusted_item_total_for_detection = [ item_total + detection_adjustment_summary[:receipt_total_delta], 0 ].max
+      fallback_tax_rate = resolve_fallback_tax_rate(adjusted_item_total_for_detection, tax_detail_total)
 
       if @item_amount_basis == :mixed_by_tax_rate_group && @item_amount_basis_assignments.present?
         amounts = mixed_assignment_amounts
         tax_details = mixed_assignment_tax_details
         tax_rates = tax_details.filter_map { |tax_detail| normalize_tax_rate(tax_detail[:rate]) }.uniq
+        adjustment_summary = adjustment_summary_for(:total_includes_tax)
 
         return {
-          item_total: amounts[:total],
-          item_tax_total: amounts[:tax],
+          item_total: item_total,
+          adjusted_item_total: [ amounts[:total] + adjustment_summary[:total_delta], 0 ].max,
+          item_tax_total: [ amounts[:tax] + adjustment_summary[:tax_delta], 0 ].max,
           tax_detail_total: amounts[:tax],
-          tax_total: amounts[:tax],
-          subtotal: amounts[:subtotal],
-          tax: amounts[:tax],
-          total: amounts[:total],
+          tax_total: [ amounts[:tax] + adjustment_summary[:tax_delta], 0 ].max,
+          subtotal: [ amounts[:subtotal] + adjustment_summary[:subtotal_delta], 0 ].max,
+          tax: [ amounts[:tax] + adjustment_summary[:tax_delta], 0 ].max,
+          total: [ amounts[:total] + adjustment_summary[:total_delta], 0 ].max,
           tax_rate: tax_rates.one? ? tax_rates.first : nil,
           external_tax: false,
           tax_details_primary: false,
           receipt_tax_basis: @receipt_tax_basis == :tax_added_to_subtotal ? :tax_added_to_subtotal : :total_includes_tax,
           item_amount_basis: :mixed_by_tax_rate_group,
           item_amount_basis_assignments: @item_amount_basis_assignments,
+          adjustment_summary: adjustment_summary,
+          adjustment_discount_total: adjustment_summary[:discount_total],
+          adjustment_surcharge_total: adjustment_summary[:surcharge_total],
+          payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
           tax_details: tax_details,
           items: @items
         }
       end
 
       if @item_amount_basis == :line_total_as_net
-        subtotal = item_total
-        tax_total = calculate_tax_excluded_item_tax_total(fallback_tax_rate)
+        adjustment_summary = adjustment_summary_for(:tax_added_to_subtotal)
+        subtotal = [ item_total + adjustment_summary[:subtotal_delta], 0 ].max
+        tax_total = [ calculate_tax_excluded_item_tax_total(fallback_tax_rate) + adjustment_summary[:tax_delta], 0 ].max
         tax_rate = resolve_tax_rate(fallback_tax_rate)
 
         return {
           item_total: item_total,
+          adjusted_item_total: subtotal,
           item_tax_total: tax_total,
           tax_detail_total: tax_detail_total,
           tax_total: tax_total,
@@ -72,12 +83,17 @@ module Amounts
           tax_details_primary: false,
           receipt_tax_basis: :tax_added_to_subtotal,
           item_amount_basis: :line_total_as_net,
+          adjustment_summary: adjustment_summary,
+          adjustment_discount_total: adjustment_summary[:discount_total],
+          adjustment_surcharge_total: adjustment_summary[:surcharge_total],
+          payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
           items: @items
         }
       end
 
-      external_tax = resolve_external_tax(item_total, tax_detail_subtotal, tax_detail_total)
-      tax_details_primary = resolve_tax_details_primary(item_total, tax_detail_subtotal, tax_detail_total)
+      external_tax = resolve_external_tax(adjusted_item_total_for_detection, tax_detail_subtotal, tax_detail_total)
+      tax_details_primary = resolve_tax_details_primary(adjusted_item_total_for_detection, tax_detail_subtotal, tax_detail_total)
+      adjustment_summary = adjustment_summary_for(external_tax ? :tax_added_to_subtotal : :total_includes_tax)
 
       if external_tax || tax_details_primary
         item_subtotal = tax_detail_subtotal
@@ -88,17 +104,21 @@ module Amounts
       else
         item_subtotal = calculate_item_subtotal(fallback_tax_rate)
         item_tax_total = item_total - item_subtotal
+        item_subtotal = [ item_subtotal + adjustment_summary[:subtotal_delta], 0 ].max
+        item_tax_total = [ item_tax_total + adjustment_summary[:tax_delta], 0 ].max
 
-        total = resolve_total(item_total, nil, nil)
-        subtotal = resolve_subtotal(item_total, item_subtotal, nil, total: total, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
+        adjusted_total = [ item_total + adjustment_summary[:total_delta], 0 ].max
+        total = resolve_total(adjusted_total, nil, nil)
+        subtotal = resolve_subtotal(adjusted_total, item_subtotal, nil, total: total, tax_rate: fallback_tax_rate, tax_detail_subtotal: tax_detail_subtotal)
         tax_total = resolve_tax_total(item_tax_total, tax_detail_total, total: total, subtotal: subtotal)
-        total = resolve_total(item_total, subtotal, tax_total)
+        total = resolve_total(adjusted_total, subtotal, tax_total)
       end
 
       tax_rate = resolve_tax_rate(fallback_tax_rate)
 
       {
         item_total: item_total,
+        adjusted_item_total: [ item_total + adjustment_summary[:receipt_total_delta], 0 ].max,
         item_tax_total: item_tax_total,
         tax_detail_total: tax_detail_total,
         tax_total: tax_total,
@@ -110,6 +130,10 @@ module Amounts
         tax_details_primary: tax_details_primary,
         receipt_tax_basis: external_tax ? :tax_added_to_subtotal : :total_includes_tax,
         item_amount_basis: :line_total_as_recorded,
+        adjustment_summary: adjustment_summary,
+        adjustment_discount_total: adjustment_summary[:discount_total],
+        adjustment_surcharge_total: adjustment_summary[:surcharge_total],
+        payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
         items: @items
       }
     end
@@ -365,6 +389,18 @@ module Amounts
       end.uniq
     end
 
+    def adjustment_summary_for(receipt_tax_basis)
+      @adjustment_summary_by_basis ||= {}
+      basis = normalize_adjustment_receipt_tax_basis(receipt_tax_basis)
+
+      @adjustment_summary_by_basis[basis] ||= Amounts::AdjustmentTotalAggregator.new(
+        adjustments: @adjustments,
+        items: @items,
+        rounding_mode: @tax_rounding_mode,
+        receipt_tax_basis: basis
+      ).call
+    end
+
     def infer_tax_rate_from_amounts(item_total, tax_detail_total)
       tax_amount = tax_detail_total.positive? ? tax_detail_total : to_i(@receipt[:tax_amount])
       receipt_subtotal = to_i(@receipt[:subtotal_amount])
@@ -421,6 +457,11 @@ module Amounts
     def normalize_receipt_tax_basis(value)
       basis = value.to_s.to_sym
       %i[auto total_includes_tax tax_added_to_subtotal].include?(basis) ? basis : :auto
+    end
+
+    def normalize_adjustment_receipt_tax_basis(value)
+      basis = value.to_s.to_sym
+      %i[total_includes_tax tax_added_to_subtotal].include?(basis) ? basis : :total_includes_tax
     end
 
     def normalize_item_amount_basis(value)

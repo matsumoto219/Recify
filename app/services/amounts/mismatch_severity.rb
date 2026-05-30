@@ -11,6 +11,7 @@ module Amounts
       tax_detail_mismatch
       invalid_amount_relation
       adjustment_uncertain
+      adjustment_duplicate_item_discount
       insufficient_data
     ].freeze
 
@@ -22,6 +23,7 @@ module Amounts
       item_tax_rate_group_uncertain
       zero_amount_item_incomplete
       discount_data_incomplete
+      adjustment_tax_rate_missing
       price_tax_inclusion_uncertain
       calculation_profile_uncertain
     ].freeze

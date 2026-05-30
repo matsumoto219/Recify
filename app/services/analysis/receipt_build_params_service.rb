@@ -34,7 +34,12 @@ module Analysis
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
-        apply_single_tax_detail_rate_to_items(receipt_items_attributes, receipt_tax_details_attributes)
+        tax_rate_correction = apply_single_tax_detail_rate_policy(
+          receipt_items_attributes,
+          receipt_adjustments_attributes,
+          receipt_tax_details_attributes,
+          receipt_attributes
+        )
 
         {
           # OCR/AI内部形式 -> receipts 保存用attributes
@@ -46,7 +51,8 @@ module Analysis
           # NOTE: 税詳細は保存対象だが、現状は主に保持目的で UI では未使用
           receipt_tax_details_attributes: receipt_tax_details_attributes,
           receipt_adjustments_attributes: receipt_adjustments_attributes,
-          review_reasons: review_reasons
+          review_reasons: review_reasons,
+          tax_rate_correction: tax_rate_correction
         }
       end
 
@@ -279,21 +285,108 @@ module Analysis
         end
       end
 
-      def apply_single_tax_detail_rate_to_items(items, tax_details)
+      def apply_single_tax_detail_rate_policy(items, adjustments, tax_details, receipt_attributes)
         return unless items.present?
+
+        override_rate = single_tax_detail_rate_covering_total(tax_details, receipt_attributes)
+        if override_rate
+          changed_item_count = apply_tax_rate_to_items(items, override_rate)
+          changed_adjustment_count = apply_tax_rate_to_taxable_adjustments(adjustments, override_rate)
+
+          if changed_item_count.positive? || changed_adjustment_count.positive?
+            return {
+              reason: "single_tax_detail_total_matches_receipt_total",
+              source: "printed_tax_detail",
+              rate: override_rate.to_s("F"),
+              item_count: changed_item_count,
+              adjustment_count: changed_adjustment_count
+            }
+          end
+        end
+
+        apply_single_tax_detail_rate_to_unrated_items(items, tax_details)
+        nil
+      end
+
+      def apply_single_tax_detail_rate_to_unrated_items(items, tax_details)
         return unless items.all? { |item| item[:tax_rate].nil? }
 
         rates = Array(tax_details).filter_map do |tax_detail|
           rate = normalize_rate(tax_detail[:rate])
-          amount = normalize_amount(tax_detail[:amount]).to_i
+          amount = normalize_amount(tax_detail[:amount])
           next unless rate&.positive?
-          next unless amount.positive?
+          next unless amount&.positive?
 
           rate
         end.uniq
         return unless rates.one?
 
         items.each { |item| item[:tax_rate] = rates.first }
+      end
+
+      def single_tax_detail_rate_covering_total(tax_details, receipt_attributes)
+        total_amount = normalize_amount(receipt_attributes[:total_amount])
+        return nil unless total_amount&.positive?
+
+        usable_tax_details = Array(tax_details).filter_map do |tax_detail|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])
+          next unless rate&.positive?
+          next unless amount&.positive?
+
+          {
+            rate: rate,
+            amount: amount,
+            net_amount: normalize_amount(tax_detail[:net_amount])
+          }
+        end
+        return nil unless usable_tax_details.one?
+
+        tax_detail = usable_tax_details.first
+        return tax_detail[:rate] if tax_detail_covers_total_amount?(tax_detail, total_amount)
+
+        nil
+      end
+
+      def tax_detail_covers_total_amount?(tax_detail, total_amount)
+        amount = tax_detail[:amount]
+        net_amount = tax_detail[:net_amount]
+        total = total_amount.to_i
+
+        return true if net_amount&.positive? && (net_amount.to_i + amount.to_i == total)
+        return true if net_amount&.positive? && net_amount.to_i == total && tax_amount_matches_inclusive_total?(total_amount, amount, tax_detail[:rate])
+
+        tax_amount_matches_inclusive_total?(total_amount, amount, tax_detail[:rate])
+      end
+
+      def tax_amount_matches_inclusive_total?(total_amount, amount, rate)
+        tax = BigDecimal(total_amount.to_s) * rate / (BigDecimal("1") + rate)
+        %i[floor round ceil].any? do |rounding_mode|
+          Amounts::Rounding.apply_rounding(tax, rounding_mode) == amount.to_i
+        end
+      end
+
+      def apply_tax_rate_to_items(items, rate)
+        Array(items).count do |item|
+          next false if normalize_rate(item[:tax_rate]) == rate
+
+          item[:tax_rate] = rate
+          true
+        end
+      end
+
+      def apply_tax_rate_to_taxable_adjustments(adjustments, rate)
+        Array(adjustments).count do |adjustment|
+          next false unless taxable_adjustment?(adjustment)
+          next false if normalize_rate(adjustment[:tax_rate]) == rate
+
+          adjustment[:tax_rate] = rate
+          true
+        end
+      end
+
+      def taxable_adjustment?(adjustment)
+        adjustment[:amount].to_i.positive? && adjustment[:kind].to_s != "point_usage"
       end
 
       def normalize_receipt_attributes(attributes)

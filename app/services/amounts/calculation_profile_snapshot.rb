@@ -72,8 +72,13 @@ module Amounts
       {
         total_amount: normalize_value(amounts[:total]),
         subtotal_amount: normalize_value(amounts[:subtotal]),
-        tax_amount: normalize_value(amounts[:tax])
-      }
+        tax_amount: normalize_value(amounts[:tax]),
+        adjusted_item_total: normalize_value(amounts[:adjusted_item_total]),
+        adjustment_discount_total: normalize_value(amounts[:adjustment_discount_total]),
+        adjustment_surcharge_total: normalize_value(amounts[:adjustment_surcharge_total]),
+        payment_adjustment_total: normalize_value(amounts[:payment_adjustment_total]),
+        adjustment_tax_rate_missing_total: normalize_value(amounts[:adjustment_tax_rate_missing_total])
+      }.compact
     end
 
     def normalized_array(value)

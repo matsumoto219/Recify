@@ -63,6 +63,14 @@ RSpec.describe Ai::PromptTemplate do
       )
     end
 
+    it '印字された税率別内訳を注記より優先するよう指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('Printed tax breakdown lines are stronger evidence than generic tax notes.')
+        expect(user_prompt).to include('use that printed rate for all taxable items and taxable adjustments')
+        expect(user_prompt).to include('do not classify all items as 8% from a generic reduced-rate note alone')
+      end
+    end
+
     it 'tax_rate_confidence と tax_rate_reason の返却ルールを指示する' do
       aggregate_failures do
         expect(user_prompt).to include('tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.')

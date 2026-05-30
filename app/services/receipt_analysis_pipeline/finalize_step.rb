@@ -170,7 +170,7 @@ class ReceiptAnalysisPipeline
           processing_error_message: nil,
           review_reasons: review_reasons,
           ocr_completed_at: Time.current,
-          amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
+          amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
         ),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
@@ -229,7 +229,7 @@ class ReceiptAnalysisPipeline
           processing_error_message: nil,
           review_reasons: review_reasons,
           ocr_completed_at: Time.current,
-          amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
+          amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
         ),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
@@ -287,7 +287,7 @@ class ReceiptAnalysisPipeline
         processing_error_message: processing_error_message,
         review_reasons: review_reasons,
         ocr_completed_at: Time.current,
-        amount_calculation_profile: amount_calculation_profile_snapshot(amount_result)
+        amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
       )
 
       persist_result_full!(
@@ -425,8 +425,13 @@ class ReceiptAnalysisPipeline
       ReviewReasonSource.review_reasons_for_user(candidates[:review_reasons])
     end
 
-    def amount_calculation_profile_snapshot(amount_result)
-      ReceiptAmountService.calculation_profile_snapshot(amount_result)
+    def amount_calculation_profile_snapshot(amount_result, tax_rate_correction: nil)
+      snapshot = ReceiptAmountService.calculation_profile_snapshot(amount_result)
+      return snapshot if tax_rate_correction.blank?
+
+      snapshot[:profile] ||= {}
+      snapshot[:profile][:tax_rate_correction] = tax_rate_correction
+      snapshot
     end
 
     def normalize_items_attributes(items)

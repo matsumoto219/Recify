@@ -321,6 +321,80 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '単一税率の印字税内訳が合計全体に一致する場合はAI item税率より優先する' do
+        rvmu_like_ocr_result = {
+          candidates: {
+            store_name: 'サンプル食堂',
+            total_amount: 1_391,
+            tax_amount: 126,
+            country_region: 'JPN',
+            items: [
+              {
+                raw_text: '牛丼並',
+                price: 450,
+                quantity: 2,
+                line_total: 900,
+                confidence: 0.95
+              },
+              {
+                raw_text: 'サラダセット',
+                price: 200,
+                quantity: 2,
+                line_total: 400,
+                confidence: 0.95
+              }
+            ],
+            tax_details: [
+              { description: '内消費税', amount: 126, rate: 10 }
+            ]
+          },
+          lines: [
+            '※は軽減税率適用商品',
+            '深夜料(*)',
+            '¥91',
+            '合計',
+            '¥1,391',
+            '(10%対象',
+            '¥1,391内消費税',
+            '¥126)'
+          ]
+        }
+        ai_result = {
+          receipt_items_attributes: [
+            { index: 0, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98 },
+            { index: 1, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98 }
+          ],
+          receipt_adjustments_attributes: [
+            {
+              kind: 'late_night_charge',
+              label: '深夜料',
+              amount: 91,
+              sign: 'surcharge',
+              tax_rate: 0.08,
+              source_text: '深夜料(*)',
+              source_line_index: 1,
+              confidence: 0.97
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: rvmu_like_ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to eq([ BigDecimal('0.1'), BigDecimal('0.1') ])
+          expect(params[:receipt_adjustments_attributes].pluck(:kind, :amount, :tax_rate)).to eq([
+            [ 'late_night_charge', 91, BigDecimal('0.1') ]
+          ])
+          expect(params[:tax_rate_correction]).to include(
+            reason: 'single_tax_detail_total_matches_receipt_total',
+            source: 'printed_tax_detail',
+            rate: '0.1',
+            item_count: 2,
+            adjustment_count: 1
+          )
+        end
+      end
+
       it '複数税率のtax_detailsではitem tax_rateを補完しない' do
         ocr_result[:candidates][:tax_details] = [
           { description: '8%対象', amount: 40, rate: 8, net_amount: 500 },

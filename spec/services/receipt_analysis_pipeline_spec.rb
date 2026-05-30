@@ -995,7 +995,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result)
 
       aggregate_failures do
-        expect(receipt.status).not_to eq('failed')
+        expect(receipt.status).to eq('completed')
         expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to include([ 'return_refund', 980, 'discount' ])
       end
     end
@@ -1027,10 +1027,13 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
 
-      expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
-        [ 'bag_fee', 10, 'surcharge' ],
-        [ 'delivery_fee', 550, 'surcharge' ]
-      )
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'bag_fee', 10, 'surcharge' ],
+          [ 'delivery_fee', 550, 'surcharge' ]
+        )
+      end
     end
 
     it 'service_and_late_night_receiptのサービス料と深夜料金をadjustmentとして保存する' do
@@ -1060,10 +1063,13 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       receipt, = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result)
 
-      expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
-        [ 'service_charge', 486, 'surcharge' ],
-        [ 'late_night_charge', 486, 'surcharge' ]
-      )
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'service_charge', 486, 'surcharge' ],
+          [ 'late_night_charge', 486, 'surcharge' ]
+        )
+      end
     end
 
     it 'ai_success decisionのwarning mismatchはcompletedのままreview_reasonsに残さず診断情報に残す' do
@@ -1652,6 +1658,105 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
         expect(amount[:blocking_inconsistencies]).to be_empty
         expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+      end
+    end
+
+    it '印字された単一10%税内訳が合計全体に一致する場合はAIの軽減税率推定を補正する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "※は軽減税率適用商品\n深夜料(*)\n¥91\n合計\n¥1,391\n(10%対象\n¥1,391内消費税\n¥126)",
+        lines: [
+          '※は軽減税率適用商品',
+          '深夜料(*)',
+          '¥91',
+          '合計',
+          '¥1,391',
+          '(10%対象',
+          '¥1,391内消費税',
+          '¥126)'
+        ],
+        candidates: {
+          store_name: 'サンプル食堂',
+          total_amount: 1_391,
+          tax_amount: 126,
+          tax_rate: 10,
+          country_region: 'JPN',
+          payment_method_text: 'au PAY',
+          items: [
+            { raw_text: '牛丼並', price: 450, quantity: 2, line_total: 900, confidence: 0.95 },
+            { raw_text: 'サラダセット', price: 200, quantity: 2, line_total: 400, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'au PAY', amount: 1_391 }
+          ],
+          tax_details: [
+            { description: '内消費税', amount: 126, rate: 10 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: {
+          payment_method: 'qr_payment'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '牛丼並', category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98, needs_review: false },
+          { index: 1, suggested_name: 'サラダセット', category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'late_night_charge',
+            label: '深夜料',
+            amount: 91,
+            sign: 'surcharge',
+            tax_rate: 0.1,
+            source_text: '深夜料(*)',
+            source_line_index: 1,
+            confidence: 0.97,
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_items.pluck(:tax_rate)).to eq([ BigDecimal('0.1'), BigDecimal('0.1') ])
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :tax_rate)).to eq([
+          [ 'late_night_charge', 91, BigDecimal('0.1') ]
+        ])
+        expect(receipt.receipt_tax_details.pluck(:description, :net_amount, :amount, :rate)).to eq([
+          [ '10%対象', 1_265, 126, BigDecimal('0.1') ]
+        ])
+        expect(receipt.subtotal_amount).to eq(1_265)
+        expect(receipt.tax_amount).to eq(126)
+        expect(receipt.total_amount).to eq(1_391)
+        expect(receipt.amount_calculation_profile.dig('profile', 'tax_rate_correction')).to include(
+          'reason' => 'single_tax_detail_total_matches_receipt_total',
+          'source' => 'printed_tax_detail',
+          'rate' => '0.1',
+          'item_count' => 2,
+          'adjustment_count' => 0
+        )
       end
     end
 

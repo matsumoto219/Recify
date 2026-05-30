@@ -10,10 +10,11 @@ module Amounts
     SAME_RATE_MIXED_MAX_ITEMS = 20
     SAME_RATE_MIXED_MAX_STATES = 50_000
 
-    def initialize(receipt:, items:, tax_details:, context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, receipt_tax_bases: RECEIPT_TAX_BASES, item_amount_bases: ITEM_AMOUNT_BASES)
+    def initialize(receipt:, items:, tax_details:, adjustments: [], context: :analysis, tax_rounding_modes: nil, discount_rounding_modes: nil, receipt_tax_bases: RECEIPT_TAX_BASES, item_amount_bases: ITEM_AMOUNT_BASES)
       @receipt = receipt
       @items = Array(items)
       @tax_details = Array(tax_details)
+      @adjustments = Array(adjustments)
       @context = normalize_context(context)
       @tax_rounding_modes = normalize_rounding_modes(tax_rounding_modes, ROUNDING_MODES)
       @discount_rounding_modes = normalize_rounding_modes(discount_rounding_modes, ROUNDING_MODES)
@@ -56,6 +57,7 @@ module Amounts
         receipt: @receipt,
         items: @items,
         tax_details: @tax_details,
+        adjustments: @adjustments,
         context: @context,
         tax_rounding_mode: profile[:tax_rounding_mode],
         discount_rounding_mode: profile[:discount_rounding_mode],
@@ -178,10 +180,12 @@ module Amounts
 
       Amounts::TaxDetailAggregator.new(
         items: calc[:items],
+        adjustments: @adjustments,
         fallback_tax_rate: calc[:tax_rate],
         fallback_net_amount: calc[:subtotal],
         fallback_tax_amount: calc[:tax],
-        rounding_mode: profile[:tax_rounding_mode]
+        rounding_mode: profile[:tax_rounding_mode],
+        receipt_tax_basis: profile[:receipt_tax_basis]
       ).call
     end
 
@@ -227,7 +231,33 @@ module Amounts
         )
       end
 
+      adjustment_tax_details(tax_rounding_mode).each do |rate, amounts|
+        groups[rate] ||= { rate: rate, net_amount: 0, amount: 0 }
+        groups[rate][:net_amount] = [ groups[rate][:net_amount] + amounts[:net_amount], 0 ].max
+        groups[rate][:amount] = [ groups[rate][:amount] + amounts[:amount], 0 ].max
+      end
+
       groups.values
+    end
+
+    def adjustment_tax_details(tax_rounding_mode)
+      adjustment_summary = Amounts::AdjustmentTotalAggregator.new(
+        adjustments: @adjustments,
+        items: @items,
+        rounding_mode: tax_rounding_mode,
+        receipt_tax_basis: :tax_added_to_subtotal
+      ).call
+
+      adjustment_summary[:taxable_delta_by_rate].each_with_object({}) do |(rate, signed_net), hash|
+        next unless signed_net.to_i.nonzero?
+
+        tax = signed_net.negative? ? -tax_from_net(signed_net.abs, rate, tax_rounding_mode) : tax_from_net(signed_net, rate, tax_rounding_mode)
+        hash[rate] = { rate: rate, net_amount: signed_net, amount: tax }
+      end
+    end
+
+    def tax_from_net(net_amount, rate, tax_rounding_mode)
+      Amounts::Rounding.apply_rounding(BigDecimal(net_amount.to_s) * rate, tax_rounding_mode)
     end
 
     def mixed_generated_tax_details(assignments)
@@ -330,7 +360,16 @@ module Amounts
     end
 
     def source_item_total
-      @source_item_total ||= @items.sum { |item| source_item_line_total(item) }
+      @source_item_total ||= @items.sum { |item| source_item_line_total(item) } + adjustment_summary[:receipt_total_delta]
+    end
+
+    def adjustment_summary
+      @adjustment_summary ||= Amounts::AdjustmentTotalAggregator.new(
+        adjustments: @adjustments,
+        items: @items,
+        rounding_mode: @tax_rounding_modes.first || Amounts::Rounding::TAX_DEFAULT_MODE,
+        receipt_tax_basis: :total_includes_tax
+      ).call
     end
 
     def source_item_line_total(item)

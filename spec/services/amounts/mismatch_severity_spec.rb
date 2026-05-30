@@ -8,6 +8,8 @@ RSpec.describe Amounts::MismatchSeverity do
         expect(described_class.severity(:item_total_mismatch)).to eq(:blocking)
         expect(described_class.severity(:tax_amount_mismatch)).to eq(:blocking)
         expect(described_class.severity(:tax_detail_mismatch)).to eq(:blocking)
+        expect(described_class.severity(:adjustment_uncertain)).to eq(:blocking)
+        expect(described_class.severity(:adjustment_duplicate_item_discount)).to eq(:blocking)
         expect(described_class.severity(:insufficient_data)).to eq(:blocking)
       end
     end
@@ -22,6 +24,7 @@ RSpec.describe Amounts::MismatchSeverity do
         expect(described_class.severity(:discount_data_incomplete)).to eq(:warning)
         expect(described_class.severity(:price_tax_inclusion_uncertain)).to eq(:warning)
         expect(described_class.severity(:item_tax_rate_group_uncertain)).to eq(:warning)
+        expect(described_class.severity(:adjustment_tax_rate_missing)).to eq(:warning)
       end
     end
 

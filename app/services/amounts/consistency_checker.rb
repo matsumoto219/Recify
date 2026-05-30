@@ -211,6 +211,9 @@ module Amounts
       source_groups ||= tax_details_by_rate(comparable_source_tax_details)
       return false if source_groups.blank? || @items.blank?
 
+      generated_groups = tax_details_by_rate(@generated_tax_details)
+      return true if generated_groups.present? && generated_groups == source_groups
+
       %i[floor ceil round].any? do |rounding_mode|
         rounding_candidate_tax_details(rounding_mode) == source_groups
       end

@@ -2,12 +2,14 @@
 
 module Amounts
   class TaxDetailAggregator
-    def initialize(items:, fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil, rounding_mode: :floor)
+    def initialize(items:, adjustments: [], fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil, rounding_mode: :floor, receipt_tax_basis: :total_includes_tax)
       @items = Array(items)
+      @adjustments = Array(adjustments)
       @fallback_tax_rate = normalize_tax_rate(fallback_tax_rate)
       @fallback_net_amount = to_i(fallback_net_amount)
       @fallback_tax_amount = to_i(fallback_tax_amount)
       @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode)
+      @receipt_tax_basis = normalize_receipt_tax_basis(receipt_tax_basis)
     end
 
     def call
@@ -43,6 +45,8 @@ module Amounts
         grouped[tax_rate] += line_total
       end
 
+      adjustment_groups = adjustment_tax_details
+
       gross_totals.each_with_object({}) do |(tax_rate, gross_total), grouped|
         tax_amount = rounded_tax_from_gross(gross_total, tax_rate)
         net_amount = gross_total - tax_amount
@@ -51,6 +55,30 @@ module Amounts
           net_amount: net_amount,
           amount: tax_amount
         }
+      end.merge(adjustment_groups) do |_rate, item_amounts, adjustment_amounts|
+        {
+          net_amount: item_amounts[:net_amount] + adjustment_amounts[:net_amount],
+          amount: item_amounts[:amount] + adjustment_amounts[:amount]
+        }
+      end
+    end
+
+    def adjustment_tax_details
+      @adjustments.each_with_object({}) do |adjustment, grouped|
+        normalized = normalize_adjustment(adjustment)
+        next if payment_adjustment?(normalized)
+        next if duplicate_item_discount?(normalized)
+
+        tax_rate = normalize_tax_rate(normalized[:tax_rate])
+        amount = normalized[:amount].to_i
+        next unless tax_rate.positive? && amount.positive?
+
+        signed = signed_amount(normalized)
+        net_delta, tax_delta = adjustment_net_tax_delta(signed, tax_rate)
+
+        grouped[tax_rate] ||= { net_amount: 0, amount: 0 }
+        grouped[tax_rate][:net_amount] = [ grouped[tax_rate][:net_amount] + net_delta, 0 ].max
+        grouped[tax_rate][:amount] = [ grouped[tax_rate][:amount] + tax_delta, 0 ].max
       end
     end
 
@@ -93,6 +121,68 @@ module Amounts
       tax_rate > 1 ? tax_rate / 100 : tax_rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def normalize_receipt_tax_basis(value)
+      basis = value.to_s.to_sym
+      %i[total_includes_tax tax_added_to_subtotal].include?(basis) ? basis : :total_includes_tax
+    end
+
+    def normalize_adjustment(adjustment)
+      normalized = if adjustment.respond_to?(:attributes)
+        adjustment.attributes.symbolize_keys
+      elsif adjustment.respond_to?(:to_h)
+        adjustment.to_h.symbolize_keys
+      else
+        {}
+      end
+
+      kind = normalized[:kind].to_s
+      sign = normalized[:sign].to_s
+
+      {
+        kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
+        sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_sign_for(kind),
+        amount: to_i(normalized[:amount]).abs,
+        tax_rate: normalized[:tax_rate]
+      }
+    end
+
+    def default_sign_for(kind)
+      %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
+    end
+
+    def payment_adjustment?(adjustment)
+      adjustment[:kind] == "point_usage"
+    end
+
+    def duplicate_item_discount?(adjustment)
+      adjustment[:kind] == "item_discount" &&
+        @items.any? { |item| to_i(fetch_value(item, :discount_amount)).positive? }
+    end
+
+    def signed_amount(adjustment)
+      adjustment[:sign] == "surcharge" ? adjustment[:amount].to_i : -adjustment[:amount].to_i
+    end
+
+    def adjustment_net_tax_delta(signed, tax_rate)
+      if @receipt_tax_basis == :tax_added_to_subtotal
+        tax = signed_tax_from_net(signed, tax_rate)
+        [ signed, tax ]
+      else
+        tax = signed_tax_from_gross(signed, tax_rate)
+        [ signed - tax, tax ]
+      end
+    end
+
+    def signed_tax_from_net(signed, tax_rate)
+      sign = signed.negative? ? -1 : 1
+      sign * Amounts::Rounding.apply_rounding(BigDecimal(signed.abs.to_s) * tax_rate, @rounding_mode)
+    end
+
+    def signed_tax_from_gross(signed, tax_rate)
+      sign = signed.negative? ? -1 : 1
+      sign * rounded_tax_from_gross(signed.abs, tax_rate)
     end
 
     def rounded_tax_from_gross(gross_total, tax_rate)

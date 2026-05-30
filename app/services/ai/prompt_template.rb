@@ -229,6 +229,9 @@ module Ai
         - tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.
         - When the receipt has multiple tax rates, assign tax_rate to each item whenever supported by the receipt context.
         - When the receipt has a single clear tax rate, return that same tax_rate for each item.
+        - Printed tax breakdown lines are stronger evidence than generic tax notes. Treat notes such as reduced-rate markers as supporting context only.
+        - If a printed tax breakdown shows the receipt total amount as a single tax-rate target, use that printed rate for all taxable items and taxable adjustments, even when a nearby note appears to mention a reduced tax rate.
+        - For example, if the final tax breakdown says the whole total is a 10% target with a printed included tax amount, do not classify all items as 8% from a generic reduced-rate note alone.
         - When tax_rate confidence is low, lower tax_rate_confidence instead of guessing.
         - When an item tax_rate cannot be selected safely, return null for tax_rate and set needs_review = true.
         - needs_review: set true when the item name, category, or tax_rate remains uncertain.
