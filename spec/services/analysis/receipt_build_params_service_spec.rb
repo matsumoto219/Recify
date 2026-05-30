@@ -1078,5 +1078,197 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
     end
+
+    context '特殊加減算行' do
+      let(:ocr_result) do
+        {
+          candidates: {
+            store_name: 'サンプルストア',
+            total_amount: 1_640,
+            payment_method_text: '現金',
+            items: [
+              { raw_text: '商品小計', line_total: 1_080 },
+              { raw_text: '配送料', line_total: 550 },
+              { raw_text: 'レジ袋代', line_total: 10 }
+            ],
+            payments: [],
+            tax_details: []
+          },
+          lines: [
+            '商品小計',
+            '¥1,080',
+            'レジ袋代',
+            '¥10',
+            '配送料',
+            '¥550',
+            '合計',
+            '¥1,640'
+          ]
+        }
+      end
+
+      it 'AI adjustmentをOCRに存在する金額だけ保存向けattributesへ通す' do
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代',
+              source_line_index: 2,
+              confidence: BigDecimal('0.9')
+            },
+            {
+              kind: 'delivery_fee',
+              label: '配送料',
+              amount: 999,
+              sign: 'surcharge',
+              source_text: '配送料',
+              source_line_index: 4
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'bag_fee', label: 'レジ袋代', amount: 10, sign: 'surcharge', source: 'ai')
+          )
+          expect(params[:receipt_adjustments_attributes]).not_to include(include(amount: 999))
+        end
+      end
+
+      it 'ラベル行と金額行が分かれた深夜料金を近傍行照合で保存向けattributesへ通す' do
+        ocr_result[:lines] = [
+          '小計',
+          '¥4,860',
+          '深夜料金10%',
+          '¥486',
+          '合計',
+          '¥5,346'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'late_night_charge',
+              label: '深夜料金10%',
+              amount: 486,
+              sign: 'surcharge',
+              source_text: '深夜料金10%',
+              source_line_index: 2,
+              confidence: BigDecimal('0.91')
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(
+            kind: 'late_night_charge',
+            label: '深夜料金10%',
+            amount: 486,
+            sign: 'surcharge',
+            source_line_index: 2
+          )
+        )
+      end
+
+      it '未知ラベルの調整行はotherかつneeds_reviewとして保存向けattributesへ通す' do
+        ocr_result[:lines] = [
+          '小計',
+          '¥1,000',
+          'ミッドナイトチャージ',
+          '¥100',
+          '合計',
+          '¥1,100'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'unknown_charge',
+              label: 'ミッドナイトチャージ',
+              amount: 100,
+              sign: 'surcharge',
+              source_text: 'ミッドナイトチャージ',
+              source_line_index: 2
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(
+            kind: 'other',
+            label: 'ミッドナイトチャージ',
+            amount: 100,
+            sign: 'surcharge',
+            needs_review: true,
+            review_reasons: include('adjustment_uncertain')
+          )
+        )
+      end
+
+      it '英語や海外風の未知表記でもOCR近傍に金額があれば保存向けattributesへ通す' do
+        ocr_result[:lines] = [
+          'Subtotal',
+          '$20.00',
+          'After hours surcharge',
+          '$3.00',
+          'Manual adjustment',
+          '-$2.00',
+          'Total',
+          '$21.00'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'late_night_charge',
+              label: 'After hours surcharge',
+              amount: 3,
+              sign: 'surcharge',
+              source_text: 'After hours surcharge',
+              source_line_index: 2,
+              confidence: BigDecimal('0.8')
+            },
+            {
+              kind: 'unknown_adjustment',
+              label: 'Manual adjustment',
+              amount: 2,
+              sign: 'discount',
+              source_text: 'Manual adjustment',
+              source_line_index: 4
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'late_night_charge', label: 'After hours surcharge', amount: 3, sign: 'surcharge'),
+          include(kind: 'other', label: 'Manual adjustment', amount: 2, sign: 'discount', needs_review: true)
+        )
+      end
+
+      it '負値itemを通常明細から除外し、adjustmentがない場合は確認理由を付ける' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'Short Dated Stock', line_total: -2160 }
+        ]
+        ocr_result[:lines] = [
+          'Short Dated Stock -2160',
+          '合計 0'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to be_empty
+          expect(params[:review_reasons]).to eq([ 'adjustment_uncertain' ])
+        end
+      end
+    end
   end
 end

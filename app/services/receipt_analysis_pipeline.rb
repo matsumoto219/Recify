@@ -366,6 +366,7 @@ class ReceiptAnalysisPipeline
     end
 
     symbolized[:receipt_items_attributes] ||= []
+    symbolized[:receipt_adjustments_attributes] ||= []
 
     {
       success: symbolized.key?(:success) ? symbolized[:success] : true,
@@ -376,6 +377,7 @@ class ReceiptAnalysisPipeline
       receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(
         symbolized[:receipt_items_attributes]
       ),
+      receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes]),
       meta: normalize_ai_meta(symbolized[:meta])
     }
   end

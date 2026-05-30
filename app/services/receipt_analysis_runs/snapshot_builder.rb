@@ -18,6 +18,9 @@ module ReceiptAnalysisRuns
     MAX_OCR_PAYMENTS = 20
     MAX_OCR_TAX_DETAILS = 20
     MAX_AI_NORMALIZED_ITEMS = 100
+    MAX_AI_NORMALIZED_ADJUSTMENTS = 50
+    MAX_FULL_CONTEXT_LINES = 150
+    MAX_ADJUSTMENT_CONTEXT_LINES = 40
     FILTERED_CONTENT_MAX_BYTES = 8 * 1024
     STRING_MAX_BYTES = 500
     MAX_ITEMS = 50
@@ -78,13 +81,14 @@ module ReceiptAnalysisRuns
         new.finalize_decision_snapshot(decision, at: at)
       end
 
-      def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil)
+      def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil)
         new.final_result_summary(
           receipt: receipt,
           receipt_attributes: receipt_attributes,
           items_attributes: items_attributes,
           payments_attributes: payments_attributes,
           tax_details_attributes: tax_details_attributes,
+          adjustments_attributes: adjustments_attributes,
           amount_result: amount_result
         )
       end
@@ -180,15 +184,19 @@ module ReceiptAnalysisRuns
           schema_version: AI_INPUT_SCHEMA_VERSION,
           prompt_schema_version: PROMPT_SCHEMA_VERSION,
           filtered_content: filtered_content,
+          full_context_lines: limited_context_lines(input[:full_context_lines], MAX_FULL_CONTEXT_LINES),
           store: store_snapshot(input[:store]),
           purchase: purchase_snapshot(input[:purchase]),
           payment: payment_snapshot(input[:payment]),
           tax: tax_snapshot(input[:tax]),
           items: items,
+          adjustment_context_lines: limited_adjustment_context_lines(input[:adjustment_context_lines]),
           meta: ai_input_meta_snapshot(input[:meta]),
           truncated: {
             filtered_content: truncated?(input[:filtered_content], max_bytes: FILTERED_CONTENT_MAX_BYTES),
-            items: Array(input[:items]).size > MAX_ITEMS
+            items: Array(input[:items]).size > MAX_ITEMS,
+            full_context_lines: Array(input[:full_context_lines]).size > MAX_FULL_CONTEXT_LINES,
+            adjustment_context_lines: Array(input[:adjustment_context_lines]).size > MAX_ADJUSTMENT_CONTEXT_LINES
           }
         }.compact
       )
@@ -206,9 +214,11 @@ module ReceiptAnalysisRuns
           review_reasons: limited_strings(result[:review_reasons], MAX_REVIEW_REASONS),
           receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
           receipt_items_attributes: limited_ai_normalized_items(result[:receipt_items_attributes]),
+          receipt_adjustments_attributes: limited_ai_normalized_adjustments(result[:receipt_adjustments_attributes]),
           meta: ai_normalized_meta_snapshot(result[:meta]),
           truncated: {
             receipt_items_attributes: Array(result[:receipt_items_attributes]).size > MAX_AI_NORMALIZED_ITEMS,
+            receipt_adjustments_attributes: Array(result[:receipt_adjustments_attributes]).size > MAX_AI_NORMALIZED_ADJUSTMENTS,
             review_reasons: Array(result[:review_reasons]).size > MAX_REVIEW_REASONS
           }
         }.compact
@@ -233,12 +243,13 @@ module ReceiptAnalysisRuns
           document_type: safe_string(meta[:document_type]),
           rejection_reason: safe_string(meta[:rejection_reason]),
           item_count: Array(result[:receipt_items_attributes]).size,
+          adjustment_count: Array(result[:receipt_adjustments_attributes]).size,
           receipt_attributes_keys: normalized_hash(result[:receipt_attributes]).keys.map(&:to_s).sort
         }.compact
       )
     end
 
-    def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil)
+    def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil)
       receipt_attrs = normalized_hash(receipt_attributes)
       amount = normalized_hash(amount_result)
 
@@ -251,6 +262,7 @@ module ReceiptAnalysisRuns
           item_count: count_records(items_attributes, receipt&.receipt_items),
           payment_count: count_records(payments_attributes, receipt&.receipt_payments),
           tax_detail_count: count_records(tax_details_attributes, receipt&.receipt_tax_details),
+          adjustment_count: count_records(adjustments_attributes, receipt&.receipt_adjustments),
           amount: amount_snapshot(receipt, receipt_attrs),
           amount_mismatch_codes: limited_strings(amount[:mismatch_codes], MAX_REVIEW_REASONS),
           amount_blocking_mismatch_codes: limited_strings(amount[:blocking_mismatch_codes], MAX_REVIEW_REASONS),
@@ -427,6 +439,27 @@ module ReceiptAnalysisRuns
       end
     end
 
+    def limited_ai_normalized_adjustments(adjustments)
+      Array(adjustments).first(MAX_AI_NORMALIZED_ADJUSTMENTS).filter_map do |adjustment|
+        adjustment = normalized_hash(adjustment)
+        next if adjustment.blank?
+
+        {
+          kind: safe_string(adjustment[:kind]),
+          label: safe_string(adjustment[:label]),
+          amount: safe_value(adjustment[:amount]),
+          sign: safe_string(adjustment[:sign]),
+          tax_rate: safe_value(adjustment[:tax_rate]),
+          source_text: safe_string(adjustment[:source_text]),
+          source_line_index: safe_value(adjustment[:source_line_index]),
+          confidence: safe_value(adjustment[:confidence]),
+          needs_review: adjustment.key?(:needs_review) ? adjustment[:needs_review] == true : nil,
+          review_reasons: limited_strings(adjustment[:review_reasons], MAX_REVIEW_REASONS),
+          position_index: safe_value(adjustment[:position_index])
+        }.compact
+      end
+    end
+
     def ai_normalized_meta_snapshot(value)
       meta = normalized_hash(value)
 
@@ -520,6 +553,24 @@ module ReceiptAnalysisRuns
           tax_rate: safe_value(item[:tax_rate]),
           product_code: safe_string(item[:product_code]),
           confidence: safe_value(item[:confidence])
+        }.compact
+      end
+    end
+
+    def limited_adjustment_context_lines(lines)
+      limited_context_lines(lines, MAX_ADJUSTMENT_CONTEXT_LINES)
+    end
+
+    def limited_context_lines(lines, max)
+      Array(lines).first(max).filter_map do |line|
+        line = normalized_hash(line)
+        next if line.blank?
+
+        {
+          index: safe_value(line[:index]),
+          text: safe_string(line[:text]),
+          previous_text: safe_string(line[:previous_text]),
+          next_text: safe_string(line[:next_text])
         }.compact
       end
     end

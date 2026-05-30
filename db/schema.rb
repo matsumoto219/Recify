@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_28_223850) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -133,6 +133,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_28_223850) do
     t.index ["last_used_at"], name: "index_passkeys_on_last_used_at"
     t.index ["uid"], name: "index_passkeys_on_uid", unique: true
     t.index ["user_id"], name: "index_passkeys_on_user_id"
+  end
+
+  create_table "receipt_adjustments", force: :cascade do |t|
+    t.bigint "amount", null: false
+    t.decimal "confidence", precision: 5, scale: 4
+    t.datetime "created_at", null: false
+    t.string "kind", null: false
+    t.string "label"
+    t.boolean "needs_review", default: false, null: false
+    t.integer "position_index"
+    t.bigint "receipt_id", null: false
+    t.jsonb "review_reasons", default: [], null: false
+    t.string "sign", null: false
+    t.string "source", null: false
+    t.integer "source_line_index"
+    t.text "source_text"
+    t.decimal "tax_rate", precision: 5, scale: 4
+    t.datetime "updated_at", null: false
+    t.index ["receipt_id", "kind"], name: "index_receipt_adjustments_on_receipt_id_and_kind"
+    t.index ["receipt_id", "position_index"], name: "index_receipt_adjustments_on_receipt_id_and_position_index"
+    t.index ["receipt_id"], name: "index_receipt_adjustments_on_receipt_id"
   end
 
   create_table "receipt_analysis_runs", force: :cascade do |t|
@@ -401,6 +422,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_28_223850) do
   add_foreign_key "contact_requests", "users", on_delete: :nullify
   add_foreign_key "notifications", "users"
   add_foreign_key "passkeys", "users"
+  add_foreign_key "receipt_adjustments", "receipts"
   add_foreign_key "receipt_analysis_runs", "receipt_analysis_runs", column: "parent_run_id", on_delete: :nullify
   add_foreign_key "receipt_analysis_runs", "receipts"
   add_foreign_key "receipt_analysis_runs", "users", column: "requested_by_user_id", on_delete: :nullify

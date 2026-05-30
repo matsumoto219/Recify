@@ -7,18 +7,32 @@ module Analysis
     FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
     FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
     FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
+    ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
+    ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
 
     class << self
       def call(ocr_result:, ai_result: nil)
         normalized_ocr_result = normalize_ocr_result(ocr_result)
         candidates = normalize_candidates(normalized_ocr_result)
+        lines = normalized_lines(normalized_ocr_result)
         normalized_ai_result = normalize_ai_result(ai_result)
+        skipped_negative_items = []
         receipt_attributes = build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes])
-        receipt_items_attributes = build_receipt_items_attributes(candidates, normalized_lines(normalized_ocr_result), normalized_ai_result[:receipt_items_attributes])
+        receipt_items_attributes = build_receipt_items_attributes(
+          candidates,
+          lines,
+          normalized_ai_result[:receipt_items_attributes],
+          skipped_negative_items:
+        )
         receipt_payments_attributes = build_receipt_payments_attributes(candidates)
         receipt_tax_details_attributes = build_receipt_tax_details_attributes(candidates)
+        receipt_adjustments_attributes = build_receipt_adjustments_attributes(
+          normalized_ai_result[:receipt_adjustments_attributes],
+          lines
+        )
+        review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
         apply_single_tax_detail_rate_to_items(receipt_items_attributes, receipt_tax_details_attributes)
 
@@ -30,7 +44,9 @@ module Analysis
           # NOTE: 現状は Payments[] 自体の取得率が低く、保存されても UI では未使用
           receipt_payments_attributes: receipt_payments_attributes,
           # NOTE: 税詳細は保存対象だが、現状は主に保持目的で UI では未使用
-          receipt_tax_details_attributes: receipt_tax_details_attributes
+          receipt_tax_details_attributes: receipt_tax_details_attributes,
+          receipt_adjustments_attributes: receipt_adjustments_attributes,
+          review_reasons: review_reasons
         }
       end
 
@@ -54,7 +70,7 @@ module Analysis
       end
 
       def normalize_ai_result(ai_result)
-        return { receipt_attributes: {}, receipt_items_attributes: [] } unless ai_result.is_a?(Hash)
+        return { receipt_attributes: {}, receipt_items_attributes: [], receipt_adjustments_attributes: [] } unless ai_result.is_a?(Hash)
 
         symbolized = ai_result.deep_symbolize_keys
 
@@ -64,7 +80,8 @@ module Analysis
 
         {
           receipt_attributes: symbolized[:receipt_attributes] || {},
-          receipt_items_attributes: Array(symbolized[:receipt_items_attributes])
+          receipt_items_attributes: Array(symbolized[:receipt_items_attributes]),
+          receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes])
         }
       end
 
@@ -92,7 +109,7 @@ module Analysis
         }.compact
       end
 
-      def build_receipt_items_attributes(candidates, lines, ai_items)
+      def build_receipt_items_attributes(candidates, lines, ai_items, skipped_negative_items: [])
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
 
@@ -114,7 +131,7 @@ module Analysis
 
         ai_items_present = normalized_ai_items.present?
         # NOTE: product_code は保存のみ。quantity_unit は編集/表示で利用する。
-        source_items.each_with_index.map do |item, index|
+        source_items.each_with_index.filter_map do |item, index|
           normalized_item = if item.respond_to?(:with_indifferent_access)
             item.with_indifferent_access
           elsif item.respond_to?(:deep_symbolize_keys)
@@ -139,6 +156,13 @@ module Analysis
             discount_amount: discount_amount
           )
           price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
+          if negative_item_amount?(price:, original_line_total:, line_total:)
+            skipped_negative_items << {
+              raw_text: raw_text,
+              amount: [ price, original_line_total, line_total ].compact.map(&:to_i).find(&:negative?)&.abs
+            }.compact
+            next
+          end
           raw_category = normalized_item[:category].presence
           category = normalize_category(raw_category)
           category_invalid = raw_category.present? && category.nil?
@@ -183,6 +207,43 @@ module Analysis
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence])
           }
+        end
+      end
+
+      def build_receipt_adjustments_attributes(ai_adjustments, lines)
+        Array(ai_adjustments).filter_map.with_index do |adjustment, index|
+          next unless adjustment.is_a?(Hash) || adjustment.respond_to?(:to_h)
+
+          normalized = (adjustment.is_a?(Hash) ? adjustment : adjustment.to_h).with_indifferent_access
+          amount = normalize_amount(normalized[:amount]).to_i.abs
+          next unless amount.positive?
+
+          source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
+
+          kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
+          sign = ReceiptAdjustment::SIGNS.include?(normalized[:sign].to_s) ? normalized[:sign].to_s : default_adjustment_sign(kind)
+          review_reasons = normalize_review_reasons(normalized[:review_reasons])
+          needs_review = normalized[:needs_review] == true
+          if kind == "other" || normalized[:kind].blank? || normalized[:sign].blank?
+            needs_review = true
+            review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
+          end
+
+          {
+            kind: kind,
+            label: normalized[:label].to_s.strip.presence,
+            amount: amount,
+            sign: sign,
+            tax_rate: normalize_rate(normalized[:tax_rate]),
+            source: "ai",
+            source_text: normalized[:source_text].to_s.strip.presence || lines[source_line_index],
+            source_line_index: source_line_index,
+            confidence: normalize_confidence(normalized[:confidence]),
+            needs_review: needs_review,
+            review_reasons: review_reasons.uniq,
+            position_index: normalized[:position_index] || index + 1
+          }.compact
         end
       end
 
@@ -267,6 +328,52 @@ module Analysis
           item_hash = item.is_a?(Hash) ? item : item.to_h
           item_hash.with_indifferent_access
         end
+      end
+
+      def negative_item_amount?(price:, original_line_total:, line_total:)
+        [ price, original_line_total, line_total ].compact.any? { |amount| amount.to_i.negative? }
+      end
+
+      def skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments)
+        return [] if skipped_negative_items.blank?
+
+        adjustment_amounts = Array(receipt_adjustments).map { |adjustment| adjustment[:amount].to_i }.select(&:positive?)
+        unmatched = skipped_negative_items.any? do |item|
+          amount = item[:amount].to_i
+          amount <= 0 || !adjustment_amounts.include?(amount)
+        end
+
+        unmatched ? [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] : []
+      end
+
+      def adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
+        return false if source_line_index.nil?
+
+        context = []
+        context << lines[source_line_index - 1] if source_line_index.positive?
+        context << lines[source_line_index]
+        context << lines[source_line_index + 1]
+        context.compact!
+        context.any? { |text| adjustment_amounts_in_text(text).include?(amount.to_i.abs) }
+      end
+
+      def adjustment_amounts_in_text(text)
+        text.to_s.scan(ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN).map do |match|
+          normalize_amount(match).to_i.abs
+        end.select(&:positive?)
+      end
+
+      def default_adjustment_sign(kind)
+        %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
+      end
+
+      def normalize_non_negative_integer(value)
+        return nil if value.blank?
+
+        integer = Integer(value)
+        integer >= 0 ? integer : nil
+      rescue ArgumentError, TypeError
+        nil
       end
 
       def normalize_country_region(value)

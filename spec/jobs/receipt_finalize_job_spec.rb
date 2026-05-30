@@ -33,7 +33,7 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
       expect { described_class.perform_now(run.id) }.to raise_error(ArgumentError)
     end
 
-    it 'finalize中の保存失敗ではrunとprocessing receiptをfailedにする' do
+    it 'finalize中に負値itemが混じっても通常明細として保存せず失敗にしない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       ocr_result = {
@@ -87,15 +87,14 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         }
       )
 
-      expect { described_class.perform_now(run_id: run.id) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect { described_class.perform_now(run_id: run.id) }.not_to raise_error
 
       aggregate_failures do
-        expect(run.reload.status).to eq('failed')
-        expect(run.error_stage).to eq('finalize')
-        expect(run.error_code).to eq('unexpected_error')
-        expect(receipt.reload.status).to eq('failed')
-        expect(receipt.processing_error_code).to eq('unexpected_error')
-        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+        expect(run.reload.status).to eq('succeeded')
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.receipt_items).to be_empty
+        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.processing_error_code).to be_nil
       end
     end
   end

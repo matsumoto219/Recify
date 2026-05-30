@@ -58,6 +58,7 @@ ja:
         item_tax_rate_group_uncertain: "明細の税率割当と税内訳が一致しない可能性があります。必要に応じて明細ごとの税率をご確認ください。"
         zero_amount_item_incomplete: "0円明細の金額情報が一部不足しています"
         discount_data_incomplete: "割引情報が不完全です"
+        adjustment_uncertain: "値引き・手数料などの調整行に確認が必要です"
         ocr_total_mismatch: "OCRの合計金額と計算結果が一致していません"
         price_tax_inclusion_uncertain: "明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。"
         calculation_profile_uncertain: "計算方式を一意に推定できません"
@@ -73,3 +74,22 @@ ja:
         ai_primary_failed: "AIのメイン処理に失敗しました"
         ai_fallback_failed: "AIの代替処理に失敗しました"
         ai_timeout: "AI処理がタイムアウトしました"
+
+    receipt_adjustment:
+      kind:
+        receipt_discount: レシート全体値引き
+        item_discount: 商品値引き
+        coupon: クーポン
+        point_usage: ポイント利用
+        return_refund: 返品・返金
+        service_charge: サービス料
+        late_night_charge: 深夜料金
+        delivery_fee: 配送料
+        bag_fee: 袋代
+        handling_fee: 手数料
+        other: その他
+      sign:
+        discount: 減算
+        surcharge: 加算
+      review_reason:
+        adjustment_uncertain: 調整行の分類に確認が必要です

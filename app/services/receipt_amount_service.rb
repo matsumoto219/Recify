@@ -11,6 +11,8 @@
 #     :price, :quantity, :line_total (optional), :tax_rate (optional)
 # - receipt_tax_details: Array<Hash> with:
 #     :amount, :rate, :net_amount (optional)
+# - receipt_adjustments: Array<Hash> with:
+#     :amount, :sign, :kind, :needs_review, :review_reasons
 #
 # Output:
 # {
@@ -29,11 +31,12 @@
 # }
 #
 class ReceiptAmountService
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_tax_details: receipt_tax_details,
+      receipt_adjustments: receipt_adjustments,
       context: context,
       rounding_mode: rounding_mode,
       tax_rounding_mode: tax_rounding_mode,
@@ -61,10 +64,11 @@ class ReceiptAmountService
     Amounts::NumberParser.parse_quantity(value, default: default)
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
+    @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @context = normalize_context(context)
     @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
     @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
@@ -97,6 +101,16 @@ class ReceiptAmountService
       item_amount_basis: active_item_amount_basis,
       item_amount_basis_assignments: active_item_amount_basis_assignments
     ).call
+    adjustment_totals = calculate_adjustment_totals
+    adjustment_delta = adjustment_totals[:surcharge] - adjustment_totals[:discount]
+    adjusted_item_total = [ calc[:item_total].to_i + adjustment_delta, 0 ].max
+    calc = calc.merge(
+      subtotal: adjustment_totals_present? ? [ calc[:subtotal].to_i + adjustment_delta, 0 ].max : calc[:subtotal],
+      total: adjustment_totals_present? ? adjusted_item_total : calc[:total],
+      adjustment_discount_total: adjustment_totals[:discount],
+      adjustment_surcharge_total: adjustment_totals[:surcharge],
+      adjusted_item_total: adjusted_item_total
+    )
 
     # --- 2) Resolver（最終値決定）
     resolved = Amounts::Resolver.new(
@@ -140,7 +154,7 @@ class ReceiptAmountService
     inconsistencies = Amounts::ConsistencyChecker.new(
       computed: calc,
       resolved: resolved,
-      item_total: calc[:item_total],
+      item_total: adjusted_item_total,
       tax_total: calc[:tax_total],
       receipt: @receipt,
       context: @context,
@@ -152,7 +166,7 @@ class ReceiptAmountService
       tax_details_primary: calc[:tax_details_primary],
       tax_rounding_mode: active_tax_rounding_mode
     ).call
-    inconsistencies = (inconsistencies + profile_estimation.warnings).uniq
+    inconsistencies = (inconsistencies + profile_estimation.warnings + adjustment_inconsistencies).uniq
 
     mismatch_codes = build_mismatch_codes(inconsistencies)
     mismatch_messages = build_mismatch_messages(inconsistencies)
@@ -166,6 +180,9 @@ class ReceiptAmountService
         tax_rate: calc[:tax_rate],
         receipt_tax_basis: calc[:receipt_tax_basis],
         item_amount_basis: calc[:item_amount_basis],
+        adjustment_discount_total: calc[:adjustment_discount_total],
+        adjustment_surcharge_total: calc[:adjustment_surcharge_total],
+        adjusted_item_total: calc[:adjusted_item_total],
         items: calc[:items]
       },
       resolved: resolved,
@@ -482,6 +499,51 @@ class ReceiptAmountService
       amount_line_total_present: value_present?(line_total),
       amount_discount_amount_present: value_present?(discount_amount)
     }
+  end
+
+  def normalize_adjustment(adjustment)
+    normalized = if adjustment.respond_to?(:attributes)
+      adjustment.attributes.symbolize_keys
+    elsif adjustment.respond_to?(:to_h)
+      adjustment.to_h.symbolize_keys
+    else
+      {}
+    end
+    kind = normalized[:kind].to_s
+    sign = normalized[:sign].to_s
+    amount = to_i_or_nil(normalized[:amount])
+
+    {
+      kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
+      sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : "discount",
+      amount: amount.nil? ? 0 : amount.abs,
+      needs_review: normalized[:needs_review] == true,
+      review_reasons: Array(normalized[:review_reasons]).map(&:to_s)
+    }
+  end
+
+  def calculate_adjustment_totals
+    @adjustment_totals ||= @adjustments.each_with_object({ discount: 0, surcharge: 0 }) do |adjustment, totals|
+      amount = adjustment[:amount].to_i
+      next unless amount.positive?
+
+      if adjustment[:sign] == "surcharge"
+        totals[:surcharge] += amount
+      else
+        totals[:discount] += amount
+      end
+    end
+  end
+
+  def adjustment_totals_present?
+    totals = calculate_adjustment_totals
+    totals[:discount].positive? || totals[:surcharge].positive?
+  end
+
+  def adjustment_inconsistencies
+    return [] if @adjustments.blank?
+
+    @adjustments.any? { |adjustment| adjustment[:needs_review] || adjustment[:kind] == "other" } ? [ :adjustment_uncertain ] : []
   end
 
   def source_tax_details_for_external_tax

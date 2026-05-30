@@ -2562,6 +2562,30 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '詳細画面に特殊加減算を読み取り専用で表示する' do
+      receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '配送料',
+        amount: 550,
+        sign: 'surcharge',
+        source: 'ai',
+        needs_review: false,
+        position_index: 1
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.text).to include(I18n.t('receipts.show.adjustments_title'))
+        expect(document.text).to include('配送料')
+        expect(document.text).to include(I18n.t('enums.receipt_adjustment.kind.delivery_fee'))
+        expect(document.text).to include('+¥550')
+      end
+    end
+
     it '詳細画面はdisplay_idを表示し、receiptの内部IDをURLやDOMに出さない' do
       get receipt_path(receipt)
 

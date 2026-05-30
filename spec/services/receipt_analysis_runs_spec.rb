@@ -302,6 +302,14 @@ RSpec.describe ReceiptAnalysisRuns do
           store_name: 'テストストア',
           store_candidates: Array.new(12) { |index| "店舗候補#{index}" }
         },
+        full_context_lines: Array.new(155) do |index|
+          {
+            index: index,
+            text: "OCR行#{index}",
+            previous_text: "前行#{index}",
+            next_text: "次行#{index}"
+          }
+        end,
         purchase: {
           purchased_at_candidates: Array.new(7) { |index| "2026/05/2#{index} 10:00" }
         },
@@ -336,6 +344,8 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot['filtered_content'].bytesize).to be <= 8 * 1024
         expect(snapshot.dig('truncated', 'filtered_content')).to eq(true)
         expect(snapshot.dig('truncated', 'items')).to eq(true)
+        expect(snapshot.dig('truncated', 'full_context_lines')).to eq(true)
+        expect(snapshot['full_context_lines'].size).to eq(150)
         expect(snapshot['items'].size).to eq(50)
         expect(snapshot.dig('store', 'store_candidates').size).to eq(10)
         expect(snapshot.dig('purchase', 'purchased_at_candidates').size).to eq(5)

@@ -42,6 +42,9 @@ ja:
       item_quantity: 数量
       item_unit_price: 単価
       item_empty: 明細はありません
+      adjustments_title: 値引き・手数料
+      adjustment_needs_review: 要確認
+      adjustment_tax_rate: "税率: %{rate}%"
       memo: メモ
       memo_empty: メモはありません
       image_preview: 画像プレビュー

@@ -173,6 +173,50 @@
         </div>
       <% end %>
 
+      <% if @receipt.receipt_adjustments.any? %>
+        <%= render "shared/ui/layout/surface_card", padding: :lg do %>
+          <div class="flex items-center justify-between gap-4 mb-4">
+            <div class="flex items-center min-w-0">
+              <span class="material-symbols-outlined token-text-brand mr-2 shrink-0">price_change</span>
+              <h3 class="text-sm font-bold token-text-base uppercase tracking-wider truncate"><%= t("receipts.show.adjustments_title") %></h3>
+            </div>
+            <span class="text-xs token-text-muted shrink-0"><%= @receipt.receipt_adjustments.count %><%= t("receipts.common.count_suffix") %></span>
+          </div>
+
+          <div class="space-y-3">
+            <% @receipt.receipt_adjustments.order(:position_index).each do |adjustment| %>
+              <div class="flex items-start justify-between gap-4 rounded-lg token-hover-bg-card-subtle px-3 py-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+                    <p class="font-medium token-text-base truncate" title="<%= adjustment.label.presence || adjustment.source_text.presence || adjustment.kind_label %>">
+                      <%= adjustment.label.presence || adjustment.source_text.presence || adjustment.kind_label %>
+                    </p>
+                    <span class="shrink-0 rounded-full token-bg-subtle px-2 py-0.5 text-[10px] font-bold token-text-muted">
+                      <%= adjustment.kind_label %>
+                    </span>
+                    <% if adjustment.needs_review? %>
+                      <span class="shrink-0 rounded-full token-state-warning-soft px-2 py-0.5 text-[10px] font-bold">
+                        <%= t("receipts.show.adjustment_needs_review") %>
+                      </span>
+                    <% end %>
+                  </div>
+                  <p class="mt-1 text-xs token-text-muted break-words">
+                    <%= adjustment.sign_label %>
+                    <% if adjustment.tax_rate.present? %>
+                      <span class="mx-2">/</span>
+                      <%= t("receipts.show.adjustment_tax_rate", rate: number_with_precision(adjustment.tax_rate * 100, precision: 1, strip_insignificant_zeros: true)) %>
+                    <% end %>
+                  </p>
+                </div>
+                <p class="shrink-0 whitespace-nowrap font-bold <%= adjustment.surcharge? ? "token-text-base" : "token-text-error" %>">
+                  <%= adjustment.surcharge? ? "+" : "-" %><%= receipt_detail_amount_display(adjustment.amount) %>
+                </p>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+
       <%= render "shared/ui/layout/surface_card", padding: :lg do %>
         <div class="flex items-center mb-4">
           <span class="material-symbols-outlined token-text-brand mr-2">notes</span>

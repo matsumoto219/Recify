@@ -78,6 +78,7 @@ class ReceiptAnalysisPipeline
         review_reasons: Array(snapshot[:review_reasons]),
         receipt_attributes: rehydrate_ai_receipt_attributes(snapshot[:receipt_attributes]),
         receipt_items_attributes: rehydrate_ai_items(snapshot[:receipt_items_attributes]),
+        receipt_adjustments_attributes: rehydrate_ai_adjustments(snapshot[:receipt_adjustments_attributes]),
         meta: normalized_hash(snapshot[:meta]).to_h
       }.compact
     end
@@ -98,6 +99,12 @@ class ReceiptAnalysisPipeline
       end
     end
 
+    def rehydrate_ai_adjustments(value)
+      Array(value).map do |adjustment|
+        normalized_hash(adjustment).to_h
+      end
+    end
+
     def parse_time_value(value)
       return value unless value.is_a?(String)
 
@@ -114,6 +121,7 @@ class ReceiptAnalysisPipeline
         receipt: params[:receipt_attributes],
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
+        receipt_adjustments: params[:receipt_adjustments_attributes],
         context: :analysis
       )
 
@@ -135,6 +143,7 @@ class ReceiptAnalysisPipeline
 
       review_reasons = merge_review_reasons(
         ai_result[:review_reasons],
+        params[:review_reasons],
         amount_review_reasons(amount_result),
         ocr_review_reasons
       )
@@ -145,6 +154,7 @@ class ReceiptAnalysisPipeline
         items_attributes: params[:receipt_items_attributes],
         ai_needs_review: ai_result[:needs_review],
         amount_needs_review: amount_result[:needs_review],
+        build_review_reasons: params[:review_reasons],
         ocr_review_reasons: ocr_review_reasons,
         ocr_low_quality: ocr_low_quality
       )
@@ -164,7 +174,8 @@ class ReceiptAnalysisPipeline
         ),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details]
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
       Rails.logger.info(
@@ -182,6 +193,7 @@ class ReceiptAnalysisPipeline
         receipt: params[:receipt_attributes],
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
+        receipt_adjustments: params[:receipt_adjustments_attributes],
         context: :analysis
       )
 
@@ -204,7 +216,7 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
-      review_reasons = merge_review_reasons([], amount_review_reasons(amount_result), ocr_review_reasons)
+      review_reasons = merge_review_reasons(params[:review_reasons], amount_review_reasons(amount_result), ocr_review_reasons)
 
       # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
       # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -221,7 +233,8 @@ class ReceiptAnalysisPipeline
         ),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details]
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
       Rails.logger.info(
@@ -239,6 +252,7 @@ class ReceiptAnalysisPipeline
         receipt: params[:receipt_attributes],
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
+        receipt_adjustments: params[:receipt_adjustments_attributes],
         context: :analysis
       )
 
@@ -261,7 +275,7 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
-      review_reasons = merge_review_reasons([], amount_review_reasons(amount_result), ocr_review_reasons)
+      review_reasons = merge_review_reasons(params[:review_reasons], amount_review_reasons(amount_result), ocr_review_reasons)
 
       # NOTE:
       # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
@@ -280,7 +294,8 @@ class ReceiptAnalysisPipeline
         receipt_attributes: receipt_attributes,
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details]
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
       Rails.logger.warn(
@@ -309,11 +324,12 @@ class ReceiptAnalysisPipeline
       receipt
     end
 
-    def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:)
+    def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:, adjustments_attributes: [])
       Receipt.transaction do
         receipt.update!(receipt_attributes)
 
         replace_receipt_items!(items_attributes)
+        replace_receipt_adjustments!(adjustments_attributes)
 
         receipt.receipt_payments.destroy_all
         Array(payments_attributes).each do |attrs|
@@ -339,6 +355,16 @@ class ReceiptAnalysisPipeline
       end
     end
 
+    def replace_receipt_adjustments!(adjustments_attributes)
+      receipt.receipt_adjustments.destroy_all
+
+      normalize_adjustments_attributes(adjustments_attributes).each_with_index do |adjustment_attributes, index|
+        receipt.receipt_adjustments.create!(
+          adjustment_attributes.merge(position_index: adjustment_attributes[:position_index] || index + 1)
+        )
+      end
+    end
+
     def apply_amount_item_totals(items_attributes, calculated_items)
       calculated_items = Array(calculated_items)
       return items_attributes if calculated_items.empty?
@@ -348,19 +374,20 @@ class ReceiptAnalysisPipeline
         next item_attributes if calculated_item.blank?
 
         item_attributes.merge(
-          price: calculated_item[:price] || calculated_item["price"],
+          price: safe_calculated_amount(calculated_item[:price] || calculated_item["price"]) || item_attributes[:price],
           quantity: calculated_item[:quantity] || calculated_item["quantity"],
-          original_line_total: calculated_item[:original_line_total] || calculated_item["original_line_total"],
-          line_total: calculated_item[:line_total] || calculated_item["line_total"],
-          discount_amount: calculated_item[:discount_amount] || calculated_item["discount_amount"],
+          original_line_total: safe_calculated_amount(calculated_item[:original_line_total] || calculated_item["original_line_total"]) || item_attributes[:original_line_total],
+          line_total: safe_calculated_amount(calculated_item[:line_total] || calculated_item["line_total"]) || item_attributes[:line_total],
+          discount_amount: safe_calculated_amount(calculated_item[:discount_amount] || calculated_item["discount_amount"]) || item_attributes[:discount_amount],
           discount_rate: calculated_item[:discount_rate] || calculated_item["discount_rate"]
         )
       end
     end
 
-    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, ocr_review_reasons: [], ocr_low_quality: nil)
+    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], ocr_low_quality: nil)
       return "review_needed" if amount_needs_review
       return "review_needed" if ai_needs_review
+      return "review_needed" if ReviewReasonSource.blocking_reasons_for_user(build_review_reasons).any?
       return "review_needed" if ReviewReasonSource.blocking_reasons_for_user(ocr_review_reasons).any?
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes) if ocr_low_quality.nil?
       return "review_needed" if ocr_low_quality
@@ -403,7 +430,7 @@ class ReceiptAnalysisPipeline
     end
 
     def normalize_items_attributes(items)
-      Array(items).map.with_index do |item, index|
+      Array(items).filter_map.with_index do |item, index|
         symbolized = if item.respond_to?(:with_indifferent_access)
           item.with_indifferent_access
         elsif item.respond_to?(:symbolize_keys)
@@ -412,19 +439,25 @@ class ReceiptAnalysisPipeline
           {}.with_indifferent_access
         end
 
+        price = normalize_amount(symbolized[:price])
+        original_line_total = normalize_amount(symbolized[:original_line_total])
+        line_total = normalize_amount(symbolized[:line_total])
+        discount_amount = normalize_amount(symbolized[:discount_amount])
+        next if [ price, original_line_total, line_total, discount_amount ].compact.any?(&:negative?)
+
         {
           raw_text: symbolized[:raw_text].to_s,
           suggested_name: symbolized[:suggested_name].presence,
           confirmed_name: symbolized[:confirmed_name].presence,
           category: symbolized[:category].presence,
-          price: normalize_amount(symbolized[:price]),
+          price: price,
           quantity: normalize_quantity(symbolized[:quantity]),
           quantity_unit: symbolized[:quantity_unit].presence,
           product_code: symbolized[:product_code].presence,
           tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
-          original_line_total: normalize_amount(symbolized[:original_line_total]),
-          line_total: normalize_amount(symbolized[:line_total]),
-          discount_amount: normalize_amount(symbolized[:discount_amount]),
+          original_line_total: original_line_total,
+          line_total: line_total,
+          discount_amount: discount_amount,
           discount_rate: normalize_tax_rate(symbolized[:discount_rate]),
           # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
           needs_review: symbolized[:needs_review],
@@ -432,6 +465,40 @@ class ReceiptAnalysisPipeline
           position_index: symbolized[:position_index] || index + 1,
           confidence: normalize_confidence(symbolized[:confidence])
         }
+      end
+    end
+
+    def normalize_adjustments_attributes(adjustments)
+      Array(adjustments).filter_map.with_index do |adjustment, index|
+        symbolized = if adjustment.respond_to?(:with_indifferent_access)
+          adjustment.with_indifferent_access
+        elsif adjustment.respond_to?(:symbolize_keys)
+          adjustment.symbolize_keys.with_indifferent_access
+        else
+          {}.with_indifferent_access
+        end
+
+        amount = normalize_amount(symbolized[:amount])
+        next unless amount&.positive?
+
+        kind = symbolized[:kind].to_s
+        sign = symbolized[:sign].to_s
+        source = symbolized[:source].to_s.presence || "ai"
+
+        {
+          kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
+          label: symbolized[:label].to_s.strip.presence,
+          amount: amount.abs,
+          sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : "discount",
+          tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
+          source: ReceiptAdjustment::SOURCES.include?(source) ? source : "ai",
+          source_text: symbolized[:source_text].to_s.strip.presence,
+          source_line_index: symbolized[:source_line_index],
+          confidence: normalize_confidence(symbolized[:confidence]),
+          needs_review: symbolized[:needs_review] == true,
+          review_reasons: normalize_review_reasons(symbolized[:review_reasons]),
+          position_index: symbolized[:position_index] || index + 1
+        }.compact
       end
     end
 
@@ -444,6 +511,11 @@ class ReceiptAnalysisPipeline
 
     def normalize_amount(value)
       ReceiptAmountService.parse_amount_or_nil(value)
+    end
+
+    def safe_calculated_amount(value)
+      amount = normalize_amount(value)
+      amount&.negative? ? nil : amount
     end
 
     def normalize_quantity(value)

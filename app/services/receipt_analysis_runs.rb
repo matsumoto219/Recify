@@ -74,7 +74,7 @@ module ReceiptAnalysisRuns
       )
     end
 
-    def record_final_result(run, receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, amount_result: nil, at: Time.current)
+    def record_final_result(run, receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil, at: Time.current)
       Tracker.new(run).record_final_result(
         SnapshotBuilder.final_result_summary(
           receipt: receipt,
@@ -82,6 +82,7 @@ module ReceiptAnalysisRuns
           items_attributes: items_attributes,
           payments_attributes: payments_attributes,
           tax_details_attributes: tax_details_attributes,
+          adjustments_attributes: adjustments_attributes,
           amount_result: amount_result
         ),
         at: at

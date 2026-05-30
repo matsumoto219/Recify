@@ -10,6 +10,7 @@ module Amounts
       tax_amount_mismatch
       tax_detail_mismatch
       invalid_amount_relation
+      adjustment_uncertain
       insufficient_data
     ].freeze
 

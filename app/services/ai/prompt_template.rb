@@ -43,7 +43,7 @@ module Ai
         Do NOT output anything except JSON.
         Do NOT include markdown fences or explanations.
 
-        Use OCR candidates as the first reference and filtered_content as the supporting reference.
+        Use OCR candidates as the first reference, full_context_lines as raw OCR line context, and filtered_content as reduced supporting reference.
 
         You MUST NOT:
         - invent store names, addresses, phone numbers, timestamps, or payment methods
@@ -74,6 +74,7 @@ module Ai
         - purchase
         - payment
         - items
+        - receipt_adjustments
         - needs_review
         - review_reasons
 
@@ -97,6 +98,18 @@ module Ai
         - tax_rate_reason
         - needs_review
 
+        Allowed receipt_adjustments keys:
+        - kind
+        - label
+        - amount
+        - sign
+        - tax_rate
+        - source_text
+        - source_line_index
+        - confidence
+        - needs_review
+        - review_reasons
+
         Allowed enum values:
 
         categories:
@@ -104,6 +117,12 @@ module Ai
 
         payment_methods:
         #{allowed_payment_methods.join(", ")}
+
+        adjustment_kinds:
+        #{allowed_adjustment_kinds.join(", ")}
+
+        adjustment_signs:
+        #{allowed_adjustment_signs.join(", ")}
 
         review_reasons:
         #{allowed_review_reasons.join(", ")}
@@ -128,7 +147,7 @@ module Ai
         - When is_receipt = false, return document_type and rejection_reason when they can be stated briefly; otherwise return null.
         - When is_receipt = false, rejection_reason MUST be one of the allowed rejection_reason values.
         - Do NOT output free-form rejection_reason values outside the allowed list.
-        - When is_receipt = false, still return store = {}, purchase = {}, payment = {}, items = [], needs_review = false, and review_reasons = [].
+        - When is_receipt = false, still return store = {}, purchase = {}, payment = {}, items = [], receipt_adjustments = [], needs_review = false, and review_reasons = [].
         - If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.
         - If uncertain, keep is_receipt = true, set needs_review = true, and use low-to-medium is_receipt_confidence.
 
@@ -215,6 +234,21 @@ module Ai
         - needs_review: set true when the item name, category, or tax_rate remains uncertain.
         - Do not change price, quantity, quantity_unit, line_total, product_code, or confidence. Those are reference-only inputs and must not be returned.
 
+        For receipt_adjustments:
+        - Return receipt_adjustments for special receipt-level or item-level adjustment rows such as discounts, coupons, point usage, returns/refunds, service charges, late-night charges, delivery fees, bag fees, handling fees, or similar context-specific adjustments.
+        - Search the entire full_context_lines list for adjustment rows. Do NOT rely on filtered_content because it may omit amount-only, percentage, short symbol, or foreign-language lines.
+        - Do NOT limit detection to known keywords. Use receipt context, signs, totals, neighboring lines, labels, and payment context to interpret Japanese, English, overseas, abbreviated, or unknown adjustment wording.
+        - adjustment_context_lines may be present for compatibility, but full_context_lines is the source of truth.
+        - Labels and amounts may be split across neighboring OCR lines. Use previous_text and next_text around the source_line_index to connect a label line with its amount line.
+        - Each adjustment amount MUST visibly exist in source_text, previous_text, or next_text for the referenced source_line_index from full_context_lines.
+        - Do NOT invent adjustment amounts, labels, percentages, or line indexes.
+        - amount MUST be the absolute integer amount. Do not return negative amounts.
+        - sign MUST be discount for values that reduce the receipt total, and surcharge for values that increase the receipt total.
+        - source_text MUST copy the most relevant OCR line text from full_context_lines.
+        - source_line_index MUST match the index from full_context_lines.
+        - Select kind only from the allowed adjustment_kinds. If the kind or sign is uncertain but the row is clearly an adjustment, use kind = other, set needs_review = true, and include adjustment_uncertain in review_reasons.
+        - If the amount cannot be tied to an OCR line, do not return the adjustment.
+
         review_reasons rules:
         - Return an array of codes.
         - Use ONLY allowed codes defined in the system constraints.
@@ -292,6 +326,14 @@ module Ai
       ]
     end
 
+    def allowed_adjustment_kinds
+      ReceiptAdjustment::KINDS
+    end
+
+    def allowed_adjustment_signs
+      ReceiptAdjustment::SIGNS
+    end
+
     def allowed_review_reasons
       %w[
         store_name_missing
@@ -309,6 +351,7 @@ module Ai
         item_name_uncertain
         item_category_uncertain
         item_tax_rate_uncertain
+        adjustment_uncertain
         ocr_unreadable
         ocr_low_confidence
       ]

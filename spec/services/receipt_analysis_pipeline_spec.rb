@@ -800,7 +800,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'finalize保存中のRecordInvalidではrollback後にprocessing receiptをfailedにする' do
+    it 'finalize中に計算結果へ負値item金額が混じっても通常明細へ保存しない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       decision = finalize_decision(:ai_success)
@@ -826,16 +826,13 @@ RSpec.describe ReceiptAnalysisPipeline do
         )
       )
 
-      expect { described_class.run_finalize(run) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect { described_class.run_finalize(run) }.not_to raise_error
 
       aggregate_failures do
-        expect(run.reload.status).to eq('failed')
-        expect(run.error_stage).to eq('finalize')
-        expect(run.error_code).to eq('unexpected_error')
-        expect(receipt.reload.status).to eq('failed')
-        expect(receipt.receipt_items).to be_empty
-        expect(receipt.processing_error_code).to eq('unexpected_error')
-        expect(receipt.processing_error_message).to eq('解析処理中にエラーが発生しました。再試行してください。')
+        expect(run.reload.status).to eq('succeeded')
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.receipt_items).not_to be_empty
+        expect(receipt.receipt_items).to all(have_attributes(price: be >= 0, line_total: be >= 0))
       end
     end
 
@@ -891,6 +888,182 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_amount).to eq(16)
         expect(receipt.receipt_items.pluck(:suggested_name, :category)).to include([ 'コーヒー', 'drink' ])
       end
+    end
+
+    it 'AIの特殊加減算をreceipt_adjustmentsとして保存し金額へ反映する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "テストストア\n商品 180\n配送料\n¥550\nレジ袋代\n¥10\n合計 740\n現金",
+        lines: [
+          'テストストア',
+          '商品 180',
+          '配送料',
+          '¥550',
+          'レジ袋代',
+          '¥10',
+          '合計 740',
+          '現金'
+        ],
+        candidates: {
+          store_name: 'テストストア',
+          total_amount: 740,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            {
+              raw_text: '商品',
+              price: 180,
+              quantity: 1,
+              line_total: 180,
+              confidence: 0.95
+            }
+          ],
+          payments: [
+            { method: 'Cash', amount: 740 }
+          ],
+          tax_details: []
+        }
+      }
+      ai_result = successful_ai_result.merge(
+        receipt_attributes: {
+          store_name: 'テストストア',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品', category: 'other', needs_review: false, confidence: 0.95 }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 550,
+            sign: 'surcharge',
+            source_text: '配送料',
+            source_line_index: 2,
+            confidence: BigDecimal('0.9')
+          },
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋代',
+            amount: 10,
+            sign: 'surcharge',
+            source_text: 'レジ袋代',
+            source_line_index: 4,
+            confidence: BigDecimal('0.9')
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.total_amount).to eq(740)
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'delivery_fee', 550, 'surcharge' ],
+          [ 'bag_fee', 10, 'surcharge' ]
+        )
+      end
+    end
+
+    it 'return_receiptの返品行をadjustmentとして保存しfinalize失敗にしない' do
+      ocr_result = ocr_fixture('return_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_adjustments_attributes: [
+          {
+            kind: 'return_refund',
+            label: '返品(液体洗剤)',
+            amount: 980,
+            sign: 'discount',
+            source_text: '返品(液体洗剤)',
+            source_line_index: 12,
+            confidence: BigDecimal('0.9')
+          }
+        ]
+      )
+
+      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).not_to eq('failed')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to include([ 'return_refund', 980, 'discount' ])
+      end
+    end
+
+    it 'delivery_and_bag_fee_receiptの配送料と袋代をadjustmentとして保存する' do
+      ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_adjustments_attributes: [
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋代',
+            amount: 10,
+            sign: 'surcharge',
+            source_text: 'レジ袋代',
+            source_line_index: 17,
+            confidence: BigDecimal('0.9')
+          },
+          {
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 550,
+            sign: 'surcharge',
+            source_text: '配送料',
+            source_line_index: 19,
+            confidence: BigDecimal('0.9')
+          }
+        ]
+      )
+
+      receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
+
+      expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+        [ 'bag_fee', 10, 'surcharge' ],
+        [ 'delivery_fee', 550, 'surcharge' ]
+      )
+    end
+
+    it 'service_and_late_night_receiptのサービス料と深夜料金をadjustmentとして保存する' do
+      ocr_result = ocr_fixture('service_and_late_night_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_adjustments_attributes: [
+          {
+            kind: 'service_charge',
+            label: 'サービス料10%',
+            amount: 486,
+            sign: 'surcharge',
+            source_text: 'サービス料10%',
+            source_line_index: 14,
+            confidence: BigDecimal('0.9')
+          },
+          {
+            kind: 'late_night_charge',
+            label: '深夜料金10%',
+            amount: 486,
+            sign: 'surcharge',
+            source_text: '深夜料金10%',
+            source_line_index: 16,
+            confidence: BigDecimal('0.9')
+          }
+        ]
+      )
+
+      receipt, = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result)
+
+      expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+        [ 'service_charge', 486, 'surcharge' ],
+        [ 'late_night_charge', 486, 'surcharge' ]
+      )
     end
 
     it 'ai_success decisionのwarning mismatchはcompletedのままreview_reasonsに残さず診断情報に残す' do

@@ -15,7 +15,8 @@ module Amounts
       calculation_profile_uncertain: "CALCULATION_PROFILE_UNCERTAIN",
       insufficient_data: "INSUFFICIENT_DATA",
       zero_amount_item_incomplete: "ZERO_AMOUNT_ITEM_INCOMPLETE",
-      discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE"
+      discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE",
+      adjustment_uncertain: "ADJUSTMENT_UNCERTAIN"
     }.freeze
 
     def self.code(symbol)

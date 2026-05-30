@@ -1,11 +1,12 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAmountService do
-  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], receipt_adjustments: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     kwargs = {
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_tax_details: receipt_tax_details,
+      receipt_adjustments: receipt_adjustments,
       context: context
     }
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
@@ -122,6 +123,63 @@ RSpec.describe ReceiptAmountService do
         expect(result).to have_key(:mismatch_codes)
         expect(result).to have_key(:blocking_mismatch_codes)
         expect(result).to have_key(:warning_mismatch_codes)
+      end
+    end
+
+    it '特殊加減算をadjusted_item_totalへ反映して明細合計不一致を解消する' do
+      result = call_service(
+        receipt: { total_amount: 1_640 },
+        receipt_items: [
+          { line_total: 1_080 }
+        ],
+        receipt_adjustments: [
+          { kind: 'bag_fee', amount: 10, sign: 'surcharge' },
+          { kind: 'delivery_fee', amount: 550, sign: 'surcharge' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjustment_surcharge_total)).to eq(560)
+        expect(result.dig(:computed, :adjustment_discount_total)).to eq(0)
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(1_640)
+        expect(result[:resolved][:total]).to eq(1_640)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it '値引きadjustmentをadjusted_item_totalへ反映する' do
+      result = call_service(
+        receipt: { total_amount: 1_000 },
+        receipt_items: [
+          { line_total: 1_980 }
+        ],
+        receipt_adjustments: [
+          { kind: 'return_refund', amount: 980, sign: 'discount' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :adjustment_discount_total)).to eq(980)
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(1_000)
+        expect(result[:resolved][:total]).to eq(1_000)
+        expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch)
+      end
+    end
+
+    it '不確実なadjustmentは確認対象にする' do
+      result = call_service(
+        receipt: { total_amount: 1_000 },
+        receipt_items: [
+          { line_total: 1_000 }
+        ],
+        receipt_adjustments: [
+          { kind: 'other', amount: 100, sign: 'discount', needs_review: true }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:blocking_inconsistencies]).to include(:adjustment_uncertain)
+        expect(result[:needs_review]).to eq(true)
       end
     end
 

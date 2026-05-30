@@ -1,6 +1,7 @@
 module Ai
   class PromptBuilder
     MAX_FILTERED_CONTENT_LINES = 40
+    MAX_FULL_CONTEXT_LINES = 150
     MAX_RAW_TEXT_LENGTH = 4_000
     MAX_PURCHASE_CANDIDATES = 5
 
@@ -20,11 +21,13 @@ module Ai
 
       {
         filtered_content: filtered_content,
+        full_context_lines: build_full_context_lines,
         store: build_store_payload,
         purchase: build_purchase_payload,
         payment: build_payment_payload,
         tax: build_tax_payload,
         items: build_items_payload,
+        adjustment_context_lines: build_adjustment_context_lines,
         meta: build_meta
       }
     end
@@ -94,6 +97,21 @@ module Ai
         Array(candidate_value(:items)).each_with_index.map do |item, index|
           normalize_item_payload(item, index)
         end.compact
+      end
+    end
+
+    def build_adjustment_context_lines
+      @adjustment_context_lines ||= build_full_context_lines
+    end
+
+    def build_full_context_lines
+      @full_context_lines ||= lines.first(MAX_FULL_CONTEXT_LINES).map.with_index do |line, index|
+        {
+          index: index,
+          text: line,
+          previous_text: index.positive? ? lines[index - 1] : nil,
+          next_text: lines[index + 1]
+        }.compact
       end
     end
 

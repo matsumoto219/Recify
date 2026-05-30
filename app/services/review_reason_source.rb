@@ -38,6 +38,7 @@ module ReviewReasonSource
     ocr_total_mismatch
     zero_amount_item_incomplete
     discount_data_incomplete
+    adjustment_uncertain
     price_tax_inclusion_uncertain
     calculation_profile_uncertain
     insufficient_data

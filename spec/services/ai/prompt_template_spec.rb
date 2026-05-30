@@ -121,5 +121,17 @@ RSpec.describe Ai::PromptTemplate do
         expect(user_prompt).to include('If uncertain, keep is_receipt = true, set needs_review = true, and use low-to-medium is_receipt_confidence.')
       end
     end
+
+    it '特殊加減算はfull_context_lines全体から検出するよう指示する' do
+      aggregate_failures do
+        expect(system_prompt).to include('full_context_lines as raw OCR line context')
+        expect(user_prompt).to include('Search the entire full_context_lines list for adjustment rows.')
+        expect(user_prompt).to include('Do NOT limit detection to known keywords.')
+        expect(user_prompt).to include('full_context_lines is the source of truth.')
+        expect(user_prompt).to include('overseas, abbreviated, or unknown adjustment wording.')
+        expect(user_prompt).to include('Labels and amounts may be split across neighboring OCR lines.')
+        expect(user_prompt).to include('source_line_index MUST match the index from full_context_lines.')
+      end
+    end
   end
 end

@@ -76,8 +76,68 @@ RSpec.describe Ai::ResponseParser do
               needs_review: true
             }
           ])
+          expect(result[:receipt_adjustments_attributes]).to eq([])
           expect(result[:meta]).to eq(provider: :openai)
         end
+      end
+
+      it 'receipt_adjustmentsを保存用attributesへ正規化する' do
+        payload['receipt_adjustments'] = [
+          {
+            'kind' => 'delivery_fee',
+            'label' => '配送料',
+            'amount' => '550円',
+            'sign' => 'surcharge',
+            'tax_rate' => '10%',
+            'source_text' => '配送料 ¥550',
+            'source_line_index' => 12,
+            'confidence' => 0.82,
+            'needs_review' => false,
+            'review_reasons' => []
+          }
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:receipt_adjustments_attributes]).to eq([
+          {
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 550,
+            sign: 'surcharge',
+            tax_rate: BigDecimal('0.1'),
+            source_text: '配送料 ¥550',
+            source_line_index: 12,
+            confidence: BigDecimal('0.82'),
+            needs_review: false,
+            review_reasons: [],
+            position_index: 1
+          }
+        ])
+      end
+
+      it '未知kind/signをotherとneeds_reviewへ安全化する' do
+        payload['receipt_adjustments'] = [
+          {
+            'kind' => 'unknown_charge',
+            'amount' => -120,
+            'sign' => 'unknown',
+            'source_text' => '謎の割引 -120',
+            'source_line_index' => 4
+          }
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:receipt_adjustments_attributes]).to include(
+          include(
+            kind: 'other',
+            amount: 120,
+            sign: 'discount',
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          )
+        )
       end
 
       it 'is_receipt true のconfidenceをmetaに保持する' do
