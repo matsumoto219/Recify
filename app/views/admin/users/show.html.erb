@@ -44,7 +44,7 @@
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.basic.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
@@ -74,7 +74,7 @@
       </dl>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.security.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
@@ -104,7 +104,7 @@
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.sign_in.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
@@ -130,7 +130,7 @@
       </dl>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.usage.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">

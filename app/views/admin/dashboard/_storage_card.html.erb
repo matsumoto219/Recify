@@ -16,7 +16,7 @@
   ]
 %>
 
-<%= render "shared/ui/layout/surface_card", padding: :md do %>
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
   <div class="mb-4">
     <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.storage.title") %></h2>
     <p class="text-sm token-text-muted"><%= t("admin.dashboard.storage.description") %></p>
@@ -31,5 +31,5 @@
     <% end %>
   </dl>
 
-  <p class="mt-4 text-sm token-text-muted"><%= t("admin.dashboard.storage.readonly_note") %></p>
+  <p class="mt-auto pt-4 text-sm token-text-muted"><%= t("admin.dashboard.storage.readonly_note") %></p>
 <% end %>

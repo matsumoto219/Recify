@@ -156,6 +156,8 @@ RSpec.describe 'Admin dashboard', type: :request do
       )
 
       get admin_root_path
+      document = Nokogiri::HTML(response.body)
+      height_matched_cards = document.css('section.surface-card-blur.h-full.flex.flex-col')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -172,8 +174,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('OCR停止中のため停止')
         expect(response.body).to include('data-controller="service-status-polling"')
         expect(response.body).to include(%(data-service-status-polling-status-url-value="#{admin_external_services_status_path}"))
-        expect(response.body).to include('data-service-status-polling-target="serviceStatusCard"')
         expect(response.body).to include('data-action="service-status-polling#pollNow"')
+        expect(document.at_css('[data-controller="service-status-polling"].h-full')).to be_present
+        expect(document.at_css('[data-service-status-polling-target="serviceStatusCard"].h-full')).to be_present
+        expect(height_matched_cards.size).to be >= 7
         expect(response.body).to include('更新')
         expect(response.body).to include('ストレージ状態')
         expect(response.body).to include('total blobs')
@@ -277,6 +281,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       get admin_external_services_status_path, as: :json
 
       html = response.parsed_body['html']
+      document = Nokogiri::HTML.fragment(html)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -286,6 +291,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(html).to include('停止中')
         expect(html).to include('OCR停止中のため停止')
         expect(html).to include('data-action="service-status-polling#pollNow"')
+        expect(document.at_css('section.surface-card-blur.h-full.flex.flex-col')).to be_present
       end
     end
 

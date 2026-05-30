@@ -115,11 +115,13 @@
           initially_open: false,
           collapse_on_mobile: true,
           keep_image_enabled: true,
+          wrapper_class: "h-full",
+          card_class: "h-full flex flex-col",
           preview_width_class: "w-full max-w-[320px]",
           preview_height_class: "h-[420px]",
           empty_message: t("admin.receipt_analysis_runs.show.image_metadata.empty") %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.image_metadata") %></h2>
       <dl class="grid gap-4 text-sm md:grid-cols-2">
         <div>

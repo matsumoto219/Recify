@@ -289,6 +289,8 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('オリジナル画像')
         expect(response.body).to include('画像メタ情報')
+        expect(response.body).to include('class="h-full" data-controller="receipt-image-card"')
+        expect(document.css('section.surface-card-blur.h-full.flex.flex-col').size).to be >= 2
         expect(response.body).to include('receipt_sample.jpg')
         expect(response.body).to include('image/jpeg')
         expect(response.body).to include(byte_size_label)

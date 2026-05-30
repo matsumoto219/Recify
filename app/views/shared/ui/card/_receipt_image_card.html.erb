@@ -22,6 +22,8 @@
   - storage_usage: 容量判定に使うストレージ使用量オブジェクト
   - storage_excluding_blob_bytes: 容量判定から除外する現在画像サイズ
   - quota_exceeded_message: 容量超過時の表示文言
+  - wrapper_class: 外側 wrapper の追加CSSクラス
+  - card_class: surface_card の追加CSSクラス
 %>
 
 <%
@@ -51,10 +53,12 @@
   storage_limit_bytes = storage_usage&.limit_bytes.to_i
   storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? displayable_image.blob&.byte_size.to_i : 0))
   quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
+  wrapper_class = local_assigns[:wrapper_class]
+  card_class = local_assigns[:card_class]
 %>
 
-<div <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
-  <%= render "shared/ui/layout/surface_card", padding: :sm do %>
+<div<%= wrapper_class.present? ? %( class="#{wrapper_class}").html_safe : "" %> <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
+  <%= render "shared/ui/layout/surface_card", padding: :sm, class: card_class do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
     </p>

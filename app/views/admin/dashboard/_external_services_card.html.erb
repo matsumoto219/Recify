@@ -37,7 +37,7 @@
   end
 %>
 
-<%= render "shared/ui/layout/surface_card", padding: :md do %>
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
   <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
     <div>
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.external_services.title") %></h2>
@@ -86,15 +86,17 @@
     <% end %>
   </dl>
 
-  <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm">
-    <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-      <span class="font-semibold token-text-muted"><%= t("admin.dashboard.external_services.upload") %></span>
-      <span class="font-semibold <%= upload_allowed ? "token-text-success" : "token-text-error" %>">
-        <%= upload_allowed ? t("admin.dashboard.external_services.upload_allowed") : t("admin.dashboard.external_services.upload_blocked") %>
-      </span>
+  <div class="mt-auto pt-4">
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm">
+      <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+        <span class="font-semibold token-text-muted"><%= t("admin.dashboard.external_services.upload") %></span>
+        <span class="font-semibold <%= upload_allowed ? "token-text-success" : "token-text-error" %>">
+          <%= upload_allowed ? t("admin.dashboard.external_services.upload_allowed") : t("admin.dashboard.external_services.upload_blocked") %>
+        </span>
+      </div>
+      <% if snapshot.dig(:notices, :ai_down) == true %>
+        <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("admin.dashboard.external_services.ocr_only_fallback") %></p>
+      <% end %>
     </div>
-    <% if snapshot.dig(:notices, :ai_down) == true %>
-      <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("admin.dashboard.external_services.ocr_only_fallback") %></p>
-    <% end %>
   </div>
 <% end %>

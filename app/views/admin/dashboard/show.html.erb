@@ -24,10 +24,11 @@
 
   <div class="grid gap-6 lg:grid-cols-2">
     <div
+      class="h-full"
       data-controller="service-status-polling"
       data-service-status-polling-status-url-value="<%= admin_external_services_status_path %>"
       data-service-status-polling-interval-value="30000">
-      <div data-service-status-polling-target="serviceStatusCard">
+      <div class="h-full" data-service-status-polling-target="serviceStatusCard">
         <%= render "admin/dashboard/external_services_card", external_services: external_services %>
       </div>
     </div>
@@ -35,7 +36,7 @@
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.receipt_analysis.title") %></h2>
@@ -63,7 +64,7 @@
         </div>
       </dl>
 
-      <p class="mt-4 text-sm token-text-muted">
+      <p class="mt-auto pt-4 text-sm token-text-muted">
         <%= t("admin.dashboard.receipt_analysis.latest_run") %>:
         <span class="font-mono token-text-base">
           <%= receipt_analysis[:latest_run_at].present? ? l(receipt_analysis[:latest_run_at], format: :short) : "-" %>
@@ -71,7 +72,7 @@
       </p>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.contact_requests.title") %></h2>
@@ -95,7 +96,7 @@
         </div>
       </dl>
 
-      <p class="mt-4 text-sm token-text-muted">
+      <p class="mt-auto pt-4 text-sm token-text-muted">
         <%= t("admin.dashboard.contact_requests.latest") %>:
         <span class="font-mono token-text-base">
           <%= contact_requests[:latest_created_at].present? ? l(contact_requests[:latest_created_at], format: :short) : "-" %>
@@ -103,7 +104,7 @@
       </p>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.cleanup.title") %></h2>
@@ -125,14 +126,14 @@
         </div>
       </dl>
 
-      <p class="mt-4 text-sm token-text-muted">
+      <p class="mt-auto pt-4 text-sm token-text-muted">
         <%= t("admin.dashboard.cleanup.execution_requirement") %>
       </p>
     <% end %>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.audit.title") %></h2>
@@ -156,7 +157,7 @@
         </div>
       </dl>
 
-      <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <div class="mt-auto flex flex-wrap gap-2 pt-4 text-sm">
         <%= render "shared/ui/actions/button",
               as: :link,
               href: admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"),
@@ -172,7 +173,7 @@
       </div>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.security.title") %></h2>
@@ -195,7 +196,7 @@
         </div>
       </dl>
 
-      <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <div class="mt-auto flex flex-wrap gap-2 pt-4 text-sm">
         <%= render "shared/ui/actions/button",
               as: :link,
               href: settings_security_path,
