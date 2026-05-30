@@ -107,17 +107,20 @@ class ReceiptsController < ApplicationController
 
   def create
     rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
+    rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
     create_params = normalized_receipt_params.to_h
     @receipt = current_user.receipts.new
 
-    apply_amount_calculation!(create_params, context: :manual)
+    amount_result = apply_amount_calculation!(create_params, context: :manual)
+    create_params["review_reasons"] = manual_update_blocking_review_reasons(amount_result)
 
     @receipt.assign_attributes(create_params)
-    @receipt.status = "completed"
+    @receipt.status = create_params["review_reasons"].empty? ? "completed" : "review_needed"
 
     if manual_receipt_items_missing?(create_params, context: :manual)
       prepare_manual_receipt_items_missing_error!(create_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content, formats: :html
       return
@@ -128,6 +131,7 @@ class ReceiptsController < ApplicationController
     else
       replace_manual_amount_errors!(create_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content, formats: :html
     end
@@ -137,6 +141,8 @@ class ReceiptsController < ApplicationController
   end
 
   def update
+    rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
+
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
       @receipt.errors.add(:image, :storage_quota_exceeded)
       flash.now[:alert] = t("flash.storage.quota_exceeded")
@@ -153,6 +159,7 @@ class ReceiptsController < ApplicationController
     if manual_receipt_items_missing?(update_params, context: :edit_save)
       @receipt.assign_attributes(update_params)
       prepare_manual_receipt_items_missing_error!(update_params)
+      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       flash.now[:alert] = @receipt.errors.full_messages
       render :edit, status: :unprocessable_content, formats: :html
       return
@@ -162,6 +169,7 @@ class ReceiptsController < ApplicationController
       purge_receipt_image_if_requested!
       redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
+      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       flash.now[:alert] = @receipt.errors.full_messages
       render :edit, status: :unprocessable_content, formats: :html
     end
@@ -345,6 +353,16 @@ class ReceiptsController < ApplicationController
         :position_index,
         :_destroy,
         { review_reasons: [] }
+      ],
+      receipt_adjustments_attributes: [
+        :id,
+        :kind,
+        :label,
+        :amount,
+        :sign,
+        :tax_rate,
+        :position_index,
+        :_destroy
       ]
       # NOTE: 以下は将来 nested attributes で直接編集する場合の候補
       # , receipt_payments_attributes: [
@@ -373,7 +391,9 @@ class ReceiptsController < ApplicationController
 
     permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
     normalize_receipt_item_tax_rates!(permitted)
+    normalize_receipt_adjustment_attributes!(permitted)
     prune_blank_new_receipt_items!(permitted)
+    prune_blank_new_receipt_adjustments!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
   end
@@ -417,6 +437,35 @@ class ReceiptsController < ApplicationController
     nil
   end
 
+  def normalize_receipt_adjustment_attributes!(permitted)
+    adjustments_attributes = permitted["receipt_adjustments_attributes"]
+    return if adjustments_attributes.blank?
+
+    adjustments_attributes.each_value do |adjustment_attributes|
+      adjustment_attributes["tax_rate"] = normalize_tax_rate(adjustment_attributes["tax_rate"])
+      adjustment_attributes["sign"] = manual_adjustment_sign(
+        kind: adjustment_attributes["kind"],
+        requested_sign: adjustment_attributes["sign"]
+      )
+      adjustment_attributes["source"] = "manual"
+      adjustment_attributes["needs_review"] = false
+      adjustment_attributes["review_reasons"] = []
+    end
+  end
+
+  def manual_adjustment_sign(kind:, requested_sign:)
+    kind = kind.to_s
+    requested_sign = requested_sign.to_s
+
+    if kind == "other"
+      return requested_sign if ReceiptAdjustment::SIGNS.include?(requested_sign)
+
+      return "surcharge"
+    end
+
+    ReceiptAdjustment.default_sign_for(kind)
+  end
+
   def prune_blank_new_receipt_items!(permitted)
     items_attributes = permitted["receipt_items_attributes"]
     return if items_attributes.blank?
@@ -426,6 +475,17 @@ class ReceiptsController < ApplicationController
     end
 
     permitted.delete("receipt_items_attributes") if items_attributes.empty?
+  end
+
+  def prune_blank_new_receipt_adjustments!(permitted)
+    adjustments_attributes = permitted["receipt_adjustments_attributes"]
+    return if adjustments_attributes.blank?
+
+    adjustments_attributes.delete_if do |_index, adjustment_attributes|
+      blank_new_receipt_adjustment_attributes?(adjustment_attributes)
+    end
+
+    permitted.delete("receipt_adjustments_attributes") if adjustments_attributes.empty?
   end
 
   def blank_new_receipt_item_attributes?(item_attributes)
@@ -442,6 +502,21 @@ class ReceiptsController < ApplicationController
     return true if positive_numeric_input?(item_attributes["line_total"])
     return true if positive_numeric_input?(item_attributes["tax_rate"])
     return true if positive_numeric_input?(item_attributes["discount_rate"])
+
+    false
+  end
+
+  def blank_new_receipt_adjustment_attributes?(adjustment_attributes)
+    return false if adjustment_attributes["id"].present?
+    return false if ActiveModel::Type::Boolean.new.cast(adjustment_attributes["_destroy"])
+
+    !receipt_adjustment_meaningful_input?(adjustment_attributes)
+  end
+
+  def receipt_adjustment_meaningful_input?(adjustment_attributes)
+    return true if adjustment_attributes["label"].present?
+    return true if numeric_input_present?(adjustment_attributes["amount"])
+    return true if positive_numeric_input?(adjustment_attributes["tax_rate"])
 
     false
   end
@@ -469,6 +544,17 @@ class ReceiptsController < ApplicationController
     end
   end
 
+  def blank_new_receipt_adjustment_rows_submitted?
+    adjustment_attribute_values = submitted_receipt_adjustment_attribute_values
+    return false if adjustment_attribute_values.blank?
+
+    adjustment_attribute_values.any? do |adjustment_attributes|
+      next false unless adjustment_attributes.respond_to?(:stringify_keys)
+
+      blank_new_receipt_adjustment_attributes?(adjustment_attributes.stringify_keys)
+    end
+  end
+
   def submitted_receipt_item_attribute_values
     items_attributes = params.dig(:receipt, :receipt_items_attributes)
     return [] if items_attributes.blank?
@@ -491,6 +577,28 @@ class ReceiptsController < ApplicationController
     end
   end
 
+  def submitted_receipt_adjustment_attribute_values
+    adjustments_attributes = params.dig(:receipt, :receipt_adjustments_attributes)
+    return [] if adjustments_attributes.blank?
+
+    values =
+      if adjustments_attributes.respond_to?(:values)
+        adjustments_attributes.values
+      else
+        Array(adjustments_attributes)
+      end
+
+    values.map do |adjustment_attributes|
+      if adjustment_attributes.respond_to?(:to_unsafe_h)
+        adjustment_attributes.to_unsafe_h
+      elsif adjustment_attributes.respond_to?(:to_h)
+        adjustment_attributes.to_h
+      else
+        adjustment_attributes
+      end
+    end
+  end
+
   def replace_manual_amount_errors!(permitted)
     return unless permitted["total_amount"].blank?
     return if @receipt.errors[:total_amount].blank?
@@ -509,6 +617,10 @@ class ReceiptsController < ApplicationController
 
   def build_receipt_item_row_for_render
     @receipt.receipt_items.build
+  end
+
+  def build_receipt_adjustment_row_for_render
+    @receipt.receipt_adjustments.build(kind: "delivery_fee", sign: "surcharge", source: "manual")
   end
 
   def manual_receipt_items_missing?(permitted, context:)
@@ -557,6 +669,7 @@ class ReceiptsController < ApplicationController
       receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
       receipt_items: amount_receipt_items(permitted),
       receipt_tax_details: receipt_tax_details,
+      receipt_adjustments: amount_receipt_adjustments(permitted, context),
       context: context,
       tax_rounding_mode: current_user.tax_rounding_mode,
       discount_rounding_mode: current_user.discount_rounding_mode
@@ -728,6 +841,31 @@ class ReceiptsController < ApplicationController
 
     items_attributes.values.reject do |item_attributes|
       ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
+    end
+  end
+
+  def amount_receipt_adjustments(permitted, context)
+    adjustments_attributes = permitted["receipt_adjustments_attributes"]
+    if adjustments_attributes.present?
+      return adjustments_attributes.values.reject do |adjustment_attributes|
+        ActiveModel::Type::Boolean.new.cast(adjustment_attributes["_destroy"])
+      end
+    end
+
+    return [] unless context == :edit_save
+    return [] unless @receipt&.persisted?
+
+    @receipt.receipt_adjustments.map do |adjustment|
+      {
+        kind: adjustment.kind,
+        label: adjustment.label,
+        amount: adjustment.amount,
+        sign: adjustment.sign,
+        tax_rate: adjustment.tax_rate,
+        needs_review: adjustment.needs_review?,
+        review_reasons: adjustment.review_reasons,
+        source: adjustment.source
+      }
     end
   end
 

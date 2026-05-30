@@ -21,6 +21,22 @@ RSpec.describe Amounts::TaxDetailAggregator do
     )
   end
 
+  it 'tax_rateありのdiscount adjustmentを税率別集計から減算する' do
+    result = described_class.new(
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 110, tax_rate: BigDecimal('0.1') }
+      ],
+      rounding_mode: :floor
+    ).call
+
+    expect(result).to include(
+      include(rate: BigDecimal('0.1'), net_amount: 810, amount: 80)
+    )
+  end
+
   it 'point_usage adjustmentは税率別集計から除外する' do
     result = described_class.new(
       items: [

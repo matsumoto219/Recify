@@ -52,6 +52,7 @@ ja:
       discount: 割引
     form:
       delete_item_confirm: この明細を削除しますか？
+      delete_adjustment_confirm: この値引き・手数料を削除しますか？
       titles:
         new: レシート登録
         edit: レシート編集
@@ -65,13 +66,17 @@ ja:
         save: 保存
         cancel: キャンセル
         add_item: 明細追加
+        add_adjustment: 値引き・手数料を追加
       review:
         blocking_description: 保存前に以下の内容を確認してください。
         warning_description: 内容を確認してください。
       sections:
         basic_info: 基本情報
         items: 明細一覧
+        adjustments: 値引き・手数料
         memo: メモ
+      adjustments:
+        description: レシート全体の値引き、送料、サービス料などを入力します。
       fields:
         store_name: 店舗名
         store_name_placeholder: 店舗名を入力
@@ -119,6 +124,17 @@ ja:
       uncategorized: 未分類
       subtotal: 小計
       warning_title: 確認情報
+    adjustment_fields:
+      label: 名称
+      label_placeholder: "例: 配送料"
+      kind: 種別
+      kind_blank: 選択してください
+      details: 詳細
+      details_aria: 値引き・手数料の詳細を表示
+      amount: 金額
+      tax_rate: 税率
+      sign: 加減算
+      remove_aria: 値引き・手数料を削除
     review_notes_card:
       title: 要確認内容
       item_label: 明細

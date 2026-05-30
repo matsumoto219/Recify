@@ -4,8 +4,23 @@ export default class extends Controller {
   static targets = [
     'itemsContainer',
     'template',
+    'adjustmentsContainer',
+    'adjustmentTemplate',
     'itemRow',
     'destroyField',
+    'adjustmentRow',
+    'adjustmentDestroyField',
+    'adjustmentKindInput',
+    'adjustmentSignInput',
+    'adjustmentSignLabel',
+    'adjustmentSignLabelWrapper',
+    'adjustmentSignSelect',
+    'adjustmentSignSelectWrapper',
+    'adjustmentAmountInput',
+    'adjustmentTaxRateInput',
+    'adjustmentDetailsPanel',
+    'adjustmentDetailsToggle',
+    'adjustmentDetailsIcon',
     'quantityInput',
     'quantityUnitInput',
     'priceInput',
@@ -25,14 +40,20 @@ export default class extends Controller {
 
   static values = {
     nextIndex: Number,
+    nextAdjustmentIndex: Number,
     roundingMode: { type: String, default: 'floor' },
     discountRoundingMode: { type: String, default: 'round' },
     deleteConfirmationEnabled: { type: Boolean, default: true },
     deleteConfirmationMessage: { type: String, default: 'Delete this item?' },
+    deleteAdjustmentConfirmationMessage: { type: String, default: 'Delete this adjustment?' },
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
     multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' },
+    adjustmentSurchargeKinds: { type: String, default: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee' },
+    adjustmentDiscountKinds: { type: String, default: 'receipt_discount,coupon,point_usage,return_refund' },
+    adjustmentSurchargeLabel: { type: String, default: 'Surcharge' },
+    adjustmentDiscountLabel: { type: String, default: 'Discount' },
     decimalQuantityUnits: { type: String, default: 'kg,g,mg,L,ml,cc' },
     integerQuantityStep: { type: String, default: '1' },
     decimalQuantityStep: { type: String, default: '0.001' }
@@ -44,7 +65,9 @@ export default class extends Controller {
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     this.syncItemDetailsPanels()
+    this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
+    this.syncAdjustmentSigns()
   }
 
   disconnect () {
@@ -66,6 +89,67 @@ export default class extends Controller {
     this.nextIndexValue = index + 1
     this.syncItemDetailsPanels()
     this.syncQuantityInputSteps()
+  }
+
+  addAdjustment (event) {
+    event.preventDefault()
+
+    const template = this.adjustmentTemplateTarget.innerHTML.trim()
+    if (!template) return
+
+    const index = this.nextAdjustmentIndexValue
+    const html = template.replace(/NEW_ADJUSTMENT_RECORD/g, String(index))
+
+    event.currentTarget.insertAdjacentHTML('beforebegin', html)
+    this.nextAdjustmentIndexValue = index + 1
+    this.syncAdjustmentDetailsPanels()
+    this.syncAdjustmentSigns()
+    this.recalculate()
+  }
+
+  removeAdjustment (event) {
+    event.preventDefault()
+
+    const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
+    if (!row) return
+
+    const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
+    delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
+
+    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deleteAdjustmentConfirmationMessageValue)) return
+
+    const destroyField = row.querySelector('[data-receipt-form-target="adjustmentDestroyField"]')
+
+    if (destroyField) {
+      destroyField.value = '1'
+      row.style.display = 'none'
+    } else {
+      row.remove()
+    }
+
+    this.recalculate()
+  }
+
+  adjustmentKindChanged (event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
+    this.syncAdjustmentSignForRow(row)
+    this.recalculate()
+  }
+
+  toggleAdjustmentDetails (event) {
+    event.preventDefault()
+
+    const toggle = event.currentTarget
+    const row = toggle.closest('[data-receipt-form-target="adjustmentRow"]')
+    if (!row) return
+
+    const panel = row.querySelector('[data-receipt-form-target="adjustmentDetailsPanel"]')
+    const toggles = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsToggle"]')
+    const icons = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsIcon"]')
+    if (!panel) return
+
+    const willOpen = !this.adjustmentDetailsPanelOpen(panel)
+    this.setAdjustmentDetailsOpen({ row, panel, toggles, icons, open: willOpen })
   }
 
   quantityUnitChanged (event) {
@@ -162,6 +246,17 @@ export default class extends Controller {
     })
   }
 
+  syncAdjustmentDetailsPanels () {
+    this.adjustmentRowTargets.forEach((row) => {
+      const panel = row.querySelector('[data-receipt-form-target="adjustmentDetailsPanel"]')
+      const toggles = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsToggle"]')
+      const icons = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsIcon"]')
+      const open = row.classList.contains('receipt-form-adjustment-details-open') || this.adjustmentDetailsPanelOpen(panel)
+
+      this.setAdjustmentDetailsOpen({ row, panel, toggles, icons, open })
+    })
+  }
+
   setItemDetailsOpen ({ row, panel, toggles, icons, open }) {
     if (!panel) return
 
@@ -183,8 +278,31 @@ export default class extends Controller {
     return Boolean(panel?.classList.contains('is-open'))
   }
 
+  setAdjustmentDetailsOpen ({ row, panel, toggles, icons, open }) {
+    if (!panel) return
+
+    panel.classList.toggle('is-open', open)
+    panel.toggleAttribute('inert', !open)
+    panel.setAttribute('aria-hidden', String(!open))
+    row?.classList.toggle('receipt-form-adjustment-details-open', open)
+
+    toggles.forEach((toggle) => {
+      toggle.setAttribute('aria-expanded', String(open))
+    })
+
+    icons.forEach((icon) => {
+      icon.classList.toggle('rotate-180', open)
+    })
+  }
+
+  adjustmentDetailsPanelOpen (panel) {
+    return Boolean(panel?.classList.contains('is-open'))
+  }
+
   handleBeforeCache () {
     this.syncItemDetailsPanels()
+    this.syncAdjustmentDetailsPanels()
+    this.syncAdjustmentSigns()
   }
 
   scheduleLineTotalTooltip (event) {
@@ -322,6 +440,45 @@ export default class extends Controller {
       this.syncLineTotalState({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal })
     })
 
+    this.adjustmentRowTargets.forEach((row) => {
+      if (row.style.display === 'none') return
+
+      this.syncAdjustmentSignForRow(row)
+
+      const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+      const amountInput = row.querySelector('[data-receipt-form-target="adjustmentAmountInput"]')
+      const taxRateInput = row.querySelector('[data-receipt-form-target="adjustmentTaxRateInput"]')
+      const kind = String(kindInput?.value ?? '')
+      const sign = this.adjustmentSignForRow(row)
+      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, 999999999)
+      const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
+      if (amount <= 0) return
+
+      if (taxRatePercent > 0 && kind !== 'point_usage') {
+        taxRates.add(taxRatePercent)
+      }
+
+      if (kind === 'point_usage') return
+
+      const signedAmount = sign === 'surcharge' ? amount : -amount
+      let adjustmentTax = 0
+      let adjustmentSubtotal = signedAmount
+
+      if (externalTax) {
+        if (taxRatePercent > 0) {
+          externalTaxGroups.set(taxRatePercent, (externalTaxGroups.get(taxRatePercent) || 0) + signedAmount)
+        }
+      } else if (taxRatePercent > 0) {
+        const signMultiplier = signedAmount < 0 ? -1 : 1
+        adjustmentTax = signMultiplier * this.applyTaxRounding((Math.abs(signedAmount) * taxRatePercent) / (100 + taxRatePercent))
+        adjustmentSubtotal = signedAmount - adjustmentTax
+      }
+
+      subtotalSum += adjustmentSubtotal
+      taxSum += adjustmentTax
+      total += signedAmount
+    })
+
     if (externalTax) {
       taxSum = this.externalTaxTotal(externalTaxGroups)
       total = subtotalSum + taxSum
@@ -347,6 +504,87 @@ export default class extends Controller {
     if (this.hasTaxRateSummaryTarget) {
       this.taxRateSummaryTarget.textContent = this.formatTaxRateSummary(taxRates)
     }
+  }
+
+  syncAdjustmentSigns () {
+    this.adjustmentRowTargets.forEach((row) => this.syncAdjustmentSignForRow(row))
+  }
+
+  syncAdjustmentSignForRow (row) {
+    if (!row) return
+
+    const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+    const signInput = row.querySelector('[data-receipt-form-target="adjustmentSignInput"]')
+    const signLabel = row.querySelector('[data-receipt-form-target="adjustmentSignLabel"]')
+    const signLabelWrapper = row.querySelector('[data-receipt-form-target="adjustmentSignLabelWrapper"]')
+    const signSelect = row.querySelector('[data-receipt-form-target="adjustmentSignSelect"]')
+    const signSelectWrapper = row.querySelector('[data-receipt-form-target="adjustmentSignSelectWrapper"]')
+    if (!signInput) return
+
+    const kind = String(kindInput?.value ?? '')
+    const other = kind === 'other'
+    const sign = other ? this.validAdjustmentSign(signSelect?.value) : this.adjustmentSignForKind(kind)
+
+    if (other) {
+      signInput.disabled = true
+      if (signSelect) {
+        signSelect.disabled = false
+        signSelect.value = sign
+      }
+      signLabelWrapper?.classList.add('hidden')
+      signSelectWrapper?.classList.remove('hidden')
+    } else {
+      signInput.disabled = false
+      signInput.value = sign
+      if (signSelect) {
+        signSelect.disabled = true
+        signSelect.value = sign
+      }
+      signLabelWrapper?.classList.remove('hidden')
+      signSelectWrapper?.classList.add('hidden')
+    }
+
+    if (signLabel) {
+      signLabel.textContent = sign === 'surcharge' ? this.adjustmentSurchargeLabelValue : this.adjustmentDiscountLabelValue
+    }
+  }
+
+  adjustmentSignForRow (row) {
+    const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+    const signInput = row.querySelector('[data-receipt-form-target="adjustmentSignInput"]')
+    const signSelect = row.querySelector('[data-receipt-form-target="adjustmentSignSelect"]')
+    const kind = String(kindInput?.value ?? '')
+
+    if (kind === 'other') return this.validAdjustmentSign(signSelect?.value)
+
+    return this.validAdjustmentSign(signInput?.value) || this.adjustmentSignForKind(kind)
+  }
+
+  adjustmentSignForKind (kind) {
+    const normalizedKind = String(kind ?? '').trim()
+    if (this.adjustmentSurchargeKindList().includes(normalizedKind)) return 'surcharge'
+    if (this.adjustmentDiscountKindList().includes(normalizedKind)) return 'discount'
+
+    return 'surcharge'
+  }
+
+  validAdjustmentSign (sign) {
+    const normalizedSign = String(sign ?? '').trim()
+    return ['surcharge', 'discount'].includes(normalizedSign) ? normalizedSign : 'surcharge'
+  }
+
+  adjustmentSurchargeKindList () {
+    return this.adjustmentSurchargeKindsValue
+      .split(',')
+      .map((kind) => kind.trim())
+      .filter((kind) => kind !== '')
+  }
+
+  adjustmentDiscountKindList () {
+    return this.adjustmentDiscountKindsValue
+      .split(',')
+      .map((kind) => kind.trim())
+      .filter((kind) => kind !== '')
   }
 
   animateLineTotal (target, nextValue, { withLabel = false } = {}) {

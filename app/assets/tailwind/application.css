@@ -1031,12 +1031,18 @@ body {
 }
 
 /* ===== Receipt Form Utilities ===== */
-.receipt-form-item-row {
+.receipt-form-item-row,
+.receipt-form-adjustment-row {
   background: var(--bg-card-subtle);
 }
 
-.receipt-form-item-row:hover {
+.receipt-form-item-row:hover,
+.receipt-form-adjustment-row:hover {
   background: var(--bg-elevated);
+}
+
+.receipt-form-adjustment-row:hover {
+  border-color: var(--border-soft);
 }
 
 @media (width <= 767px) {
@@ -1056,19 +1062,23 @@ body {
     width: 5rem;
   }
 
-  .receipt-form-item-mobile-detail {
+  .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-mobile-detail {
     display: none;
   }
 
-  .receipt-form-item-details-open .receipt-form-item-mobile-detail {
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail {
     display: block;
   }
 
-  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div {
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail-field > div {
     display: block;
   }
 
-  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div > span {
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div > span,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail-field > div > span {
     display: block;
     width: auto;
     margin-bottom: 0.5rem;
@@ -1076,7 +1086,8 @@ body {
 }
 
 @media (width >= 768px) {
-  .receipt-form-item-mobile-detail {
+  .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-mobile-detail {
     display: block;
   }
 }

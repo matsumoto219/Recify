@@ -11,20 +11,28 @@
 <% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.public_id}" : "new_receipt_form" %>
 <% visible_receipt_items = receipt.receipt_items.reject(&:marked_for_destruction?) %>
 <% destroyed_receipt_items = receipt.receipt_items.select(&:marked_for_destruction?) %>
+<% visible_receipt_adjustments = receipt.receipt_adjustments.reject(&:marked_for_destruction?) %>
+<% destroyed_receipt_adjustments = receipt.receipt_adjustments.select(&:marked_for_destruction?) %>
 <%= form_with model: receipt,
               html: {
                 id: form_dom_id,
                 data: {
                   controller: "receipt-form",
                   "receipt-form-next-index-value": receipt.receipt_items.size,
+                  "receipt-form-next-adjustment-index-value": receipt.receipt_adjustments.size,
                   "receipt-form-rounding-mode-value": current_user.tax_rounding_mode,
                   "receipt-form-discount-rounding-mode-value": current_user.discount_rounding_mode,
                   "receipt-form-delete-confirmation-enabled-value": current_user.delete_confirmation_enabled,
                   "receipt-form-delete-confirmation-message-value": t("receipts.form.delete_item_confirm"),
+                  "receipt-form-delete-adjustment-confirmation-message-value": t("receipts.form.delete_adjustment_confirm"),
                   "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form,
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
                   "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates"),
+                  "receipt-form-adjustment-surcharge-kinds-value": ReceiptAdjustment::SURCHARGE_KINDS.join(","),
+                  "receipt-form-adjustment-discount-kinds-value": ReceiptAdjustment::DISCOUNT_KINDS.join(","),
+                  "receipt-form-adjustment-surcharge-label-value": t("enums.receipt_adjustment.sign.surcharge"),
+                  "receipt-form-adjustment-discount-label-value": t("enums.receipt_adjustment.sign.discount"),
                   "receipt-form-decimal-quantity-units-value": ReceiptItem::DECIMAL_QUANTITY_UNITS.join(","),
                   "receipt-form-integer-quantity-step-value": "1",
                   "receipt-form-decimal-quantity-step-value": "0.001"
@@ -243,6 +251,55 @@
                 <%= render "receipts/receipt_item_fields",
                       item_form: item_form,
                       item: item_form.object,
+                      new_record: true %>
+              <% end %>
+            </template>
+          </div>
+        <% end %>
+
+        <%= render "shared/ui/layout/surface_card", class: "overflow-hidden" do %>
+          <div class="p-6 border-b token-border-soft">
+            <%= render "shared/ui/layout/section_header",
+                  title: t("receipts.form.sections.adjustments"),
+                  subtitle: t("receipts.form.adjustments.description"),
+                  icon: "price_change" %>
+          </div>
+
+          <div class="p-6 space-y-4" data-receipt-form-target="adjustmentsContainer">
+            <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
+              <div class="col-span-4"><%= t("receipts.adjustment_fields.label") %></div>
+              <div class="col-span-3"><%= t("receipts.adjustment_fields.kind") %></div>
+              <div class="col-span-3"><%= t("receipts.adjustment_fields.amount") %></div>
+              <div class="col-span-1"><%= t("receipts.adjustment_fields.details") %></div>
+              <div class="col-span-1"></div>
+            </div>
+
+            <% if visible_receipt_adjustments.any? %>
+              <%= f.fields_for :receipt_adjustments, visible_receipt_adjustments do |adjustment_form| %>
+                <%= render "receipts/receipt_adjustment_fields",
+                      adjustment_form: adjustment_form,
+                      adjustment: adjustment_form.object,
+                      new_record: false %>
+              <% end %>
+            <% end %>
+
+            <% destroyed_receipt_adjustments.each do |adjustment| %>
+              <%= hidden_field_tag "receipt[receipt_adjustments_attributes][destroy_#{adjustment.id}][id]", adjustment.id %>
+              <%= hidden_field_tag "receipt[receipt_adjustments_attributes][destroy_#{adjustment.id}][_destroy]", "1" %>
+            <% end %>
+
+            <button type="button"
+                    data-action="click->receipt-form#addAdjustment"
+                    class="w-full mt-4 cursor-pointer py-3 border-2 border-dashed token-border-strong rounded-xl token-text-muted token-hover-text-brand token-hover-border-brand transition-all flex items-center justify-center gap-2 font-medium">
+              <span class="material-symbols-outlined">add_circle</span>
+              <%= t("receipts.form.buttons.add_adjustment") %>
+            </button>
+
+            <template data-receipt-form-target="adjustmentTemplate">
+              <%= f.fields_for :receipt_adjustments, ReceiptAdjustment.new(kind: "delivery_fee", sign: "surcharge", source: "manual"), child_index: "NEW_ADJUSTMENT_RECORD" do |adjustment_form| %>
+                <%= render "receipts/receipt_adjustment_fields",
+                      adjustment_form: adjustment_form,
+                      adjustment: adjustment_form.object,
                       new_record: true %>
               <% end %>
             </template>

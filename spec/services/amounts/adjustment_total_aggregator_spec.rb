@@ -89,10 +89,31 @@ RSpec.describe Amounts::AdjustmentTotalAggregator do
     end
   end
 
-  it 'otherやneeds_review adjustmentを不確実として返す' do
+  it 'manual sourceのotherは不確実扱いにしない' do
     result = aggregate(
       adjustments: [
-        { kind: 'other', sign: 'surcharge', amount: 100 },
+        { kind: 'other', sign: 'surcharge', amount: 100, source: 'manual' }
+      ]
+    )
+
+    expect(result[:uncertain_adjustments]).to be_empty
+  end
+
+  it 'ai/ocr sourceのotherは不確実として返す' do
+    result = aggregate(
+      adjustments: [
+        { kind: 'other', sign: 'surcharge', amount: 100, source: 'ai' },
+        { kind: 'other', sign: 'discount', amount: 50, source: 'ocr' }
+      ]
+    )
+
+    expect(result[:uncertain_adjustments].size).to eq(2)
+  end
+
+  it 'needs_review adjustmentはsourceに関係なく不確実として返す' do
+    result = aggregate(
+      adjustments: [
+        { kind: 'delivery_fee', sign: 'surcharge', amount: 50, source: 'manual', needs_review: true },
         { kind: 'delivery_fee', sign: 'surcharge', amount: 50, needs_review: true }
       ]
     )

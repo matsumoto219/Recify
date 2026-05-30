@@ -57,8 +57,13 @@ module Amounts
         }
       end.merge(adjustment_groups) do |_rate, item_amounts, adjustment_amounts|
         {
-          net_amount: item_amounts[:net_amount] + adjustment_amounts[:net_amount],
-          amount: item_amounts[:amount] + adjustment_amounts[:amount]
+          net_amount: [ item_amounts[:net_amount] + adjustment_amounts[:net_amount], 0 ].max,
+          amount: [ item_amounts[:amount] + adjustment_amounts[:amount], 0 ].max
+        }
+      end.transform_values do |amounts|
+        {
+          net_amount: [ amounts[:net_amount], 0 ].max,
+          amount: [ amounts[:amount], 0 ].max
         }
       end
     end
@@ -76,8 +81,8 @@ module Amounts
         net_delta, tax_delta = adjustment_net_tax_delta(signed, tax_rate)
 
         grouped[tax_rate] ||= { net_amount: 0, amount: 0 }
-        grouped[tax_rate][:net_amount] = [ grouped[tax_rate][:net_amount] + net_delta, 0 ].max
-        grouped[tax_rate][:amount] = [ grouped[tax_rate][:amount] + tax_delta, 0 ].max
+        grouped[tax_rate][:net_amount] += net_delta
+        grouped[tax_rate][:amount] += tax_delta
       end
     end
 

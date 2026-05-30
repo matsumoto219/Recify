@@ -723,6 +723,44 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '調整行テンプレートを明細行と同じ折りたたみ構造で描画する' do
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      template_html = document.at_css('template[data-receipt-form-target="adjustmentTemplate"]')&.inner_html.to_s
+      template = Nokogiri::HTML.fragment(template_html)
+      adjustment_row = template.at_css('[data-receipt-form-target="adjustmentRow"]')
+      details_panel = adjustment_row.at_css('[data-receipt-form-target="adjustmentDetailsPanel"]')
+      amount_input = adjustment_row.at_css('[data-receipt-form-target="adjustmentAmountInput"]')
+      tax_rate_input = details_panel.at_css('[data-receipt-form-target="adjustmentTaxRateInput"]')
+      sign_select = details_panel.at_css('[data-receipt-form-target="adjustmentSignSelect"]')
+      sign_hidden = adjustment_row.at_css('input[type="hidden"][data-receipt-form-target="adjustmentSignInput"]')
+      mobile_detail_fields = adjustment_row.css('.receipt-form-adjustment-mobile-detail-field')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(adjustment_row['class']).to include('receipt-form-adjustment-row')
+        expect(adjustment_row.at_css('[data-receipt-form-target="adjustmentDetailsToggle"]')).to be_present
+        expect(adjustment_row.at_css('[data-receipt-form-target="adjustmentDetailsIcon"]').text).to include('expand_more')
+        expect(adjustment_row.at_css('.receipt-form-adjustment-mobile-summary')).to be_present
+        expect(mobile_detail_fields.size).to be >= 2
+        expect(details_panel['class']).to include('collapsible-grid')
+        expect(amount_input['class']).to include('field-stepper-input')
+        expect(amount_input['class']).to include('text-center')
+        expect(amount_input['class']).to include('pl-4')
+        expect(amount_input['class']).not_to include('pl-8')
+        expect(tax_rate_input['class']).to include('field-stepper-input')
+        expect(tax_rate_input['class']).to include('text-center')
+        expect(sign_select).to be_present
+        expect(sign_hidden).to be_present
+        expect(sign_hidden['value']).to eq('surcharge')
+        expect(template.text).not_to include('種別に応じて加算または減算を自動設定します')
+        expect(template.text).not_to include('ポイント利用は支払調整として扱い')
+        expect(response.body).not_to include('種別に応じて加算または減算を自動設定します')
+        expect(response.body).not_to include('ポイント利用は支払調整として扱い')
+      end
+    end
+
     context '未ログイン時' do
       before do
         sign_out user
@@ -1844,6 +1882,556 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'direct paramsでmanual service_chargeを作成できる' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '手動調整作成',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 1000,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            },
+            receipt_adjustments_attributes: {
+              '0' => {
+                kind: 'service_charge',
+                label: 'サービス料',
+                amount: '110',
+                sign: 'surcharge',
+                tax_rate: '10',
+                position_index: '0'
+              }
+            }
+          }
+        }
+      end.to change(ReceiptAdjustment, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+      adjustment = receipt.receipt_adjustments.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1110)
+        expect(receipt.tax_amount).to eq(100)
+        expect(adjustment.kind).to eq('service_charge')
+        expect(adjustment.label).to eq('サービス料')
+        expect(adjustment.amount).to eq(110)
+        expect(adjustment.sign).to eq('surcharge')
+        expect(adjustment.tax_rate).to eq(BigDecimal('0.1'))
+        expect(adjustment.source).to eq('manual')
+        expect(adjustment.needs_review).to be(false)
+        expect(adjustment.review_reasons).to eq([])
+      end
+    end
+
+    it 'delivery_feeとbag_feeを手動加算として合計へ反映する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '送料袋代作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'delivery_fee',
+              label: '配送料',
+              amount: '550',
+              sign: 'discount',
+              tax_rate: '10'
+            },
+            '1' => {
+              kind: 'bag_fee',
+              label: '袋代',
+              amount: '10',
+              sign: 'discount',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1560)
+        expect(receipt.receipt_adjustments.pluck(:kind, :sign, :source)).to contain_exactly(
+          [ 'delivery_fee', 'surcharge', 'manual' ],
+          [ 'bag_fee', 'surcharge', 'manual' ]
+        )
+      end
+    end
+
+    it 'service_chargeとlate_night_chargeを税率別サマリーへ反映する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'サービス深夜作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'service_charge',
+              label: 'サービス料',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            },
+            '1' => {
+              kind: 'late_night_charge',
+              label: '深夜料金',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1200)
+        expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+        expect(tax_detail.net_amount + tax_detail.amount).to eq(1200)
+      end
+    end
+
+    it 'couponを手動減算として合計へ反映する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'クーポン作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'coupon',
+              label: 'クーポン',
+              amount: '110',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      adjustment = receipt.receipt_adjustments.first
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(890)
+        expect(receipt.tax_amount).to eq(80)
+        expect(adjustment.kind).to eq('coupon')
+        expect(adjustment.sign).to eq('discount')
+        expect(adjustment.source).to eq('manual')
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+        expect(tax_detail.net_amount + tax_detail.amount).to eq(890)
+      end
+    end
+
+    it 'receipt_discountを手動減算として合計へ反映する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'レシート値引き作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'receipt_discount',
+              label: '全体値引き',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(900)
+        expect(receipt.receipt_adjustments.first.sign).to eq('discount')
+      end
+    end
+
+    it 'return_refundを負値itemではなくadjustmentとして保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '返品作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1980,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'return_refund',
+              label: '返品',
+              amount: '980',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1000)
+        expect(receipt.receipt_items.pluck(:price)).to contain_exactly(1980)
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly([ 'return_refund', 980, 'discount' ])
+      end
+    end
+
+    it 'manual other + surchargeは通常のadjustmentとして保存しcompletedになる' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'その他加算作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'other',
+              label: '調整加算',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: ''
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      adjustment = receipt.receipt_adjustments.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(1100)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
+        expect(adjustment.kind).to eq('other')
+        expect(adjustment.sign).to eq('surcharge')
+        expect(adjustment.source).to eq('manual')
+      end
+    end
+
+    it 'manual other + discountは通常のadjustmentとして保存しcompletedになる' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'その他減算作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1000,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'other',
+              label: '調整減算',
+              amount: '100',
+              sign: 'discount',
+              tax_rate: ''
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      adjustment = receipt.receipt_adjustments.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.total_amount).to eq(900)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
+        expect(adjustment.kind).to eq('other')
+        expect(adjustment.sign).to eq('discount')
+        expect(adjustment.source).to eq('manual')
+      end
+    end
+
+    it 'point_usageを税額計算から外して支払調整として保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'ポイント利用作成',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 1100,
+              quantity: 1,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'point_usage',
+              label: 'ポイント利用',
+              amount: '500',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      adjustment = receipt.receipt_adjustments.first
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.total_amount).to eq(1100)
+        expect(receipt.tax_amount).to eq(100)
+        expect(tax_detail.net_amount).to eq(1000)
+        expect(tax_detail.amount).to eq(100)
+        expect(adjustment.kind).to eq('point_usage')
+        expect(adjustment.sign).to eq('discount')
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_adjustment_total')).to eq(-500)
+      end
+    end
+
+    it 'blank adjustment rowは保存されない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '空調整除外',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 100,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            },
+            receipt_adjustments_attributes: {
+              '0' => {
+                kind: '',
+                label: '',
+                amount: '',
+                sign: '',
+                tax_rate: '',
+                position_index: ''
+              }
+            }
+          }
+        }
+      end.to change(Receipt, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(ReceiptAdjustment.count).to eq(0)
+        expect(Receipt.order(:id).last.receipt_adjustments).to be_empty
+      end
+    end
+
+    it 'validation error後にadjustment行を復元する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 1000,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            },
+            receipt_adjustments_attributes: {
+              '0' => {
+                kind: 'delivery_fee',
+                label: '配送料',
+                amount: '550',
+                sign: 'surcharge',
+                tax_rate: '10'
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      visible_adjustment_rows = document.css('[data-receipt-form-target="adjustmentRow"]').reject do |node|
+        node.ancestors.any? { |ancestor| ancestor.name == 'template' }
+      end
+      adjustment_row = visible_adjustment_rows.first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_adjustment_rows.size).to eq(1)
+        expect(adjustment_row).to be_present
+        expect(adjustment_row.at_css('input[name*="[label]"]')['value']).to eq('配送料')
+        expect(adjustment_row.at_css('input[name*="[amount]"]')['value']).to eq('550')
+        expect(adjustment_row.at_css('input[name*="[sign]"]')['value']).to eq('surcharge')
+      end
+    end
+
+    it '空のadjustment行を追加したvalidation error後は空行を再表示する' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 1000,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            },
+            receipt_adjustments_attributes: {
+              '0' => {
+                kind: 'delivery_fee',
+                label: '',
+                amount: '',
+                sign: 'surcharge',
+                tax_rate: ''
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      visible_adjustment_rows = document.css('[data-receipt-form-target="adjustmentRow"]').reject do |node|
+        node.ancestors.any? { |ancestor| ancestor.name == 'template' }
+      end
+      adjustment_row = visible_adjustment_rows.first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_adjustment_rows.size).to eq(1)
+        expect(adjustment_row.at_css('input[name*="[label]"]')['value'].to_s).to eq('')
+        expect(adjustment_row.at_css('input[name*="[amount]"]')['value'].to_s).to eq('')
+        expect(adjustment_row.at_css('select[name*="[kind]"] option[selected]')&.[]('value')).to eq('delivery_fee')
+      end
+    end
+
+    it 'adjustment未追加のvalidation errorでは空adjustment行を出さない' do
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: '',
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '商品A',
+                price: 1000,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: 10,
+                line_total: nil,
+                needs_review: false
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      document = Nokogiri::HTML(response.body)
+      visible_adjustment_rows = document.css('[data-receipt-form-target="adjustmentRow"]').reject do |node|
+        node.ancestors.any? { |ancestor| ancestor.name == 'template' }
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_adjustment_rows).to be_empty
+      end
+    end
+
     it '手動作成時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
       user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
       observed_kwargs = nil
@@ -2568,7 +3156,7 @@ RSpec.describe 'Receipts', type: :request do
         label: '配送料',
         amount: 550,
         sign: 'surcharge',
-        source: 'ai',
+        source: 'manual',
         needs_review: false,
         position_index: 1
       )
@@ -3326,6 +3914,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('true')
         expect(form['data-receipt-form-delete-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_item_confirm'))
+        expect(form['data-receipt-form-delete-adjustment-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_adjustment_confirm'))
       end
     end
 
@@ -3976,6 +4565,144 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.store_name).to eq('更新後')
         expect(receipt.receipt_items).to contain_exactly(item)
+      end
+    end
+
+    it 'direct paramsでmanual adjustmentを更新できる' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '既存商品',
+        price: 1000,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1000,
+        needs_review: false
+      )
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '旧配送料',
+        amount: 100,
+        sign: 'surcharge',
+        tax_rate: BigDecimal('0.1'),
+        source: 'ai',
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ],
+        position_index: 0
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '更新後',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: item.quantity_unit,
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              id: adjustment.id,
+              kind: 'delivery_fee',
+              label: '新配送料',
+              amount: '220',
+              sign: 'surcharge',
+              tax_rate: '10',
+              position_index: '2'
+            }
+          }
+        }
+      }
+      receipt.reload
+      adjustment.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(1220)
+        expect(adjustment.label).to eq('新配送料')
+        expect(adjustment.amount).to eq(220)
+        expect(adjustment.source).to eq('manual')
+        expect(adjustment.needs_review).to be(false)
+        expect(adjustment.review_reasons).to eq([])
+      end
+    end
+
+    it 'direct paramsでadjustmentを削除できる' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '既存商品',
+        price: 1000,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1000,
+        needs_review: false
+      )
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '配送料',
+        amount: 220,
+        sign: 'surcharge',
+        tax_rate: BigDecimal('0.1'),
+        source: 'manual',
+        needs_review: false,
+        position_index: 0
+      )
+
+      expect do
+        patch receipt_path(receipt), params: {
+          receipt: {
+            store_name: '削除後',
+            receipt_items_attributes: {
+              '0' => {
+                id: item.id,
+                confirmed_name: item.confirmed_name,
+                price: item.price,
+                quantity: item.quantity,
+                quantity_unit: item.quantity_unit,
+                tax_rate: 10,
+                line_total: item.line_total,
+                needs_review: false
+              }
+            },
+            receipt_adjustments_attributes: {
+              '0' => {
+                id: adjustment.id,
+                _destroy: '1'
+              }
+            }
+          }
+        }
+      end.to change(ReceiptAdjustment, :count).by(-1)
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.total_amount).to eq(1000)
+      end
+    end
+
+    it 'adjustment未送信の通常編集では既存adjustmentを消さない' do
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '配送料',
+        amount: 220,
+        sign: 'surcharge',
+        source: 'manual',
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: valid_update_params
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.receipt_adjustments).to contain_exactly(adjustment)
       end
     end
 

@@ -41,6 +41,7 @@
   label_class = local_assigns.fetch(:label_class, nil)
   error_message_class = local_assigns.fetch(:error_message_class, nil)
   size = local_assigns.fetch(:size, :md).to_sym
+  html_options = local_assigns.fetch(:html_options, {})
 
   has_error = f.object.respond_to?(:errors) && f.object.errors[attribute].present?
 
@@ -79,8 +80,8 @@
     <%= f.select attribute,
                  options_for_select(options, selected),
                  { include_blank: include_blank },
-                 class: merged_select_class,
-                 required: required %>
+                 { class: merged_select_class,
+                   required: required }.merge(html_options) %>
 
     <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>">expand_more</span>
   </div>

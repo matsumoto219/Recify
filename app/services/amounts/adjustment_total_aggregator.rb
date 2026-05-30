@@ -103,7 +103,7 @@ module Amounts
     end
 
     def uncertain_adjustment?(adjustment)
-      adjustment[:needs_review] == true || adjustment[:kind] == "other"
+      adjustment[:needs_review] == true || (adjustment[:kind] == "other" && adjustment[:source].to_s != "manual")
     end
 
     def signed_tax_from_net(signed, rate)

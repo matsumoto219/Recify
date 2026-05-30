@@ -12,6 +12,21 @@ class ReceiptAdjustment < ApplicationRecord
     other
   ].freeze
 
+  SURCHARGE_KINDS = %w[
+    service_charge
+    late_night_charge
+    delivery_fee
+    bag_fee
+    handling_fee
+  ].freeze
+
+  DISCOUNT_KINDS = %w[
+    receipt_discount
+    coupon
+    point_usage
+    return_refund
+  ].freeze
+
   SIGNS = %w[
     discount
     surcharge
@@ -52,6 +67,22 @@ class ReceiptAdjustment < ApplicationRecord
 
   def signed_amount
     surcharge? ? amount.to_i : -amount.to_i
+  end
+
+  def self.kind_options(kinds = KINDS)
+    kinds.map do |key|
+      [ I18n.t("enums.receipt_adjustment.kind.#{key}", default: key), key ]
+    end
+  end
+
+  def self.sign_options
+    SIGNS.map do |key|
+      [ I18n.t("enums.receipt_adjustment.sign.#{key}", default: key), key ]
+    end
+  end
+
+  def self.default_sign_for(kind)
+    SURCHARGE_KINDS.include?(kind.to_s) ? "surcharge" : "discount"
   end
 
   def kind_label

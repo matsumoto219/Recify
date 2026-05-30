@@ -166,14 +166,49 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it '不確実なadjustmentは確認対象にする' do
+    it 'manual sourceのother adjustmentは確認対象にしない' do
+      result = call_service(
+        receipt: { total_amount: 1_100 },
+        receipt_items: [
+          { line_total: 1_000 }
+        ],
+        receipt_adjustments: [
+          { kind: 'other', amount: 100, sign: 'surcharge', source: 'manual' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:blocking_inconsistencies]).not_to include(:adjustment_uncertain)
+        expect(result[:needs_review]).to eq(false)
+      end
+    end
+
+    it 'ai/ocr sourceのother adjustmentは確認対象にする' do
       result = call_service(
         receipt: { total_amount: 1_000 },
         receipt_items: [
           { line_total: 1_000 }
         ],
         receipt_adjustments: [
-          { kind: 'other', amount: 100, sign: 'discount', needs_review: true }
+          { kind: 'other', amount: 100, sign: 'discount', source: 'ai' },
+          { kind: 'other', amount: 50, sign: 'surcharge', source: 'ocr' }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:blocking_inconsistencies]).to include(:adjustment_uncertain)
+        expect(result[:needs_review]).to eq(true)
+      end
+    end
+
+    it 'needs_review adjustmentは確認対象にする' do
+      result = call_service(
+        receipt: { total_amount: 1_000 },
+        receipt_items: [
+          { line_total: 1_000 }
+        ],
+        receipt_adjustments: [
+          { kind: 'delivery_fee', amount: 100, sign: 'surcharge', source: 'manual', needs_review: true }
         ]
       )
 
