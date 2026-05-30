@@ -20,6 +20,12 @@ RSpec.describe 'Rack::Attack', type: :request do
     { 'REMOTE_ADDR' => ip }
   end
 
+  def turbo_request_headers(ip)
+    remote_addr(ip).merge(
+      'ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml'
+    )
+  end
+
   def invalid_sign_in_params
     {
       user: {
@@ -36,6 +42,7 @@ RSpec.describe 'Rack::Attack', type: :request do
     aggregate_failures do
       expect(response).to have_http_status(:too_many_requests)
       expect(retry_after).to be_positive
+      expect(response.headers['Turbo-Visit-Control']).to eq('reload')
       expect(response.media_type).to eq('text/html')
       expect(response.body).to include(I18n.t('errors.too_many_requests.title'))
       expect(response.body).to include(I18n.t('errors.too_many_requests.description'))
@@ -47,6 +54,8 @@ RSpec.describe 'Rack::Attack', type: :request do
       expect(response.body).to include('glass-panel')
       expect(response.body).to include('material-symbols-outlined')
       expect(response.body).to include('timer')
+      expect(response.body).to include('type="importmap"')
+      expect(response.body).to include('@hotwired/turbo-rails')
       expect(response.body).not_to include('<style>')
       expect(response.body).not_to include('class="card"')
       expect(response.body).not_to include('rack.attack')
@@ -78,6 +87,23 @@ RSpec.describe 'Rack::Attack', type: :request do
     post user_session_path, params: invalid_sign_in_params, headers: remote_addr(ip)
 
     expect_throttled_html_response
+  end
+
+  it 'asks Turbo form submissions to reload the throttled HTML page' do
+    ip = '203.0.113.18'
+
+    20.times do
+      post user_session_path, params: invalid_sign_in_params, headers: turbo_request_headers(ip)
+      expect(response).not_to have_http_status(:too_many_requests)
+    end
+
+    post user_session_path, params: invalid_sign_in_params, headers: turbo_request_headers(ip)
+
+    aggregate_failures do
+      expect_throttled_html_response
+      expect(response.headers['Retry-After'].to_i).to be_positive
+      expect(response.headers['Turbo-Visit-Control']).to eq('reload')
+    end
   end
 
   it 'keeps the sign in form accessible while throttling sign in posts' do
@@ -206,6 +232,7 @@ RSpec.describe 'Rack::Attack', type: :request do
       expect(status).to eq(429)
       expect(headers['Retry-After'].to_i).to be_positive
       expect(headers['Content-Type']).to eq('application/json; charset=utf-8')
+      expect(headers).not_to include('Turbo-Visit-Control')
       expect(json).to include(
         'error' => I18n.t('errors.too_many_requests.title'),
         'message' => I18n.t('errors.too_many_requests.description'),

@@ -131,12 +131,14 @@ class Rack::Attack
 
   self.throttled_responder = lambda do |request|
     retry_after = Rack::Attack.retry_after_for(request)
+    response_headers = { "Retry-After" => retry_after.to_s }
+    response_headers["Turbo-Visit-Control"] = "reload" unless Rack::Attack.json_request?(request)
 
     Rack::Attack.rack_response(
       request,
       status: 429,
       i18n_scope: :too_many_requests,
-      headers: { "Retry-After" => retry_after.to_s },
+      headers: response_headers,
       retry_after: retry_after
     )
   end
