@@ -736,10 +736,14 @@ RSpec.describe 'Receipts', type: :request do
       sign_select = details_panel.at_css('[data-receipt-form-target="adjustmentSignSelect"]')
       sign_hidden = adjustment_row.at_css('input[type="hidden"][data-receipt-form-target="adjustmentSignInput"]')
       mobile_detail_fields = adjustment_row.css('.receipt-form-adjustment-mobile-detail-field')
+      swipe_wrapper = adjustment_row.ancestors.find { |node| node['data-controller'].to_s.include?('swipe-action') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(adjustment_row['class']).to include('receipt-form-adjustment-row')
+        expect(swipe_wrapper).to be_present
+        expect(swipe_wrapper.at_css('[data-swipe-action-target="foreground"]')).to be_present
+        expect(swipe_wrapper.at_css('.swipe-action-background [data-action*="receipt-form#removeAdjustment"][data-swipe-action-target="action"]')).to be_present
         expect(adjustment_row.at_css('[data-receipt-form-target="adjustmentDetailsToggle"]')).to be_present
         expect(adjustment_row.at_css('[data-receipt-form-target="adjustmentDetailsIcon"]').text).to include('expand_more')
         expect(adjustment_row.at_css('.receipt-form-adjustment-mobile-summary')).to be_present
@@ -747,8 +751,6 @@ RSpec.describe 'Receipts', type: :request do
         expect(details_panel['class']).to include('collapsible-grid')
         expect(amount_input['class']).to include('field-stepper-input')
         expect(amount_input['class']).to include('text-center')
-        expect(amount_input['class']).to include('pl-4')
-        expect(amount_input['class']).not_to include('pl-8')
         expect(tax_rate_input['class']).to include('field-stepper-input')
         expect(tax_rate_input['class']).to include('text-center')
         expect(sign_select).to be_present
@@ -758,6 +760,18 @@ RSpec.describe 'Receipts', type: :request do
         expect(template.text).not_to include('ポイント利用は支払調整として扱い')
         expect(response.body).not_to include('種別に応じて加算または減算を自動設定します')
         expect(response.body).not_to include('ポイント利用は支払調整として扱い')
+      end
+    end
+
+    it 'mobile detailのfocus ringとdesktop hover重なり対策CSSを持つ' do
+      css = Rails.root.join('app/assets/tailwind/application.css').read
+
+      aggregate_failures do
+        expect(css).to include('.receipt-form-item-details-open .collapsible-grid-inner')
+        expect(css).to include('.receipt-form-adjustment-details-open .collapsible-grid-inner')
+        expect(css).to include('.swipe-action:hover')
+        expect(css).to include('.swipe-action:focus-within')
+        expect(css).to include('z-index: 30')
       end
     end
 

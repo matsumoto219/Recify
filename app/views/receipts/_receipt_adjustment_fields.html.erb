@@ -17,8 +17,25 @@
   tax_rate_value = adjustment.tax_rate.present? ? adjustment.tax_rate * 100 : nil
 %>
 
-<div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
-     data-receipt-form-target="adjustmentRow">
+<div class="swipe-action rounded-lg"
+     data-controller="swipe-action">
+  <div class="swipe-action-background md:hidden" aria-hidden="true">
+    <button type="button"
+            class="flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
+            data-action="click->receipt-form#removeAdjustment click->swipe-action#close"
+            data-swipe-action-target="action"
+            data-swipe-ignore
+            tabindex="-1"
+            aria-label="<%= t("receipts.adjustment_fields.remove_aria") %>">
+      <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+    </button>
+  </div>
+
+  <div class="swipe-action-foreground"
+       data-swipe-action-target="foreground"
+       data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
+    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
+         data-receipt-form-target="adjustmentRow">
   <div class="col-span-2 md:col-span-4">
     <div class="flex items-center gap-2 md:block">
       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.adjustment_fields.label") %></span>
@@ -212,4 +229,6 @@
     <%= adjustment_form.hidden_field :id %>
     <%= adjustment_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "adjustmentDestroyField" } %>
   <% end %>
+    </div>
+  </div>
 </div>

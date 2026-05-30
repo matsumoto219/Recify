@@ -87,9 +87,10 @@
                        "text-right"
                      end
 
-  prefix_spacing_class = prefix.present? ? "pl-8" : "pl-4"
+  balanced_affix_spacing = text_align == :center && (prefix.present? || suffix.present?)
+  prefix_spacing_class = (balanced_affix_spacing || prefix.present?) ? "pl-8" : "pl-4"
   # ステッパー表示時は余白を上書きせず、呼び出し側の input_class に委ねる
-  suffix_spacing_class = suffix.present? ? "pr-8" : "pr-4"
+  suffix_spacing_class = (balanced_affix_spacing || suffix.present?) ? "pr-8" : "pr-4"
   # ステッパー表示時は余白を上書きせず、呼び出し側の input_class に委ねる
   spinner_class = hide_spinner ? "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" : nil
   input_spacing_class = size == :dense ? "h-10 px-3 py-2" : nil

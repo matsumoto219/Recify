@@ -346,6 +346,11 @@ body {
     overflow: visible;
   }
 
+  .swipe-action:hover,
+  .swipe-action:focus-within {
+    z-index: 30;
+  }
+
   .swipe-action-background {
     display: none;
   }
@@ -1070,6 +1075,11 @@ body {
   .receipt-form-item-details-open .receipt-form-item-mobile-detail,
   .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail {
     display: block;
+  }
+
+  .receipt-form-item-details-open .collapsible-grid-inner,
+  .receipt-form-adjustment-details-open .collapsible-grid-inner {
+    padding: 0.125rem;
   }
 
   .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div,

@@ -110,7 +110,7 @@ export default class extends Controller {
   removeAdjustment (event) {
     event.preventDefault()
 
-    const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
+    const row = this.adjustmentRowForAction(event.currentTarget)
     if (!row) return
 
     const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
@@ -119,15 +119,28 @@ export default class extends Controller {
     if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deleteAdjustmentConfirmationMessageValue)) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="adjustmentDestroyField"]')
+    const rowContainer = this.adjustmentRowContainer(row)
 
     if (destroyField) {
       destroyField.value = '1'
       row.style.display = 'none'
+      if (rowContainer !== row) rowContainer.style.display = 'none'
     } else {
-      row.remove()
+      rowContainer.remove()
     }
 
     this.recalculate()
+  }
+
+  adjustmentRowForAction (element) {
+    const directRow = element.closest('[data-receipt-form-target="adjustmentRow"]')
+    if (directRow) return directRow
+
+    return element.closest('[data-controller~="swipe-action"]')?.querySelector('[data-receipt-form-target="adjustmentRow"]')
+  }
+
+  adjustmentRowContainer (row) {
+    return row.closest('[data-controller~="swipe-action"]') || row
   }
 
   adjustmentKindChanged (event) {
