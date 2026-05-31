@@ -1056,6 +1056,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
+        expect(receipt.store_name).to eq('ライフスマイルマーケット 渋谷店')
         expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to include([ 'return_refund', 980, 'discount' ])
       end
     end
@@ -1089,6 +1090,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
+        expect(receipt.store_name).to eq('スマイルデリバリー 東京中央店')
         expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
           [ 'bag_fee', 10, 'surcharge' ],
           [ 'delivery_fee', 550, 'surcharge' ]
@@ -1126,6 +1128,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
+        expect(receipt.store_name).to eq('ナイトダイニング 月灯り 新宿店')
         expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
           [ 'service_charge', 486, 'surcharge' ],
           [ 'late_night_charge', 486, 'surcharge' ]
@@ -2003,30 +2006,32 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '複数税率レシートはblocking mismatchでreview_neededにする' do
+    it '複数税率の外税レシートは印字税率と税率別対象額でcompletedにする' do
       receipt, amount = run_finalize_ocr_fixture('multiple_tax_receipt')
 
       aggregate_failures do
-        expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to eq([ 'total_mismatch' ])
-        expect(receipt.total_amount).to eq(1598)
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.total_amount).to eq(1732)
         expect(receipt.subtotal_amount).to eq(1598)
         expect(receipt.tax_amount).to eq(134)
         expect(receipt.tax_rate).to be_nil
-        expect(receipt.receipt_tax_details).to be_empty
-        expect(amount[:needs_review]).to be(true)
-        expect(amount[:mismatch_codes]).to eq([
-          'TOTAL_MISMATCH',
-          'TAX_DETAIL_INCOMPLETE',
-          'OCR_TOTAL_MISMATCH',
-          'PRICE_TAX_INCLUSION_UNCERTAIN'
+        expect(receipt.receipt_items.pluck(:tax_rate)).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1')
         ])
-        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
-        expect(amount[:warning_inconsistencies]).to eq([
-          :tax_detail_incomplete,
-          :ocr_total_mismatch,
-          :price_tax_inclusion_uncertain
-        ])
+        expect(receipt.receipt_tax_details.pluck(:description, :net_amount, :amount, :rate)).to contain_exactly(
+          [ '8%対象', 604, 44, BigDecimal('0.08') ],
+          [ '10%対象', 994, 90, BigDecimal('0.1') ]
+        )
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:mismatch_codes]).to eq([ 'PRICE_TAX_INCLUSION_UNCERTAIN' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
+        expect(amount[:warning_inconsistencies]).to eq([ :price_tax_inclusion_uncertain ])
         expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
@@ -2133,6 +2138,29 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '割引が多いレシートは商品単位値引きとレシート単位値引きを分けて合計を合わせる' do
+      receipt, amount = run_finalize_ocr_fixture('discount_heavy_receipt')
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.total_amount).to eq(571)
+        expect(receipt.receipt_items.pluck(:raw_text, :original_line_total, :discount_amount, :line_total)).to eq([
+          [ '国産豚こま切れ肉 200g', 398, 50, 348 ],
+          [ 'きゅうり 1本', 258, nil, 258 ],
+          [ "トマト (大玉)\n1個", 198, nil, 198 ],
+          [ 'たまご Mサイズ 6個入', 128, 30, 98 ]
+        ])
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'receipt_discount', 100, 'discount' ],
+          [ 'coupon', 200, 'discount' ],
+          [ 'receipt_discount', 31, 'discount' ]
+        )
+        expect(amount.dig(:computed, :adjusted_item_total)).to eq(571)
+        expect(amount[:blocking_inconsistencies]).to eq([ :adjustment_uncertain ])
+      end
+    end
+
     it 'Azure Totalがお預かり金額でも税内訳合計でtotalを補正する' do
       receipt, amount = run_finalize_ocr_fixture('deposit_total_receipt')
 
@@ -2145,7 +2173,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_amount).to eq(48)
         expect(amount[:needs_review]).to be(false)
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch ])
+        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch, :price_tax_inclusion_uncertain ])
       end
     end
 
@@ -2160,14 +2188,8 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_amount).to eq(22)
         expect(amount[:needs_review]).to be(false)
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([
-          :tax_detail_incomplete,
-          :ocr_total_mismatch
-        ])
-        expect(amount[:mismatch_codes]).to eq([
-          'TAX_DETAIL_INCOMPLETE',
-          'OCR_TOTAL_MISMATCH'
-        ])
+        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch ])
+        expect(amount[:mismatch_codes]).to eq([ 'OCR_TOTAL_MISMATCH' ])
       end
     end
   end

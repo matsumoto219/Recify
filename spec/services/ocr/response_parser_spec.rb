@@ -336,7 +336,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:store_name]).to eq('くらしのパートナー みどりスーパー 新宿南口店')
         expect(candidates[:total_amount]).to eq(8_808)
         expect(candidates[:subtotal_amount]).to eq(8_156)
-        expect(candidates[:tax_amount]).to eq(8)
+        expect(candidates[:tax_amount]).to eq(652)
         expect(candidates[:tax_rate]).to eq(0.08)
         expect(candidates[:payment_method_text]).to eq('quicpay')
         expect(candidates[:items].size).to eq(33)
@@ -393,24 +393,100 @@ RSpec.describe Ocr::ResponseParser do
       aggregate_failures do
         expect(result[:success]).to eq(true)
         expect(result.dig(:candidates, :payment_method_text)).to eq('クレジット')
+        expect(result.dig(:candidates, :tax_amount)).to eq(42)
         expect(discounted_items).to include(
           hash_including(
-            raw_text: "たまご Mサイズ 6個入\n国産豚こま切れ肉",
-            original_line_total: 128,
+            raw_text: '国産豚こま切れ肉 200g',
+            original_line_total: 398,
             discount_amount: 50,
             discount_rate: nil,
-            line_total: 78
+            line_total: 348
           )
         )
         expect(discounted_items).to include(
           hash_including(
-            raw_text: '夜間割引(20%)',
-            original_line_total: 100,
-            discount_amount: 345_909,
-            discount_rate: BigDecimal('0.08'),
-            line_total: 0
+            raw_text: 'たまご Mサイズ 6個入',
+            original_line_total: 128,
+            discount_amount: 30,
+            discount_rate: nil,
+            line_total: 98
           )
         )
+        expect(result.dig(:candidates, :items).map { |item| item[:raw_text] }).not_to include('夜間割引(20%)')
+      end
+    end
+
+    it '複数税率fixtureではitem税率と税率別対象額をOCR行から補完する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/multiple_tax_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      candidates = result[:candidates]
+
+      aggregate_failures do
+        expect(candidates[:items].map { |item| item[:tax_rate] }).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1')
+        ])
+        expect(candidates[:tax_details]).to contain_exactly(
+          hash_including(rate: 0.08, net_amount: 604, amount: 44),
+          hash_including(rate: 0.1, net_amount: 994, amount: 90)
+        )
+      end
+    end
+
+    it '単一内税fixtureでは対象額をTaxDetails net_amountへ推定しない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :tax_details)).to include(
+          hash_including(rate: 0.1, amount: 70, net_amount: nil)
+        )
+        expect(result.dig(:candidates, :items).map { |item| item[:tax_rate] }).to all(be_nil)
+      end
+    end
+
+    it '完全なMerchantNameがあるfixtureでは先頭商品名より店舗名を優先する' do
+      expectations = {
+        'return_receipt' => 'ライフスマイルマーケット 渋谷店',
+        'delivery_and_bag_fee_receipt' => 'スマイルデリバリー 東京中央店',
+        'service_and_late_night_receipt' => 'ナイトダイニング 月灯り 新宿店'
+      }
+
+      expectations.each do |fixture_name, expected_store_name|
+        fixture_response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{fixture_name}.json").read)
+
+        result = described_class.new(response: fixture_response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :store_name)).to eq(expected_store_name)
+      end
+    end
+
+    it 'discount_heavy_receiptでは商品単位値引きを対象商品へ紐付け、レシート単位値引きを明細化しない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      items = result.dig(:candidates, :items)
+
+      aggregate_failures do
+        expect(items.map { |item| item[:raw_text] }).to eq([
+          '国産豚こま切れ肉 200g',
+          'きゅうり 1本',
+          "トマト (大玉)\n1個",
+          'たまご Mサイズ 6個入'
+        ])
+        expect(items.map { |item| item.slice(:line_total, :original_line_total, :discount_amount) }).to eq([
+          { line_total: 348, original_line_total: 398, discount_amount: 50 },
+          { line_total: 258, original_line_total: 258, discount_amount: nil },
+          { line_total: 198, original_line_total: 198, discount_amount: nil },
+          { line_total: 98, original_line_total: 128, discount_amount: 30 }
+        ])
+        expect(result.dig(:candidates, :adjustment_candidates).map { |candidate| candidate[:amount] }).to contain_exactly(100, 200, 31)
       end
     end
 

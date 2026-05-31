@@ -58,7 +58,7 @@ class Ocr::ResponseParser
         country_region: extract_country_region(parsed_response),
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
-        tax_details: extract_tax_details(parsed_response),                                                         # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
+        tax_details: extract_tax_details(parsed_response, normalized_lines),                                       # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
         adjustment_candidates: extract_adjustment_candidates(parsed_response, normalized_lines),
         items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
         review_reasons: extract_review_reasons(parsed_response),
@@ -255,14 +255,16 @@ class Ocr::ResponseParser
 
   def extract_store_name_candidates(lines, merchant_name)
     normalized_lines = Array(lines).filter_map { |line| normalize_store_name_candidate(line) }
+    normalized_merchant_name = normalize_store_name_candidate(merchant_name)
     branch_name = extract_branch_like_store_name(normalized_lines, merchant_name)
     brand_name = extract_brand_like_store_name(normalized_lines, branch_name)
 
     candidates = []
     candidates << combine_brand_and_branch_name(brand_name, branch_name)
+    candidates << normalized_merchant_name if normalized_merchant_name.present? && branch_name.blank?
     candidates << brand_name
     candidates << branch_name
-    candidates << normalize_store_name_candidate(merchant_name)
+    candidates << normalized_merchant_name
 
     candidates.compact_blank.uniq
   end
@@ -442,9 +444,22 @@ class Ocr::ResponseParser
       fields.dig("TotalTax", "valueNumber") ||
       fields.dig("Tax", "valueCurrency", "amount") ||
       fields.dig("Tax", "valueNumber") ||
+      extract_tax_amount_from_tax_details(parsed_response, lines) ||
       extract_amount_from_lines(lines, /消費税|税額|tax/i)
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def extract_tax_amount_from_tax_details(parsed_response, lines)
+    amounts = extract_tax_details(parsed_response, lines).filter_map do |tax_detail|
+      next if normalize_rate_value(tax_detail[:rate]).blank?
+      next if tax_detail[:net_amount].present? && tax_detail[:net_amount].to_i <= 0
+
+      tax_detail[:amount]
+    end
+    return if amounts.blank?
+
+    amounts.sum
   end
 
   def extract_tax_rate(parsed_response)
@@ -992,22 +1007,100 @@ class Ocr::ResponseParser
   end
 
   # NOTE: 税詳細は取得できる場合のみ保存。現状は UI で未使用
-  def extract_tax_details(parsed_response)
+  def extract_tax_details(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
     return [] unless details.is_a?(Array)
 
-    details.map do |detail|
+    tax_detail_rates = details.filter_map do |detail|
+      normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))
+    end.uniq
+    infer_target_amounts = tax_detail_rates.size > 1
+    tax_details = details.map do |detail|
       value_object = detail["valueObject"] || {}
+      rate = value_object.dig("Rate", "valueNumber")
+      explicit_net_amount = value_object.dig("NetAmount", "valueCurrency", "amount") ||
+        value_object.dig("NetAmount", "valueNumber")
+      inferred_net_amount = infer_tax_detail_target_amount_from_lines(lines, rate) if infer_target_amounts && explicit_net_amount.nil?
       {
         description: value_object.dig("Description", "valueString") || value_object.dig("Description", "content"),
         amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber"),
-        rate: value_object.dig("Rate", "valueNumber"),
-        net_amount: value_object.dig("NetAmount", "valueCurrency", "amount") || value_object.dig("NetAmount", "valueNumber")
+        rate: rate,
+        net_amount: explicit_net_amount || inferred_net_amount,
+        _net_amount_inferred: explicit_net_amount.nil? && inferred_net_amount.present?
       }
     end
+
+    deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) }
   rescue NoMethodError, TypeError
     []
+  end
+
+  def deduplicate_inferred_tax_details(tax_details)
+    tax_details.group_by { |tax_detail| tax_detail_deduplication_key(tax_detail) }.flat_map do |key, group|
+      next group if key.blank? || group.size == 1
+
+      explicit_details_with_net_amount = group.reject { |tax_detail| tax_detail[:_net_amount_inferred] }.select { |tax_detail| tax_detail[:net_amount].present? }
+      next explicit_details_with_net_amount if explicit_details_with_net_amount.any?
+
+      group.all? { |tax_detail| tax_detail[:net_amount].blank? } ? [ group.first ] : group
+    end
+  end
+
+  def tax_detail_deduplication_key(tax_detail)
+    rate = normalize_rate_value(tax_detail[:rate])
+    amount = tax_detail[:amount]
+    return if rate.blank? || amount.blank?
+
+    [ rate.to_s("F"), amount.to_i ]
+  end
+
+  def infer_tax_detail_target_amount_from_lines(lines, rate)
+    normalized_rate = normalize_rate_value(rate)
+    return if normalized_rate.blank?
+
+    rate_label = rate_percentage_label(normalized_rate)
+    Array(lines).each_with_index do |line, index|
+      next unless tax_target_line?(line, rate_label)
+
+      same_line_amount = tax_target_amount_from_line(line)
+      return same_line_amount if same_line_amount.present?
+
+      neighboring_amount = tax_target_amount_from_line(lines[index + 1])
+      return neighboring_amount if neighboring_amount.present?
+    end
+
+    nil
+  end
+
+  def tax_target_line?(line, rate_label)
+    text = line.to_s
+    text.match?(/#{Regexp.escape(rate_label)}\s*[%％].{0,8}対象/) &&
+      !text.match?(/消費税|税額|tax/i)
+  end
+
+  def tax_target_amount_from_line(line)
+    amounts = line.to_s.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
+      amount = ReceiptAmountService.parse_amount_or_nil(match)
+      amount&.to_i
+    end
+
+    amounts.select { |amount| amount.positive? && amount > 20 }.max
+  end
+
+  def normalize_rate_value(value)
+    return if value.blank?
+
+    rate = BigDecimal(value.to_s)
+    rate > 1 ? rate / 100 : rate
+  rescue ArgumentError
+    nil
+  end
+
+  def rate_percentage_label(rate)
+    percentage = rate * 100
+
+    percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
   end
 
   def extract_items(parsed_response, lines = [])
@@ -1018,9 +1111,15 @@ class Ocr::ResponseParser
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
 
     # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
-    items.map.with_index do |item, index|
+    items.filter_map.with_index do |item, index|
       value_object = item["valueObject"] || {}
       total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      raw_text = value_object.dig("Description", "valueString") ||
+        value_object.dig("Description", "content") ||
+        item["content"]
+      raw_text = clean_item_raw_text(raw_text, item)
+      next if adjustment_only_item?(item, raw_text:, total_price:)
+
       discount_amount = discount_details_by_index.dig(index, :amount).to_i
       original_line_total = discount_details_by_index.dig(index, :original_line_total).presence || total_price
       line_total = if discount_amount.positive?
@@ -1030,9 +1129,7 @@ class Ocr::ResponseParser
       end
 
       {
-        raw_text: value_object.dig("Description", "valueString") ||
-          value_object.dig("Description", "content") ||
-          item["content"],
+        raw_text: raw_text,
         price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
         quantity: value_object.dig("Quantity", "valueNumber"),
         quantity_unit: value_object.dig("QuantityUnit", "valueString"),
@@ -1041,11 +1138,42 @@ class Ocr::ResponseParser
         original_line_total: original_line_total,
         discount_amount: discount_amount.positive? ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
+        tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"]
       }
     end
   rescue NoMethodError, TypeError
     []
+  end
+
+  def adjustment_only_item?(item, raw_text:, total_price:)
+    content = normalize_text(item["content"])
+    normalized_raw_text = normalize_text(raw_text)
+
+    return true if receipt_level_discount_line?(normalized_raw_text)
+
+    total_price.blank? &&
+      item_discount_keyword_line?(content) &&
+      content.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+  end
+
+  def clean_item_raw_text(raw_text, item)
+    return raw_text unless item["content"].to_s.match?(/値引|割引|discount/i)
+
+    raw_text.to_s.lines.first&.chomp.presence || raw_text
+  end
+
+  def extract_item_tax_rate(item, value_object)
+    explicit_rate = value_object.dig("TaxRate", "valueNumber") ||
+      value_object.dig("Tax", "valueNumber") ||
+      value_object.dig("Rate", "valueNumber")
+    return explicit_rate if explicit_rate.present?
+
+    item["content"].to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).filter_map do |match|
+      normalize_rate_value(match.first)
+    end.first
+  rescue NoMethodError, TypeError
+    nil
   end
 
   # NOTE: 割引検出。
@@ -1057,11 +1185,11 @@ class Ocr::ResponseParser
 
     item_labels = items.map do |item|
       value_object = item["valueObject"] || {}
-      normalize_text(
-        value_object.dig("Description", "valueString") ||
+      raw_text = value_object.dig("Description", "valueString") ||
           value_object.dig("Description", "content") ||
           item["content"]
-      )
+
+      normalize_text(clean_item_raw_text(raw_text, item))
     end
 
     item_original_totals = items.map do |item|
@@ -1070,49 +1198,80 @@ class Ocr::ResponseParser
     end
 
     current_item_index = nil
+    discount_target_item_index = nil
     next_item_index = 0
     waiting_discount = false
     current_discount_rate = nil
     discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
 
     normalized_lines.each do |line|
+      if waiting_discount
+        extracted_rate = extract_discount_rate_from_line(line)
+        if extracted_rate
+          current_discount_rate = extracted_rate
+          next
+        end
+
+        matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
+        if matched_discount_target_index
+          discount_target_item_index = matched_discount_target_index
+          next
+        end
+
+        discount_amount = extract_discount_amount_from_line(line)
+        if discount_amount.positive?
+          target_item_index = discount_target_item_index || current_item_index
+          original_line_total = normalize_amount_for_discount(item_original_totals[target_item_index])
+          detail = discount_details_by_index[target_item_index]
+          detail[:amount] += discount_amount
+          detail[:rate] ||= current_discount_rate
+          detail[:original_line_total] ||= original_line_total if original_line_total.positive?
+
+          waiting_discount = false
+          current_discount_rate = nil
+          discount_target_item_index = nil
+          next
+        end
+      end
+
       matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
       if matched_item_index
         current_item_index = matched_item_index
+        discount_target_item_index = nil
         next_item_index = matched_item_index + 1
         waiting_discount = false
         current_discount_rate = nil
         next
       end
 
-      if discount_keyword_line?(line)
+      if item_discount_keyword_line?(line)
         waiting_discount = current_item_index.present?
+        discount_target_item_index = current_item_index
         current_discount_rate = nil
         next
       end
-
-      next unless waiting_discount
-
-      extracted_rate = extract_discount_rate_from_line(line)
-      if extracted_rate
-        current_discount_rate = extracted_rate
-        next
-      end
-
-      discount_amount = extract_discount_amount_from_line(line)
-      next unless discount_amount.positive?
-
-      original_line_total = normalize_amount_for_discount(item_original_totals[current_item_index])
-      detail = discount_details_by_index[current_item_index]
-      detail[:amount] += discount_amount
-      detail[:rate] ||= current_discount_rate
-      detail[:original_line_total] ||= original_line_total if original_line_total.positive?
-
-      waiting_discount = false
-      current_discount_rate = nil
     end
 
     discount_details_by_index
+  end
+
+  def match_discount_target_item_index_from_line(line, item_labels, current_item_index)
+    return if current_item_index.blank?
+
+    item_labels.each_with_index.first(current_item_index + 1).reverse.find do |label, _index|
+      next false if label.blank?
+
+      discount_target_line_matches_label?(line, label)
+    end&.last
+  end
+
+  def discount_target_line_matches_label?(line, label)
+    normalized_line = normalize_text(line)
+    normalized_label = normalize_text(label)
+    return true if normalized_line.include?(normalized_label) || normalized_label.include?(normalized_line)
+
+    key = normalized_line.split(/[[:space:]　(（]/).first
+    key.present? && key.length >= 2 && normalized_label.include?(key)
   end
 
   def match_item_index_from_line(line, item_labels, start_index)
@@ -1123,8 +1282,14 @@ class Ocr::ResponseParser
     end&.last
   end
 
-  def discount_keyword_line?(line)
-    line.match?(/割引|値引|discount|off/i)
+  def item_discount_keyword_line?(line)
+    return false if receipt_level_discount_line?(line)
+
+    line.match?(/値引|割引|discount|off/i)
+  end
+
+  def receipt_level_discount_line?(line)
+    line.match?(/クーポン|会員|夜間|ポイント|アプリ|coupon|member|point/i)
   end
 
   def extract_discount_rate_from_line(line)

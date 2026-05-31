@@ -752,16 +752,29 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
       end
 
-      it 'multiple_tax_receipt は複数税率なので補完されない' do
+      it 'multiple_tax_receipt はOCR item行の印字税率を保持する' do
         params = described_class.call(ocr_result: ocr_fixture('multiple_tax_receipt'), ai_result: nil)
 
-        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1')
+        ])
       end
 
-      it 'external_tax_receipt は複数税率なので補完されない' do
+      it 'external_tax_receipt はOCR item行の印字税率を保持する' do
         params = described_class.call(ocr_result: ocr_fixture('external_tax_receipt'), ai_result: nil)
 
-        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+        expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1')
+        ])
       end
     end
 
