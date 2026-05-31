@@ -841,6 +841,66 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'guest本登録の期限切れconfirmation tokenは拒否され再送後のtokenで確認できる' do
+      issued_at = Time.zone.parse('2026-05-23 10:00:00')
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      new_email = 'guest-expired-confirmation@example.com'
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      travel_to(issued_at) do
+        patch user_registration_path,
+              params: {
+                update_context: 'guest_registration',
+                user: {
+                  email: new_email,
+                  password: 'password123',
+                  password_confirmation: 'password123',
+                  legal_agreement: '1'
+                }
+              }
+      end
+
+      expired_token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+
+      travel_to(issued_at + 3.days + 1.minute) do
+        get user_confirmation_path(confirmation_token: expired_token)
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
+        expect(response.body).to include('期限')
+        expect(guest.reload).to be_guest
+        expect(guest.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to eq(new_email)
+      end
+
+      ActionMailer::Base.deliveries.clear
+      sign_in guest
+
+      travel_to(issued_at + 3.days + 2.minutes) do
+        post user_confirmation_path,
+             params: {
+               user: {
+                 email: new_email
+               }
+             }
+
+        new_token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+        get user_confirmation_path(confirmation_token: new_token)
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(guest.reload).not_to be_guest
+        expect(guest.email).to eq(new_email)
+        expect(guest.unconfirmed_email).to be_nil
+      end
+    end
+
     it 'guest本登録申請で同意がなければ更新しない' do
       sign_out user
       guest = User.guest!
@@ -978,6 +1038,60 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(user.reload.email).to eq('reconfirmable-new@example.com')
+        expect(user.unconfirmed_email).to be_nil
+      end
+    end
+
+    it 'メール変更の期限切れconfirmation tokenは拒否され再送後のtokenで確認できる' do
+      issued_at = Time.zone.parse('2026-05-23 10:00:00')
+      old_email = user.email
+      new_email = 'reconfirmable-expired@example.com'
+
+      travel_to(issued_at) do
+        patch user_registration_path,
+              params: {
+                update_context: 'email',
+                user: {
+                  email: new_email,
+                  current_password: 'password'
+                }
+              }
+      end
+
+      confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?(new_email) }
+      expired_token = confirmation_token_from(confirmation_mail)
+
+      travel_to(issued_at + 3.days + 1.minute) do
+        get user_confirmation_path(confirmation_token: expired_token)
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
+        expect(response.body).to include('期限')
+        expect(user.reload.email).to eq(old_email)
+        expect(user.unconfirmed_email).to eq(new_email)
+      end
+
+      ActionMailer::Base.deliveries.clear
+      sign_in user
+
+      travel_to(issued_at + 3.days + 2.minutes) do
+        post user_confirmation_path,
+             params: {
+               user: {
+                 email: new_email
+               }
+             }
+
+        new_confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?(new_email) }
+        new_token = confirmation_token_from(new_confirmation_mail)
+        get user_confirmation_path(confirmation_token: new_token)
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(user.reload.email).to eq(new_email)
         expect(user.unconfirmed_email).to be_nil
       end
     end

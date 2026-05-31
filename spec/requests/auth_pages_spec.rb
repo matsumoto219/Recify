@@ -390,6 +390,84 @@ RSpec.describe 'Auth pages', type: :request do
         expect(User.find_by!(email: email)).to be_confirmed
       end
     end
+
+    it 'confirmation link confirms the registered user within the confirmation period' do
+      issued_at = Time.zone.parse('2026-05-23 10:00:00')
+      email = 'confirm-link-within-period@example.com'
+
+      travel_to(issued_at) do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end
+
+      token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+
+      travel_to(issued_at + 3.days - 1.minute) do
+        get user_confirmation_path(confirmation_token: token)
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(User.find_by!(email: email)).to be_confirmed
+      end
+    end
+
+    it 'expired confirmation token is rejected and resend issues a usable token' do
+      issued_at = Time.zone.parse('2026-05-23 10:00:00')
+      email = 'expired-confirmation@example.com'
+
+      travel_to(issued_at) do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end
+
+      user = User.find_by!(email: email)
+      expired_token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+
+      travel_to(issued_at + 3.days + 1.minute) do
+        get user_confirmation_path(confirmation_token: expired_token)
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
+        expect(response.body).to include('期限')
+        expect(user.reload).not_to be_confirmed
+      end
+
+      ActionMailer::Base.deliveries.clear
+
+      travel_to(issued_at + 3.days + 2.minutes) do
+        post user_confirmation_path,
+          params: {
+            user: {
+              email: email
+            }
+          }
+
+        new_token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+        get user_confirmation_path(confirmation_token: new_token)
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(user.reload).to be_confirmed
+      end
+    end
   end
 
   describe 'GET /users/edit' do
