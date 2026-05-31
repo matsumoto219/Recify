@@ -337,17 +337,67 @@ RSpec.describe 'Rack::Attack', type: :request do
     expect_blocklisted_html_response
   end
 
-  it 'counts admin probes separately and only blocks after the higher threshold' do
+  it 'does not count normal admin pages as admin probes' do
+    normal_admin_paths = [
+      '/admin',
+      '/admin/',
+      '/admin/users',
+      '/admin/users/1',
+      '/admin/audit_logs',
+      '/admin/audit_logs/26',
+      '/admin/receipt_analysis_runs',
+      '/admin/receipt_analysis_runs/run_abc',
+      '/admin/contact_requests',
+      '/admin/receipt_analysis_cleanup',
+      '/admin/external_services/status'
+    ]
+
+    aggregate_failures do
+      normal_admin_paths.each do |path|
+        request = scanner_request_for(path)
+
+        expect(Rack::Attack.admin_probe_request?(request)).to be(false), "#{path} should not be an admin probe"
+        expect(Rack::Attack.scanner_request?(request)).to be(false), "#{path} should not be a scanner path"
+      end
+    end
+  end
+
+  it 'counts suspicious admin probes separately and only blocks after the higher threshold' do
     ip = '203.0.113.21'
 
     Rack::Attack::ADMIN_PROBE_MAXRETRY.times do
-      get '/admin', headers: remote_addr(ip)
+      get '/admin/login', headers: remote_addr(ip)
       expect(response).not_to have_http_status(:forbidden)
     end
 
-    get '/admin/dashboard', headers: remote_addr(ip)
+    get '/admin.php', headers: remote_addr(ip)
 
-    expect_blocklisted_html_response(path: 'admin/dashboard')
+    expect_blocklisted_html_response(path: 'admin.php')
+  end
+
+  it 'treats suspicious admin paths as admin probes' do
+    suspicious_admin_paths = [
+      '/admin/login',
+      '/admin.php',
+      '/adminer',
+      '/administrator',
+      '/admin/login.php',
+      '/admin/index.php',
+      '/admin/admin.php',
+      '/cpanel',
+      '/webadmin',
+      '/manager',
+      '/cms',
+      '/wp-admin',
+      '/wp-admin/',
+      '/wp-login.php'
+    ]
+
+    aggregate_failures do
+      suspicious_admin_paths.each do |path|
+        expect(Rack::Attack.admin_probe_request?(scanner_request_for(path))).to be(true), "#{path} should be an admin probe"
+      end
+    end
   end
 
   it 'does not count the admin service status JSON polling endpoint as an admin probe' do
@@ -361,10 +411,34 @@ RSpec.describe 'Rack::Attack', type: :request do
     end
   end
 
-  it 'counts direct HTML hits to the admin service status endpoint as admin probes' do
+  it 'does not count direct HTML hits to the admin service status endpoint as admin probes' do
     request = scanner_request_for('/admin/external_services/status')
 
-    expect(Rack::Attack.admin_probe_request?(request)).to be(true)
+    expect(Rack::Attack.admin_probe_request?(request)).to be(false)
+  end
+
+  it 'does not block signed-in admin users while they browse normal admin pages repeatedly' do
+    admin = create(:user, :admin)
+    audit_log = create(:audit_log)
+    ip = '203.0.113.24'
+    sign_in admin
+
+    [
+      admin_audit_log_path(audit_log),
+      admin_users_path,
+      admin_receipt_analysis_runs_path
+    ].each do |path|
+      30.times do
+        get path, headers: remote_addr(ip)
+        expect(response).not_to have_http_status(:forbidden)
+      end
+    end
+
+    get root_path, headers: remote_addr(ip)
+    expect(response).not_to have_http_status(:forbidden)
+
+    get receipts_path, headers: remote_addr(ip)
+    expect(response).not_to have_http_status(:forbidden)
   end
 
   it 'blocks repeated ActiveStorage direct upload probes' do

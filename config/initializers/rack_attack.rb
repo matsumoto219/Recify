@@ -10,7 +10,22 @@ class Rack::Attack
   ADMIN_PROBE_MAXRETRY = 20
   ADMIN_PROBE_FINDTIME = 10.minutes
   ADMIN_PROBE_BANTIME = 30.minutes
-  ADMIN_PROBE_PATH = %r{\A/admin(?:\z|/)}.freeze
+  ADMIN_PROBE_PATH = %r{
+    \A/
+    (?:
+      admin/(?:login(?:\.php)?|index\.php|admin\.php)
+      |admin\.php
+      |adminer
+      |administrator
+      |cpanel
+      |webadmin
+      |manager
+      |cms
+      |wp-admin(?:/|\z)
+      |wp-login\.php
+    )
+    (?:\z|[/?#])
+  }ix.freeze
   ADMIN_SERVICE_STATUS_PATH = %r{\A/admin/external_services/status(?:\z|[/?#])}.freeze
   ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
   SCANNER_PATH = %r{
