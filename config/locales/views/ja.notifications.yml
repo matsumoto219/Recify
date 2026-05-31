@@ -17,7 +17,7 @@ ja:
       delete: 削除
       delete_confirm: この通知を削除しますか？
       delete_aria: "%{title}を削除"
-      deleted_target: 対象は削除されています
+      deleted_target: 対象は既に削除されています
     badge:
       unread_label: "未読通知 %{count}件"
     receipts:

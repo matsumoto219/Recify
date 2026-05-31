@@ -60,7 +60,7 @@ ja:
           label: AI補完
           description_html: 商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください
       support:
-        description: 困ったことや不具合等をサポートへ連絡できます。
+        description: 困ったことや不具合等をサポートへお問い合わせできます。
         contact: お問い合わせを開く
       danger:
         delete_account: 退会
@@ -109,7 +109,7 @@ ja:
         title: 本登録
         description: |-
           現在はゲスト利用中です。
-          メールアドレスとパスワードを登録すると、本登録アカウントとして引き続き利用できます。
+          メールアドレスとパスワードを登録すると、本登録アカウントとして引き続きご利用頂けます。
         fields:
           email: メールアドレス
           email_placeholder: new@example.com
@@ -144,7 +144,7 @@ ja:
           failed: コピーできませんでした。
         two_factor:
           title: 2要素認証 (2FA)
-          subtitle: 2要素認証で、ログイン時のセキュリティを強化できます。
+          subtitle: 2要素認証で、アカウントのセキュリティを強化できます。
           action: 有効化する
           empty: 認証アプリはまだ設定されていません。
           enabled_at: "有効化: %{datetime}"
@@ -205,7 +205,7 @@ ja:
           delete_confirm: このパスキーを削除しますか？
           empty: 登録済みのパスキーはありません。
           label: ラベル
-          label_placeholder: "例: iPhone Face ID"
+          label_placeholder: "例: ◯◯のパスキー"
           guest_unavailable: 本登録後に安全な本人確認を設定できます。
           messages:
             unavailable: 本登録後にこの設定を利用できます。

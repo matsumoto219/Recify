@@ -36,4 +36,4 @@ ja:
       ocr_unavailable: 解析機能は一時停止中です。手動入力をご利用ください。
       analysis_completed: レシート解析が完了しました
       analysis_review_needed: レシート解析が完了しました。内容を確認してください
-      analysis_failed: 処理に失敗しました。手動入力で続行できます。
+      analysis_failed: 処理に失敗しました。内容を確認してください
