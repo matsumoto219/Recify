@@ -179,6 +179,7 @@ module Ai
         For purchase:
         - purchased_at_text: prefer OCR purchased_at_text. Do NOT invent timestamps.
         - If OCR contains only a date and purchased_at_candidates or purchase_context_lines contain a clearly supported transaction time, complete it to a datetime.
+        - If purchased_at_text contains only a date and a single plausible transaction time is available in purchased_at_candidates or purchase_context_lines, return a full datetime instead of a date-only value.
         - Use purchased_at_candidates, purchase_context_lines, and filtered_content as supporting evidence.
         - Prefer receipt, transaction, and payment context over order, preparation, reservation, or reference workflow times.
         - Use meta.country_region as a reference for local date and time notation.

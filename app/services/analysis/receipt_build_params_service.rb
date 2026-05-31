@@ -20,7 +20,7 @@ module Analysis
         lines = normalized_lines(normalized_ocr_result)
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
-        receipt_attributes = build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes])
+        receipt_attributes = build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes], lines)
         receipt_items_attributes = build_receipt_items_attributes(
           candidates,
           lines,
@@ -97,14 +97,14 @@ module Analysis
         }
       end
 
-      def build_receipt_attributes(candidates, ai_receipt_attributes)
+      def build_receipt_attributes(candidates, ai_receipt_attributes, lines)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
 
         {
           store_name: ai_attrs[:store_name].presence || candidates[:store_name],
           store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # NOTE: 保存はするが、実レシートで未取得が多く現状UI活用は限定的
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
-          purchased_at: ai_attrs[:purchased_at].presence || parse_purchased_at(ai_attrs[:purchased_at_text]) || parse_purchased_at(candidates[:purchased_at_text]),
+          purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
           total_amount: ai_attrs[:total_amount] || normalize_amount(candidates[:total_amount]),
           subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
           tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
@@ -840,6 +840,66 @@ module Analysis
         Time.zone.parse(value.to_s)
       rescue ArgumentError, TypeError
         nil
+      end
+
+      def parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines)
+        explicit_ai_value = parse_purchased_at(ai_attrs[:purchased_at])
+        return explicit_ai_value if explicit_ai_value.present?
+
+        ai_text = ai_attrs[:purchased_at_text].presence
+        parsed_ai_text = parse_purchased_at(ai_text)
+        return parsed_ai_text if parsed_ai_text.present? && !date_only_text?(ai_text)
+
+        candidate_text = candidates[:purchased_at_text].presence
+        parsed_candidate_text = parse_purchased_at(candidate_text)
+        return parsed_candidate_text if parsed_candidate_text.present? && !date_only_text?(candidate_text)
+
+        date_text = ai_text.presence || candidate_text
+        parsed_date = parsed_ai_text || parsed_candidate_text
+        return parsed_date unless parsed_date.present? && date_only_text?(date_text)
+
+        time_text = extract_unique_time_candidate(
+          Array(candidates[:purchased_at_candidates]) +
+            Array(candidates[:purchase_context_lines]) +
+            Array(lines)
+        )
+        return parsed_date if time_text.blank?
+
+        parse_purchased_at("#{parsed_date.strftime('%Y-%m-%d')} #{time_text}") || parsed_date
+      end
+
+      def date_only_text?(value)
+        text = value.to_s.strip
+        return false if text.blank?
+        return false if extract_time_expression(text).present?
+
+        text.match?(/\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/) ||
+          text.match?(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}/)
+      end
+
+      def extract_unique_time_candidate(values)
+        candidates = Array(values).filter_map do |value|
+          text = value.to_s.strip
+          next if text.blank?
+          next unless purchase_time_context_line?(text)
+
+          extract_time_expression(text)
+        end.uniq
+
+        candidates.one? ? candidates.first : nil
+      end
+
+      def purchase_time_context_line?(text)
+        return false if text.match?(/予約|注文|受付|発行|有効期限|期限|期間|販売期間/)
+
+        extract_time_expression(text).present?
+      end
+
+      def extract_time_expression(text)
+        match = text.to_s.match(/(?:\A|[^\d])([01]?\d|2[0-3])(?:[:：]|時)([0-5]\d)分?(?:\z|[^\d])/)
+        return nil unless match
+
+        "#{match[1].to_i.to_s.rjust(2, '0')}:#{match[2]}"
       end
 
       def normalize_amount(value)

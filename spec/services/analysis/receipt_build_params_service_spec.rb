@@ -1232,6 +1232,103 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    context '購入日付だけに一意な時刻候補を補完する場合' do
+      let(:parking_receipt_ocr_result) do
+        {
+          candidates: {
+            store_name: 'サンプル公園駐車場',
+            purchased_at_text: '2026-04-19',
+            total_amount: 500,
+            payment_method_text: '現金',
+            items: [
+              { raw_text: '駐車券自家用車等', line_total: 500, confidence: 0.975 }
+            ],
+            payments: [],
+            tax_details: []
+          },
+          lines: [
+            '2026年 4月19日(日)No2',
+            '駐車券自家用車等',
+            '0796 16時41分'
+          ]
+        }
+      end
+
+      it 'AIが日付のみを返してもOCRの一意な時刻候補を結合する' do
+        ai_result = {
+          receipt_attributes: {
+            purchased_at_text: '2026-04-19'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 16:41'))
+      end
+
+      it '時刻候補の前にあるレシート番号らしき数字を時刻に混ぜない' do
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at].strftime('%H:%M')).to eq('16:41')
+      end
+
+      it 'コロン区切りの時刻候補も結合する' do
+        parking_receipt_ocr_result[:lines] = [
+          '2026年 4月19日(日)No2',
+          '0796 16:41'
+        ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 16:41'))
+      end
+
+      it '時刻候補が複数ある場合は結合しない' do
+        parking_receipt_ocr_result[:lines] = [
+          '2026年 4月19日(日)No2',
+          '入庫 15時20分',
+          '0796 16時41分'
+        ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
+      end
+
+      it 'AIが明確な日時を返した場合はAI値を優先する' do
+        ai_result = {
+          receipt_attributes: {
+            purchased_at_text: '2026-04-19 17:05'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 17:05'))
+      end
+
+      it '日付のみで時刻候補がない場合は従来通り日付のみを保存する' do
+        parking_receipt_ocr_result[:lines] = [ '2026年 4月19日(日)No2' ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
+      end
+
+      it '非購入文脈の時刻だけでは補完しない' do
+        parking_receipt_ocr_result[:lines] = [
+          '2026年 4月19日(日)No2',
+          '予約 16時41分'
+        ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
+      end
+    end
+
     context 'processing_error 系と ocr_completed_at を引き継ぐ場合' do
       let(:ai_result) do
         {
