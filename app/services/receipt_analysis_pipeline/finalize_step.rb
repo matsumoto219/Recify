@@ -115,6 +115,7 @@ class ReceiptAnalysisPipeline
 
     def save_ai_result!(ocr_result, ai_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
+      record_build_params_snapshot(params)
 
       # === AmountService integration ===
       amount_result = ReceiptAmountService.call(
@@ -187,6 +188,7 @@ class ReceiptAnalysisPipeline
 
     def save_ocr_only_result!(ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
+      record_build_params_snapshot(params)
 
       # === AmountService integration point (OCR only) ===
       amount_result = ReceiptAmountService.call(
@@ -246,6 +248,7 @@ class ReceiptAnalysisPipeline
 
     def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
+      record_build_params_snapshot(params)
 
       # === AmountService integration point (fallback) ===
       amount_result = ReceiptAmountService.call(
@@ -432,6 +435,12 @@ class ReceiptAnalysisPipeline
       snapshot[:profile] ||= {}
       snapshot[:profile][:tax_rate_correction] = tax_rate_correction
       snapshot
+    end
+
+    def record_build_params_snapshot(params)
+      return if run.blank?
+
+      ReceiptAnalysisRuns.record_build_params_snapshot(run, params)
     end
 
     def normalize_items_attributes(items)

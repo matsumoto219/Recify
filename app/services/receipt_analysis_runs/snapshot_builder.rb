@@ -6,6 +6,7 @@ module ReceiptAnalysisRuns
     AI_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_result_v1"
     AI_NORMALIZED_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_normalized_result_v1"
     FINALIZE_DECISION_SCHEMA_VERSION = ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
+    BUILD_PARAMS_SCHEMA_VERSION = "receipt_analysis_run_build_params_v1"
     FINAL_RESULT_SCHEMA_VERSION = "receipt_analysis_run_final_result_v1"
     PROMPT_SCHEMA_VERSION = "recify_receipt_analysis_v1"
 
@@ -17,6 +18,7 @@ module ReceiptAnalysisRuns
     MAX_OCR_ITEMS = 100
     MAX_OCR_PAYMENTS = 20
     MAX_OCR_TAX_DETAILS = 20
+    MAX_OCR_ADJUSTMENT_CANDIDATES = 50
     MAX_AI_NORMALIZED_ITEMS = 100
     MAX_AI_NORMALIZED_ADJUSTMENTS = 50
     MAX_FULL_CONTEXT_LINES = 150
@@ -37,17 +39,23 @@ module ReceiptAnalysisRuns
       blob_key
       cookie
       cookies
+      full_prompt
       headers
       image
+      image_payload
       messages
       openai_raw_response
       prompt
       prompt_text
+      provider_raw_response
+      raw_ai_response
       raw_response
       response_body
       secret
       signed_id
+      system_prompt
       token
+      user_prompt
     ].freeze
     FORBIDDEN_KEY_FRAGMENTS = %w[
       authorization
@@ -79,6 +87,10 @@ module ReceiptAnalysisRuns
 
       def finalize_decision_snapshot(decision, at: Time.current)
         new.finalize_decision_snapshot(decision, at: at)
+      end
+
+      def build_params_snapshot(build_params)
+        new.build_params_snapshot(build_params)
       end
 
       def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil)
@@ -116,6 +128,24 @@ module ReceiptAnalysisRuns
           receipt_attributes: finalize_decision_receipt_attributes(decision&.receipt_attributes),
           metadata: finalize_decision_metadata(decision&.metadata),
           recorded_at: safe_value(at)
+        }.compact
+      )
+    end
+
+    def build_params_snapshot(build_params)
+      params = normalized_hash(build_params)
+      receipt_attrs = normalized_hash(params[:receipt_attributes])
+
+      sanitize_hash(
+        {
+          schema_version: BUILD_PARAMS_SCHEMA_VERSION,
+          receipt_attributes: build_params_receipt_attributes(receipt_attrs),
+          receipt_items_count: Array(params[:receipt_items_attributes]).size,
+          receipt_payments_count: Array(params[:receipt_payments_attributes]).size,
+          receipt_tax_details_count: Array(params[:receipt_tax_details_attributes]).size,
+          receipt_adjustments_count: Array(params[:receipt_adjustments_attributes]).size,
+          corrections: build_params_corrections_snapshot(params[:corrections], params[:tax_rate_correction]),
+          review_reasons: limited_strings(params[:review_reasons], MAX_REVIEW_REASONS)
         }.compact
       )
     end
@@ -305,12 +335,38 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def build_params_receipt_attributes(attributes)
+      {
+        store_name: safe_string(attributes[:store_name]),
+        store_address: safe_string(attributes[:store_address]),
+        store_phone_number: safe_string(attributes[:store_phone_number]),
+        purchased_at: safe_value(attributes[:purchased_at]),
+        total_amount: safe_value(attributes[:total_amount]),
+        subtotal_amount: safe_value(attributes[:subtotal_amount]),
+        tax_amount: safe_value(attributes[:tax_amount]),
+        tax_rate: safe_value(attributes[:tax_rate]),
+        payment_method: safe_string(attributes[:payment_method]),
+        country_region: safe_string(attributes[:country_region]),
+        receipt_type: safe_string(attributes[:receipt_type]),
+        processing_error_code: safe_string(attributes[:processing_error_code])
+      }.compact
+    end
+
+    def build_params_corrections_snapshot(corrections, tax_rate_correction)
+      normalized = normalized_hash(corrections).to_h
+      normalized["tax_rate_correction"] ||= tax_rate_correction if tax_rate_correction.present?
+
+      sanitize_hash(normalized)
+    end
+
     def ocr_candidates_snapshot(candidates)
       {
         store_name: safe_string(candidates[:store_name]),
         store_address: safe_string(candidates[:store_address]),
         store_phone_number: safe_string(candidates[:store_phone_number]),
         purchased_at_text: safe_string(candidates[:purchased_at_text]),
+        purchased_at_candidates: limited_strings(candidates[:purchased_at_candidates], MAX_PURCHASED_AT_CANDIDATES),
+        purchase_context_lines: limited_strings(candidates[:purchase_context_lines], MAX_PURCHASED_AT_CANDIDATES),
         total_amount: safe_value(candidates[:total_amount]),
         subtotal_amount: safe_value(candidates[:subtotal_amount]),
         tax_amount: safe_value(candidates[:tax_amount]),
@@ -321,6 +377,7 @@ module ReceiptAnalysisRuns
         receipt_type: safe_string(candidates[:receipt_type]),
         payments: limited_ocr_payments(candidates[:payments]),
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
+        adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], MAX_OCR_ADJUSTMENT_CANDIDATES),
         items: limited_ocr_items(candidates[:items]),
         review_reasons: limited_strings(candidates[:review_reasons], MAX_REVIEW_REASONS),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])

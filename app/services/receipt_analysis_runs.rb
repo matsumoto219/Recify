@@ -80,6 +80,13 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def record_build_params_snapshot(run, build_params, at: Time.current)
+      Tracker.new(run).record_build_params_snapshot(
+        SnapshotBuilder.build_params_snapshot(build_params),
+        at: at
+      )
+    end
+
     def record_final_result(run, receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil, at: Time.current)
       Tracker.new(run).record_final_result(
         SnapshotBuilder.final_result_summary(

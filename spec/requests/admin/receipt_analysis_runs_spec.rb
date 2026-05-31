@@ -249,17 +249,108 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
   describe 'GET /admin/receipt_analysis_runs/:run_key' do
     it 'adminユーザーはshowを閲覧できる' do
       admin = create(:user, :admin)
+      receipt = create(
+        :receipt,
+        :completed,
+        purchased_at: Time.zone.local(2026, 4, 19, 16, 41),
+        review_reasons: [ 'purchased_at_uncertain' ]
+      )
+      receipt.update!(
+        amount_calculation_profile: {
+          'profile' => { 'tax_detail_amount_basis' => 'gross' },
+          'warnings' => [ 'price_tax_inclusion_uncertain' ],
+          'blocking_mismatch_codes' => [ 'ITEM_TOTAL_MISMATCH' ]
+        }
+      )
       run = create(
         :receipt_analysis_run,
         :succeeded,
+        receipt: receipt,
         ocr_summary: { schema_version: 'test', line_count: 3 },
-        ai_input_snapshot: { filtered_content: 'safe content' },
+        ocr_result_snapshot: {
+          lines: [
+            '2026年 4月19日(日)no2',
+            '0796 16時41分'
+          ],
+          candidates: {
+            purchased_at_text: '2026-04-19',
+            purchased_at_candidates: [ '0796 16時41分' ],
+            adjustment_candidates: [
+              { source_text: 'Short Dated Stock Discount -2160', amount: 2160, sign_hint: 'discount' }
+            ]
+          },
+          meta: { line_count: 2 }
+        },
+        ai_input_snapshot: {
+          filtered_content: 'safe content',
+          full_context_lines: [
+            { index: 0, text: '0796 16時41分' },
+            { index: 1, text: '10%対象 44 消費税 4' }
+          ],
+          purchase: {
+            purchased_at_text: '2026-04-19',
+            purchased_at_candidates: [ '0796 16時41分' ],
+            purchase_context_lines: [ '領収書', '0796 16時41分' ]
+          },
+          tax: {
+            tax_details: [ { rate: '0.10', net_amount: 44, amount: 4 } ],
+            tax_context_lines: [ '10%対象 44 消費税 4' ]
+          },
+          items: [
+            {
+              index: 1,
+              raw_text: 'アウトレット袋S',
+              line_total: 44,
+              tax_rate_candidate: '0.10',
+              matched_content_lines: [ 'アウトレット袋S 44' ]
+            }
+          ]
+        },
         ai_result_summary: { success: true },
-        final_result_summary: { receipt_status: 'completed' }
+        ai_normalized_result_snapshot: {
+          receipt_attributes: {
+            purchased_at_text: '2026-04-19'
+          },
+          receipt_items_attributes: [],
+          receipt_adjustments_attributes: [
+            { kind: 'other', amount: 91, needs_review: true, review_reasons: [ 'adjustment_uncertain' ] }
+          ]
+        },
+        final_result_summary: { receipt_status: 'completed' },
+        metadata: {
+          build_params_snapshot: {
+            schema_version: 'receipt_analysis_run_build_params_v1',
+            receipt_attributes: {
+              purchased_at: '2026-04-19T16:41:00+09:00'
+            },
+            receipt_adjustments_count: 2,
+            corrections: {
+              purchased_at_fallback: {
+                applied: true,
+                source: 'ocr_time_candidate',
+                date_text: '2026-04-19',
+                time_text: '16時41分',
+                ignored_prefix: '0796',
+                result: '2026-04-19 16:41'
+              },
+              tax_rate_correction: {
+                reason: 'tax_detail_amount_match',
+                matches: [
+                  { target: 'item', amount: 44, rate: '0.1' },
+                  { target: 'adjustment', amount: 2160, rate: '0.08' }
+                ]
+              }
+            },
+            review_reasons: []
+          }
+        }
       )
       sign_in admin
 
       get admin_receipt_analysis_run_path(run.run_key)
+
+      document = Nokogiri::HTML(response.body)
+      analysis_sections = document.css('[data-admin-analysis-section]').map { |node| node['data-admin-analysis-section'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -278,6 +369,40 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('再解析にはパスキー再認証が必要です')
         expect(response.body).to include(new_admin_passkey_reauthentication_path)
         expect(response.body).to include('safe content')
+        expect(response.body).to include('OCR summary')
+        expect(response.body).to include('AI input snapshot')
+        expect(response.body).to include('AI result summary')
+        expect(response.body).to include('Final result summary')
+        expect(response.body).to include('AI input highlights')
+        expect(response.body).to include('purchase_context_lines')
+        expect(response.body).to include('領収書')
+        expect(response.body).to include('tax_details')
+        expect(response.body).to include('10%対象 44 消費税 4')
+        expect(response.body).to include('adjustment_candidates')
+        expect(response.body).to include('Short Dated Stock Discount -2160')
+        expect(response.body).to include('full_context_lines')
+        expect(response.body).to include('アウトレット袋S')
+        expect(analysis_sections).to eq(%w[ocr ai build_params amount finalize])
+        expect(response.body).to include('Correction summary')
+        expect(response.body).to include('purchased_at fallback')
+        expect(response.body).to include('applied')
+        expect(response.body).to include('2026-04-19 16:41 / ocr_time_candidate')
+        expect(response.body).to include('tax rate corrections')
+        expect(response.body).to include('2 total / 1 uncertain')
+        expect(response.body).to include('amount warnings')
+        expect(response.body).to include('amount blocking')
+        expect(response.body).to include('gross')
+        expect(response.body).to include(I18n.l(receipt.purchased_at, format: :short))
+        expect(response.body).to include('purchased_at_uncertain')
+        expect(response.body).to include('OCR result snapshot')
+        expect(response.body).to include('AI normalized result snapshot')
+        expect(response.body).to include('BuildParams snapshot')
+        expect(response.body).to include('2026年 4月19日(日)no2')
+        expect(response.body).to include('0796 16時41分')
+        expect(response.body).to include('purchased_at_text')
+        expect(response.body).to include('receipt_attributes')
+        expect(response.body).to include('purchased_at_fallback')
+        expect(response.body).to include('ocr_time_candidate')
         expect(response.body).not_to include('_HORIZONTAL')
         expect(response.body).not_to include('sliders_horizontal')
         expect(response.body).not_to include('Analysis::RetryService.call')
@@ -331,6 +456,10 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('オリジナル画像')
         expect(response.body).to include('画像はありません')
         expect(response.body).to include('画像メタ情報')
+        expect(response.body).to include('OCR result snapshot')
+        expect(response.body).to include('AI normalized result snapshot')
+        expect(response.body).to include('BuildParams snapshot')
+        expect(response.body).to include('{}')
       end
     end
 
@@ -380,6 +509,43 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         final_result_summary: {
           receipt_status: 'completed',
           signed_id: 'SIGNED'
+        },
+        ocr_result_snapshot: {
+          lines: [ 'safe OCR line' ],
+          blob_key: 'BLOB KEY',
+          api_key: 'API KEY',
+          nested: {
+            token: 'TOKEN',
+            signed_id: 'SIGNED SNAPSHOT'
+          }
+        },
+        ai_normalized_result_snapshot: {
+          receipt_attributes: {
+            purchased_at_text: '2026-04-19'
+          },
+          prompt_text: 'FULL SNAPSHOT PROMPT',
+          full_prompt: 'FULL PROMPT SNAPSHOT BODY',
+          system_prompt: 'SYSTEM PROMPT SNAPSHOT BODY',
+          user_prompt: 'USER PROMPT SNAPSHOT BODY',
+          openai_raw_response: 'RAW SNAPSHOT AI RESPONSE',
+          raw_ai_response: 'RAW AI SNAPSHOT RESPONSE',
+          image_payload: 'IMAGE PAYLOAD',
+          nested: {
+            secret: 'SNAPSHOT SECRET'
+          }
+        },
+        metadata: {
+          build_params_snapshot: {
+            receipt_attributes: {
+              purchased_at: '2026-04-19T16:41:00+09:00'
+            },
+            full_prompt: 'BUILD FULL PROMPT',
+            blob_key: 'BUILD BLOB KEY',
+            signed_id: 'BUILD SIGNED ID',
+            api_key: 'BUILD API KEY',
+            token: 'BUILD TOKEN',
+            secret: 'BUILD SECRET'
+          }
         }
       )
       sign_in admin
@@ -389,12 +555,32 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('safe content')
+        expect(response.body).to include('safe OCR line')
+        expect(response.body).to include('purchased_at_text')
         expect(response.body).to include('line_count')
         expect(response.body).not_to include('RAW OCR RESPONSE')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('RAW AI RESPONSE')
         expect(response.body).not_to include('SECRET')
         expect(response.body).not_to include('SIGNED')
+        expect(response.body).not_to include('BLOB KEY')
+        expect(response.body).not_to include('API KEY')
+        expect(response.body).not_to include('TOKEN')
+        expect(response.body).not_to include('SIGNED SNAPSHOT')
+        expect(response.body).not_to include('FULL SNAPSHOT PROMPT')
+        expect(response.body).not_to include('FULL PROMPT SNAPSHOT BODY')
+        expect(response.body).not_to include('SYSTEM PROMPT SNAPSHOT BODY')
+        expect(response.body).not_to include('USER PROMPT SNAPSHOT BODY')
+        expect(response.body).not_to include('RAW SNAPSHOT AI RESPONSE')
+        expect(response.body).not_to include('RAW AI SNAPSHOT RESPONSE')
+        expect(response.body).not_to include('IMAGE PAYLOAD')
+        expect(response.body).not_to include('SNAPSHOT SECRET')
+        expect(response.body).not_to include('BUILD FULL PROMPT')
+        expect(response.body).not_to include('BUILD BLOB KEY')
+        expect(response.body).not_to include('BUILD SIGNED ID')
+        expect(response.body).not_to include('BUILD API KEY')
+        expect(response.body).not_to include('BUILD TOKEN')
+        expect(response.body).not_to include('BUILD SECRET')
       end
     end
 

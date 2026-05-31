@@ -463,6 +463,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             item_count: 1,
             adjustment_count: 1
           )
+          expect(params.dig(:corrections, :tax_rate_correction)).to eq(params[:tax_rate_correction])
           expect(params[:tax_rate_correction][:matches]).to contain_exactly(
             { target: 'item', amount: 44, rate: '0.1' },
             { target: 'adjustment', amount: 2_160, rate: '0.08' }
@@ -1264,7 +1265,19 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: ai_result)
 
-        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 16:41'))
+        aggregate_failures do
+          expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 16:41'))
+          expect(params.dig(:corrections, :purchased_at_fallback)).to include(
+            applied: true,
+            source: 'ocr_time_candidate',
+            date_text: '2026-04-19',
+            time_text: '16時41分',
+            normalized_time: '16:41',
+            ignored_prefix: '0796',
+            source_text: '0796 16時41分',
+            result: '2026-04-19 16:41'
+          )
+        end
       end
 
       it '時刻候補の前にあるレシート番号らしき数字を時刻に混ぜない' do

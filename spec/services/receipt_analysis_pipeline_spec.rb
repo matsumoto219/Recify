@@ -782,6 +782,66 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'BuildParams snapshotに購入時刻fallbackのsafe metadataを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_merge(
+        lines: [
+          '2026年 4月19日(日)No2',
+          '駐車券自家用車等',
+          '0796 16時41分'
+        ],
+        candidates: {
+          purchased_at_text: '2026-04-19',
+          purchased_at_candidates: [ '0796 16時41分' ],
+          purchase_context_lines: [ '領収書', '0796 16時41分' ]
+        }
+      )
+      ai_result = successful_ai_result.merge(
+        receipt_attributes: {
+          store_name: 'AIテストストア',
+          purchased_at_text: '2026-04-19',
+          payment_method: 'cash'
+        }
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.run_finalize(run)
+
+      snapshot = run.reload.metadata.fetch('build_params_snapshot')
+      snapshot_json = JSON.generate(snapshot)
+
+      aggregate_failures do
+        expect(snapshot).to include('schema_version' => 'receipt_analysis_run_build_params_v1')
+        expect(snapshot.dig('receipt_attributes', 'purchased_at')).to eq('2026-04-19T16:41:00+09:00')
+        expect(snapshot.dig('corrections', 'purchased_at_fallback')).to include(
+          'applied' => true,
+          'source' => 'ocr_time_candidate',
+          'date_text' => '2026-04-19',
+          'time_text' => '16時41分',
+          'ignored_prefix' => '0796',
+          'result' => '2026-04-19 16:41'
+        )
+        expect(snapshot).to include(
+          'receipt_items_count' => 1,
+          'receipt_adjustments_count' => 0,
+          'receipt_tax_details_count' => 0
+        )
+        expect(snapshot_json).not_to include('blob_key', 'signed_id', 'api_key', 'token', 'secret', 'prompt', 'raw_response')
+      end
+    end
+
     it 'finalize decisionが欠落している場合はrunをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)

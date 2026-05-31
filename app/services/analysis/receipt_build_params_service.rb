@@ -20,7 +20,8 @@ module Analysis
         lines = normalized_lines(normalized_ocr_result)
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
-        receipt_attributes = build_receipt_attributes(candidates, normalized_ai_result[:receipt_attributes], lines)
+        ai_receipt_attributes = normalized_ai_result[:receipt_attributes]
+        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines)
         receipt_items_attributes = build_receipt_items_attributes(
           candidates,
           lines,
@@ -46,6 +47,10 @@ module Analysis
           receipt_tax_details_attributes,
           receipt_attributes
         )
+        corrections = build_params_corrections(
+          purchased_at_fallback: purchased_at_fallback_snapshot(ai_receipt_attributes, candidates, lines),
+          tax_rate_correction: tax_rate_correction
+        )
 
         {
           # OCR/AI内部形式 -> receipts 保存用attributes
@@ -58,7 +63,8 @@ module Analysis
           receipt_tax_details_attributes: receipt_tax_details_attributes,
           receipt_adjustments_attributes: receipt_adjustments_attributes,
           review_reasons: review_reasons,
-          tax_rate_correction: tax_rate_correction
+          tax_rate_correction: tax_rate_correction,
+          corrections: corrections
         }
       end
 
@@ -858,14 +864,72 @@ module Analysis
         parsed_date = parsed_ai_text || parsed_candidate_text
         return parsed_date unless parsed_date.present? && date_only_text?(date_text)
 
-        time_text = extract_unique_time_candidate(
+        time_candidate = extract_unique_time_candidate_detail(
           Array(candidates[:purchased_at_candidates]) +
             Array(candidates[:purchase_context_lines]) +
             Array(lines)
         )
-        return parsed_date if time_text.blank?
+        return parsed_date if time_candidate.blank?
 
-        parse_purchased_at("#{parsed_date.strftime('%Y-%m-%d')} #{time_text}") || parsed_date
+        parse_purchased_at("#{parsed_date.strftime('%Y-%m-%d')} #{time_candidate[:time]}") || parsed_date
+      end
+
+      def build_params_corrections(purchased_at_fallback:, tax_rate_correction:)
+        {
+          purchased_at_fallback: purchased_at_fallback,
+          tax_rate_correction: tax_rate_correction
+        }.compact
+      end
+
+      def purchased_at_fallback_snapshot(ai_attrs, candidates, lines)
+        explicit_ai_value = parse_purchased_at(ai_attrs[:purchased_at])
+        return { applied: false, source: "ai_purchased_at" } if explicit_ai_value.present?
+
+        ai_text = ai_attrs[:purchased_at_text].presence
+        parsed_ai_text = parse_purchased_at(ai_text)
+        return { applied: false, source: "ai_purchased_at_text" } if parsed_ai_text.present? && !date_only_text?(ai_text)
+
+        candidate_text = candidates[:purchased_at_text].presence
+        parsed_candidate_text = parse_purchased_at(candidate_text)
+        if parsed_candidate_text.present? && !date_only_text?(candidate_text)
+          return { applied: false, source: "ocr_purchased_at_text" }
+        end
+
+        date_text = ai_text.presence || candidate_text
+        parsed_date = parsed_ai_text || parsed_candidate_text
+        unless parsed_date.present? && date_only_text?(date_text)
+          return {
+            applied: false,
+            reason: "date_candidate_missing_or_not_date_only"
+          }
+        end
+
+        time_candidate = extract_unique_time_candidate_detail(
+          Array(candidates[:purchased_at_candidates]) +
+            Array(candidates[:purchase_context_lines]) +
+            Array(lines)
+        )
+        if time_candidate.blank?
+          return {
+            applied: false,
+            reason: "unique_time_candidate_missing",
+            date_text: date_text
+          }
+        end
+
+        result = parse_purchased_at("#{parsed_date.strftime('%Y-%m-%d')} #{time_candidate[:time]}")
+        return { applied: false, reason: "combined_datetime_parse_failed", date_text: date_text } if result.blank?
+
+        {
+          applied: true,
+          source: "ocr_time_candidate",
+          date_text: date_text,
+          time_text: time_candidate[:raw_time_text],
+          normalized_time: time_candidate[:time],
+          ignored_prefix: time_candidate[:ignored_prefix],
+          source_text: time_candidate[:source_text],
+          result: result.strftime("%Y-%m-%d %H:%M")
+        }.compact
       end
 
       def date_only_text?(value)
@@ -878,13 +942,17 @@ module Analysis
       end
 
       def extract_unique_time_candidate(values)
+        extract_unique_time_candidate_detail(values)&.fetch(:time)
+      end
+
+      def extract_unique_time_candidate_detail(values)
         candidates = Array(values).filter_map do |value|
           text = value.to_s.strip
           next if text.blank?
           next unless purchase_time_context_line?(text)
 
-          extract_time_expression(text)
-        end.uniq
+          extract_time_expression_detail(text)
+        end.uniq { |candidate| candidate[:time] }
 
         candidates.one? ? candidates.first : nil
       end
@@ -896,10 +964,23 @@ module Analysis
       end
 
       def extract_time_expression(text)
+        extract_time_expression_detail(text)&.fetch(:time)
+      end
+
+      def extract_time_expression_detail(text)
         match = text.to_s.match(/(?:\A|[^\d])([01]?\d|2[0-3])(?:[:：]|時)([0-5]\d)分?(?:\z|[^\d])/)
         return nil unless match
 
-        "#{match[1].to_i.to_s.rjust(2, '0')}:#{match[2]}"
+        raw_end = match.end(2)
+        raw_time_text = text[match.begin(1)...raw_end].to_s
+        raw_time_text += "分" if text[raw_end] == "分"
+
+        {
+          time: "#{match[1].to_i.to_s.rjust(2, '0')}:#{match[2]}",
+          raw_time_text: raw_time_text,
+          ignored_prefix: text[0...match.begin(1)].to_s.strip.presence,
+          source_text: text.to_s.strip
+        }
       end
 
       def normalize_amount(value)

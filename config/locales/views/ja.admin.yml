@@ -190,9 +190,39 @@ ja:
           timing_provider: Timing / Provider
           snapshot_presence: Snapshot presence
           retry_options: Retry options
+          ocr: OCR
+          ai: AI
+          build_params: BuildParams
+          amount: Amount
+          finalize: Finalize
           finalize_decision: Finalize decision
           amount_calculation_profile: Amount calculation profile
           summaries: Summaries
+          detailed_snapshots: 詳細snapshot
+        summary_labels:
+          ocr_summary: OCR summary
+          ai_input_snapshot: AI input snapshot
+          ai_result_summary: AI result summary
+          final_result_summary: Final result summary
+        correction_summary:
+          title: Correction summary
+          empty: "-"
+          applied: applied
+          not_applied: not applied
+          purchased_at_fallback: purchased_at fallback
+          tax_rate_corrections: tax rate corrections
+          adjustments: adjustments
+          adjustment_counts: "%{count} total / %{uncertain} uncertain"
+          amount_warnings: amount warnings
+          amount_blocking: amount blocking
+          tax_detail_amount_basis: tax detail amount basis
+        ai_input_highlights:
+          title: AI input highlights
+          purchase: purchase
+          tax: tax
+          items: items
+          adjustments: adjustments
+          context: full_context_lines / filtered_content
         labels:
           run_key: run_key
           stage_status: stage / status
@@ -201,6 +231,8 @@ ja:
           display_public_id: display / public id
           receipt_status: receipt status
           store_total: store / total
+          purchased_at: purchased_at
+          review_reasons: review reasons
           user_id: user id
           kind: kind
           admin: admin
@@ -224,6 +256,11 @@ ja:
         snapshot:
           present: present
           missing: missing
+        snapshot_details:
+          names:
+            ocr_result_snapshot: OCR result snapshot
+            ai_normalized_result_snapshot: AI normalized result snapshot
+            build_params_snapshot: BuildParams snapshot
         retry:
           authenticated_guidance: パスキー再認証済みです。再解析には実行理由と確認文字列が必要です。
           reauthentication_guidance: 再解析にはパスキー再認証が必要です。再認証後、再解析内容と理由をもう一度入力してください。
