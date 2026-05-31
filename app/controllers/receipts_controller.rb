@@ -276,7 +276,14 @@ class ReceiptsController < ApplicationController
     @receipt = current_user.receipts.new
 
     if result.success?
-      redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.batch_enqueued", count: result.count))
+      notice_message =
+        if result.count == 1
+          t("flash.receipts.enqueued")
+        else
+          t("flash.receipts.batch_enqueued", count: result.count)
+        end
+
+      redirect_to receipts_path, **temporary_notice_options(notice_message)
     else
       Rails.logger.warn(
         "[ReceiptBatchUpload] failed user_id=#{current_user.id} errors=#{result.errors.join(', ')}"

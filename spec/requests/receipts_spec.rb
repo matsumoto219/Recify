@@ -983,6 +983,31 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'library uploadが1件ならbatch処理のまま単一upload文言を表示する' do
+      files = [ uploaded_receipt_fixture ]
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
+
+      receipt = Receipt.order(:id).last
+      run = receipt.receipt_analysis_runs.sole
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt).to be_processing
+        expect(receipt.image).to be_attached
+        expect(run.source).to eq('batch_upload')
+        expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
+        expect(flash[:notice]).to eq(I18n.t('flash.receipts.enqueued'))
+        expect(flash[:notice]).not_to eq(I18n.t('flash.receipts.batch_enqueued', count: 1))
+      end
+    end
+
     it 'active runが既にある場合はduplicate enqueueしない' do
       allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
       allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
@@ -1035,6 +1060,27 @@ RSpec.describe 'Receipts', type: :request do
           expect(run.requested_by_user).to eq(user)
           expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
         end
+      end
+    end
+
+    it 'library uploadが2件ならbatch upload文言に作成件数を表示する' do
+      files = [
+        uploaded_receipt_fixture,
+        uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
+      ]
+      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { images: files } }
+      end.to change(Receipt, :count).by(2)
+        .and change(ReceiptAnalysisRun, :count).by(2)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(Receipt.order(:id).last(2).flat_map(&:receipt_analysis_runs).map(&:source)).to all(eq('batch_upload'))
+        expect(flash[:notice]).to eq(I18n.t('flash.receipts.batch_enqueued', count: 2))
       end
     end
 
