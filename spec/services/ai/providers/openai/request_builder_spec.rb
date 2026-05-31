@@ -27,7 +27,8 @@ RSpec.describe Ai::Providers::Openai::RequestBuilder do
 
       aggregate_failures do
         expect(request[:input]).to be_an(Array)
-        expect(request.dig(:input, 0, :content, 0, :text)).to include("Output MUST be a valid JSON object.")
+        expect(request.dig(:input, 0, :content, 0, :text)).to include("You MUST output only a valid JSON object")
+        expect(request.dig(:input, 0, :content, 0, :text)).to include("Do NOT output anything except JSON.")
         expect(request.dig(:input, 1, :content, 0, :text)).to include("Input JSON:")
       end
     end

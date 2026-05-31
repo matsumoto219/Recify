@@ -42,43 +42,42 @@ RSpec.describe Ai::PromptTemplate do
       )
     end
 
-    it '非課税可能性をレシート文面・商品名・周辺文脈から判断するよう指示する' do
+    it 'item tax_rate は許可された入力根拠から判断するよう指示する' do
       expect(user_prompt).to include(
-        'For items that may be non-taxable or zero-rated, determine tax_rate from receipt text, item name, raw_text, matched_content_lines, matched_filtered_content_lines, and nearby context.'
+        "tax_rate: return the item's consumption tax rate only when it can be determined from tax.tax_details, tax.tax_context_lines, item raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content."
       )
     end
 
     it '確信が低い場合は confidence を低くし、tax_rate を安全に選べない場合は null と needs_review true にするよう指示する' do
       expect(user_prompt).to include(
-        'When tax_rate confidence is low, lower tax_rate_confidence instead of guessing.'
+        'tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.'
       )
       expect(user_prompt).to include(
-        'When an item tax_rate cannot be selected safely, return null for tax_rate and set needs_review = true.'
+        'Use tax_rate = null and needs_review = true when uncertain.'
       )
     end
 
     it '不確実な税率を一般的な税率へ無理に寄せないよう指示する' do
       expect(user_prompt).to include(
-        'Do not force uncertain item tax rates into common local rates such as 0.08 or 0.1.'
+        'Do NOT force uncertain tax rates into common local rates.'
       )
     end
 
     it '印字された税率別内訳を注記より優先するよう指示する' do
       aggregate_failures do
-        expect(user_prompt).to include('Printed tax breakdown lines are stronger evidence than generic tax notes.')
+        expect(user_prompt).to include('Printed tax breakdowns take priority over generic tax notes.')
         expect(user_prompt).to include('tax.tax_details target/net amount and tax amount that uniquely match')
         expect(user_prompt).to include('tax_rate_reason = tax_detail_amount_match')
         expect(user_prompt).to include('Footnotes and symbols apply only to the item/adjustment they clearly mark.')
-        expect(user_prompt).to include('This is language-agnostic: VAT breakdowns, tax summaries')
+        expect(user_prompt).to include('Printed VAT breakdowns, tax summaries')
         expect(user_prompt).to include('use that printed rate for all taxable items and taxable adjustments')
-        expect(user_prompt).to include('do not classify all items as 8% from a generic reduced-rate note alone')
       end
     end
 
     it 'tax_rate_confidence と tax_rate_reason の返却ルールを指示する' do
       aggregate_failures do
         expect(user_prompt).to include('tax_rate_confidence MUST be a decimal between 0.0 and 1.0 when returned.')
-        expect(user_prompt).to include('tax_rate_reason MUST be a short enum-like string when returned.')
+        expect(user_prompt).to include('tax_rate_reason MUST be selected from the allowed tax rate reasons when returned.')
         expect(user_prompt).to include('tax_detail_amount_match, printed_item_tax_marker, tax_summary_rate_match')
         expect(user_prompt).to include('standard_rate, reduced_rate, zero_or_exempt_candidate, tax_rate_not_visible, country_rule_uncertain, receipt_context_uncertain, ambiguous_tax_rate')
         expect(user_prompt).to include('tax_rate_confidence and tax_rate_reason may be returned even when tax_rate is null.')
@@ -110,10 +109,9 @@ RSpec.describe Ai::PromptTemplate do
 
     it 'レシートではない画像の判定ルールを指示する' do
       aggregate_failures do
-        expect(user_prompt).to include('First decide whether the document can be treated as a receipt, invoice, or purchase proof.')
-        expect(user_prompt).to include('Advertisements, development notes, general documents, text-only memos, and product lists without checkout/payment context are not receipts.')
-        expect(user_prompt).to include('If uncertain, do not set is_receipt to false; set is_receipt = true and needs_review = true.')
-        expect(user_prompt).to include('Prioritize document-type classification before completing OCR candidate values.')
+        expect(user_prompt).to include('Before completing OCR candidate values, decide whether the Input JSON represents a receipt.')
+        expect(user_prompt).to include('Product lists, memos, articles, advertisements, and screenshots without checkout or payment context are not receipts.')
+        expect(user_prompt).to include('If uncertain, do not set is_receipt = false. Set needs_review = true and use low-to-medium is_receipt_confidence.')
       end
     end
 
@@ -121,29 +119,46 @@ RSpec.describe Ai::PromptTemplate do
       aggregate_failures do
         expect(system_prompt).to include('Allowed rejection_reason values:')
         expect(system_prompt).to include('no_text, memo, article, screenshot, presentation, poster, shopping_list, menu, code_snippet, unknown_document, other')
-        expect(user_prompt).to include('When is_receipt = false, rejection_reason MUST be one of the allowed rejection_reason values.')
-        expect(user_prompt).to include('Do NOT output free-form rejection_reason values outside the allowed list.')
+        expect(user_prompt).to include('When is_receipt = false, return document_type and an allowed rejection_reason value if they can be identified; otherwise return null.')
       end
     end
 
     it 'is_receipt_confidence の返却ルールを指示する' do
       aggregate_failures do
-        expect(user_prompt).to include('is_receipt_confidence MUST be a number between 0.0 and 1.0 when returned.')
-        expect(user_prompt).to include('Higher confidence means closer to 1.0.')
-        expect(user_prompt).to include('Use is_receipt = false only when confidence is high.')
-        expect(user_prompt).to include('If uncertain, keep is_receipt = true, set needs_review = true, and use low-to-medium is_receipt_confidence.')
+        expect(user_prompt).to include('is_receipt_confidence MUST be a number between 0.0 and 1.0 when returned. 0.0 is the lowest confidence and 1.0 is the highest confidence.')
+        expect(user_prompt).to include('If uncertain, do not set is_receipt = false. Set needs_review = true and use low-to-medium is_receipt_confidence.')
       end
     end
 
     it '特殊加減算はfull_context_lines全体から検出するよう指示する' do
       aggregate_failures do
         expect(system_prompt).to include('full_context_lines as raw OCR line context')
-        expect(user_prompt).to include('Search the entire full_context_lines list for adjustment rows.')
-        expect(user_prompt).to include('Do NOT limit detection to known keywords.')
-        expect(user_prompt).to include('full_context_lines is the source of truth.')
+        expect(user_prompt).to include('Use full_context_lines to detect adjustments.')
+        expect(user_prompt).to include('Do NOT rely only on known keywords.')
+        expect(user_prompt).to include('full_context_lines takes priority.')
         expect(user_prompt).to include('overseas, abbreviated, or unknown adjustment wording.')
         expect(user_prompt).to include('Labels and amounts may be split across neighboring OCR lines.')
-        expect(user_prompt).to include('source_line_index MUST match the index from full_context_lines.')
+        expect(user_prompt).to include('Tie each adjustment amount to source_text, previous_text, or next_text.')
+        expect(user_prompt).to include('Treat point_usage as a payment adjustment. Do NOT treat point_usage as an item discount or tax adjustment.')
+        expect(user_prompt).to include('Use sign according to whether the adjustment increases or decreases the total.')
+        expect(system_prompt).not_to include('item_discount')
+        expect(user_prompt).not_to include('item_discount')
+      end
+    end
+
+    it '出力不変条件をsystem promptで指示する' do
+      aggregate_failures do
+        expect(system_prompt).to include('Output invariants:')
+        expect(system_prompt).to include('Every returned item MUST map to an input item by index.')
+        expect(system_prompt).to include('Do NOT add or remove item indexes.')
+        expect(system_prompt).to include('price, quantity, quantity_unit, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.')
+        expect(system_prompt).to include('amount MUST be an unsigned absolute integer.')
+        expect(system_prompt).to include('source_text and source_line_index MUST refer to full_context_lines.')
+        expect(system_prompt).to include('Do NOT output an adjustment if its amount cannot be tied to OCR text.')
+        expect(system_prompt).to include('Use only allowed review reason codes.')
+        expect(system_prompt).to include('Do NOT combine codes.')
+        expect(system_prompt).to include('When is_receipt = false, still return store = {}, purchase = {}, payment = {}, items = [], receipt_adjustments = [], needs_review = false, and review_reasons = [].')
+        expect(user_prompt).to include('For non-receipts, follow the system-defined empty output shape.')
       end
     end
   end
