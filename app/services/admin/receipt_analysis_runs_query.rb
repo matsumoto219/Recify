@@ -244,7 +244,7 @@ module Admin
         finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {}),
         amount_calculation_profile: amount_calculation_profile
       }
-      record[:retry_options] = Analysis::RetryService.eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
+      record[:retry_options] = Analysis.retry_eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
       record
     end
 

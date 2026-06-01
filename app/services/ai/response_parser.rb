@@ -73,7 +73,7 @@ module Ai
 
       Ai::ResultTemplate.success(
         receipt_attributes: normalize_receipt_attributes(normalized_payload),
-        receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(normalized_payload["items"]),
+        receipt_items_attributes: Analysis.normalize_receipt_items(normalized_payload["items"]),
         receipt_adjustments_attributes: normalize_receipt_adjustments(normalized_payload["receipt_adjustments"]),
         needs_review: normalized_payload["needs_review"] == true,
         review_reasons: normalize_review_reasons(normalized_payload["review_reasons"]),

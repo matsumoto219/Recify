@@ -9,5 +9,9 @@ module Users
         audit: audit
       )
     end
+
+    def account_deletion_email_digest(email)
+      AccountDeletionService.email_digest(email)
+    end
   end
 end

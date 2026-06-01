@@ -16,6 +16,10 @@ class ReceiptAiEnrichmentService
         capture_input: capture_input
       ).call
     end
+
+    def available?
+      Ai::AvailabilityChecker.call
+    end
   end
 
   class InputCaptureError < StandardError

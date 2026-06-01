@@ -54,10 +54,9 @@ module Ocr
     end
 
     # NOTE:
-    # available? は将来の外部サービス監視ジョブ用の診断メソッド。
+    # available? は親facadeの診断入口から使う疎通診断メソッド。
     # 通常のOCR処理前には毎回呼ばない。
-    # UI表示や通常リクエストでは ExternalServices の状態storeを参照する想定。
-    # provider ごとに診断方法が異なるため、必要になった時点で監視専用実装へ切り出す。
+    # UI表示や通常リクエストでは ExternalServices の状態storeを参照する。
     def available?
       check_availability
       true
@@ -210,10 +209,7 @@ module Ocr
       end
     end
 
-    # TODO:
-    # Azure Document Intelligence の疎通確認は provider 依存が強いため、
-    # 将来は監視専用クラス or job 側へ切り出す。
-    # 現時点では client 内に置いているが、通常処理フローからは直接使わない前提。
+    # provider依存の疎通確認実装。通常処理フローからは直接使わない。
     def check_availability
       res = connection.get do |req|
         req.url analyze_path

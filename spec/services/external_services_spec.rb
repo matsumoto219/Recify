@@ -155,17 +155,17 @@ RSpec.describe ExternalServices do
 
   describe '.check_available?' do
     it 'OCR checkerを呼ぶ' do
-      allow(Ocr::AvailabilityChecker).to receive(:call).and_return(true)
+      allow(ReceiptOcrService).to receive(:available?).and_return(true)
 
       expect(described_class.check_available?(:ocr)).to eq(true)
-      expect(Ocr::AvailabilityChecker).to have_received(:call)
+      expect(ReceiptOcrService).to have_received(:available?)
     end
 
     it 'AI checkerを呼ぶ' do
-      allow(Ai::AvailabilityChecker).to receive(:call).and_return(true)
+      allow(ReceiptAiEnrichmentService).to receive(:available?).and_return(true)
 
       expect(described_class.check_available?('ai')).to eq(true)
-      expect(Ai::AvailabilityChecker).to have_received(:call)
+      expect(ReceiptAiEnrichmentService).to have_received(:available?)
     end
 
     it '未知serviceを明示的に弾く' do

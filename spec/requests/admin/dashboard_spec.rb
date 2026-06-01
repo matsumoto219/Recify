@@ -36,7 +36,7 @@ RSpec.describe 'Admin dashboard', type: :request do
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
     expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
-    expect(Analysis::RetryService).not_to have_received(:call)
+    expect(Analysis).not_to have_received(:retry_receipt_analysis)
   end
 
   describe 'GET /admin' do
@@ -203,7 +203,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       create(:contact_request, status: 'open', category: 'security')
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
-      allow(Analysis::RetryService).to receive(:call)
+      allow(Analysis).to receive(:retry_receipt_analysis)
       allow(ExternalServices).to receive(:status_snapshot).and_return(
         ocr: {
           state: 'down',

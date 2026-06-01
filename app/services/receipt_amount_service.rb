@@ -64,6 +64,10 @@ class ReceiptAmountService
     Amounts::NumberParser.parse_quantity(value, default: default)
   end
 
+  def self.warning_mismatch_codes
+    Amounts::MismatchSeverity::WARNING
+  end
+
   def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }

@@ -213,7 +213,7 @@ class ReceiptAnalysisPipeline
       )
     end
 
-    receipt_signal = Analysis::ReceiptSignalEvaluator.call(ocr_result)
+    receipt_signal = Analysis.evaluate_receipt_signal(ocr_result)
 
     if no_text_detected?(receipt_signal)
       Rails.logger.warn("[ReceiptAnalysis] no_text_detected receipt_id=#{receipt.id}")
@@ -374,7 +374,7 @@ class ReceiptAnalysisPipeline
       needs_review: symbolized[:needs_review],
       review_reasons: Array(symbolized[:review_reasons]),
       receipt_attributes: symbolized[:receipt_attributes].symbolize_keys,
-      receipt_items_attributes: Analysis::ReceiptItemNormalizer.normalize_ai_items(
+      receipt_items_attributes: Analysis.normalize_receipt_items(
         symbolized[:receipt_items_attributes]
       ),
       receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes]),
@@ -435,7 +435,7 @@ class ReceiptAnalysisPipeline
   end
 
   def ai_not_receipt_decision(ocr_result, ai_result)
-    receipt_signal = Analysis::ReceiptSignalEvaluator.call(ocr_result)
+    receipt_signal = Analysis.evaluate_receipt_signal(ocr_result)
 
     if ai_not_receipt_should_fail?(ai_result, receipt_signal)
       finalize_decision(

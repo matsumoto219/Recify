@@ -140,13 +140,13 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
 
     it '一覧向けrecordではretry_optionsを作らない' do
       create(:receipt_analysis_run, :succeeded)
-      allow(Analysis::RetryService).to receive(:eligibility).and_call_original
+      allow(Analysis).to receive(:retry_eligibility).and_call_original
 
       record = described_class.call.records.first
 
       aggregate_failures do
         expect(record).not_to have_key(:retry_options)
-        expect(Analysis::RetryService).not_to have_received(:eligibility)
+        expect(Analysis).not_to have_received(:retry_eligibility)
       end
     end
 
@@ -216,7 +216,7 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
           }
         }
       )
-      allow(Analysis::RetryService).to receive(:eligibility).and_call_original
+      allow(Analysis).to receive(:retry_eligibility).and_call_original
       allow(ReceiptOcrJob).to receive(:perform_later)
       allow(ReceiptAiEnrichmentJob).to receive(:perform_later)
       allow(ReceiptFinalizeJob).to receive(:perform_later)
@@ -224,7 +224,7 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       record = described_class.call(receipt: receipt, include_retry_options: true).records.first
 
       aggregate_failures do
-        expect(Analysis::RetryService).to have_received(:eligibility).with(receipt: receipt, parent_run: run)
+        expect(Analysis).to have_received(:retry_eligibility).with(receipt: receipt, parent_run: run)
         expect(record[:retry_options]).to eq(
           [
             { type: 'full_reanalyze', possible: true, disabled_reason: nil },

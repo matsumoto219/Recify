@@ -25,6 +25,10 @@ class ReceiptOcrService
     )
   end
 
+  def self.available?
+    Ocr::AvailabilityChecker.call
+  end
+
   def initialize(image:, provider: "azure_document_intelligence")
     @image = image
     @provider = provider
@@ -35,7 +39,7 @@ class ReceiptOcrService
 
     validate_image!
 
-    # 1) 外部OCR API呼び出し（まだ未実装ならダミーでもOK）
+    # 1) 外部OCR API呼び出し
     response = Ocr::Client.new(image: image, provider: provider).call
 
     # 2) レスポンスを内部形式へ正規化

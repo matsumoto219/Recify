@@ -619,7 +619,7 @@ RSpec.describe Ai::ResponseParser do
       end
 
       it 'ProviderError はそのまま送出する' do
-        allow(Analysis::ReceiptItemNormalizer).to receive(:normalize_ai_items)
+        allow(Analysis).to receive(:normalize_receipt_items)
           .and_raise(Ai::Errors::ProviderError.new(message: 'provider invalid', error_code: 'ai_invalid_response', provider: provider))
 
         expect do
@@ -650,7 +650,7 @@ RSpec.describe Ai::ResponseParser do
       end
 
       it '内部エラー時は ai_invalid_response の error result を返す' do
-        allow(Analysis::ReceiptItemNormalizer).to receive(:normalize_ai_items).and_raise(StandardError.new('boom'))
+        allow(Analysis).to receive(:normalize_receipt_items).and_raise(StandardError.new('boom'))
 
         result = described_class.parse(payload, provider: provider, meta: meta)
 

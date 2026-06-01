@@ -1,6 +1,6 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
-  RETRY_TYPES = Analysis::RetryService::RETRY_TYPES.freeze
-  RETRY_CONFIRMATION_TEXT = Analysis::RetryService::CONFIRMATION_TEXT
+  RETRY_TYPES = Analysis.retry_types.freeze
+  RETRY_CONFIRMATION_TEXT = Analysis.retry_confirmation_text
 
   helper_method :admin_retry_enabled?, :admin_retry_reauthentication_required?, :retry_confirmation_text
 
@@ -58,7 +58,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       confirmation: params[:confirmation]
     }
 
-    result = Analysis::RetryService.call(**retry_attributes)
+    result = Analysis.retry_receipt_analysis(**retry_attributes)
 
     if result.success?
       redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: t("admin.receipt_analysis_runs.messages.accepted")

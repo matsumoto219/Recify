@@ -134,8 +134,6 @@ class ReceiptAnalysisPipeline
         tax_rate: amount_result[:resolved][:tax_rate]
       )
 
-      # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
-      # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if ocr_low_quality
@@ -211,8 +209,6 @@ class ReceiptAnalysisPipeline
         amount_result.dig(:computed, :items)
       )
 
-      # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
-      # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
@@ -271,8 +267,6 @@ class ReceiptAnalysisPipeline
         amount_result.dig(:computed, :items)
       )
 
-      # TODO: 次回、AmountService経由で受け取れる mismatch_codes / mismatch_messages を flash 表示へ接続する。
-      # AnalysisService から Amounts::MismatchCodes は直接呼ばず、表示用情報も ReceiptAmountService の返却値を使う。
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"

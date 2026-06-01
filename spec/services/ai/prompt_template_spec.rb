@@ -94,7 +94,7 @@ RSpec.describe Ai::PromptTemplate do
         expect(system_prompt).to include('- tax_rate_confidence')
         expect(system_prompt).to include('- tax_rate_reason')
         expect(system_prompt).to include('- needs_review')
-        expect(Analysis::ReceiptItemNormalizer::AI_ALLOWED_KEYS).to eq(%i[
+        expect(Analysis.receipt_item_ai_allowed_keys).to eq(%i[
           index
           position_index
           suggested_name

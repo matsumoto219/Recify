@@ -15,7 +15,5 @@ module Storage
     def usage_calculator(user)
       UsageCalculator.new(user)
     end
-
-    alias usage_for usage_calculator
   end
 end

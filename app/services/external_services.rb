@@ -83,9 +83,9 @@ module ExternalServices
     def check_available?(service)
       case normalize_service(service)
       when :ocr
-        Ocr::AvailabilityChecker.call
+        ReceiptOcrService.available?
       when :ai
-        Ai::AvailabilityChecker.call
+        ReceiptAiEnrichmentService.available?
       end
     end
 

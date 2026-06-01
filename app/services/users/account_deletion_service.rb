@@ -20,6 +20,16 @@ module Users
           audit: audit
         ).call
       end
+
+      def email_digest(email)
+        OpenSSL::HMAC.hexdigest("SHA256", email_digest_key, email.to_s.downcase)
+      end
+
+      private
+
+      def email_digest_key
+        Rails.application.key_generator.generate_key(EMAIL_DIGEST_SALT, 32)
+      end
     end
 
     def initialize(user:, actor:, reason:, request:, audit:)
@@ -63,11 +73,7 @@ module Users
     end
 
     def email_digest(email)
-      OpenSSL::HMAC.hexdigest("SHA256", email_digest_key, email.to_s.downcase)
-    end
-
-    def email_digest_key
-      Rails.application.key_generator.generate_key(EMAIL_DIGEST_SALT, 32)
+      self.class.email_digest(email)
     end
   end
 end

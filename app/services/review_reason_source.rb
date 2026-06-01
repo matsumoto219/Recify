@@ -59,7 +59,7 @@ module ReviewReasonSource
   ].freeze
 
   WARNING_REASONS = (
-    Amounts::MismatchSeverity::WARNING.map(&:to_s) +
+    ReceiptAmountService.warning_mismatch_codes.map(&:to_s) +
     %w[
       ocr_low_confidence
       item_tax_rate_uncertain

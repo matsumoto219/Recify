@@ -330,11 +330,7 @@ module SystemOperations
     end
 
     def email_digest(email)
-      OpenSSL::HMAC.hexdigest(
-        "SHA256",
-        Rails.application.key_generator.generate_key(Users::AccountDeletionService::EMAIL_DIGEST_SALT, 32),
-        email.to_s.downcase
-      )
+      Users.account_deletion_email_digest(email)
     end
 
     def user_locked?

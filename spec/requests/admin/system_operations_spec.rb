@@ -38,7 +38,7 @@ RSpec.describe 'Admin system operations', type: :request do
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
     expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
-    expect(Analysis::RetryService).not_to have_received(:call)
+    expect(Analysis).not_to have_received(:retry_receipt_analysis)
   end
 
   describe 'GET /admin/system_operations' do
@@ -84,7 +84,7 @@ RSpec.describe 'Admin system operations', type: :request do
       admin = create(:user, :admin)
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
-      allow(Analysis::RetryService).to receive(:call)
+      allow(Analysis).to receive(:retry_receipt_analysis)
 
       get admin_system_operations_path
 
