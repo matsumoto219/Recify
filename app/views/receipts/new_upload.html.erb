@@ -1,11 +1,5 @@
 <%
-  ocr_state = (@ocr_state || {}).with_indifferent_access[:state].to_s
-  ai_state = (@ai_state || {}).with_indifferent_access[:state].to_s
-  ocr_down = ocr_state == "down"
-  ocr_degraded = ocr_state == "degraded"
-  ai_down = ai_state == "down"
-  ai_degraded = ai_state == "degraded"
-  ocr_available = !ocr_down
+  upload_page = @upload_page_presenter
 %>
 
 <section
@@ -22,7 +16,7 @@
 
   <div class="space-y-3">
     <div
-      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless ocr_down %>"
+      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless upload_page.ocr_down? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ocr_down">
       <p class="font-bold"><%= t("flash.receipts.ocr_unavailable") %></p>
@@ -30,21 +24,21 @@
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless ocr_degraded %>"
+      class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-warning <%= "hidden" unless upload_page.ocr_degraded? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ocr_degraded">
       <%= t("receipts.new_upload.ocr_degraded") %>
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_down %>"
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_down? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ai_down">
       <%= t("receipts.new_upload.ai_down") %>
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_degraded %>"
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_degraded? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ai_degraded">
       <%= t("receipts.new_upload.ai_degraded") %>
@@ -58,16 +52,16 @@
             controller: "receipt-upload",
             action: "submit->receipt-upload#disableSubmit",
             service_status_polling_target: "uploadRoot",
-            receipt_upload_ocr_available_value: ocr_available,
+            receipt_upload_ocr_available_value: upload_page.ocr_available?,
             receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
             receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file"),
             receipt_upload_quota_exceeded_message_value: t("receipts.new_upload.js.quota_exceeded"),
-            receipt_upload_max_file_count_value: ReceiptBatchUploadService.max_files,
-            receipt_upload_max_file_count_message_value: t("receipts.new_upload.js.max_files", max: ReceiptBatchUploadService.max_files),
+            receipt_upload_max_file_count_value: upload_page.file_count_limit,
+            receipt_upload_max_file_count_message_value: upload_page.file_count_limit_message,
             receipt_upload_selected_files_message_value: t("receipts.new_upload.js.selected_files"),
             receipt_upload_preview_counter_message_value: t("receipts.new_upload.js.preview_counter"),
-            receipt_upload_storage_used_bytes_value: current_user.storage_used_bytes,
-            receipt_upload_storage_limit_bytes_value: current_user.storage_usage.limit_bytes
+            receipt_upload_storage_used_bytes_value: upload_page.storage_used_bytes,
+            receipt_upload_storage_limit_bytes_value: upload_page.storage_limit_bytes
           }
         } do |form| %>
       <div class="space-y-6">
@@ -81,7 +75,7 @@
               <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
               <p class="text-base font-medium token-text-base"><%= t("receipts.new_upload.empty_title") %></p>
               <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
-              <p class="text-xs token-text-subtle"><%= t("receipts.new_upload.multiple_hint", max: ReceiptBatchUploadService.max_files) %></p>
+              <p class="text-xs token-text-subtle"><%= upload_page.multiple_upload_hint %></p>
             </div>
 
             <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
@@ -135,7 +129,7 @@
               icon: "camera_alt",
               full_width: true,
               type: "button",
-              disabled: ocr_down,
+              disabled: upload_page.ocr_down?,
               data: {
                 action: "receipt-upload#openCamera",
                 service_status_polling_target: "uploadControl"
@@ -148,7 +142,7 @@
               icon: "folder_open",
               full_width: true,
               type: "button",
-              disabled: ocr_down,
+              disabled: upload_page.ocr_down?,
               data: {
                 action: "receipt-upload#openLibrary",
                 service_status_polling_target: "uploadControl"
@@ -159,7 +153,7 @@
             <%= t("receipts.new_upload.file_empty") %>
           </p>
           <p class="text-xs text-center token-text-subtle">
-            <%= t("receipts.new_upload.multiple_hint", max: ReceiptBatchUploadService.max_files) %>
+            <%= upload_page.multiple_upload_hint %>
           </p>
 
           <%= render "shared/ui/actions/button",
@@ -181,7 +175,7 @@
           accept: receipt_image_accept,
           capture: "environment",
           class: "hidden",
-          disabled: ocr_down,
+          disabled: upload_page.ocr_down?,
           data: {
             receipt_upload_target: "cameraInput",
             service_status_polling_target: "uploadControl",
@@ -192,7 +186,7 @@
           accept: receipt_image_accept,
           multiple: true,
           class: "hidden",
-          disabled: ocr_down,
+          disabled: upload_page.ocr_down?,
           data: {
             receipt_upload_target: "libraryInput",
             service_status_polling_target: "uploadControl",

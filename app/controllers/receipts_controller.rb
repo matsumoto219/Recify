@@ -49,10 +49,12 @@ class ReceiptsController < ApplicationController
   def new_upload
     set_external_service_states
     @receipt = current_user.receipts.new
+    prepare_upload_page_presenter
   end
 
   def upload
     set_external_service_states
+    prepare_upload_page_presenter
 
     if ExternalServices.down?(:ocr)
       @receipt = current_user.receipts.new
@@ -192,6 +194,14 @@ class ReceiptsController < ApplicationController
 
   def prepare_receipt_form_presenter
     @receipt_form_presenter = ReceiptFormPresenter.new(receipt: @receipt)
+  end
+
+  def prepare_upload_page_presenter
+    @upload_page_presenter = Receipts::UploadPagePresenter.new(
+      user: current_user,
+      ocr_state: @ocr_state,
+      ai_state: @ai_state
+    )
   end
 
   def block_processing_receipt

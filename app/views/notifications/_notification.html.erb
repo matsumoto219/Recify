@@ -9,22 +9,14 @@
 %>
 
 <%
-  unread = notification.unread?
-  stale_notifiable = notification.stale_notifiable?
-  delete_confirm_data = notification.user.delete_confirmation_enabled? ? { turbo_confirm: t("notifications.item.delete_confirm") } : {}
-  item_classes = [
-    "token-bg-card",
-    "token-border-soft",
-    "rounded-lg border p-4 transition-colors",
-    ("token-brand-soft-bg" if unread)
-  ].compact.join(" ")
+  item_state = notification_list_item_state(notification)
 %>
 
-<article id="<%= dom_id(notification) %>" class="<%= item_classes %>">
+<article id="<%= dom_id(notification) %>" class="<%= item_state.item_classes %>">
   <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
-        <% if unread %>
+        <% if item_state.unread? %>
           <span class="h-2 w-2 rounded-full token-state-error-soft" aria-hidden="true"></span>
         <% end %>
         <h2 class="truncate text-sm font-bold token-text-base"><%= notification.title %></h2>
@@ -34,7 +26,7 @@
         <p class="mt-2 text-sm token-text-muted"><%= notification.body %></p>
       <% end %>
 
-      <% if stale_notifiable %>
+      <% if item_state.stale_notifiable? %>
         <p class="mt-2 text-sm token-text-subtle"><%= t("notifications.item.deleted_target") %></p>
       <% end %>
 
@@ -44,8 +36,8 @@
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
-      <% if unread %>
-        <%= form_with url: read_notification_path(notification), method: :patch, local: true, class: "contents" do %>
+      <% if item_state.unread? %>
+        <%= form_with url: item_state.read_path, method: :patch, local: true, class: "contents" do %>
           <%= render "shared/ui/actions/button",
                 label: t("notifications.item.mark_as_read"),
                 variant: :secondary,
@@ -53,10 +45,10 @@
                 type: "submit",
                 class: "h-9 whitespace-nowrap px-3 text-xs" %>
         <% end %>
-      <% elsif notification.action_available? %>
+      <% elsif item_state.action_available? %>
         <%= render "shared/ui/actions/button",
               as: :link,
-              href: notification.action_path,
+              href: item_state.action_path,
               label: t("notifications.item.open"),
               variant: :secondary,
               size: :sm,
@@ -73,7 +65,7 @@
               size: :sm,
               type: "submit",
               icon: "close",
-              data: delete_confirm_data,
+              data: item_state.delete_confirm_data,
               class: "h-9 whitespace-nowrap px-3 text-xs",
               html_options: {
                 "aria-label": t("notifications.item.delete_aria", title: notification.title),

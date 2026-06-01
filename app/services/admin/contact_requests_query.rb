@@ -13,6 +13,14 @@ module Admin
       def find(id:)
         new(id: id, limit: 1).call.records.first
       end
+
+      def filter_options
+        {
+          statuses: ContactRequest::STATUSES,
+          categories: ContactRequest::CATEGORIES,
+          sources: ContactRequest::SOURCES
+        }
+      end
     end
 
     def initialize(

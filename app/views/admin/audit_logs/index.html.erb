@@ -2,21 +2,8 @@
 
 <%
   filters = @filters || {}
-  query_base = filters.except(:offset).compact_blank
-  query_base[:audit_action] = query_base.delete(:action) if query_base.key?(:action)
-  limit = @result.limit
-  offset = @result.offset
-  total_count = @result.total_count
-  start_number = total_count.zero? ? 0 : offset + 1
-  end_number = [ offset + @result.records.size, total_count ].min
-  previous_offset = [ offset - limit, 0 ].max
-  next_offset = offset + limit
-  has_previous = offset.positive?
-  has_next = next_offset < total_count
-
-  actor_kind_options = AuditLog::ACTOR_KINDS.map { |value| [ value, value ] }
-  outcome_options = AuditLog::OUTCOMES.map { |value| [ value, value ] }
-  limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.audit_logs.index.filters.limit_unit", count: value), value.to_s ] }
+  pagination = admin_index_pagination(@result, filters: filters, parameter_aliases: { action: :audit_action })
+  filter_options = admin_audit_log_filter_options(@filter_options || {})
   filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   filter_wrapper_class = "space-y-1"
   filter_control_class = "rounded-lg text-sm"
@@ -58,7 +45,7 @@
             f: form,
             attribute: :actor_kind,
             label: t("admin.audit_logs.index.filters.labels.actor_kind"),
-            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + actor_kind_options,
+            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + filter_options[:actor_kinds],
             selected: filters[:actor_kind],
             with_icon: false,
             size: :dense,
@@ -81,7 +68,7 @@
             f: form,
             attribute: :outcome,
             label: t("admin.audit_logs.index.filters.labels.outcome"),
-            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + outcome_options,
+            options: [[ t("admin.audit_logs.index.filters.all"), "" ]] + filter_options[:outcomes],
             selected: filters[:outcome],
             with_icon: false,
             size: :dense,
@@ -146,8 +133,8 @@
             f: form,
             attribute: :limit,
             label: t("admin.audit_logs.index.filters.labels.limit"),
-            options: limit_options,
-            selected: filters[:limit].presence || limit.to_s,
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
             with_icon: false,
             size: :dense,
             select_wrapper_class: filter_wrapper_class,
@@ -176,21 +163,21 @@
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.index.results.title") %></h2>
-        <p class="text-sm token-text-muted"><%= t("admin.audit_logs.index.results.count_summary", total: total_count, start: start_number, end: end_number) %></p>
+        <p class="text-sm token-text-muted"><%= t("admin.audit_logs.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <% if has_previous %>
+        <% if pagination.has_previous? %>
           <%= link_to t("admin.audit_logs.index.results.previous"),
-                admin_audit_logs_path(query_base.merge(limit: limit, offset: previous_offset)),
+                admin_audit_logs_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.previous_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.audit_logs.index.results.previous") %></span>
         <% end %>
 
-        <% if has_next %>
+        <% if pagination.has_next? %>
           <%= link_to t("admin.audit_logs.index.results.next"),
-                admin_audit_logs_path(query_base.merge(limit: limit, offset: next_offset)),
+                admin_audit_logs_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.next_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.audit_logs.index.results.next") %></span>

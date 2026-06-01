@@ -5,6 +5,7 @@ class SettingsController < ApplicationController
     # ExternalServices から現在の状態を取得
     @ocr_state = ExternalServices.state(:ocr).to_sym
     @ai_state = ExternalServices.state(:ai).to_sym
+    @settings_index_presenter = Settings::IndexPresenter.new(user: current_user, view_context: view_context)
   end
 
   def account

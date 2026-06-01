@@ -2,26 +2,8 @@
 
 <%
   filters = @filters || {}
-  query_base = filters.except(:offset).compact_blank
-  limit = @result.limit
-  offset = @result.offset
-  total_count = @result.total_count
-  start_number = total_count.zero? ? 0 : offset + 1
-  end_number = [ offset + @result.records.size, total_count ].min
-  previous_offset = [ offset - limit, 0 ].max
-  next_offset = offset + limit
-  has_previous = offset.positive?
-  has_next = next_offset < total_count
-
-  status_options = ReceiptAnalysisRun::STATUSES.map { |value| [ value, value ] }
-  stage_options = ReceiptAnalysisRun::STAGES.map { |value| [ value, value ] }
-  source_options = ReceiptAnalysisRun::SOURCES.map { |value| [ value, value ] }
-  receipt_status_options = Receipt.statuses.keys.map { |value| [ value, value ] }
-  needs_attention_options = [
-    [ t("admin.receipt_analysis_runs.index.filters.unspecified"), "" ],
-    [ t("admin.receipt_analysis_runs.index.filters.needs_attention_only"), "1" ]
-  ]
-  limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.receipt_analysis_runs.index.filters.limit_unit", count: value), value.to_s ] }
+  pagination = admin_index_pagination(@result, filters: filters)
+  filter_options = admin_receipt_analysis_run_filter_options(@filter_options || {})
   filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   filter_wrapper_class = "space-y-1"
   filter_control_class = "rounded-lg text-sm"
@@ -51,7 +33,7 @@
             f: form,
             attribute: :status,
             label: t("admin.receipt_analysis_runs.index.filters.labels.status"),
-            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + status_options,
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + filter_options[:statuses],
             selected: filters[:status],
             with_icon: false,
             size: :dense,
@@ -63,7 +45,7 @@
             f: form,
             attribute: :stage,
             label: t("admin.receipt_analysis_runs.index.filters.labels.stage"),
-            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + stage_options,
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + filter_options[:stages],
             selected: filters[:stage],
             with_icon: false,
             size: :dense,
@@ -75,7 +57,7 @@
             f: form,
             attribute: :source,
             label: t("admin.receipt_analysis_runs.index.filters.labels.source"),
-            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + source_options,
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + filter_options[:sources],
             selected: filters[:source],
             with_icon: false,
             size: :dense,
@@ -87,7 +69,7 @@
             f: form,
             attribute: :receipt_status,
             label: t("admin.receipt_analysis_runs.index.filters.labels.receipt_status"),
-            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + receipt_status_options,
+            options: [[ t("admin.receipt_analysis_runs.index.filters.all"), "" ]] + filter_options[:receipt_statuses],
             selected: filters[:receipt_status],
             with_icon: false,
             size: :dense,
@@ -99,7 +81,7 @@
             f: form,
             attribute: :needs_attention,
             label: t("admin.receipt_analysis_runs.index.filters.labels.needs_attention"),
-            options: needs_attention_options,
+            options: filter_options[:needs_attention],
             selected: filters[:needs_attention],
             with_icon: false,
             size: :dense,
@@ -156,8 +138,8 @@
             f: form,
             attribute: :limit,
             label: t("admin.receipt_analysis_runs.index.filters.labels.limit"),
-            options: limit_options,
-            selected: filters[:limit].presence || limit.to_s,
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
             with_icon: false,
             size: :dense,
             select_wrapper_class: filter_wrapper_class,
@@ -186,21 +168,21 @@
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.index.results.title") %></h2>
-        <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.index.results.count_summary", total: total_count, start: start_number, end: end_number) %></p>
+        <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <% if has_previous %>
+        <% if pagination.has_previous? %>
           <%= link_to t("admin.receipt_analysis_runs.index.results.previous"),
-                admin_receipt_analysis_runs_path(query_base.merge(limit: limit, offset: previous_offset)),
+                admin_receipt_analysis_runs_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.previous_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.receipt_analysis_runs.index.results.previous") %></span>
         <% end %>
 
-        <% if has_next %>
+        <% if pagination.has_next? %>
           <%= link_to t("admin.receipt_analysis_runs.index.results.next"),
-                admin_receipt_analysis_runs_path(query_base.merge(limit: limit, offset: next_offset)),
+                admin_receipt_analysis_runs_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.next_offset)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.receipt_analysis_runs.index.results.next") %></span>

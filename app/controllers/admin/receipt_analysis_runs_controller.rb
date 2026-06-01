@@ -7,6 +7,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   def index
     @filters = filter_params
     @result = Admin.receipt_analysis_runs(**@filters)
+    @filter_options = Admin.receipt_analysis_run_filter_options
   end
 
   def show

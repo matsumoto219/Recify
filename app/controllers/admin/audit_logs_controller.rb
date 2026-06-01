@@ -2,6 +2,7 @@ class Admin::AuditLogsController < Admin::BaseController
   def index
     @filters = filter_params
     @result = Admin.audit_logs(**@filters)
+    @filter_options = Admin.audit_log_filter_options
   end
 
   def show

@@ -9,6 +9,13 @@ module Admin
       def call(**filters)
         new(**filters).call
       end
+
+      def filter_options
+        {
+          actor_kinds: AuditLog::ACTOR_KINDS,
+          outcomes: AuditLog::OUTCOMES
+        }
+      end
     end
 
     def initialize(

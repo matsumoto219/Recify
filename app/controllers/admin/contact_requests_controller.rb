@@ -2,6 +2,7 @@ class Admin::ContactRequestsController < Admin::BaseController
   def index
     @filters = filter_params
     @result = Admin.contact_requests(**@filters)
+    @filter_options = Admin.contact_request_filter_options
   end
 
   def show

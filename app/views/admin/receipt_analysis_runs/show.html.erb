@@ -209,13 +209,13 @@
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.ocr") %></h2>
       <section>
         <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.summary_labels.ocr_summary") %></h3>
-        <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record.dig(:summaries, :ocr) || {}) %></pre>
+        <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record.dig(:summaries, :ocr) || {}) %></pre>
       </section>
       <details class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <summary class="cursor-pointer text-sm font-semibold token-text-base">
           <%= t("admin.receipt_analysis_runs.show.snapshot_details.names.ocr_result_snapshot") %>
         </summary>
-        <pre class="<%= admin_json_details_pre_class %>"><%= JSON.pretty_generate(@record.dig(:detailed_snapshots, :ocr_result_snapshot).presence || {}) %></pre>
+        <pre class="<%= admin_json_details_pre_class %>"><%= admin_pretty_json(@record.dig(:detailed_snapshots, :ocr_result_snapshot).presence || {}) %></pre>
       </details>
     </section>
   <% end %>
@@ -229,43 +229,43 @@
         <div class="grid gap-4 lg:grid-cols-2">
           <section>
             <h4 class="mb-2 text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ai_input_highlights.purchase") %></h4>
-            <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(ai_input_highlights[:purchase] || {}) %></pre>
+            <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(ai_input_highlights[:purchase] || {}) %></pre>
           </section>
           <section>
             <h4 class="mb-2 text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ai_input_highlights.tax") %></h4>
-            <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(ai_input_highlights[:tax] || {}) %></pre>
+            <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(ai_input_highlights[:tax] || {}) %></pre>
           </section>
           <section>
             <h4 class="mb-2 text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ai_input_highlights.items") %></h4>
-            <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(ai_input_highlights[:items] || []) %></pre>
+            <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(ai_input_highlights[:items] || []) %></pre>
           </section>
           <section>
             <h4 class="mb-2 text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ai_input_highlights.adjustments") %></h4>
-            <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(ai_input_highlights[:adjustments] || {}) %></pre>
+            <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(ai_input_highlights[:adjustments] || {}) %></pre>
           </section>
         </div>
         <details class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <summary class="cursor-pointer text-sm font-semibold token-text-base">
             <%= t("admin.receipt_analysis_runs.show.ai_input_highlights.context") %>
           </summary>
-          <pre class="<%= admin_json_details_pre_class %>"><%= JSON.pretty_generate(ai_input_highlights[:context] || {}) %></pre>
+          <pre class="<%= admin_json_details_pre_class %>"><%= admin_pretty_json(ai_input_highlights[:context] || {}) %></pre>
         </details>
       </section>
       <div class="grid gap-4 lg:grid-cols-2">
         <section>
           <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.summary_labels.ai_input_snapshot") %></h3>
-          <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record.dig(:summaries, :ai_input) || {}) %></pre>
+          <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record.dig(:summaries, :ai_input) || {}) %></pre>
         </section>
         <section>
           <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.summary_labels.ai_result_summary") %></h3>
-          <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record.dig(:summaries, :ai_result) || {}) %></pre>
+          <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record.dig(:summaries, :ai_result) || {}) %></pre>
         </section>
       </div>
       <details class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <summary class="cursor-pointer text-sm font-semibold token-text-base">
           <%= t("admin.receipt_analysis_runs.show.snapshot_details.names.ai_normalized_result_snapshot") %>
         </summary>
-        <pre class="<%= admin_json_details_pre_class %>"><%= JSON.pretty_generate(@record.dig(:detailed_snapshots, :ai_normalized_result_snapshot).presence || {}) %></pre>
+        <pre class="<%= admin_json_details_pre_class %>"><%= admin_pretty_json(@record.dig(:detailed_snapshots, :ai_normalized_result_snapshot).presence || {}) %></pre>
       </details>
     </section>
   <% end %>
@@ -277,7 +277,7 @@
         <summary class="cursor-pointer text-sm font-semibold token-text-base">
           <%= t("admin.receipt_analysis_runs.show.snapshot_details.names.build_params_snapshot") %>
         </summary>
-        <pre class="<%= admin_json_details_pre_class %>"><%= JSON.pretty_generate(@record.dig(:detailed_snapshots, :build_params_snapshot).presence || {}) %></pre>
+        <pre class="<%= admin_json_details_pre_class %>"><%= admin_pretty_json(@record.dig(:detailed_snapshots, :build_params_snapshot).presence || {}) %></pre>
       </details>
     </section>
   <% end %>
@@ -334,7 +334,7 @@
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.amount") %></h2>
       <section>
         <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.sections.amount_calculation_profile") %></h3>
-        <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record[:amount_calculation_profile]) %></pre>
+        <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record[:amount_calculation_profile]) %></pre>
       </section>
     </section>
   <% end %>
@@ -345,11 +345,11 @@
       <div class="grid gap-4 lg:grid-cols-2">
         <section>
           <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.sections.finalize_decision") %></h3>
-          <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record[:finalize_decision]) %></pre>
+          <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record[:finalize_decision]) %></pre>
         </section>
         <section>
           <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.summary_labels.final_result_summary") %></h3>
-          <pre class="<%= admin_json_pre_class %>"><%= JSON.pretty_generate(@record.dig(:summaries, :final_result) || {}) %></pre>
+          <pre class="<%= admin_json_pre_class %>"><%= admin_pretty_json(@record.dig(:summaries, :final_result) || {}) %></pre>
         </section>
       </div>
     </section>

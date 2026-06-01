@@ -87,17 +87,17 @@
   <div class="grid gap-6 lg:grid-cols-3">
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.metadata") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:metadata]) %></pre>
+      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:metadata]) %></pre>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.before_state") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:before_state]) %></pre>
+      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:before_state]) %></pre>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.after_state") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= JSON.pretty_generate(@record[:after_state]) %></pre>
+      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:after_state]) %></pre>
     <% end %>
   </div>
 </section>

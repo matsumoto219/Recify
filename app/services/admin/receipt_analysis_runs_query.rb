@@ -36,6 +36,15 @@ module Admin
       def call(**filters)
         new(**filters).call
       end
+
+      def filter_options
+        {
+          statuses: ReceiptAnalysisRun::STATUSES,
+          stages: ReceiptAnalysisRun::STAGES,
+          sources: ReceiptAnalysisRun::SOURCES,
+          receipt_statuses: Receipt.statuses.keys
+        }
+      end
     end
 
     def initialize(
