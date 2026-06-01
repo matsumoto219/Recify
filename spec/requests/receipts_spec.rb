@@ -216,14 +216,44 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
-    it '不正なdate検索条件でも500にせず検索empty stateを返す' do
+    it '確定した不正date検索条件はHTMLで422を返す' do
       [
         'date>=2026-13-01',
         'date>=2026-02-31',
         'date<=2214-15-99',
-        'date:2026-01-01..2026-13-40',
+        'date:2026-01-01..2026-13-40'
+      ].each do |query|
+        get receipts_path(q: query)
+
+        aggregate_failures query do
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.body).not_to include('Date::Error')
+          expect(response.body).to include(I18n.t('search.realtime.invalid_query_message'))
+        end
+      end
+    end
+
+    it 'realtime検索の不正date条件はJSON 422を返す' do
+      get receipts_path(q: 'date>=2026-13-01'), headers: { 'X-Recify-Search' => 'realtime' }
+
+      payload = JSON.parse(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.media_type).to eq('application/json')
+        expect(payload).to include(
+          'error' => 'invalid_search_query',
+          'message' => I18n.t('search.realtime.invalid_query_message')
+        )
+      end
+    end
+
+    it '入力途中のdateやdate以外の不正風tokenは422にしない' do
+      [
         'date:2026-01-01..',
-        'date>=2026-'
+        'date>=2026-',
+        'amount>=abc',
+        'unknown:xxx'
       ].each do |query|
         get receipts_path(q: query)
 
@@ -246,6 +276,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(search_controller['data-search-error-title-value']).to eq(I18n.t('search.realtime.error_title'))
         expect(search_controller['data-search-error-message-value']).to eq(I18n.t('search.realtime.error_message'))
+        expect(search_controller['data-search-invalid-query-message-value']).to eq(I18n.t('search.realtime.invalid_query_message'))
         expect(search_controller['data-search-error-close-label-value']).to eq(I18n.t('search.realtime.close_label'))
       end
     end

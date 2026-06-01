@@ -17,23 +17,20 @@ class ReceiptsController < ApplicationController
   def index
     @query = normalize_search_query(params[:q])
     log_suspicious_search_query(@query) if suspicious_search_query?(@query)
+
+    search_validation = Search::QueryValidator.call(@query)
+    unless search_validation.valid?
+      render_invalid_search_query
+      return
+    end
+
     receipts_scope = current_user.receipts.order(created_at: :desc)
     receipts_scope = receipts_scope.search(@query) if @query.present?
 
     @pagy, @receipts = pagy(:offset, receipts_scope, limit: 20)
     return if redirect_to_canonical_receipts_page_if_needed
 
-    summary = Receipt.summary_for(current_user, scope: receipts_scope)
-
-    @receipts_count = summary[:receipts_count]
-    @current_month_total = summary[:current_month_total]
-    @overall_total = summary[:overall_total]
-    @processing_count = summary[:processing_count]
-    @review_needed_count = summary[:review_needed_count]
-    @failed_count = summary[:failed_count]
-    @monthly_change_label = summary[:monthly_change_label]
-    @monthly_change_icon = summary[:monthly_change_icon]
-    @monthly_change_icon_class = summary[:monthly_change_icon_class]
+    assign_receipts_index_summary(receipts_scope)
   end
 
   def show
@@ -975,6 +972,39 @@ class ReceiptsController < ApplicationController
 
   def normalize_search_query(value)
     value.to_s.strip.first(MAX_SEARCH_QUERY_LENGTH)
+  end
+
+  def render_invalid_search_query
+    message = t("search.realtime.invalid_query_message")
+
+    if realtime_search_request? || request.format.json?
+      render json: { error: "invalid_search_query", message: message }, status: :unprocessable_content
+      return
+    end
+
+    receipts_scope = current_user.receipts.none
+    @pagy, @receipts = pagy(:offset, receipts_scope, limit: 20)
+    assign_receipts_index_summary(receipts_scope)
+    flash.now[:alert] = message
+    render :index, status: :unprocessable_content, formats: :html
+  end
+
+  def realtime_search_request?
+    request.headers["X-Recify-Search"] == "realtime"
+  end
+
+  def assign_receipts_index_summary(receipts_scope)
+    summary = Receipt.summary_for(current_user, scope: receipts_scope)
+
+    @receipts_count = summary[:receipts_count]
+    @current_month_total = summary[:current_month_total]
+    @overall_total = summary[:overall_total]
+    @processing_count = summary[:processing_count]
+    @review_needed_count = summary[:review_needed_count]
+    @failed_count = summary[:failed_count]
+    @monthly_change_label = summary[:monthly_change_label]
+    @monthly_change_icon = summary[:monthly_change_icon]
+    @monthly_change_icon_class = summary[:monthly_change_icon_class]
   end
 
   def suspicious_search_query?(query)

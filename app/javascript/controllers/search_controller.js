@@ -6,6 +6,7 @@ export default class extends Controller {
   static values = {
     errorTitle: { type: String, default: 'Error' },
     errorMessage: { type: String, default: 'Unable to update search results. Please try again.' },
+    invalidQueryMessage: { type: String, default: 'Search query format is invalid.' },
     errorCloseLabel: { type: String, default: 'Close' }
   }
 
@@ -224,12 +225,21 @@ export default class extends Controller {
     try {
       const response = await fetch(url, {
         headers: {
-          Accept: 'text/html'
+          Accept: 'text/html',
+          'X-Recify-Search': 'realtime'
         },
         signal: abortController.signal
       })
 
       if (!this.isLatestSearch(searchSequence, abortController)) return
+
+      if (response.status === 422) {
+        const message = await this.invalidSearchQueryMessage(response)
+        if (!this.isLatestSearch(searchSequence, abortController)) return
+
+        this.showSearchErrorNotice(message)
+        return
+      }
 
       if (!response.ok) {
         this.showSearchErrorNotice()
@@ -290,6 +300,19 @@ export default class extends Controller {
 
   isLatestSearch (searchSequence, abortController) {
     return this.searchSequence === searchSequence && this.searchAbortController === abortController
+  }
+
+  async invalidSearchQueryMessage (response) {
+    const fallbackMessage = this.invalidQueryMessageValue
+    const contentType = response.headers.get('Content-Type') || ''
+    if (!contentType.includes('application/json')) return fallbackMessage
+
+    try {
+      const payload = await response.json()
+      return payload.message || fallbackMessage
+    } catch (_error) {
+      return fallbackMessage
+    }
   }
 
   syncToggle (expanded) {
@@ -454,7 +477,7 @@ export default class extends Controller {
     return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
   }
 
-  showSearchErrorNotice () {
+  showSearchErrorNotice (messageText = this.errorMessageValue) {
     const flash = document.getElementById('flash')
     if (!flash) return
 
@@ -494,7 +517,7 @@ export default class extends Controller {
 
     const message = document.createElement('p')
     message.className = 'min-w-0 max-w-full text-xs token-text-muted leading-relaxed break-words whitespace-pre-wrap'
-    message.textContent = this.errorMessageValue
+    message.textContent = messageText
 
     content.append(title, message)
 
