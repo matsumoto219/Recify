@@ -12,6 +12,10 @@ module Storage
       OrphanBlobScanner.call(...)
     end
 
+    def extract_image_dimensions(...)
+      ImageDimensions.extract(...)
+    end
+
     def usage_calculator(user)
       UsageCalculator.new(user)
     end

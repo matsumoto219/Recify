@@ -1,4 +1,4 @@
-module ImageDimensions
+module Storage::ImageDimensions
   PNG_SIGNATURE = "\x89PNG\r\n\x1A\n".b
   JPEG_SOF_MARKERS = [
     0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,

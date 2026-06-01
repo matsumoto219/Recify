@@ -365,7 +365,7 @@ class Receipt < ApplicationRecord
     return unless image.attached?
     return unless ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
 
-    dimensions = ImageDimensions.extract(blob: image.blob, attached_change: attachment_changes["image"])
+    dimensions = Storage.extract_image_dimensions(blob: image.blob, attached_change: attachment_changes["image"])
     unless dimensions
       errors.add(:image, :invalid_content_type)
       return

@@ -31,6 +31,19 @@ RSpec.describe Storage do
     end
   end
 
+  describe '.extract_image_dimensions' do
+    it 'ImageDimensionsへ委譲する' do
+      blob = instance_double(ActiveStorage::Blob)
+      dimensions = { width: 640, height: 480 }
+
+      allow(Storage::ImageDimensions).to receive(:extract)
+        .with(blob: blob, attached_change: nil)
+        .and_return(dimensions)
+
+      expect(described_class.extract_image_dimensions(blob: blob, attached_change: nil)).to eq(dimensions)
+    end
+  end
+
   describe '.usage_calculator' do
     it 'UsageCalculatorを返す' do
       user = build(:user)
