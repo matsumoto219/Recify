@@ -58,7 +58,9 @@ ja:
           description: レシート明細や通知を削除する前に確認ダイアログを表示します
         product_name_ai_completion:
           label: AI補完
-          description_html: 商品名をAIが補完します<br>補完内容は正確でない可能性があるため、必ず内容を確認してください
+          description: |-
+            商品名をAIが補完します
+            補完内容は正確でない可能性があるため、必ず内容を確認してください
       support:
         description: 困ったことや不具合等をサポートへお問い合わせできます。
         contact: お問い合わせを開く
@@ -158,7 +160,7 @@ ja:
             title: 認証アプリを設定
             subtitle: 認証アプリでQRコードを読み取り、表示された6桁のコードを入力してください。
             scan_title: QRコードを読み取る
-            scan_description: QRコードを読み取れない場合は、設定キーを手入力できます。
+            scan_description: QRコードを読み取れない場合は、設定キーを認証アプリに入力してください。
             secret_label: 設定キー
             code_label: 確認コード
             code_placeholder: "123456"
@@ -175,9 +177,9 @@ ja:
             disabled: 認証アプリと回復コードを無効化しました。
         recovery_codes:
           title: 回復コード
-          subtitle: 認証アプリが使えない時のために、コードを安全な場所へ保存してください。
+          subtitle: 認証アプリが使えない時のために、コードは安全な場所に保管してください。
           notice_title: この画面でのみ表示されます
-          notice_body: 回復コードはあとから再表示できません。保存後は安全な場所に保存してください。
+          notice_body: 回復コードはあとから再表示できません。保存後は安全な場所に保管してください。
           done: 保存しました
           regenerate_confirm: 現在の回復コードを無効にして、新しいコードを発行しますか？
           status:

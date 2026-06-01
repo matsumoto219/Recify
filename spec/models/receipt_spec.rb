@@ -661,7 +661,7 @@ RSpec.describe Receipt, type: :model do
 
   describe '#processing_error_user_message' do
     it '処理失敗toastの文言を処理失敗トーンへ寄せる' do
-      expect(I18n.t('flash.receipts.analysis_failed')).to eq('処理に失敗しました。内容を確認してください')
+      expect(I18n.t('flash.receipts.analysis_failed')).to eq("処理に失敗しました。\n内容を確認してください。")
     end
 
     it '処理失敗の永続通知本文を処理失敗トーンへ寄せる' do

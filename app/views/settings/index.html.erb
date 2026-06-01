@@ -274,7 +274,8 @@
 
         <%= render "shared/ui/form/toggle_switch",
               label: t("settings.index.usage.product_name_ai_completion.label"),
-              description: t("settings.index.usage.product_name_ai_completion.description_html").html_safe,
+              description: t("settings.index.usage.product_name_ai_completion.description"),
+              description_class: "whitespace-pre-line",
               checked: current_user.product_name_ai_completion_enabled,
               name: "product_name_ai_completion_enabled",
               url: settings_path,

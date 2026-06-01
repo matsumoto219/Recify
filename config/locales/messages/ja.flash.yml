@@ -6,7 +6,9 @@ ja:
       invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
     rate_limit:
-      too_many_requests: リクエストが多すぎます。しばらく時間をおいてから、もう一度お試しください。
+      too_many_requests: |-
+        リクエストが多すぎます。
+        しばらく時間をおいてから、もう一度お試しください。
     guest_sessions:
       create:
         success: ゲストログインしました
@@ -17,23 +19,39 @@ ja:
     users:
       unsupported_update_context: アカウント情報の変更は設定画面から行ってください。
       email_change:
-        confirmation_sent: 確認メールを送信しました。新しいメールアドレスで確認を完了してください。
+        confirmation_sent: |-
+          確認メールを送信しました。
+          新しいメールアドレスで確認を完了してください。
         guest_not_allowed: ゲストユーザーは通常のメールアドレス変更を利用できません。
       guest_registration:
-        confirmation_sent: 確認メールを送信しました。メール内のリンクから本登録を完了してください。
+        confirmation_sent: |-
+          確認メールを送信しました。
+          メール内のリンクから本登録を完了してください。
         not_allowed: 本登録済みユーザーはゲスト本登録化を利用できません。
     storage:
       quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
     usage_limits:
-      uploads_exceeded: 本日のアップロード上限に達しました。時間をおいてから、もう一度お試しください。
+      uploads_exceeded: |-
+        本日のアップロード上限に達しました。
+        時間をおいてから、もう一度お試しください。
     receipts:
       create: レシートを登録しました
       update: レシートを更新しました
       destroy: レシートを削除しました
-      enqueued: レシート画像をアップロードしました。解析が完了するまでお待ちください。
-      batch_enqueued: "%{count}件のレシート画像をアップロードしました。解析が完了するまでお待ちください。"
-      processing: このレシートは解析中です。完了後に確認できます。
+      enqueued: |-
+        レシート画像をアップロードしました。
+        解析が完了するまでお待ちください。
+      batch_enqueued: |-
+        %{count}件のレシート画像をアップロードしました。
+        解析が完了するまでお待ちください。
+      processing: |-
+        このレシートは解析中です。
+        完了後に確認できます。
       ocr_unavailable: 解析機能は一時停止中です。手動入力をご利用ください。
       analysis_completed: レシート解析が完了しました
-      analysis_review_needed: レシート解析が完了しました。内容を確認してください
-      analysis_failed: 処理に失敗しました。内容を確認してください
+      analysis_review_needed: |-
+        レシート解析が完了しました。
+        内容を確認してください。
+      analysis_failed: |-
+        処理に失敗しました。
+        内容を確認してください。

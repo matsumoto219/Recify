@@ -413,7 +413,9 @@ ja:
         description: 重要な操作は専用画面で本人確認と理由入力を行ってから実行します。
       receipt_analysis:
         title: レシート解析操作
-        description: 再解析は解析run詳細から実行できます。実行にはパスキーによる再認証が必要です。
+        description: |-
+          再解析は解析run詳細から実行できます。
+          実行にはパスキーによる再認証が必要です。
         runs_link: 解析run管理
         retry_logs_link: 再解析の監査ログ
       cleanup:

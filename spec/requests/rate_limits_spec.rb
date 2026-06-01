@@ -23,7 +23,12 @@ RSpec.describe 'Rails rate limits', type: :request do
   def expect_rate_limited_response
     aggregate_failures do
       expect(response).to have_http_status(:too_many_requests)
-      expect(response.body).to include(rate_limit_message)
+
+      if response.media_type == 'application/json'
+        expect(JSON.parse(response.body)).to eq('error' => rate_limit_message)
+      else
+        expect(response.body).to include(rate_limit_message)
+      end
     end
   end
 
