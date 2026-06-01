@@ -10,9 +10,10 @@
 %>
 
 <%
-  review_groups = ReviewReasons.group_by_source(receipt.blocking_review_reason_codes).select { |_source, reasons| reasons.any? }
-  review_items = receipt.review_items
-  review_count = review_groups.values.sum(&:size) + review_items.size
+  review_notes_state = receipt_review_notes_state(receipt)
+  review_groups = review_notes_state.groups
+  review_items = review_notes_state.items
+  review_count = review_notes_state.count
 %>
 
 <%= render "shared/ui/layout/surface_card", variant: :warning, padding: :md, class: "min-w-0 max-w-full" do %>

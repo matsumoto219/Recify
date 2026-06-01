@@ -11,6 +11,7 @@ class SettingsController < ApplicationController
   end
 
   def security
+    @security_presenter = Settings::SecurityPresenter.new(user: current_user)
   end
 
   def update
@@ -76,9 +77,7 @@ class SettingsController < ApplicationController
         "notifications_dropdown_content",
         partial: "shared/notifications/dropdown_content",
         locals: {
-          notifications: Notification.preload_known_notifiables(
-            current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a
-          )
+          notifications: notifications_dropdown_items
         }
       )
     ]

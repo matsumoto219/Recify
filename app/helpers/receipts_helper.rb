@@ -3,6 +3,15 @@
 # :normal / :warning / :review / :error のような row variant に集約する。
 
 module ReceiptsHelper
+  ReceiptNotesState = Struct.new(:groups, :items, :count, keyword_init: true)
+  AmountSummaryTaxDetailRow = Struct.new(
+    :rate_label,
+    :amount_display,
+    :net_amount_display,
+    :total_display,
+    keyword_init: true
+  )
+
   def receipt_dom_id(receipt)
     receipt.dom_target_id
   end
@@ -61,6 +70,22 @@ module ReceiptsHelper
     t("receipts.common.multiple_tax_rates")
   end
 
+  def receipt_amount_summary_tax_detail_rows(tax_details, currency_prefix: "¥")
+    Array(tax_details).map do |tax_detail|
+      rate = read_receipt_value(tax_detail, :rate)
+      net_amount = read_receipt_value(tax_detail, :net_amount)
+      amount = read_receipt_value(tax_detail, :amount)
+      total = amount.nil? || net_amount.nil? ? nil : net_amount.to_i + amount.to_i
+
+      AmountSummaryTaxDetailRow.new(
+        rate_label: receipt_rate_display(rate),
+        amount_display: receipt_detail_amount_display(amount, currency_prefix: currency_prefix),
+        net_amount_display: receipt_detail_amount_display(net_amount, currency_prefix: currency_prefix),
+        total_display: receipt_detail_amount_display(total, currency_prefix: currency_prefix)
+      )
+    end
+  end
+
   def receipt_item_discount_label(item)
     discount_amount = item.discount_amount.to_i
     return nil unless discount_amount.positive?
@@ -89,7 +114,32 @@ module ReceiptsHelper
     end
   end
 
+  def receipt_review_notes_state(receipt)
+    groups = grouped_receipt_review_reasons(receipt.blocking_review_reason_codes)
+    items = receipt.review_items
+
+    ReceiptNotesState.new(
+      groups: groups,
+      items: items,
+      count: groups.values.sum(&:size) + items.size
+    )
+  end
+
+  def receipt_warning_notes_state(receipt)
+    groups = grouped_receipt_review_reasons(receipt.warning_review_reason_codes)
+
+    ReceiptNotesState.new(
+      groups: groups,
+      items: [],
+      count: groups.values.sum(&:size)
+    )
+  end
+
   private
+
+  def grouped_receipt_review_reasons(reason_codes)
+    ReviewReasons.group_by_source(reason_codes).select { |_source, reasons| reasons.any? }
+  end
 
   def normalized_receipt_tax_detail_rates(tax_details)
     Array(tax_details).filter_map do |tax_detail|
@@ -104,6 +154,10 @@ module ReceiptsHelper
   end
 
   def read_receipt_rate(record, key)
+    read_receipt_value(record, key)
+  end
+
+  def read_receipt_value(record, key)
     return record.public_send(key) if record.respond_to?(key)
     return record[key] if record.respond_to?(:key?) && record.key?(key)
     return record[key.to_s] if record.respond_to?(:key?) && record.key?(key.to_s)

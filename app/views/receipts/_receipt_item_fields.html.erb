@@ -10,37 +10,18 @@
 %>
 
 <%
-  new_record = local_assigns.fetch(:new_record, false)
-  item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || ""
-  item_review_reason_codes = Array(item.review_reasons).map(&:to_s)
-  item_warning_reason_labels = new_record ? [] : receipt_item_warning_reason_labels(item)
-  item_review_reason_includes = ->(*codes) { (item_review_reason_codes & codes.map(&:to_s)).any? }
-  item_error_flags = {
-    name: item_review_reason_includes.call("item_name_uncertain"),
-    category: item_review_reason_includes.call("item_category_uncertain"),
-    tax_rate: item_review_reason_includes.call("item_tax_rate_uncertain")
-  }
-
-  row_class = if new_record
-                "grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg receipt-form-item-row transition-colors relative min-w-0"
-              else
-                [
-                  "grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg transition-colors relative min-w-0",
-                  item.needs_review ? "border receipt-form-item-review-row" : "receipt-form-item-row"
-                ].join(" ")
-              end
-  line_total_value = new_record ? nil : item.line_total
+  row_state = local_assigns.fetch(:row_state)
+  new_record = row_state.new_record?
+  item_name = row_state.item_name
+  item_warning_reason_labels = row_state.warning_reason_labels
+  row_class = row_state.row_class
+  line_total_value = row_state.line_total_value
   line_total_display = receipt_detail_amount_display(line_total_value)
-  original_line_total_value = new_record ? 0 : (item.original_line_total.presence || item.line_total.to_i)
-  line_total_data = {
-    receipt_form_target: "lineTotalInput",
-    original_line_total: original_line_total_value
-  }
-  line_total_data[:original_saved_line_total] = line_total_value unless new_record || line_total_value.nil?
-  selected_unit = new_record ? ReceiptItem::DEFAULT_QUANTITY_UNIT : item.quantity_unit.presence || ReceiptItem::DEFAULT_QUANTITY_UNIT
-  quantity_value = new_record ? "1" : (item.formatted_quantity_for_input.presence || "1")
-  quantity_step = ReceiptItem.quantity_step_for(selected_unit)
-  quantity_inputmode = ReceiptItem.quantity_inputmode_for(selected_unit)
+  line_total_data = row_state.line_total_data
+  selected_unit = row_state.selected_unit
+  quantity_value = row_state.quantity_value
+  quantity_step = row_state.quantity_step
+  quantity_inputmode = row_state.quantity_inputmode
 %>
 
 <div class="swipe-action rounded-lg"
@@ -76,7 +57,7 @@
                    with_icon: false,
                    placeholder: t("receipts.item_fields.name_placeholder"),
                    show_label: false,
-                   highlight_variant: (item.needs_review && item_error_flags[:name] ? :error : nil),
+                   highlight_variant: row_state.name_highlight_variant,
                    show_error_message: false,
                    size: :dense,
                    html_options: { maxlength: 500, autocomplete: "off" } %>
@@ -106,7 +87,7 @@
                    label: t("receipts.item_fields.quantity"),
                    value: quantity_value,
                    selected_unit: selected_unit,
-                   unit_options: ReceiptItem.quantity_unit_options,
+                   unit_options: row_state.quantity_unit_options,
                    show_label: false,
                    min: 0,
                    max: 9999.999,
@@ -116,7 +97,7 @@
                    inputmode: quantity_inputmode,
                    text_align: :center,
                    unit_select_variant: :compact_suffix,
-                   highlight_variant: (item.errors[:quantity].any? ? :error : nil),
+                   highlight_variant: row_state.quantity_highlight_variant,
                    show_error_message: false,
                    unit_data: { action: "change->receipt-form#quantityUnitChanged", receipt_form_target: "quantityUnitInput" },
                    unit_aria_label: t("receipts.item_fields.unit"),
@@ -146,7 +127,7 @@
                    max: 999999999,
                    step: 1,
                    size: :dense,
-                   highlight_variant: (item.errors[:price].any? ? :error : nil),
+                   highlight_variant: row_state.price_highlight_variant,
                    show_error_message: false,
                    html_options: {
                      data: {
@@ -190,7 +171,7 @@
                          f: item_form,
                          attribute: :discount_rate,
                          label: t("receipts.item_fields.discount_rate"),
-                         value: (new_record ? nil : item.discount_rate_percentage_input),
+                         value: row_state.discount_rate_percentage_input,
                          step: 0.1,
                          decimal_precision: 1,
                          min: 0,
@@ -201,13 +182,13 @@
                          show_stepper_buttons: true,
                          stepper_button_class: "md:hidden",
                          size: :dense,
-                         highlight_variant: (item.errors[:discount_rate].any? ? :error : nil),
+                         highlight_variant: row_state.discount_rate_highlight_variant,
                          show_error_message: false,
                          html_options: {
                            data: {
                              action: "input->receipt-form#recalculate",
                              receipt_form_target: "discountRateInput",
-                             original_discount_rate: (new_record ? nil : item.discount_rate_percentage_input)
+                             original_discount_rate: row_state.discount_rate_percentage_input
                            }
                          } %>
             </div>
@@ -222,7 +203,7 @@
                          f: item_form,
                          attribute: :tax_rate,
                          label: t("receipts.item_fields.tax_rate"),
-                         value: (item.tax_rate.present? ? item.tax_rate * 100 : nil),
+                         value: row_state.tax_rate_percentage_value,
                          step: 0.1,
                          decimal_precision: 1,
                          min: 0,
@@ -239,7 +220,7 @@
                              receipt_form_target: "taxRateInput"
                            }
                          },
-                         highlight_variant: ((item.errors[:tax_rate].any? || (item.needs_review && item_error_flags[:tax_rate])) ? :error : nil),
+                         highlight_variant: row_state.tax_rate_highlight_variant,
                          show_error_message: false %>
             </div>
           </div>
@@ -253,13 +234,13 @@
                          f: item_form,
                          attribute: :category,
                          label: t("receipts.item_fields.category"),
-                         options: ReceiptItem.category_options,
-                         selected: (new_record ? nil : item.category),
+                         options: row_state.category_options,
+                         selected: row_state.selected_category,
                          include_blank: t("receipts.item_fields.uncategorized"),
                          show_label: false,
                          select_wrapper_class: "w-full",
                          size: :dense,
-                         highlight_variant: (item.needs_review && item_error_flags[:category] ? :error : nil),
+                         highlight_variant: row_state.category_highlight_variant,
                          show_error_message: false %>
             </div>
           </div>

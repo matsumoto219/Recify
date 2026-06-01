@@ -33,7 +33,7 @@
             update_context: update_context,
             security_form_error: security_form_error %>
 
-      <%= render "settings/security/auth_options" %>
+      <%= render "settings/security/auth_options", presenter: @security_presenter %>
     <% end %>
   </div>
 

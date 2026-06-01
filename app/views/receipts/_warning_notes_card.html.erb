@@ -10,8 +10,9 @@
 %>
 
 <%
-  warning_groups = ReviewReasons.group_by_source(receipt.warning_review_reason_codes).select { |_source, reasons| reasons.any? }
-  warning_count = warning_groups.values.sum(&:size)
+  warning_notes_state = receipt_warning_notes_state(receipt)
+  warning_groups = warning_notes_state.groups
+  warning_count = warning_notes_state.count
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>

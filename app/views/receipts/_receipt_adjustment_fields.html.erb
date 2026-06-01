@@ -10,11 +10,12 @@
 %>
 
 <%
-  new_record = local_assigns.fetch(:new_record, false)
-  selected_kind = adjustment.kind.presence
-  selected_sign = adjustment.sign.presence || ReceiptAdjustment.default_sign_for(selected_kind)
-  other_kind = selected_kind == "other"
-  tax_rate_value = adjustment.tax_rate.present? ? adjustment.tax_rate * 100 : nil
+  row_state = local_assigns.fetch(:row_state)
+  new_record = row_state.new_record?
+  selected_kind = row_state.selected_kind
+  selected_sign = row_state.selected_sign
+  other_kind = row_state.other_kind?
+  tax_rate_value = row_state.tax_rate_value
 %>
 
 <div class="swipe-action rounded-lg"
@@ -75,7 +76,7 @@
                    f: adjustment_form,
                    attribute: :kind,
                    label: t("receipts.adjustment_fields.kind"),
-                   options: ReceiptAdjustment.kind_options,
+                   options: row_state.kind_options,
                    selected: selected_kind,
                    include_blank: t("receipts.adjustment_fields.kind_blank"),
                    show_label: false,
@@ -174,27 +175,27 @@
 
             <%# 種別から加算/減算を自動設定し、その他のみ選択可能にする。ポイント利用は支払調整として扱う。 %>
             <div data-receipt-form-target="adjustmentSignLabelWrapper"
-                 class="<%= "hidden" if other_kind %>">
+                 class="<%= row_state.sign_label_wrapper_class %>">
               <span class="inline-flex h-10 w-full items-center justify-center rounded-lg border token-border-soft token-bg-card px-3 text-sm font-bold token-text-muted"
                     data-receipt-form-target="adjustmentSignLabel">
-                <%= I18n.t("enums.receipt_adjustment.sign.#{selected_sign}", default: selected_sign) %>
+                <%= row_state.sign_label %>
               </span>
             </div>
 
             <div data-receipt-form-target="adjustmentSignSelectWrapper"
-                 class="<%= "hidden" unless other_kind %>">
+                 class="<%= row_state.sign_select_wrapper_class %>">
               <%= render "shared/ui/form/select_field",
                          f: adjustment_form,
                          attribute: :sign,
                          label: t("receipts.adjustment_fields.sign"),
-                         options: ReceiptAdjustment.sign_options,
+                         options: row_state.sign_options,
                          selected: selected_sign,
                          include_blank: false,
                          show_label: false,
                          select_wrapper_class: "w-full",
                          size: :dense,
                          html_options: {
-                           disabled: !other_kind,
+                           disabled: row_state.sign_select_disabled?,
                            data: {
                              action: "change->receipt-form#recalculate",
                              receipt_form_target: "adjustmentSignSelect"

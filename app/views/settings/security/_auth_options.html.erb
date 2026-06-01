@@ -1,8 +1,10 @@
+<% security_presenter = local_assigns.fetch(:presenter) %>
+
 <div id="two-factor" class="grid grid-cols-1 md:grid-cols-2 gap-6 scroll-mt-24">
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "flex h-full flex-col justify-between border token-border-soft" do %>
-    <% totp_credential = current_user.totp_credential %>
-    <% totp_enabled = totp_credential&.confirmed? %>
-    <% recovery_codes_status = TwoFactor.recovery_codes_status(user: current_user) if totp_enabled %>
+    <% totp_credential = security_presenter.totp_credential %>
+    <% totp_enabled = security_presenter.totp_enabled? %>
+    <% recovery_codes_status = security_presenter.recovery_codes_status %>
     <div class="space-y-5">
       <div class="flex items-center justify-between mb-4">
         <span class="material-symbols-outlined token-text-brand text-3xl">vibration</span>
@@ -28,16 +30,7 @@
           </p>
         </div>
 
-        <%
-          recovery_status_classes = case recovery_codes_status.status
-                                    when :empty
-                                      "token-state-error-soft token-text-error"
-                                    when :low, :missing
-                                      "token-state-warning-soft token-text-warning"
-                                    else
-                                      "token-bg-card-subtle token-text-muted"
-                                    end
-        %>
+        <% recovery_status_classes = security_presenter.recovery_status_classes %>
         <div class="rounded-lg border token-border-soft p-3 text-sm <%= recovery_status_classes %>">
           <p class="font-semibold token-text-base">
             <%= t("settings.security.auth.recovery_codes.status.#{recovery_codes_status.status}.title") %>
@@ -108,7 +101,7 @@
       data-passkey-request-failed-message-value="<%= t("settings.security.auth.passkey.messages.request_failed") %>">
       <div class="flex items-center justify-between mb-4">
         <span class="material-symbols-outlined token-text-brand text-3xl">passkey</span>
-        <%= render "shared/ui/badge/setting_status_badge", state: current_user.passkeys.exists? ? :active : :inactive %>
+        <%= render "shared/ui/badge/setting_status_badge", state: security_presenter.passkeys? ? :active : :inactive %>
       </div>
       <%= render "shared/ui/layout/section_header",
             title: t("settings.security.auth.passkey.title"),
@@ -118,12 +111,12 @@
             class: "mb-6" %>
 
       <div class="space-y-3">
-        <% if current_user.passkeys.exists? %>
-          <% current_user.passkeys.order(created_at: :desc).each do |passkey| %>
+        <% if security_presenter.passkeys? %>
+          <% security_presenter.passkeys.each do |passkey| %>
             <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 space-y-3">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <% passkey_label = passkey.label.presence || t("settings.security.auth.passkey.default_label") %>
+                  <% passkey_label = security_presenter.passkey_label(passkey) %>
                   <p class="text-sm font-semibold token-text-base truncate" title="<%= passkey_label %>">
                     <%= passkey_label %>
                   </p>

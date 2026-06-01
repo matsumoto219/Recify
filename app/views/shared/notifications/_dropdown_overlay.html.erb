@@ -2,7 +2,7 @@
   class="hidden fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top)+0.75rem)] z-50 sm:left-auto sm:right-4 md:right-8 sm:w-96 sm:max-w-[calc(100vw-2rem)]"
   role="dialog"
   aria-label="<%= t("notifications.dropdown.title") %>">
-  <% notifications = Notification.preload_known_notifiables(current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a) %>
+  <% notifications = Array(local_assigns.fetch(:notifications, @notifications_dropdown)) %>
   <%= render "shared/notifications/dropdown",
     notifications: notifications %>
 </div>

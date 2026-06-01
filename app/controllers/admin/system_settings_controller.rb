@@ -6,6 +6,7 @@ class Admin::SystemSettingsController < Admin::BaseController
   def show
     @record = Admin.system_setting(key: params[:key])
     raise_not_found if @record.blank?
+    prepare_form_presenter
   end
 
   def update
@@ -62,5 +63,12 @@ class Admin::SystemSettingsController < Admin::BaseController
   def raise_not_found
     raise ActionController::RoutingError,
           "No route matches [#{request.request_method}] #{request.path}"
+  end
+
+  def prepare_form_presenter
+    @form_presenter = Admin::SystemSettingFormPresenter.new(
+      record: @record,
+      reauthenticated: admin_passkey_reauthenticated?
+    )
   end
 end

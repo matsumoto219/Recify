@@ -34,6 +34,7 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   before_action :enforce_user_session_version!, unless: :skip_user_session_version_enforcement?
+  before_action :prepare_notifications_dropdown, if: :prepare_notifications_dropdown?
 
   class << self
     def rate_limit_cache_store=(store)
@@ -89,6 +90,20 @@ class ApplicationController < ActionController::Base
     return false unless user_signed_in?
 
     SystemSettings.enabled?("ui.maintenance_notice_enabled", user: current_user)
+  end
+
+  def prepare_notifications_dropdown?
+    request.get? && user_signed_in? && request.format.html?
+  end
+
+  def prepare_notifications_dropdown
+    @notifications_dropdown = notifications_dropdown_items
+  end
+
+  def notifications_dropdown_items
+    Notification.preload_known_notifiables(
+      current_user.notifications.recent.limit(Notification::DROPDOWN_LIMIT).to_a
+    )
   end
 
   def rate_limit_email_digest

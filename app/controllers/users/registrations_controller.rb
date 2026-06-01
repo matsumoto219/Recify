@@ -74,6 +74,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
+      prepare_settings_security_presenter if failure_template == "settings/security"
       render failure_template, status: :unprocessable_content
       return
     end
@@ -106,6 +107,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
+      prepare_settings_security_presenter if failure_template == "settings/security"
       render failure_template, status: :unprocessable_content
     end
   end
@@ -161,6 +163,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
+      prepare_settings_security_presenter
       render "settings/security", status: :unprocessable_content
     end
   end
@@ -179,6 +182,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       clean_up_passwords resource
       set_minimum_password_length
       set_flash_from_resource_errors(resource)
+      prepare_settings_security_presenter
       render "settings/security", status: :unprocessable_content
     end
   end
@@ -188,6 +192,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     clean_up_passwords resource
     set_minimum_password_length
     set_flash_from_resource_errors(resource)
+    prepare_settings_security_presenter
     render "settings/security", status: :unprocessable_content
   end
 
@@ -241,6 +246,10 @@ class Users::RegistrationsController < Devise::RegistrationsController
     return "settings/account" if update_context == "account"
 
     "devise/registrations/edit"
+  end
+
+  def prepare_settings_security_presenter
+    @security_presenter = Settings::SecurityPresenter.new(user: resource)
   end
 
   # If you have extra params to permit, append them to the sanitizer.

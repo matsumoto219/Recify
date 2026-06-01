@@ -43,6 +43,7 @@ class ReceiptsController < ApplicationController
   def new
     @receipt = current_user.receipts.new
     @receipt.receipt_items.build
+    prepare_receipt_form_presenter
   end
 
   def new_upload
@@ -118,6 +119,7 @@ class ReceiptsController < ApplicationController
       prepare_manual_receipt_items_missing_error!(create_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+      prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content, formats: :html
       return
@@ -129,12 +131,14 @@ class ReceiptsController < ApplicationController
       replace_manual_amount_errors!(create_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+      prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
       render :new, status: :unprocessable_content, formats: :html
     end
   end
 
   def edit
+    prepare_receipt_form_presenter
   end
 
   def update
@@ -142,6 +146,7 @@ class ReceiptsController < ApplicationController
 
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
       @receipt.errors.add(:image, :storage_quota_exceeded)
+      prepare_receipt_form_presenter
       flash.now[:alert] = t("flash.storage.quota_exceeded")
       render :edit, status: :unprocessable_content, formats: :html
       return
@@ -157,6 +162,7 @@ class ReceiptsController < ApplicationController
       @receipt.assign_attributes(update_params)
       prepare_manual_receipt_items_missing_error!(update_params)
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+      prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
       render :edit, status: :unprocessable_content, formats: :html
       return
@@ -167,6 +173,7 @@ class ReceiptsController < ApplicationController
       redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+      prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
       render :edit, status: :unprocessable_content, formats: :html
     end
@@ -181,6 +188,10 @@ class ReceiptsController < ApplicationController
 
   def set_receipt
     @receipt = current_user.receipts.find_by!(public_id: params[:public_id])
+  end
+
+  def prepare_receipt_form_presenter
+    @receipt_form_presenter = ReceiptFormPresenter.new(receipt: @receipt)
   end
 
   def block_processing_receipt

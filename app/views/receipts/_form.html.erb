@@ -8,18 +8,19 @@
   - なし
 %>
 
-<% form_dom_id = receipt.persisted? ? "edit_receipt_form_#{receipt.public_id}" : "new_receipt_form" %>
-<% visible_receipt_items = receipt.receipt_items.reject(&:marked_for_destruction?) %>
-<% destroyed_receipt_items = receipt.receipt_items.select(&:marked_for_destruction?) %>
-<% visible_receipt_adjustments = receipt.receipt_adjustments.reject(&:marked_for_destruction?) %>
-<% destroyed_receipt_adjustments = receipt.receipt_adjustments.select(&:marked_for_destruction?) %>
+<% form_presenter = local_assigns[:presenter] || @receipt_form_presenter || ReceiptFormPresenter.new(receipt: receipt) %>
+<% form_dom_id = form_presenter.form_dom_id %>
+<% visible_receipt_items = form_presenter.visible_receipt_items %>
+<% destroyed_receipt_items = form_presenter.destroyed_receipt_items %>
+<% visible_receipt_adjustments = form_presenter.visible_receipt_adjustments %>
+<% destroyed_receipt_adjustments = form_presenter.destroyed_receipt_adjustments %>
 <%= form_with model: receipt,
               html: {
                 id: form_dom_id,
                 data: {
                   controller: "receipt-form",
-                  "receipt-form-next-index-value": receipt.receipt_items.size,
-                  "receipt-form-next-adjustment-index-value": receipt.receipt_adjustments.size,
+                  "receipt-form-next-index-value": form_presenter.next_item_index,
+                  "receipt-form-next-adjustment-index-value": form_presenter.next_adjustment_index,
                   "receipt-form-rounding-mode-value": current_user.tax_rounding_mode,
                   "receipt-form-discount-rounding-mode-value": current_user.discount_rounding_mode,
                   "receipt-form-delete-confirmation-enabled-value": current_user.delete_confirmation_enabled,
@@ -29,13 +30,13 @@
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
                   "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates"),
-                  "receipt-form-adjustment-surcharge-kinds-value": ReceiptAdjustment::SURCHARGE_KINDS.join(","),
-                  "receipt-form-adjustment-discount-kinds-value": ReceiptAdjustment::DISCOUNT_KINDS.join(","),
+                  "receipt-form-adjustment-surcharge-kinds-value": form_presenter.adjustment_surcharge_kinds_value,
+                  "receipt-form-adjustment-discount-kinds-value": form_presenter.adjustment_discount_kinds_value,
                   "receipt-form-adjustment-surcharge-label-value": t("enums.receipt_adjustment.sign.surcharge"),
                   "receipt-form-adjustment-discount-label-value": t("enums.receipt_adjustment.sign.discount"),
-                  "receipt-form-decimal-quantity-units-value": ReceiptItem::DECIMAL_QUANTITY_UNITS.join(","),
-                  "receipt-form-integer-quantity-step-value": "1",
-                  "receipt-form-decimal-quantity-step-value": "0.001"
+                  "receipt-form-decimal-quantity-units-value": form_presenter.decimal_quantity_units_value,
+                  "receipt-form-integer-quantity-step-value": form_presenter.integer_quantity_step_value,
+                  "receipt-form-decimal-quantity-step-value": form_presenter.decimal_quantity_step_value
                 }
               } do |f| %>
 
@@ -49,21 +50,9 @@
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
 
-  <%# TODO: error_flags生成ロジックはViewからロジックを排除するため将来的に model または presenter（例 receipt.error_flags）へ移動する %>
-  <%# TODO: Viewからロジックを排除するためmodel等に寄せられる内容を整理する %>
-
   <%
     tax_rate_summary = receipt_tax_rate_summary(receipt, items: visible_receipt_items)
-
-    receipt_review_reason_codes = Array(receipt.review_reasons).map(&:to_s)
-    receipt_review_reason_includes = ->(*codes) { (receipt_review_reason_codes & codes.map(&:to_s)).any? }
-    error_flags = {
-      store_name: receipt_review_reason_includes.call("store_name_missing", "store_name_uncertain"),
-      payment_method: receipt_review_reason_includes.call("payment_method_missing", "payment_method_uncertain"),
-      purchased_at: receipt_review_reason_includes.call("purchased_at_missing", "purchased_at_uncertain", "purchased_at_conflicted") || receipt.errors[:purchased_at].any?,
-      store_address: receipt_review_reason_includes.call("store_address_missing", "store_address_uncertain"),
-      store_phone_number: receipt_review_reason_includes.call("store_phone_number_missing", "store_phone_number_uncertain")
-    }
+    error_flags = form_presenter.error_flags
   %>
   <% content_for :mobile_bottom_actions do %>
     <%= render "shared/ui/actions/button",
@@ -223,7 +212,8 @@
                 <%= render "receipts/receipt_item_fields",
                       item_form: item_form,
                       item: item_form.object,
-                      new_record: false %>
+                      new_record: false,
+                      row_state: form_presenter.item_row(item_form.object, new_record: false) %>
               <% end %>
             <% end %>
 
@@ -240,11 +230,12 @@
             </button>
 
             <template data-receipt-form-target="template">
-              <%= f.fields_for :receipt_items, ReceiptItem.new, child_index: "NEW_RECORD" do |item_form| %>
+              <%= f.fields_for :receipt_items, form_presenter.new_item, child_index: "NEW_RECORD" do |item_form| %>
                 <%= render "receipts/receipt_item_fields",
                       item_form: item_form,
                       item: item_form.object,
-                      new_record: true %>
+                      new_record: true,
+                      row_state: form_presenter.item_row(item_form.object, new_record: true) %>
               <% end %>
             </template>
           </div>
@@ -272,7 +263,8 @@
                 <%= render "receipts/receipt_adjustment_fields",
                       adjustment_form: adjustment_form,
                       adjustment: adjustment_form.object,
-                      new_record: false %>
+                      new_record: false,
+                      row_state: form_presenter.adjustment_row(adjustment_form.object, new_record: false) %>
               <% end %>
             <% end %>
 
@@ -289,11 +281,12 @@
             </button>
 
             <template data-receipt-form-target="adjustmentTemplate">
-              <%= f.fields_for :receipt_adjustments, ReceiptAdjustment.new(kind: "delivery_fee", sign: "surcharge", source: "manual"), child_index: "NEW_ADJUSTMENT_RECORD" do |adjustment_form| %>
+              <%= f.fields_for :receipt_adjustments, form_presenter.new_adjustment, child_index: "NEW_ADJUSTMENT_RECORD" do |adjustment_form| %>
                 <%= render "receipts/receipt_adjustment_fields",
                       adjustment_form: adjustment_form,
                       adjustment: adjustment_form.object,
-                      new_record: true %>
+                      new_record: true,
+                      row_state: form_presenter.adjustment_row(adjustment_form.object, new_record: true) %>
               <% end %>
             </template>
           </div>
