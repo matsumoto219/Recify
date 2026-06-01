@@ -1,0 +1,12 @@
+<%
+  size = local_assigns.fetch(:size, :md)
+  wrapper_class = local_assigns[:wrapper_class]
+  table_class = local_assigns[:table_class]
+  wrapper_classes = [ "max-w-full overflow-x-auto", wrapper_class ].compact.join(" ")
+%>
+
+<div class="<%= wrapper_classes %>">
+  <table class="<%= admin_table_classes(size: size, extra_class: table_class) %>">
+    <%= yield %>
+  </table>
+</div>

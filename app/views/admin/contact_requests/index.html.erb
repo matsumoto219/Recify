@@ -163,37 +163,36 @@
             next_label: t("admin.contact_requests.index.results.next") %>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <%= render "admin/shared/table_frame", size: :lg do %>
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.created") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.request_uid") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.status") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.category") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.subject") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.contact_requests.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.contact_requests.index.table.request_uid") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.index.table.status") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.index.table.category") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :subject) %>"><%= t("admin.contact_requests.index.table.subject") %></th>
             <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.user") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.email") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.detail") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :email) %>"><%= t("admin.contact_requests.index.table.email") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.contact_requests.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody>
           <% @result.records.each do |record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 whitespace-nowrap"><%= l(record[:created_at], format: :short) %></td>
-              <td class="px-3 py-3 font-mono text-xs break-all"><%= record[:request_uid] %></td>
-              <td class="px-3 py-3"><%= t("admin.contact_requests.statuses.#{record[:status]}") %></td>
-              <td class="px-3 py-3"><%= t("admin.contact_requests.categories.#{record[:category]}") %></td>
-              <td class="px-3 py-3 max-w-xs truncate" title="<%= record[:subject] %>"><%= record[:subject] %></td>
-              <td class="px-3 py-3 font-mono text-xs">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:created_at], format: :short) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:request_uid] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.statuses.#{record[:status]}") %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.categories.#{record[:category]}") %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :subject) %>" title="<%= record[:subject] %>"><%= record[:subject] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>">
                 <% if record[:user_id].present? %>
                   <%= link_to "##{record[:user_id]}", admin_user_path(record[:user_id]), class: "token-text-brand hover:underline" %>
                 <% else %>
                   -
                 <% end %>
               </td>
-              <td class="px-3 py-3 font-mono text-xs"><%= record[:email_masked] %></td>
-              <td class="px-3 py-3"><%= link_to t("admin.contact_requests.index.table.detail_link"), admin_contact_request_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :email) %>"><%= record[:email_masked] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.contact_requests.index.table.detail_link"), admin_contact_request_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>
 
@@ -203,7 +202,6 @@
             </tr>
           <% end %>
         </tbody>
-      </table>
-    </div>
+    <% end %>
   <% end %>
 </section>

@@ -178,41 +178,40 @@
             next_label: t("admin.receipt_analysis_runs.index.results.next") %>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <%= render "admin/shared/table_frame", size: :lg do %>
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.run_key") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.receipt") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.user") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.run") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.receipt_status") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.source") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.error") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_runs.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.receipt_analysis_runs.index.table.run_key") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.receipt_analysis_runs.index.table.receipt") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.receipt_analysis_runs.index.table.user") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_runs.index.table.run") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_runs.index.table.receipt_status") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_runs.index.table.source") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_runs.index.table.error") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.receipt_analysis_runs.index.table.created") %></th>
           </tr>
         </thead>
         <tbody>
           <% @result.records.each do |record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 font-mono text-xs">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                 <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
               </td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                 <div class="font-semibold token-text-base"><%= record.dig(:receipt_info, :display_id) %></div>
                 <div class="font-mono text-xs token-text-muted"><%= record.dig(:receipt_info, :public_id) %></div>
               </td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>">
                 <div class="font-mono text-xs token-text-base">#<%= record.dig(:user_info, :id) %></div>
                 <div class="text-xs token-text-muted"><%= record.dig(:user_info, :guest) ? t("admin.receipt_analysis_runs.index.user_kind.guest") : t("admin.receipt_analysis_runs.index.user_kind.registered") %></div>
               </td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
                 <div class="token-text-base"><%= record[:stage] %> / <%= record[:status] %></div>
               </td>
-              <td class="px-3 py-3"><%= record[:receipt_status] %></td>
-              <td class="px-3 py-3"><%= record[:source] %></td>
-              <td class="px-3 py-3"><%= record[:error_code].presence || "-" %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= l(record[:timestamps][:created_at], format: :short) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:receipt_status] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:source] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:error_code].presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:timestamps][:created_at], format: :short) %></td>
             </tr>
           <% end %>
 
@@ -222,7 +221,6 @@
             </tr>
           <% end %>
         </tbody>
-      </table>
-    </div>
+    <% end %>
   <% end %>
 </section>

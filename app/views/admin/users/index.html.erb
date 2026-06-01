@@ -148,41 +148,40 @@
       </div>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <%= render "admin/shared/table_frame", size: :xl do %>
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.id") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.email") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.admin") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.guest") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.confirmed") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.locked") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.passkeys") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.receipts") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.sign_in") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.current") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.last") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.created") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.index.table.detail") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.users.index.table.id") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :email) %>"><%= t("admin.users.index.table.email") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.index.table.admin") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.index.table.guest") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.index.table.confirmed") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.index.table.locked") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.users.index.table.passkeys") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.users.index.table.receipts") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.users.index.table.sign_in") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.users.index.table.current") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.users.index.table.last") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.users.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.users.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody>
           <% @result.records.each do |record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 font-mono text-xs">#<%= record[:id] %></td>
-              <td class="px-3 py-3 token-text-base"><%= record[:email] %></td>
-              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:admin]) %></td>
-              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:guest]) %></td>
-              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:confirmed]) %></td>
-              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:locked]) %></td>
-              <td class="px-3 py-3 font-mono" data-admin-user-passkeys-count="<%= record[:id] %>"><%= record[:passkeys_count] %></td>
-              <td class="px-3 py-3 font-mono" data-admin-user-receipts-count="<%= record[:id] %>"><%= record[:receipts_count] %></td>
-              <td class="px-3 py-3 font-mono"><%= record.dig(:sign_in, :sign_in_count) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:sign_in, :current_sign_in_at)) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:sign_in, :last_sign_in_at)) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:timestamps, :created_at)) %></td>
-              <td class="px-3 py-3"><%= link_to t("admin.users.index.table.detail_link"), admin_user_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>">#<%= record[:id] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :email) %>"><%= record[:email] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= admin_user_boolean_label(record[:admin]) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= admin_user_boolean_label(record[:guest]) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= admin_user_boolean_label(record[:confirmed]) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= admin_user_boolean_label(record[:locked]) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>" data-admin-user-passkeys-count="<%= record[:id] %>"><%= record[:passkeys_count] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>" data-admin-user-receipts-count="<%= record[:id] %>"><%= record[:receipts_count] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record.dig(:sign_in, :sign_in_count) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= admin_short_timestamp_label(record.dig(:sign_in, :current_sign_in_at)) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= admin_short_timestamp_label(record.dig(:sign_in, :last_sign_in_at)) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= admin_short_timestamp_label(record.dig(:timestamps, :created_at)) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.users.index.table.detail_link"), admin_user_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>
 
@@ -192,7 +191,6 @@
             </tr>
           <% end %>
         </tbody>
-      </table>
-    </div>
+    <% end %>
   <% end %>
 </section>

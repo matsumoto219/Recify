@@ -20,37 +20,35 @@
       </span>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full divide-y token-border-soft text-sm">
+    <%= render "admin/shared/table_frame", size: :xl, table_class: "divide-y token-border-soft" do %>
         <thead>
           <tr class="text-left text-xs uppercase tracking-wide token-text-muted">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.key") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.category") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.value_type") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.current_value") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.default_value") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.source") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.risk_level") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.system_settings.index.table.detail") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.system_settings.index.table.key") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.system_settings.index.table.category") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.system_settings.index.table.value_type") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.system_settings.index.table.current_value") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.system_settings.index.table.default_value") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.system_settings.index.table.source") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.system_settings.index.table.risk_level") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.system_settings.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody class="divide-y token-border-soft">
           <% @result.records.each do |record| %>
             <tr>
-              <td class="px-3 py-3 font-mono text-xs token-text-base"><%= record[:key] %></td>
-              <td class="px-3 py-3 token-text-base"><%= record[:category] %></td>
-              <td class="px-3 py-3 font-mono text-xs token-text-muted"><%= record[:value_type] %></td>
-              <td class="px-3 py-3 font-mono text-xs token-text-base"><%= record[:current_value].inspect %></td>
-              <td class="px-3 py-3 font-mono text-xs token-text-muted"><%= record[:default_value].inspect %></td>
-              <td class="px-3 py-3 token-text-base"><%= record[:source] %></td>
-              <td class="px-3 py-3 token-text-base"><%= record[:risk_level] %></td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :long_id) %>"><%= record[:key] %></td>
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>"><%= record[:category] %></td>
+              <td class="px-3 py-3 token-text-muted <%= admin_table_cell_classes(type: :status, extra_class: "font-mono text-xs") %>"><%= record[:value_type] %></td>
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :long_text, extra_class: "font-mono text-xs") %>"><%= record[:current_value].inspect %></td>
+              <td class="px-3 py-3 token-text-muted <%= admin_table_cell_classes(type: :long_text, extra_class: "font-mono text-xs") %>"><%= record[:default_value].inspect %></td>
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>"><%= record[:source] %></td>
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>"><%= record[:risk_level] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>">
                 <%= link_to t("admin.system_settings.index.table.detail"), admin_system_setting_path(record[:key]), class: "font-semibold token-text-brand hover:underline" %>
               </td>
             </tr>
           <% end %>
         </tbody>
-      </table>
-    </div>
+    <% end %>
   <% end %>
 </section>

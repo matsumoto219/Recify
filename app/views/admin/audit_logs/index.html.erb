@@ -173,41 +173,40 @@
             next_label: t("admin.audit_logs.index.results.next") %>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <%= render "admin/shared/table_frame", size: :xl do %>
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.created") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.actor") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.action") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.outcome") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.target") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.error") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.request") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.ip") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.reason") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.audit_logs.index.table.detail") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.audit_logs.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.actor") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.audit_logs.index.table.action") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.outcome") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.audit_logs.index.table.target") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.error") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.audit_logs.index.table.request") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.audit_logs.index.table.ip") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.audit_logs.index.table.reason") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.audit_logs.index.table.detail") %></th>
           </tr>
         </thead>
         <tbody>
           <% @result.records.each do |record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 whitespace-nowrap"><%= l(record[:created_at], format: :short) %></td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:created_at], format: :short) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
                 <div class="token-text-base"><%= record.dig(:actor, :kind) %></div>
                 <div class="font-mono text-xs token-text-muted"><%= record.dig(:actor, :user_id).present? ? "##{record.dig(:actor, :user_id)}" : "-" %></div>
               </td>
-              <td class="px-3 py-3 font-mono text-xs"><%= record[:action] %></td>
-              <td class="px-3 py-3"><%= record[:outcome] %></td>
-              <td class="px-3 py-3">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:action] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:outcome] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                 <div class="token-text-base"><%= record[:target_uid].presence || "-" %></div>
                 <div class="text-xs token-text-muted"><%= record[:target_type].presence || "-" %></div>
               </td>
-              <td class="px-3 py-3"><%= record[:error_code].presence || "-" %></td>
-              <td class="px-3 py-3 font-mono text-xs"><%= record[:request_id].to_s.first(12).presence || "-" %></td>
-              <td class="px-3 py-3 font-mono text-xs"><%= record[:ip_address].presence || "-" %></td>
-              <td class="px-3 py-3"><%= truncate(record[:reason].to_s, length: 40) %></td>
-              <td class="px-3 py-3"><%= link_to t("admin.audit_logs.index.table.detail_link"), admin_audit_log_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:error_code].presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:request_id].to_s.first(12).presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:ip_address].presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= truncate(record[:reason].to_s, length: 40) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.audit_logs.index.table.detail_link"), admin_audit_log_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>
 
@@ -217,7 +216,6 @@
             </tr>
           <% end %>
         </tbody>
-      </table>
-    </div>
+    <% end %>
   <% end %>
 </section>
