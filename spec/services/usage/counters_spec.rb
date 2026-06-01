@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe UsageCounters do
+RSpec.describe Usage::Counters do
   describe '.current' do
     it 'counterがない場合は0のentryを返し、DB作成はしない' do
       user = create(:user)
@@ -54,7 +54,7 @@ RSpec.describe UsageCounters do
 
       expect {
         described_class.check_and_increment!(user: user, key: 'receipt_uploads_per_day', amount: 1, limit: 5)
-      }.to raise_error(UsageLimits::LimitExceeded, 'usage_limit_exceeded')
+      }.to raise_error(Usage::LimitExceeded, 'usage_limit_exceeded')
 
       expect(UsageCounter.find_by!(user: user, key: 'receipt_uploads_per_day').used_count).to eq(5)
     end
@@ -78,7 +78,7 @@ RSpec.describe UsageCounters do
 
       expect {
         described_class.check!(user: user, key: 'ocr_jobs_per_day', amount: 1, limit: 3)
-      }.to raise_error(UsageLimits::LimitExceeded)
+      }.to raise_error(Usage::LimitExceeded)
     end
   end
 
@@ -89,7 +89,7 @@ RSpec.describe UsageCounters do
 
       expect {
         described_class.ensure_within_limit!(user: user, key: 'ai_jobs_per_day', limit: 3)
-      }.to raise_error(UsageLimits::LimitExceeded)
+      }.to raise_error(Usage::LimitExceeded)
     end
   end
 

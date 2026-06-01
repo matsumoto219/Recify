@@ -31,7 +31,7 @@ class ReceiptBatchUploadService
     return failure(I18n.t("receipts.batch_upload.errors.quota_exceeded")) unless storage_quota_available?
 
     create_receipts
-  rescue UsageLimits::LimitExceeded
+  rescue Usage::LimitExceeded
     failure(I18n.t("receipts.batch_upload.errors.usage_limit_exceeded"))
   end
 
@@ -71,12 +71,7 @@ class ReceiptBatchUploadService
   end
 
   def consume_batch_upload_limits!
-    UsageCounters.check_and_increment!(
-      user: user,
-      key: "batch_files_per_day",
-      amount: files.size,
-      limit: UserLimits.effective_limit(user: user, key: "batch_files_per_day")
-    )
+    Usage.consume_batch_upload!(user: user, amount: files.size)
   end
 
   def enqueue_analysis_jobs(receipts)
@@ -109,10 +104,10 @@ class ReceiptBatchUploadService
   end
 
   def consume_ocr_job_limit_for!(run)
-    UsageLimits.consume_ocr_job!(user: user)
+    Usage.consume_ocr_job!(user: user)
     true
-  rescue UsageLimits::LimitExceeded
-    UsageLimits.mark_analysis_run_blocked!(run: run, stage: "ocr")
+  rescue Usage::LimitExceeded
+    Usage.mark_analysis_run_blocked!(run: run, stage: "ocr")
     false
   end
 

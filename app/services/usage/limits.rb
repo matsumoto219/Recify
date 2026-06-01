@@ -1,31 +1,9 @@
-module UsageLimits
+module Usage::Limits
   ANALYSIS_ERROR_CODE = "usage_limit_exceeded".freeze
-
-  class LimitExceeded < StandardError
-    attr_reader :key, :limit, :used, :requested
-
-    def initialize(key:, limit:, used:, requested:)
-      @key = key
-      @limit = limit
-      @used = used
-      @requested = requested
-
-      super("usage_limit_exceeded")
-    end
-
-    def details
-      {
-        key: key,
-        limit: limit,
-        used: used,
-        requested: requested
-      }
-    end
-  end
 
   class << self
     def consume_ocr_job!(user:)
-      UsageCounters.check_and_increment!(
+      Usage::Counters.check_and_increment!(
         user: user,
         key: "ocr_jobs_per_day",
         amount: 1,
@@ -34,7 +12,7 @@ module UsageLimits
     end
 
     def ensure_ocr_job_within_limit!(user:)
-      UsageCounters.ensure_within_limit!(
+      Usage::Counters.ensure_within_limit!(
         user: user,
         key: "ocr_jobs_per_day",
         limit: UserLimits.effective_limit(user: user, key: "ocr_jobs_per_day")
@@ -42,7 +20,7 @@ module UsageLimits
     end
 
     def consume_ai_job!(user:)
-      UsageCounters.check_and_increment!(
+      Usage::Counters.check_and_increment!(
         user: user,
         key: "ai_jobs_per_day",
         amount: 1,

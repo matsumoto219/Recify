@@ -179,7 +179,7 @@ module Admin
 
     def usage_limit_summary_for(user)
       storage_usage = user.storage_usage
-      usage_entries = UsageCounters.summary_for(user: user)
+      usage_entries = Usage.counter_summary_for(user: user)
       limit_entries = UserLimits.summary_for(user: user)
       storage_limit_entry = limit_entries.find { |entry| entry.key == "storage_bytes" }
 

@@ -314,21 +314,21 @@ class ReceiptAnalysisPipeline
   end
 
   def ocr_provider_call_allowed?
-    UsageLimits.ensure_ocr_job_within_limit!(user: receipt.user)
+    Usage.ensure_ocr_job_within_limit!(user: receipt.user)
     true
-  rescue UsageLimits::LimitExceeded
+  rescue Usage::LimitExceeded
     false
   end
 
   def ai_provider_call_allowed?
-    UsageLimits.consume_ai_job!(user: receipt.user)
+    Usage.consume_ai_job!(user: receipt.user)
     true
-  rescue UsageLimits::LimitExceeded
+  rescue Usage::LimitExceeded
     false
   end
 
   def usage_limit_blocked_result(stage)
-    UsageLimits.mark_analysis_run_blocked!(run: run, stage: stage)
+    Usage.mark_analysis_run_blocked!(run: run, stage: stage)
     Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   end
 

@@ -265,14 +265,9 @@ module Analysis
     end
 
     def consume_retry_operation_limit
-      UsageCounters.check_and_increment!(
-        user: actor,
-        key: "retry_operations_per_day",
-        amount: 1,
-        limit: UserLimits.effective_limit(user: actor, key: "retry_operations_per_day")
-      )
+      Usage.consume_retry_operation!(user: actor)
       true
-    rescue UsageLimits::LimitExceeded
+    rescue Usage::LimitExceeded
       false
     end
 

@@ -84,7 +84,7 @@ class ReceiptsController < ApplicationController
         saved = @receipt.save
         raise ActiveRecord::Rollback unless saved
       end
-    rescue UsageLimits::LimitExceeded
+    rescue Usage::LimitExceeded
       render_upload_usage_limit_exceeded
       return
     end
@@ -300,12 +300,7 @@ class ReceiptsController < ApplicationController
   end
 
   def consume_single_upload_limit!
-    UsageCounters.check_and_increment!(
-      user: current_user,
-      key: "receipt_uploads_per_day",
-      amount: 1,
-      limit: UserLimits.effective_limit(user: current_user, key: "receipt_uploads_per_day")
-    )
+    Usage.consume_receipt_upload!(user: current_user)
   end
 
   def render_upload_usage_limit_exceeded
@@ -315,10 +310,10 @@ class ReceiptsController < ApplicationController
   end
 
   def consume_ocr_job_limit_for!(run, user)
-    UsageLimits.consume_ocr_job!(user: user)
+    Usage.consume_ocr_job!(user: user)
     true
-  rescue UsageLimits::LimitExceeded
-    UsageLimits.mark_analysis_run_blocked!(run: run, stage: "ocr")
+  rescue Usage::LimitExceeded
+    Usage.mark_analysis_run_blocked!(run: run, stage: "ocr")
     false
   end
 

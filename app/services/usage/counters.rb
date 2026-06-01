@@ -1,4 +1,4 @@
-module UsageCounters
+module Usage::Counters
   Entry = Struct.new(
     :key,
     :period,
@@ -123,7 +123,7 @@ module UsageCounters
       numeric_limit = Integer(limit)
       return if used + requested <= numeric_limit
 
-      raise UsageLimits::LimitExceeded.new(
+      raise Usage::LimitExceeded.new(
         key: normalize_key(key),
         limit: numeric_limit,
         used: used,

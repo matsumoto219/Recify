@@ -151,7 +151,7 @@ RSpec.describe UserLimits do
     it 'guestから本登録化するとeffective limitだけ通常ユーザー側へ切り替わる' do
       guest = create(:user, guest: true, storage_limit_bytes: 1.gigabyte)
       guest.avatar.attach(io: StringIO.new('avatar-bytes'), filename: 'avatar.png', content_type: 'image/png')
-      UsageCounters.increment!(user: guest, key: 'receipt_uploads_per_day', amount: 5)
+      Usage::Counters.increment!(user: guest, key: 'receipt_uploads_per_day', amount: 5)
       used_bytes_before = guest.storage_usage.used_bytes
 
       aggregate_failures do
