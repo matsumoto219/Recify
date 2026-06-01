@@ -18,7 +18,7 @@ class ReceiptsController < ApplicationController
     @query = normalize_search_query(params[:q])
     log_suspicious_search_query(@query) if suspicious_search_query?(@query)
 
-    search_validation = Search::QueryValidator.call(@query)
+    search_validation = Search.validate_query(@query)
     unless search_validation.valid?
       render_invalid_search_query
       return

@@ -1,5 +1,5 @@
 class Admin::UserLimitOverridesController < Admin::BaseController
-  USER_LIMIT_CONFIRMATION_TEXT = SystemOperations::UserLimitUpdateExecutor::CONFIRMATION_TEXT
+  USER_LIMIT_CONFIRMATION_TEXT = SystemOperations.user_limit_update_confirmation_text
 
   before_action :set_user
 

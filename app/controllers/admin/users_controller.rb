@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  USER_LIMIT_CONFIRMATION_TEXT = SystemOperations::UserLimitUpdateExecutor::CONFIRMATION_TEXT
+  USER_LIMIT_CONFIRMATION_TEXT = SystemOperations.user_limit_update_confirmation_text
 
   helper_method :user_limit_confirmation_text
 

@@ -124,4 +124,10 @@ RSpec.describe SystemOperations do
       end
     end
   end
+
+  describe '.user_limit_update_confirmation_text' do
+    it 'UserLimitUpdateExecutorの確認文言を親入口から公開する' do
+      expect(described_class.user_limit_update_confirmation_text).to eq('UPDATE USER LIMIT')
+    end
+  end
 end

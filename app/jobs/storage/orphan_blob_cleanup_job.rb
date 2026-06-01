@@ -4,9 +4,9 @@ module Storage
 
     DEFAULT_LIMIT = 100
 
-    def perform(dry_run: true, limit: DEFAULT_LIMIT, created_before: nil, older_than: OrphanBlobScanner::DEFAULT_OLDER_THAN)
+    def perform(dry_run: true, limit: DEFAULT_LIMIT, created_before: nil, older_than: nil)
       dry_run = normalize_boolean(dry_run)
-      scan = OrphanBlobScanner.call(
+      scan = Storage.orphan_blob_scan(
         created_before: created_before,
         older_than: older_than,
         limit: normalize_limit(limit)

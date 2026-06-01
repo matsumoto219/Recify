@@ -76,5 +76,9 @@ module SystemOperations
         confirmation: confirmation
       )
     end
+
+    def user_limit_update_confirmation_text
+      UserLimitUpdateExecutor::CONFIRMATION_TEXT
+    end
   end
 end

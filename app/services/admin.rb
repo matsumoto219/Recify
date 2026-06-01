@@ -20,6 +20,15 @@ module Admin
       ContactRequestsQuery.find(id: id)
     end
 
+    def update_contact_request_status(contact_request:, status:, actor:, request:)
+      ContactRequestStatusUpdater.call(
+        contact_request: contact_request,
+        status: status,
+        actor: actor,
+        request: request
+      )
+    end
+
     def users(**filters)
       UsersQuery.call(**filters)
     end

@@ -133,5 +133,29 @@ RSpec.describe Storage::OrphanBlobCleanupJob, type: :job do
         )
       )
     end
+
+    it 'Storage親入口からorphan blob scanを実行する' do
+      scan = {
+        count: 0,
+        bytes: 0,
+        blob_ids: [],
+        sample: [],
+        created_before: 1.day.ago.iso8601,
+        older_than_seconds: 86_400
+      }
+
+      allow(Storage).to receive(:orphan_blob_scan).and_return(scan)
+
+      result = described_class.perform_now(dry_run: false, limit: 5)
+
+      aggregate_failures do
+        expect(Storage).to have_received(:orphan_blob_scan).with(
+          created_before: nil,
+          older_than: nil,
+          limit: 5
+        )
+        expect(result).to include(scanned_count: 0, purged_count: 0)
+      end
+    end
   end
 end
