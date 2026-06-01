@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe Search::QueryValidator do
+RSpec.describe ReceiptSearch::QueryValidator do
   describe '.call' do
     it '完全入力された不正なdate演算子をinvalidにする' do
       invalid_queries = [

@@ -564,7 +564,7 @@ class Receipt < ApplicationRecord
   end
 
   def blocking_review_reason_codes
-    ReviewReasonSource.blocking_reasons_for_user(review_reasons)
+    ReviewReasons.blocking_reasons_for_user(review_reasons)
   end
 
   def blocking_review_reason_labels
@@ -572,7 +572,7 @@ class Receipt < ApplicationRecord
   end
 
   def warning_review_reason_codes
-    ReviewReasonSource.warning_reasons_for_user(review_reasons)
+    ReviewReasons.warning_reasons_for_user(review_reasons)
   end
 
   def warning_review_reason_labels

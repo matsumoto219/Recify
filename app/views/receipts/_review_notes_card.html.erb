@@ -10,7 +10,7 @@
 %>
 
 <%
-  review_groups = ReviewReasonSource.group_by_source(receipt.blocking_review_reason_codes).select { |_source, reasons| reasons.any? }
+  review_groups = ReviewReasons.group_by_source(receipt.blocking_review_reason_codes).select { |_source, reasons| reasons.any? }
   review_items = receipt.review_items
   review_count = review_groups.values.sum(&:size) + review_items.size
 %>

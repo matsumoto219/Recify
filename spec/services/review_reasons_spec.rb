@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReviewReasonSource do
+RSpec.describe ReviewReasons do
   describe '.source_for' do
     it 'classifies ai reasons' do
       aggregate_failures do

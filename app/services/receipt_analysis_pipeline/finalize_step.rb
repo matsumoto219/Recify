@@ -384,8 +384,8 @@ class ReceiptAnalysisPipeline
     def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], ocr_low_quality: nil)
       return "review_needed" if amount_needs_review
       return "review_needed" if ai_needs_review
-      return "review_needed" if ReviewReasonSource.blocking_reasons_for_user(build_review_reasons).any?
-      return "review_needed" if ReviewReasonSource.blocking_reasons_for_user(ocr_review_reasons).any?
+      return "review_needed" if ReviewReasons.blocking_reasons_for_user(build_review_reasons).any?
+      return "review_needed" if ReviewReasons.blocking_reasons_for_user(ocr_review_reasons).any?
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes) if ocr_low_quality.nil?
       return "review_needed" if ocr_low_quality
       return "review_needed" if receipt_attributes[:store_name].blank?
@@ -399,7 +399,7 @@ class ReceiptAnalysisPipeline
     end
 
     def merge_review_reasons(*reason_groups)
-      ReviewReasonSource.review_reasons_for_user(
+      ReviewReasons.review_reasons_for_user(
         reason_groups
         .flatten
         .compact
@@ -419,7 +419,7 @@ class ReceiptAnalysisPipeline
 
     def ocr_review_reasons_for(ocr_result)
       candidates = ocr_candidates(ocr_result)
-      ReviewReasonSource.review_reasons_for_user(candidates[:review_reasons])
+      ReviewReasons.review_reasons_for_user(candidates[:review_reasons])
     end
 
     def amount_calculation_profile_snapshot(amount_result, tax_rate_correction: nil)

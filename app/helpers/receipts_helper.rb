@@ -80,7 +80,7 @@ module ReceiptsHelper
   end
 
   def receipt_item_warning_reason_codes(item)
-    ReviewReasonSource.warning_reasons_for_user(Array(item.review_reasons).map(&:to_s))
+    ReviewReasons.warning_reasons_for_user(Array(item.review_reasons).map(&:to_s))
   end
 
   def receipt_item_warning_reason_labels(item)

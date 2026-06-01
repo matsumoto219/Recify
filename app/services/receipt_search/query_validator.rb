@@ -1,4 +1,4 @@
-module Search
+module ReceiptSearch
   class QueryValidator
     DATE_PATTERN = "\\d{4}[\\/-]\\d{2}[\\/-]\\d{2}".freeze
 

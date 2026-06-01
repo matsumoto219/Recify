@@ -18,7 +18,7 @@ class ReceiptsController < ApplicationController
     @query = normalize_search_query(params[:q])
     log_suspicious_search_query(@query) if suspicious_search_query?(@query)
 
-    search_validation = Search.validate_query(@query)
+    search_validation = ReceiptSearch.validate_query(@query)
     unless search_validation.valid?
       render_invalid_search_query
       return
@@ -763,12 +763,12 @@ class ReceiptsController < ApplicationController
         amount_result[:inconsistencies]
       end
 
-    ReviewReasonSource.blocking_reasons_for_user(reasons)
+    ReviewReasons.blocking_reasons_for_user(reasons)
   end
 
   def manual_update_item_review_remaining?(permitted)
     manual_update_item_review_states(permitted).any? do |state|
-      state[:needs_review] || ReviewReasonSource.blocking_reasons_for_user(state[:review_reasons]).any?
+      state[:needs_review] || ReviewReasons.blocking_reasons_for_user(state[:review_reasons]).any?
     end
   end
 

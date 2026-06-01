@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReviewReasonSource
+module ReviewReasons
   AI_REASONS = %w[
     item_name_uncertain
     item_category_uncertain
