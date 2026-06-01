@@ -1,6 +1,9 @@
 <%= t("contact_requests.mailer.admin_notification.title") %>
 
 <%= t("contact_requests.mailer.admin_notification.fields.request_uid") %>: <%= @contact_request.request_uid %>
+<%= t("contact_requests.mailer.admin_notification.fields.created_at") %>: <%= @created_at %>
+<%= t("contact_requests.mailer.admin_notification.fields.source") %>: <%= @source_label %>
+<%= t("contact_requests.mailer.admin_notification.fields.request_id") %>: <%= @request_id %>
 <%= t("contact_requests.mailer.admin_notification.fields.category") %>: <%= t("contact_requests.categories.#{@contact_request.category}") %>
 <%= t("contact_requests.mailer.admin_notification.fields.subject") %>: <%= @contact_request.subject %>
 <%= t("contact_requests.mailer.admin_notification.fields.user_id") %>: <%= @contact_request.user_id || "-" %>

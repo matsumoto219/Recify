@@ -32,6 +32,9 @@ RSpec.describe ContactRequestMailer, type: :mailer do
         expect(mail.to).to eq([ 'support@example.com' ])
         expect(mail.subject).to include(contact_request.request_uid, I18n.t('contact_requests.categories.security'))
         expect(body).to include(contact_request.request_uid)
+        expect(body).to include(I18n.l(contact_request.created_at, format: :long))
+        expect(body).to include(I18n.t("contact_requests.sources.#{contact_request.source}"))
+        expect(body).to include(contact_request.request_id)
         expect(body).to include("http://example.com/admin/contact_requests/#{contact_request.id}")
       end
     end

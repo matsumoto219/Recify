@@ -48,6 +48,17 @@ RSpec.describe 'Mailer layout', type: :mailer do
     end
   end
 
+  def mailer_duration_text(duration)
+    seconds = duration.to_i
+    unit, divisor = {
+      days: 1.day.to_i,
+      hours: 1.hour.to_i,
+      minutes: 1.minute.to_i
+    }.find { |_key, value| seconds >= value && (seconds % value).zero? } || [ :seconds, 1 ]
+
+    I18n.t("auth.mailer.common.duration.#{unit}", count: seconds / divisor)
+  end
+
   it 'DeviseメールHTMLは柔らかい固定色とCTA背景色を明示する' do
     user = create(:user, email: 'mailer-layout@example.com')
 
@@ -71,7 +82,13 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect_devise_multipart(mail)
       expect(text_body(mail)).to include('confirm-multipart@example.com')
       expect(text_body(mail)).to include('confirmation_token=confirmation-token')
+      expect(text_body(mail)).to include(
+        I18n.t('auth.mailer.confirmation_instructions.expires_in', duration: mailer_duration_text(user.class.confirm_within))
+      )
       expect(html_body(mail)).to include(I18n.t('auth.mailer.confirmation_instructions.action'))
+      expect(html_body(mail)).to include(
+        I18n.t('auth.mailer.confirmation_instructions.expires_in', duration: mailer_duration_text(user.class.confirm_within))
+      )
     end
   end
 
@@ -83,7 +100,17 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect_devise_multipart(mail)
       expect(text_body(mail)).to include('reset-multipart@example.com')
       expect(text_body(mail)).to include('reset_password_token=reset-token')
+      expect(text_body(mail)).to include(
+        I18n.t('auth.mailer.reset_password_instructions.expires_in', duration: mailer_duration_text(user.class.reset_password_within))
+      )
+      expect(text_body(mail)).to include(I18n.t('auth.mailer.reset_password_instructions.single_use'))
+      expect(text_body(mail)).to include(I18n.t('auth.mailer.reset_password_instructions.protect_account'))
       expect(html_body(mail)).to include(I18n.t('auth.mailer.reset_password_instructions.action'))
+      expect(html_body(mail)).to include(
+        I18n.t('auth.mailer.reset_password_instructions.expires_in', duration: mailer_duration_text(user.class.reset_password_within))
+      )
+      expect(html_body(mail)).to include(I18n.t('auth.mailer.reset_password_instructions.single_use'))
+      expect(html_body(mail)).to include(I18n.t('auth.mailer.reset_password_instructions.protect_account'))
     end
   end
 
@@ -95,7 +122,15 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect_devise_multipart(mail)
       expect(text_body(mail)).to include('unlock-multipart@example.com')
       expect(text_body(mail)).to include('unlock_token=unlock-token')
+      expect(text_body(mail)).to include(
+        I18n.t('auth.mailer.unlock_instructions.auto_unlock', duration: mailer_duration_text(user.class.unlock_in))
+      )
+      expect(text_body(mail)).to include(I18n.t('auth.mailer.unlock_instructions.ignore'))
       expect(html_body(mail)).to include(I18n.t('auth.mailer.unlock_instructions.action'))
+      expect(html_body(mail)).to include(
+        I18n.t('auth.mailer.unlock_instructions.auto_unlock', duration: mailer_duration_text(user.class.unlock_in))
+      )
+      expect(html_body(mail)).to include(I18n.t('auth.mailer.unlock_instructions.ignore'))
     end
   end
 
@@ -106,6 +141,7 @@ RSpec.describe 'Mailer layout', type: :mailer do
 
     aggregate_failures do
       expect_devise_multipart(mail)
+      expect(mail.subject).to eq(I18n.t('devise.mailer.email_changed.subject'))
       expect(text_body(mail)).to include('old-email-multipart@example.com')
       expect(text_body(mail)).to include('new-email-multipart@example.com')
       expect(text_body(mail)).not_to include(I18n.t('auth.mailer.common.fallback_url'))
@@ -121,8 +157,10 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect_devise_multipart(mail)
       expect(text_body(mail)).to include('password-change-multipart@example.com')
       expect(text_body(mail)).to include(I18n.t('auth.mailer.password_change.body'))
+      expect(text_body(mail)).to include(I18n.t('auth.mailer.password_change.ignore'))
       expect(text_body(mail)).not_to include(I18n.t('auth.mailer.common.fallback_url'))
       expect(html_body(mail)).to include(I18n.t('auth.mailer.password_change.title'))
+      expect(html_body(mail)).to include(I18n.t('auth.mailer.password_change.ignore'))
     end
   end
 

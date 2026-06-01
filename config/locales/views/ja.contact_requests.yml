@@ -54,5 +54,8 @@ ja:
           user_id: ユーザーID
           email: 返信先
           email_digest: 返信先識別子
+          created_at: 受付日時
+          source: 送信元
+          request_id: リクエストID
         body_notice: 本文は個人情報を含む可能性があるため、この通知メールには全文を載せていません。
         open_admin: 管理画面で確認する

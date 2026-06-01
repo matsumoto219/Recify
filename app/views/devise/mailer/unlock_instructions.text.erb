@@ -1,10 +1,14 @@
 <% unlock_url_value = unlock_url(@resource, unlock_token: @token) %>
+<% unlocks_in = mailer_duration_text(@resource.class.unlock_in) %>
 <%= t("auth.mailer.unlock_instructions.title") %>
 
 <%= t("auth.mailer.greeting", email: @resource.display_email) %>
 
 <%= t("auth.mailer.unlock_instructions.body") %>
 <%= t("auth.mailer.unlock_instructions.instructions") %>
+<% if unlocks_in.present? %>
+<%= t("auth.mailer.unlock_instructions.auto_unlock", duration: unlocks_in) %>
+<% end %>
 <%= unlock_url_value %>
 
-<%= t("auth.mailer.confirmation_instructions.ignore") %>
+<%= t("auth.mailer.unlock_instructions.ignore") %>

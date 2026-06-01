@@ -1,4 +1,5 @@
 <% unlock_url_value = unlock_url(@resource, unlock_token: @token) %>
+<% unlocks_in = mailer_duration_text(@resource.class.unlock_in) %>
 
 <h2 style="margin: 0 0 24px; color: #1c1b1b; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 24px; font-weight: 700; line-height: 1.3;">
   <%= t("auth.mailer.unlock_instructions.title") %>
@@ -16,6 +17,12 @@
   <%= t("auth.mailer.unlock_instructions.instructions") %>
 </p>
 
+<% if unlocks_in.present? %>
+  <p style="margin: 0 0 28px; color: #4d4b5f; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 15px; line-height: 1.7;">
+    <%= t("auth.mailer.unlock_instructions.auto_unlock", duration: unlocks_in) %>
+  </p>
+<% end %>
+
 <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 0 28px;">
   <tr>
     <td align="center" bgcolor="#5a5cd6" style="border-radius: 6px; color: #f7f7fb;">
@@ -30,4 +37,8 @@
 
 <p style="margin: 0; color: #3130c0; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 1.6; word-break: break-all;">
   <%= link_to unlock_url_value, unlock_url_value, style: "color: #3130c0; text-decoration: underline; word-break: break-all;" %>
+</p>
+
+<p style="margin: 12px 0 0; color: #6b687a; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 1.6;">
+  <%= t("auth.mailer.unlock_instructions.ignore") %>
 </p>

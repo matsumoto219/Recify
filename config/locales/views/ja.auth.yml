@@ -176,26 +176,42 @@ ja:
         copyright: "© %{year} Recify. All rights reserved."
       common:
         fallback_url: ボタンが機能しない場合は、以下のURLをブラウザにコピーして開いてください。
+        duration:
+          days: "%{count}日間"
+          hours: "%{count}時間"
+          minutes: "%{count}分間"
+          seconds: "%{count}秒間"
       reset_password_instructions:
         title: パスワード再設定
         body: パスワード変更のリクエストを受け付けました。以下のリンクから変更できます。
         action: パスワードを変更する
+        expires_in: "このリンクは%{duration}有効です。"
+        single_use: このリンクは一度使用すると無効になります。
         ignore: このメールに心当たりがない場合は破棄してください。
+        protect_account: アカウント保護のため、パスワードやセキュリティ設定を確認してください。
         no_change_until_link: 上記リンクから新しいパスワードを設定するまで、パスワードは変更されません。
       password_change:
         title: パスワード変更のお知らせ
         body: パスワードが変更されたことをお知らせします。
+        ignore: この変更に心当たりがない場合は、パスワードを再設定し、アカウントのセキュリティ設定を確認してください。
       unlock_instructions:
         title: アカウントロック解除
         body: ログイン失敗が規定回数を超えたため、アカウントがロックされました。
         instructions: 以下のリンクからアカウントのロックを解除できます。
         action: アカウントのロックを解除する
+        auto_unlock: "このリンクから解除するか、約%{duration}後に自動解除されます。"
+        ignore: このメールに心当たりがない場合は、アカウントのセキュリティ設定を確認してください。
       confirmation_instructions:
         title: メールアドレスの確認
         body: メールアドレス確認のリクエストを受け付けました。以下のリンクから確認を完了してください。
         action: メールアドレスを確認する
+        expires_in: "このリンクは%{duration}有効です。"
         ignore: このメールに心当たりがない場合は破棄してください。
       email_changed:
         title: メールアドレス変更のお知らせ
         changing: "メールアドレスが %{email} に変更されようとしています。"
         changed: "メールアドレスが %{email} に変更されました。"
+  devise:
+    mailer:
+      email_changed:
+        subject: メールアドレス変更のお知らせ

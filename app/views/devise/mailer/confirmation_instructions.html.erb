@@ -1,4 +1,5 @@
 <% confirmation_url_value = confirmation_url(@resource, confirmation_token: @token) %>
+<% confirmation_expires_in = mailer_duration_text(@resource.class.confirm_within) %>
 
 <h2 style="margin: 0 0 24px; color: #1c1b1b; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 24px; font-weight: 700; line-height: 1.3;">
   <%= t("auth.mailer.confirmation_instructions.title") %>
@@ -27,6 +28,12 @@
 <p style="margin: 0 0 28px; color: #3130c0; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 1.6; word-break: break-all;">
   <%= link_to confirmation_url_value, confirmation_url_value, style: "color: #3130c0; text-decoration: underline; word-break: break-all;" %>
 </p>
+
+<% if confirmation_expires_in.present? %>
+  <p style="margin: 0 0 12px; color: #6b687a; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 1.6;">
+    <%= t("auth.mailer.confirmation_instructions.expires_in", duration: confirmation_expires_in) %>
+  </p>
+<% end %>
 
 <p style="margin: 0; color: #6b687a; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 1.6;">
   <%= t("auth.mailer.confirmation_instructions.ignore") %>

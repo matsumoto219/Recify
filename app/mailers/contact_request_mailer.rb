@@ -13,7 +13,10 @@ class ContactRequestMailer < ApplicationMailer
   def admin_notification(contact_request)
     @contact_request = contact_request
     @admin_url = admin_contact_request_url(contact_request)
+    @created_at = contact_request.created_at.present? ? I18n.l(contact_request.created_at, format: :long) : "-"
     @masked_email = masked_email(contact_request.email)
+    @request_id = contact_request.request_id.presence || "-"
+    @source_label = source_label(contact_request.source)
 
     mail(
       to: self.class.notification_email,
@@ -33,5 +36,11 @@ class ContactRequestMailer < ApplicationMailer
 
     visible = local.first(2)
     "#{visible}***@#{domain}"
+  end
+
+  def source_label(source)
+    return "-" if source.blank?
+
+    t("contact_requests.sources.#{source}", default: source)
   end
 end
