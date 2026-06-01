@@ -930,6 +930,34 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'guest本登録申請で同意パラメータがなければ更新しない' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-omitted-legal@example.com',
+                password: 'password123',
+                password_confirmation: 'password123'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(guest.reload.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to be_nil
+        expect(guest.terms_accepted_at).to be_nil
+        expect(guest.privacy_accepted_at).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'guest本登録申請のaccepted_at/version偽装はサーバー側値で上書きする' do
       sign_out user
       guest = User.guest!

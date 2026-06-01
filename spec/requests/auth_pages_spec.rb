@@ -339,6 +339,25 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'registration without legal agreement param is rejected' do
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'omitted-legal-agreement@example.com',
+              password: 'password',
+              password_confirmation: 'password'
+            }
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'registration ignores spoofed legal acceptance params' do
       email = 'spoofed-legal-acceptance@example.com'
       accepted_at = Time.zone.parse('2026-05-23 11:00:00')
