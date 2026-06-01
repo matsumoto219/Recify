@@ -2,9 +2,9 @@ class SettingsController < ApplicationController
   before_action :authenticate_user!
 
   def index
-    # ExternalServiceStatus から現在の状態を取得
-    @ocr_state = ExternalServiceStatus.state(:ocr).to_sym
-    @ai_state = ExternalServiceStatus.state(:ai).to_sym
+    # ExternalServices から現在の状態を取得
+    @ocr_state = ExternalServices.state(:ocr).to_sym
+    @ai_state = ExternalServices.state(:ai).to_sym
   end
 
   def account

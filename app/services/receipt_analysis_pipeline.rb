@@ -343,7 +343,7 @@ class ReceiptAnalysisPipeline
   end
 
   def ai_available?
-    !ExternalServiceStatus.down?(:ai)
+    !ExternalServices.down?(:ai)
   end
 
   def normalize_ai_result(result)

@@ -43,8 +43,8 @@ RSpec.describe ReceiptAiEnrichmentService do
 
   before do
     allow(Ai::Client).to receive(:new).and_return(client)
-    allow(ExternalServiceStatus).to receive(:mark_success!)
-    allow(ExternalServiceStatus).to receive(:mark_failure!)
+    allow(ExternalServices).to receive(:mark_success!)
+    allow(ExternalServices).to receive(:mark_failure!)
   end
 
   describe '.call' do
@@ -59,8 +59,8 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(Ai::PromptBuilder).to have_received(:build).with(valid_ocr_result, ai_name_completion_enabled: false)
           expect(client).to have_received(:call).with({ filtered_content: 'test' })
           expect(result).to eq(successful_ai_result)
-          expect(ExternalServiceStatus).to have_received(:mark_success!).with(:ai)
-          expect(ExternalServiceStatus).not_to have_received(:mark_failure!)
+          expect(ExternalServices).to have_received(:mark_success!).with(:ai)
+          expect(ExternalServices).not_to have_received(:mark_failure!)
         end
       end
 
@@ -93,8 +93,8 @@ RSpec.describe ReceiptAiEnrichmentService do
 
         aggregate_failures do
           expect(client).not_to have_received(:call)
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).not_to have_received(:mark_failure!)
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).not_to have_received(:mark_failure!)
         end
       end
 
@@ -114,8 +114,8 @@ RSpec.describe ReceiptAiEnrichmentService do
 
         aggregate_failures do
           expect(result).to eq(failed_result)
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'ai_timeout')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_timeout')
         end
       end
 
@@ -139,8 +139,8 @@ RSpec.describe ReceiptAiEnrichmentService do
 
         aggregate_failures do
           expect(result).to eq(not_receipt_result)
-          expect(ExternalServiceStatus).to have_received(:mark_success!).with(:ai)
-          expect(ExternalServiceStatus).not_to have_received(:mark_failure!)
+          expect(ExternalServices).to have_received(:mark_success!).with(:ai)
+          expect(ExternalServices).not_to have_received(:mark_failure!)
         end
       end
     end
@@ -155,8 +155,8 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
       end
 
@@ -168,8 +168,8 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
       end
 
@@ -181,8 +181,8 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
       end
 
@@ -194,8 +194,8 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
       end
     end
@@ -212,8 +212,8 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
         end
       end
 
@@ -229,8 +229,8 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
-          expect(ExternalServiceStatus).not_to have_received(:mark_success!)
-          expect(ExternalServiceStatus).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
         end
       end
     end

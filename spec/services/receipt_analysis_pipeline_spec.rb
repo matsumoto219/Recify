@@ -296,7 +296,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       run = create(:receipt_analysis_run, receipt:)
 
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
 
       result = described_class.run_ocr(run)
 
@@ -412,7 +412,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         end
       end
 
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(true)
       down_result = described_class.run_ocr(ai_down_run)
 
       aggregate_failures('down') do

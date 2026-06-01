@@ -140,7 +140,7 @@
             class: "mb-6" %>
 
       <div class="space-y-3">
-        <%# TODO: 本実装では ExternalServiceStatus から状態を取得する %>
+        <%# TODO: 本実装では ExternalServices の状態storeから状態を取得する %>
         <div data-service-status-polling-target="serviceBadge" data-service="ocr">
           <%= render "shared/ui/badge/service_status_badge",
                 label: t("settings.index.services.ocr"),

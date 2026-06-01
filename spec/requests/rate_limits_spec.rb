@@ -467,9 +467,9 @@ RSpec.describe 'Rails rate limits', type: :request do
     it 'throttles receipt upload by user and does not create receipts after the limit' do
       user = create(:user)
       sign_in user
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrJob).to receive(:perform_later)
 
       10.times do

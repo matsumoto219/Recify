@@ -70,9 +70,9 @@ RSpec.describe 'ActiveStorage direct uploads', type: :request do
   it 'keeps normal receipt uploads on the application upload endpoint' do
     user = create(:user)
     sign_in user
-    allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-    allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-    allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+    allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+    allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+    allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
     allow(ReceiptOcrJob).to receive(:perform_later)
 
     image = Rack::Test::UploadedFile.new(

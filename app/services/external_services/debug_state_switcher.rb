@@ -44,11 +44,11 @@ module ExternalServices
 
       case state
       when "ok", "reset"
-        ExternalServiceStatus.reset!(service)
+        StatusStore.reset!(service)
       when "degraded"
-        mark_failures!(ExternalServiceStatus::DEGRADED_THRESHOLD)
+        mark_failures!(StatusStore::DEGRADED_THRESHOLD)
       when "down"
-        mark_failures!(ExternalServiceStatus::DOWN_THRESHOLD)
+        mark_failures!(StatusStore::DOWN_THRESHOLD)
       end
 
       {
@@ -57,7 +57,7 @@ module ExternalServices
         actor_id: actor&.id,
         reason: reason,
         requested_at: requested_at&.iso8601,
-        snapshot: ExternalServiceStatus.snapshot(service)
+        snapshot: StatusStore.snapshot(service)
       }
     end
 
@@ -70,13 +70,13 @@ module ExternalServices
     end
 
     def mark_failures!(count)
-      ExternalServiceStatus.reset!(service)
-      count.times { ExternalServiceStatus.mark_failure!(service, error_code: error_code) }
+      StatusStore.reset!(service)
+      count.times { StatusStore.mark_failure!(service, error_code: error_code) }
     end
 
     def normalize_service(value)
       service = value.to_s.strip.to_sym
-      return service if ExternalServiceStatus::SERVICES.include?(service)
+      return service if StatusStore::SERVICES.include?(service)
 
       raise ArgumentError, "Unsupported service: #{value}"
     end
@@ -90,7 +90,7 @@ module ExternalServices
 
     def normalize_error_code(value)
       code = value.to_s.presence || FAILURE_ERROR_CODE
-      return code if ExternalServiceStatus.external_error?(code)
+      return code if StatusStore.external_error?(code)
 
       FAILURE_ERROR_CODE
     end

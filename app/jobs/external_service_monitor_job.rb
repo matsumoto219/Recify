@@ -7,7 +7,7 @@ class ExternalServiceMonitorJob < ApplicationJob
   }.freeze
 
   def perform
-    ExternalServiceStatus.services_due_for_check.each do |service|
+    ExternalServices.services_due_for_check.each do |service|
       monitor_service(service)
     end
   end
@@ -16,14 +16,14 @@ class ExternalServiceMonitorJob < ApplicationJob
 
   def monitor_service(service)
     if ExternalServices.check_available?(service)
-      ExternalServiceStatus.mark_success!(service)
+      ExternalServices.mark_success!(service)
     else
-      ExternalServiceStatus.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))
+      ExternalServices.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))
     end
   rescue StandardError => e
     Rails.logger.warn(
       "[ExternalServiceMonitorJob] service=#{service} failed class=#{e.class} message=#{e.message}"
     )
-    ExternalServiceStatus.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))
+    ExternalServices.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))
   end
 end

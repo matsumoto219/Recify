@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ExternalServiceStatus do
+RSpec.describe ExternalServices::StatusStore do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:cache_store) { ActiveSupport::Cache::MemoryStore.new }

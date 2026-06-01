@@ -56,7 +56,7 @@ module Ocr
     # NOTE:
     # available? は将来の外部サービス監視ジョブ用の診断メソッド。
     # 通常のOCR処理前には毎回呼ばない。
-    # UI表示や通常リクエストでは state cache / ExternalServiceStatus を参照する想定。
+    # UI表示や通常リクエストでは ExternalServices の状態storeを参照する想定。
     # provider ごとに診断方法が異なるため、必要になった時点で監視専用実装へ切り出す。
     def available?
       check_availability

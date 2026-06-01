@@ -53,7 +53,7 @@ class ReceiptsController < ApplicationController
   def upload
     set_external_service_states
 
-    if ExternalServiceStatus.down?(:ocr)
+    if ExternalServices.down?(:ocr)
       @receipt = current_user.receipts.new
       flash.now[:alert] = t("flash.receipts.ocr_unavailable")
       render :new_upload, status: :unprocessable_content, formats: :html
@@ -190,8 +190,8 @@ class ReceiptsController < ApplicationController
   end
 
   def set_external_service_states
-    @ocr_state = ExternalServiceStatus.snapshot(:ocr)
-    @ai_state = ExternalServiceStatus.snapshot(:ai)
+    @ocr_state = ExternalServices.snapshot(:ocr)
+    @ai_state = ExternalServices.snapshot(:ai)
   end
 
   def enqueue_analysis_job(receipt, source:, requested_by_user:)

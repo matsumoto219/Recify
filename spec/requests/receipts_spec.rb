@@ -875,8 +875,8 @@ RSpec.describe 'Receipts', type: :request do
 
   describe 'GET /receipts/select_input_method' do
     it '登録方法選択画面の主要文言をlocale経由で描画する' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       get select_input_method_receipts_path
 
@@ -890,8 +890,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'OCR down時は画像アップロード導線をdisabled表示し手動入力は有効にする' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       get select_input_method_receipts_path
 
@@ -907,8 +907,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'AI down時は画像アップロード導線をdisabledにせず注意を表示する' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
 
       get select_input_method_receipts_path
 
@@ -925,8 +925,8 @@ RSpec.describe 'Receipts', type: :request do
 
   describe 'GET /receipts/new_upload' do
     it 'アップロード画面の主要文言をlocale経由で描画しJS用文言をdata属性へ渡す' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       get new_upload_receipts_path
 
@@ -976,8 +976,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'OCR down時は警告を表示しアップロード操作をdisabledにする' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       get new_upload_receipts_path
 
@@ -995,8 +995,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'OCR degraded時はアップロード可能なまま注意を表示する' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'degraded' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'degraded' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       get new_upload_receipts_path
 
@@ -1012,8 +1012,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'AI down時はアップロード可能なまま注意を表示する' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
 
       get new_upload_receipts_path
 
@@ -1035,9 +1035,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '単一camera uploadはsource: uploadのrunを作成しrun_id付きOCR jobをenqueueする' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1060,9 +1060,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'library uploadが1件ならbatch処理のまま単一upload文言を表示する' do
       files = [ uploaded_receipt_fixture ]
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1084,9 +1084,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'active runが既にある場合はduplicate enqueueしない' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
       allow(ReceiptAnalysisRuns).to receive(:start).and_return(
@@ -1114,9 +1114,9 @@ RSpec.describe 'Receipts', type: :request do
         uploaded_receipt_fixture('single_tax_receipt.png', 'image/png'),
         uploaded_receipt_fixture('multiple_tax_receipt.png', 'image/png')
       ]
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1143,9 +1143,9 @@ RSpec.describe 'Receipts', type: :request do
         uploaded_receipt_fixture,
         uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
       ]
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1161,9 +1161,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it '複数uploadが6件以上ならreceiptを作成せず解析jobもenqueueしない' do
       files = Array.new(6) { uploaded_receipt_fixture }
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1185,9 +1185,9 @@ RSpec.describe 'Receipts', type: :request do
         uploaded_receipt_fixture,
         invalid_file
       ]
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1201,9 +1201,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '小さすぎる画像はreceiptを作成せず解析jobもenqueueしない' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_png(width: 1, height: 1) } }
@@ -1222,9 +1222,9 @@ RSpec.describe 'Receipts', type: :request do
         uploaded_receipt_fixture
       ]
       user.update!(storage_limit_bytes: files.first.size + 1)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
@@ -1239,9 +1239,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'ストレージ上限超過時はreceiptを作成せず解析jobもenqueueしない' do
       user.update!(storage_limit_bytes: 1)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1256,9 +1256,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it '単一uploadの日次上限到達時はreceiptを作成せず解析jobもenqueueしない' do
       create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 50)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1274,9 +1274,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'OCR job日次上限到達時はrunを安全にfailedへ落としprovider jobをenqueueしない' do
       create(:usage_counter, user: user, key: 'ocr_jobs_per_day', used_count: 50)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1302,9 +1302,9 @@ RSpec.describe 'Receipts', type: :request do
       guest = create(:user, guest: true)
       sign_in guest
       create(:usage_counter, user: guest, key: 'receipt_uploads_per_day', used_count: 5)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1322,9 +1322,9 @@ RSpec.describe 'Receipts', type: :request do
       guest = create(:user, guest: true)
       sign_in guest
       create(:usage_counter, user: guest, key: 'ocr_jobs_per_day', used_count: 5)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1348,9 +1348,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'Turbo requestでもストレージ上限guardはglobal error pageへ飛ばさずupload画面を維持する' do
       user.update!(storage_limit_bytes: 1)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path,
@@ -1368,9 +1368,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'OCR down時はreceiptを作成せず解析jobもenqueueしない' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(true)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1384,9 +1384,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'Turbo requestでもOCR down guardはglobal error pageへ飛ばさずupload画面を維持する' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(true)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(true)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
         post upload_receipts_path,
@@ -1404,9 +1404,9 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'AI down時でもuploadは止めず解析jobをenqueueする' do
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
 
       expect do
         post upload_receipts_path, params: { receipt: { image: uploaded_image } }
@@ -1422,9 +1422,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it '通知OFFならupload enqueueのredirect flashを表示しない' do
       user.update!(push_notification_enabled: false)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       post upload_receipts_path, params: { receipt: { image: uploaded_image } }
 
@@ -1440,9 +1440,9 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'upload後のjob実行でOCR失敗ならfailedになり一覧/詳細/編集で導線を表示する' do
       allow(Analysis).to receive(:processing_error_mapping).and_call_original
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrService).to receive(:call).and_return(
         success: false,
         error_code: 'ocr_timeout',
@@ -1501,10 +1501,10 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'upload後のjob実行でOCR成功かつAI失敗ならOCR由来データを残してreview_needed導線を表示する' do
       allow(Analysis).to receive(:processing_error_mapping).and_call_original
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrService).to receive(:call).and_return(upload_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
 
@@ -1560,10 +1560,10 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'upload後のjob実行でAI downならAI呼び出しをskipしてOCR由来データを残す' do
       allow(Analysis).to receive(:processing_error_mapping).and_call_original
-      allow(ExternalServiceStatus).to receive(:down?).with(:ocr).and_return(false)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(true)
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(true)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
       allow(ReceiptOcrService).to receive(:call).and_return(upload_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call)
 

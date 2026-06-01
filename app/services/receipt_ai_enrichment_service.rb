@@ -49,9 +49,9 @@ class ReceiptAiEnrichmentService
     result = client.call(input)
 
     if ai_service_healthy_result?(result)
-      ExternalServiceStatus.mark_success!(:ai)
+      ExternalServices.mark_success!(:ai)
     else
-      ExternalServiceStatus.mark_failure!(:ai, error_code: result[:error_code])
+      ExternalServices.mark_failure!(:ai, error_code: result[:error_code])
     end
 
     log_result(result)
@@ -60,7 +60,7 @@ class ReceiptAiEnrichmentService
     raise
   rescue AiEnrichmentError => e
     Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
-    ExternalServiceStatus.mark_failure!(:ai, error_code: e.error_code)
+    ExternalServices.mark_failure!(:ai, error_code: e.error_code)
     Ai::ResultTemplate.error(
       error_code: e.error_code,
       review_reasons: [ e.error_code ],
@@ -68,7 +68,7 @@ class ReceiptAiEnrichmentService
     )
   rescue StandardError => e
     Rails.logger.error("[AIEnrichment] unexpected_error #{e.class}: #{e.message}")
-    ExternalServiceStatus.mark_failure!(:ai, error_code: "ai_api_error")
+    ExternalServices.mark_failure!(:ai, error_code: "ai_api_error")
     Ai::ResultTemplate.error(
       error_code: "ai_api_error",
       review_reasons: [ "unexpected_error" ],

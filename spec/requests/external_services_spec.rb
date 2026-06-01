@@ -10,17 +10,28 @@ RSpec.describe 'External services status', type: :request do
 
   describe 'GET /external_services/status' do
     it 'OCR/AI状態とupload可否をJSONで返す' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return(
-        state: 'down',
-        monitoring: true,
-        last_checked_at: '2026-05-19T10:00:00Z',
-        next_check_at: '2026-05-19T10:30:00Z'
-      )
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return(
-        state: 'down',
-        monitoring: true,
-        last_checked_at: '2026-05-19T10:05:00Z',
-        next_check_at: '2026-05-19T10:35:00Z'
+      allow(ExternalServices).to receive(:status_snapshot).and_return(
+        ocr: {
+          state: 'down',
+          monitoring: true,
+          checked_at: '2026-05-19T10:00:00Z',
+          last_checked_at: '2026-05-19T10:00:00Z',
+          next_check_at: '2026-05-19T10:30:00Z',
+          message: I18n.t('flash.receipts.ocr_unavailable'),
+          badge_html: I18n.t('shared.service_status.down')
+        },
+        ai: {
+          state: 'down',
+          monitoring: true,
+          checked_at: '2026-05-19T10:05:00Z',
+          last_checked_at: '2026-05-19T10:05:00Z',
+          next_check_at: '2026-05-19T10:35:00Z',
+          message: I18n.t('receipts.new_upload.ai_down')
+        },
+        upload: {
+          allowed: false,
+          ocr_available: false
+        }
       )
 
       get external_services_status_path, as: :json
@@ -44,17 +55,13 @@ RSpec.describe 'External services status', type: :request do
     end
 
     it 'OCR復旧時はupload可として返す' do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return(
-        state: 'ok',
-        monitoring: false,
-        last_checked_at: nil,
-        next_check_at: nil
-      )
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return(
-        state: 'ok',
-        monitoring: false,
-        last_checked_at: nil,
-        next_check_at: nil
+      allow(ExternalServices).to receive(:status_snapshot).and_return(
+        ocr: { state: 'ok' },
+        ai: { state: 'ok' },
+        upload: {
+          allowed: true,
+          ocr_available: true
+        }
       )
 
       get external_services_status_path, as: :json
@@ -103,7 +110,7 @@ RSpec.describe 'External services status', type: :request do
         expect(json['requested_state']).to eq('down')
         expect(json['actor_id']).to eq(user.id)
         expect(json.dig('snapshot', 'state')).to eq('down')
-        expect(ExternalServiceStatus.down?(:ocr)).to eq(true)
+        expect(ExternalServices.down?(:ocr)).to eq(true)
       end
     end
 
@@ -169,8 +176,8 @@ RSpec.describe 'External services status', type: :request do
 
   describe 'polling DOM hooks' do
     before do
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
-      allow(ExternalServiceStatus).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
     end
 
     it 'upload画面にpolling controllerと更新targetを描画する' do

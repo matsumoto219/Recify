@@ -1,6 +1,6 @@
 module ExternalServices
   class StatusSnapshot
-    SERVICES = ExternalServiceStatus::SERVICES.freeze
+    SERVICES = StatusStore::SERVICES.freeze
 
     class << self
       def call(renderer: nil)
@@ -13,7 +13,7 @@ module ExternalServices
     end
 
     def call
-      snapshots = SERVICES.index_with { |service| ExternalServiceStatus.snapshot(service) }
+      snapshots = SERVICES.index_with { |service| StatusStore.snapshot(service) }
       states = snapshots.transform_values { |snapshot| service_state(snapshot) }
       ocr_state = states.fetch(:ocr)
       ai_state = states.fetch(:ai)

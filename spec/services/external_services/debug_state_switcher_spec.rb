@@ -20,7 +20,7 @@ RSpec.describe ExternalServices::DebugStateSwitcher do
         expect(result[:service]).to eq('ocr')
         expect(result[:requested_state]).to eq('degraded')
         expect(result.dig(:snapshot, :state)).to eq('degraded')
-        expect(ExternalServiceStatus.degraded?(:ocr)).to eq(true)
+        expect(ExternalServices::StatusStore.degraded?(:ocr)).to eq(true)
       end
     end
 
@@ -32,7 +32,7 @@ RSpec.describe ExternalServices::DebugStateSwitcher do
         expect(result[:requested_state]).to eq('down')
         expect(result.dig(:snapshot, :state)).to eq('down')
         expect(result.dig(:snapshot, :monitoring)).to eq(true)
-        expect(ExternalServiceStatus.down?(:ai)).to eq(true)
+        expect(ExternalServices::StatusStore.down?(:ai)).to eq(true)
       end
     end
 
@@ -45,7 +45,7 @@ RSpec.describe ExternalServices::DebugStateSwitcher do
         expect(result[:requested_state]).to eq('reset')
         expect(result.dig(:snapshot, :state)).to eq('ok')
         expect(result.dig(:snapshot, :monitoring)).to eq(false)
-        expect(ExternalServiceStatus.ok?(:ocr)).to eq(true)
+        expect(ExternalServices::StatusStore.ok?(:ocr)).to eq(true)
       end
     end
 

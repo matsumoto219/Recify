@@ -82,7 +82,7 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
         }
       )
       create(:usage_counter, user: receipt.user, key: 'ai_jobs_per_day', used_count: 50)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
       allow(ReceiptAiEnrichmentService).to receive(:call)
 
       described_class.perform_now(run_id: run.id)
@@ -114,7 +114,7 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
         }
       )
       create(:usage_counter, user: guest, key: 'ai_jobs_per_day', used_count: 5)
-      allow(ExternalServiceStatus).to receive(:down?).with(:ai).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
       allow(ReceiptAiEnrichmentService).to receive(:call)
 
       described_class.perform_now(run_id: run.id)

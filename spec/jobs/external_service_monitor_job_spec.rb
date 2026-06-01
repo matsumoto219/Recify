@@ -48,7 +48,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
 
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
       described_class.perform_now
-      snapshot = ExternalServiceStatus.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('ok')
@@ -63,7 +63,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
 
     travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
       described_class.perform_now
-      snapshot = ExternalServiceStatus.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('down')
@@ -79,7 +79,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
       described_class.perform_now
       described_class.perform_now
-      snapshot = ExternalServiceStatus.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('ok')
@@ -94,10 +94,10 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     make_degraded(:ocr)
 
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
-      before_check = ExternalServiceStatus.snapshot(:ocr)
+      before_check = ExternalServices.snapshot(:ocr)
 
       described_class.perform_now
-      snapshot = ExternalServiceStatus.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('degraded')
@@ -115,7 +115,7 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
       expect { described_class.perform_now }.not_to raise_error
 
-      snapshot = ExternalServiceStatus.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('degraded')
@@ -129,16 +129,16 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
 
   def make_degraded(service)
     travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
-      ExternalServiceStatus.mark_failure!(service, error_code: 'external_service_unavailable')
-      ExternalServiceStatus.mark_failure!(service, error_code: 'external_service_unavailable')
+      ExternalServices.mark_failure!(service, error_code: 'external_service_unavailable')
+      ExternalServices.mark_failure!(service, error_code: 'external_service_unavailable')
     end
   end
 
   def make_down(service)
     travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
-      ExternalServiceStatus.mark_failure!(service, error_code: 'external_service_unavailable')
-      ExternalServiceStatus.mark_failure!(service, error_code: 'external_service_unavailable')
-      ExternalServiceStatus.mark_failure!(service, error_code: 'external_service_unavailable')
+      ExternalServices.mark_failure!(service, error_code: 'external_service_unavailable')
+      ExternalServices.mark_failure!(service, error_code: 'external_service_unavailable')
+      ExternalServices.mark_failure!(service, error_code: 'external_service_unavailable')
     end
   end
 end

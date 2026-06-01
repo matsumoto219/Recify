@@ -38,7 +38,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
 
     it 'OCR down時はupload不可とOCR停止noticeを返す' do
       travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
-        3.times { ExternalServiceStatus.mark_failure!(:ocr, error_code: 'external_service_unavailable') }
+        3.times { ExternalServices::StatusStore.mark_failure!(:ocr, error_code: 'external_service_unavailable') }
       end
 
       payload = described_class.call
@@ -60,7 +60,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
 
     it 'AI down時はupload可能なままOCR-only fallback noticeを返す' do
       travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
-        3.times { ExternalServiceStatus.mark_failure!(:ai, error_code: 'external_service_unavailable') }
+        3.times { ExternalServices::StatusStore.mark_failure!(:ai, error_code: 'external_service_unavailable') }
       end
 
       payload = described_class.call
