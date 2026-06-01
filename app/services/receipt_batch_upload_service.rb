@@ -1,5 +1,6 @@
 class ReceiptBatchUploadService
   MAX_FILES = 5
+  private_constant :MAX_FILES
 
   Result = Struct.new(:created_receipts, :errors, keyword_init: true) do
     def success?
@@ -13,6 +14,10 @@ class ReceiptBatchUploadService
 
   def self.call(user:, files:)
     new(user:, files:).call
+  end
+
+  def self.max_files
+    MAX_FILES
   end
 
   def initialize(user:, files:)
