@@ -185,6 +185,12 @@ class Receipt < ApplicationRecord
     scope = all
 
     tokens.each do |token|
+      safe_parse_search_date = ->(date_text) do
+        Date.parse(date_text)
+      rescue ArgumentError
+        nil
+      end
+
       q = "%#{sanitize_sql_like(token)}%"
 
       matching_ids = left_joins(:receipt_items).unscope(:order).where(
@@ -211,23 +217,24 @@ class Receipt < ApplicationRecord
       # - date<=2026-12-31
       # - date<=2026/12/31
       normalized_date_query = token.strip
+      search_date_pattern = "\\d{4}[\\/-]\\d{2}[\\/-]\\d{2}"
 
       # 範囲指定
-      if normalized_date_query =~ /date:(\d{4}[\/-]\d{2}[\/-]\d{2})\.\.(\d{4}[\/-]\d{2}[\/-]\d{2})/
-        from = Date.parse($1)
-        to = Date.parse($2)
-        token_scope = token_scope.or(where(purchased_at: from.beginning_of_day..to.end_of_day))
+      if normalized_date_query =~ /\Adate:(#{search_date_pattern})\.\.(#{search_date_pattern})\z/
+        from = safe_parse_search_date.call($1)
+        to = safe_parse_search_date.call($2)
+        token_scope = from && to ? token_scope.or(where(purchased_at: from.beginning_of_day..to.end_of_day)) : none
       end
 
       # 片側指定
-      if normalized_date_query =~ /date>=?(\d{4}[\/-]\d{2}[\/-]\d{2})/
-        from = Date.parse($1)
-        token_scope = token_scope.or(where("purchased_at >= ?", from.beginning_of_day))
+      if normalized_date_query =~ /\Adate>=?(#{search_date_pattern})\z/
+        from = safe_parse_search_date.call($1)
+        token_scope = from ? token_scope.or(where("purchased_at >= ?", from.beginning_of_day)) : none
       end
 
-      if normalized_date_query =~ /date<=?(\d{4}[\/-]\d{2}[\/-]\d{2})/
-        to = Date.parse($1)
-        token_scope = token_scope.or(where("purchased_at <= ?", to.end_of_day))
+      if normalized_date_query =~ /\Adate<=?(#{search_date_pattern})\z/
+        to = safe_parse_search_date.call($1)
+        token_scope = to ? token_scope.or(where("purchased_at <= ?", to.end_of_day)) : none
       end
 
       # 金額検索

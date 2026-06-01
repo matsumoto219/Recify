@@ -130,7 +130,7 @@ export default class extends Controller {
   handleInput (event) {
     const input = event.currentTarget
 
-    if (!this.isComposing) {
+    if (!this.isComposing && !this.isDeletionInputEvent(event)) {
       this.applyAmountInputAssist(input)
       this.applyDateInputAssist(input)
     }
@@ -149,6 +149,10 @@ export default class extends Controller {
   handleCompositionEnd (event) {
     this.isComposing = false
     this.handleInput(event)
+  }
+
+  isDeletionInputEvent (event) {
+    return event && typeof event.inputType === 'string' && event.inputType.startsWith('delete')
   }
 
   showHelp (event) {

@@ -392,6 +392,60 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it '不正なdate演算子でも例外を出さずマッチなしにする' do
+      create_search_receipt(
+        user: user,
+        store_name: '日付安全化ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+
+      invalid_queries = [
+        'date>=2026-13-01',
+        'date>=2026-02-31',
+        'date<=2214-15-99',
+        'date:2026-01-01..2026-13-40'
+      ]
+      partial_queries = [
+        'date:2026-01-01..',
+        'date>=2026-'
+      ]
+
+      aggregate_failures do
+        (invalid_queries + partial_queries).each do |query|
+          expect { user.receipts.search(query).load }.not_to raise_error
+          expect(user.receipts.search(query)).to be_empty
+        end
+      end
+    end
+
+    it '複数date条件をAND検索し、矛盾条件は0件にする' do
+      january_10 = create_search_receipt(
+        user: user,
+        store_name: '一月十日ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
+      )
+      january_20 = create_search_receipt(
+        user: user,
+        store_name: '一月二十日ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 1, 20, 12, 0, 0)
+      )
+      february = create_search_receipt(
+        user: user,
+        store_name: '二月ストア',
+        total_amount: 1000,
+        purchased_at: Time.zone.local(2026, 2, 1, 12, 0, 0)
+      )
+
+      aggregate_failures do
+        expect(user.receipts.search('date>=2026-01-01 date<=2026-01-31')).to contain_exactly(january_10, january_20)
+        expect(user.receipts.search('date>=2026-01-15 date>=2026-02-01')).to contain_exactly(february)
+        expect(user.receipts.search('date>=2026-02-01 date<=2026-01-31')).to be_empty
+      end
+    end
+
     it '店舗名・金額・日付の複合条件をAND検索する' do
       target = create_search_receipt(
         user: user,

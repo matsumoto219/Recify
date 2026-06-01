@@ -216,6 +216,27 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
+    it '不正なdate検索条件でも500にせず検索empty stateを返す' do
+      [
+        'date>=2026-13-01',
+        'date>=2026-02-31',
+        'date<=2214-15-99',
+        'date:2026-01-01..2026-13-40',
+        'date:2026-01-01..',
+        'date>=2026-'
+      ].each do |query|
+        get receipts_path(q: query)
+
+        document = Nokogiri::HTML(response.body)
+
+        aggregate_failures query do
+          expect(response).to have_http_status(:success)
+          expect(response.body).not_to include('Date::Error')
+          expect(document.at_css('#receipts-empty-state').text).to include(I18n.t('receipt_cards.empty.search.title'))
+        end
+      end
+    end
+
     it 'realtime search error文言をdata属性で渡す' do
       get receipts_path
 
