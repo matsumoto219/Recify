@@ -36,6 +36,10 @@ module ContactRequests
       OpenSSL::HMAC.hexdigest("SHA256", hmac_secret, normalized)
     end
 
+    def category_options
+      ContactRequest::CATEGORIES
+    end
+
     private
 
     def normalize_attributes(user:, params:, request:)

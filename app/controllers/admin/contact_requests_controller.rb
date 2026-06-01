@@ -8,6 +8,8 @@ class Admin::ContactRequestsController < Admin::BaseController
   def show
     @record = Admin.contact_request(id: params[:id])
     raise_not_found if @record.blank?
+
+    @filter_options = Admin.contact_request_filter_options
   end
 
   def update

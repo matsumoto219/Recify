@@ -42,5 +42,21 @@ RSpec.describe Admin::IndexHelper, type: :helper do
         expect(options[:limits].map(&:last)).to eq(%w[25 50 100])
       end
     end
+
+    it 'builds user index display options and labels' do
+      options = helper.admin_user_filter_options
+
+      aggregate_failures do
+        expect(options[:booleans]).to eq([
+          [ helper.t('admin.users.common.all'), '' ],
+          [ helper.t('admin.users.common.yes'), 'true' ],
+          [ helper.t('admin.users.common.no'), 'false' ]
+        ])
+        expect(options[:limits].map(&:last)).to eq(%w[25 50 100])
+        expect(helper.admin_user_boolean_label(true)).to eq(helper.t('admin.users.common.yes'))
+        expect(helper.admin_user_boolean_label(false)).to eq(helper.t('admin.users.common.no'))
+        expect(helper.admin_short_timestamp_label(nil)).to eq('-')
+      end
+    end
   end
 end

@@ -2,23 +2,11 @@
 
 <%
   filters = @filters || {}
-  query_base = filters.except(:offset).compact_blank
-  limit = @result.limit
-  offset = @result.offset
-  total_count = @result.total_count
-  start_number = total_count.zero? ? 0 : offset + 1
-  end_number = [ offset + @result.records.size, total_count ].min
-  previous_offset = [ offset - limit, 0 ].max
-  next_offset = offset + limit
-  has_previous = offset.positive?
-  has_next = next_offset < total_count
-  boolean_options = [[ t("admin.users.common.all"), "" ], [ t("admin.users.common.yes"), "true" ], [ t("admin.users.common.no"), "false" ]]
-  limit_options = [ 25, 50, 100 ].map { |value| [ t("admin.users.common.limit_unit", count: value), value.to_s ] }
+  pagination = admin_index_pagination(@result, filters: filters)
+  filter_options = admin_user_filter_options
   filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   filter_wrapper_class = "space-y-1"
   filter_control_class = "rounded-lg text-sm"
-  boolean_label = ->(value) { value ? t("admin.users.common.yes") : t("admin.users.common.no") }
-  timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
 %>
 
 <section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -56,7 +44,7 @@
             f: form,
             attribute: :admin,
             label: t("admin.users.index.filters.labels.admin"),
-            options: boolean_options,
+            options: filter_options[:booleans],
             selected: filters[:admin],
             with_icon: false,
             size: :dense,
@@ -68,7 +56,7 @@
             f: form,
             attribute: :guest,
             label: t("admin.users.index.filters.labels.guest"),
-            options: boolean_options,
+            options: filter_options[:booleans],
             selected: filters[:guest],
             with_icon: false,
             size: :dense,
@@ -80,7 +68,7 @@
             f: form,
             attribute: :confirmed,
             label: t("admin.users.index.filters.labels.confirmed"),
-            options: boolean_options,
+            options: filter_options[:booleans],
             selected: filters[:confirmed],
             with_icon: false,
             size: :dense,
@@ -92,7 +80,7 @@
             f: form,
             attribute: :locked,
             label: t("admin.users.index.filters.labels.locked"),
-            options: boolean_options,
+            options: filter_options[:booleans],
             selected: filters[:locked],
             with_icon: false,
             size: :dense,
@@ -104,7 +92,7 @@
             f: form,
             attribute: :has_passkey,
             label: t("admin.users.index.filters.labels.passkey"),
-            options: boolean_options,
+            options: filter_options[:booleans],
             selected: filters[:has_passkey],
             with_icon: false,
             size: :dense,
@@ -116,8 +104,8 @@
             f: form,
             attribute: :limit,
             label: t("admin.users.index.filters.labels.limit"),
-            options: limit_options,
-            selected: filters[:limit].presence || limit.to_s,
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
             with_icon: false,
             size: :dense,
             select_wrapper_class: filter_wrapper_class,
@@ -138,21 +126,21 @@
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.index.results.title") %></h2>
-        <p class="text-sm token-text-muted"><%= t("admin.users.index.results.count_summary", total: total_count, start: start_number, end: end_number) %></p>
+        <p class="text-sm token-text-muted"><%= t("admin.users.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <% if has_previous %>
+        <% if pagination.has_previous? %>
           <%= link_to t("admin.users.index.results.previous"),
-                admin_users_path(query_base.merge(limit: limit, offset: previous_offset)),
+                admin_users_path(admin_index_page_params(pagination, :backward)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.users.index.results.previous") %></span>
         <% end %>
 
-        <% if has_next %>
+        <% if pagination.has_next? %>
           <%= link_to t("admin.users.index.results.next"),
-                admin_users_path(query_base.merge(limit: limit, offset: next_offset)),
+                admin_users_path(admin_index_page_params(pagination, :forward)),
                 class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
         <% else %>
           <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.users.index.results.next") %></span>
@@ -184,16 +172,16 @@
             <tr class="border-b token-border-soft">
               <td class="px-3 py-3 font-mono text-xs">#<%= record[:id] %></td>
               <td class="px-3 py-3 token-text-base"><%= record[:email] %></td>
-              <td class="px-3 py-3"><%= boolean_label.call(record[:admin]) %></td>
-              <td class="px-3 py-3"><%= boolean_label.call(record[:guest]) %></td>
-              <td class="px-3 py-3"><%= boolean_label.call(record[:confirmed]) %></td>
-              <td class="px-3 py-3"><%= boolean_label.call(record[:locked]) %></td>
+              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:admin]) %></td>
+              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:guest]) %></td>
+              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:confirmed]) %></td>
+              <td class="px-3 py-3"><%= admin_user_boolean_label(record[:locked]) %></td>
               <td class="px-3 py-3 font-mono" data-admin-user-passkeys-count="<%= record[:id] %>"><%= record[:passkeys_count] %></td>
               <td class="px-3 py-3 font-mono" data-admin-user-receipts-count="<%= record[:id] %>"><%= record[:receipts_count] %></td>
               <td class="px-3 py-3 font-mono"><%= record.dig(:sign_in, :sign_in_count) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:sign_in, :current_sign_in_at)) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:sign_in, :last_sign_in_at)) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:sign_in, :current_sign_in_at)) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:sign_in, :last_sign_in_at)) %></td>
+              <td class="px-3 py-3 whitespace-nowrap"><%= admin_short_timestamp_label(record.dig(:timestamps, :created_at)) %></td>
               <td class="px-3 py-3"><%= link_to t("admin.users.index.table.detail_link"), admin_user_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>

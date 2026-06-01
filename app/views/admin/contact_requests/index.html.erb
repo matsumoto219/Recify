@@ -156,23 +156,11 @@
         <p class="text-sm token-text-muted"><%= t("admin.contact_requests.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <% if pagination.has_previous? %>
-          <%= link_to t("admin.contact_requests.index.results.previous"),
-                admin_contact_requests_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.previous_offset)),
-                class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
-        <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.contact_requests.index.results.previous") %></span>
-        <% end %>
-
-        <% if pagination.has_next? %>
-          <%= link_to t("admin.contact_requests.index.results.next"),
-                admin_contact_requests_path(pagination.query_base.merge(limit: pagination.limit, offset: pagination.next_offset)),
-                class: "rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-brand hover:underline" %>
-        <% else %>
-          <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted opacity-60"><%= t("admin.contact_requests.index.results.next") %></span>
-        <% end %>
-      </div>
+      <%= render "admin/shared/index_pagination",
+            pagination: pagination,
+            path_method: :admin_contact_requests_path,
+            previous_label: t("admin.contact_requests.index.results.previous"),
+            next_label: t("admin.contact_requests.index.results.next") %>
     </div>
 
     <div class="overflow-x-auto">

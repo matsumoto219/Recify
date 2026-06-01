@@ -1,7 +1,3 @@
-# TODO: 明細行の表示状態判定を整理する。
-# needs_review / warning / validation error を view で直接判定せず、
-# :normal / :warning / :review / :error のような row variant に集約する。
-
 module ReceiptsHelper
   ReceiptNotesState = Struct.new(:groups, :items, :count, keyword_init: true)
   AmountSummaryTaxDetailRow = Struct.new(

@@ -55,7 +55,7 @@
               attribute: :category,
               label: t("contact_requests.fields.category"),
               icon: "category",
-              options: ContactRequest::CATEGORIES.map { |category| [t("contact_requests.categories.#{category}"), category] },
+              options: contact_request_category_options,
               include_blank: t("contact_requests.placeholders.category"),
               required: true,
               size: :regular %>

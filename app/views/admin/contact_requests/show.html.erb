@@ -1,7 +1,7 @@
 <% content_for :title, t("admin.contact_requests.show.title") %>
 
 <%
-  status_options = ContactRequest::STATUSES.map { |value| [ t("admin.contact_requests.statuses.#{value}"), value ] }
+  status_options = admin_contact_request_filter_options(@filter_options || {})[:statuses]
   admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   admin_control_class = "rounded-lg text-sm"
 %>

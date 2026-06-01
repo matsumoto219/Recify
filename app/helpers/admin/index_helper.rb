@@ -78,6 +78,31 @@ module Admin
       }
     end
 
+    def admin_user_filter_options
+      {
+        booleans: [
+          [ t("admin.users.common.all"), "" ],
+          [ t("admin.users.common.yes"), "true" ],
+          [ t("admin.users.common.no"), "false" ]
+        ],
+        limits: admin_limit_options("admin.users.common.limit_unit")
+      }
+    end
+
+    def admin_user_boolean_label(value)
+      value ? t("admin.users.common.yes") : t("admin.users.common.no")
+    end
+
+    def admin_short_timestamp_label(value)
+      value.present? ? l(value, format: :short) : "-"
+    end
+
+    def admin_index_page_params(pagination, direction)
+      target_offset = direction == :backward ? pagination.previous_offset : pagination.next_offset
+
+      pagination.query_base.merge(limit: pagination.limit, offset: target_offset)
+    end
+
     private
 
     def admin_value_options(values)

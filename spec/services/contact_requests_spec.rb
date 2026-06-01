@@ -145,4 +145,10 @@ RSpec.describe ContactRequests do
       end
     end
   end
+
+  describe '.category_options' do
+    it 'returns category values through the public entrypoint' do
+      expect(described_class.category_options).to eq(ContactRequest::CATEGORIES)
+    end
+  end
 end

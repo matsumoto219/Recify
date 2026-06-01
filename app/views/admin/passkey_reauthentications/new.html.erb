@@ -18,7 +18,7 @@
       </div>
     <% end %>
 
-    <% if current_user.passkeys.none? %>
+    <% unless @admin_passkey_registered %>
       <div class="space-y-4">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.passkey_reauthentications.new.no_passkeys_title") %></h2>
         <p class="text-sm token-text-muted leading-relaxed">
