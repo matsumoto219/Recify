@@ -190,6 +190,7 @@ module Admin
           effective_limit_bytes: storage_limit_entry&.value,
           source: storage_limit_entry&.source
         },
+        limit_keys: limit_entries.map(&:key),
         limits: limit_entries.map { |entry| usage_limit_record(entry, usage_entries.fetch(entry.key)) }
       }
     end

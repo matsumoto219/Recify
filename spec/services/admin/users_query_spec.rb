@@ -162,6 +162,7 @@ RSpec.describe Admin::UsersQuery do
           used_count: 10,
           api_reservation: true
         )
+        expect(record.dig(:usage_limits, :limit_keys)).to eq(limit_rows.keys)
         expect(record.to_json).not_to include('secret', 'credential_id', 'session_uid')
       end
     end
@@ -173,7 +174,7 @@ RSpec.describe Admin::UsersQuery do
 
       queries = count_sql_queries do
         record = described_class.find(id: user.id)
-        expect(record.dig(:usage_limits, :limits).size).to eq(UserLimits.definitions.size)
+        expect(record.dig(:usage_limits, :limits).size).to eq(record.dig(:usage_limits, :limit_keys).size)
       end
 
       aggregate_failures do

@@ -230,7 +230,7 @@
                 f: form,
                 attribute: :key,
                 label: t("admin.users.show.limits.form.key_label"),
-                options: UserLimits.definitions.keys.map { |key| [ t("admin.users.show.limits.keys.#{key}", default: key), key ] },
+                options: record.dig(:usage_limits, :limit_keys).to_a.map { |key| [ t("admin.users.show.limits.keys.#{key}", default: key), key ] },
                 with_icon: false,
                 size: :dense,
                 label_class: admin_label_class,
