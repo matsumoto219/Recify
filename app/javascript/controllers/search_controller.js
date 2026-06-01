@@ -19,6 +19,8 @@ export default class extends Controller {
     this.focusFrame = null
     this.searchAbortController = null
     this.searchSequence = 0
+    this.isComposing = false
+    this.helpHideTimers = new Map()
     this.close({ animated: false })
     document.addEventListener('pointerdown', this.handleOutsideTap)
     document.addEventListener('keydown', this.handleKeydown)
@@ -30,6 +32,7 @@ export default class extends Controller {
     document.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     clearTimeout(this.debounceTimer)
+    this.clearHelpHideTimers()
     this.clearCloseTimer()
     this.cancelOpenFrame()
     this.cancelFocusFrame()
@@ -127,6 +130,11 @@ export default class extends Controller {
   handleInput (event) {
     const input = event.currentTarget
 
+    if (!this.isComposing) {
+      this.applyAmountInputAssist(input)
+      this.applyDateInputAssist(input)
+    }
+
     clearTimeout(this.debounceTimer)
 
     this.debounceTimer = setTimeout(() => {
@@ -134,10 +142,20 @@ export default class extends Controller {
     }, 300)
   }
 
+  handleCompositionStart () {
+    this.isComposing = true
+  }
+
+  handleCompositionEnd (event) {
+    this.isComposing = false
+    this.handleInput(event)
+  }
+
   showHelp (event) {
     const help = this.helpFor(event.currentTarget)
     if (!help) return
 
+    this.clearHelpHideTimer(help)
     help.classList.remove('hidden')
     help.setAttribute('aria-hidden', 'false')
   }
@@ -146,14 +164,34 @@ export default class extends Controller {
     const help = this.helpFor(event.currentTarget)
     if (!help) return
 
-    help.classList.add('hidden')
-    help.setAttribute('aria-hidden', 'true')
+    this.scheduleHelpHide(help)
   }
 
   handleInputKeydown (event) {
     if (event.key !== 'Escape') return
 
     this.hideHelp(event)
+  }
+
+  keepHelpOpen (event) {
+    event.preventDefault()
+  }
+
+  insertQueryPrefix (event) {
+    event.preventDefault()
+
+    const prefix = event.params.prefix || event.currentTarget.dataset.searchPrefixParam
+    const input = this.queryInputFor(event.currentTarget)
+    if (!prefix || !input) return
+
+    const currentValue = input.value.replace(/\s+$/, '')
+    const separator = currentValue.length > 0 ? ' ' : ''
+    input.value = `${currentValue}${separator}${prefix}`
+
+    const cursorPosition = input.value.length
+    input.focus()
+    input.setSelectionRange(cursorPosition, cursorPosition)
+    this.hideAllHelp()
   }
 
   async performSearch (input) {
@@ -289,10 +327,127 @@ export default class extends Controller {
   }
 
   hideAllHelp () {
+    this.clearHelpHideTimers()
     this.element.querySelectorAll('[data-search-help]').forEach((help) => {
       help.classList.add('hidden')
       help.setAttribute('aria-hidden', 'true')
     })
+  }
+
+  scheduleHelpHide (help) {
+    this.clearHelpHideTimer(help)
+
+    const timer = setTimeout(() => {
+      if (help.contains(document.activeElement)) return
+
+      help.classList.add('hidden')
+      help.setAttribute('aria-hidden', 'true')
+      this.helpHideTimers.delete(help)
+    }, 120)
+
+    this.helpHideTimers.set(help, timer)
+  }
+
+  clearHelpHideTimer (help) {
+    const timer = this.helpHideTimers.get(help)
+    if (!timer) return
+
+    clearTimeout(timer)
+    this.helpHideTimers.delete(help)
+  }
+
+  clearHelpHideTimers () {
+    this.helpHideTimers.forEach((timer) => {
+      clearTimeout(timer)
+    })
+    this.helpHideTimers.clear()
+  }
+
+  queryInputFor (element) {
+    const box = element.closest('[data-search-box]')
+    if (!box) return null
+
+    return box.querySelector('[data-search-query-input]')
+  }
+
+  applyDateInputAssist (input) {
+    if (!input || input.selectionStart === null || input.selectionStart !== input.selectionEnd) return
+
+    const value = input.value
+    const cursor = input.selectionStart
+    const tokenRange = this.currentTokenRange(value, cursor)
+    if (!tokenRange) return
+    if (cursor !== tokenRange.end) return
+
+    const token = value.slice(tokenRange.start, tokenRange.end)
+    const match = token.match(/^(date(?:>=|<=))(.+)$/)
+    if (!match) return
+
+    const prefix = match[1]
+    const rawDateValue = match[2]
+    if (!/^[\d/-]+$/.test(rawDateValue)) return
+
+    const digits = rawDateValue.replace(/[^\d]/g, '')
+    if (digits.length === 0 || digits.length > 8) return
+
+    const formattedDate = this.formatDateDigits(digits)
+    if (!formattedDate) return
+
+    const formattedToken = `${prefix}${formattedDate}`
+    if (formattedToken === token) return
+
+    input.value = `${value.slice(0, tokenRange.start)}${formattedToken}${value.slice(tokenRange.end)}`
+
+    const newCursor = tokenRange.start + formattedToken.length
+    input.setSelectionRange(newCursor, newCursor)
+  }
+
+  applyAmountInputAssist (input) {
+    if (!input || input.selectionStart === null || input.selectionStart !== input.selectionEnd) return
+
+    const value = input.value
+    const cursor = input.selectionStart
+    const normalized = this.normalizeAmountExpressions(value)
+    if (normalized === value) return
+
+    input.value = normalized
+    const newCursor = Math.max(0, cursor - (value.length - normalized.length))
+    input.setSelectionRange(newCursor, newCursor)
+  }
+
+  normalizeAmountExpressions (value) {
+    return value.replace(
+      /(^|\s)((?:amount)?(?:>=|<=))\s*([¥￥]?\s*\d[\d,]*)/gi,
+      (_match, leadingSpace, prefix, rawAmount) => {
+        const amount = rawAmount.replace(/[¥￥,\s]/g, '')
+        return `${leadingSpace}${prefix}${amount}`
+      }
+    )
+  }
+
+  currentTokenRange (value, cursor) {
+    let start = cursor
+    while (start > 0 && !/\s/.test(value[start - 1])) {
+      start -= 1
+    }
+
+    let end = cursor
+    while (end < value.length && !/\s/.test(value[end])) {
+      end += 1
+    }
+
+    if (start === end) return null
+
+    return { start, end }
+  }
+
+  formatDateDigits (digits) {
+    if (digits.length <= 3) return digits
+    if (digits.length === 4) return `${digits}-`
+    if (digits.length <= 5) return `${digits.slice(0, 4)}-${digits.slice(4)}`
+    if (digits.length === 6) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-`
+
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
   }
 
   showSearchErrorNotice () {

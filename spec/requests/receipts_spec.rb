@@ -238,6 +238,7 @@ RSpec.describe 'Receipts', type: :request do
       total_count_card = summary_cards.find { |card| card.text.include?(I18n.t('dashboard.summary.total_count.title')) }
       header = document.at_css('#dashboard-header')
       page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
+      search_prefixes = header.css('#desktop-search-help [data-search-prefix-param]').map { |node| node['data-search-prefix-param'] }
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
@@ -246,14 +247,30 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
         expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))
         expect(header.at_css('input[name="q"]')['placeholder']).to eq(I18n.t('dashboard.search.placeholder'))
+        expect(header.at_css('input[name="q"]')['data-search-query-input']).to eq('true')
         expect(header.at_css('input[name="q"]')['aria-describedby']).to eq('desktop-search-help')
         expect(header.at_css('#desktop-search-help')['role']).to eq('tooltip')
         expect(header.at_css('#desktop-search-help')['aria-hidden']).to eq('true')
         expect(header.at_css('#desktop-search-help')['class'].split).to include('hidden')
         expect(header.at_css('#desktop-search-help')['class'].split).to include('w-full', 'max-w-none')
+        expect(header.at_css('#desktop-search-help')['class'].split).to include('pointer-events-auto')
         expect(header.at_css('#desktop-search-help')['class']).not_to include('max-w-[min(28rem')
         expect(header.at_css('#desktop-search-help').text).to include(I18n.t('search.help.title'))
-        expect(header.at_css('#desktop-search-help').text).to include('date>=2026-01-01')
+        expect(search_prefixes).to contain_exactly('date>=', 'date<=', 'amount>=', 'amount<=')
+        expect(header.at_css('#desktop-search-help').text).to include('数字8桁で YYYY-MM-DD 形式')
+        expect(header.at_css('#desktop-search-help').text).to include('そのほかの検索方法')
+        expect(header.at_css('#desktop-search-help').text).to include('店舗名・メモ・商品名は通常キーワードで検索できます。')
+        expect(header.at_css('#desktop-search-help').text).to include('例: 1000')
+        expect(header.at_css('#desktop-search-help').text).to include('例: >=1000, <=5000')
+        expect(header.at_css('#desktop-search-help').text).to include('例: 2026-01-01')
+        expect(header.at_css('#desktop-search-help').text).to include('例: date:2026-01-01..2026-01-31')
+        expect(header.at_css('#desktop-search-help').text).not_to include('status:')
+        expect(header.at_css('#desktop-search-help').text).not_to include('payment:')
+        expect(header.at_css('#desktop-search-help').text).not_to include('category:')
+        expect(header.at_css('#desktop-search-help').text).not_to include('store:')
+        expect(header.at_css('#desktop-search-help').text).not_to include('tax_rate:')
+        expect(header.at_css('#desktop-search-help').text).not_to include('has:adjustment')
+        expect(header.at_css('#desktop-search-help').text).not_to include('needs_review:true')
         expect(header.at_css('[data-search-target="toggle"]')['aria-label']).to eq(I18n.t('dashboard.header.search_label'))
         expect(header.at_css('[data-notification-dropdown-target="button"]')['aria-label']).to eq(I18n.t('dashboard.header.notifications_label'))
         expect(summary.text).to include(I18n.t('dashboard.summary.total_count.title'))
@@ -420,17 +437,23 @@ RSpec.describe 'Receipts', type: :request do
       document = Nokogiri::HTML(response.body)
       header = document.at_css('#dashboard-header')
       mobile_panel = document.at_css('#mobile-search-panel')
+      search_prefixes = mobile_panel.css('#mobile-search-help [data-search-prefix-param]').map { |node| node['data-search-prefix-param'] }
 
       aggregate_failures do
         expect(mobile_panel).to be_present
         expect(mobile_panel.ancestors).not_to include(header)
         expect(header.at_css('.search-panel-mobile')).to be_nil
         expect(mobile_panel.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
+        expect(mobile_panel.at_css('input[name="q"]')['data-search-query-input']).to eq('true')
         expect(mobile_panel.at_css('input[name="q"]')['aria-describedby']).to eq('mobile-search-help')
         expect(mobile_panel.at_css('#mobile-search-help').text).to include(I18n.t('search.help.title'))
         expect(mobile_panel.at_css('#mobile-search-help')['class'].split).to include('hidden')
         expect(mobile_panel.at_css('#mobile-search-help')['class'].split).to include('w-full', 'max-w-none')
+        expect(mobile_panel.at_css('#mobile-search-help')['class'].split).to include('pointer-events-auto')
         expect(mobile_panel.at_css('#mobile-search-help')['class']).not_to include('max-w-[min(28rem')
+        expect(search_prefixes).to contain_exactly('date>=', 'date<=', 'amount>=', 'amount<=')
+        expect(mobile_panel.at_css('#mobile-search-help').text).to include('そのほかの検索方法')
+        expect(mobile_panel.at_css('#mobile-search-help').text).to include('例: date:2026-01-01..2026-01-31')
       end
     end
 

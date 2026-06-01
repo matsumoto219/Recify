@@ -2,13 +2,28 @@ ja:
   search:
     help:
       title: 拡張検索が使えます
-      description: スペース区切りでAND検索できます。
+      description: 条件をクリックすると検索欄に挿入できます。スペース区切りでAND検索できます。
       examples:
-        - 店舗名 1000
-        - 商品名 <=300
-        - date>=2026-01-01
-        - date:2026-01-01..2026-01-31
-      syntax: "金額は <=1000 / >=1000、日付は date>=YYYY-MM-DD の形式で指定できます。"
+        - value: date>=
+          label: 指定日以降
+          hint: 数字8桁で YYYY-MM-DD 形式
+        - value: date<=
+          label: 指定日以前
+          hint: 数字8桁で YYYY-MM-DD 形式
+        - value: amount>=
+          label: 指定金額以上
+          hint: 数字のみ入力
+        - value: amount<=
+          label: 指定金額以下
+          hint: 数字のみ入力
+      syntax: "日付は date>=YYYY-MM-DD / date<=YYYY-MM-DD、金額は amount>=1000 / amount<=1000 の形式で指定できます。"
+      tips_title: そのほかの検索方法
+      tips:
+        - 店舗名・メモ・商品名は通常キーワードで検索できます。
+        - "金額だけでも検索できます。例: 1000"
+        - "比較演算子だけでも検索できます。例: >=1000, <=5000"
+        - "日付単体でも検索できます。例: 2026-01-01"
+        - "日付範囲も検索できます。例: date:2026-01-01..2026-01-31"
     realtime:
       error_title: エラー
       error_message: 検索結果を更新できませんでした。通信状況を確認してもう一度お試しください。
