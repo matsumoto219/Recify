@@ -72,9 +72,6 @@
 
       <%= render "shared/ui/layout/section_divider" %>
       <div class="space-y-6 -mx-8 px-8 py-8 min-w-0">
-        <%# TODO: ユーザー名更新を有効化
-            - devise_parameter_sanitizerで :name を許可
-            - バリデーション（任意：文字数制限など）を追加 %>
         <%= render "shared/ui/form/text_field",
               f: f,
               attribute: :name,
@@ -100,9 +97,6 @@
               variant: :secondary,
               class: "px-8 py-3" %>
 
-        <%# TODO: 更新後の挙動
-            - 更新成功時：settingsページへリダイレクト
-            - 更新失敗時：エラーメッセージ表示 %>
         <%= render "shared/ui/actions/button",
               label: t("settings.account.buttons.save"),
               variant: :primary,

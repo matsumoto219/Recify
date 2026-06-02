@@ -53,7 +53,6 @@ module Ocr
       raise OcrError, "unexpected_error"
     end
 
-    # NOTE:
     # available? は親facadeの診断入口から使う疎通診断メソッド。
     # 通常のOCR処理前には毎回呼ばない。
     # UI表示や通常リクエストでは ExternalServices の状態storeを参照する。
@@ -223,7 +222,6 @@ module Ocr
       raise OcrError, "external_service_unavailable"
     end
 
-    # NOTE:
     # 外部サービス状態管理では、このメソッドで寄せた error_code を利用して
     # ok / degraded / down の状態遷移を判定する想定。
     # input_invalid や ocr_unreadable のような入力起因エラーは

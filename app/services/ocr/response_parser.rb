@@ -46,21 +46,21 @@ class Ocr::ResponseParser
       lines: normalized_lines,
       candidates: {
         store_name: extract_store_name(parsed_response, normalized_lines),
-        store_address: extract_store_address(parsed_response),                                                     # NOTE: MerchantAddress は取得するが、実レシートで未取得が多く保存/表示は限定的
+        store_address: extract_store_address(parsed_response),                                                     # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
         store_phone_number: extract_store_phone_number(parsed_response),
         purchased_at_text: normalize_purchased_at_text(extract_purchased_at_text(parsed_response, normalized_lines)),
         total_amount: extract_total_amount(parsed_response, normalized_lines),
         subtotal_amount: extract_subtotal_amount(parsed_response, normalized_lines),
         tax_amount: extract_tax_amount(parsed_response, normalized_lines),
         tax_rate: extract_tax_rate(parsed_response),
-        payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),  # NOTE: Payments[].Method が取れない場合の fallback 用。現在はこちらが主力
+        payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),
         tip_amount: extract_tip_amount(parsed_response),                                                           # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
         country_region: extract_country_region(parsed_response),
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
-        tax_details: extract_tax_details(parsed_response, normalized_lines),                                       # NOTE: TaxDetails[] は保存対象だがレシート依存で取得率にばらつきあり
+        tax_details: extract_tax_details(parsed_response, normalized_lines),
         adjustment_candidates: extract_adjustment_candidates(parsed_response, normalized_lines),
-        items: extract_items(parsed_response, normalized_lines),                                                   # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
+        items: extract_items(parsed_response, normalized_lines),
         review_reasons: extract_review_reasons(parsed_response),
         confidence_summary: extract_confidence_summary(parsed_response)
       },
@@ -153,18 +153,17 @@ class Ocr::ResponseParser
     end
   end
 
-  # NOTE: 以下はAzure OCR (Document Intelligence) のレスポンスで取得可能だが、
-  # 現在のRecifyでは未使用 or 未マッピングのフィールド一覧
-  # 必要に応じて今後対応検討する
+  # Azure OCR (Document Intelligence) のレスポンスで取得可能だが、
+  # 現在のRecifyでは未表示 or 限定利用のフィールド一覧。
+  # 取得率や実レシートでの有用性を見ながら、必要に応じて対応を広げる。
   #
-  # - MerchantAddress (住所) → 現状は未取得 or 不安定
   # - Tip (チップ) → 日本レシートではほぼ未使用
   # - Payments (構造化支払い情報) → 未取得ケースが多く fallback運用
   # - Loyalty / Membership系 → ポイントカード誤認のため未採用
   # - ReceiptId / TransactionId → 今回のスコープ外
   # - CurrencyCode → JPY固定前提のため未使用
   # - Discounts / Offers → MVPでは lines から割引額のみ直前itemへ紐付ける
-  # - ProductCode → レシートによっては存在するが未活用
+  # - ProductCode → 保存のみで、画面表示/検索では未使用
   # - AdditionalFields (query fields拡張分) → PaymentMethod以外は未使用
   #
   # 方針:
@@ -988,7 +987,6 @@ class Ocr::ResponseParser
     categories
   end
 
-  # NOTE: 実レシートでは未取得が多く、現在は payment_method_text fallback を優先使用
   def extract_payments(parsed_response)
     fields = extract_fields(parsed_response)
     payments = fields.dig("Payments", "valueArray")
@@ -1006,7 +1004,7 @@ class Ocr::ResponseParser
     []
   end
 
-  # NOTE: 税詳細は取得できる場合のみ保存。現状は UI で未使用
+  # 税詳細は取得できる場合のみ保存し、金額計算/サマリー表示の補助情報として利用する。
   def extract_tax_details(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
@@ -1110,7 +1108,6 @@ class Ocr::ResponseParser
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
 
-    # NOTE: quantity_unit は編集/表示で利用し、product_code は保存する
     items.filter_map.with_index do |item, index|
       value_object = item["valueObject"] || {}
       total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
@@ -1176,7 +1173,7 @@ class Ocr::ResponseParser
     nil
   end
 
-  # NOTE: 割引検出。
+  # 割引検出。
   # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
   # 割引額・割引率・割引前金額を直前itemへ紐付ける。
   def extract_discount_details_by_item_index(items, lines)

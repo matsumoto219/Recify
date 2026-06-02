@@ -59,7 +59,7 @@ module Analysis
           receipt_items_attributes: receipt_items_attributes,
           # NOTE: 現状は Payments[] 自体の取得率が低く、保存されても UI では未使用
           receipt_payments_attributes: receipt_payments_attributes,
-          # NOTE: 税詳細は保存対象だが、現状は主に保持目的で UI では未使用
+          # 税詳細は保存し、金額計算/サマリー表示の補助情報として利用する
           receipt_tax_details_attributes: receipt_tax_details_attributes,
           receipt_adjustments_attributes: receipt_adjustments_attributes,
           review_reasons: review_reasons,
@@ -92,8 +92,7 @@ module Analysis
 
         symbolized = ai_result.deep_symbolize_keys
 
-        # NOTE:
-        # 現在の AI item は保存用完全データではなく、index ベースの補完データを受ける前提。
+        # AI item は保存用完全データではなく、index ベースの補完データを受ける前提。
         # 主に suggested_name / category / needs_review を OCR item にマージするための中間形式として扱う。
 
         {
@@ -108,7 +107,7 @@ module Analysis
 
         {
           store_name: ai_attrs[:store_name].presence || candidates[:store_name],
-          store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # NOTE: 保存はするが、実レシートで未取得が多く現状UI活用は限定的
+          store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # 実レシートでは未取得が多いが、取得値は住所として表示/編集対象にする
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
           purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
           total_amount: ai_attrs[:total_amount] || normalize_amount(candidates[:total_amount]),
@@ -118,7 +117,7 @@ module Analysis
           tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),           # NOTE: 日本レシートではほぼ未取得。保存はするが現状未使用に近い
           country_region: normalize_country_region(
             ai_attrs[:country_region].presence || candidates[:country_region]
-          ), # NOTE: 保存優先項目。現状UIでは未使用
+          ), # 国判定/AI promptの補助に使う。UIでは表示しない
           receipt_type: ai_attrs[:receipt_type].presence || candidates[:receipt_type],              # NOTE: 保存優先項目。現状UIでは未使用
           payment_method: ai_attrs[:payment_method].presence || detect_payment_method(candidates),
           processing_error_code: ai_attrs[:processing_error_code],
@@ -148,7 +147,7 @@ module Analysis
         end
 
         ai_items_present = normalized_ai_items.present?
-        # NOTE: product_code は保存のみ。quantity_unit は編集/表示で利用する。
+        # product_code は保存のみ。quantity_unit は編集/表示で利用する。
         source_items.each_with_index.filter_map do |item, index|
           normalized_item = if item.respond_to?(:with_indifferent_access)
             item.with_indifferent_access
@@ -197,7 +196,7 @@ module Analysis
             # Azure Items[].Description / Name -> receipt_items.raw_text
             raw_text: raw_text,
             suggested_name: normalized_item[:suggested_name].presence || extract_item_name(raw_text),
-            # NOTE: AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
+            # AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
             confirmed_name: normalized_item[:confirmed_name],
             category: category_invalid ? nil : (category || detect_category(raw_text)),
             price: price,
@@ -318,7 +317,7 @@ module Analysis
       end
 
       def build_receipt_tax_details_attributes(candidates)
-        # NOTE: 税詳細は保存できる場合のみ保存。現状は tax_rate / tax_amount の補助情報で UI では未活用
+        # 税詳細は保存できる場合のみ保存し、金額計算/サマリー表示の補助情報として利用する
         Array(candidates[:tax_details]).map do |tax_detail|
           normalized_tax_detail = tax_detail.respond_to?(:deep_symbolize_keys) ? tax_detail.deep_symbolize_keys : {}
 
@@ -528,7 +527,7 @@ module Analysis
 
         {
           store_name: symbolized[:store_name],
-          store_address: symbolized[:store_address],               # NOTE: AI側から来ても現状UI活用は限定的
+          store_address: symbolized[:store_address],               # AI側で補完された値も住所として表示/編集対象にする
           store_phone_number: symbolized[:store_phone_number],
           purchased_at: symbolized[:purchased_at],
           purchased_at_text: symbolized[:purchased_at_text],
@@ -537,7 +536,7 @@ module Analysis
           tax_amount: normalize_amount(symbolized[:tax_amount]),
           tax_rate: normalize_rate(symbolized[:tax_rate]),
           tip_amount: normalize_amount(symbolized[:tip_amount]),   # NOTE: AI側から来ても現状未使用に近い
-          country_region: normalize_country_region(symbolized[:country_region]), # NOTE: AI側から来ても保存優先。現状UIでは未使用
+          country_region: normalize_country_region(symbolized[:country_region]), # 国判定/AI promptの補助に使う。UIでは表示しない
           receipt_type: symbolized[:receipt_type],                 # NOTE: AI側から来ても保存優先。現状UIでは未使用
           payment_method: symbolized[:payment_method],
           processing_error_code: symbolized[:processing_error_code],
@@ -645,7 +644,7 @@ module Analysis
           ai_item = lookup_candidates.lazy.map { |idx| ai_items_by_index[idx] }.find(&:present?) || {}.with_indifferent_access
           merged_item = candidate_item.merge(ai_item.compact)
 
-          # NOTE: quantity_unit / product_code はOCR優先で保持する。
+          # quantity_unit / product_code はOCR優先で保持する。
           merged_item.merge(
             suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
             category: ai_item[:category].presence || candidate_item[:category],
@@ -728,7 +727,7 @@ module Analysis
       end
 
       def build_items_from_lines(lines)
-        # NOTE: OCR Items[] が取れない場合の最終fallback。現状は review_needed 前提
+        # OCR Items[] が取れない場合の最終fallback。現状は review_needed 前提
         Array(lines).select { |line| item_line?(line) }.each_with_index.map do |line, index|
           price = extract_item_price(line)
           quantity = extract_item_quantity(line)
@@ -806,7 +805,7 @@ module Analysis
       end
 
       def detect_payment_method(candidates)
-        # NOTE: OCR fieldの payment_method_text は支払い文脈が強い場合に優先し、
+        # OCR fieldの payment_method_text は支払い文脈が強い場合に優先し、
         # Payments[].Method はAI失敗 / OCR-only時の次点fallbackとして使う。
         detected_from_text = normalize_detected_payment_method(
           Analysis::ReceiptFallbackPatterns.detect_payment_method(candidates[:payment_method_text])
@@ -835,7 +834,7 @@ module Analysis
       end
 
       def detect_category(text)
-        # NOTE: 最終カテゴリ精度はAI担当。ここは OCR only / AI失敗時の簡易fallback
+        # 最終カテゴリ精度はAI担当。ここは OCR only / AI失敗時の簡易fallback
         Analysis::ReceiptFallbackPatterns.detect_category(text)
       end
 

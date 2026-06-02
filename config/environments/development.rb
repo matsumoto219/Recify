@@ -67,7 +67,6 @@ Rails.application.configure do
     config.active_job.queue_adapter = :solid_queue
     config.solid_queue.connects_to = { database: { writing: :queue } }
   else
-    # NOTE: 通常の開発環境では非同期ジョブを即時実行するため :async を維持
     config.active_job.queue_adapter = :async
   end
 

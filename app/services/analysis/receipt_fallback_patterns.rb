@@ -1,10 +1,6 @@
 module Analysis
   module ReceiptFallbackPatterns
     # OCRフォールバック用の簡易ルール（AI失敗時のみ使用）
-    # NOTE: 上から順に評価（先にマッチしたものを採用）
-    # NOTE: このファイルでは「簡易分類ルール」のみを担当する
-    # NOTE: フォールバック保存時も自動確定はせず、needs_review = true 前提で扱う
-
     PAYMENT_METHOD_PATTERNS = {
       "debit_card" => [
         /デビット(?:カード)?/i,

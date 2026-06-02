@@ -222,7 +222,7 @@ body {
 
 /* ===== Glass Panel Effect ===== */
 
-/* NOTE:
+/* Backdrop filter guidance:
  * Direct `backdrop-filter: var(...)` declarations are dropped during
  * Tailwind v4 build output in this project environment.
  * Use Tailwind backdrop utilities instead.
