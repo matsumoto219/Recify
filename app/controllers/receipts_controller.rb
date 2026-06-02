@@ -24,13 +24,14 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    receipts_scope = current_user.receipts.order(created_at: :desc)
-    receipts_scope = receipts_scope.search(@query) if @query.present?
+    prepare_receipt_index_query(current_user.receipts)
+    receipts_scope = @receipt_index_query.scope
 
-    @pagy, @receipts = pagy(:offset, receipts_scope, limit: 20)
+    @pagy, @receipts = pagy(:offset, receipts_scope, limit: @per_page)
     return if redirect_to_canonical_receipts_page_if_needed
 
     assign_receipts_index_summary(receipts_scope)
+    assign_receipt_index_count_summary
   end
 
   def show
@@ -204,6 +205,30 @@ class ReceiptsController < ApplicationController
     )
   end
 
+  def prepare_receipt_index_query(scope)
+    @receipt_index_query = ReceiptSearch.index_query(
+      scope: scope,
+      query: @query,
+      sort: params[:sort],
+      per_page: params[:per_page]
+    )
+    @sort = @receipt_index_query.sort
+    @per_page = @receipt_index_query.per_page
+    @receipt_index_params = @receipt_index_query.sanitized_params
+    @receipt_search_hidden_fields = @receipt_index_params.except(:q)
+  end
+
+  def assign_receipt_index_count_summary
+    total_count = @pagy.count
+    offset = (@pagy.page - 1) * @per_page
+
+    @receipt_index_count_summary = {
+      total: total_count,
+      start: total_count.zero? ? 0 : offset + 1,
+      finish: [ offset + @receipts.size, total_count ].min
+    }
+  end
+
   def block_processing_receipt
     return unless @receipt.processing?
 
@@ -258,7 +283,7 @@ class ReceiptsController < ApplicationController
     canonical_page = canonical_receipts_page(requested_page)
     return false if canonical_page.blank?
 
-    redirect_to receipts_path(request.query_parameters.merge(page_key => canonical_page))
+    redirect_to receipts_path(@receipt_index_query.pagination_params.merge(page_key => canonical_page))
     true
   end
 
@@ -998,9 +1023,11 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    receipts_scope = current_user.receipts.none
-    @pagy, @receipts = pagy(:offset, receipts_scope, limit: 20)
+    prepare_receipt_index_query(current_user.receipts.none)
+    receipts_scope = @receipt_index_query.scope
+    @pagy, @receipts = pagy(:offset, receipts_scope, limit: @per_page)
     assign_receipts_index_summary(receipts_scope)
+    assign_receipt_index_count_summary
     flash.now[:alert] = message
     render :index, status: :unprocessable_content, formats: :html
   end

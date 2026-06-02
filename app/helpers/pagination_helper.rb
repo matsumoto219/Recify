@@ -32,17 +32,18 @@ module PaginationHelper
     end
   end
 
-  def navigation_pagination_state(pagy)
+  def navigation_pagination_state(pagy, query_params: nil)
     page_key = pagy.options.fetch(:page_key, "page")
     current_page = pagy.page
     last_page = pagy.last
+    query_params ||= request.query_parameters
 
     NavigationPaginationState.new(
-      items: navigation_pagination_items(current_page:, last_page:, page_key:),
+      items: navigation_pagination_items(current_page:, last_page:, page_key:, query_params:),
       current_page: current_page,
       last_page: last_page,
-      back_url: navigation_pagination_url(pagy.previous, page_key:),
-      forward_url: navigation_pagination_url(pagy.next, page_key:),
+      back_url: navigation_pagination_url(pagy.previous, page_key:, query_params:),
+      forward_url: navigation_pagination_url(pagy.next, page_key:, query_params:),
       back_label: t("common.pagination.previous"),
       forward_label: t("common.pagination.next")
     )
@@ -50,7 +51,7 @@ module PaginationHelper
 
   private
 
-  def navigation_pagination_items(current_page:, last_page:, page_key:)
+  def navigation_pagination_items(current_page:, last_page:, page_key:, query_params:)
     visible_pages = ([ 1, last_page, current_page - 1, current_page, current_page + 1 ].select do |page|
       page.between?(1, last_page)
     end).uniq.sort
@@ -58,13 +59,13 @@ module PaginationHelper
     visible_pages.each_with_object([]) do |page, items|
       items << NavigationPaginationItem.new(kind: :gap) if items.any? && page > items.last.page.to_i + 1
       kind = page == current_page ? :current : :link
-      items << NavigationPaginationItem.new(kind: kind, page: page, url: navigation_pagination_url(page, page_key:))
+      items << NavigationPaginationItem.new(kind: kind, page: page, url: navigation_pagination_url(page, page_key:, query_params:))
     end
   end
 
-  def navigation_pagination_url(page, page_key:)
+  def navigation_pagination_url(page, page_key:, query_params:)
     return if page.blank?
 
-    url_for(request.query_parameters.merge(page_key => page, only_path: true))
+    url_for(query_params.merge(page_key => page, only_path: true))
   end
 end

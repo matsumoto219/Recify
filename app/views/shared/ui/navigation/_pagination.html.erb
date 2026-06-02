@@ -5,11 +5,11 @@
   - pagy: Pagy オブジェクト
 
   任意:
-  - なし
+  - query_params: ページリンクへ引き継ぐ正規化済み query params
 
   Pagy v43.x では protected な series を直接呼ばず、公開されている page / last から表示ページを組み立てる。
 %>
-<% pagination = navigation_pagination_state(local_assigns.fetch(:pagy)) %>
+<% pagination = navigation_pagination_state(local_assigns.fetch(:pagy), query_params: local_assigns[:query_params]) %>
 
 <% if pagination.render? %>
   <nav class="max-w-full overflow-x-auto no-scrollbar px-1 mt-8 mb-4" aria-label="<%= t("common.pagination.label") %>">

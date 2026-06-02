@@ -2,8 +2,7 @@
   レシート一覧コントロール
 
   NOTE:
-  - 現時点では表示のみ。並び替え / 表示件数のバックエンド連動は未実装。
-  - select name / value は将来の GET パラメータ連動を想定している。
+  - 並び替え / 表示件数の処理ロジックは controller / service 側で正規化する。
 %>
 
 <%
@@ -33,6 +32,10 @@
   surface_variant: :bg_card,
   class: "mb-8" do %>
   <%= form_with url: receipts_path, method: :get, local: true, class: "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" do |form| %>
+    <% if @query.present? %>
+      <%= hidden_field_tag :q, @query %>
+    <% end %>
+
     <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
       <span class="<%= control_icon_class %>" aria-hidden="true">sort</span>
       <div class="min-w-0 flex-1 sm:w-52 sm:flex-none">
@@ -41,7 +44,7 @@
           attribute: :sort,
           label: "並び順",
           options: sort_options,
-          selected: "newest",
+          selected: @sort,
           show_label: false,
           with_icon: false,
           size: :dense,
@@ -49,6 +52,7 @@
           select_class: control_select_class,
           html_options: {
             id: "receipts-sort-control",
+            onchange: "this.form.requestSubmit()",
             aria: { label: "並び順" }
           } %>
       </div>
@@ -63,7 +67,7 @@
             attribute: :per_page,
             label: "表示件数",
             options: per_page_options,
-            selected: "20",
+            selected: @per_page.to_s,
             show_label: false,
             with_icon: false,
             size: :dense,
@@ -71,14 +75,15 @@
             select_class: control_select_class,
             html_options: {
               id: "receipts-per-page-control",
+              onchange: "this.form.requestSubmit()",
               aria: { label: "表示件数" }
             } %>
         </div>
       </div>
 
-      <%# TODO: バックエンド実装時に pagy/count から正しい件数表示へ置き換える。処理ロジックはサーバー側へ寄せる。 %>
       <p class="text-xs leading-relaxed token-text-muted sm:whitespace-nowrap">
-        全 -- 件中 -- 件を表示
+        全 <%= number_with_delimiter(@receipt_index_count_summary[:total]) %> 件中
+        <%= number_with_delimiter(@receipt_index_count_summary[:start]) %>-<%= number_with_delimiter(@receipt_index_count_summary[:finish]) %> 件を表示
       </p>
     </div>
   <% end %>

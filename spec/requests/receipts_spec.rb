@@ -54,6 +54,18 @@ RSpec.describe 'Receipts', type: :request do
     row&.xpath('./span')&.last&.text&.strip
   end
 
+  def receipt_card_ids(document)
+    document.css('#receipts-list-grid > [id^="receipt_"]').map { |node| node['id'] }
+  end
+
+  def receipt_index_controls(document)
+    document.at_css('#receipt-index-controls')
+  end
+
+  def selected_receipt_index_control(document, name)
+    receipt_index_controls(document).at_css("select[name='#{name}'] option[selected]")&.[]('value')
+  end
+
   def upload_ocr_result(overrides = {})
     {
       success: true,
@@ -574,6 +586,189 @@ RSpec.describe 'Receipts', type: :request do
         expect(card_ids.index("receipt_#{newer_receipt.public_id}")).to be < card_ids.index("receipt_#{older_receipt.public_id}")
         expect(document.at_css('#receipts-page-header').text).to include('3件')
         expect(document.at_css('#receipts_summary').text).to include('¥300')
+      end
+    end
+
+    it 'defaultでは作成日時の新しい順で表示する' do
+      older_receipt = create(:receipt, user: user, store_name: '古い順序', total_amount: 100, status: 'completed', created_at: 2.days.ago)
+      newer_receipt = create(:receipt, user: user, store_name: '新しい順序', total_amount: 200, status: 'completed', created_at: 1.hour.ago)
+
+      get receipts_path
+
+      card_ids = receipt_card_ids(Nokogiri::HTML(response.body))
+
+      expect(card_ids.index("receipt_#{newer_receipt.public_id}")).to be < card_ids.index("receipt_#{older_receipt.public_id}")
+    end
+
+    it 'oldest sortでは作成日時の古い順で表示する' do
+      older_receipt = create(:receipt, user: user, store_name: '古いsort', total_amount: 100, status: 'completed', created_at: 2.days.ago)
+      newer_receipt = create(:receipt, user: user, store_name: '新しいsort', total_amount: 200, status: 'completed', created_at: 1.hour.ago)
+
+      get receipts_path(sort: 'oldest')
+
+      document = Nokogiri::HTML(response.body)
+      card_ids = receipt_card_ids(document)
+
+      aggregate_failures do
+        expect(card_ids.index("receipt_#{older_receipt.public_id}")).to be < card_ids.index("receipt_#{newer_receipt.public_id}")
+        expect(selected_receipt_index_control(document, 'sort')).to eq('oldest')
+      end
+    end
+
+    it '金額sortではnil金額を最後にして並び替える' do
+      low_receipt = create(:receipt, user: user, store_name: '金額小', total_amount: 100, status: 'completed')
+      high_receipt = create(:receipt, user: user, store_name: '金額大', total_amount: 5_000, status: 'completed')
+      nil_amount_receipt = create(:receipt, user: user, store_name: '金額nil', total_amount: 300, status: 'completed')
+      nil_amount_receipt.update_columns(total_amount: nil)
+
+      get receipts_path(sort: 'amount_desc')
+      desc_card_ids = receipt_card_ids(Nokogiri::HTML(response.body))
+
+      get receipts_path(sort: 'amount_asc')
+      asc_card_ids = receipt_card_ids(Nokogiri::HTML(response.body))
+
+      aggregate_failures do
+        expect(desc_card_ids.index("receipt_#{high_receipt.public_id}")).to be < desc_card_ids.index("receipt_#{low_receipt.public_id}")
+        expect(desc_card_ids.index("receipt_#{low_receipt.public_id}")).to be < desc_card_ids.index("receipt_#{nil_amount_receipt.public_id}")
+        expect(asc_card_ids.index("receipt_#{low_receipt.public_id}")).to be < asc_card_ids.index("receipt_#{high_receipt.public_id}")
+        expect(asc_card_ids.index("receipt_#{high_receipt.public_id}")).to be < asc_card_ids.index("receipt_#{nil_amount_receipt.public_id}")
+      end
+    end
+
+    it '店名sortでは空文字とnilを最後寄りにして並び替える' do
+      alpha_receipt = create(:receipt, user: user, store_name: 'Alpha Store', total_amount: 100, status: 'completed')
+      zebra_receipt = create(:receipt, user: user, store_name: 'Zebra Store', total_amount: 200, status: 'completed')
+      blank_store_receipt = create(:receipt, user: user, store_name: 'Blank Store', total_amount: 300, status: 'completed')
+      nil_store_receipt = create(:receipt, user: user, store_name: 'Nil Store', total_amount: 400, status: 'completed')
+      blank_store_receipt.update_columns(store_name: '')
+      nil_store_receipt.update_columns(store_name: nil)
+
+      get receipts_path(sort: 'store_name')
+
+      card_ids = receipt_card_ids(Nokogiri::HTML(response.body))
+
+      aggregate_failures do
+        expect(card_ids.index("receipt_#{alpha_receipt.public_id}")).to be < card_ids.index("receipt_#{zebra_receipt.public_id}")
+        expect(card_ids.index("receipt_#{zebra_receipt.public_id}")).to be < card_ids.index("receipt_#{blank_store_receipt.public_id}")
+        expect(card_ids.index("receipt_#{blank_store_receipt.public_id}")).to be < card_ids.index("receipt_#{nil_store_receipt.public_id}")
+      end
+    end
+
+    it 'updated sortでは更新日時の新しい順で表示する' do
+      older_updated_receipt = create(:receipt, user: user, store_name: '古い更新', total_amount: 100, status: 'completed')
+      newer_updated_receipt = create(:receipt, user: user, store_name: '新しい更新', total_amount: 200, status: 'completed')
+      older_updated_receipt.update_columns(updated_at: 2.days.ago)
+      newer_updated_receipt.update_columns(updated_at: 1.hour.ago)
+
+      get receipts_path(sort: 'updated')
+
+      card_ids = receipt_card_ids(Nokogiri::HTML(response.body))
+
+      expect(card_ids.index("receipt_#{newer_updated_receipt.public_id}")).to be < card_ids.index("receipt_#{older_updated_receipt.public_id}")
+    end
+
+    it 'review_priority sortでは要確認を優先して表示する' do
+      completed_receipt = create(:receipt, user: user, store_name: '完了優先比較', total_amount: 100, status: 'completed', created_at: 1.hour.ago)
+      review_receipt = create(:receipt, :review_needed, user: user, store_name: '要確認優先比較', total_amount: 200, created_at: 2.days.ago)
+
+      get receipts_path(sort: 'review_priority')
+
+      document = Nokogiri::HTML(response.body)
+      card_ids = receipt_card_ids(document)
+
+      aggregate_failures do
+        expect(card_ids.index("receipt_#{review_receipt.public_id}")).to be < card_ids.index("receipt_#{completed_receipt.public_id}")
+        expect(selected_receipt_index_control(document, 'sort')).to eq('review_priority')
+      end
+    end
+
+    it 'per_page 20/50/100で表示件数を切り替える' do
+      create_list(:receipt, 105, user: user, status: 'completed')
+
+      get receipts_path
+      default_document = Nokogiri::HTML(response.body)
+
+      get receipts_path(per_page: 50)
+      fifty_document = Nokogiri::HTML(response.body)
+
+      get receipts_path(per_page: 100)
+      hundred_document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(receipt_card_ids(default_document).size).to eq(20)
+        expect(selected_receipt_index_control(default_document, 'per_page')).to eq('20')
+        expect(receipt_card_ids(fifty_document).size).to eq(50)
+        expect(selected_receipt_index_control(fifty_document, 'per_page')).to eq('50')
+        expect(receipt_card_ids(hundred_document).size).to eq(100)
+        expect(selected_receipt_index_control(hundred_document, 'per_page')).to eq('100')
+      end
+    end
+
+    it '不正なsort/per_pageはdefaultへfallbackしpaginationへ残さない' do
+      create_list(:receipt, 21, user: user, status: 'completed')
+
+      get receipts_path(sort: 'created_at desc', per_page: '999', page: 2)
+
+      document = Nokogiri::HTML(response.body)
+      pagination_urls = document.css('nav[aria-label] a').map { |node| node['href'] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(selected_receipt_index_control(document, 'sort')).to eq('newest')
+        expect(selected_receipt_index_control(document, 'per_page')).to eq('20')
+        expect(pagination_urls.join(' ')).not_to include('created_at')
+        expect(pagination_urls.join(' ')).not_to include('per_page=999')
+      end
+    end
+
+    it '検索フォーム送信時にsort/per_pageを維持するhidden fieldを描画する' do
+      get receipts_path(q: my_receipt.store_name, sort: 'oldest', per_page: 50)
+
+      document = Nokogiri::HTML(response.body)
+      search_forms = document.css("form[action='#{receipts_path}']")
+
+      aggregate_failures do
+        expect(search_forms.any? { |form| form.at_css("input[name='sort'][value='oldest']").present? }).to be(true)
+        expect(search_forms.any? { |form| form.at_css("input[name='per_page'][value='50']").present? }).to be(true)
+        expect(receipt_index_controls(document).at_css("input[name='q'][value='#{my_receipt.store_name}']")).to be_present
+      end
+    end
+
+    it 'paginationリンクではq/sort/per_pageを維持する' do
+      create_list(:receipt, 55, user: user, store_name: '維持ストア', total_amount: 100, status: 'completed')
+
+      get receipts_path(q: '維持ストア', sort: 'oldest', per_page: 50)
+
+      document = Nokogiri::HTML(response.body)
+      pagination_urls = document.css('nav[aria-label] a').map { |node| node['href'] }
+
+      expect(pagination_urls).to include(receipts_path(q: '維持ストア', sort: 'oldest', per_page: 50, page: 2))
+    end
+
+    it 'sort/per_page変更フォームにはpage hiddenを描画しない' do
+      create_list(:receipt, 55, user: user, store_name: 'ページ維持なし', total_amount: 100, status: 'completed')
+
+      get receipts_path(q: 'ページ維持なし', sort: 'oldest', per_page: 50, page: 2)
+
+      document = Nokogiri::HTML(response.body)
+      controls = receipt_index_controls(document)
+
+      aggregate_failures do
+        expect(controls.at_css("input[name='q'][value='ページ維持なし']")).to be_present
+        expect(controls.at_css("input[name='page']")).to be_nil
+      end
+    end
+
+    it 'default以外のsort/per_pageではcreate prepend専用streamを購読しない' do
+      get receipts_path(sort: 'oldest')
+      sorted_document = Nokogiri::HTML(response.body)
+
+      get receipts_path(per_page: 50)
+      per_page_document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(sorted_document.css('turbo-cable-stream-source').size).to eq(2)
+        expect(per_page_document.css('turbo-cable-stream-source').size).to eq(2)
       end
     end
 

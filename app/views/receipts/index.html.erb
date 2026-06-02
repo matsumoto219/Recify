@@ -52,10 +52,12 @@
     hide_on_mobile: searching %>
 </div>
 
-<%= render "receipts/index_controls" %>
+<div id="receipt-index-controls">
+  <%= render "receipts/index_controls" %>
+</div>
 
 <div id="receipts-results">
-  <% if @query.blank? && @pagy.page == 1 %>
+  <% if @query.blank? && @pagy.page == 1 && @receipt_index_query.default_index_view? %>
     <%= turbo_stream_from [current_user, :receipts, :index_first_page] %>
   <% end %>
 
@@ -65,7 +67,9 @@
       query: @query %>
   </div>
 
-  <%= render "shared/ui/navigation/pagination", pagy: @pagy %>
+  <%= render "shared/ui/navigation/pagination",
+    pagy: @pagy,
+    query_params: @receipt_index_query.pagination_params %>
 
   <% if @pagy.count.positive? && @pagy.page == @pagy.last %>
     <%= render "shared/ui/layout/section_divider",

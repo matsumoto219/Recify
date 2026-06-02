@@ -203,6 +203,7 @@ export default class extends Controller {
     const results = document.getElementById('receipts-results')
     const pageHeader = document.getElementById('receipts-page-header')
     const summary = document.getElementById('receipts-summary')
+    const indexControls = document.getElementById('receipt-index-controls')
     if (!input || !results) return
 
     const searchSequence = this.searchSequence + 1
@@ -255,6 +256,7 @@ export default class extends Controller {
       const newResults = doc.querySelector('#receipts-results')
       const newPageHeader = doc.querySelector('#receipts-page-header')
       const newSummary = doc.querySelector('#receipts-summary')
+      const newIndexControls = doc.querySelector('#receipt-index-controls')
 
       if (!newResults) {
         this.showSearchErrorNotice()
@@ -274,6 +276,10 @@ export default class extends Controller {
         }
 
         summary.innerHTML = newSummary.innerHTML
+      }
+
+      if (indexControls && newIndexControls) {
+        indexControls.innerHTML = newIndexControls.innerHTML
       }
 
       window.history.replaceState(window.history.state, '', url)

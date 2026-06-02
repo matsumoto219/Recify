@@ -28,6 +28,7 @@
   variant = local_assigns.fetch(:variant, :desktop).to_sym
   close_action = local_assigns[:close_action]
   panel_data = local_assigns.fetch(:panel_data, {})
+  hidden_fields = local_assigns.fetch(:hidden_fields, @receipt_search_hidden_fields || {})
   mobile = variant == :mobile
   help_id = local_assigns.fetch(:help_id, "#{mobile ? "mobile" : "desktop"}-search-help")
   custom_input_action = input_data.delete(:action)
@@ -59,6 +60,10 @@
     data-<%= key.to_s.dasherize %>="<%= value %>"
   <% end %>>
   <%= form_with url: receipts_path, method: :get, local: true, class: "contents" do %>
+  <% hidden_fields.each do |name, value| %>
+    <%= hidden_field_tag name, value %>
+  <% end %>
+
   <div class="relative overflow-hidden rounded-lg">
     <button type="submit"
       class="absolute left-3 top-0 z-10 flex h-10 cursor-pointer items-center search-icon-button transition-colors"
