@@ -49,9 +49,9 @@
       <div class="min-w-0 flex-1">
         <h2 class="max-w-full font-bold token-text-base receipt-card-title-hover transition-colors truncate">
           <% if processing %>
-            <span class="block truncate"><%= display_store_name %></span>
+            <span class="block truncate" title="<%= display_store_name %>"><%= display_store_name %></span>
           <% else %>
-            <%= link_to display_store_name, receipt_path(receipt, from: "index"), class: "block truncate hover:underline" %>
+            <%= link_to display_store_name, receipt_path(receipt, from: "index"), class: "block truncate hover:underline", title: display_store_name %>
           <% end %>
         </h2>
 

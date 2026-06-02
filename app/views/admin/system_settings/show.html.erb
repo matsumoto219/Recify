@@ -28,11 +28,11 @@
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.current_value") %></dt>
-        <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:current_value].inspect %></dd>
+        <dd class="break-words font-mono text-lg font-bold token-text-base [overflow-wrap:anywhere]"><%= @record[:current_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.default_value") %></dt>
-        <dd class="font-mono text-lg font-bold token-text-base"><%= @record[:default_value].inspect %></dd>
+        <dd class="break-words font-mono text-lg font-bold token-text-base [overflow-wrap:anywhere]"><%= @record[:default_value].inspect %></dd>
       </div>
       <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.source") %></dt>

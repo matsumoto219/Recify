@@ -126,7 +126,14 @@ export default class extends Controller {
   updateFileName (fileName) {
     if (!this.hasFileNameTarget) return
 
-    this.fileNameTarget.textContent = fileName || this.unselectedLabelValue
+    const label = fileName || this.unselectedLabelValue
+    this.fileNameTarget.textContent = label
+
+    if (fileName) {
+      this.fileNameTarget.title = fileName
+    } else {
+      this.fileNameTarget.removeAttribute('title')
+    }
   }
 
   showUploadError (message = this.defaultUploadErrorMessage) {
@@ -153,6 +160,7 @@ export default class extends Controller {
     } else {
       this.fileNameTarget.textContent = this.emptyFileLabelValue
     }
+    this.fileNameTarget.removeAttribute('title')
   }
 
   handleDragOver (event) {

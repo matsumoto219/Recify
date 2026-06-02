@@ -36,6 +36,8 @@ export default class extends Controller {
     'libraryInput',
     'submitButton',
     'fileName',
+    'selectedFileCount',
+    'selectedFileNames',
     'emptyState',
     'previewWrapper',
     'preview',
@@ -161,7 +163,7 @@ export default class extends Controller {
     this.selectedFiles = files
     this.previewIndex = 0
     this.renderCurrentPreview()
-    this.fileNameTarget.textContent = this.selectedFilesText(files)
+    this.updateSelectedFilesMessage(files)
   }
 
   previousPreview () {
@@ -247,12 +249,43 @@ export default class extends Controller {
     return true
   }
 
-  selectedFilesText (files) {
-    if (files.length === 1) return files[0].name
-
+  selectedFilesSummaryText (files) {
     return this.selectedFilesMessageValue
       .replace('%{count}', files.length)
-      .replace('%{files}', files.map((file) => file.name).join(', '))
+      .replace(/[:：]\s*%\{files\}/, '')
+      .replace('%{files}', '')
+      .trim()
+  }
+
+  updateSelectedFilesMessage (files) {
+    const fileNames = files.map((file) => file.name)
+    const fullLabel = fileNames.join(', ')
+
+    this.fileNameTarget.setAttribute('aria-label', fullLabel)
+
+    if (files.length === 1) {
+      this.selectedFileCountTarget.textContent = fileNames[0]
+      this.selectedFileCountTarget.title = fileNames[0]
+      this.selectedFileNamesTarget.textContent = ''
+      this.selectedFileNamesTarget.removeAttribute('title')
+      this.selectedFileNamesTarget.classList.add('hidden')
+      return
+    }
+
+    this.selectedFileCountTarget.textContent = this.selectedFilesSummaryText(files)
+    this.selectedFileCountTarget.removeAttribute('title')
+    this.selectedFileNamesTarget.textContent = fullLabel
+    this.selectedFileNamesTarget.title = fileNames.join('\n')
+    this.selectedFileNamesTarget.classList.remove('hidden')
+  }
+
+  updateFileStatusMessage (message) {
+    this.fileNameTarget.removeAttribute('aria-label')
+    this.selectedFileCountTarget.textContent = message
+    this.selectedFileCountTarget.removeAttribute('title')
+    this.selectedFileNamesTarget.textContent = ''
+    this.selectedFileNamesTarget.removeAttribute('title')
+    this.selectedFileNamesTarget.classList.add('hidden')
   }
 
   showDropOverlay () {
@@ -271,7 +304,7 @@ export default class extends Controller {
     this.clearPreview()
     this.cameraInputTarget.value = ''
     this.libraryInputTarget.value = ''
-    this.fileNameTarget.textContent = message
+    this.updateFileStatusMessage(message)
     this.submitButtonTarget.disabled = true
   }
 
@@ -293,7 +326,7 @@ export default class extends Controller {
     this.previewTarget.src = ''
     this.previewWrapperTarget.classList.add('hidden')
     this.emptyStateTarget.classList.remove('hidden')
-    this.fileNameTarget.textContent = this.emptyFileMessageValue
+    this.updateFileStatusMessage(this.emptyFileMessageValue)
     this.hidePreviewControls()
   }
 

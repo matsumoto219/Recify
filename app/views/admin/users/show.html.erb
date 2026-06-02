@@ -53,7 +53,7 @@
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.email") %></dt>
-          <dd class="break-all token-text-base"><%= record[:email] %></dd>
+          <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= record[:email] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.admin") %></dt>
@@ -187,7 +187,7 @@
             <tr class="border-b token-border-soft" data-admin-user-limit-key="<%= row[:key] %>">
               <td class="px-3 py-3 align-top">
                 <div class="font-semibold token-text-base"><%= t("admin.users.show.limits.keys.#{row[:key]}", default: row[:key]) %></div>
-                <div class="mt-1 max-w-full break-all font-mono text-xs token-text-muted"><%= row[:key] %></div>
+                <div class="mt-1 max-w-full break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= row[:key] %></div>
                 <% if row[:api_reservation] %>
                   <div class="mt-2 inline-flex rounded-full token-bg-info-soft px-2 py-1 text-xs font-semibold token-text-base"><%= t("admin.users.show.limits.api_reservation") %></div>
                 <% end %>
@@ -338,7 +338,7 @@
               <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(session_record[:last_seen_at]) %></td>
               <td class="px-3 py-3"><%= session_record[:sign_in_method].presence || "-" %></td>
               <td class="px-3 py-3 font-mono"><%= session_record[:ip_address].presence || "-" %></td>
-              <td class="max-w-md truncate px-3 py-3"><%= session_record[:user_agent].presence || "-" %></td>
+              <td class="max-w-md truncate px-3 py-3" title="<%= session_record[:user_agent].presence || "-" %>"><%= session_record[:user_agent].presence || "-" %></td>
               <td class="px-3 py-3 font-mono"><%= session_record[:session_version] %></td>
             </tr>
           <% end %>

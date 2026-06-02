@@ -83,7 +83,7 @@
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.jobs.queues") %></h3>
         <ul class="grid gap-2 text-sm md:grid-cols-2">
           <% @dashboard.queues.each do |queue| %>
-            <li class="min-w-0 max-w-full break-all rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
+            <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
           <% end %>
         </ul>
       </div>
@@ -93,9 +93,9 @@
         <div class="space-y-2 text-sm">
           <% @dashboard.recurring_tasks.each do |task| %>
             <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
-              <div class="min-w-0 max-w-full break-all font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></div>
-              <div class="min-w-0 max-w-full break-all font-semibold token-text-base [overflow-wrap:anywhere]"><%= task[:class_name] %></div>
-              <div class="min-w-0 max-w-full break-all token-text-muted [overflow-wrap:anywhere]"><%= t("admin.system_operations.jobs.recurring_task_detail", queue: task[:queue], schedule: task[:schedule], preview: task[:dry_run]) %></div>
+              <div class="min-w-0 max-w-full break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></div>
+              <div class="min-w-0 max-w-full break-words font-semibold token-text-base [overflow-wrap:anywhere]"><%= task[:class_name] %></div>
+              <div class="min-w-0 max-w-full break-words token-text-muted [overflow-wrap:anywhere]"><%= t("admin.system_operations.jobs.recurring_task_detail", queue: task[:queue], schedule: task[:schedule], preview: task[:dry_run]) %></div>
             </div>
           <% end %>
 
@@ -130,7 +130,7 @@
           <% @dashboard.audit_actions.each do |action| %>
             <%= link_to action,
                   admin_audit_logs_path(audit_action: action),
-                  class: "min-w-0 max-w-full break-all rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-brand [overflow-wrap:anywhere] hover:underline" %>
+                  class: "min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-brand [overflow-wrap:anywhere] hover:underline" %>
           <% end %>
         </div>
       </div>

@@ -128,12 +128,13 @@
           <% if @receipt.receipt_items.any? %>
             <div class="space-y-4">
               <% @receipt.receipt_items.order(:position_index).each do |item| %>
+                <% item_name = item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || t("receipts.show.item_name_missing") %>
                 <div class="flex justify-between items-center py-3 token-hover-bg-card-subtle rounded-lg px-3 transition-colors gap-4">
                   <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <p class="font-medium token-text-base truncate"><%= item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || t("receipts.show.item_name_missing") %></p>
+                    <div class="flex min-w-0 items-center gap-2">
+                      <p class="min-w-0 flex-1 font-medium token-text-base truncate" title="<%= item_name %>"><%= item_name %></p>
                       <% if item.needs_review %>
-                        <span class="px-2 py-0.5 rounded-full token-state-warning-soft text-[10px] font-bold"><%= t("receipts.show.item_needs_review") %></span>
+                        <span class="shrink-0 px-2 py-0.5 rounded-full token-state-warning-soft text-[10px] font-bold"><%= t("receipts.show.item_needs_review") %></span>
                       <% end %>
                     </div>
                     <p class="text-xs token-text-muted mt-1 break-words">
@@ -178,11 +179,12 @@
 
           <div class="space-y-3">
             <% @receipt.receipt_adjustments.order(:position_index).each do |adjustment| %>
+              <% adjustment_label = adjustment.label.presence || adjustment.source_text.presence || adjustment.kind_label %>
               <div class="flex items-start justify-between gap-4 rounded-lg token-hover-bg-card-subtle px-3 py-3">
                 <div class="min-w-0 flex-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <p class="font-medium token-text-base truncate" title="<%= adjustment.label.presence || adjustment.source_text.presence || adjustment.kind_label %>">
-                      <%= adjustment.label.presence || adjustment.source_text.presence || adjustment.kind_label %>
+                    <p class="min-w-0 flex-1 font-medium token-text-base truncate" title="<%= adjustment_label %>">
+                      <%= adjustment_label %>
                     </p>
                     <span class="shrink-0 rounded-full token-bg-subtle px-2 py-0.5 text-[10px] font-bold token-text-muted">
                       <%= adjustment.kind_label %>

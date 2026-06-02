@@ -149,9 +149,15 @@
               } %>
           </div>
 
-          <p class="text-xs text-center token-text-muted" data-receipt-upload-target="fileName">
-            <%= t("receipts.new_upload.file_empty") %>
-          </p>
+          <div class="space-y-1 text-center text-xs token-text-muted"
+               aria-live="polite"
+               data-receipt-upload-target="fileName">
+            <p class="font-medium" data-receipt-upload-target="selectedFileCount">
+              <%= t("receipts.new_upload.file_empty") %>
+            </p>
+            <p class="hidden max-w-full break-words leading-relaxed [overflow-wrap:anywhere]"
+               data-receipt-upload-target="selectedFileNames"></p>
+          </div>
           <p class="text-xs text-center token-text-subtle">
             <%= upload_page.multiple_upload_hint %>
           </p>

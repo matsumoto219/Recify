@@ -361,7 +361,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('Snapshot presence')
         expect(response.body).to include('ai_normalized_result_snapshot')
         expect(response.body).to include('flex min-w-0 items-center justify-between gap-3')
-        expect(response.body).to include('min-w-0 break-all font-mono text-xs token-text-base [overflow-wrap:anywhere]')
+        expect(response.body).to include('min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]')
         expect(response.body).to include('shrink-0 whitespace-nowrap token-text-success')
         expect(response.body).to include('shrink-0 whitespace-nowrap token-text-muted')
         expect(response.body).to include('Finalize decision')

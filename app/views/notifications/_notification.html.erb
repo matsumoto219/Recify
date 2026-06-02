@@ -23,7 +23,7 @@
       </div>
 
       <% if notification.body.present? %>
-        <p class="mt-2 text-sm token-text-muted"><%= notification.body %></p>
+        <p class="mt-2 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= notification.body %></p>
       <% end %>
 
       <% if item_state.stale_notifiable? %>
