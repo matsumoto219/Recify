@@ -52,6 +52,8 @@
     hide_on_mobile: searching %>
 </div>
 
+<%= render "receipts/index_controls" %>
+
 <div id="receipts-results">
   <% if @query.blank? && @pagy.page == 1 %>
     <%= turbo_stream_from [current_user, :receipts, :index_first_page] %>

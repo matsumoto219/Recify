@@ -1,0 +1,85 @@
+<%#
+  レシート一覧コントロール
+
+  NOTE:
+  - 現時点では表示のみ。並び替え / 表示件数のバックエンド連動は未実装。
+  - select name / value は将来の GET パラメータ連動を想定している。
+%>
+
+<%
+  sort_options = [
+    [ "新しい順", "newest" ],
+    [ "古い順", "oldest" ],
+    [ "金額が大きい順", "amount_desc" ],
+    [ "金額が小さい順", "amount_asc" ],
+    [ "店名順", "store_name" ],
+    [ "更新日順", "updated" ],
+    [ "要確認優先", "review_priority" ]
+  ]
+
+  per_page_options = [
+    [ "20件", "20" ],
+    [ "50件", "50" ],
+    [ "100件", "100" ]
+  ]
+
+  control_icon_class = "material-symbols-outlined shrink-0 text-[20px] token-text-muted"
+  control_select_wrapper_class = "min-w-0"
+  control_select_class = "text-sm font-medium cursor-pointer"
+%>
+
+<%= render "shared/ui/layout/surface_card",
+  padding: :sm,
+  surface_variant: :bg_card,
+  class: "mb-8" do %>
+  <%= form_with url: receipts_path, method: :get, local: true, class: "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" do |form| %>
+    <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+      <span class="<%= control_icon_class %>" aria-hidden="true">sort</span>
+      <div class="min-w-0 flex-1 sm:w-52 sm:flex-none">
+        <%= render "shared/ui/form/select_field",
+          f: form,
+          attribute: :sort,
+          label: "並び順",
+          options: sort_options,
+          selected: "newest",
+          show_label: false,
+          with_icon: false,
+          size: :dense,
+          select_wrapper_class: control_select_wrapper_class,
+          select_class: control_select_class,
+          html_options: {
+            id: "receipts-sort-control",
+            aria: { label: "並び順" }
+          } %>
+      </div>
+    </div>
+
+    <div class="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="<%= control_icon_class %>" aria-hidden="true">list</span>
+        <div class="w-full min-w-0 sm:w-28 sm:flex-none">
+          <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :per_page,
+            label: "表示件数",
+            options: per_page_options,
+            selected: "20",
+            show_label: false,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: control_select_wrapper_class,
+            select_class: control_select_class,
+            html_options: {
+              id: "receipts-per-page-control",
+              aria: { label: "表示件数" }
+            } %>
+        </div>
+      </div>
+
+      <%# TODO: バックエンド実装時に pagy/count から正しい件数表示へ置き換える。処理ロジックはサーバー側へ寄せる。 %>
+      <p class="text-xs leading-relaxed token-text-muted sm:whitespace-nowrap">
+        全 -- 件中 -- 件を表示
+      </p>
+    </div>
+  <% end %>
+<% end %>
