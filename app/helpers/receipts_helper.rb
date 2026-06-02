@@ -7,6 +7,18 @@ module ReceiptsHelper
     :total_display,
     keyword_init: true
   )
+  ReceiptIndexCountSummaryParts = Struct.new(:total_text, :range_text, :full_text, keyword_init: true)
+
+  RECEIPT_INDEX_SORT_OPTIONS = %w[
+    newest
+    oldest
+    amount_desc
+    amount_asc
+    store_name
+    updated
+    review_priority
+  ].freeze
+  RECEIPT_INDEX_PER_PAGE_OPTIONS = [ 20, 50, 100 ].freeze
 
   def receipt_dom_id(receipt)
     receipt.dom_target_id
@@ -82,6 +94,30 @@ module ReceiptsHelper
     end
   end
 
+  def receipt_index_sort_options
+    RECEIPT_INDEX_SORT_OPTIONS.map do |value|
+      [ t("receipts.index.controls.sort_options.#{value}"), value ]
+    end
+  end
+
+  def receipt_index_per_page_options
+    RECEIPT_INDEX_PER_PAGE_OPTIONS.map do |value|
+      [ t("receipts.index.controls.per_page_options.count", count: value), value.to_s ]
+    end
+  end
+
+  def receipt_index_count_summary_parts(summary)
+    total = number_with_delimiter(receipt_index_count_summary_value(summary, :total))
+    start_number = number_with_delimiter(receipt_index_count_summary_value(summary, :start))
+    finish_number = number_with_delimiter(receipt_index_count_summary_value(summary, :finish))
+
+    ReceiptIndexCountSummaryParts.new(
+      total_text: t("receipts.index.controls.count_total", total: total),
+      range_text: t("receipts.index.controls.count_range", start: start_number, finish: finish_number),
+      full_text: t("receipts.index.controls.count_summary", total: total, start: start_number, finish: finish_number)
+    )
+  end
+
   def receipt_item_discount_label(item)
     discount_amount = item.discount_amount.to_i
     return nil unless discount_amount.positive?
@@ -132,6 +168,13 @@ module ReceiptsHelper
   end
 
   private
+
+  def receipt_index_count_summary_value(summary, key)
+    return summary[key] if summary.respond_to?(:key?) && summary.key?(key)
+    return summary[key.to_s] if summary.respond_to?(:key?) && summary.key?(key.to_s)
+
+    summary.public_send(key)
+  end
 
   def grouped_receipt_review_reasons(reason_codes)
     ReviewReasons.group_by_source(reason_codes).select { |_source, reasons| reasons.any? }

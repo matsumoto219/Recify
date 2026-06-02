@@ -13,6 +13,22 @@ ja:
       title: レシート一覧
       empty: レシートがまだありません
       new_link: レシート登録
+      controls:
+        sort_label: 並び順
+        per_page_label: 表示件数
+        count_summary: "全 %{total} 件中 %{start}-%{finish} 件を表示"
+        count_total: "全 %{total} 件中"
+        count_range: "%{start}-%{finish} 件を表示"
+        sort_options:
+          newest: 新しい順
+          oldest: 古い順
+          amount_desc: 金額が大きい順
+          amount_asc: 金額が小さい順
+          store_name: 店名順
+          updated: 更新日順
+          review_priority: 要確認優先
+        per_page_options:
+          count: "%{count}件"
     new:
       title: レシート登録
     edit:

@@ -1,28 +1,25 @@
 <%#
   レシート一覧コントロール
 
+  必須:
+  - sort: 選択中の並び順
+  - per_page: 選択中の表示件数
+  - count summary: 一覧の総件数と表示範囲
+
+  任意:
+  - query: 検索中のキーワード
+
   NOTE:
-  - 並び替え / 表示件数の処理ロジックは controller / service 側で正規化する。
+  - 並び替え / 表示件数 / 件数表示の処理ロジックは controller / service / helper 側へ寄せる。
 %>
 
 <%
-  sort_options = [
-    [ "新しい順", "newest" ],
-    [ "古い順", "oldest" ],
-    [ "金額が大きい順", "amount_desc" ],
-    [ "金額が小さい順", "amount_asc" ],
-    [ "店名順", "store_name" ],
-    [ "更新日順", "updated" ],
-    [ "要確認優先", "review_priority" ]
-  ]
-
-  per_page_options = [
-    [ "20件", "20" ],
-    [ "50件", "50" ],
-    [ "100件", "100" ]
-  ]
-
+  count_summary = receipt_index_count_summary_parts(@receipt_index_count_summary)
+  sort_label = t("receipts.index.controls.sort_label")
+  per_page_label = t("receipts.index.controls.per_page_label")
   control_icon_class = "material-symbols-outlined shrink-0 text-[20px] token-text-muted"
+  control_select_container_class = "min-w-0 flex-1 sm:w-52 sm:flex-none"
+  per_page_select_container_class = "min-w-0 flex-1 sm:w-28 sm:flex-none"
   control_select_wrapper_class = "min-w-0"
   control_select_class = "text-sm font-medium cursor-pointer"
 %>
@@ -38,12 +35,12 @@
 
     <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
       <span class="<%= control_icon_class %>" aria-hidden="true">sort</span>
-      <div class="min-w-0 flex-1 sm:w-52 sm:flex-none">
+      <div class="<%= control_select_container_class %>">
         <%= render "shared/ui/form/select_field",
           f: form,
           attribute: :sort,
-          label: "並び順",
-          options: sort_options,
+          label: sort_label,
+          options: receipt_index_sort_options,
           selected: @sort,
           show_label: false,
           with_icon: false,
@@ -53,20 +50,20 @@
           html_options: {
             id: "receipts-sort-control",
             onchange: "this.form.requestSubmit()",
-            aria: { label: "並び順" }
+            aria: { label: sort_label }
           } %>
       </div>
     </div>
 
-    <div class="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-      <div class="flex min-w-0 items-center gap-2">
+    <div class="flex w-full min-w-0 flex-col items-start gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+      <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
         <span class="<%= control_icon_class %>" aria-hidden="true">list</span>
-        <div class="w-full min-w-0 sm:w-28 sm:flex-none">
+        <div class="<%= per_page_select_container_class %>">
           <%= render "shared/ui/form/select_field",
             f: form,
             attribute: :per_page,
-            label: "表示件数",
-            options: per_page_options,
+            label: per_page_label,
+            options: receipt_index_per_page_options,
             selected: @per_page.to_s,
             show_label: false,
             with_icon: false,
@@ -76,14 +73,15 @@
             html_options: {
               id: "receipts-per-page-control",
               onchange: "this.form.requestSubmit()",
-              aria: { label: "表示件数" }
+              aria: { label: per_page_label }
             } %>
         </div>
       </div>
 
-      <p class="text-xs leading-relaxed token-text-muted sm:whitespace-nowrap">
-        全 <%= number_with_delimiter(@receipt_index_count_summary[:total]) %> 件中
-        <%= number_with_delimiter(@receipt_index_count_summary[:start]) %>-<%= number_with_delimiter(@receipt_index_count_summary[:finish]) %> 件を表示
+      <p class="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-relaxed token-text-muted sm:justify-end"
+         aria-label="<%= count_summary.full_text %>">
+        <span class="whitespace-nowrap"><%= count_summary.total_text %></span>
+        <span class="whitespace-nowrap"><%= count_summary.range_text %></span>
       </p>
     </div>
   <% end %>

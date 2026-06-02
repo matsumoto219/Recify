@@ -73,6 +73,56 @@ RSpec.describe ReceiptsHelper, type: :helper do
     end
   end
 
+  describe '#receipt_index_sort_options' do
+    it 'returns localized sort option labels with stable values' do
+      expect(helper.receipt_index_sort_options).to eq([
+        [ I18n.t('receipts.index.controls.sort_options.newest'), 'newest' ],
+        [ I18n.t('receipts.index.controls.sort_options.oldest'), 'oldest' ],
+        [ I18n.t('receipts.index.controls.sort_options.amount_desc'), 'amount_desc' ],
+        [ I18n.t('receipts.index.controls.sort_options.amount_asc'), 'amount_asc' ],
+        [ I18n.t('receipts.index.controls.sort_options.store_name'), 'store_name' ],
+        [ I18n.t('receipts.index.controls.sort_options.updated'), 'updated' ],
+        [ I18n.t('receipts.index.controls.sort_options.review_priority'), 'review_priority' ]
+      ])
+    end
+  end
+
+  describe '#receipt_index_per_page_options' do
+    it 'returns localized per page labels with string values for select options' do
+      expect(helper.receipt_index_per_page_options).to eq([
+        [ I18n.t('receipts.index.controls.per_page_options.count', count: 20), '20' ],
+        [ I18n.t('receipts.index.controls.per_page_options.count', count: 50), '50' ],
+        [ I18n.t('receipts.index.controls.per_page_options.count', count: 100), '100' ]
+      ])
+    end
+  end
+
+  describe '#receipt_index_count_summary_parts' do
+    it 'builds delimited count text split into readable display parts' do
+      parts = helper.receipt_index_count_summary_parts(
+        total: 1_234_567,
+        start: 100_001,
+        finish: 100_100
+      )
+
+      aggregate_failures do
+        expect(parts.total_text).to eq('全 1,234,567 件中')
+        expect(parts.range_text).to eq('100,001-100,100 件を表示')
+        expect(parts.full_text).to eq('全 1,234,567 件中 100,001-100,100 件を表示')
+      end
+    end
+
+    it 'accepts string keyed summaries' do
+      parts = helper.receipt_index_count_summary_parts(
+        'total' => 20,
+        'start' => 1,
+        'finish' => 20
+      )
+
+      expect(parts.full_text).to eq('全 20 件中 1-20 件を表示')
+    end
+  end
+
   describe '#receipt_review_notes_state' do
     it 'groups blocking reasons and includes review items in the count' do
       review_items = [ instance_double('ReceiptReviewItem'), instance_double('ReceiptReviewItem') ]
