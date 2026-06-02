@@ -32,6 +32,7 @@
   accent = local_assigns.fetch(:accent, :brand).to_sym
   accent_width_class = local_assigns[:accent_width_class]
   accent_width = local_assigns[:accent_width] || (accent_width_class.to_s.include?("4") ? "4px" : "2px")
+  accent_corner_radius = "0.75rem"
   accent_sides = Array(local_assigns[:accent_sides] || local_assigns[:accent_side]).map(&:to_sym)
   accent_sides = [:top, :right, :bottom, :left] if accent_sides.include?(:all)
   id = local_assigns[:id]
@@ -110,20 +111,32 @@
                       "p-5"
                     end
 
-  accent_style_rules = if accent_color.present? && accent_sides.any?
-                         accent_sides.map do |side|
-                           case side
-                           when :top
-                             "border-top: #{accent_width} solid #{accent_color};"
-                           when :right
-                             "border-right: #{accent_width} solid #{accent_color};"
-                           when :bottom
-                             "border-bottom: #{accent_width} solid #{accent_color};"
-                           when :left
-                             "border-left: #{accent_width} solid #{accent_color};"
-                           end
-                         end.compact.join(" ")
-                       end
+  accent_segments = if accent_color.present? && accent_sides.any?
+                      accent_sides.map do |side|
+                        case side
+                        when :top
+                          {
+                            class: "pointer-events-none absolute inset-x-0 top-0 rounded-t-xl",
+                            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-top: #{accent_width} solid #{accent_color};"
+                          }
+                        when :right
+                          {
+                            class: "pointer-events-none absolute inset-y-0 right-0 rounded-r-xl",
+                            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-right: #{accent_width} solid #{accent_color};"
+                          }
+                        when :bottom
+                          {
+                            class: "pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl",
+                            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-bottom: #{accent_width} solid #{accent_color};"
+                          }
+                        when :left
+                          {
+                            class: "pointer-events-none absolute inset-y-0 left-0 rounded-l-xl",
+                            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-left: #{accent_width} solid #{accent_color};"
+                          }
+                        end
+                      end.compact
+                    end
 
   surface_style = [style].flatten.compact.join(" ")
 
@@ -131,12 +144,14 @@
 %>
 
 <section <%= id.present? ? " id=\"#{id}\"".html_safe : "" %> class="<%= surface_classes %>"<%= surface_style.present? ? " style=\"#{surface_style}\"".html_safe : "" %><%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
-  <% if accent_style_rules.present? %>
-    <span
-      aria-hidden="true"
-      class="pointer-events-none absolute inset-0 rounded-[inherit]"
-      style="<%= accent_style_rules %>">
-    </span>
+  <% if accent_segments.present? %>
+    <% accent_segments.each do |accent_segment| %>
+      <span
+        aria-hidden="true"
+        class="<%= accent_segment[:class] %>"
+        style="<%= accent_segment[:style] %>">
+      </span>
+    <% end %>
   <% end %>
 
   <%= yield %>
