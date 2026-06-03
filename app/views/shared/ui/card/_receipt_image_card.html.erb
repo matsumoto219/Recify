@@ -57,7 +57,7 @@
   card_class = local_assigns[:card_class]
 %>
 
-<div<%= wrapper_class.present? ? %( class="#{wrapper_class}").html_safe : "" %> <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
+<div <%= wrapper_class.present? ? %( class="#{wrapper_class}").html_safe : "" %> <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
   <%= render "shared/ui/layout/surface_card", padding: :sm, class: card_class do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
@@ -110,7 +110,6 @@
 
           <% if show_download %>
             <%# アクション（ダウンロード） %>
-            <%# TODO ファイル名や拡張子の仕様を決める %>
             <div class="mt-3 flex justify-end">
               <%= link_to url_for(displayable_image),
                     download: displayable_image.filename.to_s,

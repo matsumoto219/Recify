@@ -481,7 +481,8 @@ module Amounts
 
       percentage = rate * 100
 
-      # config想定（将来外出し）
+      # TODO: 国別税制対応時に rounding_step / tolerance をconfig化する。
+      # 現状は日本向けの固定値で推定する。詳細はroadmapを参照。
       step = BigDecimal("0.5")
       tolerance = BigDecimal("0.03")
 

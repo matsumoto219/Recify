@@ -281,7 +281,8 @@
               url: settings_path,
               remote: true %>
 
-        <%# TODO: レシート画像最適化設定は v1.0以降で再検討する %>
+        <%# TODO: OCR前処理と保存容量削減は別タスクとしてroadmapで扱う。
+            feature.receipt_image_preprocess は予約済みだが、現時点では設定UIへ出さない %>
       </div>
     <% end %>
 

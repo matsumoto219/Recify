@@ -157,9 +157,6 @@
               <% end %>
             </div>
           <% else %>
-            <%# TODO: 明細空状態の本実装
-                - 空状態文言を I18n 化
-                - 手動登録導線や編集導線を追加する %>
             <div class="rounded-xl border border-dashed token-border-soft p-8 text-center token-text-muted">
               <%= t("receipts.show.item_empty") %>
             </div>
@@ -222,7 +219,6 @@
     </div>
 
     <div id="receipt-detail-sidebar" class="order-2 md:order-1 lg:order-none lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:row-span-2 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
-      <%# TODO: 未設定値を他の値から自動計算する計算システムを実装予定 %>
       <div class="order-first lg:order-none">
         <%= render "shared/ui/card/amount_summary_card",
               title: t("receipts.common.total_amount_title"),
