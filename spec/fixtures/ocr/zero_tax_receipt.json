@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:56:58Z",
-	"lastUpdatedDateTime": "2026-06-03T13:56:58Z",
+	"createdDateTime": "2026-06-03T16:04:43Z",
+	"lastUpdatedDateTime": "2026-06-03T16:04:43Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -4630,7 +4630,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "現 金",
 						"content": "現金",

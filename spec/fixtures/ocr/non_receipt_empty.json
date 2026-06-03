@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:45:54Z",
-	"lastUpdatedDateTime": "2026-06-03T13:45:54Z",
+	"createdDateTime": "2026-06-03T15:58:22Z",
+	"lastUpdatedDateTime": "2026-06-03T15:58:22Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",

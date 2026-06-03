@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:56:19Z",
-	"lastUpdatedDateTime": "2026-06-03T13:56:19Z",
+	"createdDateTime": "2026-06-03T16:04:13Z",
+	"lastUpdatedDateTime": "2026-06-03T16:04:13Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -9373,7 +9373,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "ク レ ジ ッ ト カ ー ド ¥100,385",
 						"content": "クレジットカード\n¥100,385",

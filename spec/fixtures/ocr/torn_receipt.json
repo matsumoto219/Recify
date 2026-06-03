@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:55:50Z",
-	"lastUpdatedDateTime": "2026-06-03T13:55:50Z",
+	"createdDateTime": "2026-06-03T16:03:50Z",
+	"lastUpdatedDateTime": "2026-06-03T16:03:50Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -5184,7 +5184,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "(Visa) ¥",
 						"content": "(Visa)\n¥",

@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:46:47Z",
-	"lastUpdatedDateTime": "2026-06-03T13:46:47Z",
+	"createdDateTime": "2026-06-03T15:58:42Z",
+	"lastUpdatedDateTime": "2026-06-03T15:58:42Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -7979,7 +7979,7 @@
 						"valueString": "Supplies",
 						"confidence": 0.982
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "ポ イ ン ト カ ー ド",
 						"content": "ポイントカード",

@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:54:06Z",
-	"lastUpdatedDateTime": "2026-06-03T13:54:06Z",
+	"createdDateTime": "2026-06-03T16:03:02Z",
+	"lastUpdatedDateTime": "2026-06-03T16:03:02Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -3545,7 +3545,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "レ ジ ッ ト カ ー ド ¥6,415 お 釣 り",
 						"content": "レジットカード\n¥6,415\nお釣り",

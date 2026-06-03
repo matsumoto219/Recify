@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:45:31Z",
-	"lastUpdatedDateTime": "2026-06-03T13:45:31Z",
+	"createdDateTime": "2026-06-03T15:57:55Z",
+	"lastUpdatedDateTime": "2026-06-03T15:57:55Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -7353,7 +7353,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"confidence": 0
 					}

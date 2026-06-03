@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:35:40Z",
-	"lastUpdatedDateTime": "2026-06-03T13:35:40Z",
+	"createdDateTime": "2026-06-03T15:52:02Z",
+	"lastUpdatedDateTime": "2026-06-03T15:52:02Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -3319,7 +3319,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "PayPay ¥1,804",
 						"content": "PayPay\n¥1,804",

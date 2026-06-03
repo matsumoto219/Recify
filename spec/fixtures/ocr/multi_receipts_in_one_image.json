@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-06-03T13:43:04Z",
-	"lastUpdatedDateTime": "2026-06-03T13:43:04Z",
+	"createdDateTime": "2026-06-03T15:56:54Z",
+	"lastUpdatedDateTime": "2026-06-03T15:56:54Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -10542,7 +10542,7 @@
 							}
 						]
 					},
-					"Payment_methods": {
+					"PaymentMethods": {
 						"type": "string",
 						"valueString": "レ ジ 02-0456",
 						"content": "レジ 02-0456",
