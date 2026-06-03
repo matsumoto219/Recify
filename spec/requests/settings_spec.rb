@@ -592,6 +592,23 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'account update ignores spoofed admin param' do
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: 'Updated Safe Name',
+                admin: true
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_path)
+        expect(user.reload.name).to eq('Updated Safe Name')
+        expect(user).not_to be_admin
+      end
+    end
+
     it 'invalid content type is rejected and not attached' do
       invalid_file = Tempfile.new([ 'avatar', '.txt' ])
       invalid_file.write('not an image')
@@ -791,6 +808,30 @@ RSpec.describe 'Settings', type: :request do
         expect(delivered_body).to include('guest-upgrade@example.com')
         expect(delivered_body).not_to include(fake_email)
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+
+    it 'guest本登録申請はspoofed admin paramを無視する' do
+      sign_out user
+      guest = User.guest!
+      sign_in guest
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-spoofed-admin@example.com',
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '1',
+                admin: true
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(guest.reload).not_to be_admin
+        expect(guest.unconfirmed_email).to eq('guest-spoofed-admin@example.com')
       end
     end
 
@@ -1333,6 +1374,24 @@ RSpec.describe 'Settings', type: :request do
         expect(notice_surface).to be_present
         expect(stream.text).to include(I18n.t('flash.settings.update_success'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
+      end
+    end
+
+    it 'settings update ignores spoofed admin param' do
+      patch settings_path,
+            params: {
+              admin: true,
+              user: {
+                theme_preference: 'dark',
+                admin: true
+              }
+            },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.theme_preference).to eq('dark')
+        expect(user).not_to be_admin
       end
     end
 

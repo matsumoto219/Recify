@@ -377,4 +377,27 @@ RSpec.describe 'Admin users', type: :request do
       end
     end
   end
+
+  describe 'POST /admin/users/:id/operations/lock' do
+    it '一般ユーザーはadmin操作へ到達できずadminにも昇格しない' do
+      user = create(:user)
+      target = create(:user)
+      previous_audit_count = AuditLog.count
+      sign_in user
+
+      post lock_operation_admin_user_path(target),
+           params: {
+             reason: 'malicious admin operation attempt',
+             confirmation: 'LOCK USER',
+             admin: true
+           }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(user.reload).not_to be_admin
+        expect(target.reload.locked_at).to be_nil
+        expect_no_admin_side_effects(previous_audit_count)
+      end
+    end
+  end
 end

@@ -319,6 +319,30 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'registration ignores spoofed admin param' do
+      email = 'spoofed-admin-registration@example.com'
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1',
+              admin: true
+            }
+          }
+      end.to change(User, :count).by(1)
+
+      user = User.find_by!(email: email)
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(user).not_to be_admin
+      end
+    end
+
     it 'registration without legal agreement is rejected' do
       expect do
         post user_registration_path,
