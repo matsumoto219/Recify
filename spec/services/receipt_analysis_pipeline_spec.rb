@@ -1261,6 +1261,32 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'ai_fallback decisionはmapper経由でnil error_codeをunexpected_errorとして保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_fallback,
+          ocr_result: successful_ocr_result,
+          error_code: nil
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to eq('unexpected_error')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
       receipt = create(:receipt, :processing, :with_image)
       expect_any_instance_of(ReceiptAnalysisPipeline::FinalizeStep)

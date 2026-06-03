@@ -4200,6 +4200,24 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'AI provider失敗の処理エラーカードはAI共通文言を表示する' do
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
+
+      receipt.update!(
+        status: 'review_needed',
+        processing_error_code: 'ai_primary_failed'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('処理に関する注意')
+        expect(response.body).to include(I18n.t('receipts.processing_errors.ai_error'))
+        expect(response.body).not_to include(I18n.t('receipts.processing_errors.system_error'))
+      end
+    end
+
     it '他人のレシートは取得できない' do
       other_user = create(:user, email: 'other@example.com')
       other_receipt = create(

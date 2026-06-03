@@ -273,14 +273,11 @@ class ReceiptAnalysisPipeline
       end
 
       review_reasons = merge_review_reasons(params[:review_reasons], amount_review_reasons(amount_result), ocr_review_reasons)
+      mapped = Analysis.processing_error_mapping(error_code)
 
-      # NOTE:
-      # fallback 保存時は processing_error_code に AI 側の内部コードをそのまま保持している。
-      # fail_receipt! は mapper を通しているため扱いが完全一致していないが、
-      # 先に AI 通信と保存フローの安定化を優先し、コード統一は後続で整理する。
       receipt_attributes = params[:receipt_attributes].merge(
         status: "review_needed",
-        processing_error_code: error_code,
+        processing_error_code: mapped[:error_code],
         processing_error_message: processing_error_message,
         review_reasons: review_reasons,
         ocr_completed_at: Time.current,
@@ -296,7 +293,7 @@ class ReceiptAnalysisPipeline
       )
 
       Rails.logger.warn(
-        "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{error_code} items=#{items_attributes.size}"
+        "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{mapped[:error_code]} items=#{items_attributes.size}"
       )
 
       receipt

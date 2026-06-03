@@ -680,6 +680,15 @@ RSpec.describe Receipt, type: :model do
       expect(receipt.processing_error_user_message).to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
     end
 
+    it 'AI provider失敗もAI共通エラー文言へ寄せる' do
+      aggregate_failures do
+        expect(build_stubbed(:receipt, :review_needed, processing_error_code: 'ai_primary_failed').processing_error_user_message)
+          .to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
+        expect(build_stubbed(:receipt, :review_needed, processing_error_code: 'ai_fallback_failed').processing_error_user_message)
+          .to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
+      end
+    end
+
     it '文字読み取り不可とレシート認識不可を別文言にする' do
       no_text_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'no_text_detected')
       not_detected_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'receipt_not_detected')
@@ -830,6 +839,22 @@ RSpec.describe Receipt, type: :model do
       }.to change(user.notifications, :count).by(1)
 
       expect(user.notifications.last.kind).to eq('receipt_review_needed')
+    end
+
+    it 'fallback error_codeがあってもreview_needed通知はstatusベースの本文にする' do
+      receipt = create(:receipt, :processing, :with_image, user: user, store_name: '確認ストア')
+
+      expect {
+        receipt.update!(status: 'review_needed', processing_error_code: 'ai_primary_failed')
+      }.to change(user.notifications, :count).by(1)
+
+      notification = user.notifications.last
+
+      aggregate_failures do
+        expect(notification.kind).to eq('receipt_review_needed')
+        expect(notification.body).to eq(I18n.t('notifications.receipts.review_needed.body', subject: '確認ストア'))
+        expect(notification.body).not_to include('AI補完に失敗')
+      end
     end
 
     it 'processingからfailedになった時に永続通知を作成する' do

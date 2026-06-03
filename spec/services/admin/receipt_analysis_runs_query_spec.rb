@@ -85,6 +85,22 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       end
     end
 
+    it 'fallback保存されたprocessing_error_codeで絞り込み、admin表示用error_codeへ反映する' do
+      fallback_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        final_result_summary: { processing_error_code: 'ai_primary_failed', receipt_status: 'review_needed' }
+      )
+
+      result = described_class.call(error_code: 'ai_primary_failed')
+
+      aggregate_failures do
+        expect(result.records.map { |record| record[:run] }).to eq([ fallback_run ])
+        expect(result.records.first[:error_code]).to eq('ai_primary_failed')
+        expect(result.records.first[:processing_error_code]).to eq('ai_primary_failed')
+      end
+    end
+
     it 'receipt_status / needs_attention / expires_beforeで絞り込める' do
       completed_run = create(
         :receipt_analysis_run,

@@ -20,6 +20,19 @@ RSpec.describe Analysis::ReceiptProcessingErrorMapper do
       )
     end
 
+    it 'AI primary/fallbackのprovider失敗をAIエラーとして変換する' do
+      aggregate_failures do
+        expect(described_class.map("ai_primary_failed")).to eq(
+          error_code: "ai_primary_failed",
+          error_category: "ai_error"
+        )
+        expect(described_class.map("ai_fallback_failed")).to eq(
+          error_code: "ai_fallback_failed",
+          error_category: "ai_error"
+        )
+      end
+    end
+
     it 'AIのnot receipt判定は画像エラーとして変換する' do
       result = described_class.map("ai_not_receipt")
 
