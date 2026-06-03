@@ -39,6 +39,9 @@ class DeviseCreateUsers < ActiveRecord::Migration[8.1]
       t.string :tax_rounding_mode, null: false, default: "floor"
       t.string :discount_rounding_mode, null: false, default: "round"
 
+      ## Receipt image retention settings
+      t.boolean :keep_receipt_images
+
       t.timestamps null: false
     end
 

@@ -57,6 +57,12 @@ class Receipt < ApplicationRecord
     ocr_timeout
     ocr_api_error
   ].freeze
+  IMAGE_PURGED_REASON_MANUAL_DELETE = "manual_delete".freeze
+  IMAGE_PURGED_REASON_SYSTEM_PURGE = "system_purge".freeze
+  IMAGE_PURGED_REASONS = [
+    IMAGE_PURGED_REASON_MANUAL_DELETE,
+    IMAGE_PURGED_REASON_SYSTEM_PURGE
+  ].freeze
 
   enum :payment_method, PAYMENT_METHODS.index_with { |v| v }
 
@@ -84,6 +90,7 @@ class Receipt < ApplicationRecord
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }
+  validates :image_purged_reason, inclusion: { in: IMAGE_PURGED_REASONS }, allow_nil: true
   validates :public_id,
             presence: true,
             uniqueness: true,
@@ -131,6 +138,45 @@ class Receipt < ApplicationRecord
 
   def to_param
     public_id
+  end
+
+  def image_retention_disabled?
+    keep_image == false
+  end
+
+  def image_purged?
+    image_purged_at.present? || image_purged_reason.present?
+  end
+
+  def image_purged_manually?
+    image_purged_reason == IMAGE_PURGED_REASON_MANUAL_DELETE
+  end
+
+  def image_purged_by_system?
+    image_purged_reason == IMAGE_PURGED_REASON_SYSTEM_PURGE
+  end
+
+  def schedule_image_purge!(eligible_at: Time.current)
+    attributes = {
+      image_purge_eligible_at: eligible_at,
+      image_purged_at: nil,
+      image_purged_reason: nil
+    }
+
+    persisted? ? update!(attributes) : assign_attributes(attributes)
+  end
+
+  def mark_image_purged!(reason:, purged_at: Time.current)
+    normalized_reason = reason.to_s
+    unless IMAGE_PURGED_REASONS.include?(normalized_reason)
+      raise ArgumentError, "Unknown image_purged_reason=#{reason}"
+    end
+
+    update!(
+      image_purge_eligible_at: nil,
+      image_purged_at: purged_at,
+      image_purged_reason: normalized_reason
+    )
   end
 
   def dom_target_id

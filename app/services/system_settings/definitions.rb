@@ -50,6 +50,14 @@ module SystemSettings
         risk_level: "low"
       ),
       Definition.new(
+        key: "storage.keep_receipt_images_default",
+        category: "storage_policy",
+        value_type: "boolean",
+        default: true,
+        editable: true,
+        risk_level: "medium"
+      ),
+      Definition.new(
         key: "limits.receipt_upload_soft_limit",
         category: "soft_limit",
         value_type: "integer",

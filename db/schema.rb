@@ -254,6 +254,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.string "country_region"
     t.datetime "created_at", null: false
     t.string "display_id", limit: 16, null: false
+    t.datetime "image_purge_eligible_at"
+    t.datetime "image_purged_at"
+    t.string "image_purged_reason"
+    t.boolean "keep_image", default: true, null: false
     t.text "memo"
     t.datetime "ocr_completed_at"
     t.string "payment_method"
@@ -274,12 +278,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.bigint "total_amount"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["image_purge_eligible_at", "id"], name: "index_receipts_on_image_purge_eligible_at", where: "((keep_image = false) AND (image_purged_at IS NULL) AND (image_purge_eligible_at IS NOT NULL))"
     t.index ["public_id"], name: "index_receipts_on_public_id", unique: true
     t.index ["user_id", "created_at"], name: "index_receipts_on_user_id_and_created_at_desc", order: { created_at: :desc }
     t.index ["user_id", "display_id"], name: "index_receipts_on_user_id_and_display_id", unique: true
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"
+    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying, 'system_purge'::character varying]::text[]))", name: "check_receipts_image_purged_reason"
   end
 
   create_table "recovery_codes", force: :cascade do |t|
@@ -384,6 +390,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.string "encrypted_password", default: "", null: false
     t.integer "failed_attempts", default: 0, null: false
     t.boolean "guest", default: false, null: false
+    t.boolean "keep_receipt_images"
     t.datetime "last_sign_in_at"
     t.inet "last_sign_in_ip"
     t.datetime "locked_at"

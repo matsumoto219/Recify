@@ -38,6 +38,15 @@ RSpec.describe User, type: :model do
 
       expect(user).not_to be_admin
     end
+
+    it 'レシート画像保持設定は初期状態でsystem defaultを継承する' do
+      user = create(:user)
+
+      aggregate_failures do
+        expect(user.keep_receipt_images).to be_nil
+        expect(user.effective_keep_receipt_images).to be(true)
+      end
+    end
   end
 
   describe 'admin flag' do
@@ -426,6 +435,31 @@ RSpec.describe User, type: :model do
       user = build(:user, discount_rounding_mode: 'bankers')
 
       expect(user).not_to be_valid
+    end
+  end
+
+  describe '#effective_keep_receipt_images' do
+    it 'user overrideがtrueならtrueを返す' do
+      user = create(:user, keep_receipt_images: true)
+
+      expect(user.effective_keep_receipt_images).to be(true)
+    end
+
+    it 'user overrideがfalseならfalseを返す' do
+      user = create(:user, keep_receipt_images: false)
+
+      expect(user.effective_keep_receipt_images).to be(false)
+    end
+
+    it 'user overrideがnilならSystemSettings defaultを返す' do
+      create(
+        :system_setting,
+        key: 'storage.keep_receipt_images_default',
+        value: SystemSettings.stored_value(false)
+      )
+      user = create(:user, keep_receipt_images: nil)
+
+      expect(user.effective_keep_receipt_images).to be(false)
     end
   end
 

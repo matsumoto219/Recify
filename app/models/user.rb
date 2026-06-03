@@ -113,6 +113,12 @@ class User < ApplicationRecord
     storage_usage.can_add?(byte_size, excluding_blob: excluding_blob)
   end
 
+  def effective_keep_receipt_images
+    return keep_receipt_images unless keep_receipt_images.nil?
+
+    SystemSettings.enabled?("storage.keep_receipt_images_default", user: self)
+  end
+
   def ensure_webauthn_id!
     return webauthn_id if webauthn_id.present?
 

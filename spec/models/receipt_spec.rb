@@ -545,6 +545,69 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'image retention state' do
+    it 'keep_imageは初期値trueにする' do
+      receipt = create(:receipt)
+
+      expect(receipt.keep_image).to be(true)
+    end
+
+    it '画像保持無効状態を返す' do
+      receipt = build(:receipt, keep_image: false)
+
+      expect(receipt).to be_image_retention_disabled
+    end
+
+    it 'purge予定を記録する' do
+      receipt = create(:receipt, keep_image: false)
+      eligible_at = Time.zone.parse('2026-06-03 21:00:00')
+
+      receipt.schedule_image_purge!(eligible_at: eligible_at)
+
+      aggregate_failures do
+        expect(receipt.reload.image_purge_eligible_at).to eq(eligible_at)
+        expect(receipt.image_purged_at).to be_nil
+        expect(receipt.image_purged_reason).to be_nil
+      end
+    end
+
+    it '手動purge済み状態を返す' do
+      receipt = create(:receipt)
+      purged_at = Time.zone.parse('2026-06-03 22:00:00')
+
+      receipt.mark_image_purged!(
+        reason: Receipt::IMAGE_PURGED_REASON_MANUAL_DELETE,
+        purged_at: purged_at
+      )
+
+      aggregate_failures do
+        expect(receipt.reload).to be_image_purged
+        expect(receipt).to be_image_purged_manually
+        expect(receipt).not_to be_image_purged_by_system
+        expect(receipt.image_purged_at).to eq(purged_at)
+      end
+    end
+
+    it 'system purge済み状態を返す' do
+      receipt = create(:receipt)
+
+      receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_image_purged
+        expect(receipt).to be_image_purged_by_system
+      end
+    end
+
+    it '未知のpurge reasonは拒否する' do
+      receipt = create(:receipt)
+
+      expect {
+        receipt.mark_image_purged!(reason: 'unknown')
+      }.to raise_error(ArgumentError, 'Unknown image_purged_reason=unknown')
+    end
+  end
+
   describe 'public/display identifiers' do
     it '作成時にpublic_idとdisplay_idを自動生成する' do
       receipt = create(:receipt)

@@ -9,6 +9,7 @@ RSpec.describe SystemSettings do
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
         'ui.maintenance_notice_enabled',
+        'storage.keep_receipt_images_default',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
         'limits.batch_files_per_day',
@@ -45,6 +46,10 @@ RSpec.describe SystemSettings do
   describe '.value_for' do
     it 'DB値がない場合はdefaultを返す' do
       expect(described_class.value_for('feature.receipt_logo_display_enabled')).to eq(false)
+    end
+
+    it 'レシート画像保持defaultはtrueを返す' do
+      expect(described_class.value_for('storage.keep_receipt_images_default')).to eq(true)
     end
 
     it 'DB値がある場合はcast済みの値を返す' do
@@ -91,6 +96,7 @@ RSpec.describe SystemSettings do
 
       expect(described_class.enabled?('feature.receipt_logo_display_enabled')).to eq(true)
       expect(described_class.enabled?('ui.maintenance_notice_enabled')).to eq(false)
+      expect(described_class.enabled?('storage.keep_receipt_images_default')).to eq(true)
     end
   end
 
