@@ -178,7 +178,7 @@ class Ocr::ResponseParser
   #
   # - Tip (チップ) → 保存済み。日本レシートではほぼ未使用
   # - Payments (構造化支払い情報) → 保存済み。未取得ケースが多く fallback運用
-  # - MerchantAddress.valueAddress → store_address_componentsへ保存済み。UI表示はstore_address文字列を使う
+  # - MerchantAddress.content/valueString → store_address、valueAddress → store_address_componentsへ保存済み
   # - valueCurrency.currencyCode → receipts.currency_codeへ代表通貨として保存済み。金額計算は現状JPY前提を維持
   # - Loyalty / Membership系 → ポイントカード誤認のため未採用
   # - ReceiptId / TransactionId → 今回のスコープ外
@@ -401,7 +401,7 @@ class Ocr::ResponseParser
     normalized.match?(/[0-9]{2,}/)
   end
 
-  # 表示/編集用の住所文字列。構造化住所は extract_store_address_components で別保存する。
+  # 表示/編集用の住所文字列。MerchantAddress.valueAddress は store_address_components として別保存する。
   def extract_store_address(parsed_response)
     fields = extract_fields(parsed_response)
 
