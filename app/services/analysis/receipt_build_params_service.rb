@@ -151,7 +151,7 @@ module Analysis
         end
 
         ai_items_present = normalized_ai_items.present?
-        # product_code は保存のみ。quantity_unit は編集/表示で利用する。
+        # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit は編集/表示で利用する。
         source_items.each_with_index.filter_map do |item, index|
           normalized_item = if item.respond_to?(:with_indifferent_access)
             item.with_indifferent_access

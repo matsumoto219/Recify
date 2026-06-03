@@ -387,11 +387,13 @@ class ReceiptsController < ApplicationController
       :remove_image,
       :store_address,
       :store_phone_number,
-      # NOTE: 以下は将来フォームから直接編集する場合の候補
-      # :purchased_at,
+      # NOTE: purchased_at は purchased_on / purchased_time に分けて編集する。
+      # 以下は保存済みだが、一般ユーザー編集フォームには未開放の項目。
       # :tip_amount,
       # :country_region,
       # :receipt_type,
+      # :currency_code,
+      # :store_address_components,
       receipt_items_attributes: [
         :id,
         :confirmed_name,
@@ -399,6 +401,7 @@ class ReceiptsController < ApplicationController
         :price,
         :quantity,
         :quantity_unit,
+        # ProductCode は保存/permit済みだが、UI入力欄はまだ出していない。
         :product_code,
         :tax_rate,
         :discount_rate,
@@ -418,7 +421,9 @@ class ReceiptsController < ApplicationController
         :position_index,
         :_destroy
       ]
-      # NOTE: 以下は将来 nested attributes で直接編集する場合の候補
+      # NOTE: receipt_payments は保存されるがUI未活用。
+      # receipt_tax_details は表示/金額計算に使い、ユーザー入力ではなく再計算結果として保存する。
+      # 以下は将来 nested attributes で直接編集する場合の候補。
       # , receipt_payments_attributes: [
       #   :id,
       #   :method,
