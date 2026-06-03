@@ -584,8 +584,6 @@ class ReceiptAnalysisPipeline
       candidates = ocr_candidates(ocr_result)
       items = Array(candidates[:items])
       items_average = candidates.dig(:confidence_summary, :items_average)
-      # TODO: 実レスポンスで confidence_summary の配置を再確認する。
-      # unreadable_ocr? と同様に、candidates / meta のどちらが正なのか確認後に整理する。
 
       return true if candidates[:store_name].blank?
       return true if candidates[:total_amount].blank?
