@@ -4,6 +4,7 @@ RSpec.describe Ai::Providers::Openai::Client do
   let(:input) { { filtered_content: 'sample receipt text' } }
   let(:client) { described_class.new }
   let(:request_body) { { model: 'gpt-test', input: 'payload' } }
+  let(:backoff_policy) { Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.0 }) }
   let(:operational_env_keys) do
     %w[
       OPENAI_TIMEOUT
@@ -81,7 +82,7 @@ RSpec.describe Ai::Providers::Openai::Client do
   end
 
   before do
-    allow(client).to receive(:retry_jitter_delay).and_return(0.0)
+    allow(client).to receive(:backoff_policy).and_return(backoff_policy)
   end
 
   describe '#call' do
@@ -203,7 +204,8 @@ RSpec.describe Ai::Providers::Openai::Client do
 
         { 'id' => 'resp_jitter' }
       end
-      allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+      allow(client).to receive(:backoff_policy)
+        .and_return(Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.25 }))
       allow(Ai::Providers::Openai::ResponseParser)
         .to receive(:parse)
         .with(parsed_response_with_metrics('resp_jitter', retry_count: 1, retry_after_used: false, total_retry_sleep_ms: 1250, rate_limited: false))
@@ -287,16 +289,14 @@ RSpec.describe Ai::Providers::Openai::Client do
       end
     end
 
-    it 'ENVでretry delayを上書きできる' do
+    it 'ENVでretry delay設定を上書きできる' do
       with_env(
         'OPENAI_BASE_RETRY_DELAY' => '2.0',
         'OPENAI_MAX_RETRY_DELAY' => '3.0'
       ) do
-        allow(client).to receive(:retry_jitter_delay).and_return(0.25)
-
         aggregate_failures do
-          expect(client.send(:retry_delay_for, 1)).to eq(2.25)
-          expect(client.send(:retry_delay_for, 3)).to eq(3.0)
+          expect(client.send(:base_retry_delay)).to eq(2.0)
+          expect(client.send(:max_retry_delay)).to eq(3.0)
         end
       end
     end

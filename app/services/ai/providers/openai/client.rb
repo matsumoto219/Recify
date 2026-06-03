@@ -124,26 +124,13 @@ module Ai
             attempts += 1
             yield
           rescue Net::OpenTimeout, Net::ReadTimeout, Ai::Errors::ProviderError => e
-            raise unless retryable_error?(e)
-            raise if attempts > max_retries
+            raise unless retry_policy.retryable?(e)
+            raise if attempts > retry_policy.max_retries
 
-            delay = retry_delay_for(attempts, e)
+            delay = retry_policy.delay_for(attempt: attempts, error: e)
             track_retry_metrics!(error: e, delay: delay)
             sleep(delay)
             retry
-          end
-        end
-
-        def retryable_error?(error)
-          case error
-          when Net::OpenTimeout, Net::ReadTimeout
-            true
-          when Ai::Errors::RateLimitError
-            true
-          when Ai::Errors::ProviderError
-            error.error_code == "ai_api_error"
-          else
-            false
           end
         end
 
@@ -159,52 +146,11 @@ module Ai
           response.code.to_i >= 500
         end
 
-        def retry_delay_for(attempt, error = nil)
-          retry_after = retry_after_for(error)
-          return cap_retry_delay(retry_after) if retry_after
-
-          cap_retry_delay(exponential_retry_delay(attempt) + retry_jitter_delay)
-        end
-
-        def exponential_retry_delay(attempt)
-          base_retry_delay * (2**(attempt - 1))
-        end
-
-        def retry_jitter_delay
-          rand * base_retry_delay
-        end
-
-        def retry_after_for(error)
-          return unless error.respond_to?(:retry_after)
-
-          error.retry_after
-        end
-
         def retry_after_from_response(response)
           value = response["Retry-After"]
           return if value.blank?
 
-          parse_retry_after(value)
-        end
-
-        def parse_retry_after(value)
-          raw_value = value.to_s.strip
-          return if raw_value.blank?
-
-          if raw_value.match?(/\A\d+(?:\.\d+)?\z/)
-            return cap_retry_delay(raw_value.to_f)
-          end
-
-          delay = Time.httpdate(raw_value) - Time.current
-          return if delay.negative?
-
-          cap_retry_delay(delay)
-        rescue ArgumentError
-          nil
-        end
-
-        def cap_retry_delay(delay)
-          [ delay.to_f, max_retry_delay ].min
+          backoff_policy.parse_retry_after(value)
         end
 
         def headers
@@ -246,6 +192,20 @@ module Ai
 
         def max_retry_delay
           ENV.fetch("OPENAI_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
+        end
+
+        def retry_policy
+          @retry_policy ||= Ai::RetryPolicy.new(
+            max_retries: max_retries,
+            backoff_policy: backoff_policy
+          )
+        end
+
+        def backoff_policy
+          @backoff_policy ||= Ai::BackoffPolicy.new(
+            base_delay: base_retry_delay,
+            max_delay: max_retry_delay
+          )
         end
 
         def parse_response_body(body)
@@ -303,7 +263,7 @@ module Ai
           @current_metrics = Ai::ProviderMetrics.merge(
             @current_metrics,
             retry_count: @current_metrics.fetch(:retry_count, 0).to_i + 1,
-            retry_after_used: @current_metrics[:retry_after_used] == true || retry_after_for(error).present?,
+            retry_after_used: @current_metrics[:retry_after_used] == true || retry_policy.retry_after_for(error).present?,
             total_retry_sleep_ms: @current_metrics.fetch(:total_retry_sleep_ms, 0).to_i + (delay.to_f * 1000).round
           )
         end
