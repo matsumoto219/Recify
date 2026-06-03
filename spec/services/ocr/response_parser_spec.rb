@@ -24,7 +24,14 @@ RSpec.describe Ocr::ResponseParser do
               'docType' => 'receipt.retailMeal',
               'fields' => {
                 'MerchantName' => { 'valueString' => 'サンプルストア' },
-                'MerchantAddress' => { 'valueString' => '東京都渋谷区1-2-3' },
+                'MerchantAddress' => {
+                  'valueString' => '東京都渋谷区1-2-3',
+                  'valueAddress' => {
+                    'state' => '東京都',
+                    'city' => '渋谷区',
+                    'streetAddress' => '1-2-3'
+                  }
+                },
                 'MerchantPhoneNumber' => { 'valueString' => '03-1234-5678' },
                 'TransactionDate' => { 'valueDate' => '2026-04-02' },
                 'TransactionTime' => { 'valueTime' => '12:34' },
@@ -109,6 +116,11 @@ RSpec.describe Ocr::ResponseParser do
       aggregate_failures do
         expect(candidates[:store_name]).to eq('サンプルストア')
         expect(candidates[:store_address]).to eq('東京都渋谷区1-2-3')
+        expect(candidates[:store_address_components]).to eq(
+          'state' => '東京都',
+          'city' => '渋谷区',
+          'streetAddress' => '1-2-3'
+        )
         expect(candidates[:store_phone_number]).to eq('03-1234-5678')
         expect(candidates[:purchased_at_text]).to eq('2026-04-02 12:34')
         expect(candidates[:total_amount]).to eq(1280)

@@ -108,6 +108,9 @@ module Analysis
         {
           store_name: ai_attrs[:store_name].presence || candidates[:store_name],
           store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # 実レシートでは未取得が多いが、取得値は住所として表示/編集対象にする
+          store_address_components: normalize_store_address_components(
+            ai_attrs[:store_address_components].presence || candidates[:store_address_components]
+          ),
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
           purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
           total_amount: ai_attrs[:total_amount] || normalize_amount(candidates[:total_amount]),
@@ -529,6 +532,7 @@ module Analysis
         {
           store_name: symbolized[:store_name],
           store_address: symbolized[:store_address],               # AI側で補完された値も住所として表示/編集対象にする
+          store_address_components: normalize_store_address_components(symbolized[:store_address_components]),
           store_phone_number: symbolized[:store_phone_number],
           purchased_at: symbolized[:purchased_at],
           purchased_at_text: symbolized[:purchased_at_text],
@@ -623,6 +627,13 @@ module Analysis
 
       def normalize_currency_code(value)
         value.to_s.strip.upcase.presence
+      end
+
+      def normalize_store_address_components(value)
+        return nil if value.blank?
+        return value.deep_stringify_keys if value.is_a?(Hash)
+
+        nil
       end
 
       def merge_items(candidate_items, ai_items)

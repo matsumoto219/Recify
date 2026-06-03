@@ -753,6 +753,26 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'store_address_components normalization' do
+    it 'store_address_components は文字列キーへ正規化する' do
+      receipt = build(:receipt, store_address_components: { state: '東京都', streetAddress: '1-2-3' })
+
+      receipt.valid?
+
+      expect(receipt.store_address_components).to eq(
+        'state' => '東京都',
+        'streetAddress' => '1-2-3'
+      )
+    end
+
+    it 'store_address_components はHashだけを許可する' do
+      receipt = build(:receipt, store_address_components: [ '東京都' ])
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors[:store_address_components]).to be_present
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)

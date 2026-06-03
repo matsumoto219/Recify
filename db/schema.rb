@@ -270,6 +270,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.jsonb "review_reasons", default: [], null: false
     t.string "status"
     t.text "store_address"
+    t.jsonb "store_address_components", default: {}, null: false
     t.string "store_name"
     t.string "store_phone_number"
     t.bigint "subtotal_amount"

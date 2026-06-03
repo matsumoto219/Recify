@@ -47,6 +47,7 @@ class Ocr::ResponseParser
       candidates: {
         store_name: extract_store_name(parsed_response, normalized_lines),
         store_address: extract_store_address(parsed_response),                                                     # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
+        store_address_components: extract_store_address_components(parsed_response),
         store_phone_number: extract_store_phone_number(parsed_response),
         purchased_at_text: normalize_purchased_at_text(extract_purchased_at_text(parsed_response, normalized_lines)),
         total_amount: extract_total_amount(parsed_response, normalized_lines),
@@ -359,6 +360,16 @@ class Ocr::ResponseParser
       fields.dig("MerchantAddress", "content")
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def extract_store_address_components(parsed_response)
+    fields = extract_fields(parsed_response)
+    value_address = fields.dig("MerchantAddress", "valueAddress")
+    return {} unless value_address.is_a?(Hash)
+
+    value_address.deep_stringify_keys
+  rescue NoMethodError, TypeError
+    {}
   end
 
   def extract_store_phone_number(parsed_response)

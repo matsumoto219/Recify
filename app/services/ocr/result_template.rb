@@ -21,6 +21,7 @@ module Ocr
       {
         store_name: nil,
         store_address: nil,
+        store_address_components: {},
         store_phone_number: nil,
         purchased_at_text: nil,
         total_amount: nil,

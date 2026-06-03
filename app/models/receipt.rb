@@ -124,10 +124,12 @@ class Receipt < ApplicationRecord
   validate :validate_image_file_size
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
+  validate :validate_store_address_components_shape
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
   before_validation :normalize_currency_code
+  before_validation :normalize_store_address_components
   before_validation :normalize_store_phone_number
   before_validation :assign_public_id, on: :create
   before_validation :assign_display_id, on: :create
@@ -369,6 +371,11 @@ class Receipt < ApplicationRecord
     self.currency_code = currency_code.to_s.strip.upcase.presence if currency_code.present?
   end
 
+  def normalize_store_address_components
+    self.store_address_components = {} if store_address_components.nil?
+    self.store_address_components = store_address_components.deep_stringify_keys if store_address_components.is_a?(Hash)
+  end
+
   def normalize_store_phone_number
     return if store_phone_number.blank?
 
@@ -405,6 +412,12 @@ class Receipt < ApplicationRecord
     return if purchased_at <= Time.current
 
     errors.add(:purchased_at, :future_date)
+  end
+
+  def validate_store_address_components_shape
+    return if store_address_components.is_a?(Hash)
+
+    errors.add(:store_address_components, :invalid)
   end
 
   def validate_image_content_type

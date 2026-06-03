@@ -13,6 +13,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         candidates: {
           store_name: 'サンプルストア',
           store_address: '東京都渋谷区1-2-3',
+          store_address_components: {
+            state: '東京都',
+            city: '渋谷区',
+            streetAddress: '1-2-3'
+          },
           store_phone_number: '03-1234-5678',
           purchased_at_text: '2026/04/02 12:34',
           total_amount: 1280,
@@ -62,6 +67,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(params[:receipt_attributes][:store_name]).to eq('サンプルストア')
           expect(params[:receipt_attributes][:store_address]).to eq('東京都渋谷区1-2-3')
+          expect(params[:receipt_attributes][:store_address_components]).to eq(
+            'state' => '東京都',
+            'city' => '渋谷区',
+            'streetAddress' => '1-2-3'
+          )
           expect(params[:receipt_attributes][:store_phone_number]).to eq('03-1234-5678')
           expect(params[:receipt_attributes][:total_amount]).to eq(1280)
           expect(params[:receipt_attributes][:subtotal_amount]).to eq(1180)
