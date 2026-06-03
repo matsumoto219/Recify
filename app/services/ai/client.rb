@@ -30,7 +30,7 @@ module Ai
     attr_reader :primary_provider, :fallback_provider
 
     def run_primary(input)
-      provider_client(primary_provider).call(input)
+      provider_executor(primary_provider).call(input)
     rescue Ai::Errors::TimeoutError => error
       Rails.logger.error("[AI] primary timeout: #{error.message}")
       raise Ai::Errors::ProviderError.new(
@@ -56,7 +56,7 @@ module Ai
     def run_fallback(input, primary_error, fallback_decision)
       Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
 
-      result = provider_client(fallback_provider).call(input)
+      result = provider_executor(fallback_provider).call(input)
 
       decorate_success_result(
         result,
@@ -76,6 +76,13 @@ module Ai
 
     def provider_client(provider_name)
       ProviderRegistry.fetch(provider_name)
+    end
+
+    def provider_executor(provider_name)
+      Ai::ProviderExecutor.new(
+        provider_client: provider_client(provider_name),
+        provider_name: provider_name
+      )
     end
 
     def fallback_decision_for(error)

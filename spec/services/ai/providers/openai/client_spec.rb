@@ -90,7 +90,7 @@ RSpec.describe Ai::Providers::Openai::Client do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body).and_return({ 'id' => 'resp_123' })
       allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
-        .with(parsed_response_with_metrics('resp_123', retry_count: 0, retry_after_used: false, rate_limited: false))
+        .with(parsed_response_with_metrics('resp_123', model: 'gpt-test', provider_status: '200'))
         .and_return(parsed_response)
 
       result = client.call(input)
@@ -99,7 +99,7 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(Ai::Providers::Openai::RequestBuilder).to have_received(:build).with(input)
         expect(client).to have_received(:post_request).with(request_body)
         expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse)
-          .with(parsed_response_with_metrics('resp_123', retry_count: 0, retry_after_used: false, rate_limited: false))
+          .with(parsed_response_with_metrics('resp_123', model: 'gpt-test', provider_status: '200'))
         expect(result).to be_a(Ai::ProviderResult)
         expect(result.payload).to eq(parsed_response)
       end
@@ -107,8 +107,7 @@ RSpec.describe Ai::Providers::Openai::Client do
 
     it '成功時のmetricsをmetaへ渡す' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-      allow(client).to receive(:post_request).with(request_body) do
-        client.send(:track_provider_status!, '200')
+      allow(client).to receive(:post_request).with(request_body).and_return(
         valid_openai_response(
           response_id: 'resp_metrics',
           usage: {
@@ -117,7 +116,7 @@ RSpec.describe Ai::Providers::Openai::Client do
             'total_tokens' => 168
           }
         )
-      end
+      )
 
       result = client.call(input)
 
@@ -126,10 +125,6 @@ RSpec.describe Ai::Providers::Openai::Client do
         provider: 'openai',
         model: 'gpt-test',
         response_id: 'resp_metrics',
-        retry_count: 0,
-        retry_after_used: false,
-        total_retry_sleep_ms: 0,
-        rate_limited: false,
         provider_status: '200',
         token_usage: {
           input_tokens: 123,
@@ -137,123 +132,9 @@ RSpec.describe Ai::Providers::Openai::Client do
           total_tokens: 168
         }
       )
-      expect(result.payload.dig(:meta, :metrics, :elapsed_ms)).to be_a(Integer)
     end
 
-    it '一時的な ProviderError の後に再試行して成功する' do
-      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-      call_count = 0
-      allow(client).to receive(:post_request).with(request_body) do
-        call_count += 1
-        raise Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error') if call_count == 1
-
-        { 'id' => 'resp_456' }
-      end
-      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
-        .with(parsed_response_with_metrics('resp_456', retry_count: 1, retry_after_used: false, total_retry_sleep_ms: 1000, rate_limited: false))
-        .and_return(parsed_response)
-      allow(client).to receive(:sleep)
-
-      result = client.call(input)
-
-      aggregate_failures do
-        expect(client).to have_received(:post_request).with(request_body).twice
-        expect(client).to have_received(:sleep).once
-        expect(result).to be_a(Ai::ProviderResult)
-        expect(result.payload).to eq(parsed_response)
-      end
-    end
-
-    it 'RateLimitErrorのRetry-After秒数をretry delayとして優先する' do
-      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-      call_count = 0
-      allow(client).to receive(:post_request).with(request_body) do
-        call_count += 1
-        if call_count == 1
-          raise Ai::Errors::RateLimitError.new(
-            message: 'rate limited',
-            error_code: 'ai_api_error',
-            retry_after: 3.0
-          )
-        end
-
-        { 'id' => 'resp_retry_after' }
-      end
-      allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse)
-        .with(parsed_response_with_metrics('resp_retry_after', retry_count: 1, retry_after_used: true, total_retry_sleep_ms: 3000, rate_limited: true))
-        .and_return(parsed_response)
-      allow(client).to receive(:sleep)
-
-      result = client.call(input)
-
-      aggregate_failures do
-        expect(result).to be_a(Ai::ProviderResult)
-        expect(result.payload).to eq(parsed_response)
-        expect(client).to have_received(:post_request).with(request_body).twice
-        expect(client).to have_received(:sleep).with(3.0).once
-      end
-    end
-
-    it 'Retry-Afterがない場合はjitterを加算する' do
-      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-      call_count = 0
-      allow(client).to receive(:post_request).with(request_body) do
-        call_count += 1
-        raise Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error') if call_count == 1
-
-        { 'id' => 'resp_jitter' }
-      end
-      allow(client).to receive(:backoff_policy)
-        .and_return(Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.25 }))
-      allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse)
-        .with(parsed_response_with_metrics('resp_jitter', retry_count: 1, retry_after_used: false, total_retry_sleep_ms: 1250, rate_limited: false))
-        .and_return(parsed_response)
-      allow(client).to receive(:sleep)
-
-      result = client.call(input)
-
-      aggregate_failures do
-        expect(result).to be_a(Ai::ProviderResult)
-        expect(result.payload).to eq(parsed_response)
-        expect(client).to have_received(:post_request).with(request_body).twice
-        expect(client).to have_received(:sleep).with(1.25).once
-      end
-    end
-
-    it 'Retry-Afterが上限を超える場合はcapする' do
-      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-      call_count = 0
-      allow(client).to receive(:post_request).with(request_body) do
-        call_count += 1
-        if call_count == 1
-          raise Ai::Errors::RateLimitError.new(
-            message: 'rate limited',
-            error_code: 'ai_api_error',
-            retry_after: 30.0
-          )
-        end
-
-        { 'id' => 'resp_cap' }
-      end
-      allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse)
-        .with(parsed_response_with_metrics('resp_cap', retry_count: 1, retry_after_used: true, total_retry_sleep_ms: 10_000, rate_limited: true))
-        .and_return(parsed_response)
-      allow(client).to receive(:sleep)
-
-      result = client.call(input)
-
-      aggregate_failures do
-        expect(result).to be_a(Ai::ProviderResult)
-        expect(result.payload).to eq(parsed_response)
-        expect(client).to have_received(:post_request).with(request_body).twice
-        expect(client).to have_received(:sleep).with(10.0).once
-      end
-    end
-
-    it '再試行上限を超えた ProviderError はそのまま送出する' do
+    it 'ProviderError はadapter内で再試行せずそのまま送出する' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body)
         .and_raise(Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error'))
@@ -265,27 +146,15 @@ RSpec.describe Ai::Providers::Openai::Client do
         aggregate_failures do
           expect(error.message).to eq('server error')
           expect(error.error_code).to eq('ai_api_error')
-          expect(client).to have_received(:post_request).with(request_body).exactly(3).times
+          expect(client).to have_received(:post_request).with(request_body).once
+          expect(client).not_to have_received(:sleep)
         end
       }
     end
 
     it 'ENVでretry上限を上書きできる' do
       with_env('OPENAI_MAX_RETRIES' => '0') do
-        allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
-        allow(client).to receive(:post_request).with(request_body)
-          .and_raise(Ai::Errors::ProviderError.new(message: 'server error', error_code: 'ai_api_error'))
-        allow(client).to receive(:sleep)
-
-        expect do
-          client.call(input)
-        end.to raise_error(Ai::Errors::ProviderError) { |error|
-          aggregate_failures do
-            expect(error.message).to eq('server error')
-            expect(client).to have_received(:post_request).with(request_body).once
-            expect(client).not_to have_received(:sleep)
-          end
-        }
+        expect(client.retry_policy.max_retries).to eq(0)
       end
     end
 
@@ -319,7 +188,7 @@ RSpec.describe Ai::Providers::Openai::Client do
       }
     end
 
-    it 'RateLimitError は再試行後も失敗したらそのまま送出する' do
+    it 'RateLimitError はadapter内で再試行せずそのまま送出する' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body)
         .and_raise(Ai::Errors::RateLimitError.new(message: 'rate limited', error_code: 'external_service_unavailable'))
@@ -331,8 +200,8 @@ RSpec.describe Ai::Providers::Openai::Client do
         aggregate_failures do
           expect(error.message).to eq('rate limited')
           expect(error.error_code).to eq('external_service_unavailable')
-          expect(client).to have_received(:post_request).with(request_body).exactly(3).times
-          expect(client).to have_received(:sleep).twice
+          expect(client).to have_received(:post_request).with(request_body).once
+          expect(client).not_to have_received(:sleep)
         end
       }
     end
@@ -399,7 +268,9 @@ RSpec.describe Ai::Providers::Openai::Client do
     end
 
     it '200系なら parse_response_body の結果を返す' do
-      allow(client).to receive(:parse_response_body).with(body).and_return({ 'id' => 'resp_123' })
+      allow(client).to receive(:parse_response_body)
+        .with(body, provider_status: '200', request_body: request_body)
+        .and_return({ 'id' => 'resp_123' })
 
       result = client.send(:post_request, request_body)
 
@@ -419,7 +290,9 @@ RSpec.describe Ai::Providers::Openai::Client do
         'OPENAI_OPEN_TIMEOUT' => '12',
         'OPENAI_READ_TIMEOUT' => '90'
       ) do
-        allow(client).to receive(:parse_response_body).with(body).and_return({ 'id' => 'resp_timeout_env' })
+        allow(client).to receive(:parse_response_body)
+          .with(body, provider_status: '200', request_body: request_body)
+          .and_return({ 'id' => 'resp_timeout_env' })
 
         result = client.send(:post_request, request_body)
 

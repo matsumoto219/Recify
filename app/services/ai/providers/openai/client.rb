@@ -20,15 +20,10 @@ module Ai
         MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
 
         def call(input)
-          reset_metrics!
           body = RequestBuilder.build(input)
-          track_request_metrics!(body)
+          response = post_request(body)
 
-          response = with_retries do
-            post_request(body)
-          end
-
-          payload = ResponseParser.parse(attach_metrics(response))
+          payload = ResponseParser.parse(attach_response_metrics(response, request_body: body))
           Ai::ProviderResult.new(
             provider: PROVIDER_NAME,
             model: payload.dig(:meta, :model),
@@ -41,20 +36,29 @@ module Ai
             message: e.message,
             provider: PROVIDER_NAME,
             cause: e,
-            metrics: finalized_metrics(provider_status: "timeout")
+            metrics: error_metrics(provider_status: "timeout")
           )
         rescue Ai::Errors::ProviderError => e
-          raise enrich_error_with_metrics(e)
+          raise e
         rescue StandardError => e
           raise Ai::Errors::ProviderError.new(
             message: e.message,
             error_code: "ai_api_error",
             provider: PROVIDER_NAME,
+            category: :api_error,
+            retryable: true,
+            fallbackable: true,
             cause: e,
-            metrics: finalized_metrics(provider_status: "unexpected_error")
+            provider_status: "unexpected_error",
+            metrics: error_metrics(provider_status: "unexpected_error")
           )
-        ensure
-          reset_metrics!
+        end
+
+        def retry_policy
+          @retry_policy ||= Ai::RetryPolicy.new(
+            max_retries: max_retries,
+            backoff_policy: backoff_policy
+          )
         end
 
         private
@@ -70,26 +74,31 @@ module Ai
           request.body = JSON.generate(body)
 
           response = http.request(request)
-          track_provider_status!(response.code)
 
           if auth_error_response?(response)
             raise Ai::Errors::AuthError.new(
               message: "OpenAI API auth error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME,
-              metrics: finalized_metrics(provider_status: response.code)
+              category: :auth,
+              retryable: false,
+              fallbackable: false,
+              provider_status: response.code,
+              metrics: error_metrics(provider_status: response.code, request_body: body)
             )
           end
 
           if rate_limit_response?(response)
-            track_rate_limit_metrics!
-
             raise Ai::Errors::RateLimitError.new(
               message: "OpenAI API rate limit error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME,
+              category: :rate_limit,
+              retryable: true,
+              fallbackable: true,
               retry_after: retry_after_from_response(response),
-              metrics: finalized_metrics(provider_status: response.code)
+              provider_status: response.code,
+              metrics: error_metrics(provider_status: response.code, request_body: body, rate_limited: true)
             )
           end
 
@@ -98,8 +107,12 @@ module Ai
               message: "OpenAI API retryable server error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME,
+              category: :server_error,
+              retryable: true,
+              fallbackable: true,
               retry_after: retry_after_from_response(response),
-              metrics: finalized_metrics(provider_status: response.code)
+              provider_status: response.code,
+              metrics: error_metrics(provider_status: response.code, request_body: body)
             )
           end
 
@@ -108,30 +121,15 @@ module Ai
               message: "OpenAI API error: #{response.code}",
               error_code: "ai_api_error",
               provider: PROVIDER_NAME,
-              metrics: finalized_metrics(provider_status: response.code)
+              category: :api_error,
+              retryable: true,
+              fallbackable: true,
+              provider_status: response.code,
+              metrics: error_metrics(provider_status: response.code, request_body: body)
             )
           end
 
-          parsed_body = parse_response_body(response.body)
-          track_response_metrics!(parsed_body)
-          parsed_body
-        end
-
-        def with_retries
-          attempts = 0
-
-          begin
-            attempts += 1
-            yield
-          rescue Net::OpenTimeout, Net::ReadTimeout, Ai::Errors::ProviderError => e
-            raise unless retry_policy.retryable?(e)
-            raise if attempts > retry_policy.max_retries
-
-            delay = retry_policy.delay_for(attempt: attempts, error: e)
-            track_retry_metrics!(error: e, delay: delay)
-            sleep(delay)
-            retry
-          end
+          parse_response_body(response.body, provider_status: response.code, request_body: body)
         end
 
         def auth_error_response?(response)
@@ -194,13 +192,6 @@ module Ai
           ENV.fetch("OPENAI_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
         end
 
-        def retry_policy
-          @retry_policy ||= Ai::RetryPolicy.new(
-            max_retries: max_retries,
-            backoff_policy: backoff_policy
-          )
-        end
-
         def backoff_policy
           @backoff_policy ||= Ai::BackoffPolicy.new(
             base_delay: base_retry_delay,
@@ -208,137 +199,47 @@ module Ai
           )
         end
 
-        def parse_response_body(body)
+        def parse_response_body(body, provider_status: nil, request_body: nil)
           JSON.parse(body)
         rescue JSON::ParserError => e
           raise Ai::Errors::InvalidResponseError.new(
             message: "Invalid JSON response from OpenAI",
             error_code: "ai_invalid_response",
             provider: PROVIDER_NAME,
+            category: :invalid_response,
+            retryable: false,
+            fallbackable: false,
             cause: e,
-            metrics: finalized_metrics(provider_status: "invalid_json")
+            provider_status: "invalid_json",
+            metrics: error_metrics(provider_status: provider_status || "invalid_json", request_body: request_body)
           )
         end
 
-        def reset_metrics!
-          @metrics_started_at = nil
-          @current_metrics = nil
-          @provider_status = nil
+        def attach_response_metrics(response, request_body:)
+          return response unless response.is_a?(Hash)
+
+          response.merge(
+            Ai::ProviderMetrics::METADATA_KEY => response_metrics(response, request_body: request_body)
+          )
         end
 
-        def ensure_metrics!
-          return if @current_metrics.present?
-
-          @metrics_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          @current_metrics = Ai::ProviderMetrics.build(
+        def response_metrics(response, request_body:)
+          Ai::ProviderMetrics.build(
             provider: PROVIDER_NAME,
-            retry_count: 0,
-            retry_after_used: false,
-            total_retry_sleep_ms: 0,
-            rate_limited: false
-          )
-        end
-
-        def track_request_metrics!(body)
-          ensure_metrics!
-          @current_metrics = Ai::ProviderMetrics.merge(@current_metrics, model: body[:model] || body["model"])
-        end
-
-        def track_provider_status!(status)
-          return unless @current_metrics.present?
-
-          @provider_status = status.to_s
-          @current_metrics = Ai::ProviderMetrics.merge(@current_metrics, provider_status: @provider_status)
-        end
-
-        def track_rate_limit_metrics!
-          return unless @current_metrics.present?
-
-          @current_metrics = Ai::ProviderMetrics.merge(@current_metrics, rate_limited: true)
-        end
-
-        def track_retry_metrics!(error:, delay:)
-          ensure_metrics!
-          track_rate_limit_metrics! if error.is_a?(Ai::Errors::RateLimitError)
-          @current_metrics = Ai::ProviderMetrics.merge(
-            @current_metrics,
-            retry_count: @current_metrics.fetch(:retry_count, 0).to_i + 1,
-            retry_after_used: @current_metrics[:retry_after_used] == true || retry_policy.retry_after_for(error).present?,
-            total_retry_sleep_ms: @current_metrics.fetch(:total_retry_sleep_ms, 0).to_i + (delay.to_f * 1000).round
-          )
-        end
-
-        def track_response_metrics!(response)
-          return unless response.is_a?(Hash)
-
-          @current_metrics = Ai::ProviderMetrics.merge(
-            @current_metrics,
+            provider_status: "200",
             response_id: response["id"] || response[:id],
-            model: response["model"] || response[:model],
+            model: response["model"] || response[:model] || request_model(request_body),
             token_usage: extract_token_usage(response)
           )
         end
 
-        def attach_metrics(response)
-          return response unless response.is_a?(Hash)
-
-          response.merge(Ai::ProviderMetrics::METADATA_KEY => finalized_metrics(response: response))
-        end
-
-        def finalized_metrics(response: nil, provider_status: nil)
-          ensure_metrics!
-
-          values = {
-            elapsed_ms: elapsed_ms,
-            provider_status: provider_status || @provider_status
-          }
-
-          if response.is_a?(Hash)
-            values.merge!(
-              response_id: response["id"] || response[:id],
-              model: response["model"] || response[:model],
-              token_usage: extract_token_usage(response)
-            )
-          end
-
-          Ai::ProviderMetrics.merge(@current_metrics, values)
-        end
-
-        def enrich_error_with_metrics(error)
-          metrics = Ai::ProviderMetrics.merge(finalized_metrics(provider_status: error_provider_status(error)), error.metrics)
-          metrics = Ai::ProviderMetrics.merge(metrics, rate_limited: true) if error.is_a?(Ai::Errors::RateLimitError)
-
-          if error.is_a?(Ai::Errors::TimeoutError)
-            return Ai::Errors::TimeoutError.new(
-              message: error.message,
-              provider: error.provider || PROVIDER_NAME,
-              cause: error.cause,
-              metrics: metrics
-            )
-          end
-
-          error.class.new(
-            message: error.message,
-            error_code: error.error_code,
-            provider: error.provider || PROVIDER_NAME,
-            cause: error.cause,
-            retry_after: error.retry_after,
-            metrics: metrics
+        def error_metrics(provider_status:, request_body: nil, rate_limited: false)
+          Ai::ProviderMetrics.build(
+            provider: PROVIDER_NAME,
+            model: request_model(request_body),
+            provider_status: provider_status,
+            rate_limited: rate_limited
           )
-        end
-
-        def error_provider_status(error)
-          return "rate_limited" if error.is_a?(Ai::Errors::RateLimitError)
-          return "timeout" if error.is_a?(Ai::Errors::TimeoutError)
-          return "invalid_response" if error.is_a?(Ai::Errors::InvalidResponseError)
-
-          @provider_status || error.error_code
-        end
-
-        def elapsed_ms
-          return unless @metrics_started_at
-
-          ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @metrics_started_at) * 1000).round
         end
 
         def extract_token_usage(response)
@@ -346,6 +247,12 @@ module Ai
           return {} unless usage.respond_to?(:to_h)
 
           Ai::ProviderMetrics.token_usage(usage)
+        end
+
+        def request_model(body)
+          return unless body.respond_to?(:[])
+
+          body[:model] || body["model"]
         end
       end
     end

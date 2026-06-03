@@ -1,12 +1,17 @@
 module Ai
   module Errors
     class TimeoutError < ProviderError
-      def initialize(message: nil, provider: nil, cause: nil, metrics: nil)
+      def initialize(message: nil, provider: nil, category: :timeout, retryable: true, fallbackable: true, cause: nil, retry_after: nil, provider_status: "timeout", metrics: nil)
         super(
           message: message || default_message(provider),
           error_code: "ai_timeout",
           provider: provider,
+          category: category,
+          retryable: retryable,
+          fallbackable: fallbackable,
           cause: cause,
+          retry_after: retry_after,
+          provider_status: provider_status,
           metrics: metrics
         )
       end
