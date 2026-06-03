@@ -27,6 +27,17 @@ class Ocr::ResponseParser
   TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
   PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
   PAYMENT_QUERY_FIELD_NAME = "PaymentMethods"
+  POLLING_METRICS_KEY = Ocr::Client::POLLING_METRICS_KEY
+  POLLING_METRIC_KEYS = %i[
+    elapsed_ms
+    poll_count
+    final_status
+    max_poll_count
+    poll_interval
+    reached_max_poll
+    retry_after_used
+    retry_count
+  ].freeze
 
   def initialize(response:, provider: nil)
     @response = response
@@ -73,6 +84,7 @@ class Ocr::ResponseParser
         provider: provider,
         model_id: extract_model_id(parsed_response),
         doc_type: extract_doc_type(parsed_response),
+        polling_metrics: extract_polling_metrics(parsed_response),
         raw_response_included: false
       }
     }
@@ -190,6 +202,35 @@ class Ocr::ResponseParser
 
   def extract_doc_type(parsed_response)
     extract_document(parsed_response)["docType"]
+  end
+
+  def extract_polling_metrics(parsed_response)
+    metrics = polling_metrics_hash(parsed_response[POLLING_METRICS_KEY])
+    return {} if metrics.blank?
+
+    POLLING_METRIC_KEYS.each_with_object({}) do |key, memo|
+      value = metrics[key]
+      memo[key] = normalize_polling_metric_value(key, value) unless value.nil?
+    end.compact
+  end
+
+  def normalize_polling_metric_value(key, value)
+    case key
+    when :elapsed_ms, :poll_count, :max_poll_count, :retry_count
+      Integer(value, exception: false)
+    when :poll_interval
+      Float(value, exception: false)
+    when :reached_max_poll, :retry_after_used
+      ActiveModel::Type::Boolean.new.cast(value)
+    else
+      value.to_s.presence
+    end
+  end
+
+  def polling_metrics_hash(value)
+    return value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
+
+    {}.with_indifferent_access
   end
 
   def normalize_response(value)
@@ -1406,8 +1447,15 @@ class Ocr::ResponseParser
     Ocr::ResultTemplate.error_result(
       error_code: error_code,
       provider: provider,
-      model_id: nil
+      model_id: nil,
+      polling_metrics: parsed_response_polling_metrics.presence
     )
+  end
+
+  def parsed_response_polling_metrics
+    return {} unless defined?(@parsed_response) && @parsed_response.present?
+
+    extract_polling_metrics(@parsed_response)
   end
 
   def cacheable_response?(parsed_response)

@@ -197,6 +197,37 @@
         <% end %>
       </dl>
 
+      <%
+        polling_metrics = (@record[:polling_metrics] || {}).with_indifferent_access
+        poll_count = polling_metrics[:poll_count]
+        max_poll_count = polling_metrics[:max_poll_count]
+        poll_count_label = if poll_count.present? || max_poll_count.present?
+                             "#{poll_count.presence || "-"} / #{max_poll_count.presence || "-"}"
+                           else
+                             "-"
+                           end
+        polling_metric_rows = [
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.elapsed_ms"), polling_metrics[:elapsed_ms].present? ? "#{polling_metrics[:elapsed_ms]}ms" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_count"), poll_count_label ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.final_status"), polling_metrics[:final_status].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_interval"), polling_metrics[:poll_interval].present? ? "#{polling_metrics[:poll_interval]}s" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.reached_max_poll"), polling_metrics.key?(:reached_max_poll) ? t("admin.receipt_analysis_runs.show.boolean.#{polling_metrics[:reached_max_poll]}") : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.retry_after_used"), polling_metrics.key?(:retry_after_used) ? t("admin.receipt_analysis_runs.show.boolean.#{polling_metrics[:retry_after_used]}") : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.retry_count"), polling_metrics[:retry_count].presence || "-" ]
+        ]
+      %>
+      <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.polling_metrics.title") %></h3>
+        <dl class="mt-3 grid gap-3 text-sm md:grid-cols-2">
+          <% polling_metric_rows.each do |label, value| %>
+            <div>
+              <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
+              <dd class="font-mono text-xs token-text-base"><%= value %></dd>
+            </div>
+          <% end %>
+        </dl>
+      </div>
+
       <div class="mt-4 space-y-2">
         <% @record[:provider].each do |name, provider| %>
           <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">

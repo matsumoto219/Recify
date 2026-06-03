@@ -175,7 +175,8 @@ module ReceiptAnalysisRuns
             payment_method_text: candidates[:payment_method_text].present?,
             items: Array(candidates[:items]).present?
           },
-          confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
+          confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary]),
+          polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence
         }.compact
       )
     end
@@ -396,7 +397,8 @@ module ReceiptAnalysisRuns
         provider: safe_string(meta[:provider]),
         model_id: safe_string(meta[:model_id]),
         model: safe_string(meta[:model]),
-        doc_type: safe_string(meta[:doc_type])
+        doc_type: safe_string(meta[:doc_type]),
+        polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence
       }.compact
     end
 
@@ -651,6 +653,21 @@ module ReceiptAnalysisRuns
       summary.each_with_object({}) do |(key, child_value), memo|
         memo[key.to_s] = safe_value(child_value)
       end
+    end
+
+    def sanitized_polling_metrics(value)
+      metrics = normalized_hash(value)
+
+      {
+        elapsed_ms: safe_value(metrics[:elapsed_ms]),
+        poll_count: safe_value(metrics[:poll_count]),
+        final_status: safe_string(metrics[:final_status]),
+        max_poll_count: safe_value(metrics[:max_poll_count]),
+        poll_interval: safe_value(metrics[:poll_interval]),
+        reached_max_poll: safe_value(metrics[:reached_max_poll]),
+        retry_after_used: safe_value(metrics[:retry_after_used]),
+        retry_count: safe_value(metrics[:retry_count])
+      }.compact
     end
 
     def limited_hashes(value, max)

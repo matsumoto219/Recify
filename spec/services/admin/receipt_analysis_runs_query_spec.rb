@@ -206,6 +206,38 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       end
     end
 
+    it 'OCR polling metricsをrecordに含める' do
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        ocr_summary: {
+          polling_metrics: {
+            poll_count: 3,
+            max_poll_count: 20,
+            final_status: 'succeeded',
+            retry_after_used: true
+          }
+        },
+        ocr_result_snapshot: {
+          meta: {
+            polling_metrics: {
+              poll_count: 2,
+              final_status: 'fallback'
+            }
+          }
+        }
+      )
+
+      record = described_class.call(receipt: run.receipt).records.first
+
+      expect(record[:polling_metrics]).to include(
+        'poll_count' => 3,
+        'max_poll_count' => 20,
+        'final_status' => 'succeeded',
+        'retry_after_used' => true
+      )
+    end
+
     it 'include_retry_optionsが有効な場合だけRetryServiceのread-only eligibilityをrecordに含め、enqueueしない' do
       receipt = create(:receipt, :completed, :with_image)
       run = create(

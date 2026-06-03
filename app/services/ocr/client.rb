@@ -6,14 +6,15 @@ module Ocr
   class Client
     DEFAULT_TIMEOUT = 30
     # NOTE:
-    # 現時点では単純な固定間隔 polling。
-    # Azure 側の解析完了が遅い場合は、この間隔や回数が先にボトルネックになる。
-    # 将来は backoff や provider ごとの最適値調整を検討する。
+    # polling自体は固定間隔のままにする。
+    # 408/429/5xxやpolling GET timeoutのretryでは、Retry-After / backoff / jitterを利用する。
+    # request timeout / polling / retry値は AZURE_OCR_* ENV で運用調整できる。
     DEFAULT_POLL_INTERVAL = 1.0
     # NOTE:
     # 受信JSONの行数上限ではなく、まずは polling 上限が実運用上のボトルネックになりやすい。
     # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
-    # 現時点では保守的な初期値とし、実データを見ながら後で調整する。
+    # 現時点では1秒間隔/20回を維持し、staging / production のOCR latencyとpolling metricsを見て調整する。
+    # 202 Accepted / running中のRetry-After反映は、必要になった時点で検討する。
     DEFAULT_MAX_POLL = 20
     DEFAULT_MAX_RETRIES = 2
     DEFAULT_BASE_RETRY_DELAY = 0.5
@@ -24,6 +25,7 @@ module Ocr
     MAX_RETRIES = DEFAULT_MAX_RETRIES
     BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
     MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
+    POLLING_METRICS_KEY = "recify_polling_metrics".freeze
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethods" ].freeze
 
@@ -33,6 +35,7 @@ module Ocr
     end
 
     def call
+      reset_polling_metrics!
       Rails.logger.info("[OCR::Client] request start provider=#{provider}")
 
       op_location = submit_request
@@ -42,15 +45,15 @@ module Ocr
       result
     rescue Faraday::TimeoutError
       Rails.logger.error("[OCR::Client] timeout")
-      raise OcrTimeoutError, "ocr_timeout"
+      raise OcrTimeoutError.new("ocr_timeout", polling_metrics: polling_metrics(final_status: "timeout"))
     rescue Faraday::ConnectionFailed => e
       Rails.logger.error("[OCR::Client] connection failed class=#{e.class} error_code=external_service_unavailable")
-      raise OcrError, "external_service_unavailable"
-    rescue OcrError, OcrTimeoutError
-      raise
+      raise OcrError.new("external_service_unavailable", polling_metrics: polling_metrics(final_status: "external_service_unavailable"))
+    rescue OcrError, OcrTimeoutError => e
+      raise enrich_error_with_polling_metrics(e)
     rescue StandardError => e
       Rails.logger.error("[OCR::Client] request failed class=#{e.class} error_code=unexpected_error")
-      raise OcrError, "unexpected_error"
+      raise OcrError.new("unexpected_error", polling_metrics: polling_metrics(final_status: "unexpected_error"))
     end
 
     # available? は親facadeの診断入口から使う疎通診断メソッド。
@@ -94,10 +97,15 @@ module Ocr
     end
 
     def poll_result(op_location)
+      ensure_polling_metrics!
+      @polling_started_at ||= monotonic_now
+      @last_poll_status = nil
+
       max_poll.times do
         sleep poll_interval
 
         res = with_retries(operation: :poll_result, retry_timeouts: true) do
+          @poll_count += 1
           Faraday.get(op_location) do |req|
             req.headers["Ocp-Apim-Subscription-Key"] = api_key
           end.tap do |response|
@@ -111,18 +119,23 @@ module Ocr
         # 将来ボトルネックになる場合は、受信サイズそのものより parser / 保存方針 / polling を先に見直す。
         body = JSON.parse(res.body)
         status = body["status"]
+        @last_poll_status = status
 
         case status
         when "succeeded"
-          return body
+          return body.merge(POLLING_METRICS_KEY => polling_metrics(final_status: status))
         when "failed"
-          raise OcrError, "ocr_failed"
+          raise OcrError.new("ocr_failed", polling_metrics: polling_metrics(final_status: status))
         else
           next
         end
       end
 
-      raise OcrTimeoutError, "ocr_timeout"
+      @reached_max_poll = true
+      raise OcrTimeoutError.new(
+        "ocr_timeout",
+        polling_metrics: polling_metrics(final_status: @last_poll_status || "timeout", reached_max_poll: true)
+      )
     end
 
     def request_body
@@ -146,6 +159,7 @@ module Ocr
         raise unless retryable_error?(e, retry_timeouts:)
         raise if attempts > max_retries
 
+        track_retry_metrics!(e)
         retry_delay = retry_delay_for(attempts, e)
         Rails.logger.warn(
           "[OCR::Client] retry operation=#{operation} attempt=#{attempts} delay=#{retry_delay} error_code=#{error_code_for(e)} class=#{e.class}"
@@ -189,6 +203,62 @@ module Ocr
       return unless error.respond_to?(:retry_after)
 
       error.retry_after
+    end
+
+    def reset_polling_metrics!
+      @poll_count = 0
+      @retry_count = 0
+      @retry_after_used = false
+      @reached_max_poll = false
+      @last_poll_status = nil
+      @polling_started_at = nil
+    end
+
+    def ensure_polling_metrics!
+      reset_polling_metrics! unless defined?(@poll_count)
+    end
+
+    def track_retry_metrics!(error)
+      ensure_polling_metrics!
+      @retry_count += 1
+      @retry_after_used = true if retry_after_for(error).present?
+    end
+
+    def polling_metrics(final_status: nil, reached_max_poll: false)
+      ensure_polling_metrics!
+
+      {
+        "elapsed_ms" => polling_elapsed_ms,
+        "poll_count" => @poll_count,
+        "final_status" => final_status,
+        "max_poll_count" => max_poll,
+        "poll_interval" => poll_interval,
+        "reached_max_poll" => reached_max_poll || @reached_max_poll == true,
+        "retry_after_used" => @retry_after_used == true,
+        "retry_count" => @retry_count
+      }.compact
+    end
+
+    def polling_elapsed_ms
+      return if @polling_started_at.blank?
+
+      ((monotonic_now - @polling_started_at) * 1000).round
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def enrich_error_with_polling_metrics(error)
+      return error if error.respond_to?(:polling_metrics) && error.polling_metrics.present?
+
+      enriched = error.class.new(
+        error.message,
+        retry_after: error.respond_to?(:retry_after) ? error.retry_after : nil,
+        polling_metrics: polling_metrics(final_status: error_code_for(error))
+      )
+      enriched.set_backtrace(error.backtrace)
+      enriched
     end
 
     def cap_retry_delay(delay)
@@ -333,20 +403,22 @@ module Ocr
   end
 
   class OcrError < StandardError
-    attr_reader :retry_after
+    attr_reader :retry_after, :polling_metrics
 
-    def initialize(message = nil, retry_after: nil)
+    def initialize(message = nil, retry_after: nil, polling_metrics: nil)
       super(message)
       @retry_after = retry_after
+      @polling_metrics = polling_metrics || {}
     end
   end
 
   class OcrTimeoutError < StandardError
-    attr_reader :retry_after
+    attr_reader :retry_after, :polling_metrics
 
-    def initialize(message = nil, retry_after: nil)
+    def initialize(message = nil, retry_after: nil, polling_metrics: nil)
       super(message)
       @retry_after = retry_after
+      @polling_metrics = polling_metrics || {}
     end
   end
 end

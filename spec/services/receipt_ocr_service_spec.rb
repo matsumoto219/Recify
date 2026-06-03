@@ -6,7 +6,8 @@ RSpec.describe ReceiptOcrService do
       result = described_class.error_result(
         error_code: 'ocr_disabled',
         provider: 'azure_document_intelligence',
-        model_id: nil
+        model_id: nil,
+        polling_metrics: { 'poll_count' => 0, 'final_status' => 'ocr_disabled' }
       )
 
       aggregate_failures do
@@ -15,6 +16,7 @@ RSpec.describe ReceiptOcrService do
         expect(result[:raw_text]).to eq('')
         expect(result[:lines]).to eq([])
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
+        expect(result.dig(:meta, :polling_metrics)).to eq('poll_count' => 0, 'final_status' => 'ocr_disabled')
       end
     end
   end
@@ -158,13 +160,19 @@ RSpec.describe ReceiptOcrService do
       end
 
       it '408やpolling timeoutを ocr_timeout として返す' do
-        allow(client).to receive(:call).and_raise(Ocr::OcrTimeoutError.new('ocr_timeout'))
+        polling_metrics = {
+          'poll_count' => 20,
+          'final_status' => 'running',
+          'reached_max_poll' => true
+        }
+        allow(client).to receive(:call).and_raise(Ocr::OcrTimeoutError.new('ocr_timeout', polling_metrics: polling_metrics))
 
         result = described_class.call(image, provider: provider)
 
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('ocr_timeout')
+          expect(result.dig(:meta, :polling_metrics)).to eq(polling_metrics)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'ocr_timeout')
         end
       end

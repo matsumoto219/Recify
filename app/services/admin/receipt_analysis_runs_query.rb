@@ -233,6 +233,7 @@ module Admin
           ai: compact_provider(provider: run.ai_provider, model: run.ai_model),
           ai_fallback: compact_provider(provider: run.ai_fallback_provider, used: run.ai_fallback_used)
         },
+        polling_metrics: polling_metrics_for(run),
         timestamps: {
           created_at: run.created_at,
           started_at: run.started_at,
@@ -302,6 +303,13 @@ module Admin
 
     def compact_provider(**values)
       values.compact
+    end
+
+    def polling_metrics_for(run)
+      summary_metrics = run.ocr_summary.to_h["polling_metrics"]
+      snapshot_metrics = run.ocr_result_snapshot.to_h.dig("meta", "polling_metrics")
+
+      safe_summary(summary_metrics.presence || snapshot_metrics.presence || {})
     end
 
     def correction_summary(detailed_snapshots:, amount_calculation_profile:)

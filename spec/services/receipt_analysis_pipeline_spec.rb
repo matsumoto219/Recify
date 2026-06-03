@@ -317,7 +317,15 @@ RSpec.describe ReceiptAnalysisPipeline do
         error_code: 'ocr_timeout',
         lines: [],
         candidates: {},
-        meta: { provider: 'azure_document_intelligence' }
+        meta: {
+          provider: 'azure_document_intelligence',
+          polling_metrics: {
+            poll_count: 20,
+            final_status: 'running',
+            reached_max_poll: true,
+            retry_count: 0
+          }
+        }
       }
 
       allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
@@ -330,6 +338,8 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.finalize_decision.error_code).to eq('ocr_timeout')
         expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('fail_receipt')
         expect(run.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_timeout')
+        expect(run.ocr_summary.dig('polling_metrics', 'poll_count')).to eq(20)
+        expect(run.ocr_result_snapshot.dig('meta', 'polling_metrics', 'reached_max_poll')).to eq(true)
       end
     end
 

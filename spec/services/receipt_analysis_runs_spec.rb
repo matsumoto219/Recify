@@ -171,11 +171,22 @@ RSpec.describe ReceiptAnalysisRuns do
         meta: {
           provider: 'azure_document_intelligence',
           model_id: 'prebuilt-receipt',
+          polling_metrics: {
+            elapsed_ms: 3200,
+            poll_count: 3,
+            final_status: 'succeeded',
+            max_poll_count: 20,
+            poll_interval: 1.0,
+            reached_max_poll: false,
+            retry_after_used: true,
+            retry_count: 1
+          },
           raw_response: { secret: 'do-not-store' }
         }
       }
 
       described_class.record_ocr_result(run, ocr_result, latency_ms: 1234)
+      described_class.record_ocr_snapshot(run, ocr_result)
       run.reload
 
       aggregate_failures do
@@ -190,6 +201,21 @@ RSpec.describe ReceiptAnalysisRuns do
           'item_count' => 1,
           'payment_count' => 1,
           'tax_detail_count' => 1
+        )
+        expect(run.ocr_summary['polling_metrics']).to include(
+          'elapsed_ms' => 3200,
+          'poll_count' => 3,
+          'final_status' => 'succeeded',
+          'max_poll_count' => 20,
+          'poll_interval' => 1.0,
+          'reached_max_poll' => false,
+          'retry_after_used' => true,
+          'retry_count' => 1
+        )
+        expect(run.ocr_result_snapshot.dig('meta', 'polling_metrics')).to include(
+          'poll_count' => 3,
+          'final_status' => 'succeeded',
+          'retry_after_used' => true
         )
         expect(deep_json(run.ocr_summary)).not_to include('RAW OCR TEXT')
         expect(deep_json(run.ocr_summary)).not_to include('do-not-store')

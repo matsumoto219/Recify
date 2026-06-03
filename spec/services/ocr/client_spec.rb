@@ -453,7 +453,17 @@ RSpec.describe Ocr::Client do
       result = client.send(:poll_result, operation_location)
 
       aggregate_failures do
-        expect(result).to eq(succeeded_response)
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'poll_count' => 2,
+          'final_status' => 'succeeded',
+          'max_poll_count' => described_class::MAX_POLL,
+          'poll_interval' => described_class::POLL_INTERVAL,
+          'reached_max_poll' => false,
+          'retry_after_used' => false,
+          'retry_count' => 1
+        )
+        expect(result[described_class::POLLING_METRICS_KEY]['elapsed_ms']).to be_a(Integer)
         expect(Faraday).to have_received(:get).twice
         expect(client).to have_received(:sleep).with(0.5).once
       end
@@ -476,10 +486,42 @@ RSpec.describe Ocr::Client do
       result = client.call
 
       aggregate_failures do
-        expect(result).to eq(succeeded_response)
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'poll_count' => 2,
+          'final_status' => 'succeeded',
+          'retry_after_used' => false,
+          'retry_count' => 1
+        )
         expect(connection).to have_received(:post).once
         expect(Faraday).to have_received(:get).twice
         expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    it 'polling GET のRetry-After利用をmetricsに残す' do
+      outcomes = [
+        faraday_response(status: 500, headers: { 'Retry-After' => '3' }),
+        succeeded_poll_response
+      ]
+      allow(Faraday).to receive(:get) do
+        outcome = outcomes.shift
+        raise outcome if outcome.is_a?(Exception)
+
+        outcome
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'poll_count' => 2,
+          'final_status' => 'succeeded',
+          'retry_after_used' => true,
+          'retry_count' => 1
+        )
+        expect(client).to have_received(:sleep).with(3.0).once
       end
     end
 
@@ -490,7 +532,17 @@ RSpec.describe Ocr::Client do
 
       expect do
         client.send(:poll_result, operation_location)
-      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout') { |error|
+        expect(error.polling_metrics).to include(
+          'poll_count' => described_class::MAX_POLL,
+          'final_status' => 'running',
+          'max_poll_count' => described_class::MAX_POLL,
+          'poll_interval' => described_class::POLL_INTERVAL,
+          'reached_max_poll' => true,
+          'retry_after_used' => false,
+          'retry_count' => 0
+        )
+      }
 
       aggregate_failures do
         expect(Faraday).to have_received(:get).exactly(described_class::MAX_POLL).times
@@ -505,7 +557,15 @@ RSpec.describe Ocr::Client do
 
       expect do
         client.send(:poll_result, operation_location)
-      end.to raise_error(Ocr::OcrError, 'ocr_failed')
+      end.to raise_error(Ocr::OcrError, 'ocr_failed') { |error|
+        expect(error.polling_metrics).to include(
+          'poll_count' => 1,
+          'final_status' => 'failed',
+          'reached_max_poll' => false,
+          'retry_after_used' => false,
+          'retry_count' => 0
+        )
+      }
 
       aggregate_failures do
         expect(Faraday).to have_received(:get).once

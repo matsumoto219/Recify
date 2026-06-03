@@ -266,7 +266,20 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         :receipt_analysis_run,
         :succeeded,
         receipt: receipt,
-        ocr_summary: { schema_version: 'test', line_count: 3 },
+        ocr_summary: {
+          schema_version: 'test',
+          line_count: 3,
+          polling_metrics: {
+            elapsed_ms: 3200,
+            poll_count: 3,
+            final_status: 'succeeded',
+            max_poll_count: 20,
+            poll_interval: 1.0,
+            reached_max_poll: false,
+            retry_after_used: true,
+            retry_count: 1
+          }
+        },
         ocr_result_snapshot: {
           lines: [
             '2026年 4月19日(日)no2',
@@ -370,6 +383,11 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include(new_admin_passkey_reauthentication_path)
         expect(response.body).to include('safe content')
         expect(response.body).to include('OCR summary')
+        expect(response.body).to include('OCR polling')
+        expect(response.body).to include('OCR処理時間')
+        expect(response.body).to include('3200ms')
+        expect(response.body).to include('3 / 20')
+        expect(response.body).to include('Retry-After使用')
         expect(response.body).to include('AI input snapshot')
         expect(response.body).to include('AI result summary')
         expect(response.body).to include('Final result summary')

@@ -204,6 +204,15 @@ ja:
           ai_input_snapshot: AI input snapshot
           ai_result_summary: AI result summary
           final_result_summary: Final result summary
+        polling_metrics:
+          title: OCR polling
+          elapsed_ms: OCR処理時間
+          poll_count: poll回数 / max poll
+          final_status: 最終status
+          poll_interval: poll間隔
+          reached_max_poll: max到達
+          retry_after_used: Retry-After使用
+          retry_count: retry回数
         correction_summary:
           title: Correction summary
           empty: "-"

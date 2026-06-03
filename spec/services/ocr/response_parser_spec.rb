@@ -181,6 +181,33 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'Recify内部のpolling metricsをmetaへ移す' do
+      response = raw_response.deep_dup
+      response[Ocr::Client::POLLING_METRICS_KEY] = {
+        'elapsed_ms' => 3200,
+        'poll_count' => 3,
+        'final_status' => 'succeeded',
+        'max_poll_count' => 20,
+        'poll_interval' => 1.0,
+        'reached_max_poll' => false,
+        'retry_after_used' => true,
+        'retry_count' => 1
+      }
+
+      result = described_class.new(response: response, provider: 'azure_document_intelligence').call
+
+      expect(result.dig(:meta, :polling_metrics)).to eq(
+        elapsed_ms: 3200,
+        poll_count: 3,
+        final_status: 'succeeded',
+        max_poll_count: 20,
+        poll_interval: 1.0,
+        reached_max_poll: false,
+        retry_after_used: true,
+        retry_count: 1
+      )
+    end
+
     it 'Totalに通貨コードがない場合は周辺のvalueCurrencyから代表通貨を補完する' do
       raw_response.dig('analyzeResult', 'documents', 0, 'fields', 'Total', 'valueCurrency').delete('currencyCode')
       raw_response.dig('analyzeResult', 'documents', 0, 'fields', 'Subtotal', 'valueCurrency')['currencyCode'] = 'usd'
@@ -638,6 +665,29 @@ RSpec.describe Ocr::ResponseParser do
         expect(result[:raw_text]).to eq('')
         expect(result[:lines]).to eq([])
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
+      end
+    end
+
+    it '不正なAzureレスポンスでもRecify内部のpolling metricsは維持する' do
+      response = {
+        'status' => 'succeeded',
+        Ocr::Client::POLLING_METRICS_KEY => {
+          'poll_count' => 2,
+          'final_status' => 'succeeded',
+          'reached_max_poll' => false
+        }
+      }
+
+      result = described_class.new(response: response, provider: 'azure_document_intelligence').call
+
+      aggregate_failures do
+        expect(result[:success]).to eq(false)
+        expect(result[:error_code]).to eq('ocr_api_error')
+        expect(result.dig(:meta, :polling_metrics)).to include(
+          poll_count: 2,
+          final_status: 'succeeded',
+          reached_max_poll: false
+        )
       end
     end
 

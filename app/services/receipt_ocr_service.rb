@@ -17,11 +17,12 @@ class ReceiptOcrService
     new(image: image, provider: provider).call
   end
 
-  def self.error_result(error_code:, provider: "azure_document_intelligence", model_id: nil)
+  def self.error_result(error_code:, provider: "azure_document_intelligence", model_id: nil, polling_metrics: nil)
     Ocr::ResultTemplate.error_result(
       error_code: error_code,
       provider: provider,
-      model_id: model_id
+      model_id: model_id,
+      polling_metrics: polling_metrics
     )
   end
 
@@ -87,7 +88,7 @@ class ReceiptOcrService
 
     Rails.logger.error("[OCR] ocr_error code=#{error_code} class=#{error.class}")
     ExternalServices.mark_failure!(:ocr, error_code: error_code)
-    build_error_result(error_code)
+    build_error_result(error_code, polling_metrics: polling_metrics_for(error))
   end
 
   def normalized_ocr_error_code(error)
@@ -102,11 +103,18 @@ class ReceiptOcrService
     CLIENT_ERROR_CODE_MAPPING.fetch(code, code)
   end
 
-  def build_error_result(error_code)
+  def build_error_result(error_code, polling_metrics: nil)
     self.class.error_result(
       error_code: error_code,
       provider: provider,
-      model_id: nil
+      model_id: nil,
+      polling_metrics: polling_metrics
     )
+  end
+
+  def polling_metrics_for(error)
+    return unless error.respond_to?(:polling_metrics)
+
+    error.polling_metrics.presence
   end
 end
