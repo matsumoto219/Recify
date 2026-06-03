@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T22:40:29Z",
-	"lastUpdatedDateTime": "2026-05-19T22:40:29Z",
+	"createdDateTime": "2026-06-03T13:36:47Z",
+	"lastUpdatedDateTime": "2026-06-03T13:36:47Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -6640,6 +6640,33 @@
 							{
 								"offset": 83,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "ポ イ ン ト 利 用 300P ¥300 ク レ ジ ッ ト カ ー ド ¥271 お 預 り",
+						"content": "ポイント利用 300P\n¥300\nクレジットカード\n¥271\nお預り",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									135,
+									1166,
+									847,
+									1166,
+									847,
+									1278,
+									135,
+									1278
+								]
+							}
+						],
+						"confidence": 0.814,
+						"spans": [
+							{
+								"offset": 338,
+								"length": 34
 							}
 						]
 					}

@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T20:27:44Z",
-	"lastUpdatedDateTime": "2026-05-19T20:27:44Z",
+	"createdDateTime": "2026-06-03T13:50:50Z",
+	"lastUpdatedDateTime": "2026-06-03T13:50:50Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -4758,6 +4758,33 @@
 							{
 								"offset": 78,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "12P",
+						"content": "12P",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									689,
+									1287,
+									756,
+									1287,
+									756,
+									1323,
+									689,
+									1323
+								]
+							}
+						],
+						"confidence": 0.418,
+						"spans": [
+							{
+								"offset": 302,
+								"length": 3
 							}
 						]
 					}

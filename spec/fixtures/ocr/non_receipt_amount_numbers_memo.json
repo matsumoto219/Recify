@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T11:08:39Z",
-	"lastUpdatedDateTime": "2026-05-19T11:08:39Z",
+	"createdDateTime": "2026-06-03T13:44:48Z",
+	"lastUpdatedDateTime": "2026-06-03T13:44:48Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -2928,6 +2928,33 @@
 						"spans": [
 							{
 								"offset": 5,
+								"length": 2
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "家 賃",
+						"content": "家賃",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									578,
+									359,
+									635,
+									359,
+									635,
+									400,
+									578,
+									400
+								]
+							}
+						],
+						"confidence": 0.394,
+						"spans": [
+							{
+								"offset": 36,
 								"length": 2
 							}
 						]

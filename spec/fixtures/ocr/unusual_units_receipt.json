@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-20T21:51:28Z",
-	"lastUpdatedDateTime": "2026-05-20T21:51:28Z",
+	"createdDateTime": "2026-06-03T13:56:19Z",
+	"lastUpdatedDateTime": "2026-06-03T13:56:19Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -9370,6 +9370,33 @@
 							{
 								"offset": 68,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "ク レ ジ ッ ト カ ー ド ¥100,385",
+						"content": "クレジットカード\n¥100,385",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									122,
+									1366,
+									853,
+									1366,
+									853,
+									1404,
+									122,
+									1404
+								]
+							}
+						],
+						"confidence": 0.425,
+						"spans": [
+							{
+								"offset": 568,
+								"length": 17
 							}
 						]
 					}

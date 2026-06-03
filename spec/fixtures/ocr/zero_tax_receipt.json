@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T22:30:32Z",
-	"lastUpdatedDateTime": "2026-05-19T22:30:32Z",
+	"createdDateTime": "2026-06-03T13:56:58Z",
+	"lastUpdatedDateTime": "2026-06-03T13:56:58Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -4627,6 +4627,33 @@
 							{
 								"offset": 90,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "現 金",
+						"content": "現金",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									399,
+									1246,
+									463,
+									1246,
+									463,
+									1279,
+									399,
+									1279
+								]
+							}
+						],
+						"confidence": 0.984,
+						"spans": [
+							{
+								"offset": 266,
+								"length": 2
 							}
 						]
 					}

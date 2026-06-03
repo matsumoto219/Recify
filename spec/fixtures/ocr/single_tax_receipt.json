@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T20:38:19Z",
-	"lastUpdatedDateTime": "2026-05-19T20:38:19Z",
+	"createdDateTime": "2026-06-03T13:54:30Z",
+	"lastUpdatedDateTime": "2026-06-03T13:54:30Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -4739,6 +4739,33 @@
 							{
 								"offset": 67,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "現 金 ¥1,000",
+						"content": "現金\n¥1,000",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									201,
+									1169,
+									890,
+									1169,
+									890,
+									1205,
+									201,
+									1205
+								]
+							}
+						],
+						"confidence": 0.355,
+						"spans": [
+							{
+								"offset": 239,
+								"length": 9
 							}
 						]
 					}

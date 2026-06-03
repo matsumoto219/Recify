@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T22:21:15Z",
-	"lastUpdatedDateTime": "2026-05-19T22:21:15Z",
+	"createdDateTime": "2026-06-03T13:55:50Z",
+	"lastUpdatedDateTime": "2026-06-03T13:55:50Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -5181,6 +5181,33 @@
 							{
 								"offset": 116,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "(Visa) ¥",
+						"content": "(Visa)\n¥",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									355,
+									1248,
+									780,
+									1261,
+									779,
+									1307,
+									354,
+									1294
+								]
+							}
+						],
+						"confidence": 0.388,
+						"spans": [
+							{
+								"offset": 318,
+								"length": 8
 							}
 						]
 					}

@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T21:29:24Z",
-	"lastUpdatedDateTime": "2026-05-19T21:29:24Z",
+	"createdDateTime": "2026-06-03T13:44:12Z",
+	"lastUpdatedDateTime": "2026-06-03T13:44:12Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -5499,6 +5499,33 @@
 							{
 								"offset": 105,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "¥2,000",
+						"content": "¥2,000",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									768,
+									1193,
+									896,
+									1193,
+									896,
+									1230,
+									768,
+									1230
+								]
+							}
+						],
+						"confidence": 0.9,
+						"spans": [
+							{
+								"offset": 368,
+								"length": 6
 							}
 						]
 					}

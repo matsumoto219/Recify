@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T12:19:54Z",
-	"lastUpdatedDateTime": "2026-05-19T12:19:54Z",
+	"createdDateTime": "2026-06-03T13:48:00Z",
+	"lastUpdatedDateTime": "2026-06-03T13:48:00Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -11292,6 +11292,33 @@
 						"type": "string",
 						"valueString": "Meal",
 						"confidence": 0.99
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "·",
+						"content": "·",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									145,
+									325,
+									151,
+									326,
+									151,
+									344,
+									145,
+									344
+								]
+							}
+						],
+						"confidence": 0.321,
+						"spans": [
+							{
+								"offset": 52,
+								"length": 1
+							}
+						]
 					}
 				},
 				"confidence": 0.989,

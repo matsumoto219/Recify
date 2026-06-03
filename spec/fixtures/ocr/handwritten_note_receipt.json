@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T22:26:36Z",
-	"lastUpdatedDateTime": "2026-05-19T22:26:36Z",
+	"createdDateTime": "2026-06-03T13:39:59Z",
+	"lastUpdatedDateTime": "2026-06-03T13:39:59Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -5984,6 +5984,33 @@
 							{
 								"offset": 138,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "(Visa) ¥1,288",
+						"content": "(Visa)\n¥1,288",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									376,
+									1259,
+									884,
+									1262,
+									884,
+									1298,
+									376,
+									1295
+								]
+							}
+						],
+						"confidence": 0.532,
+						"spans": [
+							{
+								"offset": 367,
+								"length": 13
 							}
 						]
 					}

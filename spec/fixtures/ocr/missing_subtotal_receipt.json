@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T10:54:54Z",
-	"lastUpdatedDateTime": "2026-05-19T10:54:54Z",
+	"createdDateTime": "2026-06-03T13:41:19Z",
+	"lastUpdatedDateTime": "2026-06-03T13:41:19Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -7012,6 +7012,33 @@
 							{
 								"offset": 266,
 								"length": 6
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "お 預 り",
+						"content": "お預り",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									212,
+									1475,
+									303,
+									1475,
+									303,
+									1503,
+									212,
+									1503
+								]
+							}
+						],
+						"confidence": 0.578,
+						"spans": [
+							{
+								"offset": 425,
+								"length": 3
 							}
 						]
 					}

@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T19:40:20Z",
-	"lastUpdatedDateTime": "2026-05-19T19:40:20Z",
+	"createdDateTime": "2026-06-03T13:49:13Z",
+	"lastUpdatedDateTime": "2026-06-03T13:49:13Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -26537,6 +26537,33 @@
 						"type": "string",
 						"valueString": "Supplies",
 						"confidence": 0.988
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "ク レ ジ ッ ト カ ー ド /PayPay",
+						"content": "クレジットカード/PayPay",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									911,
+									1364,
+									1055,
+									1364,
+									1055,
+									1379,
+									911,
+									1379
+								]
+							}
+						],
+						"confidence": 0.986,
+						"spans": [
+							{
+								"offset": 1810,
+								"length": 15
+							}
+						]
 					}
 				},
 				"confidence": 0.987,

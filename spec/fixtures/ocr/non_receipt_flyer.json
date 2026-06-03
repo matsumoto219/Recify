@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T12:03:22Z",
-	"lastUpdatedDateTime": "2026-05-19T12:03:22Z",
+	"createdDateTime": "2026-06-03T13:46:47Z",
+	"lastUpdatedDateTime": "2026-06-03T13:46:47Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -7978,6 +7978,33 @@
 						"type": "string",
 						"valueString": "Supplies",
 						"confidence": 0.982
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "ポ イ ン ト カ ー ド",
+						"content": "ポイントカード",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									820,
+									926,
+									995,
+									926,
+									995,
+									953,
+									820,
+									953
+								]
+							}
+						],
+						"confidence": 0.579,
+						"spans": [
+							{
+								"offset": 409,
+								"length": 7
+							}
+						]
 					}
 				},
 				"confidence": 0.981,

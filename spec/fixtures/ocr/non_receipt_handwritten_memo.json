@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-19T12:10:36Z",
-	"lastUpdatedDateTime": "2026-05-19T12:10:36Z",
+	"createdDateTime": "2026-06-03T13:47:18Z",
+	"lastUpdatedDateTime": "2026-06-03T13:47:18Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -3870,6 +3870,10 @@
 						"type": "string",
 						"valueString": "Meal",
 						"confidence": 0.983
+					},
+					"Payment_methods": {
+						"type": "string",
+						"confidence": 0
 					}
 				},
 				"confidence": 0.983,

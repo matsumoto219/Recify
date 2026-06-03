@@ -1,7 +1,7 @@
 {
 	"status": "succeeded",
-	"createdDateTime": "2026-05-29T08:49:49Z",
-	"lastUpdatedDateTime": "2026-05-29T08:49:49Z",
+	"createdDateTime": "2026-06-03T13:43:04Z",
+	"lastUpdatedDateTime": "2026-06-03T13:43:04Z",
 	"analyzeResult": {
 		"apiVersion": "2024-11-30",
 		"modelId": "prebuilt-receipt",
@@ -10539,6 +10539,33 @@
 							{
 								"offset": 360,
 								"length": 5
+							}
+						]
+					},
+					"Payment_methods": {
+						"type": "string",
+						"valueString": "レ ジ 02-0456",
+						"content": "レジ 02-0456",
+						"boundingRegions": [
+							{
+								"pageNumber": 1,
+								"polygon": [
+									504,
+									416,
+									638,
+									416,
+									638,
+									438,
+									504,
+									438
+								]
+							}
+						],
+						"confidence": 0.764,
+						"spans": [
+							{
+								"offset": 289,
+								"length": 10
 							}
 						]
 					}
