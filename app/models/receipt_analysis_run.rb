@@ -35,8 +35,11 @@ class ReceiptAnalysisRun < ApplicationRecord
   SHORT_RETENTION_PERIOD = 14.days
   LONG_RETENTION_PERIOD = 90.days
 
-  # Store only small, sanitized summaries/snapshots here. Do not persist OCR raw
-  # text, Azure raw responses, full prompts, full AI responses, or image payloads.
+  # Store only bounded, sanitized summaries/snapshots here. Do not persist Azure
+  # raw response bodies, headers, Operation-Location URLs, endpoints, API keys,
+  # full prompts, full AI responses, or image payloads. OCR snapshots may include
+  # normalized text such as lines and item raw_text for AI/finalize retry and
+  # admin investigation, capped by SnapshotBuilder limits.
   belongs_to :receipt, inverse_of: :receipt_analysis_runs
   belongs_to :requested_by_user,
              class_name: "User",
