@@ -156,17 +156,19 @@ class Ocr::ResponseParser
   end
 
   # Azure OCR (Document Intelligence) のレスポンスで取得可能だが、
-  # 現在のRecifyでは未表示 or 限定利用のフィールド一覧。
+  # 現在のRecifyでは未表示/限定利用、または意図的に対象外としているフィールドメモ。
   # 取得率や実レシートでの有用性を見ながら、必要に応じて対応を広げる。
   #
-  # - Tip (チップ) → 日本レシートではほぼ未使用
-  # - Payments (構造化支払い情報) → 未取得ケースが多く fallback運用
+  # - Tip (チップ) → 保存済み。日本レシートではほぼ未使用
+  # - Payments (構造化支払い情報) → 保存済み。未取得ケースが多く fallback運用
+  # - MerchantAddress.valueAddress → store_address_componentsへ保存済み。UI表示はstore_address文字列を使う
+  # - valueCurrency.currencyCode → receipts.currency_codeへ代表通貨として保存済み。金額計算は現状JPY前提を維持
   # - Loyalty / Membership系 → ポイントカード誤認のため未採用
   # - ReceiptId / TransactionId → 今回のスコープ外
-  # - CurrencyCode → JPY固定前提のため未使用
   # - Discounts / Offers → MVPでは lines から割引額のみ直前itemへ紐付ける
   # - ProductCode → 保存のみで、画面表示/検索では未使用
-  # - AdditionalFields (query fields拡張分) → PaymentMethod以外は未使用
+  # - Hotel専用field / MerchantAliases / Items.Date / Items.Category → 通常レシート対象外のため未採用
+  # - Payment_methods query field → 公式schemaではなくquery拡張候補。PaymentMethod fallback以外は未採用
   #
   # 方針:
   # - parserでは「安全に取れるものだけ扱う」
@@ -352,7 +354,7 @@ class Ocr::ResponseParser
     normalized.match?(/[0-9]{2,}/)
   end
 
-  # NOTE: Azure側で address 型の場合もあり、valueString/content 以外の対応は今後検討
+  # 表示/編集用の住所文字列。構造化住所は extract_store_address_components で別保存する。
   def extract_store_address(parsed_response)
     fields = extract_fields(parsed_response)
 
