@@ -31,6 +31,16 @@ RSpec.describe Storage do
     end
   end
 
+  describe '.purge_receipt_images' do
+    it 'ReceiptImagePurgerへ委譲する' do
+      result = { candidate_count: 1 }
+
+      allow(Storage::ReceiptImagePurger).to receive(:call).with(limit: 5).and_return(result)
+
+      expect(described_class.purge_receipt_images(limit: 5)).to eq(result)
+    end
+  end
+
   describe '.extract_image_dimensions' do
     it 'ImageDimensionsへ委譲する' do
       blob = instance_double(ActiveStorage::Blob)

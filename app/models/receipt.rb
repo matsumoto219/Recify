@@ -172,11 +172,18 @@ class Receipt < ApplicationRecord
       raise ArgumentError, "Unknown image_purged_reason=#{reason}"
     end
 
-    update!(
+    attributes = {
       image_purge_eligible_at: nil,
       image_purged_at: purged_at,
       image_purged_reason: normalized_reason
-    )
+    }
+
+    if persisted?
+      update_columns(attributes.merge(updated_at: Time.current))
+      reload
+    else
+      assign_attributes(attributes)
+    end
   end
 
   def dom_target_id

@@ -12,6 +12,10 @@ module Storage
       OrphanBlobScanner.call(...)
     end
 
+    def purge_receipt_images(...)
+      ReceiptImagePurger.call(...)
+    end
+
     def extract_image_dimensions(...)
       ImageDimensions.extract(...)
     end

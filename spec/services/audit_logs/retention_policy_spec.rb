@@ -9,14 +9,16 @@ RSpec.describe AuditLogs::RetentionPolicy do
         expect(described_class.category_for(action: 'admin.users.force_two_factor_reset')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'system_settings.update')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'receipt_analysis_runs.cleanup_stale.execute')).to eq(:cleanup_execute)
+        expect(described_class.category_for(action: 'receipt_images.purge.execute')).to eq(:cleanup_execute)
         expect(described_class.category_for(action: 'admin.passkey_reauthentication.succeeded')).to eq(:passkey_reauth)
         expect(described_class.category_for(action: 'receipt_analysis_runs.cleanup_stale.dry_run')).to eq(:system_dry_run)
+        expect(described_class.category_for(action: 'receipt_images.purge.dry_run')).to eq(:system_dry_run)
       end
     end
 
     it 'cleanup系failed auditはcleanup_failedへ割り当てる' do
       expect(
-        described_class.category_for(action: 'receipt_analysis_runs.cleanup_stale.dry_run', outcome: 'failed')
+        described_class.category_for(action: 'receipt_images.purge.dry_run', outcome: 'failed')
       ).to eq(:cleanup_failed)
     end
 

@@ -10,8 +10,10 @@ module Admin
     AUDIT_ACTIONS = [
       "receipt_analysis_runs.cleanup_stale.execute",
       "receipt_analysis_runs.cleanup_expired.execute",
+      "receipt_images.purge.execute",
       "receipt_analysis_runs.cleanup_stale.dry_run",
       "receipt_analysis_runs.cleanup_expired.dry_run",
+      "receipt_images.purge.dry_run",
       "user_sessions.retention_cleanup.dry_run",
       "audit_logs.retention_cleanup.dry_run",
       "receipt_analysis.full_reanalyze",

@@ -10,6 +10,7 @@ module Admin
     CLEANUP_EXECUTE_AUDIT_ACTIONS = %w[
       receipt_analysis_runs.cleanup_stale.execute
       receipt_analysis_runs.cleanup_expired.execute
+      receipt_images.purge.execute
     ].freeze
     RECENT_WINDOW = 24.hours
 

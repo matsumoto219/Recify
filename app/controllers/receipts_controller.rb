@@ -461,8 +461,8 @@ class ReceiptsController < ApplicationController
     return if uploaded_receipt_image.present?
     return unless @receipt.image.attached?
 
-    @receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_MANUAL_DELETE)
     Storage.purge_attachment(@receipt.image)
+    @receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_MANUAL_DELETE)
   end
 
   def apply_current_image_retention_snapshot!(attributes, purge_eligible:)
