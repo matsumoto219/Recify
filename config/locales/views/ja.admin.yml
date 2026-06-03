@@ -251,6 +251,13 @@ ja:
           dimensions: dimensions
           dimensions_value: "%{width} x %{height}"
           attached_at: attached at
+          keep_image: keep image
+          purge_eligible_at: purge eligible at
+          purged_at: purged at
+          purged_reason: purged reason
+          purged_reasons:
+            manual_delete: manual_delete
+            system_purge: system_purge
           ocr_input_image: OCR input image
           ocr_input_image_not_implemented: 未実装。現在はオリジナル画像をOCRへ送信します。
         snapshot:

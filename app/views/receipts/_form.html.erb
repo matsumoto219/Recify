@@ -329,6 +329,7 @@
               show_toggle: true,
               show_upload: true,
               show_modal: true,
+              keep_image_enabled: (receipt.persisted? ? receipt.keep_image? : current_user.effective_keep_receipt_images),
               empty_message: t("receipts.form.image.empty"),
               helper_text: t("receipts.form.image.helper"),
               accept: receipt_image_accept,

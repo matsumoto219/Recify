@@ -281,6 +281,15 @@
               url: settings_path,
               remote: true %>
 
+        <%= render "shared/ui/form/toggle_switch",
+              label: t("settings.index.usage.keep_receipt_images.label"),
+              description: t("settings.index.usage.keep_receipt_images.description"),
+              description_class: "whitespace-pre-line",
+              checked: settings_presenter.keep_receipt_images_enabled?,
+              name: "keep_receipt_images",
+              url: settings_path,
+              remote: true %>
+
         <%# TODO: OCR前処理と保存容量削減は別タスクとしてroadmapで扱う。
             feature.receipt_image_preprocess は予約済みだが、現時点では設定UIへ出さない %>
       </div>

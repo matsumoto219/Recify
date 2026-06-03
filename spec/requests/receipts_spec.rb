@@ -4268,6 +4268,22 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'system purge済み画像なしレシートでは保存なし表示を出す' do
+      receipt.update!(
+        keep_image: false,
+        image_purged_at: 1.hour.ago,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.unsaved_empty'))
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.system_purged_hint'))
+      end
+    end
+
     it '他人のレシートは取得できない' do
       other_user = create(:user, email: 'other@example.com')
       other_receipt = create(

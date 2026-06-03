@@ -53,6 +53,12 @@
   storage_limit_bytes = storage_usage&.limit_bytes.to_i
   storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? displayable_image.blob&.byte_size.to_i : 0))
   quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
+  purged_hint =
+    if receipt.image_purged_by_system?
+      t("shared.receipt_image_card.system_purged_hint")
+    elsif receipt.image_purged_manually?
+      t("shared.receipt_image_card.manual_purged_hint")
+    end
   wrapper_class = local_assigns[:wrapper_class]
   card_class = local_assigns[:card_class]
 %>
@@ -126,17 +132,19 @@
         <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle relative overflow-hidden">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p><%= has_pending_image ? t("shared.receipt_image_card.reselect_image") : empty_message %></p>
+          <% if purged_hint.present? %>
+            <p class="mt-2 text-xs token-text-muted"><%= purged_hint %></p>
+          <% end %>
 
           <%= image_tag "",
                 class: "hidden absolute inset-0 w-full h-full object-contain token-bg-input",
                 data: { receipt_image_card_target: "previewImage" } %>
         </div>
       <% else %>
-        <%# TODO: keep_image 設定に応じた画像なしUIは専用カメラUI仕様確定後に再調整する %>
         <div class="rounded-lg border border-dashed token-border-glass p-10 text-center token-text-muted surface-card-bg-card-subtle">
           <span class="material-symbols-outlined text-4xl mb-2">image</span>
           <p><%= t("shared.receipt_image_card.unsaved_empty") %></p>
-          <p class="mt-2 text-xs token-text-muted"><%= t("shared.receipt_image_card.unsaved_hint") %></p>
+          <p class="mt-2 text-xs token-text-muted"><%= purged_hint.presence || t("shared.receipt_image_card.unsaved_hint") %></p>
         </div>
       <% end %>
     <% end %>

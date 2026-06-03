@@ -43,6 +43,8 @@ ja:
       download: ダウンロード
       unsaved_empty: 画像は保存されていません
       unsaved_hint: 画像を保存しない設定のため、プレビューは表示されません
+      system_purged_hint: 画像を保存しない設定により削除済みです
+      manual_purged_hint: 保存済み画像は手動で削除済みです
       drop_upload: ドロップして画像をアップロード
       upload_title: レシートをアップロード
       upload_hint: 画像を選択するか、このカードにドラッグ&ドロップ

@@ -124,7 +124,7 @@
           show_download: false,
           initially_open: false,
           collapse_on_mobile: true,
-          keep_image_enabled: true,
+          keep_image_enabled: receipt.keep_image?,
           wrapper_class: "h-full",
           card_class: "h-full flex flex-col",
           preview_width_class: "w-full max-w-[320px]",
@@ -153,6 +153,22 @@
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.attached_at") %></dt>
           <dd class="font-mono text-xs token-text-base"><%= receipt_image_attachment&.created_at.present? ? l(receipt_image_attachment.created_at, format: :short) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.keep_image") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt.keep_image? ? t("admin.receipt_analysis_runs.show.boolean.true") : t("admin.receipt_analysis_runs.show.boolean.false") %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purge_eligible_at") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purge_eligible_at.present? ? l(receipt.image_purge_eligible_at, format: :short) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purged_at") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purged_at.present? ? l(receipt.image_purged_at, format: :short) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purged_reason") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purged_reason.present? ? t("admin.receipt_analysis_runs.show.image_metadata.purged_reasons.#{receipt.image_purged_reason}", default: receipt.image_purged_reason) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image") %></dt>

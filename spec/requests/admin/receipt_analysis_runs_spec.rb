@@ -463,6 +463,32 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
+    it '画像purge済みreceiptではpurgeメタ情報を表示する' do
+      admin = create(:user, :admin)
+      purged_at = Time.zone.parse('2026-06-03 02:30:00')
+      receipt = create(
+        :receipt,
+        :completed,
+        keep_image: false,
+        image_purged_at: purged_at,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+      sign_in admin
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.unsaved_empty'))
+        expect(response.body).to include(I18n.t('shared.receipt_image_card.system_purged_hint'))
+        expect(response.body).to include('keep image')
+        expect(response.body).to include('purged at')
+        expect(response.body).to include('system_purge')
+        expect(response.body).to include(I18n.l(purged_at, format: :short))
+      end
+    end
+
     it '非adminはshowを閲覧できない' do
       user = create(:user)
       run = create(:receipt_analysis_run, :succeeded, receipt: create(:receipt, :completed, :with_image))

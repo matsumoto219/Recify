@@ -40,6 +40,10 @@ module Settings
       user.storage_usage
     end
 
+    def keep_receipt_images_enabled?
+      user.effective_keep_receipt_images
+    end
+
     def theme_options
       [
         { label: t("settings.index.appearance.theme_options.system"), value: "system", icon: "brightness_auto" },

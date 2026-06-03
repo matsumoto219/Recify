@@ -707,6 +707,23 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it '画像purge済みの場合もfull_reanalyze / ocr_retryを不可にする' do
+      purged_receipt = create(
+        :receipt,
+        :completed,
+        keep_image: false,
+        image_purged_at: 1.hour.ago,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+
+      options = options_by_type(described_class.eligibility(receipt: purged_receipt, parent_run: nil))
+
+      aggregate_failures do
+        expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'image_missing')
+        expect(options['ocr_retry']).to include(possible: false, disabled_reason: 'image_missing')
+      end
+    end
+
     it 'OCR snapshotがある場合だけai_retryを可能にする' do
       missing_snapshot_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: {})
       ready_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)

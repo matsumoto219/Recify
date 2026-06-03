@@ -27,6 +27,7 @@ class SettingsController < ApplicationController
             push_notification_enabled: current_user.push_notification_enabled,
             product_name_ai_completion_enabled: current_user.product_name_ai_completion_enabled,
             delete_confirmation_enabled: current_user.delete_confirmation_enabled,
+            keep_receipt_images: current_user.keep_receipt_images,
             theme_preference: current_user.theme_preference,
             tax_rounding_mode: current_user.tax_rounding_mode,
             discount_rounding_mode: current_user.discount_rounding_mode
@@ -65,6 +66,7 @@ class SettingsController < ApplicationController
       :push_notification_enabled,
       :product_name_ai_completion_enabled,
       :delete_confirmation_enabled,
+      :keep_receipt_images,
       :theme_preference,
       :tax_rounding_mode,
       :discount_rounding_mode

@@ -122,6 +122,19 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'レシート画像保存toggleを表示する' do
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.usage.keep_receipt_images.label'))
+        expect(response.body).to include('OFFにすると解析後にレシート画像を削除します')
+        expect(document.at_css('input[name="keep_receipt_images"]')).to be_present
+      end
+    end
+
     it '計算設定を表示する' do
       get settings_path
 
@@ -1545,6 +1558,21 @@ RSpec.describe 'Settings', type: :request do
         expect(response.parsed_body).to include(
           'ok' => true,
           'push_notification_enabled' => false
+        )
+      end
+    end
+
+    it 'updates keep receipt images setting to false' do
+      patch settings_path,
+            params: { user: { keep_receipt_images: false } },
+            as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.keep_receipt_images).to be(false)
+        expect(response.parsed_body).to include(
+          'ok' => true,
+          'keep_receipt_images' => false
         )
       end
     end
