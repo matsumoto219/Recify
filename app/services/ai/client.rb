@@ -17,9 +17,12 @@ module Ai
         final_provider: primary_provider
       )
     rescue Ai::Errors::ProviderError => primary_error
-      raise primary_error unless fallback_needed?(primary_error)
+      fallback_decision = fallback_decision_for(primary_error)
+      return failure_result(primary_error, nil) if fallback_decision.fail? && fallback_decision.fallbackable?
 
-      run_fallback(input, primary_error)
+      raise primary_error unless fallback_decision.fallback?
+
+      run_fallback(input, primary_error, fallback_decision)
     end
 
     private
@@ -50,9 +53,7 @@ module Ai
       )
     end
 
-    def run_fallback(input, primary_error)
-      return failure_result(primary_error, nil) unless fallback_available?
-
+    def run_fallback(input, primary_error, fallback_decision)
       Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
 
       result = provider_client(fallback_provider).call(input)
@@ -61,7 +62,7 @@ module Ai
         result,
         fallback_used: true,
         fallback_provider: fallback_provider,
-        fallback_reason: primary_error.error_code,
+        fallback_reason: fallback_decision.reason,
         final_provider: fallback_provider
       )
     rescue Ai::Errors::TimeoutError => fallback_error
@@ -77,24 +78,12 @@ module Ai
       ProviderRegistry.fetch(provider_name)
     end
 
-    def fallback_available?
-      fallback_provider.present? && fallback_provider != primary_provider
-    end
-
-    def fallback_needed?(error)
-      case error
-      when Ai::Errors::AuthError, Ai::Errors::InvalidResponseError
-        false
-      when Ai::Errors::TimeoutError, Ai::Errors::RateLimitError
-        true
-      when Ai::Errors::ProviderError
-        %w[
-          ai_primary_failed
-          ai_api_error
-        ].include?(error.error_code)
-      else
-        false
-      end
+    def fallback_decision_for(error)
+      Ai::FallbackDecision.call(
+        error: error,
+        provider: primary_provider,
+        fallback_provider: fallback_provider
+      )
     end
 
     def build_fallback_error(error)
