@@ -28,6 +28,7 @@ module Ocr
         tax_amount: nil,
         tax_rate: nil,
         tip_amount: nil,
+        currency_code: nil,
         country_region: nil,
         receipt_type: nil,
         payments: [],

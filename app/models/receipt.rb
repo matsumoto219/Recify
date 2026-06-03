@@ -114,6 +114,10 @@ class Receipt < ApplicationRecord
   validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
   validates :store_address, length: { maximum: 255 }, allow_blank: true   # 住所(MAX255文字)
   validates :store_phone_number, length: { maximum: 20 }, allow_blank: true # 電話番号(MAX20文字)
+  validates :currency_code,
+            length: { is: 3 },
+            format: { with: /\A[A-Z]{3}\z/ },
+            allow_blank: true
 
   validate :validate_purchased_at_not_in_future
   validate :validate_image_content_type
@@ -123,6 +127,7 @@ class Receipt < ApplicationRecord
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
+  before_validation :normalize_currency_code
   before_validation :normalize_store_phone_number
   before_validation :assign_public_id, on: :create
   before_validation :assign_display_id, on: :create
@@ -358,6 +363,10 @@ class Receipt < ApplicationRecord
 
   def set_default_country_region
     self.country_region = "JPN" if country_region.blank?
+  end
+
+  def normalize_currency_code
+    self.currency_code = currency_code.to_s.strip.upcase.presence if currency_code.present?
   end
 
   def normalize_store_phone_number

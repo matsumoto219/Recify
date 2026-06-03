@@ -115,6 +115,7 @@ module Analysis
           tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
           tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
           tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),           # NOTE: 日本レシートではほぼ未取得。保存はするが現状未使用に近い
+          currency_code: normalize_currency_code(ai_attrs[:currency_code].presence || candidates[:currency_code]),
           country_region: normalize_country_region(
             ai_attrs[:country_region].presence || candidates[:country_region]
           ), # 国判定/AI promptの補助に使う。UIでは表示しない
@@ -536,6 +537,7 @@ module Analysis
           tax_amount: normalize_amount(symbolized[:tax_amount]),
           tax_rate: normalize_rate(symbolized[:tax_rate]),
           tip_amount: normalize_amount(symbolized[:tip_amount]),   # NOTE: AI側から来ても現状未使用に近い
+          currency_code: normalize_currency_code(symbolized[:currency_code]),
           country_region: normalize_country_region(symbolized[:country_region]), # 国判定/AI promptの補助に使う。UIでは表示しない
           receipt_type: symbolized[:receipt_type],                 # NOTE: AI側から来ても保存優先。現状UIでは未使用
           payment_method: symbolized[:payment_method],
@@ -616,6 +618,10 @@ module Analysis
       end
 
       def normalize_country_region(value)
+        value.to_s.strip.upcase.presence
+      end
+
+      def normalize_currency_code(value)
         value.to_s.strip.upcase.presence
       end
 

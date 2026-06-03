@@ -55,6 +55,7 @@ class Ocr::ResponseParser
         tax_rate: extract_tax_rate(parsed_response),
         payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),
         tip_amount: extract_tip_amount(parsed_response),                                                           # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
+        currency_code: extract_currency_code(parsed_response),
         country_region: extract_country_region(parsed_response),
         receipt_type: extract_receipt_type(parsed_response),
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
@@ -599,6 +600,61 @@ class Ocr::ResponseParser
       fields.dig("Tip", "valueNumber")
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def extract_currency_code(parsed_response)
+    fields = extract_fields(parsed_response)
+
+    currency_code_candidates(fields).first
+  rescue NoMethodError, TypeError
+    nil
+  end
+
+  def currency_code_candidates(fields)
+    [
+      *receipt_level_currency_codes(fields),
+      *item_currency_codes(fields),
+      *tax_detail_currency_codes(fields),
+      *payment_currency_codes(fields)
+    ].filter_map { |currency_code| normalize_currency_code(currency_code) }.uniq
+  end
+
+  def receipt_level_currency_codes(fields)
+    %w[Total Subtotal TotalTax Tax Tip].filter_map do |field_name|
+      fields.dig(field_name, "valueCurrency", "currencyCode")
+    end
+  end
+
+  def item_currency_codes(fields)
+    Array(fields.dig("Items", "valueArray")).flat_map do |item|
+      value_object = item["valueObject"] || {}
+
+      %w[TotalPrice Price].filter_map do |field_name|
+        value_object.dig(field_name, "valueCurrency", "currencyCode")
+      end
+    end
+  end
+
+  def tax_detail_currency_codes(fields)
+    Array(fields.dig("TaxDetails", "valueArray")).flat_map do |detail|
+      value_object = detail["valueObject"] || {}
+
+      %w[Amount NetAmount].filter_map do |field_name|
+        value_object.dig(field_name, "valueCurrency", "currencyCode")
+      end
+    end
+  end
+
+  def payment_currency_codes(fields)
+    Array(fields.dig("Payments", "valueArray")).filter_map do |payment|
+      value_object = payment["valueObject"] || {}
+
+      value_object.dig("Amount", "valueCurrency", "currencyCode")
+    end
+  end
+
+  def normalize_currency_code(value)
+    value.to_s.strip.upcase.presence
   end
 
   def extract_country_region(parsed_response)

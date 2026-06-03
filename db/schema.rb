@@ -253,6 +253,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.jsonb "amount_calculation_profile", default: {}, null: false
     t.string "country_region"
     t.datetime "created_at", null: false
+    t.string "currency_code"
     t.string "display_id", limit: 16, null: false
     t.datetime "image_purge_eligible_at"
     t.datetime "image_purged_at"

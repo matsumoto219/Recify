@@ -736,6 +736,23 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'currency_code normalization' do
+    it 'currency_code はuppercaseに正規化する' do
+      receipt = build(:receipt, currency_code: ' jpy ')
+
+      receipt.valid?
+
+      expect(receipt.currency_code).to eq('JPY')
+    end
+
+    it 'currency_code は3文字の英字だけを許可する' do
+      receipt = build(:receipt, currency_code: 'JP')
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors[:currency_code]).to be_present
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)

@@ -20,6 +20,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           tax_amount: 80,
           tax_rate: 10,
           tip_amount: 100,
+          currency_code: 'jpy',
           country_region: 'JPN',
           receipt_type: 'Meal',
           payment_method_text: 'Master',
@@ -67,6 +68,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:tax_amount]).to eq(80)
           expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal("0.1"))
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
+          expect(params[:receipt_attributes][:currency_code]).to eq('JPY')
           expect(params[:receipt_attributes][:country_region]).to eq('JPN')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
@@ -80,6 +82,14 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         expect(params[:receipt_attributes][:country_region]).to eq('JPN')
+      end
+
+      it 'currency_codeは保存前に3文字uppercaseへ正規化する' do
+        ocr_result[:candidates][:currency_code] = ' usd '
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:currency_code]).to eq('USD')
       end
 
       it 'itemsが正しく生成される' do

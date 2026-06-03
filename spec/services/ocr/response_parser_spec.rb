@@ -28,10 +28,10 @@ RSpec.describe Ocr::ResponseParser do
                 'MerchantPhoneNumber' => { 'valueString' => '03-1234-5678' },
                 'TransactionDate' => { 'valueDate' => '2026-04-02' },
                 'TransactionTime' => { 'valueTime' => '12:34' },
-                'Total' => { 'valueCurrency' => { 'amount' => 1280 } },
-                'Subtotal' => { 'valueCurrency' => { 'amount' => 1180 } },
-                'TotalTax' => { 'valueCurrency' => { 'amount' => 80 } },
-                'Tip' => { 'valueCurrency' => { 'amount' => 100 } },
+                'Total' => { 'valueCurrency' => { 'amount' => 1280, 'currencyCode' => 'jpy' } },
+                'Subtotal' => { 'valueCurrency' => { 'amount' => 1180, 'currencyCode' => 'JPY' } },
+                'TotalTax' => { 'valueCurrency' => { 'amount' => 80, 'currencyCode' => 'JPY' } },
+                'Tip' => { 'valueCurrency' => { 'amount' => 100, 'currencyCode' => 'JPY' } },
                 'CountryRegion' => { 'valueCountryRegion' => 'JPN' },
                 'ReceiptType' => { 'valueString' => 'Meal' },
                 'Payments' => {
@@ -39,7 +39,7 @@ RSpec.describe Ocr::ResponseParser do
                     {
                       'valueObject' => {
                         'Method' => { 'valueString' => 'CreditCard' },
-                        'Amount' => { 'valueCurrency' => { 'amount' => 1280 } }
+                        'Amount' => { 'valueCurrency' => { 'amount' => 1280, 'currencyCode' => 'JPY' } }
                       }
                     }
                   ]
@@ -49,9 +49,9 @@ RSpec.describe Ocr::ResponseParser do
                     {
                       'valueObject' => {
                         'Description' => { 'valueString' => 'Sales Tax' },
-                        'Amount' => { 'valueCurrency' => { 'amount' => 80 } },
+                        'Amount' => { 'valueCurrency' => { 'amount' => 80, 'currencyCode' => 'JPY' } },
                         'Rate' => { 'valueNumber' => 10 },
-                        'NetAmount' => { 'valueCurrency' => { 'amount' => 800 } }
+                        'NetAmount' => { 'valueCurrency' => { 'amount' => 800, 'currencyCode' => 'JPY' } }
                       }
                     }
                   ]
@@ -63,8 +63,8 @@ RSpec.describe Ocr::ResponseParser do
                         'Description' => { 'valueString' => 'コーヒー' },
                         'Quantity' => { 'valueNumber' => 1 },
                         'QuantityUnit' => { 'valueString' => '杯' },
-                        'Price' => { 'valueCurrency' => { 'amount' => 180 } },
-                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 180 } },
+                        'Price' => { 'valueCurrency' => { 'amount' => 180, 'currencyCode' => 'JPY' } },
+                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 180, 'currencyCode' => 'JPY' } },
                         'ProductCode' => { 'valueString' => 'C001' }
                       },
                       'confidence' => 0.98
@@ -74,8 +74,8 @@ RSpec.describe Ocr::ResponseParser do
                         'Description' => { 'valueString' => 'サンド' },
                         'Quantity' => { 'valueNumber' => 2 },
                         'QuantityUnit' => { 'valueString' => '個' },
-                        'Price' => { 'valueCurrency' => { 'amount' => 550 } },
-                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 1100 } },
+                        'Price' => { 'valueCurrency' => { 'amount' => 550, 'currencyCode' => 'JPY' } },
+                        'TotalPrice' => { 'valueCurrency' => { 'amount' => 1100, 'currencyCode' => 'JPY' } },
                         'ProductCode' => { 'valueString' => 'S001' }
                       },
                       'confidence' => 0.97
@@ -116,6 +116,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:tax_amount]).to eq(80)
         expect(candidates[:tax_rate]).to eq(10)
         expect(candidates[:tip_amount]).to eq(100)
+        expect(candidates[:currency_code]).to eq('JPY')
         expect(candidates[:country_region]).to eq('JPN')
         expect(candidates[:receipt_type]).to eq('Meal')
         expect(candidates[:payment_method_text]).to eq('master')
@@ -166,6 +167,15 @@ RSpec.describe Ocr::ResponseParser do
         expect(result.dig(:candidates, :items)&.size).to eq(2)
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
+    end
+
+    it 'Totalに通貨コードがない場合は周辺のvalueCurrencyから代表通貨を補完する' do
+      raw_response.dig('analyzeResult', 'documents', 0, 'fields', 'Total', 'valueCurrency').delete('currencyCode')
+      raw_response.dig('analyzeResult', 'documents', 0, 'fields', 'Subtotal', 'valueCurrency')['currencyCode'] = 'usd'
+
+      result = described_class.new(response: raw_response, provider: 'azure_document_intelligence').call
+
+      expect(result.dig(:candidates, :currency_code)).to eq('USD')
     end
 
     it 'fieldsが一部欠けていても lines や text から補助抽出できる' do
