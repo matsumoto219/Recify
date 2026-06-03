@@ -950,6 +950,33 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '画像保持OFFのai_success完了後にpurge候補化する' do
+      receipt = create(:receipt, :processing, :with_image, keep_image: false)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.image_purge_eligible_at).to be_present
+        expect(receipt.image_purged_at).to be_nil
+        expect(receipt.image_purged_reason).to be_nil
+      end
+    end
+
     it 'AIの特殊加減算をreceipt_adjustmentsとして保存し金額へ反映する' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = {
@@ -1213,6 +1240,29 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '画像保持OFFのocr_only完了後にpurge候補化する' do
+      receipt = create(:receipt, :processing, :with_image, keep_image: false)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: successful_ocr_result)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.image_purge_eligible_at).to be_present
+        expect(receipt.image_purged_at).to be_nil
+        expect(receipt.image_purged_reason).to be_nil
+      end
+    end
+
     it 'ocr_only decisionでも高信頼OCR adjustment candidateを保存しreview_neededにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('service_and_late_night_receipt')
@@ -1259,6 +1309,28 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.processing_error_code).to eq('ai_unavailable')
         expect(receipt.processing_error_message).to eq('AI補完に失敗したためOCR結果で保存しました')
       end
+    end
+
+    it '画像保持OFFのai_fallback完了後にpurge候補化する' do
+      receipt = create(:receipt, :processing, :with_image, keep_image: false)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_fallback,
+          ocr_result: successful_ocr_result,
+          error_code: 'ai_unavailable'
+        )
+      )
+
+      expect(receipt.reload.image_purge_eligible_at).to be_present
     end
 
     it 'ai_fallback decisionはmapper経由でnil error_codeをunexpected_errorとして保存する' do
@@ -1473,6 +1545,24 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.processing_error_message).to eq('timeout')
         expect(receipt.review_reasons).to eq([])
         expect(receipt.ocr_completed_at).to be_present
+      end
+    end
+
+    it '画像保持OFFのfail_receipt完了後にpurge候補化する' do
+      receipt = create(:receipt, :processing, :with_image, keep_image: false)
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :fail_receipt,
+          error_code: 'ocr_timeout',
+          error_message: 'timeout'
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.image_purge_eligible_at).to be_present
       end
     end
 

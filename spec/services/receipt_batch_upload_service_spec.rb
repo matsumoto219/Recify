@@ -85,6 +85,23 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it 'userの画像保持設定を作成receiptへsnapshotする' do
+    user.update!(keep_receipt_images: false)
+    files = [
+      uploaded_receipt_fixture,
+      uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
+    ]
+
+    result = described_class.call(user:, files:)
+    created_receipts = result.created_receipts
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(created_receipts).to all(have_attributes(keep_image: false))
+      expect(created_receipts).to all(have_attributes(image_purge_eligible_at: nil))
+    end
+  end
+
   it 'OCR job上限到達時はrunをfailedにし、OCR jobをenqueueしない' do
     create(:usage_counter, user: user, key: 'ocr_jobs_per_day', used_count: 50)
     files = [ uploaded_receipt_fixture ]

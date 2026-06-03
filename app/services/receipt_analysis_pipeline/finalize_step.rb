@@ -170,7 +170,7 @@ class ReceiptAnalysisPipeline
           review_reasons: review_reasons,
           ocr_completed_at: Time.current,
           amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
-        ),
+        ).merge(image_purge_candidate_attributes),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
         tax_details_attributes: amount_result[:tax_details],
@@ -228,7 +228,7 @@ class ReceiptAnalysisPipeline
           review_reasons: review_reasons,
           ocr_completed_at: Time.current,
           amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
-        ),
+        ).merge(image_purge_candidate_attributes),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
         tax_details_attributes: amount_result[:tax_details],
@@ -282,7 +282,7 @@ class ReceiptAnalysisPipeline
         review_reasons: review_reasons,
         ocr_completed_at: Time.current,
         amount_calculation_profile: amount_calculation_profile_snapshot(amount_result, tax_rate_correction: params[:tax_rate_correction])
-      )
+      ).merge(image_purge_candidate_attributes)
 
       persist_result_full!(
         receipt_attributes: receipt_attributes,
@@ -307,7 +307,7 @@ class ReceiptAnalysisPipeline
         processing_error_message: message,
         review_reasons: [],
         ocr_completed_at: Time.current
-      }.merge(attributes)
+      }.merge(attributes).merge(image_purge_candidate_attributes)
 
       receipt.update!(receipt_attributes)
 
@@ -432,6 +432,17 @@ class ReceiptAnalysisPipeline
       return if run.blank?
 
       ReceiptAnalysisRuns.record_build_params_snapshot(run, params)
+    end
+
+    def image_purge_candidate_attributes
+      return {} unless receipt.image_retention_disabled?
+      return {} unless receipt.image.attached?
+
+      {
+        image_purge_eligible_at: Time.current,
+        image_purged_at: nil,
+        image_purged_reason: nil
+      }
     end
 
     def normalize_items_attributes(items)

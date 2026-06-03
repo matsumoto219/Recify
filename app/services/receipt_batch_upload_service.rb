@@ -47,7 +47,11 @@ class ReceiptBatchUploadService
       consume_batch_upload_limits!
 
       files.each do |file|
-        receipt = user.receipts.new(image: file, status: "processing")
+        receipt = user.receipts.new(
+          image: file,
+          status: "processing",
+          keep_image: user.effective_keep_receipt_images
+        )
 
         unless receipt.save
           validation_errors = receipt.errors.full_messages

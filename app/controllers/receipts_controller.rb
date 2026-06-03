@@ -77,7 +77,9 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    @receipt = current_user.receipts.new(upload_receipt_params)
+    @receipt = current_user.receipts.new(
+      upload_receipt_params.merge(keep_image: current_user.effective_keep_receipt_images)
+    )
     @receipt.status = "processing"
 
     saved = false
@@ -114,6 +116,10 @@ class ReceiptsController < ApplicationController
 
     amount_result = apply_amount_calculation!(create_params, context: :manual)
     create_params["review_reasons"] = manual_update_blocking_review_reasons(amount_result)
+    apply_current_image_retention_snapshot!(
+      create_params,
+      purge_eligible: create_params["image"].present?
+    )
 
     @receipt.assign_attributes(create_params)
     @receipt.status = create_params["review_reasons"].empty? ? "completed" : "review_needed"
@@ -156,6 +162,9 @@ class ReceiptsController < ApplicationController
     end
 
     update_params = normalized_receipt_params.to_h
+    if uploaded_receipt_image.present?
+      apply_current_image_retention_snapshot!(update_params, purge_eligible: true)
+    end
     clear_review_flags_for_edited_items!(update_params)
     amount_result = apply_amount_calculation!(update_params, context: :edit_save)
     rebuild_review_state_after_manual_update!(update_params, amount_result)
@@ -452,7 +461,17 @@ class ReceiptsController < ApplicationController
     return if uploaded_receipt_image.present?
     return unless @receipt.image.attached?
 
+    @receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_MANUAL_DELETE)
     Storage.purge_attachment(@receipt.image)
+  end
+
+  def apply_current_image_retention_snapshot!(attributes, purge_eligible:)
+    keep_image = current_user.effective_keep_receipt_images
+
+    attributes["keep_image"] = keep_image
+    attributes["image_purge_eligible_at"] = !keep_image && purge_eligible ? Time.current : nil
+    attributes["image_purged_at"] = nil
+    attributes["image_purged_reason"] = nil
   end
 
   def build_purchased_at(purchased_on, purchased_time)

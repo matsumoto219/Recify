@@ -1253,6 +1253,23 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '単一uploadはuserの画像保持設定をsnapshotし、解析完了前はpurge候補化しない' do
+      user.update!(keep_receipt_images: false)
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.keep_image).to be(false)
+        expect(receipt.image_purge_eligible_at).to be_nil
+      end
+    end
+
     it 'library uploadが1件ならbatch処理のまま単一upload文言を表示する' do
       files = [ uploaded_receipt_fixture ]
       allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
@@ -1918,6 +1935,39 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.status).to eq('completed')
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
         expect(response).to redirect_to(receipts_path)
+      end
+    end
+
+    it '画像あり手動登録はuserの画像保持設定をsnapshotし、OFFならpurge候補化する' do
+      user.update!(keep_receipt_images: false)
+
+      post receipts_path, params: {
+        receipt: {
+          store_name: '画像保持OFF手動登録',
+          total_amount: 1500,
+          payment_method: 'cash',
+          image: uploaded_image,
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '画像保持OFF商品',
+              price: 1500,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 1500,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.keep_image).to be(false)
+        expect(receipt.image_purge_eligible_at).to be_present
+        expect(receipt.image_purged_at).to be_nil
+        expect(receipt.image_purged_reason).to be_nil
       end
     end
 
@@ -5267,6 +5317,34 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '画像差し替え時だけ現在のuser画像保持設定で再snapshotする' do
+      receipt.update!(
+        keep_image: true,
+        image_purge_eligible_at: 1.day.ago,
+        image_purged_at: 1.hour.ago,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+      user.update!(keep_receipt_images: false)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え保持OFF',
+          total_amount: 2100,
+          payment_method: 'cash',
+          image: uploaded_image
+        }
+      }
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.keep_image).to be(false)
+        expect(receipt.image_purge_eligible_at).to be_present
+        expect(receipt.image_purged_at).to be_nil
+        expect(receipt.image_purged_reason).to be_nil
+      end
+    end
+
     it '画像差し替え時は解析失敗処理も実行しない' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
@@ -5343,6 +5421,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.reload.image).not_to be_attached
         expect(ActiveStorage::Blob.exists?(old_blob.id)).to be(false)
+        expect(receipt.image_purged_at).to be_present
+        expect(receipt.image_purged_reason).to eq(Receipt::IMAGE_PURGED_REASON_MANUAL_DELETE)
       end
     end
 

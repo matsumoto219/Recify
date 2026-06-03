@@ -599,6 +599,34 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it '画像purge済みのreview_neededは部分OCRデータとして許可する' do
+      receipt = build(
+        :receipt,
+        :review_needed,
+        store_name: nil,
+        total_amount: nil,
+        payment_method: nil,
+        image_purged_at: Time.current,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+
+      expect(receipt).to be_valid
+    end
+
+    it '画像purge済みでもprocessingは画像必須のままにする' do
+      receipt = build(
+        :receipt,
+        :processing,
+        image_purged_at: Time.current,
+        image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
+      )
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:image, :blank)).to be(true)
+      end
+    end
+
     it '未知のpurge reasonは拒否する' do
       receipt = create(:receipt)
 

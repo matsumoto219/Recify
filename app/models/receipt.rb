@@ -438,12 +438,9 @@ class Receipt < ApplicationRecord
   end
 
   def allow_partial_ocr_data?
-    image.attached? && (
-      uploaded? ||
-      processing? ||
-      review_needed? ||
-      failed?
-    )
+    return true if image.attached? && (uploaded? || processing? || review_needed? || failed?)
+
+    image_purged? && (review_needed? || failed?)
   end
 
   public
