@@ -304,7 +304,7 @@ RSpec.describe 'Auth pages', type: :request do
       user = User.find_by!(email: email)
 
       aggregate_failures do
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(new_user_session_path)
         expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
         expect(flash[:notice]).not_to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(user).not_to be_confirmed
@@ -338,7 +338,7 @@ RSpec.describe 'Auth pages', type: :request do
       user = User.find_by!(email: email)
 
       aggregate_failures do
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(new_user_session_path)
         expect(user).not_to be_admin
       end
     end
