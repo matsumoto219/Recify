@@ -213,7 +213,7 @@ ja:
           empty: 登録済みのパスキーはありません。
           label: ラベル
           label_placeholder: "例: ◯◯のパスキー"
-          guest_unavailable: 本登録後に安全な本人確認を設定できます。
+          guest_unavailable: 本登録後にセキュリティ設定ができるようになります。
           messages:
             unavailable: 本登録後にこの設定を利用できます。
             challenge_missing: パスキー登録の有効期限が切れました。もう一度お試しください。
