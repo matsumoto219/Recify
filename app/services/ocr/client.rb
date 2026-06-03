@@ -6,23 +6,27 @@ module Ocr
   class Client
     DEFAULT_TIMEOUT = 30
     # NOTE:
-    # polling自体は固定間隔のままにする。
-    # 408/429/5xxやpolling GET timeoutのretryでは、Retry-After / backoff / jitterを利用する。
+    # pollingはRetry-Afterを優先し、未指定時はbase intervalから緩やかにcapped backoffする。
+    # 408/429/5xxやpolling GET timeoutのretryでは、別系統のRetry-After / backoff / jitterを利用する。
     # request timeout / polling / retry値は AZURE_OCR_* ENV で運用調整できる。
     DEFAULT_POLL_INTERVAL = 1.0
     # NOTE:
     # 受信JSONの行数上限ではなく、まずは polling 上限が実運用上のボトルネックになりやすい。
     # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
-    # 現時点では1秒間隔/20回を維持し、staging / production のOCR latencyとpolling metricsを見て調整する。
-    # 202 Accepted / running中のRetry-After反映は、必要になった時点で検討する。
+    # 現時点ではbase interval 1秒/max 20回を維持し、staging / production のOCR latencyとpolling metricsを見て
+    # poll_backoff_factor / max_poll_interval を調整する。
     DEFAULT_MAX_POLL = 20
     DEFAULT_MAX_RETRIES = 2
+    DEFAULT_POLL_BACKOFF_FACTOR = 1.5
+    DEFAULT_MAX_POLL_INTERVAL = 3.0
     DEFAULT_BASE_RETRY_DELAY = 0.5
     DEFAULT_MAX_RETRY_DELAY = 10.0
 
     POLL_INTERVAL = DEFAULT_POLL_INTERVAL
     MAX_POLL = DEFAULT_MAX_POLL
     MAX_RETRIES = DEFAULT_MAX_RETRIES
+    POLL_BACKOFF_FACTOR = DEFAULT_POLL_BACKOFF_FACTOR
+    MAX_POLL_INTERVAL = DEFAULT_MAX_POLL_INTERVAL
     BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
     MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
     POLLING_METRICS_KEY = "recify_polling_metrics".freeze
@@ -93,6 +97,7 @@ module Ocr
       op_location = res.headers["operation-location"] || res.headers["Operation-Location"]
       raise OcrError, "ocr_invalid_response" if op_location.blank?
 
+      @next_poll_retry_after = retry_after_from_headers(res.headers)
       op_location
     end
 
@@ -100,9 +105,14 @@ module Ocr
       ensure_polling_metrics!
       @polling_started_at ||= monotonic_now
       @last_poll_status = nil
+      next_poll_retry_after = @next_poll_retry_after
+      @next_poll_retry_after = nil
 
-      max_poll.times do
-        sleep poll_interval
+      max_poll.times do |index|
+        poll_delay = poll_delay_for(index, retry_after: next_poll_retry_after)
+        track_poll_sleep_metrics!(poll_delay, retry_after: next_poll_retry_after)
+        sleep poll_delay
+        next_poll_retry_after = nil
 
         res = with_retries(operation: :poll_result, retry_timeouts: true) do
           @poll_count += 1
@@ -112,6 +122,7 @@ module Ocr
             handle_response_status!(response)
           end
         end
+        next_poll_retry_after = retry_after_from_headers(res.headers)
 
         # NOTE:
         # Azure のレスポンス本文は一旦そのまま受け取り、後段 parser で必要部分だけ使う方針。
@@ -191,6 +202,12 @@ module Ocr
       cap_retry_delay(exponential_retry_delay(attempt) + retry_jitter_delay)
     end
 
+    def poll_delay_for(index, retry_after: nil)
+      return cap_poll_delay(retry_after) unless retry_after.nil?
+
+      cap_poll_delay(poll_interval * (poll_backoff_factor**index.to_i))
+    end
+
     def exponential_retry_delay(attempt)
       base_retry_delay * (2**(attempt - 1))
     end
@@ -208,10 +225,12 @@ module Ocr
     def reset_polling_metrics!
       @poll_count = 0
       @retry_count = 0
+      @total_poll_sleep_ms = 0
       @retry_after_used = false
       @reached_max_poll = false
       @last_poll_status = nil
       @polling_started_at = nil
+      @next_poll_retry_after = nil
     end
 
     def ensure_polling_metrics!
@@ -224,6 +243,12 @@ module Ocr
       @retry_after_used = true if retry_after_for(error).present?
     end
 
+    def track_poll_sleep_metrics!(delay, retry_after:)
+      ensure_polling_metrics!
+      @total_poll_sleep_ms += (delay.to_f * 1000).round
+      @retry_after_used = true unless retry_after.nil?
+    end
+
     def polling_metrics(final_status: nil, reached_max_poll: false)
       ensure_polling_metrics!
 
@@ -233,6 +258,9 @@ module Ocr
         "final_status" => final_status,
         "max_poll_count" => max_poll,
         "poll_interval" => poll_interval,
+        "total_poll_sleep_ms" => @total_poll_sleep_ms,
+        "max_poll_interval" => max_poll_interval,
+        "poll_backoff_factor" => poll_backoff_factor,
         "reached_max_poll" => reached_max_poll || @reached_max_poll == true,
         "retry_after_used" => @retry_after_used == true,
         "retry_count" => @retry_count
@@ -263,6 +291,10 @@ module Ocr
 
     def cap_retry_delay(delay)
       [ delay.to_f, max_retry_delay ].min
+    end
+
+    def cap_poll_delay(delay)
+      [ [ delay.to_f, 0.0 ].max, max_poll_interval ].min
     end
 
     def error_code_for(error)
@@ -348,13 +380,13 @@ module Ocr
       return if raw_value.blank?
 
       if raw_value.match?(/\A\d+(?:\.\d+)?\z/)
-        return cap_retry_delay(raw_value.to_f)
+        return raw_value.to_f
       end
 
       delay = Time.httpdate(raw_value) - Time.current
       return if delay.negative?
 
-      cap_retry_delay(delay)
+      delay
     rescue ArgumentError
       nil
     end
@@ -387,6 +419,14 @@ module Ocr
 
     def poll_interval
       ENV.fetch("AZURE_OCR_POLL_INTERVAL", DEFAULT_POLL_INTERVAL).to_f
+    end
+
+    def poll_backoff_factor
+      ENV.fetch("AZURE_OCR_POLL_BACKOFF_FACTOR", DEFAULT_POLL_BACKOFF_FACTOR).to_f
+    end
+
+    def max_poll_interval
+      ENV.fetch("AZURE_OCR_MAX_POLL_INTERVAL", DEFAULT_MAX_POLL_INTERVAL).to_f
     end
 
     def max_retries

@@ -211,6 +211,9 @@
           [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_count"), poll_count_label ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.final_status"), polling_metrics[:final_status].presence || "-" ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_interval"), polling_metrics[:poll_interval].present? ? "#{polling_metrics[:poll_interval]}s" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.total_poll_sleep_ms"), polling_metrics[:total_poll_sleep_ms].present? ? "#{polling_metrics[:total_poll_sleep_ms]}ms" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.max_poll_interval"), polling_metrics[:max_poll_interval].present? ? "#{polling_metrics[:max_poll_interval]}s" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_backoff_factor"), polling_metrics[:poll_backoff_factor].presence || "-" ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.reached_max_poll"), polling_metrics.key?(:reached_max_poll) ? t("admin.receipt_analysis_runs.show.boolean.#{polling_metrics[:reached_max_poll]}") : "-" ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.retry_after_used"), polling_metrics.key?(:retry_after_used) ? t("admin.receipt_analysis_runs.show.boolean.#{polling_metrics[:retry_after_used]}") : "-" ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.retry_count"), polling_metrics[:retry_count].presence || "-" ]

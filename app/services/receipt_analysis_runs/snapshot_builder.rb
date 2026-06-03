@@ -664,6 +664,9 @@ module ReceiptAnalysisRuns
         final_status: safe_string(metrics[:final_status]),
         max_poll_count: safe_value(metrics[:max_poll_count]),
         poll_interval: safe_value(metrics[:poll_interval]),
+        total_poll_sleep_ms: safe_value(metrics[:total_poll_sleep_ms]),
+        max_poll_interval: safe_value(metrics[:max_poll_interval]),
+        poll_backoff_factor: safe_value(metrics[:poll_backoff_factor]),
         reached_max_poll: safe_value(metrics[:reached_max_poll]),
         retry_after_used: safe_value(metrics[:retry_after_used]),
         retry_count: safe_value(metrics[:retry_count])

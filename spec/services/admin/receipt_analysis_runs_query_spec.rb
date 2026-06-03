@@ -215,6 +215,9 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
             poll_count: 3,
             max_poll_count: 20,
             final_status: 'succeeded',
+            total_poll_sleep_ms: 5500,
+            max_poll_interval: 3.0,
+            poll_backoff_factor: 1.5,
             retry_after_used: true
           }
         },
@@ -234,6 +237,9 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
         'poll_count' => 3,
         'max_poll_count' => 20,
         'final_status' => 'succeeded',
+        'total_poll_sleep_ms' => 5500,
+        'max_poll_interval' => 3.0,
+        'poll_backoff_factor' => 1.5,
         'retry_after_used' => true
       )
     end

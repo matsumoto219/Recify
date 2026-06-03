@@ -34,6 +34,9 @@ class Ocr::ResponseParser
     final_status
     max_poll_count
     poll_interval
+    total_poll_sleep_ms
+    max_poll_interval
+    poll_backoff_factor
     reached_max_poll
     retry_after_used
     retry_count
@@ -216,9 +219,9 @@ class Ocr::ResponseParser
 
   def normalize_polling_metric_value(key, value)
     case key
-    when :elapsed_ms, :poll_count, :max_poll_count, :retry_count
+    when :elapsed_ms, :poll_count, :max_poll_count, :total_poll_sleep_ms, :retry_count
       Integer(value, exception: false)
-    when :poll_interval
+    when :poll_interval, :max_poll_interval, :poll_backoff_factor
       Float(value, exception: false)
     when :reached_max_poll, :retry_after_used
       ActiveModel::Type::Boolean.new.cast(value)

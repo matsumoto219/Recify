@@ -10,6 +10,8 @@ RSpec.describe Ocr::Client do
       AZURE_OCR_TIMEOUT
       AZURE_OCR_MAX_POLL
       AZURE_OCR_POLL_INTERVAL
+      AZURE_OCR_POLL_BACKOFF_FACTOR
+      AZURE_OCR_MAX_POLL_INTERVAL
       AZURE_OCR_MAX_RETRIES
       AZURE_OCR_BASE_RETRY_DELAY
       AZURE_OCR_MAX_RETRY_DELAY
@@ -381,7 +383,7 @@ RSpec.describe Ocr::Client do
       end
     end
 
-    it 'AZURE_OCR_MAX_POLLとAZURE_OCR_POLL_INTERVALでpolling上限を上書きできる' do
+    it 'AZURE_OCR_MAX_POLLとAZURE_OCR_POLL_INTERVALでpolling上限とbase intervalを上書きできる' do
       with_env(
         'AZURE_OCR_MAX_POLL' => '2',
         'AZURE_OCR_POLL_INTERVAL' => '0.25'
@@ -396,7 +398,41 @@ RSpec.describe Ocr::Client do
 
         aggregate_failures do
           expect(Faraday).to have_received(:get).twice
-          expect(client).to have_received(:sleep).with(0.25).twice
+          expect(client).to have_received(:sleep).with(0.25).once
+          expect(client).to have_received(:sleep).with(0.375).once
+        end
+      end
+    end
+
+    it 'polling delayはintervalにbackoff factorをかけてmax poll intervalでcapする' do
+      expect((0..5).map { |index| client.send(:poll_delay_for, index) }).to eq(
+        [
+          1.0,
+          1.5,
+          2.25,
+          3.0,
+          3.0,
+          3.0
+        ]
+      )
+    end
+
+    it 'polling delayはRetry-Afterを優先しmax poll intervalでcapする' do
+      aggregate_failures do
+        expect(client.send(:poll_delay_for, 2, retry_after: 2.5)).to eq(2.5)
+        expect(client.send(:poll_delay_for, 2, retry_after: 30.0)).to eq(3.0)
+      end
+    end
+
+    it 'AZURE_OCR_POLL_BACKOFF_FACTORとAZURE_OCR_MAX_POLL_INTERVALでpolling delayを上書きできる' do
+      with_env(
+        'AZURE_OCR_POLL_INTERVAL' => '0.5',
+        'AZURE_OCR_POLL_BACKOFF_FACTOR' => '2.0',
+        'AZURE_OCR_MAX_POLL_INTERVAL' => '2.5'
+      ) do
+        aggregate_failures do
+          expect((0..4).map { |index| client.send(:poll_delay_for, index) }).to eq([ 0.5, 1.0, 2.0, 2.5, 2.5 ])
+          expect(client.send(:poll_delay_for, 0, retry_after: 9.0)).to eq(2.5)
         end
       end
     end
@@ -435,6 +471,86 @@ RSpec.describe Ocr::Client do
   describe '#poll_result' do
     let(:succeeded_poll_response) do
       faraday_response(status: 200, body: JSON.generate(succeeded_response))
+    end
+
+    it '202 AcceptedのRetry-Afterを初回poll sleepに使う' do
+      retry_after_accepted_response = faraday_response(
+        status: 202,
+        headers: { 'operation-location' => operation_location, 'Retry-After' => '2' }
+      )
+      connection = stub_connection_post(client, retry_after_accepted_response)
+      allow(Faraday).to receive(:get).and_return(succeeded_poll_response)
+      allow(client).to receive(:sleep)
+
+      result = client.call
+
+      aggregate_failures do
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'total_poll_sleep_ms' => 2000,
+          'max_poll_interval' => described_class::MAX_POLL_INTERVAL,
+          'poll_backoff_factor' => described_class::POLL_BACKOFF_FACTOR,
+          'retry_after_used' => true
+        )
+        expect(connection).to have_received(:post).once
+        expect(Faraday).to have_received(:get).once
+        expect(client).to have_received(:sleep).with(2.0).once
+        expect(client).not_to have_received(:sleep).with(1.0)
+      end
+    end
+
+    it 'running中レスポンスのRetry-Afterを次回poll sleepに使う' do
+      outcomes = [
+        faraday_response(status: 200, headers: { 'Retry-After' => '2.5' }, body: JSON.generate({ 'status' => 'running' })),
+        succeeded_poll_response
+      ]
+      allow(Faraday).to receive(:get) do
+        outcomes.shift
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'total_poll_sleep_ms' => 3500,
+          'retry_after_used' => true
+        )
+        expect(Faraday).to have_received(:get).twice
+        expect(client).to have_received(:sleep).with(1.0).once
+        expect(client).to have_received(:sleep).with(2.5).once
+      end
+    end
+
+    it 'Retry-Afterがない場合はcapped backoffでpollingする' do
+      outcomes = [
+        faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' })),
+        faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' })),
+        faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' })),
+        succeeded_poll_response
+      ]
+      allow(Faraday).to receive(:get) do
+        outcomes.shift
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include(
+          'total_poll_sleep_ms' => 7750,
+          'max_poll_interval' => described_class::MAX_POLL_INTERVAL,
+          'poll_backoff_factor' => described_class::POLL_BACKOFF_FACTOR,
+          'retry_after_used' => false
+        )
+        expect(Faraday).to have_received(:get).exactly(4).times
+        expect(client).to have_received(:sleep).with(1.0).once
+        expect(client).to have_received(:sleep).with(1.5).once
+        expect(client).to have_received(:sleep).with(2.25).once
+        expect(client).to have_received(:sleep).with(3.0).once
+      end
     end
 
     it 'polling GET の Faraday::TimeoutError はretryする' do

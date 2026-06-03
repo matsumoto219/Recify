@@ -275,6 +275,9 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             final_status: 'succeeded',
             max_poll_count: 20,
             poll_interval: 1.0,
+            total_poll_sleep_ms: 5500,
+            max_poll_interval: 3.0,
+            poll_backoff_factor: 1.5,
             reached_max_poll: false,
             retry_after_used: true,
             retry_count: 1
@@ -387,6 +390,12 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('OCR処理時間')
         expect(response.body).to include('3200ms')
         expect(response.body).to include('3 / 20')
+        expect(response.body).to include('poll待機合計')
+        expect(response.body).to include('5500ms')
+        expect(response.body).to include('最大poll間隔')
+        expect(response.body).to include('3.0s')
+        expect(response.body).to include('poll backoff factor')
+        expect(response.body).to include('1.5')
         expect(response.body).to include('Retry-After使用')
         expect(response.body).to include('AI input snapshot')
         expect(response.body).to include('AI result summary')

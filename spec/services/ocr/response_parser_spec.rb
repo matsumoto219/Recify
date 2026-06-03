@@ -189,6 +189,9 @@ RSpec.describe Ocr::ResponseParser do
         'final_status' => 'succeeded',
         'max_poll_count' => 20,
         'poll_interval' => 1.0,
+        'total_poll_sleep_ms' => 5500,
+        'max_poll_interval' => 3.0,
+        'poll_backoff_factor' => 1.5,
         'reached_max_poll' => false,
         'retry_after_used' => true,
         'retry_count' => 1
@@ -202,6 +205,9 @@ RSpec.describe Ocr::ResponseParser do
         final_status: 'succeeded',
         max_poll_count: 20,
         poll_interval: 1.0,
+        total_poll_sleep_ms: 5500,
+        max_poll_interval: 3.0,
+        poll_backoff_factor: 1.5,
         reached_max_poll: false,
         retry_after_used: true,
         retry_count: 1

@@ -210,6 +210,9 @@ ja:
           poll_count: poll回数 / max poll
           final_status: 最終status
           poll_interval: poll間隔
+          total_poll_sleep_ms: poll待機合計
+          max_poll_interval: 最大poll間隔
+          poll_backoff_factor: poll backoff factor
           reached_max_poll: max到達
           retry_after_used: Retry-After使用
           retry_count: retry回数

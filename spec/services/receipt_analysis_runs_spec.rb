@@ -177,6 +177,9 @@ RSpec.describe ReceiptAnalysisRuns do
             final_status: 'succeeded',
             max_poll_count: 20,
             poll_interval: 1.0,
+            total_poll_sleep_ms: 5500,
+            max_poll_interval: 3.0,
+            poll_backoff_factor: 1.5,
             reached_max_poll: false,
             retry_after_used: true,
             retry_count: 1
@@ -208,6 +211,9 @@ RSpec.describe ReceiptAnalysisRuns do
           'final_status' => 'succeeded',
           'max_poll_count' => 20,
           'poll_interval' => 1.0,
+          'total_poll_sleep_ms' => 5500,
+          'max_poll_interval' => 3.0,
+          'poll_backoff_factor' => 1.5,
           'reached_max_poll' => false,
           'retry_after_used' => true,
           'retry_count' => 1
@@ -215,6 +221,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(run.ocr_result_snapshot.dig('meta', 'polling_metrics')).to include(
           'poll_count' => 3,
           'final_status' => 'succeeded',
+          'total_poll_sleep_ms' => 5500,
           'retry_after_used' => true
         )
         expect(deep_json(run.ocr_summary)).not_to include('RAW OCR TEXT')
