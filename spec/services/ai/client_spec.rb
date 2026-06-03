@@ -39,6 +39,11 @@ RSpec.describe Ai::Client do
           expect(result).to eq(primary_result)
           expect(primary_client).to have_received(:call).with(input)
           expect(fallback_client).not_to have_received(:call)
+          expect(result.dig(:meta, :metrics)).to include(
+            fallback_used: false,
+            fallback_provider: 'fallback_ai',
+            final_provider: 'openai'
+          )
         end
       end
     end
@@ -64,7 +69,15 @@ RSpec.describe Ai::Client do
           expect(fallback_client).to have_received(:call).with(input)
           expect(result[:success]).to eq(true)
           expect(result.dig(:meta, :fallback_used)).to eq(true)
+          expect(result.dig(:meta, :fallback_provider)).to eq('fallback_ai')
+          expect(result.dig(:meta, :fallback_reason)).to eq('ai_primary_failed')
           expect(result.dig(:meta, :provider)).to eq('fallback_ai')
+          expect(result.dig(:meta, :metrics)).to include(
+            fallback_used: true,
+            fallback_provider: 'fallback_ai',
+            fallback_reason: 'ai_primary_failed',
+            final_provider: 'fallback_ai'
+          )
         end
       end
     end
@@ -90,6 +103,12 @@ RSpec.describe Ai::Client do
           expect(fallback_client).to have_received(:call).with(input)
           expect(result[:success]).to eq(true)
           expect(result.dig(:meta, :fallback_used)).to eq(true)
+          expect(result.dig(:meta, :metrics)).to include(
+            fallback_used: true,
+            fallback_provider: 'fallback_ai',
+            fallback_reason: 'ai_primary_failed',
+            final_provider: 'fallback_ai'
+          )
         end
       end
     end
@@ -142,7 +161,16 @@ RSpec.describe Ai::Client do
       end
 
       it 'primary 失敗時に error result を返す' do
-        error = Ai::Errors::ProviderError.new(message: 'primary failed', error_code: 'ai_primary_failed')
+        error = Ai::Errors::ProviderError.new(
+          message: 'primary failed',
+          error_code: 'ai_primary_failed',
+          metrics: {
+            provider: 'openai',
+            retry_count: 2,
+            retry_after_used: true,
+            rate_limited: true
+          }
+        )
         allow(primary_client).to receive(:call).with(input).and_raise(error)
 
         result = client.call(input)
@@ -152,6 +180,15 @@ RSpec.describe Ai::Client do
           expect(result[:error_code]).to eq('ai_primary_failed')
           expect(result.dig(:meta, :primary_error_code)).to eq('ai_primary_failed')
           expect(result.dig(:meta, :fallback_used)).to eq(false)
+          expect(result.dig(:meta, :metrics)).to include(
+            provider: 'openai',
+            retry_count: 2,
+            retry_after_used: true,
+            rate_limited: true,
+            fallback_used: false,
+            fallback_reason: 'ai_primary_failed',
+            final_provider: 'openai'
+          )
         end
       end
     end

@@ -1,14 +1,15 @@
 module Ai
   module Errors
     class ProviderError < StandardError
-      attr_reader :error_code, :provider, :cause, :retry_after
+      attr_reader :error_code, :provider, :cause, :retry_after, :metrics
 
-      def initialize(message: nil, error_code: nil, provider: nil, cause: nil, retry_after: nil)
+      def initialize(message: nil, error_code: nil, provider: nil, cause: nil, retry_after: nil, metrics: nil)
         super(message || default_message(error_code, provider))
         @error_code = error_code
         @provider = provider
         @cause = cause
         @retry_after = retry_after
+        @metrics = Ai::ProviderMetrics.build(metrics)
       end
 
       private

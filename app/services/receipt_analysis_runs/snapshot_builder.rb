@@ -271,6 +271,7 @@ module ReceiptAnalysisRuns
           model: safe_string(meta[:model]),
           fallback_provider: safe_string(meta[:fallback_provider]),
           fallback_used: meta[:fallback_used] == true,
+          metrics: sanitized_ai_metrics(meta[:metrics]).presence,
           document_type: safe_string(meta[:document_type]),
           rejection_reason: safe_string(meta[:rejection_reason]),
           item_count: Array(result[:receipt_items_attributes]).size,
@@ -535,6 +536,7 @@ module ReceiptAnalysisRuns
         fallback_used: meta[:fallback_used] == true,
         primary_error_code: safe_string(meta[:primary_error_code]),
         fallback_error_code: safe_string(meta[:fallback_error_code]),
+        metrics: sanitized_ai_metrics(meta[:metrics]).presence,
         document_type: safe_string(meta[:document_type]),
         rejection_reason: safe_string(meta[:rejection_reason]),
         is_receipt_confidence: safe_value(meta[:is_receipt_confidence])
@@ -671,6 +673,10 @@ module ReceiptAnalysisRuns
         retry_after_used: safe_value(metrics[:retry_after_used]),
         retry_count: safe_value(metrics[:retry_count])
       }.compact
+    end
+
+    def sanitized_ai_metrics(value)
+      Ai::ProviderMetrics.build(value)
     end
 
     def limited_hashes(value, max)

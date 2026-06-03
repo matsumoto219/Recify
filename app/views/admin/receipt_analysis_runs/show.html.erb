@@ -231,6 +231,46 @@
         </dl>
       </div>
 
+      <%
+        ai_metrics = (@record[:ai_metrics] || {}).with_indifferent_access
+        token_usage = (ai_metrics[:token_usage] || {}).with_indifferent_access
+        token_usage_label = if token_usage.present?
+                              t(
+                                "admin.receipt_analysis_runs.show.ai_metrics.token_usage_value",
+                                input: token_usage[:input_tokens].presence || "-",
+                                output: token_usage[:output_tokens].presence || "-",
+                                total: token_usage[:total_tokens].presence || "-"
+                              )
+                            else
+                              "-"
+                            end
+        ai_metric_rows = [
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.elapsed_ms"), ai_metrics[:elapsed_ms].present? ? "#{ai_metrics[:elapsed_ms]}ms" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.retry_count"), ai_metrics[:retry_count].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.retry_after_used"), ai_metrics.key?(:retry_after_used) ? t("admin.receipt_analysis_runs.show.boolean.#{ai_metrics[:retry_after_used]}") : "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.total_retry_sleep_ms"), ai_metrics[:total_retry_sleep_ms].present? ? "#{ai_metrics[:total_retry_sleep_ms]}ms" : "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.rate_limited"), ai_metrics.key?(:rate_limited) ? t("admin.receipt_analysis_runs.show.boolean.#{ai_metrics[:rate_limited]}") : "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.provider_status"), ai_metrics[:provider_status].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.final_provider"), ai_metrics[:final_provider].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_used"), ai_metrics.key?(:fallback_used) ? t("admin.receipt_analysis_runs.show.boolean.#{ai_metrics[:fallback_used]}") : "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_provider"), ai_metrics[:fallback_provider].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_reason"), ai_metrics[:fallback_reason].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.response_id"), ai_metrics[:response_id].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.token_usage"), token_usage_label ]
+        ]
+      %>
+      <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.ai_metrics.title") %></h3>
+        <dl class="mt-3 grid gap-3 text-sm md:grid-cols-2">
+          <% ai_metric_rows.each do |label, value| %>
+            <div>
+              <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
+              <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
+            </div>
+          <% end %>
+        </dl>
+      </div>
+
       <div class="mt-4 space-y-2">
         <% @record[:provider].each do |name, provider| %>
           <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">

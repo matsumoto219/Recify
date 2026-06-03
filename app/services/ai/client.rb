@@ -9,7 +9,13 @@ module Ai
     end
 
     def call(input)
-      run_primary(input)
+      decorate_success_result(
+        run_primary(input),
+        fallback_used: false,
+        fallback_provider: fallback_provider,
+        fallback_reason: nil,
+        final_provider: primary_provider
+      )
     rescue Ai::Errors::ProviderError => primary_error
       raise primary_error unless fallback_needed?(primary_error)
 
@@ -28,7 +34,8 @@ module Ai
         message: error.message,
         error_code: "ai_primary_failed",
         provider: primary_provider,
-        cause: error
+        cause: error,
+        metrics: error.metrics
       )
     rescue Ai::Errors::ProviderError => error
       Rails.logger.error("[AI] primary provider error: #{error.message}")
@@ -38,7 +45,8 @@ module Ai
         message: error.message,
         error_code: "ai_primary_failed",
         provider: primary_provider,
-        cause: error
+        cause: error,
+        metrics: error.metrics
       )
     end
 
@@ -49,12 +57,13 @@ module Ai
 
       result = provider_client(fallback_provider).call(input)
 
-      if result.is_a?(Hash)
-        result[:meta] ||= {}
-        result[:meta][:fallback_used] = true
-      end
-
-      result
+      decorate_success_result(
+        result,
+        fallback_used: true,
+        fallback_provider: fallback_provider,
+        fallback_reason: primary_error.error_code,
+        final_provider: fallback_provider
+      )
     rescue Ai::Errors::TimeoutError => fallback_error
       failure_result(primary_error, build_fallback_error(fallback_error))
     rescue Ai::Errors::ProviderError => fallback_error
@@ -93,7 +102,8 @@ module Ai
         message: error.message,
         error_code: "ai_fallback_failed",
         provider: fallback_provider,
-        cause: error
+        cause: error,
+        metrics: error.respond_to?(:metrics) ? error.metrics : nil
       )
     end
 
@@ -107,7 +117,8 @@ module Ai
           primary_error_code: primary_error&.error_code,
           primary_error_message: primary_error&.message,
           fallback_error_code: fallback_error&.error_code,
-          fallback_error_message: fallback_error&.message
+          fallback_error_message: fallback_error&.message,
+          metrics: failure_metrics(primary_error, fallback_error)
         }.compact
       )
     end
@@ -117,6 +128,36 @@ module Ai
       return primary_error.error_code if primary_error&.error_code.present?
 
       "ai_api_error"
+    end
+
+    def decorate_success_result(result, fallback_used:, fallback_provider:, fallback_reason:, final_provider:)
+      return result unless result.is_a?(Hash)
+
+      fallback_provider_name = fallback_provider.to_s.presence
+
+      result[:meta] ||= {}
+      result[:meta][:fallback_used] = fallback_used
+      result[:meta][:fallback_provider] = fallback_provider_name if fallback_provider_name.present?
+      result[:meta][:fallback_reason] = fallback_reason if fallback_reason.present?
+      result[:meta][:metrics] = Ai::ProviderMetrics.merge(
+        result[:meta][:metrics],
+        fallback_used: fallback_used,
+        fallback_provider: fallback_provider_name,
+        fallback_reason: fallback_reason,
+        final_provider: final_provider
+      )
+      result
+    end
+
+    def failure_metrics(primary_error, fallback_error)
+      metrics = Ai::ProviderMetrics.merge(primary_error&.metrics, fallback_error&.metrics || {})
+      Ai::ProviderMetrics.merge(
+        metrics,
+        fallback_used: fallback_error.present?,
+        fallback_provider: fallback_provider,
+        fallback_reason: primary_error&.error_code,
+        final_provider: fallback_error&.provider || primary_error&.provider || primary_provider
+      )
     end
   end
 end

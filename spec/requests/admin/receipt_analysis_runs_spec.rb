@@ -322,7 +322,29 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             }
           ]
         },
-        ai_result_summary: { success: true },
+        ai_result_summary: {
+          success: true,
+          metrics: {
+            provider: 'openai',
+            model: 'gpt-test',
+            elapsed_ms: 1200,
+            retry_count: 2,
+            retry_after_used: true,
+            total_retry_sleep_ms: 4000,
+            rate_limited: true,
+            provider_status: '429',
+            token_usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              total_tokens: 120
+            },
+            response_id: 'resp_admin_metrics',
+            fallback_used: true,
+            fallback_provider: 'backup-provider',
+            fallback_reason: 'ai_api_error',
+            final_provider: 'backup-provider'
+          }
+        },
         ai_normalized_result_snapshot: {
           receipt_attributes: {
             purchased_at_text: '2026-04-19'
@@ -397,6 +419,19 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('poll backoff factor')
         expect(response.body).to include('1.5')
         expect(response.body).to include('Retry-After使用')
+        expect(response.body).to include('AI metrics')
+        expect(response.body).to include('AI処理時間')
+        expect(response.body).to include('1200ms')
+        expect(response.body).to include('retry待機合計')
+        expect(response.body).to include('4000ms')
+        expect(response.body).to include('rate limit')
+        expect(response.body).to include('provider status')
+        expect(response.body).to include('429')
+        expect(response.body).to include('fallback reason')
+        expect(response.body).to include('ai_api_error')
+        expect(response.body).to include('response id')
+        expect(response.body).to include('resp_admin_metrics')
+        expect(response.body).to include('input: 100 / output: 20 / total: 120')
         expect(response.body).to include('AI input snapshot')
         expect(response.body).to include('AI result summary')
         expect(response.body).to include('Final result summary')

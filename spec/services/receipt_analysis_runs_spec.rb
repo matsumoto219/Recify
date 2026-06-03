@@ -419,6 +419,25 @@ RSpec.describe ReceiptAnalysisRuns do
           provider: 'openai',
           model: 'gpt-test',
           fallback_used: false,
+          metrics: {
+            provider: 'openai',
+            model: 'gpt-test',
+            retry_count: 1,
+            retry_after_used: true,
+            total_retry_sleep_ms: 3000,
+            rate_limited: true,
+            provider_status: '429',
+            token_usage: {
+              input_tokens: 123,
+              output_tokens: 45,
+              total_tokens: 168,
+              raw_response: 'RAW TOKEN USAGE MUST NOT BE STORED'
+            },
+            response_id: 'resp_123',
+            fallback_used: false,
+            final_provider: 'openai',
+            raw_response: 'RAW METRICS MUST NOT BE STORED'
+          },
           response_body: 'RAW AI RESPONSE MUST NOT BE STORED',
           api_key: 'SECRET API KEY MUST NOT BE STORED',
           primary_error_message: 'provider raw message should not be stored'
@@ -440,10 +459,29 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot.dig('receipt_items_attributes', 0, 'line_total')).to eq('180.5')
         expect(snapshot.dig('truncated', 'receipt_items_attributes')).to eq(true)
         expect(snapshot.dig('truncated', 'review_reasons')).to eq(true)
+        expect(snapshot.dig('meta', 'metrics')).to include(
+          'provider' => 'openai',
+          'model' => 'gpt-test',
+          'retry_count' => 1,
+          'retry_after_used' => true,
+          'total_retry_sleep_ms' => 3000,
+          'rate_limited' => true,
+          'provider_status' => '429',
+          'response_id' => 'resp_123',
+          'fallback_used' => false,
+          'final_provider' => 'openai'
+        )
+        expect(snapshot.dig('meta', 'metrics', 'token_usage')).to eq(
+          'input_tokens' => 123,
+          'output_tokens' => 45,
+          'total_tokens' => 168
+        )
         expect { json_roundtrip(snapshot) }.not_to raise_error
         expect(snapshot_json).not_to include('FULL PROMPT MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW MESSAGES MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW AI RESPONSE MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('RAW TOKEN USAGE MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('RAW METRICS MUST NOT BE STORED')
         expect(snapshot_json).not_to include('SECRET API KEY MUST NOT BE STORED')
         expect(snapshot_json).not_to include('provider raw message should not be stored')
       end
@@ -463,6 +501,26 @@ RSpec.describe ReceiptAnalysisRuns do
           model: 'gpt-test',
           fallback_provider: 'backup-provider',
           fallback_used: true,
+          metrics: {
+            provider: 'openai',
+            model: 'gpt-test',
+            elapsed_ms: 1200,
+            retry_count: 2,
+            retry_after_used: true,
+            total_retry_sleep_ms: 4000,
+            rate_limited: true,
+            provider_status: '429',
+            token_usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              total_tokens: 120
+            },
+            response_id: 'resp_summary',
+            fallback_used: true,
+            fallback_provider: 'backup-provider',
+            fallback_reason: 'ai_api_error',
+            final_provider: 'backup-provider'
+          },
           response_body: 'do-not-store'
         }
       }
@@ -481,7 +539,27 @@ RSpec.describe ReceiptAnalysisRuns do
           'schema_version' => 'receipt_analysis_run_ai_result_v1',
           'success' => false,
           'error_code' => 'ai_primary_failed',
-          'item_count' => 1
+          'item_count' => 1,
+          'metrics' => {
+            'provider' => 'openai',
+            'model' => 'gpt-test',
+            'final_provider' => 'backup-provider',
+            'elapsed_ms' => 1200,
+            'retry_count' => 2,
+            'retry_after_used' => true,
+            'total_retry_sleep_ms' => 4000,
+            'rate_limited' => true,
+            'provider_status' => '429',
+            'token_usage' => {
+              'input_tokens' => 100,
+              'output_tokens' => 20,
+              'total_tokens' => 120
+            },
+            'response_id' => 'resp_summary',
+            'fallback_used' => true,
+            'fallback_provider' => 'backup-provider',
+            'fallback_reason' => 'ai_api_error'
+          }
         )
         expect(deep_json(run.ai_result_summary)).not_to include('do-not-store')
       end

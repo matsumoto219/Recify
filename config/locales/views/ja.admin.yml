@@ -216,6 +216,21 @@ ja:
           reached_max_poll: max到達
           retry_after_used: Retry-After使用
           retry_count: retry回数
+        ai_metrics:
+          title: AI metrics
+          elapsed_ms: AI処理時間
+          retry_count: retry回数
+          retry_after_used: Retry-After使用
+          total_retry_sleep_ms: retry待機合計
+          rate_limited: rate limit
+          provider_status: provider status
+          final_provider: final provider
+          fallback_used: fallback使用
+          fallback_provider: fallback provider
+          fallback_reason: fallback reason
+          response_id: response id
+          token_usage: token usage
+          token_usage_value: "input: %{input} / output: %{output} / total: %{total}"
         correction_summary:
           title: Correction summary
           empty: "-"

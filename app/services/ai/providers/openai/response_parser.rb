@@ -64,7 +64,7 @@ module Ai
           return JSON.parse(output_text) if output_text.present?
 
           if body["store"].is_a?(Hash) || body[:store].is_a?(Hash)
-            return stringify_keys(body)
+            return stringify_keys(body.except(Ai::ProviderMetrics::METADATA_KEY))
           end
 
           raise Ai::Errors::InvalidResponseError.new(
@@ -93,8 +93,25 @@ module Ai
           {
             provider: "openai",
             response_id: body["id"] || body[:id],
-            model: body["model"] || body[:model]
+            model: body["model"] || body[:model],
+            metrics: response_metrics(body).presence
           }.compact
+        end
+
+        def response_metrics(body)
+          metrics = body[Ai::ProviderMetrics::METADATA_KEY] || body[:recify_ai_metrics] || {}
+          return {} if metrics.blank? && token_usage(body).blank?
+
+          Ai::ProviderMetrics.merge(
+            metrics,
+            response_id: body["id"] || body[:id],
+            model: body["model"] || body[:model],
+            token_usage: token_usage(body)
+          )
+        end
+
+        def token_usage(body)
+          Ai::ProviderMetrics.token_usage(body["usage"] || body[:usage])
         end
 
         def error_meta(error)

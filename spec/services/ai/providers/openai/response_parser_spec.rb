@@ -88,6 +88,67 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
       end
     end
 
+    context 'Recify内部のAI metricsがある場合' do
+      let(:response) do
+        {
+          'id' => 'resp_metrics',
+          'model' => 'gpt-test',
+          'usage' => {
+            'input_tokens' => 10,
+            'output_tokens' => 20,
+            'total_tokens' => 30
+          },
+          Ai::ProviderMetrics::METADATA_KEY => {
+            provider: 'openai',
+            retry_count: 1,
+            retry_after_used: true,
+            total_retry_sleep_ms: 3000,
+            rate_limited: true,
+            provider_status: '200'
+          },
+          'output_text' => '{"store":{},"purchase":{},"payment":{},"items":[],"needs_review":false,"review_reasons":[]}'
+        }
+      end
+
+      it 'AI metricsをmetaへ渡す' do
+        allow(Ai::ResponseParser).to receive(:parse).and_return(success: true)
+
+        described_class.parse(response)
+
+        expect(Ai::ResponseParser).to have_received(:parse).with(
+          {
+            'store' => {},
+            'purchase' => {},
+            'payment' => {},
+            'items' => [],
+            'needs_review' => false,
+            'review_reasons' => []
+          },
+          provider: provider,
+          meta: {
+            provider: 'openai',
+            response_id: 'resp_metrics',
+            model: 'gpt-test',
+            metrics: {
+              provider: 'openai',
+              model: 'gpt-test',
+              retry_count: 1,
+              retry_after_used: true,
+              total_retry_sleep_ms: 3000,
+              rate_limited: true,
+              provider_status: '200',
+              token_usage: {
+                input_tokens: 10,
+                output_tokens: 20,
+                total_tokens: 30
+              },
+              response_id: 'resp_metrics'
+            }
+          }
+        )
+      end
+    end
+
     context 'output[].content[].text にJSON文字列がある場合' do
       let(:response) do
         {

@@ -244,6 +244,66 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       )
     end
 
+    it 'AI metricsをrecordに含める' do
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        ai_result_summary: {
+          metrics: {
+            provider: 'openai',
+            model: 'gpt-test',
+            elapsed_ms: 1200,
+            retry_count: 2,
+            retry_after_used: true,
+            total_retry_sleep_ms: 4000,
+            rate_limited: true,
+            provider_status: '429',
+            token_usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              total_tokens: 120
+            },
+            response_id: 'resp_123',
+            fallback_used: true,
+            fallback_provider: 'backup-provider',
+            fallback_reason: 'ai_api_error',
+            final_provider: 'backup-provider'
+          }
+        },
+        ai_normalized_result_snapshot: {
+          meta: {
+            metrics: {
+              provider: 'openai',
+              retry_count: 1
+            }
+          }
+        }
+      )
+
+      record = described_class.call(receipt: run.receipt).records.first
+
+      expect(record[:ai_metrics]).to include(
+        'provider' => 'openai',
+        'model' => 'gpt-test',
+        'elapsed_ms' => 1200,
+        'retry_count' => 2,
+        'retry_after_used' => true,
+        'total_retry_sleep_ms' => 4000,
+        'rate_limited' => true,
+        'provider_status' => '429',
+        'response_id' => 'resp_123',
+        'fallback_used' => true,
+        'fallback_provider' => 'backup-provider',
+        'fallback_reason' => 'ai_api_error',
+        'final_provider' => 'backup-provider'
+      )
+      expect(record.dig(:ai_metrics, 'token_usage')).to eq(
+        'input_tokens' => 100,
+        'output_tokens' => 20,
+        'total_tokens' => 120
+      )
+    end
+
     it 'include_retry_optionsが有効な場合だけRetryServiceのread-only eligibilityをrecordに含め、enqueueしない' do
       receipt = create(:receipt, :completed, :with_image)
       run = create(

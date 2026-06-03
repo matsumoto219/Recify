@@ -42,6 +42,38 @@ RSpec.describe Ai::Providers::Openai::Client do
     end
   end
 
+  def parsed_response_with_metrics(response_id, metrics = {})
+    hash_including(
+      'id' => response_id,
+      Ai::ProviderMetrics::METADATA_KEY => hash_including(
+        {
+          provider: 'openai',
+          response_id: response_id
+        }.merge(metrics)
+      )
+    )
+  end
+
+  def valid_openai_response(response_id: 'resp_metrics', model: 'gpt-test', usage: nil)
+    {
+      'id' => response_id,
+      'model' => model,
+      'usage' => usage,
+      'output_text' => {
+        is_receipt: true,
+        document_type: 'receipt',
+        rejection_reason: nil,
+        store: {},
+        purchase: {},
+        payment: {},
+        items: [],
+        receipt_adjustments: [],
+        needs_review: false,
+        review_reasons: []
+      }.to_json
+    }.compact
+  end
+
   around do |example|
     with_env(operational_env_keys.to_h { |key| [ key, nil ] }) do
       example.run
@@ -56,16 +88,53 @@ RSpec.describe Ai::Providers::Openai::Client do
     it 'RequestBuilder.build → post_request → ResponseParser.parse の順で呼び結果を返す' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body).and_return({ 'id' => 'resp_123' })
-      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse).with({ 'id' => 'resp_123' }).and_return(parsed_response)
+      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
+        .with(parsed_response_with_metrics('resp_123', retry_count: 0, retry_after_used: false, rate_limited: false))
+        .and_return(parsed_response)
 
       result = client.call(input)
 
       aggregate_failures do
         expect(Ai::Providers::Openai::RequestBuilder).to have_received(:build).with(input)
         expect(client).to have_received(:post_request).with(request_body)
-        expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse).with({ 'id' => 'resp_123' })
+        expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse)
+          .with(parsed_response_with_metrics('resp_123', retry_count: 0, retry_after_used: false, rate_limited: false))
         expect(result).to eq(parsed_response)
       end
+    end
+
+    it '成功時のmetricsをmetaへ渡す' do
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      allow(client).to receive(:post_request).with(request_body) do
+        client.send(:track_provider_status!, '200')
+        valid_openai_response(
+          response_id: 'resp_metrics',
+          usage: {
+            'input_tokens' => 123,
+            'output_tokens' => 45,
+            'total_tokens' => 168
+          }
+        )
+      end
+
+      result = client.call(input)
+
+      expect(result.dig(:meta, :metrics)).to include(
+        provider: 'openai',
+        model: 'gpt-test',
+        response_id: 'resp_metrics',
+        retry_count: 0,
+        retry_after_used: false,
+        total_retry_sleep_ms: 0,
+        rate_limited: false,
+        provider_status: '200',
+        token_usage: {
+          input_tokens: 123,
+          output_tokens: 45,
+          total_tokens: 168
+        }
+      )
+      expect(result.dig(:meta, :metrics, :elapsed_ms)).to be_a(Integer)
     end
 
     it '一時的な ProviderError の後に再試行して成功する' do
@@ -77,7 +146,9 @@ RSpec.describe Ai::Providers::Openai::Client do
 
         { 'id' => 'resp_456' }
       end
-      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse).with({ 'id' => 'resp_456' }).and_return(parsed_response)
+      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
+        .with(parsed_response_with_metrics('resp_456', retry_count: 1, retry_after_used: false, total_retry_sleep_ms: 1000, rate_limited: false))
+        .and_return(parsed_response)
       allow(client).to receive(:sleep)
 
       result = client.call(input)
@@ -105,7 +176,9 @@ RSpec.describe Ai::Providers::Openai::Client do
         { 'id' => 'resp_retry_after' }
       end
       allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse).with({ 'id' => 'resp_retry_after' }).and_return(parsed_response)
+        .to receive(:parse)
+        .with(parsed_response_with_metrics('resp_retry_after', retry_count: 1, retry_after_used: true, total_retry_sleep_ms: 3000, rate_limited: true))
+        .and_return(parsed_response)
       allow(client).to receive(:sleep)
 
       result = client.call(input)
@@ -128,7 +201,9 @@ RSpec.describe Ai::Providers::Openai::Client do
       end
       allow(client).to receive(:retry_jitter_delay).and_return(0.25)
       allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse).with({ 'id' => 'resp_jitter' }).and_return(parsed_response)
+        .to receive(:parse)
+        .with(parsed_response_with_metrics('resp_jitter', retry_count: 1, retry_after_used: false, total_retry_sleep_ms: 1250, rate_limited: false))
+        .and_return(parsed_response)
       allow(client).to receive(:sleep)
 
       result = client.call(input)
@@ -156,7 +231,9 @@ RSpec.describe Ai::Providers::Openai::Client do
         { 'id' => 'resp_cap' }
       end
       allow(Ai::Providers::Openai::ResponseParser)
-        .to receive(:parse).with({ 'id' => 'resp_cap' }).and_return(parsed_response)
+        .to receive(:parse)
+        .with(parsed_response_with_metrics('resp_cap', retry_count: 1, retry_after_used: true, total_retry_sleep_ms: 10_000, rate_limited: true))
+        .and_return(parsed_response)
       allow(client).to receive(:sleep)
 
       result = client.call(input)
