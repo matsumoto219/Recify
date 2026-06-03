@@ -99,7 +99,8 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(client).to have_received(:post_request).with(request_body)
         expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse)
           .with(parsed_response_with_metrics('resp_123', retry_count: 0, retry_after_used: false, rate_limited: false))
-        expect(result).to eq(parsed_response)
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(result.payload).to eq(parsed_response)
       end
     end
 
@@ -119,7 +120,8 @@ RSpec.describe Ai::Providers::Openai::Client do
 
       result = client.call(input)
 
-      expect(result.dig(:meta, :metrics)).to include(
+      expect(result).to be_a(Ai::ProviderResult)
+      expect(result.payload.dig(:meta, :metrics)).to include(
         provider: 'openai',
         model: 'gpt-test',
         response_id: 'resp_metrics',
@@ -134,7 +136,7 @@ RSpec.describe Ai::Providers::Openai::Client do
           total_tokens: 168
         }
       )
-      expect(result.dig(:meta, :metrics, :elapsed_ms)).to be_a(Integer)
+      expect(result.payload.dig(:meta, :metrics, :elapsed_ms)).to be_a(Integer)
     end
 
     it '一時的な ProviderError の後に再試行して成功する' do
@@ -156,7 +158,8 @@ RSpec.describe Ai::Providers::Openai::Client do
       aggregate_failures do
         expect(client).to have_received(:post_request).with(request_body).twice
         expect(client).to have_received(:sleep).once
-        expect(result).to eq(parsed_response)
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(result.payload).to eq(parsed_response)
       end
     end
 
@@ -184,7 +187,8 @@ RSpec.describe Ai::Providers::Openai::Client do
       result = client.call(input)
 
       aggregate_failures do
-        expect(result).to eq(parsed_response)
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(result.payload).to eq(parsed_response)
         expect(client).to have_received(:post_request).with(request_body).twice
         expect(client).to have_received(:sleep).with(3.0).once
       end
@@ -209,7 +213,8 @@ RSpec.describe Ai::Providers::Openai::Client do
       result = client.call(input)
 
       aggregate_failures do
-        expect(result).to eq(parsed_response)
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(result.payload).to eq(parsed_response)
         expect(client).to have_received(:post_request).with(request_body).twice
         expect(client).to have_received(:sleep).with(1.25).once
       end
@@ -239,7 +244,8 @@ RSpec.describe Ai::Providers::Openai::Client do
       result = client.call(input)
 
       aggregate_failures do
-        expect(result).to eq(parsed_response)
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(result.payload).to eq(parsed_response)
         expect(client).to have_received(:post_request).with(request_body).twice
         expect(client).to have_received(:sleep).with(10.0).once
       end

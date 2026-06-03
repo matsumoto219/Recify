@@ -28,7 +28,14 @@ module Ai
             post_request(body)
           end
 
-          ResponseParser.parse(attach_metrics(response))
+          payload = ResponseParser.parse(attach_metrics(response))
+          Ai::ProviderResult.new(
+            provider: PROVIDER_NAME,
+            model: payload.dig(:meta, :model),
+            payload: payload,
+            metrics: payload.dig(:meta, :metrics),
+            response_id: payload.dig(:meta, :response_id)
+          )
         rescue Net::OpenTimeout, Net::ReadTimeout => e
           raise Ai::Errors::TimeoutError.new(
             message: e.message,

@@ -131,22 +131,23 @@ module Ai
     end
 
     def decorate_success_result(result, fallback_used:, fallback_provider:, fallback_reason:, final_provider:)
-      return result unless result.is_a?(Hash)
+      result = ensure_provider_result!(result)
+      payload = result.payload
 
       fallback_provider_name = fallback_provider.to_s.presence
 
-      result[:meta] ||= {}
-      result[:meta][:fallback_used] = fallback_used
-      result[:meta][:fallback_provider] = fallback_provider_name if fallback_provider_name.present?
-      result[:meta][:fallback_reason] = fallback_reason if fallback_reason.present?
-      result[:meta][:metrics] = Ai::ProviderMetrics.merge(
-        result[:meta][:metrics],
+      payload[:meta] ||= {}
+      payload[:meta][:fallback_used] = fallback_used
+      payload[:meta][:fallback_provider] = fallback_provider_name if fallback_provider_name.present?
+      payload[:meta][:fallback_reason] = fallback_reason if fallback_reason.present?
+      payload[:meta][:metrics] = Ai::ProviderMetrics.merge(
+        result.metrics,
         fallback_used: fallback_used,
         fallback_provider: fallback_provider_name,
         fallback_reason: fallback_reason,
         final_provider: final_provider
       )
-      result
+      payload
     end
 
     def failure_metrics(primary_error, fallback_error)
@@ -157,6 +158,19 @@ module Ai
         fallback_provider: fallback_provider,
         fallback_reason: primary_error&.error_code,
         final_provider: fallback_error&.provider || primary_error&.provider || primary_provider
+      )
+    end
+
+    def ensure_provider_result!(result)
+      return result if result.is_a?(Ai::ProviderResult)
+
+      raise Ai::Errors::ProviderError.new(
+        message: "AI provider returned invalid result",
+        error_code: "ai_invalid_response",
+        provider: primary_provider,
+        category: :invalid_response,
+        retryable: false,
+        fallbackable: false
       )
     end
   end

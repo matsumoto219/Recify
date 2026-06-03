@@ -14,6 +14,16 @@ RSpec.describe Ai::Client do
     )
   end
 
+  def provider_result(payload, provider:)
+    Ai::ProviderResult.new(
+      provider: provider,
+      model: payload.dig(:meta, :model),
+      payload: payload,
+      metrics: payload.dig(:meta, :metrics),
+      response_id: payload.dig(:meta, :response_id)
+    )
+  end
+
   before do
     allow(Ai::ProviderRegistry).to receive(:fetch).with(primary_provider).and_return(primary_client)
     allow(Ai::ProviderRegistry).to receive(:fetch).with(fallback_provider).and_return(fallback_client)
@@ -30,7 +40,7 @@ RSpec.describe Ai::Client do
       end
 
       it 'primary の結果をそのまま返し fallback を使わない' do
-        allow(primary_client).to receive(:call).with(input).and_return(primary_result)
+        allow(primary_client).to receive(:call).with(input).and_return(provider_result(primary_result, provider: primary_provider))
         allow(fallback_client).to receive(:call)
 
         result = client.call(input)
@@ -60,7 +70,7 @@ RSpec.describe Ai::Client do
 
       it 'fallback の結果を返し fallback_used を付与する' do
         allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::TimeoutError.new(message: 'timeout'))
-        allow(fallback_client).to receive(:call).with(input).and_return(fallback_result)
+        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
 
         result = client.call(input)
 
@@ -94,7 +104,7 @@ RSpec.describe Ai::Client do
       it 'fallback を実行する' do
         error = Ai::Errors::ProviderError.new(message: 'primary failed', error_code: 'ai_primary_failed')
         allow(primary_client).to receive(:call).with(input).and_raise(error)
-        allow(fallback_client).to receive(:call).with(input).and_return(fallback_result)
+        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
 
         result = client.call(input)
 
@@ -114,6 +124,21 @@ RSpec.describe Ai::Client do
     end
 
     context 'primary が fallback対象外のエラーを返す場合' do
+      it 'provider adapterがhashを返した場合は契約違反として扱う' do
+        allow(primary_client).to receive(:call).with(input).and_return(success: true)
+        allow(fallback_client).to receive(:call)
+
+        expect do
+          client.call(input)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_invalid_response')
+            expect(error.category).to eq(:invalid_response)
+            expect(fallback_client).not_to have_received(:call)
+          end
+        }
+      end
+
       it 'AuthError 時は fallback を試し、成功すれば fallback 結果を返す' do
         fallback_result = {
           success: true,
@@ -122,7 +147,7 @@ RSpec.describe Ai::Client do
         }
 
         allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::AuthError.new(message: 'auth failed'))
-        allow(fallback_client).to receive(:call).with(input).and_return(fallback_result)
+        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
 
         result = client.call(input)
 
@@ -141,7 +166,7 @@ RSpec.describe Ai::Client do
         }
 
         allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::InvalidResponseError.new(message: 'invalid response'))
-        allow(fallback_client).to receive(:call).with(input).and_return(fallback_result)
+        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
 
         result = client.call(input)
 

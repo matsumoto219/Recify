@@ -15,7 +15,7 @@ module Ai
       end
 
       def merge(metrics, values = {})
-        sanitize(normalized_hash(metrics).merge(normalized_hash(values)))
+        sanitize(normalized_hash(metrics).merge(normalized_hash(values).compact))
       end
 
       def sanitize(value)

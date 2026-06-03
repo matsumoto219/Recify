@@ -46,4 +46,19 @@ RSpec.describe Ai::ProviderMetrics do
       )
     end
   end
+
+  describe '.merge' do
+    it 'nilの上書き値で既存metricsを消さない' do
+      metrics = described_class.merge(
+        { provider: 'openai', retry_count: 1 },
+        { provider: nil, retry_after_used: false }
+      )
+
+      expect(metrics).to include(
+        provider: 'openai',
+        retry_count: 1,
+        retry_after_used: false
+      )
+    end
+  end
 end
