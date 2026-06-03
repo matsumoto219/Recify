@@ -194,6 +194,27 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to be_nil
       end
 
+      it 'PaymentMethods query field由来の補助候補だけでは payment_method を埋めない' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:payment_candidates] = [
+          {
+            source: 'query_field',
+            field_name: 'PaymentMethods',
+            method: 'PayPay ¥1,280',
+            raw_text: 'PayPay ¥1,280',
+            confidence: 0.82
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to be_nil
+          expect(params[:receipt_payments_attributes]).to eq([])
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [

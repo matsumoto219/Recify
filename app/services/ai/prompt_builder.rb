@@ -478,7 +478,11 @@ module Ai
         next unless candidate.is_a?(Hash)
 
         {
+          source: fetch(candidate, :source),
+          field_name: fetch(candidate, :field_name),
           method: fetch(candidate, :method),
+          raw_text: fetch(candidate, :raw_text),
+          content: fetch(candidate, :content),
           amount: normalize_number(fetch(candidate, :amount)),
           confidence: normalize_decimal(fetch(candidate, :confidence))
         }.compact

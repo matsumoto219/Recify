@@ -375,6 +375,7 @@ module ReceiptAnalysisRuns
         tax_amount: safe_value(candidates[:tax_amount]),
         tax_rate: safe_value(candidates[:tax_rate]),
         payment_method_text: safe_string(candidates[:payment_method_text]),
+        payment_candidates: limited_hashes(candidates[:payment_candidates], MAX_PAYMENT_CANDIDATES),
         tip_amount: safe_value(candidates[:tip_amount]),
         currency_code: safe_string(candidates[:currency_code]),
         country_region: safe_string(candidates[:country_region]),

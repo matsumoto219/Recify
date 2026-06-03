@@ -140,6 +140,21 @@ RSpec.describe Ocr::Client do
   end
 
   describe '#submit_request' do
+    it 'prebuilt receipt analyze requestにPaymentMethods query fieldを指定する' do
+      analyze_path = client.send(:analyze_path)
+      uri = URI.parse("https://example.test#{analyze_path}")
+      query = Rack::Utils.parse_nested_query(uri.query)
+
+      aggregate_failures do
+        expect(uri.path).to eq('/documentintelligence/documentModels/prebuilt-receipt:analyze')
+        expect(query).to include(
+          'api-version' => '2024-11-30',
+          'features' => 'queryFields',
+          'queryFields' => 'PaymentMethods'
+        )
+      end
+    end
+
     it '429が1回出た後に成功したらretryしてoperation-locationを返す' do
       connection = stub_connection_post(
         client,

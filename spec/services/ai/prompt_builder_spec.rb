@@ -194,6 +194,32 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it 'PaymentMethods query field由来の補助候補をAI入力へ渡す' do
+      ocr_result[:candidates][:payment_candidates] = [
+        {
+          source: 'query_field',
+          field_name: 'PaymentMethods',
+          method: 'PayPay ¥400',
+          raw_text: 'PayPay ¥400',
+          content: '支払い PayPay ¥400',
+          confidence: '0.84'
+        }
+      ]
+
+      result = described_class.build(ocr_result)
+
+      expect(result.dig(:payment, :payment_candidates)).to include(
+        hash_including(
+          source: 'query_field',
+          field_name: 'PaymentMethods',
+          method: 'PayPay ¥400',
+          raw_text: 'PayPay ¥400',
+          content: '支払い PayPay ¥400',
+          confidence: 0.84
+        )
+      )
+    end
+
     it 'キーワード未登録の短い調整候補もadjustment_context_linesとfull_context_linesに残す' do
       ocr_result[:lines] = [
         'サンプル店舗',

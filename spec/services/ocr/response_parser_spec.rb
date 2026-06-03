@@ -286,6 +286,46 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'PaymentMethods query fieldは確定支払い方法へ昇格せず補助候補として扱う' do
+      query_field_response = raw_response.deep_dup
+      query_field_response['analyzeResult']['content'] = <<~TEXT
+        サンプルストア
+        合計 1280
+      TEXT
+      fields = query_field_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['PaymentMethods'] = {
+        'valueString' => 'PayPay ¥1,280',
+        'content' => '支払い PayPay ¥1,280',
+        'confidence' => 0.82
+      }
+
+      result = described_class.new(response: query_field_response).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :payment_method_text)).to be_nil
+        expect(result.dig(:candidates, :payment_candidates)).to include(
+          hash_including(
+            source: 'query_field',
+            field_name: 'PaymentMethods',
+            method: 'PayPay ¥1,280',
+            raw_text: 'PayPay ¥1,280',
+            content: '支払い PayPay ¥1,280',
+            confidence: 0.82
+          )
+        )
+      end
+    end
+
+    it 'fixtureのPaymentMethods query fieldも補助候補として扱う' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/zero_tax_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :payment_candidates)).to include(
+        hash_including(field_name: 'PaymentMethods', method: '現 金', source: 'query_field')
+      )
+    end
+
     it 'Azure Totalがお預かり金額を指す場合は会計合計候補を優先する' do
       deposit_response = raw_response.deep_dup
       deposit_response['analyzeResult']['content'] = <<~TEXT

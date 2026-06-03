@@ -36,6 +36,7 @@ module Ocr
         tax_details: [],
         adjustment_candidates: [],
         payment_method_text: nil,
+        payment_candidates: [],
         items: [],
         review_reasons: [],
         confidence_summary: empty_confidence_summary

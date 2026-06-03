@@ -25,7 +25,7 @@ module Ocr
     BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
     MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
     QUERY_FIELDS_FEATURE = "queryFields"
-    QUERY_FIELDS = [ "PaymentMethod" ].freeze
+    QUERY_FIELDS = [ "PaymentMethods" ].freeze
 
     def initialize(image:, provider: "azure_document_intelligence")
       @image = image

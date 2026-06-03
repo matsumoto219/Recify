@@ -26,6 +26,7 @@ class Ocr::ResponseParser
   TOTAL_ANCHOR_PATTERN = /合\s*計|総合計|total/i.freeze
   TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
   PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
+  PAYMENT_QUERY_FIELD_NAME = "PaymentMethods"
 
   def initialize(response:, provider: nil)
     @response = response
@@ -55,6 +56,7 @@ class Ocr::ResponseParser
         tax_amount: extract_tax_amount(parsed_response, normalized_lines),
         tax_rate: extract_tax_rate(parsed_response),
         payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),
+        payment_candidates: extract_payment_candidates(parsed_response),
         tip_amount: extract_tip_amount(parsed_response),                                                           # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
         currency_code: extract_currency_code(parsed_response),
         country_region: extract_country_region(parsed_response),
@@ -168,7 +170,8 @@ class Ocr::ResponseParser
   # - Discounts / Offers → MVPでは lines から割引額のみ直前itemへ紐付ける
   # - ProductCode → 保存のみで、画面表示/検索では未使用
   # - Hotel専用field / MerchantAliases / Items.Date / Items.Category → 通常レシート対象外のため未採用
-  # - Payment_methods query field → 公式schemaではなくquery拡張候補。PaymentMethod fallback以外は未採用
+  # - PaymentMethods query field → 公式schemaの Payments[] とは別のqueryFields補助候補。
+  #   DB保存や payment_method_text 昇格はせず、AI判断材料として payment_candidates に渡す
   #
   # 方針:
   # - parserでは「安全に取れるものだけ扱う」
@@ -499,15 +502,6 @@ class Ocr::ResponseParser
   end
 
   def extract_payment_method_text(parsed_response, raw_text, lines)
-    fields = extract_fields(parsed_response)
-    query_field_names = %w[PaymentMethod PaymentsMethod]
-
-    query_field_names.each do |field_name|
-      value = fields.dig(field_name, "valueString") || fields.dig(field_name, "content")
-      normalized_value = normalize_payment_text(value)
-      return normalized_value if normalized_value.present? && !point_or_membership_only_payment_text?(normalized_value)
-    end
-
     strong_line = extract_payment_method_from_lines(lines)
     return strong_line if strong_line.present?
 
@@ -515,6 +509,37 @@ class Ocr::ResponseParser
     return normalized_raw_match if normalized_raw_match.present? && !point_or_membership_only_payment_text?(normalized_raw_match)
 
     nil
+  end
+
+  def extract_payment_candidates(parsed_response)
+    fields = extract_fields(parsed_response)
+    candidate = payment_query_candidate(fields[PAYMENT_QUERY_FIELD_NAME])
+
+    candidate.present? ? [ candidate ] : []
+  rescue NoMethodError, TypeError
+    []
+  end
+
+  def payment_query_candidate(field)
+    return nil unless field.is_a?(Hash)
+
+    raw_value = field["valueString"].presence || field["content"].presence
+    return nil if raw_value.blank?
+
+    {
+      source: "query_field",
+      field_name: PAYMENT_QUERY_FIELD_NAME,
+      method: normalize_payment_candidate_text(raw_value),
+      raw_text: raw_value.to_s,
+      content: field["content"].presence,
+      confidence: field["confidence"]
+    }.compact
+  end
+
+  def normalize_payment_candidate_text(text)
+    return nil if text.blank?
+
+    text.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, " ").strip.presence
   end
 
   def extract_payment_method_from_lines(lines)
