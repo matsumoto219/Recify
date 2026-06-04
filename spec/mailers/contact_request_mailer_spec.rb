@@ -76,6 +76,28 @@ RSpec.describe ContactRequestMailer, type: :mailer do
       end
     end
 
+    it '返信保証ではないdescriptionをHTML/TEXTに段落付きで表示する' do
+      contact_request = create(:contact_request, sender_name: '入力 太郎', email: 'sender@example.com')
+
+      mail = described_class.auto_reply(contact_request)
+      text_body = mail.text_part.body.decoded
+      html_body = mail.html_part.body.decoded
+
+      aggregate_failures do
+        expect(text_body).to include(I18n.t('contact_requests.mailer.auto_reply.title'))
+        expect(text_body).to include(<<~TEXT.chomp)
+          お問い合わせありがとうございます。
+          内容を確認のうえ、必要に応じて返信いたします。
+          返信までお時間をいただく場合があります。
+
+          ※すべてのお問い合わせに対して返信をお約束するものではございません。あらかじめご了承ください。
+        TEXT
+        expect(html_body).to match(/お問い合わせありがとうございます。\s*<br \/>/)
+        expect(html_body).to match(/内容を確認のうえ、必要に応じて返信いたします。\s*<br \/>/)
+        expect(html_body).to match(/返信までお時間をいただく場合があります。<\/p>\s*<p style=.*※すべてのお問い合わせに対して返信をお約束するものではございません。/m)
+      end
+    end
+
     it 'sender_nameなしならuser.nameを宛名にする' do
       user = create(:user, name: '登録 花子', email: 'registered@example.com')
       contact_request = create(:contact_request, sender_name: nil, user: user, email: 'registered@example.com')
@@ -103,6 +125,17 @@ RSpec.describe ContactRequestMailer, type: :mailer do
       aggregate_failures do
         expect(mail_body).not_to include(body)
         expect(mail_body).not_to include('password recovery code TOTP secret cookie session')
+      end
+    end
+
+    it 'admin通知メールには自動返信descriptionを載せない' do
+      contact_request = create(:contact_request, sender_name: '入力 太郎', email: 'sender@example.com')
+
+      mail_body = decoded_mail_body(described_class.admin_notification(contact_request))
+
+      aggregate_failures do
+        expect(mail_body).not_to include('すべてのお問い合わせに対して返信をお約束するものではございません')
+        expect(mail_body).to include(I18n.t('contact_requests.mailer.admin_notification.title'))
       end
     end
   end
