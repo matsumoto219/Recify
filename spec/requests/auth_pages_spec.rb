@@ -351,6 +351,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
+        expect(email_input['placeholder']).to eq(I18n.t('auth.registrations.new.fields.email_placeholder'))
         expect(email_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present
         expect(password_confirmation_input.attribute('required')).to be_present
@@ -851,6 +852,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
+      email_input = document.at_css('input[name="user[email]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -860,6 +862,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.passwords.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.passwords.new.buttons.submit'))
         expect(response.body).to include(I18n.t('auth.passwords.new.back_to_login'))
+        expect(email_input['placeholder']).to eq(I18n.t('auth.passwords.new.fields.email_placeholder'))
         expect(login_link).to be_present
       end
     end
@@ -924,6 +927,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_confirmation_path
 
       document = Nokogiri::HTML(response.body)
+      email_input = document.at_css("input[type='email'][name='user[email]']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -934,7 +938,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.confirmations.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.buttons.submit'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_login'))
-        expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+        expect(email_input).to be_present
+        expect(email_input['placeholder']).to eq(I18n.t('auth.confirmations.new.fields.email_placeholder'))
         expect(document.at_css("a[href='#{new_user_session_path}']")).to be_present
       end
     end
@@ -1201,6 +1206,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
+      email_input = document.at_css("input[type='email'][name='user[email]']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -1209,7 +1215,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.unlocks.new.title'))
         expect(response.body).to include(I18n.t('auth.unlocks.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.unlocks.new.buttons.submit'))
-        expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
+        expect(email_input).to be_present
+        expect(email_input['placeholder']).to eq(I18n.t('auth.unlocks.new.fields.email_placeholder'))
         expect(login_link).to be_present
       end
     end

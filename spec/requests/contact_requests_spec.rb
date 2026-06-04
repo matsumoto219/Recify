@@ -56,6 +56,7 @@ RSpec.describe 'Contact requests', type: :request do
 
       document = Nokogiri::HTML(response.body)
       safety_text = document.at_css('.token-bg-warning-soft').text
+      email_input = document.at_css("input[type='email'][name='contact_request[email]']")
       category_select = document.at_css("select[name='contact_request[category]']")
       category_first_option = category_select.at_css('option:first-child')
 
@@ -64,6 +65,7 @@ RSpec.describe 'Contact requests', type: :request do
         expect(response.body).to include(I18n.t('contact_requests.new.title'))
         expect(category_first_option['value']).to eq('')
         expect(category_first_option.text).to eq(I18n.t('contact_requests.placeholders.category'))
+        expect(email_input['placeholder']).to eq(I18n.t('contact_requests.placeholders.email'))
         expect(category_select.at_css("option[value='other'][selected]")).to be_nil
         expect(safety_text).to include('安全のため、必要な範囲の情報のみ入力してください。')
         expect(safety_text).to include('個人情報')

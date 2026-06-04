@@ -30,11 +30,14 @@ RSpec.describe 'User recovery codes', type: :request do
       start_pending_recovery_code(user)
 
       get users_two_factor_recovery_code_path
+      document = Nokogiri::HTML(response.body)
+      code_input = document.at_css("input[name='code']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.title'))
         expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.button'))
+        expect(code_input['placeholder']).to eq(I18n.t('auth.two_factor.recovery_code.code_placeholder'))
         codes.each { |code| expect(response.body).not_to include(code) }
       end
     end

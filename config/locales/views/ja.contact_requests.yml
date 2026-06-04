@@ -19,7 +19,7 @@ ja:
       company_name: 会社名
     placeholders:
       sender_name: 任意
-      email: you@example.com
+      email: contact@example.com
       category: 種別を選択
       subject: 例）レシート解析結果について
       body: 状況、発生日時、レシートID、操作内容などを入力してください。

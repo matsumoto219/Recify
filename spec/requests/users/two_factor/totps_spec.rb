@@ -38,10 +38,14 @@ RSpec.describe 'User TOTP step-up', type: :request do
 
       get users_two_factor_totp_path
 
+      document = Nokogiri::HTML(response.body)
+      code_input = document.at_css("input[name='code']")
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.two_factor.totp.title'))
         expect(response.body).to include(I18n.t('auth.two_factor.totp.button'))
+        expect(code_input['placeholder']).to eq(I18n.t('auth.two_factor.totp.code_placeholder'))
         expect(response.body).not_to include(credential.totp_secret)
         expect(response.body).not_to include('recovery_code=')
       end

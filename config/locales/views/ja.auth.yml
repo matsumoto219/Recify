@@ -87,6 +87,7 @@ ja:
         form_title: 新規登録フォーム
         fields:
           email: メールアドレス
+          email_placeholder: new@example.com
           password: パスワード
           password_confirmation: パスワード確認
           minimum_password_length: "%{count}文字以上"
@@ -123,6 +124,7 @@ ja:
         form_title: パスワード再設定フォーム
         fields:
           email: メールアドレス
+          email_placeholder: reset@example.com
         buttons:
           submit: 再設定メールを送信
           submitting: 送信中...
@@ -146,7 +148,7 @@ ja:
         form_title: 確認メール再送フォーム
         fields:
           email: メールアドレス
-          email_placeholder: メールアドレスを入力
+          email_placeholder: confirm@example.com
         buttons:
           submit: 確認メールを再送
           submitting: 送信中...
@@ -160,7 +162,7 @@ ja:
         form_title: ロック解除メール再送フォーム
         fields:
           email: メールアドレス
-          email_placeholder: メールアドレスを入力
+          email_placeholder: unlock@example.com
         buttons:
           submit: ロック解除メールを再送
           submitting: 送信中...
