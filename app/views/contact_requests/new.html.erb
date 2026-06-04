@@ -86,6 +86,8 @@
           <%= form.text_field :company_name, tabindex: "-1", autocomplete: "off" %>
         </div>
 
+        <%= render "shared/bot_protection/turnstile_widget" %>
+
         <%= render "shared/ui/actions/button",
               label: t("contact_requests.buttons.submit"),
               variant: :primary,

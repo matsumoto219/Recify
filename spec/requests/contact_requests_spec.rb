@@ -27,6 +27,22 @@ RSpec.describe 'Contact requests', type: :request do
     post contact_path, params: { contact_request: params }, headers: { 'REMOTE_ADDR' => ip }
   end
 
+  def with_turnstile_env(enabled:, site_key:, secret_key:)
+    original_enabled = ENV["TURNSTILE_ENABLED"]
+    original_site_key = ENV["TURNSTILE_SITE_KEY"]
+    original_secret_key = ENV["TURNSTILE_SECRET_KEY"]
+
+    ENV["TURNSTILE_ENABLED"] = enabled.to_s
+    ENV["TURNSTILE_SITE_KEY"] = site_key
+    ENV["TURNSTILE_SECRET_KEY"] = secret_key
+
+    yield
+  ensure
+    ENV["TURNSTILE_ENABLED"] = original_enabled
+    ENV["TURNSTILE_SITE_KEY"] = original_site_key
+    ENV["TURNSTILE_SECRET_KEY"] = original_secret_key
+  end
+
   describe 'GET /contact' do
     it '問い合わせフォームと個人情報を必要範囲に絞る注意文を表示する' do
       get contact_path
@@ -52,6 +68,28 @@ RSpec.describe 'Contact requests', type: :request do
         expect(safety_text).not_to include('recovery code', 'TOTP secret', 'cookie', 'session')
         expect(response.body).not_to include('TODO', '未実装')
       end
+    end
+
+    it 'Turnstile有効時はwidgetを表示し、secretはHTMLへ出さない' do
+      with_turnstile_env(enabled: true, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get contact_path
+      end
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
+        expect(document.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(response.body).not_to include('test_secret_key')
+      end
+    end
+
+    it 'Turnstile無効時はwidgetを表示しない' do
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get contact_path
+      end
+
+      expect(response.body).not_to include('cf-turnstile')
     end
 
     it 'logged-in userには返信先emailを表示し、email inputは出さない' do

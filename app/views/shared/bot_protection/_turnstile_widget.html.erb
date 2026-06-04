@@ -1,0 +1,6 @@
+<% if turnstile_widget_enabled? %>
+  <div class="flex justify-center">
+    <div class="cf-turnstile" data-sitekey="<%= turnstile_site_key %>"></div>
+  </div>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<% end %>

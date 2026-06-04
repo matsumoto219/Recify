@@ -117,6 +117,8 @@
                         method: :post,
                         local: true,
                         class: "w-full" do %>
+            <%= render "shared/bot_protection/turnstile_widget" %>
+
             <%= render "shared/ui/actions/button",
                   label: t("auth.sessions.guest.button"),
                   variant: :secondary,

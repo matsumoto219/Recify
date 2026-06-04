@@ -65,6 +65,22 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
+  def with_turnstile_env(enabled:, site_key:, secret_key:)
+    original_enabled = ENV["TURNSTILE_ENABLED"]
+    original_site_key = ENV["TURNSTILE_SITE_KEY"]
+    original_secret_key = ENV["TURNSTILE_SECRET_KEY"]
+
+    ENV["TURNSTILE_ENABLED"] = enabled.to_s
+    ENV["TURNSTILE_SITE_KEY"] = site_key
+    ENV["TURNSTILE_SECRET_KEY"] = secret_key
+
+    yield
+  ensure
+    ENV["TURNSTILE_ENABLED"] = original_enabled
+    ENV["TURNSTILE_SITE_KEY"] = original_site_key
+    ENV["TURNSTILE_SECRET_KEY"] = original_secret_key
+  end
+
   describe 'GET /users/sign_in' do
     it 'renders login copy through locale keys and keeps guest login action' do
       get new_user_session_path
@@ -102,6 +118,29 @@ RSpec.describe 'Auth pages', type: :request do
         expect(forgot_password_link).to be_present
         expect(sign_up_link).to be_present
       end
+    end
+
+    it 'Turnstile有効時はguest formにwidgetを表示し、secretはHTMLへ出さない' do
+      with_turnstile_env(enabled: true, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_session_path
+      end
+
+      document = Nokogiri::HTML(response.body)
+      guest_form = document.at_css("form[action='#{guest_sign_in_path}']")
+
+      aggregate_failures do
+        expect(guest_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
+        expect(guest_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(response.body).not_to include('test_secret_key')
+      end
+    end
+
+    it 'Turnstile無効時はwidgetを表示しない' do
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_session_path
+      end
+
+      expect(response.body).not_to include('cf-turnstile')
     end
 
     it 'invalid sign in shows locale-backed field errors' do
