@@ -63,7 +63,7 @@ class Users::PasskeySessionsController < ApplicationController
   private
 
   def passkey_login_allowed?(user)
-    user.active_for_authentication? && !user.guest?
+    user.active_for_authentication? && !user.guest? && Maintenance.login_allowed_for?(user)
   end
 
   def clear_pending_second_factor

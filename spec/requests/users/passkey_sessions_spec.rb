@@ -92,6 +92,29 @@ RSpec.describe 'User passkey sessions', type: :request do
       end
     end
 
+    it 'login_restricted中の一般ユーザーpasskey loginは拒否する' do
+      user = create(:user)
+      passkey = create_passkey_with_fake_client(user)
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      options = authentication_options_payload
+      credential = fake_assertion_credential(options, user: user)
+
+      expect do
+        post users_passkey_sessions_path,
+             params: { credential: credential },
+             as: :json
+      end.not_to change(UserSession, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.sessions.passkey.messages.failure'))
+        expect(passkey.reload.last_used_at).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+        expect(session[:user_session_version]).to be_blank
+        expect(session[:user_session_uid]).to be_blank
+      end
+    end
+
     it 'passkey reset後は削除済みcredentialでログインできない' do
       admin = create(:user, :admin)
       user = create(:user)

@@ -26,6 +26,7 @@ class ContactRequestsController < ApplicationController
              only: :create,
              if: :rate_limit_contact_email_present?
 
+  prepend_before_action :enforce_maintenance_restriction!, only: :create
   before_action :verify_turnstile!, only: :create
 
   def new
@@ -45,6 +46,15 @@ class ContactRequestsController < ApplicationController
   end
 
   private
+
+  def enforce_maintenance_restriction!
+    return unless maintenance_login_restricted?
+
+    @contact_request = build_contact_request
+    @contact_request.assign_attributes(contact_request_params.except(:email, :company_name))
+    flash.now[:alert] = maintenance_restriction_message
+    render :new, status: :unprocessable_content
+  end
 
   def build_contact_request
     ContactRequest.new(

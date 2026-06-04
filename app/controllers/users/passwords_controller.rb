@@ -10,6 +10,7 @@ class Users::PasswordsController < Devise::PasswordsController
              only: :create,
              if: :rate_limit_email_present?
 
+  prepend_before_action :enforce_maintenance_restriction!, only: :create
   before_action :verify_turnstile!, only: :create
 
   # GET /resource/password/new
@@ -38,6 +39,14 @@ class Users::PasswordsController < Devise::PasswordsController
 
   def set_flash_from_resource_errors(resource)
     flash.now[:alert] = resource.errors.full_messages
+  end
+
+  def enforce_maintenance_restriction!
+    return unless maintenance_login_restricted?
+
+    self.resource = resource_class.new(email: params.dig(resource_name, :email).to_s)
+    flash.now[:alert] = maintenance_restriction_message
+    render :new, status: :unprocessable_content
   end
 
   def verify_turnstile!

@@ -385,6 +385,29 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'login_restricted中は通常登録を拒否し、user作成と確認メール送信をしない' do
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'maintenance-registration@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('shared.maintenance_mode.body'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'Turnstile有効時にtokenなしならuserを作成せず確認メールを送らない' do
       allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
 
@@ -993,6 +1016,26 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'login_restricted中はconfirmation resendを拒否し、確認メールを送らない' do
+      user = create(:user, :unconfirmed)
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      ActionMailer::Base.deliveries.clear
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('shared.maintenance_mode.body'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'Turnstile有効時にtokenなしならconfirmation mailを送らない' do
       user = create(:user, :unconfirmed)
       ActionMailer::Base.deliveries.clear
@@ -1180,6 +1223,25 @@ RSpec.describe 'Auth pages', type: :request do
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.reset_password_instructions.action'))
+      end
+    end
+
+    it 'login_restricted中はpassword resetを拒否し、reset password mailを送らない' do
+      user = create(:user)
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      post user_password_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('shared.maintenance_mode.body'))
+        expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
 

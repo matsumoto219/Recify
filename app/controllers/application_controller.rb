@@ -84,15 +84,30 @@ class ApplicationController < ActionController::Base
   end
 
   def enforce_maintenance_existing_session!
-    return unless user_signed_in?
-    return unless Maintenance.login_restricted?(user: current_user)
-    return if Maintenance.admin_bypass_user?(current_user)
+    return unless authenticated_user_session?
 
-    message = Maintenance.body(user: current_user)
-    UserSessions.record_sign_out(user: current_user, session: session)
+    user = current_user
+    return unless user
+    return unless maintenance_login_restricted?
+    return if Maintenance.admin_bypass_user?(user)
+
+    message = maintenance_restriction_message(user: user)
+    UserSessions.record_sign_out(user: user, session: session)
     clear_user_session_version
     sign_out(:user)
     redirect_to new_user_session_path, alert: message, status: :see_other
+  end
+
+  def authenticated_user_session?
+    session["warden.user.user.key"].present?
+  end
+
+  def maintenance_login_restricted?
+    Maintenance.login_restricted?(user: current_user)
+  end
+
+  def maintenance_restriction_message(user: nil)
+    Maintenance.body(user: user || current_user)
   end
 
   def touch_current_user_session

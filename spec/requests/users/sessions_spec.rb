@@ -60,6 +60,48 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
+  it 'login_restricted中の一般ユーザーpassword loginは拒否する' do
+    user = create(:user)
+    create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+    expect do
+      post user_session_path,
+           params: { user: { email: user.email, password: 'password' } }
+    end.not_to change(UserSession, :count)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(flash[:alert]).to eq(I18n.t('shared.maintenance_mode.body'))
+      expect(flash[:notice]).to be_nil
+      expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to be_blank
+      expect(session[:user_session_uid]).to be_blank
+      expect(user.reload.sign_in_count).to eq(0)
+      expect_no_dashboard_shell
+    end
+  end
+
+  it 'login_restricted中でもadmin password loginは許可する' do
+    admin = create(:user, :admin)
+    create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+    expect do
+      post user_session_path,
+           params: { user: { email: admin.email, password: 'password' } }
+    end.to change { admin.reload.sign_in_count }.from(0).to(1)
+      .and change(UserSession, :count).by(1)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq(I18n.t('auth.sessions.messages.signed_in'))
+      expect(flash[:alert]).to be_nil
+      expect(session[:pending_second_factor]).to be_blank
+      expect(session[:user_session_version]).to eq(admin.session_version)
+      expect(session[:user_session_uid]).to be_present
+    end
+  end
+
   it 'unconfirmed userは2FA要素があってもpassword loginでpendingへ進まない' do
     user = create(:user, :unconfirmed)
     create(:passkey, user: user)

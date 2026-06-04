@@ -22,6 +22,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
              if: :rate_limit_email_change_context?
 
   before_action :configure_sign_up_params, only: [ :create ]
+  prepend_before_action :enforce_maintenance_sign_up_restriction!, only: [ :create ]
   before_action :verify_turnstile!, only: [ :create ]
   before_action :configure_account_update_params, only: [ :update ]
 
@@ -148,6 +149,17 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def set_flash_from_resource_errors(resource)
     flash.now[:alert] = resource.errors.full_messages
+  end
+
+  def enforce_maintenance_sign_up_restriction!
+    return unless maintenance_login_restricted?
+
+    configure_sign_up_params
+    self.resource = build_resource(sign_up_params)
+    clean_up_passwords resource
+    set_minimum_password_length
+    flash.now[:alert] = maintenance_restriction_message
+    render :new, status: :unprocessable_content
   end
 
   def verify_turnstile!

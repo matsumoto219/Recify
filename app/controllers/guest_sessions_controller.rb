@@ -1,4 +1,5 @@
 class GuestSessionsController < ApplicationController
+  prepend_before_action :enforce_maintenance_restriction!, only: :create
   before_action :verify_turnstile!, only: :create
 
   def create
@@ -11,6 +12,12 @@ class GuestSessionsController < ApplicationController
   end
 
   private
+
+  def enforce_maintenance_restriction!
+    return unless maintenance_login_restricted?
+
+    redirect_to new_user_session_path, alert: maintenance_restriction_message
+  end
 
   def verify_turnstile!
     result = BotProtection.verify_turnstile(

@@ -107,6 +107,27 @@ RSpec.describe 'User TOTP step-up', type: :request do
       end
     end
 
+    it 'login_restricted中は既存pendingからのTOTP step-up完了を拒否する' do
+      user = create(:user)
+      credential = create_confirmed_totp(user)
+      start_pending_totp(user)
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      expect do
+        post users_two_factor_totp_create_path, params: { code: totp_code(credential) }
+      end.not_to change(UserSession, :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:alert]).to eq(I18n.t('auth.two_factor.messages.expired'))
+        expect(session[:pending_second_factor]).to be_blank
+        expect(session[:user_session_version]).to be_blank
+        expect(session[:user_session_uid]).to be_blank
+        expect(user.reload.sign_in_count).to eq(0)
+        expect(credential.reload.last_used_at).to be_blank
+      end
+    end
+
     it 'TOTP失敗ではpendingを維持する' do
       user = create(:user)
       credential = create_confirmed_totp(user)

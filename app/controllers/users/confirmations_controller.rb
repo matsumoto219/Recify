@@ -10,6 +10,7 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
              only: :create,
              if: :rate_limit_email_present?
 
+  prepend_before_action :enforce_maintenance_restriction!, only: :create
   before_action :verify_turnstile!, only: :create, unless: :turnstile_exempt_confirmation_context?
 
   # GET /resource/confirmation/new
@@ -28,6 +29,14 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
   # end
 
   protected
+
+  def enforce_maintenance_restriction!
+    return unless maintenance_login_restricted?
+
+    self.resource = resource_class.new(email: params.dig(resource_name, :email).to_s)
+    flash.now[:alert] = maintenance_restriction_message
+    render :new, status: :unprocessable_content
+  end
 
   def verify_turnstile!
     result = BotProtection.verify_turnstile(

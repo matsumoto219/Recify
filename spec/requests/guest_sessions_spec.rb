@@ -31,6 +31,20 @@ RSpec.describe 'GuestSessions', type: :request do
       end
     end
 
+    it 'login_restricted中はTurnstile検証前に拒否し、ゲストユーザーを作成しない' do
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      expect do
+        post guest_sign_in_path
+      end.not_to change(User.where(guest: true), :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:alert]).to eq(I18n.t('shared.maintenance_mode.body'))
+      end
+    end
+
     it 'locale経由の失敗flashでログイン画面へ戻す' do
       allow(User).to receive(:guest!).and_raise(StandardError, 'guest unavailable')
 

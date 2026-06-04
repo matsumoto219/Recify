@@ -41,7 +41,7 @@ module Users::TwoFactor::PendingSecondFactor
   end
 
   def pending_user_still_allowed?(user)
-    user.active_for_authentication? && !user.guest?
+    user.active_for_authentication? && !user.guest? && Maintenance.login_allowed_for?(user)
   end
 
   def pending_second_factor_session

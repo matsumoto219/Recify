@@ -159,6 +159,22 @@ RSpec.describe 'Contact requests', type: :request do
       end
     end
 
+    it 'login_restricted中はTurnstile検証前に拒否し、問い合わせと通知メールを作成しない' do
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      ActionMailer::Base.deliveries.clear
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      expect {
+        post_contact(params: valid_contact_params(email: 'maintenance-contact@example.com'))
+      }.not_to change(ContactRequest, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('shared.maintenance_mode.body'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'Turnstile有効時にtokenなしなら問い合わせを作成せず通知メールも送らない' do
       allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
       expect(ContactRequestMailer).not_to receive(:admin_notification)

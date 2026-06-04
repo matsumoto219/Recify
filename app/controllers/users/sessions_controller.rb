@@ -30,6 +30,11 @@ class Users::SessionsController < Devise::SessionsController
         return
       end
 
+      unless Maintenance.login_allowed_for?(resource)
+        handle_maintenance_restricted_resource(resource)
+        return
+      end
+
       allowed_methods = second_factor_methods_for(resource)
       if allowed_methods.any?
         store_pending_second_factor(resource, allowed_methods: allowed_methods)
@@ -67,6 +72,15 @@ class Users::SessionsController < Devise::SessionsController
     self.resource = resource_class.new(sign_in_params)
     clear_inactive_authentication_state
     flash.now[:alert] = sign_in_failure_message(failure_message)
+    clean_up_passwords(resource)
+    set_minimum_password_length
+    render :new, status: :unprocessable_content
+  end
+
+  def handle_maintenance_restricted_resource(restricted_resource)
+    self.resource = resource_class.new(sign_in_params)
+    clear_inactive_authentication_state
+    flash.now[:alert] = maintenance_restriction_message(user: restricted_resource)
     clean_up_passwords(resource)
     set_minimum_password_length
     render :new, status: :unprocessable_content
