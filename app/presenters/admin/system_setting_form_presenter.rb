@@ -2,6 +2,7 @@ module Admin
   class SystemSettingFormPresenter
     TEXTAREA_STRING_KEYS = %w[
       ui.maintenance_notice_body
+      maintenance.body
     ].freeze
 
     FieldRender = Struct.new(:partial, :locals, keyword_init: true)

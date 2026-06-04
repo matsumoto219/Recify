@@ -153,6 +153,22 @@ RSpec.describe 'Admin system settings', type: :request do
         expect_no_side_effects
       end
     end
+
+    it 'login_restricted中でもadminユーザーはメンテナンス設定一覧を閲覧できる' do
+      admin = create(:user, :admin)
+      sign_in admin
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      get admin_system_settings_path(category: 'maintenance')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('システム設定')
+        expect(response.body).to include('maintenance.mode')
+        expect(response.body).to include('maintenance.title')
+        expect(response.body).to include('maintenance.body')
+      end
+    end
   end
 
   describe 'GET /admin/system_settings/:key' do
@@ -239,6 +255,24 @@ RSpec.describe 'Admin system settings', type: :request do
       reauthenticate_admin_with_passkey!(admin)
 
       get admin_system_setting_path('ui.maintenance_notice_body')
+
+      document = Nokogiri::HTML(response.body)
+      textarea = document.at_css('textarea[name="value"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(textarea).to be_present
+        expect(textarea['maxlength']).to eq('1000')
+        expect(document.at_css('input[name="value"]')).to be_nil
+      end
+    end
+
+    it 'メンテナンス本文はtextareaで表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('maintenance.body')
 
       document = Nokogiri::HTML(response.body)
       textarea = document.at_css('textarea[name="value"]')
@@ -415,6 +449,28 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('shared.maintenance_notice.title'))
         expect(response.body).to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
+    it 'login_restricted中でもadminはmaintenance.modeをoffへ戻せる' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      patch admin_system_setting_path('maintenance.mode'),
+            params: {
+              value: 'off',
+              reason: 'maintenance finished',
+              confirm: '1'
+            }
+
+      setting = SystemSetting.find_by!(key: 'maintenance.mode')
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('maintenance.mode'))
+        expect(flash[:notice]).to include('設定を更新しました')
+        expect(setting.value).to eq('value' => 'off')
       end
     end
 

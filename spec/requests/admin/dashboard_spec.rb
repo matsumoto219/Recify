@@ -301,6 +301,40 @@ RSpec.describe 'Admin dashboard', type: :request do
       end
     end
 
+    it 'login_restricted中でもadminユーザーは総合トップを閲覧できる' do
+      admin = create(:user, :admin)
+      sign_in admin
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+      allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
+      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(ExternalServices).to receive(:status_snapshot).and_return(
+        ocr: { state: 'ok', text: I18n.t('shared.service_status.ok'), monitoring: false, checked_at: nil, next_check_at: nil },
+        ai: { state: 'ok', text: I18n.t('shared.service_status.ok'), monitoring: false, checked_at: nil, next_check_at: nil },
+        upload: { allowed: true, ocr_available: true },
+        notices: { ocr_down: false, ai_down: false }
+      )
+      allow(Storage).to receive(:system_usage_snapshot).and_return(
+        total_blob_count: 0,
+        attached_blob_count: 0,
+        orphan_blob_count: 0,
+        total_blob_bytes: 0,
+        attached_blob_bytes: 0,
+        orphan_blob_bytes: 0,
+        user_count: 0,
+        quota_total_bytes: 1.gigabyte,
+        quota_used_bytes: 0
+      )
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('管理トップ')
+        expect(response.body).to include('システム運用')
+        expect(response.body).to include(admin_system_settings_path)
+      end
+    end
+
     it 'request開始時のlocaleが英語でもadmin dashboardは日本語固定で、localeを汚染しない' do
       admin = create(:user, :admin)
       sign_in admin
