@@ -10,6 +10,8 @@ class Users::PasswordsController < Devise::PasswordsController
              only: :create,
              if: :rate_limit_email_present?
 
+  before_action :verify_turnstile!, only: :create
+
   # GET /resource/password/new
   # def new
   #   super
@@ -36,6 +38,19 @@ class Users::PasswordsController < Devise::PasswordsController
 
   def set_flash_from_resource_errors(resource)
     flash.now[:alert] = resource.errors.full_messages
+  end
+
+  def verify_turnstile!
+    result = BotProtection.verify_turnstile(
+      token: params["cf-turnstile-response"],
+      remote_ip: request.remote_ip
+    )
+
+    return if result.success?
+
+    self.resource = resource_class.new(email: params.dig(resource_name, :email).to_s)
+    flash.now[:alert] = t("flash.bot_protection.verification_failed")
+    render :new, status: :unprocessable_content
   end
 
   # def after_resetting_password_path_for(resource)

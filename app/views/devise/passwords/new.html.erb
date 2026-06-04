@@ -34,6 +34,8 @@
                 label_class: "text-xs font-bold uppercase tracking-widest block px-1",
                 error_message_class: "px-1 text-xs leading-relaxed" %>
 
+          <%= render "shared/bot_protection/turnstile_widget" %>
+
           <%= render "shared/ui/actions/button",
                 label: t("auth.passwords.new.buttons.submit"),
                 type: "submit",
