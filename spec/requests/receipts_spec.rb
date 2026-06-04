@@ -62,6 +62,10 @@ RSpec.describe 'Receipts', type: :request do
     document.at_css('#receipt-index-controls')
   end
 
+  def logout_confirm_value(sign_out_form)
+    sign_out_form['data-turbo-confirm'] || sign_out_form.at_css('button')&.[]('data-turbo-confirm')
+  end
+
   def selected_receipt_index_control(document, name)
     receipt_index_controls(document).at_css("select[name='#{name}'] option[selected]")&.[]('value')
   end
@@ -161,6 +165,25 @@ RSpec.describe 'Receipts', type: :request do
         expect(sign_out_form.at_css('input[name="_method"]')['value']).to eq('delete')
         expect(sign_out_form.at_css('button')).to be_present
         expect(sign_out_form.text).to include(I18n.t('common.logout'))
+        expect(logout_confirm_value(sign_out_form)).to eq(I18n.t('dashboard.header.logout_confirm'))
+      end
+    end
+
+    it 'guestのログアウト導線は再アクセス不可の可能性をconfirmで警告する' do
+      sign_out user
+      guest = create(:user, guest: true)
+      sign_in guest
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      sign_out_form = document.at_css("form[action='#{destroy_user_session_path}'][method='post']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(sign_out_form).to be_present
+        expect(sign_out_form.at_css('input[name="_method"]')['value']).to eq('delete')
+        expect(logout_confirm_value(sign_out_form)).to eq(I18n.t('dashboard.header.logout_confirm_guest'))
       end
     end
 

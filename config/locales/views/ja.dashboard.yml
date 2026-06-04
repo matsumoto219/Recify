@@ -18,6 +18,11 @@ ja:
       search_label: 検索
       notifications_label: 通知
       logout_confirm: ログアウトしますか？
+      logout_confirm_guest: |-
+        ログアウトすると、このゲストアカウントに再度アクセスできなくなります。
+        必要なデータがある場合は、本登録を完了してからログアウトしてください。
+
+        ログアウトしますか？
     search:
       placeholder: レシートを検索
       close_label: 検索を閉じる

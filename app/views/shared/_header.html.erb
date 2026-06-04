@@ -46,11 +46,12 @@
               size: 32,
               class: "border token-border-brand-soft" %>
 
+        <% logout_confirm_message = current_user.guest? ? t("dashboard.header.logout_confirm_guest") : t("dashboard.header.logout_confirm") %>
         <%= button_to destroy_user_session_path,
           method: :delete,
           form: { class: "contents" },
           data: {
-            turbo_confirm: t("dashboard.header.logout_confirm")
+            turbo_confirm: logout_confirm_message
           },
           class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] token-text-muted header-text-error-hover transition-colors ml-1 rounded-md cursor-pointer bg-transparent border-0" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
