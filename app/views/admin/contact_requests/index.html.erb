@@ -171,6 +171,7 @@
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.index.table.status") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.index.table.category") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :subject) %>"><%= t("admin.contact_requests.index.table.subject") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :subject) %>"><%= t("admin.contact_requests.index.table.sender_name") %></th>
             <th class="px-3 py-2 font-semibold"><%= t("admin.contact_requests.index.table.user") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :email) %>"><%= t("admin.contact_requests.index.table.email") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.contact_requests.index.table.detail") %></th>
@@ -184,6 +185,7 @@
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.statuses.#{record[:status]}") %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.contact_requests.categories.#{record[:category]}") %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :subject) %>" title="<%= record[:subject] %>"><%= record[:subject] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :subject) %>" title="<%= record[:sender_name].presence || t("admin.contact_requests.common.sender_name_blank") %>"><%= record[:sender_name].presence || t("admin.contact_requests.common.sender_name_blank") %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>">
                 <% if record[:user_id].present? %>
                   <%= link_to "##{record[:user_id]}", admin_user_path(record[:user_id]), class: "token-text-brand hover:underline" %>
@@ -198,7 +200,7 @@
 
           <% if @result.records.empty? %>
             <tr>
-              <td colspan="8" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.contact_requests.index.results.empty") %></td>
+              <td colspan="9" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.contact_requests.index.results.empty") %></td>
             </tr>
           <% end %>
         </tbody>

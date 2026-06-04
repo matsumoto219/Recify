@@ -120,6 +120,7 @@ module Admin
         status: contact_request.status,
         category: contact_request.category,
         source: contact_request.source,
+        sender_name: contact_request.sender_name,
         subject: contact_request.subject,
         body: contact_request.body,
         user_id: contact_request.user_id,

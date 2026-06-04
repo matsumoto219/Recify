@@ -86,6 +86,10 @@
         </dd>
       </div>
       <div>
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.sender_name") %></dt>
+        <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:sender_name].presence || t("admin.contact_requests.common.sender_name_blank") %></dd>
+      </div>
+      <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_masked") %></dt>
         <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:email_masked] %></dd>
       </div>

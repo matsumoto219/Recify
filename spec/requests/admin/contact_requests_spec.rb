@@ -47,7 +47,7 @@ RSpec.describe 'Admin contact requests', type: :request do
 
     it 'adminが一覧とnavigationを閲覧でき、返信先全文は表示しない' do
       admin = create(:user, :admin)
-      contact_request = create(:contact_request, email: 'sender@example.com', subject: '問い合わせ件名')
+      contact_request = create(:contact_request, email: 'sender@example.com', sender_name: '送信 太郎', subject: '問い合わせ件名')
       sign_in admin
 
       get admin_contact_requests_path
@@ -57,6 +57,7 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include(I18n.t('admin.contact_requests.index.title'))
         expect(response.body).to include(I18n.t('admin.navigation.contact_requests'))
         expect(response.body).to include(contact_request.request_uid)
+        expect(response.body).to include('送信 太郎')
         expect(response.body).to include('se***@example.com')
         expect(response.body).not_to include('sender@example.com')
       end
@@ -83,7 +84,7 @@ RSpec.describe 'Admin contact requests', type: :request do
     it 'adminが詳細を閲覧できる' do
       admin = create(:user, :admin)
       user = create(:user)
-      contact_request = create(:contact_request, user: user, email: 'sender@example.com', body: '問い合わせ本文')
+      contact_request = create(:contact_request, user: user, email: 'sender@example.com', sender_name: '送信 太郎', body: '問い合わせ本文')
       sign_in admin
 
       get admin_contact_request_path(contact_request)
@@ -92,6 +93,7 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(contact_request.request_uid)
         expect(response.body).to include('問い合わせ本文')
+        expect(response.body).to include('送信 太郎')
         expect(response.body).to include('se***@example.com')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')

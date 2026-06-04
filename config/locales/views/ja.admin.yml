@@ -785,6 +785,8 @@ ja:
           admin_target_forbidden: 管理者ユーザーの上限は変更できません。
           default: ユーザー別上限を更新できませんでした。
     contact_requests:
+      common:
+        sender_name_blank: 未入力
       categories:
         bug: 不具合
         account: アカウント
@@ -833,6 +835,7 @@ ja:
           status: ステータス
           category: 種別
           subject: 件名
+          sender_name: お名前
           user: ユーザー
           email: 返信先
           detail: 詳細
@@ -849,6 +852,7 @@ ja:
           category: 種別
           source: 送信元
           user: ユーザー
+          sender_name: お名前
           email_masked: 返信先
           email_digest: 返信先識別子
           subject: 件名

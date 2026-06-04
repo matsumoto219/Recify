@@ -11,6 +11,7 @@ RSpec.describe Admin::ContactRequestsQuery do
         category: 'security',
         status: 'open',
         source: 'authenticated',
+        sender_name: '送信 太郎',
         subject: '安全性の相談'
       )
 
@@ -23,6 +24,7 @@ RSpec.describe Admin::ContactRequestsQuery do
         expect(record[:email_masked]).not_to eq('sender@example.com')
         expect(record[:email_digest]).to eq(contact_request.email_digest)
         expect(record[:user_id]).to eq(user.id)
+        expect(record[:sender_name]).to eq('送信 太郎')
       end
     end
 
