@@ -213,7 +213,7 @@ module SystemSettings
       when "decimal"
         cast_decimal(definition, value)
       when "string"
-        cast_string(value)
+        cast_string(definition, value)
       when "enum"
         cast_enum(definition, value)
       when "percentage"
@@ -256,8 +256,11 @@ module SystemSettings
       raise ValidationError, "invalid_decimal"
     end
 
-    def cast_string(value)
-      value.to_s
+    def cast_string(definition, value)
+      string = value.to_s
+      raise ValidationError, "above_max" if definition.max && string.length > definition.max
+
+      string
     end
 
     def cast_enum(definition, value)

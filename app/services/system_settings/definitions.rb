@@ -50,6 +50,24 @@ module SystemSettings
         risk_level: "low"
       ),
       Definition.new(
+        key: "ui.maintenance_notice_title",
+        category: "ui_notice",
+        value_type: "string",
+        default: "",
+        editable: true,
+        risk_level: "low",
+        max: 80
+      ),
+      Definition.new(
+        key: "ui.maintenance_notice_body",
+        category: "ui_notice",
+        value_type: "string",
+        default: "",
+        editable: true,
+        risk_level: "low",
+        max: 1000
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",

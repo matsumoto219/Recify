@@ -9,6 +9,8 @@ RSpec.describe SystemSettings do
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
         'ui.maintenance_notice_enabled',
+        'ui.maintenance_notice_title',
+        'ui.maintenance_notice_body',
         'storage.keep_receipt_images_default',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
@@ -50,6 +52,13 @@ RSpec.describe SystemSettings do
 
     it 'レシート画像保持defaultはtrueを返す' do
       expect(described_class.value_for('storage.keep_receipt_images_default')).to eq(true)
+    end
+
+    it 'お知らせ文言defaultはlocale fallback用の空文字を返す' do
+      aggregate_failures do
+        expect(described_class.value_for('ui.maintenance_notice_title')).to eq('')
+        expect(described_class.value_for('ui.maintenance_notice_body')).to eq('')
+      end
     end
 
     it 'DB値がある場合はcast済みの値を返す' do
@@ -283,6 +292,19 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+      end
+    end
+
+    it 'stringのmaxを検証する' do
+      aggregate_failures do
+        expect(described_class.cast_update_value('ui.maintenance_notice_title', '臨時メンテナンス')).to eq('臨時メンテナンス')
+        expect(described_class.stored_value_for_update('ui.maintenance_notice_title', '臨時メンテナンス')).to eq('value' => '臨時メンテナンス')
+        expect {
+          described_class.cast_update_value('ui.maintenance_notice_title', 'a' * 81)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('ui.maintenance_notice_body', 'a' * 1001)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end
