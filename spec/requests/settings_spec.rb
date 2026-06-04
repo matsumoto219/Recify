@@ -187,6 +187,57 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'maintenance notice uses configured title and body when present' do
+      create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(true))
+      create(:system_setting, key: 'ui.maintenance_notice_title', value: SystemSettings.stored_value('重要なお知らせ'))
+      create(:system_setting, key: 'ui.maintenance_notice_body', value: SystemSettings.stored_value("1行目\n2行目"))
+
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      notice = document.at_css('[data-controller~="notice-surface"]')
+      body_node = notice.css('p').find { |node| node.text.include?('1行目') && node.text.include?('2行目') }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice.text).to include('重要なお知らせ')
+        expect(notice.text).to include('1行目')
+        expect(notice.text).to include('2行目')
+        expect(body_node).to be_present
+        expect(body_node['class']).to include('whitespace-pre-wrap')
+      end
+    end
+
+    it 'maintenance notice falls back to locale when configured text is blank' do
+      create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(true))
+      create(:system_setting, key: 'ui.maintenance_notice_title', value: SystemSettings.stored_value(''))
+      create(:system_setting, key: 'ui.maintenance_notice_body', value: SystemSettings.stored_value(''))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.title'))
+        expect(response.body).to include(I18n.t('shared.maintenance_notice.body'))
+      end
+    end
+
+    it 'maintenance notice escapes configured HTML text' do
+      create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(true))
+      create(:system_setting, key: 'ui.maintenance_notice_title', value: SystemSettings.stored_value('<strong>重要</strong>'))
+      create(:system_setting, key: 'ui.maintenance_notice_body', value: SystemSettings.stored_value("<script>alert('x')</script>"))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('&lt;strong&gt;重要&lt;/strong&gt;')
+        expect(response.body).to include('&lt;script&gt;alert')
+        expect(response.body).not_to include('<strong>重要</strong>')
+        expect(response.body).not_to include("<script>alert('x')</script>")
+      end
+    end
+
     it 'maintenance notice is hidden when the system setting is disabled' do
       create(:system_setting, key: 'ui.maintenance_notice_enabled', value: SystemSettings.stored_value(false))
 

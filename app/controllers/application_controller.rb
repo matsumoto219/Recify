@@ -42,7 +42,7 @@ class ApplicationController < ActionController::Base
     end
   end
 
-  helper_method :maintenance_notice_enabled?
+  helper_method :maintenance_notice_enabled?, :maintenance_notice_title, :maintenance_notice_body
 
   private
 
@@ -90,6 +90,18 @@ class ApplicationController < ActionController::Base
     return false unless user_signed_in?
 
     SystemSettings.enabled?("ui.maintenance_notice_enabled", user: current_user)
+  end
+
+  def maintenance_notice_title
+    maintenance_notice_text("ui.maintenance_notice_title", fallback_key: "shared.maintenance_notice.title")
+  end
+
+  def maintenance_notice_body
+    maintenance_notice_text("ui.maintenance_notice_body", fallback_key: "shared.maintenance_notice.body")
+  end
+
+  def maintenance_notice_text(key, fallback_key:)
+    SystemSettings.value_for(key, user: current_user).to_s.presence || I18n.t(fallback_key)
   end
 
   def prepare_notifications_dropdown?
