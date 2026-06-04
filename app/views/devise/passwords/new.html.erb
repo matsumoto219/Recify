@@ -14,6 +14,8 @@
             spacing_class: "space-y-3" %>
     </section>
 
+    <%= render "shared/ui/feedback/maintenance_mode_banner" %>
+
     <%= render "shared/ui/layout/surface_card", title_id: "password-reset-form-title" do %>
       <div class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6">
         <h2 id="password-reset-form-title" class="sr-only"><%= t("auth.passwords.new.form_title") %></h2>

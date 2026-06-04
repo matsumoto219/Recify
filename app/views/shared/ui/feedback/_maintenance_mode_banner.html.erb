@@ -1,0 +1,7 @@
+<% if maintenance_mode_login_restricted? %>
+  <%= render "shared/ui/feedback/notice_surface",
+             notice_type: :warning,
+             title: maintenance_mode_title,
+             message: maintenance_mode_body,
+             class: "text-left" %>
+<% end %>

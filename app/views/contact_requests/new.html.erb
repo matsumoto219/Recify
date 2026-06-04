@@ -18,6 +18,8 @@
         subtitle_size: "text-base",
         align: :center %>
 
+  <%= render "shared/ui/feedback/maintenance_mode_banner" %>
+
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-6 rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-base">
       <p class="font-semibold token-text-warning"><%= t("contact_requests.new.safety_title") %></p>

@@ -43,7 +43,8 @@ class ApplicationController < ActionController::Base
     end
   end
 
-  helper_method :maintenance_notice_enabled?, :maintenance_notice_title, :maintenance_notice_body
+  helper_method :maintenance_notice_enabled?, :maintenance_notice_title, :maintenance_notice_body,
+                :maintenance_mode_login_restricted?, :maintenance_mode_title, :maintenance_mode_body
 
   private
 
@@ -108,6 +109,18 @@ class ApplicationController < ActionController::Base
 
   def maintenance_restriction_message(user: nil)
     Maintenance.body(user: user || current_user)
+  end
+
+  def maintenance_mode_login_restricted?
+    maintenance_login_restricted?
+  end
+
+  def maintenance_mode_title
+    Maintenance.title(user: current_user)
+  end
+
+  def maintenance_mode_body
+    maintenance_restriction_message
   end
 
   def touch_current_user_session

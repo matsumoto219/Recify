@@ -27,6 +27,12 @@ RSpec.describe 'Contact requests', type: :request do
     post contact_path, params: { contact_request: params }, headers: { 'REMOTE_ADDR' => ip }
   end
 
+  def enable_login_restricted_maintenance(title: '臨時メンテナンス', body: "1行目\n2行目")
+    create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+    create(:system_setting, key: 'maintenance.title', value: SystemSettings.stored_value(title))
+    create(:system_setting, key: 'maintenance.body', value: SystemSettings.stored_value(body))
+  end
+
   def with_turnstile_env(enabled:, site_key:, secret_key:)
     original_enabled = ENV["TURNSTILE_ENABLED"]
     original_site_key = ENV["TURNSTILE_SITE_KEY"]
@@ -90,6 +96,25 @@ RSpec.describe 'Contact requests', type: :request do
       end
 
       expect(response.body).not_to include('cf-turnstile')
+    end
+
+    it 'login_restricted中は問い合わせ画面にメンテナンスメッセージを表示しHTMLをescapeする' do
+      enable_login_restricted_maintenance(
+        title: '<strong>臨時メンテナンス</strong>',
+        body: "<script>alert('x')</script>\n再開までお待ちください。"
+      )
+
+      get contact_path
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.text).to include('<strong>臨時メンテナンス</strong>')
+        expect(document.text).to include("<script>alert('x')</script>")
+        expect(document.text).to include('再開までお待ちください。')
+        expect(response.body).not_to include('<strong>臨時メンテナンス</strong>')
+        expect(response.body).not_to include("<script>alert('x')</script>")
+      end
     end
 
     it 'logged-in userには返信先emailを表示し、email inputは出さない' do
