@@ -296,6 +296,10 @@ RSpec.describe 'Auth pages', type: :request do
   end
 
   describe 'GET /users/sign_up' do
+    before do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+    end
+
     it 'renders registration copy through locale keys' do
       get new_user_registration_path
 
@@ -320,6 +324,29 @@ RSpec.describe 'Auth pages', type: :request do
         expect(password_confirmation_input.attribute('required')).to be_present
         expect(login_link).to be_present
       end
+    end
+
+    it 'Turnstile有効時はregistration formにwidgetを表示し、secretはHTMLへ出さない' do
+      with_turnstile_env(enabled: true, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_registration_path
+      end
+
+      document = Nokogiri::HTML(response.body)
+      registration_form = document.at_css("form[action='#{user_registration_path}']")
+
+      aggregate_failures do
+        expect(registration_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
+        expect(registration_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(response.body).not_to include('test_secret_key')
+      end
+    end
+
+    it 'Turnstile無効時はregistration formにwidgetを表示しない' do
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_registration_path
+      end
+
+      expect(response.body).not_to include('cf-turnstile')
     end
 
     it 'registration creates unconfirmed user and sends confirmation mail' do
@@ -356,6 +383,90 @@ RSpec.describe 'Auth pages', type: :request do
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
       end
+    end
+
+    it 'Turnstile有効時にtokenなしならuserを作成せず確認メールを送らない' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'turnstile-missing-registration@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.bot_protection.verification_failed'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it 'Turnstile検証失敗時はuserを作成しない' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_verification_failed"))
+
+      expect do
+        post user_registration_path,
+          params: {
+            "cf-turnstile-response" => "invalid-token",
+            user: {
+              email: 'turnstile-failed-registration@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it 'Turnstile検証成功時は既存registration flowを維持する' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+
+      expect do
+        post user_registration_path,
+          params: {
+            "cf-turnstile-response" => "valid-token",
+            user: {
+              email: 'turnstile-success-registration@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end.to change(User, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+      end
+    end
+
+    it 'Turnstile無効時は既存registration flowを維持する' do
+      allow(BotProtection).to receive(:verify_turnstile).and_call_original
+
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        expect do
+          post user_registration_path,
+            params: {
+              user: {
+                email: 'turnstile-disabled-registration@example.com',
+                password: 'password',
+                password_confirmation: 'password',
+                legal_agreement: '1'
+              }
+            }
+        end.to change(User, :count).by(1)
+      end
+
+      expect(response).to redirect_to(new_user_session_path)
     end
 
     it 'registration ignores spoofed admin param' do

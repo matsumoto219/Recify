@@ -22,6 +22,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
              if: :rate_limit_email_change_context?
 
   before_action :configure_sign_up_params, only: [ :create ]
+  before_action :verify_turnstile!, only: [ :create ]
   before_action :configure_account_update_params, only: [ :update ]
 
   # GET /resource/sign_up
@@ -147,6 +148,21 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def set_flash_from_resource_errors(resource)
     flash.now[:alert] = resource.errors.full_messages
+  end
+
+  def verify_turnstile!
+    result = BotProtection.verify_turnstile(
+      token: params["cf-turnstile-response"],
+      remote_ip: request.remote_ip
+    )
+
+    return if result.success?
+
+    self.resource = build_resource(sign_up_params)
+    clean_up_passwords resource
+    set_minimum_password_length
+    flash.now[:alert] = t("flash.bot_protection.verification_failed")
+    render :new, status: :unprocessable_content
   end
 
   def update_email

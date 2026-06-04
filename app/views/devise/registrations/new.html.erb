@@ -94,6 +94,8 @@
             <% end %>
           </section>
 
+          <%= render "shared/bot_protection/turnstile_widget" %>
+
           <div class="pt-4">
             <%= render "shared/ui/actions/button",
                   label: t("auth.registrations.new.submit"),
