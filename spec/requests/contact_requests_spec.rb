@@ -159,6 +159,51 @@ RSpec.describe 'Contact requests', type: :request do
       end
     end
 
+    it 'Turnstile有効時にtokenなしなら問い合わせを作成せず通知メールも送らない' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
+      expect(ContactRequestMailer).not_to receive(:admin_notification)
+
+      expect {
+        post_contact(params: valid_contact_params(email: 'turnstile-missing@example.com'))
+      }.not_to change(ContactRequest, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.bot_protection.verification_failed'))
+      end
+    end
+
+    it 'Turnstile検証失敗時は問い合わせを作成しない' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_verification_failed"))
+
+      expect {
+        post contact_path,
+          params: {
+            "cf-turnstile-response" => "invalid-token",
+            contact_request: valid_contact_params(email: 'turnstile-failed@example.com')
+          }
+      }.not_to change(ContactRequest, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it 'Turnstile検証成功時は既存の問い合わせ作成flowを維持する' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+
+      expect {
+        post contact_path,
+          params: {
+            "cf-turnstile-response" => "valid-token",
+            contact_request: valid_contact_params(email: 'turnstile-success@example.com')
+          }
+      }.to change(ContactRequest, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(contact_path)
+        expect(flash[:notice]).to eq(I18n.t('contact_requests.messages.created'))
+      end
+    end
+
     it 'validation errorを表示する' do
       expect {
         post_contact(params: valid_contact_params(email: '', subject: '', body: ''))

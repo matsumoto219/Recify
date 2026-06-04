@@ -26,6 +26,8 @@ class ContactRequestsController < ApplicationController
              only: :create,
              if: :rate_limit_contact_email_present?
 
+  before_action :verify_turnstile!, only: :create
+
   def new
     @contact_request = build_contact_request
   end
@@ -71,6 +73,20 @@ class ContactRequestsController < ApplicationController
 
   def contact_request_params
     params.fetch(:contact_request, {}).permit(:email, :category, :subject, :body, :company_name)
+  end
+
+  def verify_turnstile!
+    result = BotProtection.verify_turnstile(
+      token: params["cf-turnstile-response"],
+      remote_ip: request.remote_ip
+    )
+
+    return if result.success?
+
+    @contact_request = build_contact_request
+    @contact_request.assign_attributes(contact_request_params.except(:email, :company_name))
+    flash.now[:alert] = t("flash.bot_protection.verification_failed")
+    render :new, status: :unprocessable_content
   end
 
   def rate_limit_registered_contact_user?
