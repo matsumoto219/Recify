@@ -5,6 +5,8 @@ ja:
     failure:
       invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
+    bot_protection:
+      verification_failed: 認証に失敗しました。時間をおいてもう一度お試しください。
     rate_limit:
       too_many_requests: |-
         リクエストが多すぎます。

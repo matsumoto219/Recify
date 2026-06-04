@@ -41,5 +41,38 @@ RSpec.describe 'GuestSessions', type: :request do
         expect(flash[:alert]).to eq(I18n.t('flash.guest_sessions.create.failure'))
       end
     end
+
+    it 'Turnstile有効時にtokenなしならゲストを作成せずログイン画面へ戻す' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
+
+      expect do
+        post guest_sign_in_path
+      end.not_to change(User.where(guest: true), :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.bot_protection.verification_failed'))
+      end
+    end
+
+    it 'Turnstile検証失敗時はゲストを作成しない' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_verification_failed"))
+
+      expect do
+        post guest_sign_in_path, params: { "cf-turnstile-response" => "invalid-token" }
+      end.not_to change(User.where(guest: true), :count)
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+
+    it 'Turnstile検証成功時は既存guest login flowを維持する' do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+
+      expect do
+        post guest_sign_in_path, params: { "cf-turnstile-response" => "valid-token" }
+      end.to change(User.where(guest: true), :count).by(1)
+
+      expect(response).to redirect_to(receipts_path)
+    end
   end
 end
