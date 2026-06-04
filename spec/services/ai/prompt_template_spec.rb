@@ -107,6 +107,30 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it '商品名補完OFF時はOCR由来の商品名を絶対に編集しないよう指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('suggested_name: preserve the item name exactly as captured by OCR and do not edit it under any circumstances.')
+        expect(user_prompt).not_to include('improve OCR item names with typos or noise only when clearly supported')
+        expect(user_prompt).not_to include('infer or complete item names when they appear truncated, noisy, or misspelled')
+      end
+    end
+
+    it '商品名補完ON時は商品名の補完・誤字修正だけを許可する' do
+      prompt = described_class.build(
+        input.deep_merge(meta: { ai_name_completion_enabled: true })
+      )
+      enabled_user_prompt = prompt[:user]
+
+      aggregate_failures do
+        expect(enabled_user_prompt).to include('suggested_name: infer or complete item names when they appear truncated, noisy, or misspelled.')
+        expect(enabled_user_prompt).to include('When completing or correcting item names, preserve the original writing style, such as katakana, kanji, or uppercase/lowercase English.')
+        expect(enabled_user_prompt).to include('Do NOT change an item into a different product by guesswork.')
+        expect(enabled_user_prompt).to include('Complete or correct item names only when confidence is sufficiently high.')
+        expect(enabled_user_prompt).to include('Keep needs_review = true when the completed result is not sufficiently confident.')
+        expect(enabled_user_prompt).not_to include('preserve the item name exactly as captured by OCR and do not edit it under any circumstances.')
+      end
+    end
+
     it 'レシートではない画像の判定ルールを指示する' do
       aggregate_failures do
         expect(user_prompt).to include('Before completing OCR candidate values, decide whether the Input JSON represents a receipt.')

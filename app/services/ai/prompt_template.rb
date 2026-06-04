@@ -282,15 +282,15 @@ module Ai
     def user_item_name_rules
       if ai_name_completion_enabled?
         <<~RULES.chomp
-          - suggested_name: infer and improve item names that appear truncated or contain noise.
-          - When correcting or completing item names, preserve the original writing style, such as katakana, kanji, or casing.
-          - Complete or correct item names only when the context supports the result with high confidence.
-          - If multiple plausible completions exist, keep the original OCR text.
-          - Even when completion confidence is not high, keep needs_review = true.
+          - suggested_name: infer or complete item names when they appear truncated, noisy, or misspelled.
+          - When completing or correcting item names, preserve the original writing style, such as katakana, kanji, or uppercase/lowercase English.
+          - Do NOT change an item into a different product by guesswork.
+          - Complete or correct item names only when confidence is sufficiently high.
+          - Keep needs_review = true when the completed result is not sufficiently confident.
         RULES
       else
         <<~RULES.chomp
-          - suggested_name: improve OCR item names with typos or noise only when clearly supported by raw_text, matched_content_lines, matched_filtered_content_lines, or filtered_content.
+          - suggested_name: preserve the item name exactly as captured by OCR and do not edit it under any circumstances.
         RULES
       end
     end
