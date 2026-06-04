@@ -85,10 +85,12 @@ RSpec.describe 'Contact requests', type: :request do
       end
 
       document = Nokogiri::HTML(response.body)
+      turnstile_widget = document.at_css('.cf-turnstile')
 
       aggregate_failures do
-        expect(document.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
-        expect(document.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(turnstile_widget['data-controller']).to eq('turnstile')
+        expect(turnstile_widget['data-turnstile-site-key-value']).to eq('test_site_key')
+        expect(document.at_css("script[src*='turnstile']")).to be_nil
         expect(response.body).not_to include('test_secret_key')
       end
     end

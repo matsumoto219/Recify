@@ -133,10 +133,12 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       guest_form = document.at_css("form[action='#{guest_sign_in_path}']")
+      turnstile_widget = guest_form.at_css('.cf-turnstile')
 
       aggregate_failures do
-        expect(guest_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
-        expect(guest_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(turnstile_widget['data-controller']).to eq('turnstile')
+        expect(turnstile_widget['data-turnstile-site-key-value']).to eq('test_site_key')
+        expect(guest_form.at_css("script[src*='turnstile']")).to be_nil
         expect(response.body).not_to include('test_secret_key')
       end
     end
@@ -366,10 +368,12 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       registration_form = document.at_css("form[action='#{user_registration_path}']")
+      turnstile_widget = registration_form.at_css('.cf-turnstile')
 
       aggregate_failures do
-        expect(registration_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
-        expect(registration_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(turnstile_widget['data-controller']).to eq('turnstile')
+        expect(turnstile_widget['data-turnstile-site-key-value']).to eq('test_site_key')
+        expect(registration_form.at_css("script[src*='turnstile']")).to be_nil
         expect(response.body).not_to include('test_secret_key')
       end
     end
@@ -874,10 +878,12 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       password_form = document.at_css("form[action='#{user_password_path}']")
+      turnstile_widget = password_form.at_css('.cf-turnstile')
 
       aggregate_failures do
-        expect(password_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
-        expect(password_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(turnstile_widget['data-controller']).to eq('turnstile')
+        expect(turnstile_widget['data-turnstile-site-key-value']).to eq('test_site_key')
+        expect(password_form.at_css("script[src*='turnstile']")).to be_nil
         expect(response.body).not_to include('test_secret_key')
       end
     end
@@ -951,10 +957,12 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       confirmation_form = document.at_css("form[action='#{user_confirmation_path}']")
+      turnstile_widget = confirmation_form.at_css('.cf-turnstile')
 
       aggregate_failures do
-        expect(confirmation_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
-        expect(confirmation_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(turnstile_widget['data-controller']).to eq('turnstile')
+        expect(turnstile_widget['data-turnstile-site-key-value']).to eq('test_site_key')
+        expect(confirmation_form.at_css("script[src*='turnstile']")).to be_nil
         expect(response.body).not_to include('test_secret_key')
       end
     end
