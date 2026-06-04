@@ -11,6 +11,9 @@ RSpec.describe SystemSettings do
         'ui.maintenance_notice_enabled',
         'ui.maintenance_notice_title',
         'ui.maintenance_notice_body',
+        'maintenance.mode',
+        'maintenance.title',
+        'maintenance.body',
         'storage.keep_receipt_images_default',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
@@ -58,6 +61,14 @@ RSpec.describe SystemSettings do
       aggregate_failures do
         expect(described_class.value_for('ui.maintenance_notice_title')).to eq('')
         expect(described_class.value_for('ui.maintenance_notice_body')).to eq('')
+      end
+    end
+
+    it 'メンテナンス制限defaultはoffとlocale fallback用の空文字を返す' do
+      aggregate_failures do
+        expect(described_class.value_for('maintenance.mode')).to eq('off')
+        expect(described_class.value_for('maintenance.title')).to eq('')
+        expect(described_class.value_for('maintenance.body')).to eq('')
       end
     end
 
@@ -300,12 +311,30 @@ RSpec.describe SystemSettings do
       aggregate_failures do
         expect(described_class.cast_update_value('ui.maintenance_notice_title', '臨時メンテナンス')).to eq('臨時メンテナンス')
         expect(described_class.stored_value_for_update('ui.maintenance_notice_title', '臨時メンテナンス')).to eq('value' => '臨時メンテナンス')
+        expect(described_class.cast_update_value('maintenance.title', 'メンテナンス中')).to eq('メンテナンス中')
+        expect(described_class.cast_update_value('maintenance.body', "1行目\n2行目")).to eq("1行目\n2行目")
         expect {
           described_class.cast_update_value('ui.maintenance_notice_title', 'a' * 81)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('ui.maintenance_notice_body', 'a' * 1001)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('maintenance.title', 'a' * 81)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('maintenance.body', 'a' * 1001)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+      end
+    end
+
+    it 'maintenance mode enumをcastする' do
+      aggregate_failures do
+        expect(described_class.cast_update_value('maintenance.mode', 'login_restricted')).to eq('login_restricted')
+        expect(described_class.stored_value_for_update('maintenance.mode', 'off')).to eq('value' => 'off')
+        expect {
+          described_class.cast_update_value('maintenance.mode', 'full')
+        }.to raise_error(SystemSettings::ValidationError, 'invalid_enum')
       end
     end
 

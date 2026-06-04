@@ -68,6 +68,33 @@ module SystemSettings
         max: 1000
       ),
       Definition.new(
+        key: "maintenance.mode",
+        category: "maintenance",
+        value_type: "enum",
+        default: "off",
+        editable: true,
+        risk_level: "high",
+        allowed_values: %w[off login_restricted]
+      ),
+      Definition.new(
+        key: "maintenance.title",
+        category: "maintenance",
+        value_type: "string",
+        default: "",
+        editable: true,
+        risk_level: "medium",
+        max: 80
+      ),
+      Definition.new(
+        key: "maintenance.body",
+        category: "maintenance",
+        value_type: "string",
+        default: "",
+        editable: true,
+        risk_level: "medium",
+        max: 1000
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",

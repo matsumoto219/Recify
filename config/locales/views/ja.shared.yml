@@ -73,6 +73,11 @@ ja:
     maintenance_notice:
       title: お知らせ
       body: 現在、一部機能の調整を行っています。
+    maintenance_mode:
+      title: メンテナンス中です
+      body: |-
+        現在、メンテナンスのため一部機能を停止しています。
+        時間をおいてから、もう一度お試しください。
     service_status:
       ok: 利用可能
       degraded: 不安定
