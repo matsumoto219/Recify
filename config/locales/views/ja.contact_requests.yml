@@ -61,3 +61,13 @@ ja:
           request_id: リクエストID
         body_notice: 本文は個人情報を含む可能性があるため、この通知メールには全文を載せていません。
         open_admin: 管理画面で確認する
+      auto_reply:
+        subject: "[Recify %{request_uid}] お問い合わせを受け付けました"
+        title: お問い合わせを受け付けました
+        description: お問い合わせありがとうございます。内容を確認のうえ、必要に応じて返信いたします。返信までお時間をいただく場合があります。
+        fields:
+          request_uid: 受付ID
+          created_at: 受付日時
+          category: 種別
+          subject: 件名
+        body_notice: 安全のため、お問い合わせ本文の全文はこのメールには記載していません。

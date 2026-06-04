@@ -53,4 +53,57 @@ RSpec.describe ContactRequestMailer, type: :mailer do
       end
     end
   end
+
+  describe '#auto_reply' do
+    def decoded_mail_body(mail)
+      [ mail.text_part&.body&.decoded, mail.html_part&.body&.decoded, mail.body.decoded ].compact.join("\n")
+    end
+
+    it 'sender_nameを宛名にして問い合わせ受付メールを送る' do
+      contact_request = create(:contact_request, sender_name: '入力 太郎', email: 'sender@example.com')
+
+      mail = described_class.auto_reply(contact_request)
+      body = decoded_mail_body(mail)
+
+      aggregate_failures do
+        expect(mail.to).to eq([ 'sender@example.com' ])
+        expect(mail.subject).to include(contact_request.request_uid)
+        expect(body).to include(I18n.t('auth.mailer.greeting', email: '入力 太郎'))
+        expect(body).to include(contact_request.request_uid)
+        expect(body).to include(I18n.t("contact_requests.categories.#{contact_request.category}"))
+        expect(body).to include(contact_request.subject)
+        expect(body).not_to include('お客様')
+      end
+    end
+
+    it 'sender_nameなしならuser.nameを宛名にする' do
+      user = create(:user, name: '登録 花子', email: 'registered@example.com')
+      contact_request = create(:contact_request, sender_name: nil, user: user, email: 'registered@example.com')
+
+      body = decoded_mail_body(described_class.auto_reply(contact_request))
+
+      expect(body).to include(I18n.t('auth.mailer.greeting', email: '登録 花子'))
+    end
+
+    it 'sender_name/user.nameなしならemailを宛名にする' do
+      user = create(:user, name: '', email: 'registered@example.com')
+      contact_request = create(:contact_request, sender_name: nil, user: user, email: 'registered@example.com')
+
+      body = decoded_mail_body(described_class.auto_reply(contact_request))
+
+      expect(body).to include(I18n.t('auth.mailer.greeting', email: 'registered@example.com'))
+    end
+
+    it '本文全文や秘密情報を自動返信メール本文に載せない' do
+      body = 'password recovery code TOTP secret cookie session を含む長い問い合わせ本文'
+      contact_request = create(:contact_request, sender_name: '入力 太郎', email: 'sender@example.com', body: body)
+
+      mail_body = decoded_mail_body(described_class.auto_reply(contact_request))
+
+      aggregate_failures do
+        expect(mail_body).not_to include(body)
+        expect(mail_body).not_to include('password recovery code TOTP secret cookie session')
+      end
+    end
+  end
 end

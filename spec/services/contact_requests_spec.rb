@@ -101,15 +101,18 @@ RSpec.describe ContactRequests do
     end
 
     it 'honeypot入力は保存せず成功扱いにする' do
+      result = nil
+
       expect {
         result = described_class.create(user: nil, params: valid_params(company_name: 'bot company'), request: request)
-
-        aggregate_failures do
-          expect(result).to be_success
-          expect(result).to be_spam
-          expect(result.contact_request).not_to be_persisted
-        end
       }.not_to change(ContactRequest, :count)
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result).to be_spam
+        expect(result.contact_request).not_to be_persisted
+        expect(enqueued_jobs).to be_empty
+      end
     end
 
     it 'URL大量投稿を拒否する' do
@@ -146,7 +149,13 @@ RSpec.describe ContactRequests do
       }.to have_enqueued_mail(ContactRequestMailer, :admin_notification)
     end
 
-    it 'SUPPORT_NOTIFICATION_EMAIL未設定でも問い合わせ保存は成功し、メールはenqueueしない' do
+    it '作成時に問い合わせ受付メールをenqueueする' do
+      expect {
+        described_class.create(user: nil, params: valid_params(email: 'auto-reply@example.com'), request: request)
+      }.to have_enqueued_mail(ContactRequestMailer, :auto_reply)
+    end
+
+    it 'SUPPORT_NOTIFICATION_EMAIL未設定でも問い合わせ保存と自動返信enqueueは成功する' do
       result = nil
 
       expect {
@@ -156,6 +165,9 @@ RSpec.describe ContactRequests do
       aggregate_failures do
         expect(result).to be_success
         expect(result.contact_request).to be_persisted
+        expect(enqueued_jobs).to include(
+          hash_including(args: include("ContactRequestMailer", "auto_reply"))
+        )
       end
     end
   end

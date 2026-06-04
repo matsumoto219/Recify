@@ -218,6 +218,7 @@ RSpec.describe 'Contact requests', type: :request do
     it 'Turnstile有効時にtokenなしなら問い合わせを作成せず通知メールも送らない' do
       allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
       expect(ContactRequestMailer).not_to receive(:admin_notification)
+      expect(ContactRequestMailer).not_to receive(:auto_reply)
 
       expect {
         post_contact(params: valid_contact_params(email: 'turnstile-missing@example.com'))
@@ -231,6 +232,7 @@ RSpec.describe 'Contact requests', type: :request do
 
     it 'Turnstile検証失敗時は問い合わせを作成しない' do
       allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_verification_failed"))
+      expect(ContactRequestMailer).not_to receive(:auto_reply)
 
       expect {
         post contact_path,

@@ -28,6 +28,20 @@ class ContactRequestMailer < ApplicationMailer
     )
   end
 
+  def auto_reply(contact_request)
+    @contact_request = contact_request
+    @recipient_name = contact_request_recipient_name(contact_request)
+    @created_at = contact_request.created_at.present? ? I18n.l(contact_request.created_at, format: :long) : "-"
+
+    mail(
+      to: contact_request.email,
+      subject: t(
+        "contact_requests.mailer.auto_reply.subject",
+        request_uid: contact_request.request_uid
+      )
+    )
+  end
+
   private
 
   def masked_email(email)

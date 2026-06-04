@@ -25,6 +25,7 @@ module ContactRequests
 
       if contact_request.errors.blank? && contact_request.save
         enqueue_admin_notification(contact_request)
+        enqueue_auto_reply(contact_request)
         Result.new(contact_request: contact_request, submitted: true, spam: false)
       else
         Result.new(contact_request: contact_request, submitted: false, spam: false, error_code: "validation_failed")
@@ -108,6 +109,10 @@ module ContactRequests
       end
 
       ContactRequestMailer.admin_notification(contact_request).deliver_later
+    end
+
+    def enqueue_auto_reply(contact_request)
+      ContactRequestMailer.auto_reply(contact_request).deliver_later
     end
 
     def hmac_secret

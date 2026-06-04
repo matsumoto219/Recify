@@ -1,0 +1,12 @@
+<%= t("contact_requests.mailer.auto_reply.title") %>
+
+<%= t("auth.mailer.greeting", email: @recipient_name) %>
+
+<%= t("contact_requests.mailer.auto_reply.description") %>
+
+<%= t("contact_requests.mailer.auto_reply.fields.request_uid") %>: <%= @contact_request.request_uid %>
+<%= t("contact_requests.mailer.auto_reply.fields.created_at") %>: <%= @created_at %>
+<%= t("contact_requests.mailer.auto_reply.fields.category") %>: <%= t("contact_requests.categories.#{@contact_request.category}") %>
+<%= t("contact_requests.mailer.auto_reply.fields.subject") %>: <%= @contact_request.subject %>
+
+<%= t("contact_requests.mailer.auto_reply.body_notice") %>
