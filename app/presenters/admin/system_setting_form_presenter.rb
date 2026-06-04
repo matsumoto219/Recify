@@ -1,5 +1,9 @@
 module Admin
   class SystemSettingFormPresenter
+    TEXTAREA_STRING_KEYS = %w[
+      ui.maintenance_notice_body
+    ].freeze
+
     FieldRender = Struct.new(:partial, :locals, keyword_init: true)
 
     attr_reader :record
@@ -51,6 +55,8 @@ module Admin
         user_allowlist_field(form)
       when "feature_flag"
         feature_flag_field(form)
+      when "string"
+        string_field(form)
       else
         text_field(form)
       end
@@ -157,15 +163,41 @@ module Admin
       )
     end
 
+    def string_field(form)
+      return textarea_string_field(form) if TEXTAREA_STRING_KEYS.include?(record[:key].to_s)
+
+      text_field(form)
+    end
+
+    def textarea_string_field(form)
+      FieldRender.new(
+        partial: "shared/ui/form/textarea_field",
+        locals: base_locals(form).merge(
+          value: current_value,
+          rows: 5,
+          size: :dense,
+          textarea_class: control_class,
+          html_options: string_html_options
+        )
+      )
+    end
+
     def text_field(form)
       FieldRender.new(
         partial: "shared/ui/form/text_field",
         locals: base_locals(form).merge(
           value: current_value,
           size: :dense,
-          input_class: control_class
+          input_class: control_class,
+          html_options: string_html_options
         )
       )
+    end
+
+    def string_html_options
+      return {} if record[:max].blank?
+
+      { maxlength: record[:max] }
     end
   end
 end

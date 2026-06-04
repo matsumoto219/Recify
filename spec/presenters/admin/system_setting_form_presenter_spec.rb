@@ -60,5 +60,32 @@ RSpec.describe Admin::SystemSettingFormPresenter do
         expect(field.locals[:textarea_class]).to include('font-mono')
       end
     end
+
+    it 'builds text field for regular string settings' do
+      field = described_class.new(
+        record: record(value_type: 'string', current_value: 'お知らせ', key: 'ui.maintenance_notice_title', max: 80),
+        reauthenticated: true
+      ).value_field_render(form: form)
+
+      aggregate_failures do
+        expect(field.partial).to eq('shared/ui/form/text_field')
+        expect(field.locals[:value]).to eq('お知らせ')
+        expect(field.locals[:html_options]).to eq(maxlength: 80)
+      end
+    end
+
+    it 'builds textarea for maintenance notice body' do
+      field = described_class.new(
+        record: record(value_type: 'string', current_value: "本文1\n本文2", key: 'ui.maintenance_notice_body', max: 1000),
+        reauthenticated: true
+      ).value_field_render(form: form)
+
+      aggregate_failures do
+        expect(field.partial).to eq('shared/ui/form/textarea_field')
+        expect(field.locals[:value]).to eq("本文1\n本文2")
+        expect(field.locals[:rows]).to eq(5)
+        expect(field.locals[:html_options]).to eq(maxlength: 1000)
+      end
+    end
   end
 end

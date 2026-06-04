@@ -215,6 +215,42 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it 'お知らせタイトルはtext fieldで表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('ui.maintenance_notice_title')
+
+      document = Nokogiri::HTML(response.body)
+      input = document.at_css('input[name="value"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(input).to be_present
+        expect(input['maxlength']).to eq('80')
+        expect(document.at_css('textarea[name="value"]')).to be_nil
+      end
+    end
+
+    it 'お知らせ本文はtextareaで表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('ui.maintenance_notice_body')
+
+      document = Nokogiri::HTML(response.body)
+      textarea = document.at_css('textarea[name="value"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(textarea).to be_present
+        expect(textarea['maxlength']).to eq('1000')
+        expect(document.at_css('input[name="value"]')).to be_nil
+      end
+    end
+
     it '存在しないkeyは404にする' do
       admin = create(:user, :admin)
       sign_in admin
@@ -337,6 +373,28 @@ RSpec.describe 'Admin system settings', type: :request do
           'reauthentication_method' => 'passkey'
         )
         expect(audit_log.attributes.to_json).not_to include('credential_id', 'challenge', 'public_key', 'secret')
+      end
+    end
+
+    it 'お知らせ本文を更新でき、admin表示ではHTMLとして実行しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_path('ui.maintenance_notice_body'),
+            params: {
+              value: "<script>alert('x')</script>\n本文",
+              reason: 'announcement copy update'
+            }
+
+      setting = SystemSetting.find_by!(key: 'ui.maintenance_notice_body')
+
+      get admin_system_setting_path('ui.maintenance_notice_body')
+
+      aggregate_failures do
+        expect(setting.value).to eq('value' => "<script>alert('x')</script>\n本文")
+        expect(response.body).to include('&lt;script&gt;alert')
+        expect(response.body).not_to include("<script>alert('x')</script>")
       end
     end
 
