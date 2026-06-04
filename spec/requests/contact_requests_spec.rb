@@ -16,6 +16,7 @@ RSpec.describe 'Contact requests', type: :request do
   def valid_contact_params(overrides = {})
     {
       email: 'sender@example.com',
+      sender_name: '送信 太郎',
       category: 'account',
       subject: '問い合わせ件名',
       body: '問い合わせ本文です。',
@@ -118,17 +119,20 @@ RSpec.describe 'Contact requests', type: :request do
     end
 
     it 'logged-in userには返信先emailを表示し、email inputは出さない' do
-      user = create(:user, email: 'contact-user@example.com')
+      user = create(:user, email: 'contact-user@example.com', name: '登録 花子')
       sign_in user
 
       get contact_path
 
       document = Nokogiri::HTML(response.body)
+      sender_name_input = document.at_css('input[name="contact_request[sender_name]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('contact-user@example.com')
         expect(document.at_css('input[name="contact_request[email]"]')).to be_nil
+        expect(sender_name_input['value']).to eq('登録 花子')
+        expect(sender_name_input['required']).to be_nil
       end
     end
   end
@@ -149,6 +153,7 @@ RSpec.describe 'Contact requests', type: :request do
         expect(flash[:notice]).to eq(I18n.t('contact_requests.messages.created'))
         expect(contact_request.user).to eq(user)
         expect(contact_request.email).to eq('registered@example.com')
+        expect(contact_request.sender_name).to eq('送信 太郎')
         expect(contact_request.source).to eq('authenticated')
       end
     end
@@ -166,6 +171,7 @@ RSpec.describe 'Contact requests', type: :request do
       aggregate_failures do
         expect(contact_request.user).to eq(guest)
         expect(contact_request.email).to eq('guest-reply@example.com')
+        expect(contact_request.sender_name).to eq('送信 太郎')
         expect(contact_request.source).to eq('guest')
       end
     end
@@ -180,8 +186,17 @@ RSpec.describe 'Contact requests', type: :request do
       aggregate_failures do
         expect(contact_request.user).to be_nil
         expect(contact_request.email).to eq('public-reply@example.com')
+        expect(contact_request.sender_name).to eq('送信 太郎')
         expect(contact_request.source).to eq('public')
       end
+    end
+
+    it 'sender_nameがblankならnilで保存する' do
+      expect {
+        post_contact(params: valid_contact_params(email: 'blank-name@example.com', sender_name: '   '))
+      }.to change(ContactRequest, :count).by(1)
+
+      expect(ContactRequest.last.sender_name).to be_nil
     end
 
     it 'login_restricted中はTurnstile検証前に拒否し、問い合わせと通知メールを作成しない' do

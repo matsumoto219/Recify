@@ -26,6 +26,21 @@ RSpec.describe ContactRequest do
       expect(contact_request.errors[:email]).to be_present
     end
 
+    it 'sender_nameを正規化し、長さを検証する' do
+      contact_request = build(:contact_request, sender_name: '  山田 太郎  ')
+      too_long = build(:contact_request, sender_name: 'あ' * 51)
+      blank = build(:contact_request, sender_name: '   ')
+
+      aggregate_failures do
+        expect(contact_request).to be_valid
+        expect(contact_request.sender_name).to eq('山田 太郎')
+        expect(too_long).not_to be_valid
+        expect(too_long.errors[:sender_name]).to be_present
+        expect(blank).to be_valid
+        expect(blank.sender_name).to be_nil
+      end
+    end
+
     it 'category / status / sourceのallowlistを検証する' do
       contact_request = build(:contact_request, category: 'secret', status: 'deleted', source: 'crawler')
 

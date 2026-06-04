@@ -80,6 +80,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.inet "ip_address"
     t.string "request_id"
     t.string "request_uid", null: false
+    t.string "sender_name", limit: 50
     t.string "source", null: false
     t.string "status", default: "open", null: false
     t.string "subject", null: false

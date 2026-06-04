@@ -32,6 +32,17 @@
 
     <%= form_with model: @contact_request, url: contact_path, method: :post, local: true do |form| %>
       <div class="space-y-5">
+        <%= render "shared/ui/form/text_field",
+              f: form,
+              attribute: :sender_name,
+              label: t("contact_requests.fields.sender_name"),
+              icon: "person",
+              placeholder: t("contact_requests.placeholders.sender_name"),
+              autocomplete: "name",
+              required: false,
+              size: :regular,
+              html_options: { maxlength: 50 } %>
+
         <% unless user_signed_in? && !current_user.guest? %>
           <%= render "shared/ui/form/text_field",
                 f: form,

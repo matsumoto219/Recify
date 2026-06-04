@@ -11,12 +11,14 @@ ja:
         - クレジットカード番号など、本人確認に不要な情報は入力しないでください。
         - レシート内容など個人情報を含む場合は、必要な範囲に絞って記載してください。
     fields:
+      sender_name: お名前
       email: 返信先メールアドレス
       category: 種別
       subject: 件名
       body: 内容
       company_name: 会社名
     placeholders:
+      sender_name: 任意
       email: you@example.com
       category: 種別を選択
       subject: 例）レシート解析結果について

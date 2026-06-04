@@ -58,6 +58,7 @@ class ContactRequestsController < ApplicationController
 
   def build_contact_request
     ContactRequest.new(
+      sender_name: default_sender_name,
       email: default_contact_email,
       source: contact_source,
       status: "open"
@@ -74,6 +75,12 @@ class ContactRequestsController < ApplicationController
     params.dig(:contact_request, :email).to_s
   end
 
+  def default_sender_name
+    return current_user.name if user_signed_in? && !current_user.guest?
+
+    params.dig(:contact_request, :sender_name).to_s
+  end
+
   def contact_source
     return "public" unless user_signed_in?
     return "guest" if current_user.guest?
@@ -82,7 +89,7 @@ class ContactRequestsController < ApplicationController
   end
 
   def contact_request_params
-    params.fetch(:contact_request, {}).permit(:email, :category, :subject, :body, :company_name)
+    params.fetch(:contact_request, {}).permit(:sender_name, :email, :category, :subject, :body, :company_name)
   end
 
   def verify_turnstile!

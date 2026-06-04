@@ -43,13 +43,18 @@ RSpec.describe ContactRequests do
     it 'logged-in userはauthenticated sourceになりuser.emailを使う' do
       user = create(:user, email: 'user@example.com')
 
-      result = described_class.create(user: user, params: valid_params(email: 'other@example.com'), request: request)
+      result = described_class.create(
+        user: user,
+        params: valid_params(email: 'other@example.com', sender_name: '  登録 太郎  '),
+        request: request
+      )
 
       aggregate_failures do
         expect(result).to be_success
         expect(result.contact_request).to be_persisted
         expect(result.contact_request.source).to eq('authenticated')
         expect(result.contact_request.email).to eq('user@example.com')
+        expect(result.contact_request.sender_name).to eq('登録 太郎')
         expect(result.contact_request.user).to eq(user)
       end
     end
@@ -63,6 +68,15 @@ RSpec.describe ContactRequests do
         expect(result).to be_success
         expect(result.contact_request.source).to eq('guest')
         expect(result.contact_request.email).to eq('guest-contact@example.com')
+      end
+    end
+
+    it 'sender_nameがblankならnilに正規化する' do
+      result = described_class.create(user: nil, params: valid_params(sender_name: '   '), request: request)
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.contact_request.sender_name).to be_nil
       end
     end
 

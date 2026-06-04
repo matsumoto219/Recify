@@ -3,6 +3,7 @@ class CreateContactRequests < ActiveRecord::Migration[8.0]
     create_table :contact_requests do |t|
       t.references :user, null: true, foreign_key: { on_delete: :nullify }
       t.string :request_uid, null: false
+      t.string :sender_name, limit: 50
       t.string :email, null: false
       t.string :email_digest, null: false
       t.string :category, null: false

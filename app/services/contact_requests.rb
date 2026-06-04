@@ -47,6 +47,7 @@ module ContactRequests
 
       {
         user: user,
+        sender_name: normalize_optional_text(params[:sender_name]),
         email: email,
         email_digest: email_digest(email),
         category: params[:category].to_s,
@@ -68,6 +69,10 @@ module ContactRequests
 
     def normalize_email(email)
       email.to_s.strip.downcase
+    end
+
+    def normalize_optional_text(value)
+      value.to_s.strip.presence
     end
 
     def source_for(user)
