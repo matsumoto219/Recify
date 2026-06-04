@@ -113,6 +113,41 @@ RSpec.describe 'Mailer layout', type: :mailer do
     end
   end
 
+  it 'Deviseメールはuser.nameがあれば宛名に使う' do
+    user = create(:user, name: '山田 花子', email: 'named-devise@example.com')
+    mail = Devise::Mailer.reset_password_instructions(user, 'reset-token')
+    greeting = I18n.t('auth.mailer.greeting', email: '山田 花子')
+
+    aggregate_failures do
+      expect(text_body(mail)).to include(greeting)
+      expect(html_body(mail)).to include(greeting)
+      expect(text_body(mail)).not_to include(I18n.t('auth.mailer.greeting', email: 'named-devise@example.com'))
+    end
+  end
+
+  it 'Deviseメールはuser.nameがなければ実送信先emailを宛名に使う' do
+    user = create(:user, name: '', email: 'fallback-devise@example.com')
+    mail = Devise::Mailer.reset_password_instructions(user, 'reset-token')
+    greeting = I18n.t('auth.mailer.greeting', email: 'fallback-devise@example.com')
+
+    aggregate_failures do
+      expect(text_body(mail)).to include(greeting)
+      expect(html_body(mail)).to include(greeting)
+    end
+  end
+
+  it 'confirmation instructionsは送信先overrideをfallback宛名に使う' do
+    user = create(:user, name: '', email: 'old-confirmation@example.com')
+    mail = Devise::Mailer.confirmation_instructions(user, 'confirmation-token', to: 'new-confirmation@example.com')
+    greeting = I18n.t('auth.mailer.greeting', email: 'new-confirmation@example.com')
+
+    aggregate_failures do
+      expect(text_body(mail)).to include(greeting)
+      expect(html_body(mail)).to include(greeting)
+      expect(text_body(mail)).not_to include(I18n.t('auth.mailer.greeting', email: 'old-confirmation@example.com'))
+    end
+  end
+
   it 'reset password instructionsはtext/plainとtext/htmlのmultipartで送る' do
     user = create(:user, email: 'reset-multipart@example.com')
     mail = Devise::Mailer.reset_password_instructions(user, 'reset-token')

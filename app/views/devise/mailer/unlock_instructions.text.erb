@@ -1,8 +1,9 @@
 <% unlock_url_value = unlock_url(@resource, unlock_token: @token) %>
 <% unlocks_in = mailer_duration_text(@resource.class.unlock_in) %>
+<% recipient_name = devise_recipient_name(@resource, delivery_email: @email.presence || @resource.email) %>
 <%= t("auth.mailer.unlock_instructions.title") %>
 
-<%= t("auth.mailer.greeting", email: @resource.display_email) %>
+<%= t("auth.mailer.greeting", email: recipient_name) %>
 
 <%= t("auth.mailer.unlock_instructions.body") %>
 <%= t("auth.mailer.unlock_instructions.instructions") %>

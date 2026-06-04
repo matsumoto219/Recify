@@ -1,6 +1,7 @@
+<% recipient_name = devise_recipient_name(@resource, delivery_email: @email) %>
 <%= t("auth.mailer.email_changed.title") %>
 
-<%= t("auth.mailer.greeting", email: @email) %>
+<%= t("auth.mailer.greeting", email: recipient_name) %>
 
 <% if @resource.try(:unconfirmed_email?) %>
 <%= t("auth.mailer.email_changed.changing", email: @resource.unconfirmed_email) %>
