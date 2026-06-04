@@ -48,6 +48,29 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include Devise::Test::IntegrationHelpers, type: :request
 
+  config.around do |example|
+    turnstile_env_keys = %w[
+      TURNSTILE_ENABLED
+      TURNSTILE_SITE_KEY
+      TURNSTILE_SECRET_KEY
+      TURNSTILE_TIMEOUT
+    ]
+    original_turnstile_env = turnstile_env_keys.each_with_object({}) do |key, values|
+      values[key] = ENV[key] if ENV.key?(key)
+    end
+
+    ENV["TURNSTILE_ENABLED"] = "false"
+    example.run
+  ensure
+    turnstile_env_keys.each do |key|
+      if original_turnstile_env.key?(key)
+        ENV[key] = original_turnstile_env[key]
+      else
+        ENV.delete(key)
+      end
+    end
+  end
+
   # You can uncomment this line to turn off ActiveRecord support entirely.
   # config.use_active_record = false
 
