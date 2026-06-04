@@ -10,6 +10,8 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
              only: :create,
              if: :rate_limit_email_present?
 
+  before_action :verify_turnstile!, only: :create, unless: :turnstile_exempt_confirmation_context?
+
   # GET /resource/confirmation/new
   # def new
   #   super
@@ -26,6 +28,23 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
   # end
 
   protected
+
+  def verify_turnstile!
+    result = BotProtection.verify_turnstile(
+      token: params["cf-turnstile-response"],
+      remote_ip: request.remote_ip
+    )
+
+    return if result.success?
+
+    self.resource = resource_class.new(email: params.dig(resource_name, :email).to_s)
+    flash.now[:alert] = t("flash.bot_protection.verification_failed")
+    render :new, status: :unprocessable_content
+  end
+
+  def turnstile_exempt_confirmation_context?
+    user_signed_in?
+  end
 
   # The path used after resending confirmation instructions.
   def after_resending_confirmation_instructions_path_for(resource_name)

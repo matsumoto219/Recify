@@ -861,6 +861,10 @@ RSpec.describe 'Auth pages', type: :request do
   end
 
   describe 'GET /users/confirmation/new' do
+    before do
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+    end
+
     it 'renders confirmation resend copy through locale keys' do
       get new_user_confirmation_path
 
@@ -878,6 +882,29 @@ RSpec.describe 'Auth pages', type: :request do
         expect(document.at_css("input[type='email'][name='user[email]']")).to be_present
         expect(document.at_css("a[href='#{new_user_session_path}']")).to be_present
       end
+    end
+
+    it 'Turnstile有効時はconfirmation resend formにwidgetを表示し、secretはHTMLへ出さない' do
+      with_turnstile_env(enabled: true, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_confirmation_path
+      end
+
+      document = Nokogiri::HTML(response.body)
+      confirmation_form = document.at_css("form[action='#{user_confirmation_path}']")
+
+      aggregate_failures do
+        expect(confirmation_form.at_css('.cf-turnstile')['data-sitekey']).to eq('test_site_key')
+        expect(confirmation_form.at_css("script[src='https://challenges.cloudflare.com/turnstile/v0/api.js']")).to be_present
+        expect(response.body).not_to include('test_secret_key')
+      end
+    end
+
+    it 'Turnstile無効時はconfirmation resend formにwidgetを表示しない' do
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        get new_user_confirmation_path
+      end
+
+      expect(response.body).not_to include('cf-turnstile')
     end
 
     it 'guest本登録申請中は内部メールを出さず本登録設定へ戻す' do
@@ -905,6 +932,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_guest_registration'))
         expect(email_input['value']).to eq('guest-pending-confirmation@example.com')
         expect(document.at_css("a[href='#{settings_security_path(anchor: 'guest-registration')}']")).to be_present
+        expect(response.body).not_to include('cf-turnstile')
       end
     end
 
@@ -925,6 +953,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
         expect(email_input['value']).to eq('normal-pending-confirmation@example.com')
         expect(document.at_css("a[href='#{settings_security_path(anchor: 'email')}']")).to be_present
+        expect(response.body).not_to include('cf-turnstile')
       end
     end
 
@@ -940,6 +969,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
         expect(document.at_css("a[href='#{settings_security_path}']")).to be_present
+        expect(response.body).not_to include('cf-turnstile')
       end
     end
 
@@ -963,6 +993,83 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'Turnstile有効時にtokenなしならconfirmation mailを送らない' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_token_missing"))
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.bot_protection.verification_failed'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it 'Turnstile検証失敗時はconfirmation mailを送らない' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.failure_result("turnstile_verification_failed"))
+
+      post user_confirmation_path,
+        params: {
+          "cf-turnstile-response" => "invalid-token",
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
+    it 'Turnstile検証成功時は既存confirmation resend flowを維持する' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+      allow(BotProtection).to receive(:verify_turnstile).and_return(BotProtection.success_result)
+
+      post user_confirmation_path,
+        params: {
+          "cf-turnstile-response" => "valid-token",
+          user: {
+            email: user.email
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+      end
+    end
+
+    it 'Turnstile無効時は既存confirmation resend flowを維持する' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+      allow(BotProtection).to receive(:verify_turnstile).and_call_original
+
+      with_turnstile_env(enabled: false, site_key: 'test_site_key', secret_key: 'test_secret_key') do
+        post user_confirmation_path,
+          params: {
+            user: {
+              email: user.email
+            }
+          }
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+      end
+    end
+
     it 'guest本登録申請中のconfirmation resend後は本登録設定へ戻す' do
       guest = User.guest!
       guest.start_guest_registration(
@@ -973,6 +1080,7 @@ RSpec.describe 'Auth pages', type: :request do
       )
       ActionMailer::Base.deliveries.clear
       sign_in guest
+      expect(BotProtection).not_to receive(:verify_turnstile)
 
       post user_confirmation_path,
         params: {
@@ -994,6 +1102,7 @@ RSpec.describe 'Auth pages', type: :request do
       user.update!(email: 'normal-resend-confirmation@example.com')
       ActionMailer::Base.deliveries.clear
       sign_in user
+      expect(BotProtection).not_to receive(:verify_turnstile)
 
       post user_confirmation_path,
         params: {
