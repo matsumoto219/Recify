@@ -325,7 +325,12 @@ RSpec.describe 'Receipts', type: :request do
       total_count_card = summary_cards.find { |card| card.text.include?(I18n.t('dashboard.summary.total_count.title')) }
       header = document.at_css('#dashboard-header')
       page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
+      mobile_bottom_nav = document.at_css('#mobile-bottom-nav .mobile-bottom-nav')
+      mobile_receipts_link = document.at_css("#mobile-bottom-nav a[href='#{receipts_path}']")
+      mobile_new_receipt_link = document.at_css("#mobile-bottom-nav a[href='#{select_input_method_receipts_path}']")
+      mobile_nav_labels = document.css('#mobile-bottom-nav .mobile-bottom-nav-label')
       search_prefixes = header.css('#desktop-search-help [data-search-prefix-param]').map { |node| node['data-search-prefix-param'] }
+      tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
@@ -333,6 +338,24 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.receipts'))
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
         expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))
+        expect(mobile_bottom_nav['class'].split).to include('mobile-bottom-nav')
+        expect(mobile_receipts_link['class'].split).to include('mobile-bottom-nav-link')
+        expect(mobile_receipts_link['class'].split).to include('token-text-brand')
+        expect(mobile_new_receipt_link['class'].split).to include('token-text-muted')
+        expect(mobile_receipts_link['aria-label']).to eq(I18n.t('dashboard.nav.mobile_receipts'))
+        expect(mobile_receipts_link['aria-current']).to eq('page')
+        expect(mobile_new_receipt_link['aria-label']).to eq(I18n.t('dashboard.nav.mobile_new_receipt'))
+        expect(mobile_new_receipt_link['aria-current']).to be_nil
+        expect(mobile_receipts_link.at_css('.mobile-bottom-nav-icon')).to be_present
+        expect(mobile_receipts_link.at_css('.mobile-bottom-nav-icon')['aria-hidden']).to eq('true')
+        expect(mobile_nav_labels.map(&:text)).to include(
+          I18n.t('dashboard.nav.mobile_receipts'),
+          I18n.t('dashboard.nav.mobile_new_receipt'),
+          I18n.t('dashboard.nav.mobile_settings')
+        )
+        expect(tailwind_css).to include('@media (height <= 700px) and (width <= 380px)')
+        expect(tailwind_css).to include('.mobile-bottom-nav-label')
+        expect(tailwind_css).to include('clip-path: inset(50%)')
         expect(header.at_css('input[name="q"]')['placeholder']).to eq(I18n.t('dashboard.search.placeholder'))
         expect(header.at_css('input[name="q"]')['data-search-query-input']).to eq('true')
         expect(header.at_css('input[name="q"]')['aria-describedby']).to eq('desktop-search-help')

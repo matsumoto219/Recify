@@ -1,3 +1,26 @@
+<%
+  mobile_nav_items = [
+    {
+      path: receipts_path,
+      icon: "receipt_long",
+      label: t("dashboard.nav.mobile_receipts"),
+      active: current_page?(receipts_path)
+    },
+    {
+      path: select_input_method_receipts_path,
+      icon: "add_circle",
+      label: t("dashboard.nav.mobile_new_receipt"),
+      active: current_page?(select_input_method_receipts_path)
+    },
+    {
+      path: settings_path,
+      icon: "settings",
+      label: t("dashboard.nav.mobile_settings"),
+      active: current_page?(settings_path)
+    }
+  ]
+%>
+
 <nav id="mobile-bottom-nav" data-component="mobile-bottom-nav" data-controller="mobile-ui" class="md:hidden fixed bottom-0 left-0 w-full z-50">
   <% if content_for?(:mobile_bottom_actions) %>
     <div
@@ -9,23 +32,18 @@
     </div>
   <% end %>
 
-  <div data-mobile-ui-target="nav" class="glass-panel border-t token-border-glass flex justify-around items-center h-[calc(5rem+env(safe-area-inset-bottom))] px-4 pt-1 pb-[calc(env(safe-area-inset-bottom))] transition-transform transition-opacity duration-300 ease-out translate-y-0 will-change-transform">
-    <%= link_to receipts_path,
-      class: "flex flex-col items-center gap-2 #{current_page?(receipts_path) ? 'token-text-brand' : 'token-text-muted'}" do %>
-      <span class="material-symbols-outlined">receipt_long</span>
-      <span class="text-xs"><%= t("dashboard.nav.mobile_receipts") %></span>
-    <% end %>
-
-    <%= link_to select_input_method_receipts_path,
-      class: "flex flex-col items-center gap-2 #{current_page?(select_input_method_receipts_path) ? 'token-text-brand' : 'token-text-muted'}" do %>
-      <span class="material-symbols-outlined">add_circle</span>
-      <span class="text-xs"><%= t("dashboard.nav.mobile_new_receipt") %></span>
-    <% end %>
-
-    <%= link_to settings_path,
-      class: "flex flex-col items-center gap-2 #{current_page?(settings_path) ? 'token-text-brand' : 'token-text-muted'}" do %>
-      <span class="material-symbols-outlined">settings</span>
-      <span class="text-xs"><%= t("dashboard.nav.mobile_settings") %></span>
+  <div data-mobile-ui-target="nav" class="mobile-bottom-nav glass-panel border-t token-border-glass flex justify-around items-center h-[calc(5rem+env(safe-area-inset-bottom))] px-4 pt-1 pb-[calc(env(safe-area-inset-bottom))] transition-transform transition-opacity duration-300 ease-out translate-y-0 will-change-transform">
+    <% mobile_nav_items.each do |item| %>
+      <%
+        aria_options = { label: item[:label] }
+        aria_options[:current] = "page" if item[:active]
+      %>
+      <%= link_to item[:path],
+        class: "mobile-bottom-nav-link flex flex-col items-center gap-2 #{item[:active] ? 'token-text-brand' : 'token-text-muted'}",
+        aria: aria_options do %>
+        <span class="material-symbols-outlined mobile-bottom-nav-icon" aria-hidden="true"><%= item[:icon] %></span>
+        <span class="mobile-bottom-nav-label text-xs"><%= item[:label] %></span>
+      <% end %>
     <% end %>
   </div>
 </nav>

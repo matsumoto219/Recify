@@ -301,6 +301,31 @@ body {
   opacity: 1;
 }
 
+@media (height <= 700px) and (width <= 380px) {
+  .mobile-bottom-nav {
+    height: calc(4rem + env(safe-area-inset-bottom));
+  }
+
+  .mobile-bottom-nav-link {
+    min-width: 3.5rem;
+    min-height: 3rem;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .mobile-bottom-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
 .swipe-action {
   position: relative;
   overflow: hidden;
