@@ -257,6 +257,55 @@ RSpec.describe 'Settings', type: :request do
       expect(SystemSettings).to have_received(:enabled?).with('ui.maintenance_notice_enabled', user: user)
     end
 
+    it 'login_restricted中の既存一般ユーザーsessionはsign outしてログイン画面へ戻す' do
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:alert]).to eq(I18n.t('shared.maintenance_mode.body'))
+      end
+
+      get settings_path
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+
+    it 'login_restricted中の既存guest sessionはsign outしてログイン画面へ戻す' do
+      sign_out user
+      guest = create(:user, guest: true)
+      sign_in guest
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:alert]).to eq(I18n.t('shared.maintenance_mode.body'))
+      end
+
+      get settings_path
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+
+    it 'login_restricted中でもadmin sessionは維持する' do
+      sign_out user
+      admin = create(:user, :admin)
+      sign_in admin
+      create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
+
+      get settings_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('settings.index.title'))
+      end
+    end
+
     it 'header/settings index にfallback頭文字を表示する' do
       user.update!(name: 'Matsumoto')
 

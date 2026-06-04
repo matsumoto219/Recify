@@ -34,6 +34,7 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   before_action :enforce_user_session_version!, unless: :skip_user_session_version_enforcement?
+  before_action :enforce_maintenance_existing_session!
   before_action :prepare_notifications_dropdown, if: :prepare_notifications_dropdown?
 
   class << self
@@ -80,6 +81,18 @@ class ApplicationController < ActionController::Base
 
   def skip_user_session_version_enforcement?
     is_a?(Users::SessionsController) && action_name == "create"
+  end
+
+  def enforce_maintenance_existing_session!
+    return unless user_signed_in?
+    return unless Maintenance.login_restricted?(user: current_user)
+    return if Maintenance.admin_bypass_user?(current_user)
+
+    message = Maintenance.body(user: current_user)
+    UserSessions.record_sign_out(user: current_user, session: session)
+    clear_user_session_version
+    sign_out(:user)
+    redirect_to new_user_session_path, alert: message, status: :see_other
   end
 
   def touch_current_user_session
