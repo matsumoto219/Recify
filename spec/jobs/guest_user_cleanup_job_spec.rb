@@ -156,6 +156,30 @@ RSpec.describe GuestUserCleanupJob, type: :job do
       end
     end
 
+    it '保持期間30日でguest関連データを削除し、本登録済みユーザーとrecent guestは残す' do
+      create(:system_setting, key: 'retention.guest_users_days', value: SystemSettings.stored_value(30))
+      old_guest = create(:user, guest: true, last_sign_in_at: 31.days.ago)
+      recent_guest = create(:user, guest: true, last_sign_in_at: 29.days.ago)
+      converted_user = create(:user, guest: false, last_sign_in_at: 31.days.ago)
+      receipt = create(:receipt, :with_image, user: old_guest)
+      notification = create(:notification, user: old_guest)
+      usage_counter = create(:usage_counter, user: old_guest, key: 'receipt_uploads_per_day', used_count: 3)
+      attachment_id = receipt.image.attachment.id
+
+      result = described_class.perform_now(batch_size: 10, max_records: 100)
+
+      aggregate_failures do
+        expect(result).to eq(deleted_count: 1, failed_count: 0)
+        expect(User.exists?(old_guest.id)).to be(false)
+        expect(User.exists?(recent_guest.id)).to be(true)
+        expect(User.exists?(converted_user.id)).to be(true)
+        expect(Receipt.exists?(receipt.id)).to be(false)
+        expect(Notification.exists?(notification.id)).to be(false)
+        expect(UsageCounter.exists?(usage_counter.id)).to be(false)
+        expect(ActiveStorage::Attachment.exists?(attachment_id)).to be(false)
+      end
+    end
+
     it 'avatarとreceipt image attachmentを削除しActiveStorage::PurgeJobをenqueueする' do
       guest = create_old_guest
       guest.avatar.attach(
