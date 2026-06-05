@@ -25,6 +25,73 @@ RSpec.describe Passkeys do
     end
   end
 
+  describe '.registration_limit' do
+    it 'passkey登録上限を返す' do
+      expect(described_class.registration_limit).to eq(Passkey::MAX_PER_USER)
+    end
+  end
+
+  describe '.count_for' do
+    it 'userの登録済みpasskey数を返す' do
+      user = create(:user)
+      create_list(:passkey, 3, user: user)
+
+      expect(described_class.count_for(user)).to eq(3)
+    end
+
+    it 'userがnilの場合は0を返す' do
+      expect(described_class.count_for(nil)).to eq(0)
+    end
+  end
+
+  describe '.remaining_slots_for' do
+    it '残り登録可能数を返す' do
+      user = create(:user)
+      create_list(:passkey, 4, user: user)
+
+      expect(described_class.remaining_slots_for(user)).to eq(Passkey::MAX_PER_USER - 4)
+    end
+
+    it '上限到達時は0を返す' do
+      user = create(:user)
+      create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+
+      expect(described_class.remaining_slots_for(user)).to eq(0)
+    end
+
+    it 'guest userは安全側に倒して0を返す' do
+      guest = User.guest!
+
+      expect(described_class.remaining_slots_for(guest)).to eq(0)
+    end
+  end
+
+  describe '.registration_limit_reached?' do
+    it '登録数が上限未満ならfalseを返す' do
+      user = create(:user)
+      create_list(:passkey, Passkey::MAX_PER_USER - 1, user: user)
+
+      expect(described_class.registration_limit_reached?(user)).to be(false)
+    end
+
+    it '登録数が上限に達している場合はtrueを返す' do
+      user = create(:user)
+      create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+
+      expect(described_class.registration_limit_reached?(user)).to be(true)
+    end
+
+    it 'nil userは安全側に倒してtrueを返す' do
+      expect(described_class.registration_limit_reached?(nil)).to be(true)
+    end
+
+    it 'guest userは安全側に倒してtrueを返す' do
+      guest = User.guest!
+
+      expect(described_class.registration_limit_reached?(guest)).to be(true)
+    end
+  end
+
   describe '.verify_registration' do
     it 'registration responseを検証してpasskeyを保存する' do
       user = create(:user)

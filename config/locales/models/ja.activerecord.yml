@@ -139,6 +139,10 @@ ja:
           attributes:
             body:
               too_many_urls: "にURLが多すぎます"
+        passkey:
+          attributes:
+            user:
+              passkey_limit_exceeded: "に登録できるパスキーは%{count}個までです"
         receipt_item:
           attributes:
             quantity:

@@ -82,6 +82,56 @@ RSpec.describe Passkey, type: :model do
 
       expect(passkey.transports).to eq([ 'internal', 'hybrid' ])
     end
+
+    it '1ユーザーあたりの登録数を最大数まで許可する' do
+      user = create(:user)
+      create_list(:passkey, described_class::MAX_PER_USER - 1, user: user)
+
+      passkey = build(:passkey, user: user)
+
+      expect(passkey).to be_valid
+    end
+
+    it '1ユーザーあたりの登録数が最大数に達している場合は追加登録を拒否する' do
+      user = create(:user)
+      create_list(:passkey, described_class::MAX_PER_USER, user: user)
+
+      passkey = build(:passkey, user: user)
+
+      expect(passkey).not_to be_valid
+      expect(passkey.errors[:user]).to include(
+        I18n.t('activerecord.errors.models.passkey.attributes.user.passkey_limit_exceeded', count: described_class::MAX_PER_USER)
+      )
+    end
+
+    it '他ユーザーの登録数は上限判定へ影響しない' do
+      create_list(:passkey, described_class::MAX_PER_USER)
+      user = create(:user)
+
+      passkey = build(:passkey, user: user)
+
+      expect(passkey).to be_valid
+    end
+
+    it '削除後は再登録できる' do
+      user = create(:user)
+      passkeys = create_list(:passkey, described_class::MAX_PER_USER, user: user)
+      passkeys.first.destroy!
+
+      passkey = build(:passkey, user: user)
+
+      expect(passkey).to be_valid
+    end
+
+    it '既存passkeyの更新時は登録数上限に引っかからない' do
+      user = create(:user)
+      passkeys = create_list(:passkey, described_class::MAX_PER_USER, user: user)
+      passkey = passkeys.first
+
+      passkey.label = 'Updated passkey'
+
+      expect(passkey).to be_valid
+    end
   end
 
   describe 'indexes' do

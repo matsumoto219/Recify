@@ -1,4 +1,5 @@
 class Passkey < ApplicationRecord
+  MAX_PER_USER = 10
   UID_PREFIX = "psk_"
   UID_RANDOM_LENGTH = 16
   UID_FORMAT = /\A#{UID_PREFIX}[A-Za-z0-9]{#{UID_RANDOM_LENGTH}}\z/
@@ -20,6 +21,7 @@ class Passkey < ApplicationRecord
   validates :sign_count,
             numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :transports_must_be_array
+  validate :passkeys_per_user_within_limit, on: :create
 
   # credential_id and public_key are required WebAuthn credential material.
   # They are persisted here, but must never be copied into AuditLog metadata.
@@ -87,5 +89,12 @@ class Passkey < ApplicationRecord
     return if transports.is_a?(Array)
 
     errors.add(:transports, :invalid)
+  end
+
+  def passkeys_per_user_within_limit
+    return if user.blank?
+    return if user.passkeys.count < MAX_PER_USER
+
+    errors.add(:user, :passkey_limit_exceeded, count: MAX_PER_USER)
   end
 end

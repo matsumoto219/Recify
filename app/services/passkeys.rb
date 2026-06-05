@@ -3,6 +3,29 @@ module Passkeys
   AuthenticationError = Class.new(StandardError)
 
   class << self
+    def registration_limit
+      Passkey::MAX_PER_USER
+    end
+
+    def count_for(user)
+      return 0 if user.blank?
+
+      user.passkeys.count
+    end
+
+    def remaining_slots_for(user)
+      return 0 if registration_limit_reached?(user)
+
+      [ registration_limit - count_for(user), 0 ].max
+    end
+
+    def registration_limit_reached?(user)
+      return true if user.blank?
+      return true if user.guest?
+
+      count_for(user) >= registration_limit
+    end
+
     def registration_options(user:)
       WebAuthn::Credential.options_for_create(
         user: webauthn_user_entity(user),
