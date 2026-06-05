@@ -449,7 +449,7 @@ class Receipt < ApplicationRecord
   def validate_receipt_payments_count_within_limit
     validate_child_records_count_within_limit(
       :receipt_payments,
-      ReceiptPayment::MAX_PER_RECEIPT,
+      ReceiptPayment.per_receipt_limit,
       :too_many
     )
   end

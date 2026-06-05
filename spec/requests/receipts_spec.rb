@@ -2127,10 +2127,14 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '支払い行が固定上限を超える手動作成paramsを金額計算前に拒否する' do
+    it '支払い行が設定上限を超える手動作成paramsを金額計算前に拒否する' do
+      create(:system_setting, key: 'limits.receipt_payments_per_receipt', value: SystemSettings.stored_value(1))
       params = valid_params.deep_dup
       params[:receipt][:receipt_payments_attributes] =
-        (0..ReceiptPayment::MAX_PER_RECEIPT).to_h { |index| [ index.to_s, manual_payment_params(index) ] }
+        {
+          '0' => manual_payment_params(0),
+          '1' => manual_payment_params(1)
+        }
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
@@ -2139,7 +2143,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include("支払い行は#{ReceiptPayment::MAX_PER_RECEIPT}件まで登録できます")
+        expect(response.body).to include('支払い行は1件まで登録できます')
       end
     end
 

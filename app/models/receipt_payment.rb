@@ -1,17 +1,25 @@
 class ReceiptPayment < ApplicationRecord
-  MAX_PER_RECEIPT = 20
+  DEFAULT_MAX_PER_RECEIPT = 20
+  MAX_PER_RECEIPT = DEFAULT_MAX_PER_RECEIPT
 
   belongs_to :receipt
 
   validate :payments_per_receipt_within_limit, on: :create
 
+  def self.per_receipt_limit
+    SystemSettings.limit_for("limits.receipt_payments_per_receipt")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    DEFAULT_MAX_PER_RECEIPT
+  end
+
   private
 
   def payments_per_receipt_within_limit
     return if receipt.blank?
-    return if sibling_count_for_limit(:receipt_payments) < MAX_PER_RECEIPT
+    limit = self.class.per_receipt_limit
+    return if sibling_count_for_limit(:receipt_payments) < limit
 
-    errors.add(:receipt, :receipt_payments_limit_exceeded, limit: MAX_PER_RECEIPT)
+    errors.add(:receipt, :receipt_payments_limit_exceeded, limit: limit)
   end
 
   def sibling_count_for_limit(association_name)

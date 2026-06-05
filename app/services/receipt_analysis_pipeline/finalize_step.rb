@@ -336,7 +336,7 @@ class ReceiptAnalysisPipeline
       validate_collection_limit!(
         name: "receipt_payments",
         attributes: payments_attributes,
-        limit: ReceiptPayment::MAX_PER_RECEIPT
+        limit: receipt_payments_limit
       )
       validate_collection_limit!(
         name: "receipt_tax_details",
@@ -372,7 +372,7 @@ class ReceiptAnalysisPipeline
       validate_collection_limit!(
         name: "receipt_payments",
         attributes: params[:receipt_payments_attributes],
-        limit: ReceiptPayment::MAX_PER_RECEIPT
+        limit: receipt_payments_limit
       )
       validate_collection_limit!(
         name: "receipt_tax_details",
@@ -415,7 +415,7 @@ class ReceiptAnalysisPipeline
         error: "analysis_value_invalid",
         resource: "receipt_payments",
         count_metadata: ocr_candidate_count_metadata(ocr_result, :payments),
-        limit: ReceiptPayment::MAX_PER_RECEIPT
+        limit: receipt_payments_limit
       )
       validate_source_collection_limit!(
         error: "analysis_value_invalid",
@@ -447,6 +447,10 @@ class ReceiptAnalysisPipeline
 
     def receipt_adjustments_limit
       ReceiptAdjustment.per_receipt_limit
+    end
+
+    def receipt_payments_limit
+      ReceiptPayment.per_receipt_limit
     end
 
     def validate_source_collection_limit!(error:, resource:, count_metadata:, limit:)

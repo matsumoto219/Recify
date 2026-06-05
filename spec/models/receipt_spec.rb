@@ -851,8 +851,8 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
-    it '支払い行は固定上限を超えると無効にする' do
-      stub_const('ReceiptPayment::MAX_PER_RECEIPT', 1)
+    it '支払い行は設定上限を超えると無効にする' do
+      create(:system_setting, key: 'limits.receipt_payments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = build(:receipt)
       receipt.receipt_payments.build(method: 'Cash', amount: 100)
       receipt.receipt_payments.build(method: 'CreditCard', amount: 200)

@@ -543,7 +543,7 @@ class ReceiptsController < ApplicationController
         attributes_key: "receipt_payments_attributes",
         association_name: :receipt_payments,
         error_attribute: :receipt_payments,
-        limit: ReceiptPayment::MAX_PER_RECEIPT
+        limit: ReceiptPayment.per_receipt_limit
       ),
       manual_child_count_limit_violation(
         permitted,
