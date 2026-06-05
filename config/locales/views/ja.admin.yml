@@ -492,6 +492,7 @@ ja:
       show:
         title: "設定詳細: %{key}"
         subtitle: 設定詳細
+        snapshot_limit_note: snapshot上限を大きくすると解析snapshotのjsonbサイズが増えます。receipt_items_per_receipt の最大値以上に設定してください。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。

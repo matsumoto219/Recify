@@ -9,6 +9,8 @@
   setting_value_class = "min-w-0 max-w-full break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere] md:text-lg"
   setting_meta_value_class = "min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"
   setting_mono_meta_value_class = "#{setting_meta_value_class} font-mono"
+  snapshot_limit_keys = %w[limits.snapshot_ocr_items_max limits.snapshot_ai_normalized_items_max]
+  snapshot_limit_note = snapshot_limit_keys.include?(@record[:key].to_s) ? t("admin.system_settings.show.snapshot_limit_note") : nil
 %>
 
 <section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -51,6 +53,11 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_settings.show.definition.title") %></h2>
+    <% if snapshot_limit_note.present? %>
+      <p class="mb-4 min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-warning-soft p-3 text-sm token-text-base [overflow-wrap:anywhere]">
+        <%= snapshot_limit_note %>
+      </p>
+    <% end %>
     <dl class="grid gap-3 text-sm md:grid-cols-2">
       <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.category") %></dt>

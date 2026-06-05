@@ -178,6 +178,9 @@ RSpec.describe 'Admin system settings', type: :request do
 
       get admin_system_setting_path('limits.snapshot_ocr_items_max')
 
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('limits.snapshot_ocr_items_max')
@@ -186,6 +189,10 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('100')
         expect(response.body).to include('10000')
         expect(response.body).to include('1000')
+        expect(note.text).to include('snapshot上限を大きくすると解析snapshotのjsonbサイズが増えます')
+        expect(note.text).to include('receipt_items_per_receipt の最大値以上')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
       end
     end
   end
