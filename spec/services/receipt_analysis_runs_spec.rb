@@ -342,6 +342,33 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR payment snapshot上限はSystemSettings値を参照しactual_countを維持する' do
+      create(:system_setting, key: 'limits.receipt_payments_per_receipt', value: SystemSettings.stored_value(50))
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        candidates: {
+          payments: Array.new(51) { |index| { method: "支払い#{index}", amount: index } }
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'payments').size).to eq(50)
+        expect(snapshot.dig('candidate_counts', 'payments')).to eq('actual_count' => 51, 'snapshot_count' => 50)
+        expect(snapshot.dig('truncated', 'payments')).to eq(true)
+      end
+    end
+
+    it 'payment snapshot上限の設定可能最大値はreceipt_payments_per_receiptの最大値と同期する' do
+      aggregate_failures do
+        expect(SystemSettings.definition_for('limits.receipt_payments_per_receipt').max).to eq(100)
+        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_PAYMENTS).to eq(SystemSettings.definition_for('limits.receipt_payments_per_receipt').default)
+      end
+    end
+
     it 'OCR item snapshot上限はSystemSettings値を参照しactual_countを維持する' do
       create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(500))
       run = described_class.start(receipt:, source: 'upload').run

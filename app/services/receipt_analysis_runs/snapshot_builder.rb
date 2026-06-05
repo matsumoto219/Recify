@@ -17,7 +17,8 @@ module ReceiptAnalysisRuns
     MAX_OCR_LINES = 150
     DEFAULT_MAX_OCR_ITEMS = 1000
     MAX_OCR_ITEMS = DEFAULT_MAX_OCR_ITEMS
-    MAX_OCR_PAYMENTS = 20
+    DEFAULT_MAX_OCR_PAYMENTS = 20
+    MAX_OCR_PAYMENTS = DEFAULT_MAX_OCR_PAYMENTS
     MAX_OCR_TAX_DETAILS = 20
     DEFAULT_MAX_AI_NORMALIZED_ITEMS = 1000
     MAX_AI_NORMALIZED_ITEMS = DEFAULT_MAX_AI_NORMALIZED_ITEMS
@@ -213,7 +214,7 @@ module ReceiptAnalysisRuns
           truncated: {
             lines: Array(result[:lines]).size > MAX_OCR_LINES,
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
-            payments: Array(candidates[:payments]).size > MAX_OCR_PAYMENTS,
+            payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
             tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS,
             adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit
           }
@@ -472,7 +473,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_ocr_payments(payments)
-      Array(payments).first(MAX_OCR_PAYMENTS).filter_map do |payment|
+      Array(payments).first(receipt_payments_snapshot_limit).filter_map do |payment|
         payment = normalized_hash(payment)
         next if payment.blank?
 
@@ -482,6 +483,12 @@ module ReceiptAnalysisRuns
           confidence: safe_value(payment[:confidence])
         }.compact
       end
+    end
+
+    def receipt_payments_snapshot_limit
+      SystemSettings.limit_for("limits.receipt_payments_per_receipt")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      DEFAULT_MAX_OCR_PAYMENTS
     end
 
     def limited_ocr_tax_details(tax_details)
