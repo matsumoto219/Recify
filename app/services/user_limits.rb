@@ -2,6 +2,11 @@ module UserLimits
   VALUE_KEY = "value"
   RECEIPT_ITEMS_PER_RECEIPT_KEY = "receipt_items_per_receipt"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
+  USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
+  MAX_UPLOADS_PER_DAY_SETTING_KEY = "limits.max_uploads_per_day"
+  MAX_OCR_PER_DAY_SETTING_KEY = "limits.max_ocr_per_day"
+  MAX_AI_PER_DAY_SETTING_KEY = "limits.max_ai_per_day"
+  MAX_STORAGE_BYTES_SETTING_KEY = "limits.max_storage_bytes"
   SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
@@ -17,6 +22,7 @@ module UserLimits
     :storage,
     :api_reservation,
     :guest_system_setting_key,
+    :max_system_setting_key,
     keyword_init: true
   )
 
@@ -38,7 +44,8 @@ module UserLimits
       system_setting_key: "limits.receipt_uploads_per_day",
       guest_system_setting_key: "limits.guest_receipt_uploads_per_day",
       min: 1,
-      max: 1000
+      max: 1000,
+      max_system_setting_key: MAX_UPLOADS_PER_DAY_SETTING_KEY
     ),
     Definition.new(
       key: "manual_receipts_per_day",
@@ -58,21 +65,24 @@ module UserLimits
       system_setting_key: "limits.batch_files_per_day",
       guest_system_setting_key: "limits.guest_batch_files_per_day",
       min: 1,
-      max: 1000
+      max: 1000,
+      max_system_setting_key: MAX_UPLOADS_PER_DAY_SETTING_KEY
     ),
     Definition.new(
       key: "ocr_jobs_per_day",
       system_setting_key: "limits.ocr_jobs_per_day",
       guest_system_setting_key: "limits.guest_ocr_jobs_per_day",
       min: 1,
-      max: 1000
+      max: 1000,
+      max_system_setting_key: MAX_OCR_PER_DAY_SETTING_KEY
     ),
     Definition.new(
       key: "ai_jobs_per_day",
       system_setting_key: "limits.ai_jobs_per_day",
       guest_system_setting_key: "limits.guest_ai_jobs_per_day",
       min: 1,
-      max: 1000
+      max: 1000,
+      max_system_setting_key: MAX_AI_PER_DAY_SETTING_KEY
     ),
     Definition.new(
       key: "retry_operations_per_day",
@@ -84,7 +94,8 @@ module UserLimits
       key: "storage_bytes",
       min: 1.megabyte,
       max: 100.gigabytes,
-      storage: true
+      storage: true,
+      max_system_setting_key: MAX_STORAGE_BYTES_SETTING_KEY
     ),
     Definition.new(
       key: "api_requests_per_minute",
@@ -139,7 +150,7 @@ module UserLimits
       if override
         return Entry.new(
           key: definition.key,
-          value: override.integer_value,
+          value: cast_value(definition.key, override.value, system_limit_cache: system_limit_cache),
           source: "override",
           definition: definition,
           override: override,
@@ -172,12 +183,12 @@ module UserLimits
       end
     end
 
-    def cast_value(key, value)
+    def cast_value(key, value, system_limit_cache: nil)
       definition = definition_for(key)
       raw_value = raw_value_from(value)
       integer = Integer(raw_value)
       raise ValidationError, "below_min" if definition.min && integer < definition.min
-      raise ValidationError, "above_max" if definition.max && integer > definition.max
+      validate_maximum!(definition, integer, system_limit_cache: system_limit_cache)
       validate_definition_dependencies!(definition, integer)
 
       integer
@@ -238,6 +249,23 @@ module UserLimits
       SystemSettings.limit_for(key)
     end
 
+    def max_for(definition, system_limit_cache: nil)
+      return definition.max unless definition.max_system_setting_key
+      return system_limit_cache.fetch(definition.max_system_setting_key) if system_limit_cache&.key?(definition.max_system_setting_key)
+
+      SystemSettings.limit_for(definition.max_system_setting_key)
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      definition.max
+    end
+
+    def validate_maximum!(definition, integer, system_limit_cache: nil)
+      max = max_for(definition, system_limit_cache: system_limit_cache)
+      return unless max && integer > max
+
+      error = definition.max_system_setting_key ? USER_LIMIT_SAFETY_MAX_ERROR : "above_max"
+      raise ValidationError, error
+    end
+
     def validate_definition_dependencies!(definition, integer)
       return unless definition.key == RECEIPT_ITEMS_PER_RECEIPT_KEY
       return if integer <= receipt_items_snapshot_ceiling
@@ -262,7 +290,7 @@ module UserLimits
 
     def system_limit_cache_for_summary
       keys = definitions.values.flat_map do |definition|
-        [ definition.system_setting_key, definition.guest_system_setting_key ]
+        [ definition.system_setting_key, definition.guest_system_setting_key, definition.max_system_setting_key ]
       end.compact.uniq
 
       SystemSettings.limits_for(keys)

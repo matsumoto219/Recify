@@ -205,6 +205,60 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
       expect(result.error_code).to eq('above_max')
     end
 
+    it 'SystemSettingsのシステム上限を超えるoverrideを拒否する' do
+      create(:system_setting, key: 'limits.max_ocr_per_day', value: SystemSettings.stored_value(100))
+
+      result = described_class.call(
+        user: target_user,
+        key: 'ocr_jobs_per_day',
+        value: '101',
+        enabled: '1',
+        expires_at: nil,
+        actor: actor,
+        reason: 'raise OCR limit',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('user_limit_safety_max')
+        expect(UserLimitOverride.where(user: target_user, key: 'ocr_jobs_per_day')).to be_empty
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.limit_update',
+          outcome: 'failed',
+          error_code: 'user_limit_safety_max'
+        )
+      end
+    end
+
+    it 'SystemSettingsのシステム上限以下ならoverrideを作成できる' do
+      create(:system_setting, key: 'limits.max_ai_per_day', value: SystemSettings.stored_value(200))
+
+      result = described_class.call(
+        user: target_user,
+        key: 'ai_jobs_per_day',
+        value: '150',
+        enabled: '1',
+        expires_at: nil,
+        actor: actor,
+        reason: 'raise AI limit',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.user_limit_override.integer_value).to eq(150)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.limit_update',
+          outcome: 'succeeded'
+        )
+      end
+    end
+
     it 'snapshot OCR/AI上限を超えるreceipt_items_per_receipt overrideを拒否する' do
       result = described_class.call(
         user: target_user,

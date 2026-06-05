@@ -213,6 +213,46 @@ RSpec.describe UserLimits do
 
       expect(described_class.cast_value('receipt_items_per_receipt', { 'value' => 1200 })).to eq(1200)
     end
+
+    it 'upload / OCR / AI / storage overrideはSystemSettingsのシステム上限以下だけ許可する' do
+      error_message = 'user_limit_safety_max'
+
+      aggregate_failures do
+        expect(described_class.cast_value('receipt_uploads_per_day', { 'value' => 1000 })).to eq(1000)
+        expect(described_class.cast_value('batch_files_per_day', { 'value' => 1000 })).to eq(1000)
+        expect(described_class.cast_value('ocr_jobs_per_day', { 'value' => 1000 })).to eq(1000)
+        expect(described_class.cast_value('ai_jobs_per_day', { 'value' => 1000 })).to eq(1000)
+        expect(described_class.cast_value('storage_bytes', { 'value' => 100.gigabytes })).to eq(100.gigabytes)
+      end
+
+      create(:system_setting, key: 'limits.max_uploads_per_day', value: SystemSettings.stored_value(100))
+      create(:system_setting, key: 'limits.max_ocr_per_day', value: SystemSettings.stored_value(200))
+      create(:system_setting, key: 'limits.max_ai_per_day', value: SystemSettings.stored_value(300))
+      create(:system_setting, key: 'limits.max_storage_bytes', value: SystemSettings.stored_value(2.gigabytes))
+
+      aggregate_failures do
+        expect(described_class.cast_value('receipt_uploads_per_day', { 'value' => 100 })).to eq(100)
+        expect(described_class.cast_value('batch_files_per_day', { 'value' => 100 })).to eq(100)
+        expect(described_class.cast_value('ocr_jobs_per_day', { 'value' => 200 })).to eq(200)
+        expect(described_class.cast_value('ai_jobs_per_day', { 'value' => 300 })).to eq(300)
+        expect(described_class.cast_value('storage_bytes', { 'value' => 2.gigabytes })).to eq(2.gigabytes)
+        expect {
+          described_class.cast_value('receipt_uploads_per_day', { 'value' => 101 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+        expect {
+          described_class.cast_value('batch_files_per_day', { 'value' => 101 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+        expect {
+          described_class.cast_value('ocr_jobs_per_day', { 'value' => 201 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+        expect {
+          described_class.cast_value('ai_jobs_per_day', { 'value' => 301 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+        expect {
+          described_class.cast_value('storage_bytes', { 'value' => 2.gigabytes + 1 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+      end
+    end
   end
 
   def count_sql_queries

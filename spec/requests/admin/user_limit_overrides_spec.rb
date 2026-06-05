@@ -228,5 +228,29 @@ RSpec.describe 'Admin user limit overrides', type: :request do
         expect(AuditLog.last).to have_attributes(action: 'admin.users.limit_update', outcome: 'failed', error_code: 'receipt_items_snapshot_limit')
       end
     end
+
+    it 'SystemSettingsのシステム上限を超えるoverrideは日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      create(:system_setting, key: 'limits.max_uploads_per_day', value: SystemSettings.stored_value(100))
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      post limit_overrides_admin_user_path(target),
+           params: {
+             key: 'receipt_uploads_per_day',
+             value: '101',
+             enabled: '1',
+             reason: 'raise upload limit',
+             confirmation: 'UPDATE USER LIMIT'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(flash[:alert]).to include('UserLimitsのシステム上限を超えています')
+        expect(UserLimitOverride.where(user: target, key: 'receipt_uploads_per_day')).to be_empty
+        expect(AuditLog.last).to have_attributes(action: 'admin.users.limit_update', outcome: 'failed', error_code: 'user_limit_safety_max')
+      end
+    end
   end
 end

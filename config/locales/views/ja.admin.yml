@@ -783,6 +783,7 @@ ja:
           invalid_integer: 上限値を整数で入力してください。
           below_min: 上限値が下限を下回っています。
           above_max: 上限値が上限を超えています。
+          user_limit_safety_max: UserLimitsのシステム上限を超えています。先に該当するSystemSettingsの最大値を調整してください。
           receipt_items_snapshot_limit: receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。
           expires_at_invalid: 期限の形式を確認してください。
           reauthentication_required: パスキー再認証が必要です。
