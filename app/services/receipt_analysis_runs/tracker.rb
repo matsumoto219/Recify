@@ -199,13 +199,14 @@ module ReceiptAnalysisRuns
       terminate!("succeeded", at: at)
     end
 
-    def fail(error_stage:, error_code:, error_message: nil, at: Time.current)
+    def fail(error_stage:, error_code:, error_message: nil, error_metadata: nil, at: Time.current)
       failed_run = terminate!(
         "failed",
         at: at,
         error_stage: error_stage,
         error_code: error_code,
-        error_message: error_message
+        error_message: error_message,
+        error_metadata: error_metadata
       )
       sync_processing_receipt_failure!(failed_run)
       failed_run
@@ -260,12 +261,12 @@ module ReceiptAnalysisRuns
       end
     end
 
-    def terminate!(status, at:, error_stage: nil, error_code: nil, error_message: nil)
+    def terminate!(status, at:, error_stage: nil, error_code: nil, error_message: nil, error_metadata: nil)
       run.with_lock do
         run.reload
         ensure_not_terminal!(run)
 
-        run.update!(
+        attrs = {
           status: status,
           stage: terminal_stage_for(status, run),
           finished_at: at,
@@ -280,7 +281,13 @@ module ReceiptAnalysisRuns
             receipt_status: final_receipt_status(run),
             from: at
           )
-        )
+        }
+        metadata = safe_error_metadata(error_metadata)
+        if metadata.present?
+          attrs[:metadata] = run.metadata.to_h.deep_dup.merge("error_metadata" => metadata)
+        end
+
+        run.update!(attrs)
         run
       end
     end
@@ -431,6 +438,29 @@ module ReceiptAnalysisRuns
         truncated << char
       end
       truncated
+    end
+
+    def safe_error_metadata(value)
+      return {} unless value.respond_to?(:to_h)
+
+      metadata = value.to_h.with_indifferent_access
+      {
+        "error" => safe_error_metadata_text(metadata[:error]),
+        "resource" => safe_error_metadata_text(metadata[:resource]),
+        "limit" => safe_error_metadata_integer(metadata[:limit]),
+        "actual" => safe_error_metadata_integer(metadata[:actual])
+      }.compact
+    end
+
+    def safe_error_metadata_text(value)
+      text = value.to_s.strip
+      return nil if text.blank?
+
+      text.truncate(100)
+    end
+
+    def safe_error_metadata_integer(value)
+      Integer(value, exception: false)
     end
   end
 end

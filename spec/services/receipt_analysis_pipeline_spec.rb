@@ -894,6 +894,12 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.reload.status).to eq('failed')
         expect(run.error_stage).to eq('finalize')
         expect(run.error_code).to eq('analysis_items_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_items_invalid',
+          'resource' => 'receipt_items',
+          'limit' => 1,
+          'actual' => 2
+        )
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('analysis_items_invalid')
         expect(receipt.receipt_items).to be_empty
@@ -1005,7 +1011,14 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/) { |error|
+        expect(error.metadata).to include(
+          error: 'analysis_value_invalid',
+          resource: 'receipt_payments',
+          limit: 1,
+          actual: 2
+        )
+      }
     end
 
     it '税内訳が固定上限を超える解析結果は金額計算前に拒否する' do
@@ -1023,7 +1036,14 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/) { |error|
+        expect(error.metadata).to include(
+          error: 'analysis_value_invalid',
+          resource: 'receipt_tax_details',
+          limit: 1,
+          actual: 2
+        )
+      }
     end
 
     it '調整行が固定上限を超えるAI解析結果は金額計算前に拒否する' do
@@ -1050,7 +1070,14 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ai_success, ocr_result: ocr_result, ai_result: ai_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/) { |error|
+        expect(error.metadata).to include(
+          error: 'analysis_value_invalid',
+          resource: 'receipt_adjustments',
+          limit: 1,
+          actual: 2
+        )
+      }
     end
 
     it '画像保持OFFのai_success完了後にpurge候補化する' do

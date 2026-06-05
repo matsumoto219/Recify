@@ -383,7 +383,13 @@ class ReceiptAnalysisPipeline
 
       raise ReceiptAnalysisPipeline::AnalysisError.new(
         "analysis_items_invalid",
-        "receipt_items_limit_exceeded count=#{count} limit=#{limit}"
+        "receipt_items_limit_exceeded count=#{count} limit=#{limit}",
+        metadata: limit_exceeded_metadata(
+          error: "analysis_items_invalid",
+          resource: "receipt_items",
+          limit: limit,
+          actual: count
+        )
       )
     end
 
@@ -393,8 +399,23 @@ class ReceiptAnalysisPipeline
 
       raise ReceiptAnalysisPipeline::AnalysisError.new(
         "analysis_value_invalid",
-        "#{name}_limit_exceeded count=#{count} limit=#{limit}"
+        "#{name}_limit_exceeded count=#{count} limit=#{limit}",
+        metadata: limit_exceeded_metadata(
+          error: "analysis_value_invalid",
+          resource: name,
+          limit: limit,
+          actual: count
+        )
       )
+    end
+
+    def limit_exceeded_metadata(error:, resource:, limit:, actual:)
+      {
+        error: error,
+        resource: resource,
+        limit: limit,
+        actual: actual
+      }
     end
 
     def replace_receipt_items!(items_attributes)

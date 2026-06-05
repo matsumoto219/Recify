@@ -4,10 +4,11 @@ class ReceiptAnalysisPipeline
   FINALIZE_STRATEGIES = %w[fail_receipt ocr_only ai_fallback ai_success].freeze
 
   class AnalysisError < StandardError
-    attr_reader :error_code
+    attr_reader :error_code, :metadata
 
-    def initialize(error_code, message = nil)
+    def initialize(error_code, message = nil, metadata: {})
       @error_code = error_code
+      @metadata = metadata.to_h
       super(message)
     end
   end
@@ -538,7 +539,8 @@ class ReceiptAnalysisPipeline
       run,
       error_stage: run.stage.presence || "ocr",
       error_code: error_code_for(error),
-      error_message: error.message
+      error_message: error.message,
+      error_metadata: error_metadata_for(error)
     )
   rescue ReceiptAnalysisRuns::TerminalRunError
     nil
@@ -548,5 +550,11 @@ class ReceiptAnalysisPipeline
     return error.error_code if error.respond_to?(:error_code) && error.error_code.present?
 
     "unexpected_error"
+  end
+
+  def error_metadata_for(error)
+    return nil unless error.respond_to?(:metadata)
+
+    error.metadata
   end
 end

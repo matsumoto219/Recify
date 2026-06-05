@@ -116,11 +116,12 @@ module ReceiptAnalysisRuns
       Tracker.new(run).succeed(at: at)
     end
 
-    def fail(run, error_stage:, error_code:, error_message: nil, at: Time.current)
+    def fail(run, error_stage:, error_code:, error_message: nil, error_metadata: nil, at: Time.current)
       Tracker.new(run).fail(
         error_stage: error_stage,
         error_code: error_code,
         error_message: error_message,
+        error_metadata: error_metadata,
         at: at
       )
     end
