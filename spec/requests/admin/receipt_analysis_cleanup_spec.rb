@@ -116,6 +116,10 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       get admin_receipt_analysis_cleanup_path
 
+      document = Nokogiri::HTML(response.body)
+      tables = document.css('table')
+      run_key_cells = document.css('td').select { |cell| cell.text.include?(stale_run.run_key) || cell.text.include?(expired_run.run_key) }
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('Cleanup確認')
@@ -131,6 +135,11 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         expect(response.body).to include(admin_receipt_analysis_run_path(stale_run.run_key))
         expect(response.body).to include(admin_receipt_analysis_run_path(expired_run.run_key))
         expect(response.body).to include('Cleanup実行は重要な管理操作です')
+        expect(tables.size).to eq(2)
+        expect(tables.all? { |table| table['class'].include?('min-w-[56rem]') }).to be(true)
+        expect(run_key_cells.size).to eq(2)
+        expect(run_key_cells.all? { |cell| cell['class'].include?('min-w-[18rem]') }).to be(true)
+        expect(run_key_cells.all? { |cell| cell['class'].include?('whitespace-nowrap') }).to be(true)
       end
     end
 

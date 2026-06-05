@@ -160,32 +160,30 @@
     </dl>
 
     <% if stale_records.any? %>
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
+      <%= render "admin/shared/table_frame", size: :md do %>
           <thead class="token-text-muted">
             <tr class="border-b token-border-soft">
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.receipt_status") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.stale.updated_at") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_cleanup.common.receipt_status") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.receipt_analysis_cleanup.stale.updated_at") %></th>
             </tr>
           </thead>
           <tbody>
             <% stale_records.each do |record| %>
               <tr class="border-b token-border-soft">
-                <td class="px-3 py-3 font-mono text-xs">
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                   <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
                 </td>
-                <td class="px-3 py-3"><%= record[:status] %></td>
-                <td class="px-3 py-3"><%= record[:stage] %></td>
-                <td class="px-3 py-3"><%= record[:receipt_status] %></td>
-                <td class="px-3 py-3 whitespace-nowrap"><%= record[:updated_at].present? ? l(record[:updated_at], format: :short) : "-" %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:status] %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:stage] %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:receipt_status] %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= record[:updated_at].present? ? l(record[:updated_at], format: :short) : "-" %></td>
               </tr>
             <% end %>
           </tbody>
-        </table>
-      </div>
+      <% end %>
     <% else %>
       <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
         <%= t("admin.receipt_analysis_cleanup.stale.empty") %>
@@ -268,30 +266,28 @@
     </dl>
 
     <% if retention_records.any? %>
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
+      <%= render "admin/shared/table_frame", size: :md do %>
           <thead class="token-text-muted">
             <tr class="border-b token-border-soft">
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
-              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.retention.expires_at") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.receipt_analysis_cleanup.retention.expires_at") %></th>
             </tr>
           </thead>
           <tbody>
             <% retention_records.each do |record| %>
               <tr class="border-b token-border-soft">
-                <td class="px-3 py-3 font-mono text-xs">
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                   <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
                 </td>
-                <td class="px-3 py-3"><%= record[:status] %></td>
-                <td class="px-3 py-3"><%= record[:stage] %></td>
-                <td class="px-3 py-3 whitespace-nowrap"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : "-" %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:status] %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:stage] %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : "-" %></td>
               </tr>
             <% end %>
           </tbody>
-        </table>
-      </div>
+      <% end %>
     <% else %>
       <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
         <%= t("admin.receipt_analysis_cleanup.retention.empty") %>
