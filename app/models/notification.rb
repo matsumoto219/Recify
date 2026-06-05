@@ -30,7 +30,8 @@ class Notification < ApplicationRecord
 
   DROPDOWN_LIMIT = 5
   INDEX_LIMIT = 50
-  READ_RETENTION_DAYS = 30
+  DEFAULT_READ_RETENTION_DAYS = 30
+  READ_RETENTION_DAYS = DEFAULT_READ_RETENTION_DAYS
   DEFAULT_MAX_NOTIFICATIONS_PER_USER = 100
   MAX_NOTIFICATIONS_PER_USER = DEFAULT_MAX_NOTIFICATIONS_PER_USER
 
@@ -70,7 +71,7 @@ class Notification < ApplicationRecord
     end
 
     def cleanup_old!(now: Time.current)
-      threshold = now - READ_RETENTION_DAYS.days
+      threshold = now - read_retention_days.days
       affected_user_ids = read.where("read_at < ?", threshold).distinct.pluck(:user_id)
       deleted_count = read.where("read_at < ?", threshold).delete_all
 
@@ -103,6 +104,12 @@ class Notification < ApplicationRecord
       SystemSettings.limit_for("limits.notifications_per_user")
     rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
       DEFAULT_MAX_NOTIFICATIONS_PER_USER
+    end
+
+    def read_retention_days
+      SystemSettings.limit_for("retention.notifications_read_days")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      DEFAULT_READ_RETENTION_DAYS
     end
 
     private
