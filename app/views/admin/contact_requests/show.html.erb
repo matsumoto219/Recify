@@ -56,9 +56,9 @@
     <% end %>
   </div>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.summary") %></h2>
-    <dl class="grid gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
+    <dl class="grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_uid") %></dt>
         <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:request_uid] %></dd>
@@ -93,9 +93,9 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_masked") %></dt>
         <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:email_masked] %></dd>
       </div>
-      <div>
+      <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_digest") %></dt>
-        <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:email_digest] %></dd>
+        <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= @record[:email_digest] %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.created_at") %></dt>
@@ -109,15 +109,15 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_at") %></dt>
         <dd class="token-text-base"><%= @record[:handled_at].present? ? l(@record[:handled_at], format: :short) : "-" %></dd>
       </div>
-      <div>
+      <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_id") %></dt>
-        <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:request_id].presence || "-" %></dd>
+        <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= @record[:request_id].presence || "-" %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.ip_address") %></dt>
         <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
       </div>
-      <div class="md:col-span-2 lg:col-span-3">
+      <div class="min-w-0 max-w-full md:col-span-2 lg:col-span-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user_agent") %></dt>
         <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:user_agent].presence || "-" %></dd>
       </div>

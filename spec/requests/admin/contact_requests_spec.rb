@@ -95,6 +95,10 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include('問い合わせ本文')
         expect(response.body).to include('送信 太郎')
         expect(response.body).to include('se***@example.com')
+        expect(response.body).to include(contact_request.email_digest)
+        expect(response.body).to include('grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2 lg:grid-cols-3')
+        expect(response.body).to include('break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]')
+        expect(response.body).to include('min-w-0 max-w-full md:col-span-2 lg:col-span-3')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
       end
