@@ -14,7 +14,7 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
       :with_image,
       {
         keep_image: false,
-        image_purge_eligible_at: 1.hour.ago
+        image_purge_eligible_at: 2.days.ago
       }.merge(attributes)
     )
   end
@@ -29,6 +29,7 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
       aggregate_failures do
         expect(result).to include(
           dry_run: true,
+          retention_days: 1,
           candidate_count: 1,
           purged_count: 0,
           skipped_count: 1,
@@ -64,11 +65,11 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
 
     it '保持ON、未来eligible、processing、active run、画像なし、purge済みは対象外にする' do
       keep_enabled = purgeable_receipt(keep_image: true)
-      future = purgeable_receipt(image_purge_eligible_at: 1.hour.from_now)
+      future = purgeable_receipt(image_purge_eligible_at: 12.hours.ago)
       processing = purgeable_receipt(status: 'processing')
       active = purgeable_receipt
       create(:receipt_analysis_run, :running, receipt: active)
-      no_image = create(:receipt, :completed, keep_image: false, image_purge_eligible_at: 1.hour.ago)
+      no_image = create(:receipt, :completed, keep_image: false, image_purge_eligible_at: 2.days.ago)
       purged = purgeable_receipt(
         image_purged_at: 5.minutes.ago,
         image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
@@ -88,8 +89,8 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
     end
 
     it 'limit件数だけ処理する' do
-      first = purgeable_receipt(image_purge_eligible_at: 2.hours.ago)
-      second = purgeable_receipt(image_purge_eligible_at: 1.hour.ago)
+      first = purgeable_receipt(image_purge_eligible_at: 3.days.ago)
+      second = purgeable_receipt(image_purge_eligible_at: 2.days.ago)
 
       result = described_class.call(dry_run: false, limit: 1)
 
@@ -110,6 +111,34 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
         expect(first_result).to include(candidate_count: 1, purged_count: 1)
         expect(second_result).to include(candidate_count: 0, purged_count: 0, failed_count: 0)
         expect(receipt.reload).to be_image_purged_by_system
+      end
+    end
+
+    it 'SystemSettingsの保持日数でpurge対象を変更できる' do
+      create(:system_setting, key: 'retention.receipt_images_days', value: SystemSettings.stored_value(30))
+      too_new = purgeable_receipt(image_purge_eligible_at: 29.days.ago)
+      old_receipt = purgeable_receipt(image_purge_eligible_at: 31.days.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result).to include(dry_run: true, retention_days: 30, candidate_count: 1)
+        expect(result[:sample_receipt_ids]).to eq([ old_receipt.id ])
+        expect(result[:sample_receipt_ids]).not_to include(too_new.id)
+      end
+    end
+
+    it '保持日数365日なら366日前の画像だけを対象にする' do
+      create(:system_setting, key: 'retention.receipt_images_days', value: SystemSettings.stored_value(365))
+      too_new = purgeable_receipt(image_purge_eligible_at: 364.days.ago)
+      old_receipt = purgeable_receipt(image_purge_eligible_at: 366.days.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result).to include(retention_days: 365, candidate_count: 1)
+        expect(result[:sample_receipt_ids]).to eq([ old_receipt.id ])
+        expect(result[:sample_receipt_ids]).not_to include(too_new.id)
       end
     end
   end

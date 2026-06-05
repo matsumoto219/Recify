@@ -12,6 +12,7 @@ RSpec.describe Storage::ReceiptImagePurgeJob, type: :job do
       result = {
         dry_run: true,
         cutoff: Time.current,
+        retention_days: 1,
         limit: 100,
         candidate_count: 1,
         purged_count: 0,
@@ -36,6 +37,7 @@ RSpec.describe Storage::ReceiptImagePurgeJob, type: :job do
         expect(audit_log.outcome).to eq('succeeded')
         expect(audit_log.metadata).to include(
           'dry_run' => true,
+          'retention_days' => 1,
           'candidate_count' => 1,
           'purged_count' => 0,
           'sample_receipt_ids' => [ 123 ]
@@ -47,6 +49,7 @@ RSpec.describe Storage::ReceiptImagePurgeJob, type: :job do
       result = {
         dry_run: false,
         cutoff: Time.current,
+        retention_days: 1,
         limit: 5,
         candidate_count: 1,
         purged_count: 1,

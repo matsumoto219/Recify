@@ -1,16 +1,25 @@
 module Storage
   class ReceiptImagePurger
     DEFAULT_LIMIT = 100
+    DEFAULT_RETENTION_DAYS = 1
+    RETENTION_DAYS_KEY = "retention.receipt_images_days"
     SAMPLE_LIMIT = 20
 
     def self.call(...)
       new(...).call
     end
 
+    def self.retention_days
+      SystemSettings.limit_for(RETENTION_DAYS_KEY)
+    rescue StandardError
+      DEFAULT_RETENTION_DAYS
+    end
+
     def initialize(dry_run: true, limit: DEFAULT_LIMIT, cutoff: Time.current)
       @dry_run = normalize_boolean(dry_run)
       @limit = normalize_limit(limit)
-      @cutoff = normalize_cutoff(cutoff)
+      @retention_days = self.class.retention_days
+      @cutoff = normalize_cutoff(cutoff) - retention_days.days
     end
 
     def call
@@ -18,6 +27,7 @@ module Storage
       result = {
         dry_run: dry_run,
         cutoff: cutoff,
+        retention_days: retention_days,
         limit: limit,
         candidate_count: records.size,
         purged_count: 0,
@@ -37,7 +47,7 @@ module Storage
 
     private
 
-    attr_reader :dry_run, :limit, :cutoff
+    attr_reader :dry_run, :limit, :cutoff, :retention_days
 
     def candidates
       @candidates ||= Receipt

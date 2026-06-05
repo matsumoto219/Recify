@@ -41,6 +41,7 @@ module Storage
         metadata: {
           dry_run: result.fetch(:dry_run, dry_run),
           cutoff: audit_time(result[:cutoff] || cutoff),
+          retention_days: result[:retention_days],
           limit: result[:limit] || limit,
           candidate_count: result[:candidate_count],
           purged_count: result[:purged_count],
