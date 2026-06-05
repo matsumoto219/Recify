@@ -441,6 +441,31 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it '明細上限がsnapshot OCR/AI上限を超える場合は日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('limits.receipt_items_per_receipt'),
+              params: {
+                value: '1200',
+                reason: 'raise receipt item limit'
+              }
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('limits.receipt_items_per_receipt'))
+        expect(flash[:alert]).to include('receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。')
+        expect(SystemSetting.find_by(key: 'limits.receipt_items_per_receipt')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'receipt_items_snapshot_limit'
+        )
+      end
+    end
+
     it 'お知らせ本文を更新でき、admin表示ではHTMLとして実行しない' do
       admin = create(:user, :admin)
       sign_in admin

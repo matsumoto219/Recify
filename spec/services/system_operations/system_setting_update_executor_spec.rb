@@ -171,6 +171,53 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it '明細上限がsnapshot OCR/AI上限を超える更新を拒否する' do
+      result = described_class.call(
+        key: 'limits.receipt_items_per_receipt',
+        value: '1200',
+        actor: actor,
+        reason: 'raise receipt item limit',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('receipt_items_snapshot_limit')
+        expect(SystemSetting.find_by(key: 'limits.receipt_items_per_receipt')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'receipt_items_snapshot_limit',
+          target_uid: 'limits.receipt_items_per_receipt'
+        )
+      end
+    end
+
+    it 'snapshot OCR/AI上限を先に上げた場合は明細上限を更新できる' do
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+
+      result = described_class.call(
+        key: 'limits.receipt_items_per_receipt',
+        value: '1200',
+        actor: actor,
+        reason: 'raise receipt item limit after snapshot limits',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.limit_for('limits.receipt_items_per_receipt')).to eq(1200)
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'limits.receipt_items_per_receipt'
+        )
+      end
+    end
+
     it 'requires_confirmation設定ではconfirmationを要求する' do
       with_extra_definition(
         SystemSettings::Definition.new(

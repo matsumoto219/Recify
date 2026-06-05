@@ -205,6 +205,59 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
       expect(result.error_code).to eq('above_max')
     end
 
+    it 'snapshot OCR/AI上限を超えるreceipt_items_per_receipt overrideを拒否する' do
+      result = described_class.call(
+        user: target_user,
+        key: 'receipt_items_per_receipt',
+        value: '1200',
+        enabled: '1',
+        expires_at: nil,
+        actor: actor,
+        reason: 'raise item limit',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('receipt_items_snapshot_limit')
+        expect(UserLimitOverride.where(user: target_user, key: 'receipt_items_per_receipt')).to be_empty
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.limit_update',
+          outcome: 'failed',
+          error_code: 'receipt_items_snapshot_limit'
+        )
+      end
+    end
+
+    it 'snapshot OCR/AI上限以下ならreceipt_items_per_receipt overrideを作成できる' do
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+
+      result = described_class.call(
+        user: target_user,
+        key: 'receipt_items_per_receipt',
+        value: '1200',
+        enabled: '1',
+        expires_at: nil,
+        actor: actor,
+        reason: 'raise item limit after snapshot limits',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.user_limit_override.integer_value).to eq(1200)
+        expect(AuditLog.last).to have_attributes(
+          action: 'admin.users.limit_update',
+          outcome: 'succeeded'
+        )
+      end
+    end
+
     it 'admin自身の増枠を許可する' do
       actor.update!(storage_limit_bytes: 1.gigabyte)
 

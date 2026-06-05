@@ -331,12 +331,14 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
-    it 'OCR/AI normalized item snapshot上限はreceipt_items_per_receiptの最大override値と同期する' do
+    it 'snapshot上限の設定可能最大値はreceipt_items_per_receiptの最大override値と同期する' do
       max_receipt_items = UserLimits.definition_for('receipt_items_per_receipt').max
 
       aggregate_failures do
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_ITEMS).to eq(max_receipt_items)
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_AI_NORMALIZED_ITEMS).to eq(max_receipt_items)
+        expect(SystemSettings.definition_for('limits.snapshot_ocr_items_max').max).to eq(max_receipt_items)
+        expect(SystemSettings.definition_for('limits.snapshot_ai_normalized_items_max').max).to eq(max_receipt_items)
+        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ocr_items_max').default)
+        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_AI_NORMALIZED_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ai_normalized_items_max').default)
       end
     end
 

@@ -191,6 +191,28 @@ RSpec.describe UserLimits do
         }.to raise_error(UserLimits::ValidationError, 'unknown_key')
       end
     end
+
+    it 'receipt_items_per_receipt overrideはsnapshot OCR/AI上限以下だけ許可する' do
+      error_message = 'receipt_items_snapshot_limit'
+
+      aggregate_failures do
+        expect(described_class.definition_for('receipt_items_per_receipt').max).to eq(10_000)
+        expect(described_class.cast_value('receipt_items_per_receipt', { 'value' => 1000 })).to eq(1000)
+        expect {
+          described_class.cast_value('receipt_items_per_receipt', { 'value' => 1200 })
+        }.to raise_error(UserLimits::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+
+      expect {
+        described_class.cast_value('receipt_items_per_receipt', { 'value' => 1200 })
+      }.to raise_error(UserLimits::ValidationError, error_message)
+
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+
+      expect(described_class.cast_value('receipt_items_per_receipt', { 'value' => 1200 })).to eq(1200)
+    end
   end
 
   def count_sql_queries

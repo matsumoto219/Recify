@@ -140,7 +140,7 @@ module SystemSettings
         editable: true,
         risk_level: "medium",
         min: 1,
-        max: 1000
+        max: 10_000
       ),
       Definition.new(
         key: "limits.snapshot_ocr_items_max",

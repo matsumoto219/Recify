@@ -205,5 +205,28 @@ RSpec.describe 'Admin user limit overrides', type: :request do
         expect(AuditLog.last).to have_attributes(action: 'admin.users.limit_update', outcome: 'failed', error_code: 'unknown_key')
       end
     end
+
+    it 'snapshot OCR/AI上限を超える明細数overrideは日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      target = create(:user)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      post limit_overrides_admin_user_path(target),
+           params: {
+             key: 'receipt_items_per_receipt',
+             value: '1200',
+             enabled: '1',
+             reason: 'raise receipt item limit',
+             confirmation: 'UPDATE USER LIMIT'
+           }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(target))
+        expect(flash[:alert]).to include('receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。')
+        expect(UserLimitOverride.where(user: target, key: 'receipt_items_per_receipt')).to be_empty
+        expect(AuditLog.last).to have_attributes(action: 'admin.users.limit_update', outcome: 'failed', error_code: 'receipt_items_snapshot_limit')
+      end
+    end
   end
 end

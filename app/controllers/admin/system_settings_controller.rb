@@ -43,7 +43,7 @@ class Admin::SystemSettingsController < Admin::BaseController
                   status: :see_other
     else
       redirect_to admin_system_setting_path(@record[:key]),
-                  alert: t("admin.system_settings.messages.failed", error_code: result.error_code),
+                  alert: failure_message(result),
                   status: :see_other
     end
   end
@@ -58,6 +58,13 @@ class Admin::SystemSettingsController < Admin::BaseController
 
   def update_params
     params.permit(:value, :reason, :confirm)
+  end
+
+  def failure_message(result)
+    t(
+      "admin.system_settings.messages.failure.#{result.error_code}",
+      default: t("admin.system_settings.messages.failed", error_code: result.error_code)
+    )
   end
 
   def raise_not_found

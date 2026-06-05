@@ -1,5 +1,11 @@
 module UserLimits
   VALUE_KEY = "value"
+  RECEIPT_ITEMS_PER_RECEIPT_KEY = "receipt_items_per_receipt"
+  RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
+  SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
+    limits.snapshot_ocr_items_max
+    limits.snapshot_ai_normalized_items_max
+  ].freeze
 
   ValidationError = Class.new(StandardError)
 
@@ -42,10 +48,10 @@ module UserLimits
       max: 1000
     ),
     Definition.new(
-      key: "receipt_items_per_receipt",
+      key: RECEIPT_ITEMS_PER_RECEIPT_KEY,
       system_setting_key: "limits.receipt_items_per_receipt",
       min: 1,
-      max: 1000
+      max: 10_000
     ),
     Definition.new(
       key: "batch_files_per_day",
@@ -172,6 +178,7 @@ module UserLimits
       integer = Integer(raw_value)
       raise ValidationError, "below_min" if definition.min && integer < definition.min
       raise ValidationError, "above_max" if definition.max && integer > definition.max
+      validate_definition_dependencies!(definition, integer)
 
       integer
     rescue ArgumentError, TypeError
@@ -229,6 +236,19 @@ module UserLimits
       return system_limit_cache.fetch(key) if system_limit_cache&.key?(key)
 
       SystemSettings.limit_for(key)
+    end
+
+    def validate_definition_dependencies!(definition, integer)
+      return unless definition.key == RECEIPT_ITEMS_PER_RECEIPT_KEY
+      return if integer <= receipt_items_snapshot_ceiling
+
+      raise ValidationError, RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR
+    end
+
+    def receipt_items_snapshot_ceiling
+      SystemSettings.limits_for(SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      1000
     end
 
     def active_override_cache_for(user)

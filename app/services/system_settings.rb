@@ -1,5 +1,11 @@
 module SystemSettings
   VALUE_KEY = "value"
+  RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
+  RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
+  SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
+    limits.snapshot_ocr_items_max
+    limits.snapshot_ai_normalized_items_max
+  ].freeze
 
   UnknownKeyError = Class.new(KeyError)
   ValidationError = Class.new(StandardError)
@@ -155,7 +161,8 @@ module SystemSettings
       raise ValidationError, "must_be_hash" unless value.is_a?(Hash)
       raise ValidationError, "value_required" unless value.key?(VALUE_KEY) || value.key?(VALUE_KEY.to_sym)
 
-      cast_value(definition, stored_raw_value(value))
+      casted_value = cast_value(definition, stored_raw_value(value))
+      validate_setting_dependencies!(definition, casted_value)
       true
     end
 
@@ -164,7 +171,10 @@ module SystemSettings
     end
 
     def cast_update_value(key, value)
-      cast_value(definition_for(key), value)
+      definition = definition_for(key)
+      casted_value = cast_value(definition, value)
+      validate_setting_dependencies!(definition, casted_value)
+      casted_value
     end
 
     def stored_value_for_update(key, value)
@@ -324,6 +334,19 @@ module SystemSettings
     def validate_numeric_range!(definition, value)
       raise ValidationError, "below_min" if definition.min && value < BigDecimal(definition.min.to_s)
       raise ValidationError, "above_max" if definition.max && value > BigDecimal(definition.max.to_s)
+    end
+
+    def validate_setting_dependencies!(definition, value)
+      return unless definition.key == RECEIPT_ITEMS_LIMIT_KEY
+      return if Integer(value) <= receipt_items_snapshot_ceiling
+
+      raise ValidationError, RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR
+    end
+
+    def receipt_items_snapshot_ceiling
+      limits_for(SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
+    rescue UnknownKeyError, ValidationError, ArgumentError, TypeError
+      1000
     end
 
     def serializable_value(value)

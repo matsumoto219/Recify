@@ -325,6 +325,28 @@ RSpec.describe SystemSettings do
       end
     end
 
+    it 'receipt_items_per_receiptはsnapshot OCR/AI上限以下だけ許可する' do
+      error_message = 'receipt_items_snapshot_limit'
+
+      aggregate_failures do
+        expect(described_class.definition_for('limits.receipt_items_per_receipt').max).to eq(10_000)
+        expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1000')).to eq(1000)
+        expect {
+          described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+
+      expect {
+        described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')
+      }.to raise_error(SystemSettings::ValidationError, error_message)
+
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+
+      expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')).to eq(1200)
+    end
+
     it 'snapshot件数上限はhigh risk設定として扱う' do
       aggregate_failures do
         expect(described_class.definition_for('limits.snapshot_ocr_items_max')).to have_attributes(
