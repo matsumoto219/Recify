@@ -498,6 +498,7 @@ ja:
         receipt_payments_limit_note: 1レシートに保存できる支払い情報の最大数です。OCRのPayments配列が異常に多い場合のDB肥大化を防ぎます。大きくしすぎると解析snapshotや管理画面表示が重くなる可能性があります。
         notifications_limit_note: 1ユーザーあたりDBに保持する通知の最大件数です。通知一覧の1回表示件数とは別で、大きくしすぎると通知一覧とDB容量に影響する可能性があります。
         notifications_read_retention_note: 既読通知を保持する日数です。未読通知はこの保持期間では削除されません。1ユーザーあたりの通知保持件数とは別設定です。
+        guest_users_retention_note: ゲストユーザーと関連データを保持する日数です。期間を長くすると本登録前のデータ保持期間は伸びますが、ストレージ使用量も増える可能性があります。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。

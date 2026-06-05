@@ -76,7 +76,10 @@ RSpec.describe Admin::SystemSettingsQuery do
     it 'retention filterを適用できる' do
       result = described_class.call(category: 'retention')
 
-      expect(result.records.map { |record| record[:key] }).to eq([ 'retention.notifications_read_days' ])
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'retention.notifications_read_days',
+        'retention.guest_users_days'
+      )
     end
 
     it 'unknown keyは空結果にする' do
