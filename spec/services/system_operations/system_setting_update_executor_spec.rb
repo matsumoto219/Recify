@@ -94,6 +94,37 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it 'orphan blob保持期間の変更はhigh riskとして監査ログに残す' do
+      result = described_class.call(
+        key: 'retention.orphan_blobs_hours',
+        value: '72',
+        actor: actor,
+        reason: 'extend orphan blob dry-run window',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.limit_for('retention.orphan_blobs_hours')).to eq(72)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'retention.orphan_blobs_hours',
+          reason: 'extend orphan blob dry-run window'
+        )
+        expect(audit_log.metadata).to include(
+          'category' => 'retention',
+          'risk_level' => 'high',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+      end
+    end
+
     it 'unknown keyを拒否し、failed auditを残す' do
       result = described_class.call(
         key: 'secret.provider_api_key',

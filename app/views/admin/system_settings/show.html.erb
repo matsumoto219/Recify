@@ -44,6 +44,8 @@
       "contact_requests_retention_note"
     elsif analysis_run_retention_keys.include?(@record[:key].to_s)
       "analysis_runs_retention_note"
+    elsif @record[:key].to_s == "retention.orphan_blobs_hours"
+      "orphan_blobs_retention_note"
     end
   setting_notice = setting_notice_key.present? ? t("admin.system_settings.show.#{setting_notice_key}") : nil
 %>

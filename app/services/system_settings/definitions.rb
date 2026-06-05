@@ -273,6 +273,16 @@ module SystemSettings
         max: 365
       ),
       Definition.new(
+        key: "retention.orphan_blobs_hours",
+        category: "retention",
+        value_type: "integer",
+        default: 48,
+        editable: true,
+        risk_level: "high",
+        min: 24,
+        max: 720
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",
