@@ -125,7 +125,7 @@
         <% end %>
       </div>
 
-      <div class="space-y-3">
+      <div class="space-y-3 md:max-h-[16rem] md:overflow-y-auto md:pr-1" data-passkey-list>
         <% if security_presenter.passkeys? %>
           <% security_presenter.passkeys.each do |passkey| %>
             <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 space-y-3">

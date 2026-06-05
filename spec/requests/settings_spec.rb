@@ -609,10 +609,14 @@ RSpec.describe 'Settings', type: :request do
       get settings_security_path
 
       document = Nokogiri::HTML(response.body)
+      passkey_list = document.at_css('[data-passkey-list]')
       passkey_button = document.at_css('[data-passkey-target="button"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(passkey_list['class']).to include('md:max-h-[16rem]')
+        expect(passkey_list['class']).to include('md:overflow-y-auto')
+        expect(passkey_list['class']).to include('md:pr-1')
         expect(document.at_css('[data-passkey-registration-count]').text.squish).to include(
           I18n.t('settings.security.auth.passkey.registered_count', count: 0, limit: Passkey::MAX_PER_USER)
         )
