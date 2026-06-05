@@ -64,7 +64,7 @@ ja:
         keep_receipt_images:
           label: レシート画像を保存
           description: |-
-            レシートを登録する際、画像を保存します。
+            レシートを登録する際、画像を保存します
       support:
         description: 困ったことや不具合等をサポートへお問い合わせできます。
         contact: お問い合わせを開く

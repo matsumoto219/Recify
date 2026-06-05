@@ -130,7 +130,7 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.index.usage.keep_receipt_images.label'))
-        expect(response.body).to include('OFFにすると解析後にレシート画像を削除します')
+        expect(response.body).to include('レシートを登録する際、画像を保存します')
         expect(document.at_css('input[name="keep_receipt_images"]')).to be_present
       end
     end
