@@ -2,10 +2,31 @@ module SystemSettings
   VALUE_KEY = "value"
   RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
+  USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
   SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
   ].freeze
+  USER_LIMIT_SETTING_SAFETY_KEYS = {
+    "limits.receipt_uploads_per_day" => "limits.max_uploads_per_day",
+    "limits.batch_files_per_day" => "limits.max_uploads_per_day",
+    "limits.guest_receipt_uploads_per_day" => "limits.max_uploads_per_day",
+    "limits.guest_batch_files_per_day" => "limits.max_uploads_per_day",
+    "limits.ocr_jobs_per_day" => "limits.max_ocr_per_day",
+    "limits.guest_ocr_jobs_per_day" => "limits.max_ocr_per_day",
+    "limits.ai_jobs_per_day" => "limits.max_ai_per_day",
+    "limits.guest_ai_jobs_per_day" => "limits.max_ai_per_day",
+    "limits.guest_storage_bytes" => "limits.max_storage_bytes"
+  }.freeze
+  USER_LIMIT_SAFETY_SETTING_KEYS = USER_LIMIT_SETTING_SAFETY_KEYS.group_by { |_setting_key, safety_key| safety_key }
+                                                                  .transform_values { |pairs| pairs.map(&:first) }
+                                                                  .freeze
+  USER_LIMIT_SAFETY_OVERRIDE_KEYS = {
+    "limits.max_uploads_per_day" => %w[receipt_uploads_per_day batch_files_per_day],
+    "limits.max_ocr_per_day" => %w[ocr_jobs_per_day],
+    "limits.max_ai_per_day" => %w[ai_jobs_per_day],
+    "limits.max_storage_bytes" => %w[storage_bytes]
+  }.freeze
 
   UnknownKeyError = Class.new(KeyError)
   ValidationError = Class.new(StandardError)
@@ -337,6 +358,12 @@ module SystemSettings
     end
 
     def validate_setting_dependencies!(definition, value)
+      validate_receipt_items_snapshot_dependency!(definition, value)
+      validate_user_limit_setting_safety!(definition, value)
+      validate_user_limit_safety_ceiling!(definition, value)
+    end
+
+    def validate_receipt_items_snapshot_dependency!(definition, value)
       return unless definition.key == RECEIPT_ITEMS_LIMIT_KEY
       return if Integer(value) <= receipt_items_snapshot_ceiling
 
@@ -347,6 +374,45 @@ module SystemSettings
       limits_for(SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
     rescue UnknownKeyError, ValidationError, ArgumentError, TypeError
       1000
+    end
+
+    def validate_user_limit_setting_safety!(definition, value)
+      safety_key = USER_LIMIT_SETTING_SAFETY_KEYS[definition.key]
+      return unless safety_key
+      return if Integer(value) <= limit_for(safety_key)
+
+      raise ValidationError, USER_LIMIT_SAFETY_MAX_ERROR
+    end
+
+    def validate_user_limit_safety_ceiling!(definition, value)
+      return unless USER_LIMIT_SAFETY_SETTING_KEYS.key?(definition.key)
+
+      safety_limit = Integer(value)
+      validate_related_system_limits!(definition.key, safety_limit)
+      validate_related_user_limit_overrides!(definition.key, safety_limit)
+    end
+
+    def validate_related_system_limits!(safety_key, safety_limit)
+      current_limits = limits_for(USER_LIMIT_SAFETY_SETTING_KEYS.fetch(safety_key))
+      return if current_limits.values.all? { |limit| limit <= safety_limit }
+
+      raise ValidationError, USER_LIMIT_SAFETY_MAX_ERROR
+    end
+
+    def validate_related_user_limit_overrides!(safety_key, safety_limit)
+      keys = USER_LIMIT_SAFETY_OVERRIDE_KEYS.fetch(safety_key)
+      has_exceeding_override = UserLimitOverride.active
+                                             .where(key: keys)
+                                             .any? { |override| override_integer_value(override) > safety_limit }
+      return unless has_exceeding_override
+
+      raise ValidationError, USER_LIMIT_SAFETY_MAX_ERROR
+    end
+
+    def override_integer_value(override)
+      Integer(override.value.fetch(VALUE_KEY))
+    rescue ArgumentError, KeyError, TypeError
+      0
     end
 
     def serializable_value(value)

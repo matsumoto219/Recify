@@ -533,6 +533,7 @@ ja:
         failed: "設定を更新できませんでした: %{error_code}"
         failure:
           receipt_items_snapshot_limit: receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。
+          user_limit_safety_max: UserLimitsのシステム上限を超えています。関連する利用上限またはユーザー別上限を先に同等以下へ変更してください。
     users:
       common:
         yes: はい

@@ -560,6 +560,60 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it '利用上限がシステム上限を超える場合は日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      create(:system_setting, key: 'limits.max_ocr_per_day', value: SystemSettings.stored_value(100))
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('limits.ocr_jobs_per_day'),
+              params: {
+                value: '101',
+                reason: 'raise OCR limit'
+              }
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('limits.ocr_jobs_per_day'))
+        expect(flash[:alert]).to include('UserLimitsのシステム上限を超えています')
+        expect(SystemSetting.find_by(key: 'limits.ocr_jobs_per_day')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'user_limit_safety_max'
+        )
+      end
+    end
+
+    it 'active overrideを下回るシステム上限への変更は日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'ai_jobs_per_day', value: { 'value' => 150 })
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('limits.max_ai_per_day'),
+              params: {
+                value: '100',
+                reason: 'lower AI safety limit',
+                confirm: '1'
+              }
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('limits.max_ai_per_day'))
+        expect(flash[:alert]).to include('UserLimitsのシステム上限を超えています')
+        expect(SystemSetting.find_by(key: 'limits.max_ai_per_day')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'user_limit_safety_max'
+        )
+      end
+    end
+
     it 'お知らせ本文を更新でき、admin表示ではHTMLとして実行しない' do
       admin = create(:user, :admin)
       sign_in admin

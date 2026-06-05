@@ -404,6 +404,67 @@ RSpec.describe SystemSettings do
       expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')).to eq(1200)
     end
 
+    it 'upload / OCR / AI / storage系UserLimit設定はシステム上限以下だけ許可する' do
+      error_message = 'user_limit_safety_max'
+      create(:system_setting, key: 'limits.max_uploads_per_day', value: described_class.stored_value(100))
+      create(:system_setting, key: 'limits.max_ocr_per_day', value: described_class.stored_value(100))
+      create(:system_setting, key: 'limits.max_ai_per_day', value: described_class.stored_value(200))
+      create(:system_setting, key: 'limits.max_storage_bytes', value: described_class.stored_value(1.gigabyte))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_uploads_per_day', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.batch_files_per_day', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.ocr_jobs_per_day', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.ai_jobs_per_day', '150')).to eq(150)
+        expect(described_class.cast_update_value('limits.guest_ocr_jobs_per_day', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.guest_storage_bytes', 1.gigabyte.to_s)).to eq(1.gigabyte)
+        expect {
+          described_class.cast_update_value('limits.receipt_uploads_per_day', '101')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.batch_files_per_day', '101')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.ocr_jobs_per_day', '101')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.ai_jobs_per_day', '201')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      SystemSetting.find_by!(key: 'limits.max_ocr_per_day').update!(value: described_class.stored_value(50))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.guest_ocr_jobs_per_day', '50')).to eq(50)
+        expect {
+          described_class.cast_update_value('limits.guest_ocr_jobs_per_day', '51')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
+    it 'システム上限は関連する既存設定やactive overrideを下回れない' do
+      error_message = 'user_limit_safety_max'
+      user = create(:user)
+      create(:system_setting, key: 'limits.ocr_jobs_per_day', value: described_class.stored_value(150))
+      create(:user_limit_override, user: user, key: 'ai_jobs_per_day', value: { 'value' => 150 })
+      create(:user_limit_override, user: user, key: 'storage_bytes', value: { 'value' => 2.gigabytes })
+
+      aggregate_failures do
+        expect {
+          described_class.cast_update_value('limits.max_ocr_per_day', '100')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('limits.max_ocr_per_day', '200')).to eq(200)
+        expect {
+          described_class.cast_update_value('limits.max_ai_per_day', '100')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('limits.max_ai_per_day', '200')).to eq(200)
+        expect {
+          described_class.cast_update_value('limits.max_storage_bytes', 1.gigabyte.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('limits.max_storage_bytes', 3.gigabytes.to_s)).to eq(3.gigabytes)
+      end
+    end
+
     it 'snapshot件数上限はhigh risk設定として扱う' do
       aggregate_failures do
         expect(described_class.definition_for('limits.snapshot_ocr_items_max')).to have_attributes(

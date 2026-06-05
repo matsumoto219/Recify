@@ -130,7 +130,7 @@ module SystemSettings
         editable: true,
         risk_level: "medium",
         min: 1,
-        max: 1000
+        max: 10_000
       ),
       Definition.new(
         key: "limits.manual_receipts_per_day",
@@ -230,7 +230,7 @@ module SystemSettings
         editable: true,
         risk_level: "medium",
         min: 1,
-        max: 1000
+        max: 10_000
       ),
       Definition.new(
         key: "limits.ocr_jobs_per_day",
@@ -240,7 +240,7 @@ module SystemSettings
         editable: true,
         risk_level: "medium",
         min: 1,
-        max: 1000
+        max: 10_000
       ),
       Definition.new(
         key: "limits.ai_jobs_per_day",
@@ -250,7 +250,7 @@ module SystemSettings
         editable: true,
         risk_level: "medium",
         min: 1,
-        max: 1000
+        max: 10_000
       ),
       Definition.new(
         key: "limits.retry_operations_per_day",
