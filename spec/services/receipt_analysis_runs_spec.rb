@@ -340,6 +340,26 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR item snapshot上限はSystemSettings値を参照しactual_countを維持する' do
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(500))
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        candidates: {
+          items: Array.new(501) { |index| { raw_text: "商品#{index}", line_total: index } }
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'items').size).to eq(500)
+        expect(snapshot.dig('candidate_counts', 'items')).to eq('actual_count' => 501, 'snapshot_count' => 500)
+        expect(snapshot.dig('truncated', 'items')).to eq(true)
+      end
+    end
+
     it 'AI input snapshotをtruncateし件数上限を守る' do
       run = described_class.start(receipt:, source: 'upload').run
       long_filtered_content = 'あ' * 9_000
@@ -408,6 +428,7 @@ RSpec.describe ReceiptAnalysisRuns do
     end
 
     it 'AI normalized snapshotをJSON保存可能な形で記録しraw系を除外する' do
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(500))
       run = described_class.start(receipt:, source: 'upload').run
       ai_result = {
         success: true,
@@ -477,12 +498,12 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot['success']).to eq(true)
         expect(snapshot['needs_review']).to eq(false)
         expect(snapshot['review_reasons'].size).to eq(20)
-        expect(snapshot['receipt_items_attributes'].size).to eq(1000)
+        expect(snapshot['receipt_items_attributes'].size).to eq(500)
         expect(snapshot['receipt_adjustments_attributes'].size).to eq(50)
         expect(snapshot.dig('receipt_attributes', 'total_amount')).to eq('180.5')
         expect(snapshot.dig('receipt_attributes', 'purchased_at')).to eq('2026-05-23T10:00:00Z')
         expect(snapshot.dig('receipt_items_attributes', 0, 'line_total')).to eq('180.5')
-        expect(snapshot.dig('attribute_counts', 'receipt_items_attributes')).to eq('actual_count' => 1001, 'snapshot_count' => 1000)
+        expect(snapshot.dig('attribute_counts', 'receipt_items_attributes')).to eq('actual_count' => 1001, 'snapshot_count' => 500)
         expect(snapshot.dig('attribute_counts', 'receipt_adjustments_attributes')).to eq('actual_count' => 51, 'snapshot_count' => 50)
         expect(snapshot.dig('truncated', 'receipt_items_attributes')).to eq(true)
         expect(snapshot.dig('truncated', 'receipt_adjustments_attributes')).to eq(true)

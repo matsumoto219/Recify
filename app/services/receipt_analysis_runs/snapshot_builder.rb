@@ -15,11 +15,13 @@ module ReceiptAnalysisRuns
     FINALIZE_DECISION_METADATA_KEYS = %w[reason].freeze
 
     MAX_OCR_LINES = 150
-    MAX_OCR_ITEMS = 1000
+    DEFAULT_MAX_OCR_ITEMS = 1000
+    MAX_OCR_ITEMS = DEFAULT_MAX_OCR_ITEMS
     MAX_OCR_PAYMENTS = 20
     MAX_OCR_TAX_DETAILS = 20
     MAX_OCR_ADJUSTMENT_CANDIDATES = 50
-    MAX_AI_NORMALIZED_ITEMS = 1000
+    DEFAULT_MAX_AI_NORMALIZED_ITEMS = 1000
+    MAX_AI_NORMALIZED_ITEMS = DEFAULT_MAX_AI_NORMALIZED_ITEMS
     MAX_AI_NORMALIZED_ADJUSTMENTS = 50
     MAX_FULL_CONTEXT_LINES = 150
     MAX_ADJUSTMENT_CONTEXT_LINES = 40
@@ -107,6 +109,20 @@ module ReceiptAnalysisRuns
 
       def sanitized_stored_snapshot(snapshot)
         new.sanitized_stored_snapshot(snapshot)
+      end
+
+      def snapshot_ocr_items_max
+        snapshot_limit_for("limits.snapshot_ocr_items_max", DEFAULT_MAX_OCR_ITEMS)
+      end
+
+      def snapshot_ai_normalized_items_max
+        snapshot_limit_for("limits.snapshot_ai_normalized_items_max", DEFAULT_MAX_AI_NORMALIZED_ITEMS)
+      end
+
+      def snapshot_limit_for(key, fallback)
+        SystemSettings.limit_for(key)
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        fallback
       end
     end
 
@@ -198,7 +214,7 @@ module ReceiptAnalysisRuns
           meta: ocr_meta_snapshot(result[:meta]),
           truncated: {
             lines: Array(result[:lines]).size > MAX_OCR_LINES,
-            items: Array(candidates[:items]).size > MAX_OCR_ITEMS,
+            items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > MAX_OCR_PAYMENTS,
             tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS,
             adjustment_candidates: Array(candidates[:adjustment_candidates]).size > MAX_OCR_ADJUSTMENT_CANDIDATES
@@ -258,7 +274,7 @@ module ReceiptAnalysisRuns
           ),
           meta: ai_normalized_meta_snapshot(result[:meta]),
           truncated: {
-            receipt_items_attributes: Array(result[:receipt_items_attributes]).size > MAX_AI_NORMALIZED_ITEMS,
+            receipt_items_attributes: Array(result[:receipt_items_attributes]).size > ai_normalized_items_snapshot_limit,
             receipt_adjustments_attributes: Array(result[:receipt_adjustments_attributes]).size > MAX_AI_NORMALIZED_ADJUSTMENTS,
             review_reasons: Array(result[:review_reasons]).size > MAX_REVIEW_REASONS
           }
@@ -437,7 +453,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_ocr_items(items)
-      Array(items).first(MAX_OCR_ITEMS).filter_map do |item|
+      Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
 
@@ -508,7 +524,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_ai_normalized_items(items)
-      Array(items).first(MAX_AI_NORMALIZED_ITEMS).filter_map do |item|
+      Array(items).first(ai_normalized_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
 
@@ -574,6 +590,14 @@ module ReceiptAnalysisRuns
         rejection_reason: safe_string(meta[:rejection_reason]),
         is_receipt_confidence: safe_value(meta[:is_receipt_confidence])
       }.compact
+    end
+
+    def ocr_items_snapshot_limit
+      @ocr_items_snapshot_limit ||= self.class.snapshot_ocr_items_max
+    end
+
+    def ai_normalized_items_snapshot_limit
+      @ai_normalized_items_snapshot_limit ||= self.class.snapshot_ai_normalized_items_max
     end
 
     def store_snapshot(value)
