@@ -143,6 +143,26 @@ module SystemSettings
         max: 1000
       ),
       Definition.new(
+        key: "limits.snapshot_ocr_items_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "high",
+        min: 100,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.snapshot_ai_normalized_items_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "high",
+        min: 100,
+        max: 10_000
+      ),
+      Definition.new(
         key: "limits.batch_files_per_day",
         category: "usage_limit",
         value_type: "integer",

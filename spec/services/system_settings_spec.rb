@@ -19,6 +19,8 @@ RSpec.describe SystemSettings do
         'limits.receipt_uploads_per_day',
         'limits.manual_receipts_per_day',
         'limits.receipt_items_per_receipt',
+        'limits.snapshot_ocr_items_max',
+        'limits.snapshot_ai_normalized_items_max',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
@@ -233,6 +235,8 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_uploads_per_day')).to eq(50)
         expect(described_class.limit_for('limits.manual_receipts_per_day')).to eq(50)
         expect(described_class.limit_for('limits.receipt_items_per_receipt')).to eq(100)
+        expect(described_class.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
+        expect(described_class.limit_for('limits.snapshot_ai_normalized_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ocr_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ai_jobs_per_day')).to eq(50)
@@ -307,9 +311,34 @@ RSpec.describe SystemSettings do
         expect {
           described_class.cast_update_value('limits.receipt_upload_soft_limit', '1001')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10000')).to eq(10_000)
+        expect {
+          described_class.cast_update_value('limits.snapshot_ocr_items_max', '99')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+      end
+    end
+
+    it 'snapshot件数上限はhigh risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('limits.snapshot_ocr_items_max')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'high',
+          min: 100,
+          max: 10_000
+        )
+        expect(described_class.definition_for('limits.snapshot_ai_normalized_items_max')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'high',
+          min: 100,
+          max: 10_000
+        )
       end
     end
 
