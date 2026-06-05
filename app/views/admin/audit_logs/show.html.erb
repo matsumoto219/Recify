@@ -85,19 +85,25 @@
   <% end %>
 
   <div class="grid gap-6 lg:grid-cols-3">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.metadata") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:metadata]) %></pre>
+      <div class="<%= admin_json_container_classes %>">
+        <pre class="<%= admin_json_pre_classes %>"><%= admin_pretty_json(@record[:metadata]) %></pre>
+      </div>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.before_state") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:before_state]) %></pre>
+      <div class="<%= admin_json_container_classes %>">
+        <pre class="<%= admin_json_pre_classes %>"><%= admin_pretty_json(@record[:before_state]) %></pre>
+      </div>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.after_state") %></h2>
-      <pre class="overflow-x-auto rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base"><%= admin_pretty_json(@record[:after_state]) %></pre>
+      <div class="<%= admin_json_container_classes %>">
+        <pre class="<%= admin_json_pre_classes %>"><%= admin_pretty_json(@record[:after_state]) %></pre>
+      </div>
     <% end %>
   </div>
 </section>

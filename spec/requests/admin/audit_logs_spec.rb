@@ -186,6 +186,8 @@ RSpec.describe 'Admin audit logs', type: :request do
         expect(response.body).to include('parent-run')
         expect(response.body).to include('new-run')
         expect(response.body).to include('ReceiptFinalizeJob')
+        expect(response.body).to include('min-w-0 max-w-full')
+        expect(response.body).to include('max-w-full whitespace-pre rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base overflow-x-auto')
       end
     end
 
