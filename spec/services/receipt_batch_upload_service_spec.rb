@@ -251,6 +251,29 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it '一括アップロード上限を増やしても日次batch/OCR/AI/upload quotaは独立して動作する' do
+    create(:system_setting, key: 'limits.batch_upload_max_files', value: SystemSettings.stored_value(20))
+    files = Array.new(20) { uploaded_receipt_fixture }
+
+    first_result = described_class.call(user:, files:)
+    batch_counter = UsageCounter.find_by!(user: user, key: 'batch_files_per_day')
+    batch_counter.update!(used_count: 40)
+    blocked_result = described_class.call(user:, files:)
+
+    aggregate_failures do
+      expect(first_result).to be_success
+      expect(first_result.count).to eq(20)
+      expect(UsageCounter.find_by!(user: user, key: 'batch_files_per_day').used_count).to eq(40)
+      expect(UsageCounter.find_by!(user: user, key: 'ocr_jobs_per_day').used_count).to eq(20)
+      expect(UsageCounter.where(user: user, key: 'receipt_uploads_per_day')).to be_empty
+      expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
+      expect(blocked_result).not_to be_success
+      expect(blocked_result.errors).to include(I18n.t('receipts.batch_upload.errors.usage_limit_exceeded'))
+      expect(user.receipts.count).to eq(20)
+      expect(ReceiptOcrJob).to have_received(:perform_later).exactly(20).times
+    end
+  end
+
   it 'guest batchはguest用batch_files_per_dayを適用する' do
     guest = create(:user, guest: true)
     files = [ uploaded_receipt_fixture ]
