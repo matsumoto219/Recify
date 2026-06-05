@@ -203,6 +203,8 @@ ja:
           title: パスキー
           subtitle: パスワードマネージャーや対応端末を使って、安全にログインできます。
           action: パスキーを登録
+          registered_count: "登録済み %{count}/%{limit}"
+          limit_reached_notice: 登録できるパスキーの上限に達しています。不要なパスキーを削除してから追加してください。
           default_label: パスキー
           registered_at: "登録日: %{datetime}"
           last_used_at: "最終使用: %{datetime}"

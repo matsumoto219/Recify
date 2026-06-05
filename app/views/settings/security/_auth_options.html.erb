@@ -110,6 +110,21 @@
             subtitle_size: "text-sm",
             class: "mb-6" %>
 
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted space-y-2">
+        <p class="font-medium token-text-base" data-passkey-registration-count>
+          <%= t(
+                "settings.security.auth.passkey.registered_count",
+                count: security_presenter.passkey_count,
+                limit: security_presenter.passkey_limit
+              ) %>
+        </p>
+        <% if security_presenter.passkey_limit_reached? %>
+          <p data-passkey-limit-message>
+            <%= t("settings.security.auth.passkey.limit_reached_notice") %>
+          </p>
+        <% end %>
+      </div>
+
       <div class="space-y-3">
         <% if security_presenter.passkeys? %>
           <% security_presenter.passkeys.each do |passkey| %>
@@ -153,6 +168,7 @@
       </div>
 
       <div class="space-y-3">
+        <% passkey_limit_reached = security_presenter.passkey_limit_reached? %>
         <%= render "shared/ui/form/text_field",
               id: "passkey-label-input",
               label: t("settings.security.auth.passkey.label"),
@@ -163,6 +179,7 @@
               input_class: "rounded-lg text-sm",
               html_options: {
                 maxlength: 80,
+                disabled: passkey_limit_reached,
                 data: { passkey_target: "label" }
               } %>
 
@@ -176,10 +193,11 @@
               full_width: true,
               icon: "passkey",
               class: "token-border-brand-soft",
+              disabled: passkey_limit_reached,
               data: {
-                action: "click->passkey#register",
+                action: (passkey_limit_reached ? nil : "click->passkey#register"),
                 passkey_target: "button"
-              } %>
+              }.compact %>
       </div>
     </div>
   <% end %>

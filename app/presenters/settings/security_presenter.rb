@@ -32,5 +32,21 @@ module Settings
     def passkey_label(passkey)
       passkey.label.presence || I18n.t("settings.security.auth.passkey.default_label")
     end
+
+    def passkey_count
+      passkeys.size
+    end
+
+    def passkey_limit
+      Passkeys.registration_limit
+    end
+
+    def passkey_remaining_slots
+      Passkeys.remaining_slots_for(@user)
+    end
+
+    def passkey_limit_reached?
+      Passkeys.registration_limit_reached?(@user)
+    end
   end
 end

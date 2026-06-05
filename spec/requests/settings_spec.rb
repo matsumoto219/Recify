@@ -605,6 +605,65 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'passkey登録数が0個の場合は0/10を表示し、登録ボタンを有効にする' do
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      passkey_button = document.at_css('[data-passkey-target="button"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('[data-passkey-registration-count]').text.squish).to include(
+          I18n.t('settings.security.auth.passkey.registered_count', count: 0, limit: Passkey::MAX_PER_USER)
+        )
+        expect(document.at_css('[data-passkey-limit-message]')).to be_nil
+        expect(passkey_button['disabled']).to be_nil
+        expect(passkey_button['data-action']).to eq('click->passkey#register')
+      end
+    end
+
+    it 'passkey登録数が3個の場合は3/10を表示し、登録ボタンを有効にする' do
+      create_list(:passkey, 3, user: user)
+
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      passkey_button = document.at_css('[data-passkey-target="button"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('[data-passkey-registration-count]').text.squish).to include(
+          I18n.t('settings.security.auth.passkey.registered_count', count: 3, limit: Passkey::MAX_PER_USER)
+        )
+        expect(document.at_css('[data-passkey-limit-message]')).to be_nil
+        expect(passkey_button['disabled']).to be_nil
+        expect(passkey_button['data-action']).to eq('click->passkey#register')
+      end
+    end
+
+    it 'passkey登録数が10個の場合は上限表示を出し、登録ボタンをdisabledにし、削除ボタンは残す' do
+      passkeys = create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      passkey_button = document.at_css('[data-passkey-target="button"]')
+      label_input = document.at_css('#passkey-label-input')
+      delete_forms = passkeys.map { |passkey| document.at_css("form[action='#{settings_passkey_path(passkey)}']") }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('[data-passkey-registration-count]').text.squish).to include(
+          I18n.t('settings.security.auth.passkey.registered_count', count: Passkey::MAX_PER_USER, limit: Passkey::MAX_PER_USER)
+        )
+        expect(document.at_css('[data-passkey-limit-message]').text.squish).to include(I18n.t('settings.security.auth.passkey.limit_reached_notice'))
+        expect(passkey_button['disabled']).to eq('disabled')
+        expect(passkey_button['data-action']).to be_nil
+        expect(label_input['disabled']).to eq('disabled')
+        expect(delete_forms).to all(be_present)
+      end
+    end
+
     it 'recovery codeが1〜2件なら注意表示にする' do
       create(:totp_credential, user: user, confirmed_at: Time.current)
       codes = TwoFactor.generate_recovery_codes_for(user: user)
