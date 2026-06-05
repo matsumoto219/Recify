@@ -57,6 +57,14 @@ module ContactRequests
       RetentionPolicy.anonymizable_scope(now: now)
     end
 
+    def anonymize(contact_request)
+      Anonymizer.call(contact_request)
+    end
+
+    def anonymized?(contact_request)
+      Anonymizer.anonymized?(contact_request)
+    end
+
     private
 
     def normalize_attributes(user:, params:, request:)
