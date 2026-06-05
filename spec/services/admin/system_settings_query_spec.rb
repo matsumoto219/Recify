@@ -45,6 +45,7 @@ RSpec.describe Admin::SystemSettingsQuery do
         'limits.receipt_items_per_receipt',
         'limits.receipt_adjustments_per_receipt',
         'limits.receipt_payments_per_receipt',
+        'limits.receipt_tax_details_per_receipt',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
