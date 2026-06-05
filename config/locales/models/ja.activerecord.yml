@@ -33,6 +33,9 @@ ja:
         processing_error_code: 処理エラーコード
         processing_error_message: 処理エラーメッセージ
         receipt_items: 明細
+        receipt_adjustments: 調整行
+        receipt_payments: 支払い行
+        receipt_tax_details: 税内訳
       receipt_item:
         receipt: レシート
         raw_text: OCR原文
@@ -119,6 +122,12 @@ ja:
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
             receipt_items:
               too_many: "は%{limit}件まで登録できます（現在%{count}件）"
+            receipt_adjustments:
+              too_many: "は%{limit}件まで登録できます（現在%{count}件）"
+            receipt_payments:
+              too_many: "は%{limit}件まで登録できます（現在%{count}件）"
+            receipt_tax_details:
+              too_many: "は%{limit}件まで登録できます（現在%{count}件）"
         user:
           attributes:
             email:
@@ -148,8 +157,22 @@ ja:
               passkey_limit_exceeded: "に登録できるパスキーは%{count}個までです"
         receipt_item:
           attributes:
+            receipt:
+              receipt_items_limit_exceeded: "に登録できる明細は%{limit}件までです"
             quantity:
               must_be_integer_for_unit: "はこの単位では整数で入力してください"
             tax_rate:
               less_than_or_equal_to: "は100%以下で入力してください"
               greater_than_or_equal_to: "は0%以上で入力してください"
+        receipt_adjustment:
+          attributes:
+            receipt:
+              receipt_adjustments_limit_exceeded: "に登録できる調整行は%{limit}件までです"
+        receipt_payment:
+          attributes:
+            receipt:
+              receipt_payments_limit_exceeded: "に登録できる支払い行は%{limit}件までです"
+        receipt_tax_detail:
+          attributes:
+            receipt:
+              receipt_tax_details_limit_exceeded: "に登録できる税内訳は%{limit}件までです"

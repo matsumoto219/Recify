@@ -990,6 +990,69 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '支払い行が固定上限を超える解析結果は金額計算前に拒否する' do
+      stub_const('ReceiptPayment::MAX_PER_RECEIPT', 1)
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:payments] = [
+        { method: 'Cash', amount: 100 },
+        { method: 'CreditCard', amount: 80 }
+      ]
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+        )
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/)
+    end
+
+    it '税内訳が固定上限を超える解析結果は金額計算前に拒否する' do
+      stub_const('ReceiptTaxDetail::MAX_PER_RECEIPT', 1)
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:tax_details] = [
+        { description: '10%対象', rate: 10, amount: 10, net_amount: 100 },
+        { description: '8%対象', rate: 8, amount: 8, net_amount: 100 }
+      ]
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+        )
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+    end
+
+    it '調整行が固定上限を超えるAI解析結果は金額計算前に拒否する' do
+      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        lines: [
+          'テストストア',
+          'クーポン -100',
+          'ポイント利用 -50',
+          '合計 30'
+        ]
+      )
+      ai_result = successful_ai_result.deep_merge(
+        receipt_adjustments_attributes: [
+          { kind: 'coupon', amount: 100, sign: 'discount', source_text: 'クーポン -100', source_line_index: 1 },
+          { kind: 'point_usage', amount: 50, sign: 'discount', source_text: 'ポイント利用 -50', source_line_index: 2 }
+        ]
+      )
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(:ai_success, ocr_result: ocr_result, ai_result: ai_result)
+        )
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+    end
+
     it '画像保持OFFのai_success完了後にpurge候補化する' do
       receipt = create(:receipt, :processing, :with_image, keep_image: false)
       allow(ReceiptAmountService).to receive(:call).and_return(

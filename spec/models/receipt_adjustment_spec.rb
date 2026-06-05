@@ -27,6 +27,19 @@ RSpec.describe ReceiptAdjustment do
     expect(adjustment).not_to be_valid
   end
 
+  it '1レシートあたりの調整行数を固定上限までにする' do
+    stub_const("#{described_class}::MAX_PER_RECEIPT", 1)
+    receipt = create(:receipt)
+    create(:receipt_adjustment, receipt: receipt)
+
+    adjustment = build(:receipt_adjustment, receipt: receipt)
+
+    aggregate_failures do
+      expect(adjustment).not_to be_valid
+      expect(adjustment.errors.of_kind?(:receipt, :receipt_adjustments_limit_exceeded)).to be(true)
+    end
+  end
+
   it 'is destroyed with receipt' do
     receipt = create(:receipt)
     create(:receipt_adjustment, receipt: receipt)

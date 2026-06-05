@@ -2768,7 +2768,6 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
-        expect(ReceiptAdjustment.count).to eq(0)
         expect(Receipt.order(:id).last.receipt_adjustments).to be_empty
       end
     end

@@ -53,4 +53,20 @@ RSpec.describe ReceiptItem, type: :model do
       expect(item).not_to be_valid
     end
   end
+
+  describe 'per receipt limit' do
+    it 'direct createでもuser limitを超える明細を拒否する' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
+      receipt = create(:receipt, user: user)
+      receipt.receipt_items.create!(confirmed_name: '既存', price: 100, quantity: 1, line_total: 100)
+
+      item = receipt.receipt_items.build(confirmed_name: '追加', price: 100, quantity: 1, line_total: 100)
+
+      aggregate_failures do
+        expect(item).not_to be_valid
+        expect(item.errors.of_kind?(:receipt, :receipt_items_limit_exceeded)).to be(true)
+      end
+    end
+  end
 end

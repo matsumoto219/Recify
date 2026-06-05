@@ -126,6 +126,9 @@ class Receipt < ApplicationRecord
   validate :validate_image_presence_for_processing
   validate :validate_store_address_components_shape
   validate :validate_receipt_items_count_within_limit
+  validate :validate_receipt_adjustments_count_within_limit
+  validate :validate_receipt_payments_count_within_limit
+  validate :validate_receipt_tax_details_count_within_limit
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
@@ -429,10 +432,52 @@ class Receipt < ApplicationRecord
 
   def validate_receipt_items_count_within_limit
     limit = receipt_items_limit
-    count = receipt_items.reject(&:marked_for_destruction?).size
+    count = child_records_count_for_validation(:receipt_items)
     return if count <= limit
 
     errors.add(:receipt_items, :too_many, count: count, limit: limit)
+  end
+
+  def validate_receipt_adjustments_count_within_limit
+    validate_child_records_count_within_limit(
+      :receipt_adjustments,
+      ReceiptAdjustment::MAX_PER_RECEIPT,
+      :too_many
+    )
+  end
+
+  def validate_receipt_payments_count_within_limit
+    validate_child_records_count_within_limit(
+      :receipt_payments,
+      ReceiptPayment::MAX_PER_RECEIPT,
+      :too_many
+    )
+  end
+
+  def validate_receipt_tax_details_count_within_limit
+    validate_child_records_count_within_limit(
+      :receipt_tax_details,
+      ReceiptTaxDetail::MAX_PER_RECEIPT,
+      :too_many
+    )
+  end
+
+  def validate_child_records_count_within_limit(association_name, limit, error)
+    count = child_records_count_for_validation(association_name)
+    return if count <= limit
+
+    errors.add(association_name, error, count: count, limit: limit)
+  end
+
+  def child_records_count_for_validation(association_name)
+    association_proxy = association(association_name)
+    target = association_proxy.target
+
+    if new_record? || association_proxy.loaded? || target.any?
+      target.reject(&:marked_for_destruction?).size
+    else
+      association_proxy.scope.count
+    end
   end
 
   def validate_image_content_type

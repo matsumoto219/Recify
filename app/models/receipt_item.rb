@@ -93,6 +93,7 @@ class ReceiptItem < ApplicationRecord
   validates :confidence,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
             allow_blank: true
+  validate :items_per_receipt_within_limit, on: :create
 
   def review_required?
     needs_review?
@@ -193,5 +194,25 @@ class ReceiptItem < ApplicationRecord
     return nil if discount > original_total
 
     BigDecimal(discount.to_s) / BigDecimal(original_total.to_s)
+  end
+
+  def items_per_receipt_within_limit
+    return if receipt.blank?
+    return if sibling_count_for_limit(:receipt_items) < receipt.receipt_items_limit
+
+    errors.add(:receipt, :receipt_items_limit_exceeded, limit: receipt.receipt_items_limit)
+  end
+
+  def sibling_count_for_limit(association_name)
+    association_proxy = receipt.association(association_name)
+    target = association_proxy.target
+
+    if association_proxy.loaded? || target.any?
+      target.reject { |record| record.equal?(self) || record.marked_for_destruction? }.size
+    else
+      scope = receipt.public_send(association_name)
+      scope = scope.where.not(id: id) if id.present?
+      scope.count
+    end
   end
 end

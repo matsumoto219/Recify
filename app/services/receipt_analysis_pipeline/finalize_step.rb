@@ -116,7 +116,7 @@ class ReceiptAnalysisPipeline
     def save_ai_result!(ocr_result, ai_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
       record_build_params_snapshot(params)
-      validate_receipt_items_limit!(params[:receipt_items_attributes])
+      validate_structural_limits!(params)
 
       # === AmountService integration ===
       amount_result = ReceiptAmountService.call(
@@ -188,7 +188,7 @@ class ReceiptAnalysisPipeline
     def save_ocr_only_result!(ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
-      validate_receipt_items_limit!(params[:receipt_items_attributes])
+      validate_structural_limits!(params)
 
       # === AmountService integration point (OCR only) ===
       amount_result = ReceiptAmountService.call(
@@ -247,7 +247,7 @@ class ReceiptAnalysisPipeline
     def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
-      validate_receipt_items_limit!(params[:receipt_items_attributes])
+      validate_structural_limits!(params)
 
       # === AmountService integration point (fallback) ===
       amount_result = ReceiptAmountService.call(
@@ -323,6 +323,21 @@ class ReceiptAnalysisPipeline
 
     def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:, adjustments_attributes: [])
       validate_receipt_items_limit!(items_attributes)
+      validate_collection_limit!(
+        name: "receipt_adjustments",
+        attributes: adjustments_attributes,
+        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+      )
+      validate_collection_limit!(
+        name: "receipt_payments",
+        attributes: payments_attributes,
+        limit: ReceiptPayment::MAX_PER_RECEIPT
+      )
+      validate_collection_limit!(
+        name: "receipt_tax_details",
+        attributes: tax_details_attributes,
+        limit: ReceiptTaxDetail::MAX_PER_RECEIPT
+      )
 
       Receipt.transaction do
         receipt.update!(receipt_attributes)
@@ -342,6 +357,25 @@ class ReceiptAnalysisPipeline
       end
     end
 
+    def validate_structural_limits!(params)
+      validate_receipt_items_limit!(params[:receipt_items_attributes])
+      validate_collection_limit!(
+        name: "receipt_adjustments",
+        attributes: params[:receipt_adjustments_attributes],
+        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+      )
+      validate_collection_limit!(
+        name: "receipt_payments",
+        attributes: params[:receipt_payments_attributes],
+        limit: ReceiptPayment::MAX_PER_RECEIPT
+      )
+      validate_collection_limit!(
+        name: "receipt_tax_details",
+        attributes: params[:receipt_tax_details_attributes],
+        limit: ReceiptTaxDetail::MAX_PER_RECEIPT
+      )
+    end
+
     def validate_receipt_items_limit!(items_attributes)
       limit = receipt.receipt_items_limit
       count = Array(items_attributes).size
@@ -350,6 +384,16 @@ class ReceiptAnalysisPipeline
       raise ReceiptAnalysisPipeline::AnalysisError.new(
         "analysis_items_invalid",
         "receipt_items_limit_exceeded count=#{count} limit=#{limit}"
+      )
+    end
+
+    def validate_collection_limit!(name:, attributes:, limit:)
+      count = Array(attributes).size
+      return if count <= limit
+
+      raise ReceiptAnalysisPipeline::AnalysisError.new(
+        "analysis_value_invalid",
+        "#{name}_limit_exceeded count=#{count} limit=#{limit}"
       )
     end
 

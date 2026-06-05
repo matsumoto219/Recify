@@ -831,6 +831,66 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'receipt structural child count limits' do
+    it '調整行は固定上限を超えると無効にする' do
+      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+      receipt = build(:receipt)
+      2.times do |index|
+        receipt.receipt_adjustments.build(
+          kind: 'coupon',
+          sign: 'discount',
+          source: 'manual',
+          amount: 100,
+          position_index: index
+        )
+      end
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:receipt_adjustments, :too_many)).to be(true)
+      end
+    end
+
+    it '支払い行は固定上限を超えると無効にする' do
+      stub_const('ReceiptPayment::MAX_PER_RECEIPT', 1)
+      receipt = build(:receipt)
+      receipt.receipt_payments.build(method: 'Cash', amount: 100)
+      receipt.receipt_payments.build(method: 'CreditCard', amount: 200)
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:receipt_payments, :too_many)).to be(true)
+      end
+    end
+
+    it '税内訳は固定上限を超えると無効にする' do
+      stub_const('ReceiptTaxDetail::MAX_PER_RECEIPT', 1)
+      receipt = build(:receipt)
+      receipt.receipt_tax_details.build(description: '10%対象', rate: 0.1, amount: 10, net_amount: 100)
+      receipt.receipt_tax_details.build(description: '8%対象', rate: 0.08, amount: 8, net_amount: 100)
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:receipt_tax_details, :too_many)).to be(true)
+      end
+    end
+
+    it '削除予定の構造子要素は件数に含めない' do
+      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+      receipt = create(:receipt)
+      adjustment = create(:receipt_adjustment, receipt: receipt)
+
+      receipt.assign_attributes(
+        receipt_adjustments_attributes: {
+          '0' => { id: adjustment.id, _destroy: '1' },
+          '1' => { kind: 'coupon', sign: 'discount', source: 'manual', amount: 200 }
+        }
+      )
+
+      expect(receipt).to be_valid
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)
