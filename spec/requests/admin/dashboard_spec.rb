@@ -241,6 +241,9 @@ RSpec.describe 'Admin dashboard', type: :request do
       admin_navigation = document.at_css('nav.admin-navigation')
       admin_navigation_links = admin_navigation.css('a.admin-navigation-link')
       admin_navigation_labels = admin_navigation.css('.admin-navigation-label')
+      current_admin_navigation_link = admin_navigation.at_css('a[aria-current="page"]')
+      inactive_admin_navigation_link = admin_navigation_links.find { |link| link['href'] == admin_users_path }
+      back_admin_navigation_link = admin_navigation.at_css('a.admin-navigation-back')
       tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
 
       aggregate_failures do
@@ -264,9 +267,16 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(admin_navigation).to be_present
         expect(admin_navigation_links.size).to eq(9)
         expect(admin_navigation_links.all? { |link| link['aria-label'].present? }).to be(true)
+        expect(admin_navigation_links.none? { |link| link['class'].include?('hover:underline') }).to be(true)
         expect(admin_navigation_labels.size).to eq(9)
-        expect(admin_navigation.at_css('a[aria-current="page"]')['href']).to eq(admin_root_path)
-        expect(admin_navigation.at_css('a[aria-current="page"]')['class']).to include('admin-navigation-current')
+        expect(current_admin_navigation_link['href']).to eq(admin_root_path)
+        expect(current_admin_navigation_link['class']).to include('admin-navigation-current')
+        expect(current_admin_navigation_link['class']).to include('token-text-brand')
+        expect(current_admin_navigation_link['class']).to include('token-brand-soft-bg')
+        expect(inactive_admin_navigation_link['class']).to include('token-text-muted')
+        expect(inactive_admin_navigation_link['class']).to include('token-hover-text-brand')
+        expect(back_admin_navigation_link['class']).to include('token-text-muted')
+        expect(back_admin_navigation_link['class']).to include('token-hover-text-base')
         expect(tailwind_css).to include('@media (height <= 700px) and (width <= 380px)')
         expect(tailwind_css).to include('.admin-navigation-label')
         expect(tailwind_css).to include('.admin-navigation-current')

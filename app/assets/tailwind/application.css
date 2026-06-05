@@ -360,7 +360,11 @@ body {
   }
 
   .admin-navigation-current {
-    background: var(--bg-card-subtle);
+    background: color-mix(
+      in srgb,
+      var(--brand-primary) 10%,
+      transparent
+    );
   }
 }
 
