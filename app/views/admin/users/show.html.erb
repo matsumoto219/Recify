@@ -171,31 +171,31 @@
       </div>
     </dl>
 
-    <div class="overflow-x-auto" data-admin-user-usage-limits>
-      <table class="min-w-full text-left text-sm">
+    <div class="max-w-full overflow-x-auto" data-admin-user-usage-limits>
+      <table class="min-w-[52rem] text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.limit") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.used") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.applied") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.source") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.expires_at") %></th>
+            <th class="min-w-[18rem] px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.limit") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.used") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.applied") %></th>
+            <th class="min-w-[9rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.source") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.limits.columns.expires_at") %></th>
           </tr>
         </thead>
         <tbody>
           <% usage_limits[:limits].each do |row| %>
             <tr class="border-b token-border-soft" data-admin-user-limit-key="<%= row[:key] %>">
-              <td class="px-3 py-3 align-top">
+              <td class="min-w-[18rem] px-3 py-3 align-top">
                 <div class="font-semibold token-text-base"><%= t("admin.users.show.limits.keys.#{row[:key]}", default: row[:key]) %></div>
                 <div class="mt-1 max-w-full break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= row[:key] %></div>
                 <% if row[:api_reservation] %>
                   <div class="mt-2 inline-flex rounded-full token-bg-info-soft px-2 py-1 text-xs font-semibold token-text-base"><%= t("admin.users.show.limits.api_reservation") %></div>
                 <% end %>
               </td>
-              <td class="px-3 py-3 align-top font-mono token-text-base"><%= used_value_label.call(row) %></td>
-              <td class="px-3 py-3 align-top font-mono token-text-base"><%= limit_value_label.call(row) %></td>
-              <td class="px-3 py-3 align-top token-text-base"><%= t("admin.users.show.limits.sources.#{row[:source]}", default: row[:source].to_s) %></td>
-              <td class="px-3 py-3 align-top token-text-base"><%= timestamp_label.call(row[:expires_at]) %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3 align-top font-mono token-text-base"><%= used_value_label.call(row) %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3 align-top font-mono token-text-base"><%= limit_value_label.call(row) %></td>
+              <td class="min-w-[9rem] whitespace-nowrap px-3 py-3 align-top token-text-base"><%= t("admin.users.show.limits.sources.#{row[:source]}", default: row[:source].to_s) %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3 align-top token-text-base"><%= timestamp_label.call(row[:expires_at]) %></td>
             </tr>
           <% end %>
         </tbody>
@@ -319,27 +319,27 @@
       </div>
     </dl>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <div class="max-w-full overflow-x-auto">
+      <table class="min-w-[64rem] text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.started") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.last_seen") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.method") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.ip") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.user_agent") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.version") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.started") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.last_seen") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.method") %></th>
+            <th class="min-w-[9rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.ip") %></th>
+            <th class="min-w-[20rem] px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.user_agent") %></th>
+            <th class="min-w-[7rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.sessions.version") %></th>
           </tr>
         </thead>
         <tbody>
           <% active_sessions[:recent].each do |session_record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(session_record[:started_at]) %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(session_record[:last_seen_at]) %></td>
-              <td class="px-3 py-3"><%= session_record[:sign_in_method].presence || "-" %></td>
-              <td class="px-3 py-3 font-mono"><%= session_record[:ip_address].presence || "-" %></td>
-              <td class="max-w-md truncate px-3 py-3" title="<%= session_record[:user_agent].presence || "-" %>"><%= session_record[:user_agent].presence || "-" %></td>
-              <td class="px-3 py-3 font-mono"><%= session_record[:session_version] %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(session_record[:started_at]) %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(session_record[:last_seen_at]) %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= session_record[:sign_in_method].presence || "-" %></td>
+              <td class="min-w-[9rem] whitespace-nowrap px-3 py-3 font-mono"><%= session_record[:ip_address].presence || "-" %></td>
+              <td class="min-w-[20rem] max-w-md truncate px-3 py-3" title="<%= session_record[:user_agent].presence || "-" %>"><%= session_record[:user_agent].presence || "-" %></td>
+              <td class="min-w-[7rem] whitespace-nowrap px-3 py-3 font-mono"><%= session_record[:session_version] %></td>
             </tr>
           <% end %>
 
@@ -698,25 +698,25 @@
       <%= link_to t("admin.users.show.audit_logs.link"), admin_audit_logs_path(actor_user_id: record[:id]), class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
+    <div class="max-w-full overflow-x-auto">
+      <table class="min-w-[56rem] text-left text-sm">
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.created") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.action") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.outcome") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.target") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.detail") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.created") %></th>
+            <th class="min-w-[16rem] px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.action") %></th>
+            <th class="min-w-[7rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.outcome") %></th>
+            <th class="min-w-[18rem] px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.target") %></th>
+            <th class="min-w-[7rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.audit_logs.detail") %></th>
           </tr>
         </thead>
         <tbody>
           <% @audit_result.records.each do |audit_record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 whitespace-nowrap"><%= timestamp_label.call(audit_record[:created_at]) %></td>
-              <td class="px-3 py-3 font-mono text-xs"><%= audit_record[:action] %></td>
-              <td class="px-3 py-3"><%= audit_record[:outcome] %></td>
-              <td class="px-3 py-3"><%= audit_record[:target_uid].presence || "-" %></td>
-              <td class="px-3 py-3"><%= link_to t("admin.users.show.audit_logs.detail_link"), admin_audit_log_path(audit_record[:id]), class: "token-text-brand hover:underline" %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(audit_record[:created_at]) %></td>
+              <td class="min-w-[16rem] break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]"><%= audit_record[:action] %></td>
+              <td class="min-w-[7rem] whitespace-nowrap px-3 py-3"><%= audit_record[:outcome] %></td>
+              <td class="min-w-[18rem] break-words px-3 py-3 [overflow-wrap:anywhere]"><%= audit_record[:target_uid].presence || "-" %></td>
+              <td class="min-w-[7rem] whitespace-nowrap px-3 py-3"><%= link_to t("admin.users.show.audit_logs.detail_link"), admin_audit_log_path(audit_record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>
 
