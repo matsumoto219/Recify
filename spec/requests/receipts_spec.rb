@@ -2107,6 +2107,26 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '調整行が設定上限を超える手動作成を金額計算前に拒否する' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(1))
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_adjustments_attributes] =
+        {
+          '0' => manual_adjustment_params(0),
+          '1' => manual_adjustment_params(1)
+        }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('調整行は1件まで登録できます')
+      end
+    end
+
     it '支払い行が固定上限を超える手動作成paramsを金額計算前に拒否する' do
       params = valid_params.deep_dup
       params[:receipt][:receipt_payments_attributes] =

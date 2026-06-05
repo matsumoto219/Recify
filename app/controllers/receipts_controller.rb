@@ -536,7 +536,7 @@ class ReceiptsController < ApplicationController
         attributes_key: "receipt_adjustments_attributes",
         association_name: :receipt_adjustments,
         error_attribute: :receipt_adjustments,
-        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+        limit: ReceiptAdjustment.per_receipt_limit
       ),
       manual_child_count_limit_violation(
         permitted,

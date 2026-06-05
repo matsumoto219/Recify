@@ -362,6 +362,29 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR adjustment snapshot上限は調整行SystemSettings値を参照しactual_countを維持する' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        candidates: {
+          adjustment_candidates: Array.new(101) { |index| { source_text: "調整#{index}", amount: index + 1 } }
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'adjustment_candidates').size).to eq(100)
+        expect(snapshot.dig('candidate_counts', 'adjustment_candidates')).to eq(
+          'actual_count' => 101,
+          'snapshot_count' => 100
+        )
+        expect(snapshot.dig('truncated', 'adjustment_candidates')).to eq(true)
+      end
+    end
+
     it 'AI input snapshotをtruncateし件数上限を守る' do
       run = described_class.start(receipt:, source: 'upload').run
       long_filtered_content = 'あ' * 9_000
@@ -535,6 +558,34 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot_json).not_to include('RAW METRICS MUST NOT BE STORED')
         expect(snapshot_json).not_to include('SECRET API KEY MUST NOT BE STORED')
         expect(snapshot_json).not_to include('provider raw message should not be stored')
+      end
+    end
+
+    it 'AI normalized adjustment snapshot上限は調整行SystemSettings値を参照しactual_countを維持する' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      run = described_class.start(receipt:, source: 'upload').run
+      ai_result = {
+        success: true,
+        receipt_adjustments_attributes: Array.new(101) do |index|
+          {
+            kind: 'coupon',
+            amount: index + 1,
+            sign: 'discount',
+            source_text: "調整#{index}"
+          }
+        end
+      }
+
+      described_class.record_ai_normalized_result(run, ai_result)
+      snapshot = run.reload.ai_normalized_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot['receipt_adjustments_attributes'].size).to eq(100)
+        expect(snapshot.dig('attribute_counts', 'receipt_adjustments_attributes')).to eq(
+          'actual_count' => 101,
+          'snapshot_count' => 100
+        )
+        expect(snapshot.dig('truncated', 'receipt_adjustments_attributes')).to eq(true)
       end
     end
 

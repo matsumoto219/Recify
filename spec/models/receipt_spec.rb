@@ -832,8 +832,8 @@ RSpec.describe Receipt, type: :model do
   end
 
   describe 'receipt structural child count limits' do
-    it '調整行は固定上限を超えると無効にする' do
-      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+    it '調整行は設定上限を超えると無効にする' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = build(:receipt)
       2.times do |index|
         receipt.receipt_adjustments.build(
@@ -876,7 +876,7 @@ RSpec.describe Receipt, type: :model do
     end
 
     it '削除予定の構造子要素は件数に含めない' do
-      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = create(:receipt)
       adjustment = create(:receipt_adjustment, receipt: receipt)
 

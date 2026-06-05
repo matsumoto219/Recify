@@ -19,10 +19,8 @@ module ReceiptAnalysisRuns
     MAX_OCR_ITEMS = DEFAULT_MAX_OCR_ITEMS
     MAX_OCR_PAYMENTS = 20
     MAX_OCR_TAX_DETAILS = 20
-    MAX_OCR_ADJUSTMENT_CANDIDATES = 50
     DEFAULT_MAX_AI_NORMALIZED_ITEMS = 1000
     MAX_AI_NORMALIZED_ITEMS = DEFAULT_MAX_AI_NORMALIZED_ITEMS
-    MAX_AI_NORMALIZED_ADJUSTMENTS = 50
     MAX_FULL_CONTEXT_LINES = 150
     MAX_ADJUSTMENT_CONTEXT_LINES = 40
     FILTERED_CONTENT_MAX_BYTES = 8 * 1024
@@ -217,7 +215,7 @@ module ReceiptAnalysisRuns
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > MAX_OCR_PAYMENTS,
             tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS,
-            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > MAX_OCR_ADJUSTMENT_CANDIDATES
+            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit
           }
         }.compact
       )
@@ -275,7 +273,7 @@ module ReceiptAnalysisRuns
           meta: ai_normalized_meta_snapshot(result[:meta]),
           truncated: {
             receipt_items_attributes: Array(result[:receipt_items_attributes]).size > ai_normalized_items_snapshot_limit,
-            receipt_adjustments_attributes: Array(result[:receipt_adjustments_attributes]).size > MAX_AI_NORMALIZED_ADJUSTMENTS,
+            receipt_adjustments_attributes: Array(result[:receipt_adjustments_attributes]).size > receipt_adjustments_snapshot_limit,
             review_reasons: Array(result[:review_reasons]).size > MAX_REVIEW_REASONS
           }
         }.compact
@@ -410,7 +408,7 @@ module ReceiptAnalysisRuns
         receipt_type: safe_string(candidates[:receipt_type]),
         payments: limited_ocr_payments(candidates[:payments]),
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
-        adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], MAX_OCR_ADJUSTMENT_CANDIDATES),
+        adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], receipt_adjustments_snapshot_limit),
         items: limited_ocr_items(candidates[:items]),
         review_reasons: limited_strings(candidates[:review_reasons], MAX_REVIEW_REASONS),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
@@ -554,7 +552,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_ai_normalized_adjustments(adjustments)
-      Array(adjustments).first(MAX_AI_NORMALIZED_ADJUSTMENTS).filter_map do |adjustment|
+      Array(adjustments).first(receipt_adjustments_snapshot_limit).filter_map do |adjustment|
         adjustment = normalized_hash(adjustment)
         next if adjustment.blank?
 
@@ -598,6 +596,10 @@ module ReceiptAnalysisRuns
 
     def ai_normalized_items_snapshot_limit
       @ai_normalized_items_snapshot_limit ||= self.class.snapshot_ai_normalized_items_max
+    end
+
+    def receipt_adjustments_snapshot_limit
+      @receipt_adjustments_snapshot_limit ||= ReceiptAdjustment.per_receipt_limit
     end
 
     def store_snapshot(value)

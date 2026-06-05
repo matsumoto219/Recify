@@ -261,6 +261,18 @@ RSpec.describe ReceiptAnalysisPipeline do
     end
   end
 
+  def generated_ocr_adjustment_candidates(count)
+    Array.new(count) do |index|
+      {
+        source_text: "クーポン -#{index + 1}",
+        amount: index + 1,
+        sign_hint: 'discount',
+        source_line_index: index + 1,
+        confidence: 0.95
+      }
+    end
+  end
+
   def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
     {
       resolved: {
@@ -1235,7 +1247,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '調整行が固定上限を超える場合は部分保存せずrunをfailedにする' do
+    it '調整行が設定上限を超える場合は部分保存せずrunをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       decision = finalize_decision(:ai_success)
@@ -1267,6 +1279,130 @@ RSpec.describe ReceiptAnalysisPipeline do
         )
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.receipt_adjustments).to be_empty
+      end
+    end
+
+    it '調整行上限設定で100件のOCR調整候補を保存できる' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:lines] = generated_adjustment_lines(100)
+      ocr_result[:candidates][:adjustment_candidates] = generated_ocr_adjustment_candidates(100)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect { described_class.run_finalize(run) }.not_to raise_error
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.metadata['error_metadata']).to be_blank
+        expect(run.ocr_result_snapshot.dig('candidate_counts', 'adjustment_candidates')).to eq(
+          'actual_count' => 100,
+          'snapshot_count' => 100
+        )
+        expect(receipt.reload.receipt_adjustments.count).to eq(100)
+      end
+    end
+
+    it '調整行上限設定を超える101件のOCR調整候補はfailedにする' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:lines] = generated_adjustment_lines(101)
+      ocr_result[:candidates][:adjustment_candidates] = generated_ocr_adjustment_candidates(101)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to include(
+          'resource' => 'receipt_adjustments',
+          'limit' => 100,
+          'actual_count' => 101,
+          'snapshot_count' => 100
+        )
+        expect(receipt.reload.receipt_adjustments).to be_empty
+      end
+    end
+
+    it '調整行上限設定で100件のAI調整行を保存できる' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_merge(lines: generated_adjustment_lines(100))
+      ai_result = successful_ai_result.deep_merge(receipt_adjustments_attributes: generated_ai_adjustments(100))
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect { described_class.run_finalize(run) }.not_to raise_error
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.metadata['error_metadata']).to be_blank
+        expect(run.ai_normalized_result_snapshot.dig('attribute_counts', 'receipt_adjustments_attributes')).to eq(
+          'actual_count' => 100,
+          'snapshot_count' => 100
+        )
+        expect(receipt.reload.receipt_adjustments.count).to eq(100)
+      end
+    end
+
+    it '調整行上限設定を超える101件のAI調整行はfailedにする' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_merge(lines: generated_adjustment_lines(101))
+      ai_result = successful_ai_result.deep_merge(receipt_adjustments_attributes: generated_ai_adjustments(101))
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to include(
+          'resource' => 'receipt_adjustments',
+          'limit' => 100,
+          'actual_count' => 101,
+          'snapshot_count' => 100
+        )
+        expect(receipt.reload.receipt_adjustments).to be_empty
       end
     end
 
@@ -1412,8 +1548,8 @@ RSpec.describe ReceiptAnalysisPipeline do
       }
     end
 
-    it '調整行が固定上限を超えるAI解析結果は金額計算前に拒否する' do
-      stub_const('ReceiptAdjustment::MAX_PER_RECEIPT', 1)
+    it '調整行が設定上限を超えるAI解析結果は金額計算前に拒否する' do
+      create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
         lines: [

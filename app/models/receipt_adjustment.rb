@@ -1,5 +1,6 @@
 class ReceiptAdjustment < ApplicationRecord
-  MAX_PER_RECEIPT = 50
+  DEFAULT_MAX_PER_RECEIPT = 50
+  MAX_PER_RECEIPT = DEFAULT_MAX_PER_RECEIPT
 
   KINDS = %w[
     receipt_discount
@@ -88,6 +89,12 @@ class ReceiptAdjustment < ApplicationRecord
     SURCHARGE_KINDS.include?(kind.to_s) ? "surcharge" : "discount"
   end
 
+  def self.per_receipt_limit
+    SystemSettings.limit_for("limits.receipt_adjustments_per_receipt")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    DEFAULT_MAX_PER_RECEIPT
+  end
+
   def kind_label
     I18n.t("enums.receipt_adjustment.kind.#{kind}", default: kind)
   end
@@ -112,9 +119,10 @@ class ReceiptAdjustment < ApplicationRecord
 
   def adjustments_per_receipt_within_limit
     return if receipt.blank?
-    return if sibling_count_for_limit(:receipt_adjustments) < MAX_PER_RECEIPT
+    limit = self.class.per_receipt_limit
+    return if sibling_count_for_limit(:receipt_adjustments) < limit
 
-    errors.add(:receipt, :receipt_adjustments_limit_exceeded, limit: MAX_PER_RECEIPT)
+    errors.add(:receipt, :receipt_adjustments_limit_exceeded, limit: limit)
   end
 
   def sibling_count_for_limit(association_name)
