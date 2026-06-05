@@ -3,6 +3,7 @@ require 'webauthn/fake_client'
 
 RSpec.describe 'Admin system settings', type: :request do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   around do |example|
     original_show_exceptions = Rails.application.env_config['action_dispatch.show_exceptions']
@@ -396,6 +397,29 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
         expect(session.to_hash.to_json).not_to include('enable logo', 'true')
         expect_no_jobs_enqueued
+      end
+    end
+
+    it '設定された再認証期間を過ぎると高リスク設定更新を拒否する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(1))
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+      allow(SystemOperations).to receive(:update_setting)
+
+      travel 2.minutes do
+        patch admin_system_setting_path('feature.receipt_logo_display_enabled'),
+              params: {
+                value: 'true',
+                reason: 'expired reauth'
+              }
+      end
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path('feature.receipt_logo_display_enabled')))
+        expect(flash[:alert]).to include('パスキーによる再認証')
+        expect(SystemOperations).not_to have_received(:update_setting)
+        expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
       end
     end
 

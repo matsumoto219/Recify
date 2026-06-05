@@ -159,6 +159,37 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
         expect(response.body).not_to include('パスキー再認証済みです')
       end
     end
+
+    it 'freshness helperは1分から60分までの設定値を判定する' do
+      [ 1, 5, 15, 60 ].each do |minutes|
+        create(
+          :system_setting,
+          key: 'security.admin_passkey_reauth_window_minutes',
+          value: SystemSettings.stored_value(minutes)
+        )
+        admin = create(:user, :admin)
+        passkey = create_passkey_with_fake_client(admin)
+        sign_in admin
+        options = reauthentication_options_payload
+        credential = fake_reauthentication_credential(options, passkey: passkey)
+        post admin_passkey_reauthentication_path,
+             params: { credential: credential },
+             as: :json
+
+        travel minutes.minutes - 1.second do
+          get new_admin_passkey_reauthentication_path
+          expect(response.body).to include('パスキー再認証済みです')
+        end
+
+        travel minutes.minutes + 1.second do
+          get new_admin_passkey_reauthentication_path
+          expect(response.body).not_to include('パスキー再認証済みです')
+        end
+
+        sign_out admin
+        SystemSetting.find_by(key: 'security.admin_passkey_reauth_window_minutes')&.destroy!
+      end
+    end
   end
 
   describe 'POST /admin/reauth/passkey/options' do
