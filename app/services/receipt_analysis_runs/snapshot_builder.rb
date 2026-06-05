@@ -15,11 +15,11 @@ module ReceiptAnalysisRuns
     FINALIZE_DECISION_METADATA_KEYS = %w[reason].freeze
 
     MAX_OCR_LINES = 150
-    MAX_OCR_ITEMS = 100
+    MAX_OCR_ITEMS = 1000
     MAX_OCR_PAYMENTS = 20
     MAX_OCR_TAX_DETAILS = 20
     MAX_OCR_ADJUSTMENT_CANDIDATES = 50
-    MAX_AI_NORMALIZED_ITEMS = 100
+    MAX_AI_NORMALIZED_ITEMS = 1000
     MAX_AI_NORMALIZED_ADJUSTMENTS = 50
     MAX_FULL_CONTEXT_LINES = 150
     MAX_ADJUSTMENT_CONTEXT_LINES = 40
@@ -185,20 +185,23 @@ module ReceiptAnalysisRuns
       result = normalized_hash(ocr_result)
       candidates = normalized_hash(result[:candidates])
       lines = limited_strings(result[:lines], MAX_OCR_LINES)
+      candidates_snapshot = ocr_candidates_snapshot(candidates)
 
       sanitize_hash(
         {
           schema_version: OCR_RESULT_SCHEMA_VERSION,
           success: result[:success] == true,
           lines: lines,
-          candidates: ocr_candidates_snapshot(candidates),
+          candidates: candidates_snapshot,
+          candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
           error_code: safe_string(result[:error_code]),
           meta: ocr_meta_snapshot(result[:meta]),
           truncated: {
             lines: Array(result[:lines]).size > MAX_OCR_LINES,
             items: Array(candidates[:items]).size > MAX_OCR_ITEMS,
             payments: Array(candidates[:payments]).size > MAX_OCR_PAYMENTS,
-            tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS
+            tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS,
+            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > MAX_OCR_ADJUSTMENT_CANDIDATES
           }
         }.compact
       )
@@ -235,6 +238,8 @@ module ReceiptAnalysisRuns
 
     def ai_normalized_result_snapshot(ai_result)
       result = normalized_hash(ai_result)
+      receipt_items_snapshot = limited_ai_normalized_items(result[:receipt_items_attributes])
+      receipt_adjustments_snapshot = limited_ai_normalized_adjustments(result[:receipt_adjustments_attributes])
 
       sanitize_hash(
         {
@@ -244,8 +249,13 @@ module ReceiptAnalysisRuns
           needs_review: result[:needs_review] == true,
           review_reasons: limited_strings(result[:review_reasons], MAX_REVIEW_REASONS),
           receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
-          receipt_items_attributes: limited_ai_normalized_items(result[:receipt_items_attributes]),
-          receipt_adjustments_attributes: limited_ai_normalized_adjustments(result[:receipt_adjustments_attributes]),
+          receipt_items_attributes: receipt_items_snapshot,
+          receipt_adjustments_attributes: receipt_adjustments_snapshot,
+          attribute_counts: ai_normalized_attribute_counts(
+            result,
+            receipt_items_snapshot: receipt_items_snapshot,
+            receipt_adjustments_snapshot: receipt_adjustments_snapshot
+          ),
           meta: ai_normalized_meta_snapshot(result[:meta]),
           truncated: {
             receipt_items_attributes: Array(result[:receipt_items_attributes]).size > MAX_AI_NORMALIZED_ITEMS,
@@ -389,6 +399,29 @@ module ReceiptAnalysisRuns
         review_reasons: limited_strings(candidates[:review_reasons], MAX_REVIEW_REASONS),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
+    end
+
+    def ocr_candidate_counts(candidates, snapshot)
+      {
+        items: count_metadata(candidates[:items], snapshot[:items]),
+        payments: count_metadata(candidates[:payments], snapshot[:payments]),
+        tax_details: count_metadata(candidates[:tax_details], snapshot[:tax_details]),
+        adjustment_candidates: count_metadata(candidates[:adjustment_candidates], snapshot[:adjustment_candidates])
+      }
+    end
+
+    def ai_normalized_attribute_counts(result, receipt_items_snapshot:, receipt_adjustments_snapshot:)
+      {
+        receipt_items_attributes: count_metadata(result[:receipt_items_attributes], receipt_items_snapshot),
+        receipt_adjustments_attributes: count_metadata(result[:receipt_adjustments_attributes], receipt_adjustments_snapshot)
+      }
+    end
+
+    def count_metadata(actual_values, snapshot_values)
+      {
+        actual_count: Array(actual_values).size,
+        snapshot_count: Array(snapshot_values).size
+      }
     end
 
     def ocr_meta_snapshot(value)

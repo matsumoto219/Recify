@@ -77,6 +77,10 @@ RSpec.describe 'Receipts', type: :request do
     }
   end
 
+  def manual_items_params(count)
+    (0...count).to_h { |index| [ index.to_s, manual_item_params(index) ] }
+  end
+
   def manual_adjustment_params(index)
     {
       kind: 'delivery_fee',
@@ -2035,6 +2039,55 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include('明細は1件まで登録できます')
         expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
+      end
+    end
+
+    it 'default上限を超える101件の手動作成を金額計算前に拒否する' do
+      params = valid_params.deep_dup
+      params[:receipt][:total_amount] = 10_100
+      params[:receipt][:receipt_items_attributes] = manual_items_params(101)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('明細は100件まで登録できます')
+      end
+    end
+
+    it 'override上限内の150件の手動作成を許可する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      params = valid_params.deep_dup
+      params[:receipt][:total_amount] = 15_000
+      params[:receipt][:receipt_items_attributes] = manual_items_params(150)
+
+      expect do
+        post receipts_path, params: params
+      end.to change(Receipt, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:redirect)
+        expect(Receipt.order(:id).last.receipt_items.count).to eq(150)
+      end
+    end
+
+    it 'override上限を超える201件の手動作成を金額計算前に拒否する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      params = valid_params.deep_dup
+      params[:receipt][:total_amount] = 20_100
+      params[:receipt][:receipt_items_attributes] = manual_items_params(201)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('明細は200件まで登録できます')
       end
     end
 
@@ -5410,6 +5463,50 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include('明細は1件まで登録できます')
+        expect(receipt.reload.store_name).to eq('更新前')
+      end
+    end
+
+    it 'override上限内の150件の手動更新を許可する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      params = {
+        receipt: {
+          store_name: '更新後',
+          total_amount: 15_000,
+          payment_method: 'cash',
+          receipt_items_attributes: manual_items_params(150)
+        }
+      }
+
+      patch receipt_path(receipt), params: params
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.store_name).to eq('更新後')
+        expect(receipt.receipt_items.count).to eq(150)
+      end
+    end
+
+    it 'override上限を超える201件の手動更新を金額計算前に拒否する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      params = {
+        receipt: {
+          store_name: '更新後',
+          total_amount: 20_100,
+          payment_method: 'cash',
+          receipt_items_attributes: manual_items_params(201)
+        }
+      }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        patch receipt_path(receipt), params: params
+      end.not_to change { receipt.reload.receipt_items.count }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('明細は200件まで登録できます')
         expect(receipt.reload.store_name).to eq('更新前')
       end
     end

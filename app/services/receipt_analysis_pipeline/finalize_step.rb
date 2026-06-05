@@ -62,6 +62,7 @@ class ReceiptAnalysisPipeline
         success: snapshot[:success] == true,
         lines: Array(snapshot[:lines]).map(&:to_s),
         candidates: normalized_hash(snapshot[:candidates]).to_h,
+        candidate_counts: normalized_hash(snapshot[:candidate_counts]).to_h,
         error_code: snapshot[:error_code].presence,
         meta: normalized_hash(snapshot[:meta]).to_h
       }.compact
@@ -79,6 +80,7 @@ class ReceiptAnalysisPipeline
         receipt_attributes: rehydrate_ai_receipt_attributes(snapshot[:receipt_attributes]),
         receipt_items_attributes: rehydrate_ai_items(snapshot[:receipt_items_attributes]),
         receipt_adjustments_attributes: rehydrate_ai_adjustments(snapshot[:receipt_adjustments_attributes]),
+        attribute_counts: normalized_hash(snapshot[:attribute_counts]).to_h,
         meta: normalized_hash(snapshot[:meta]).to_h
       }.compact
     end
@@ -114,6 +116,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_ai_result!(ocr_result, ai_result)
+      validate_source_structural_limits!(ocr_result: ocr_result, ai_result: ai_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
       record_build_params_snapshot(params)
       validate_structural_limits!(params)
@@ -186,6 +189,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_ocr_only_result!(ocr_result)
+      validate_source_structural_limits!(ocr_result: ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
       validate_structural_limits!(params)
@@ -245,6 +249,7 @@ class ReceiptAnalysisPipeline
     end
 
     def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
+      validate_source_structural_limits!(ocr_result: ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
       validate_structural_limits!(params)
@@ -379,43 +384,141 @@ class ReceiptAnalysisPipeline
     def validate_receipt_items_limit!(items_attributes)
       limit = receipt.receipt_items_limit
       count = Array(items_attributes).size
-      return if count <= limit
-
-      raise ReceiptAnalysisPipeline::AnalysisError.new(
-        "analysis_items_invalid",
-        "receipt_items_limit_exceeded count=#{count} limit=#{limit}",
-        metadata: limit_exceeded_metadata(
-          error: "analysis_items_invalid",
-          resource: "receipt_items",
-          limit: limit,
-          actual: count
-        )
+      raise_limit_exceeded!(
+        error: "analysis_items_invalid",
+        resource: "receipt_items",
+        limit: limit,
+        actual_count: count,
+        snapshot_count: count
       )
     end
 
     def validate_collection_limit!(name:, attributes:, limit:)
       count = Array(attributes).size
-      return if count <= limit
+      raise_limit_exceeded!(
+        error: "analysis_value_invalid",
+        resource: name,
+        limit: limit,
+        actual_count: count,
+        snapshot_count: count
+      )
+    end
+
+    def validate_source_structural_limits!(ocr_result:, ai_result: nil)
+      validate_source_collection_limit!(
+        error: "analysis_items_invalid",
+        resource: "receipt_items",
+        count_metadata: ocr_candidate_count_metadata(ocr_result, :items),
+        limit: receipt.receipt_items_limit
+      )
+      validate_source_collection_limit!(
+        error: "analysis_value_invalid",
+        resource: "receipt_payments",
+        count_metadata: ocr_candidate_count_metadata(ocr_result, :payments),
+        limit: ReceiptPayment::MAX_PER_RECEIPT
+      )
+      validate_source_collection_limit!(
+        error: "analysis_value_invalid",
+        resource: "receipt_tax_details",
+        count_metadata: ocr_candidate_count_metadata(ocr_result, :tax_details),
+        limit: ReceiptTaxDetail::MAX_PER_RECEIPT
+      )
+      validate_source_collection_limit!(
+        error: "analysis_value_invalid",
+        resource: "receipt_adjustments",
+        count_metadata: ocr_candidate_count_metadata(ocr_result, :adjustment_candidates),
+        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+      )
+      return if ai_result.blank?
+
+      validate_source_collection_limit!(
+        error: "analysis_items_invalid",
+        resource: "receipt_items",
+        count_metadata: ai_attribute_count_metadata(ai_result, :receipt_items_attributes),
+        limit: receipt.receipt_items_limit
+      )
+      validate_source_collection_limit!(
+        error: "analysis_value_invalid",
+        resource: "receipt_adjustments",
+        count_metadata: ai_attribute_count_metadata(ai_result, :receipt_adjustments_attributes),
+        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+      )
+    end
+
+    def validate_source_collection_limit!(error:, resource:, count_metadata:, limit:)
+      actual_count = count_metadata[:actual_count]
+      return if actual_count.nil?
+
+      raise_limit_exceeded!(
+        error: error,
+        resource: resource,
+        limit: limit,
+        actual_count: actual_count,
+        snapshot_count: count_metadata[:snapshot_count]
+      )
+    end
+
+    def raise_limit_exceeded!(error:, resource:, limit:, actual_count:, snapshot_count: nil)
+      return if actual_count <= limit
 
       raise ReceiptAnalysisPipeline::AnalysisError.new(
-        "analysis_value_invalid",
-        "#{name}_limit_exceeded count=#{count} limit=#{limit}",
+        error,
+        "#{resource}_limit_exceeded count=#{actual_count} limit=#{limit}",
         metadata: limit_exceeded_metadata(
-          error: "analysis_value_invalid",
-          resource: name,
+          error: error,
+          resource: resource,
           limit: limit,
-          actual: count
+          actual_count: actual_count,
+          snapshot_count: snapshot_count
         )
       )
     end
 
-    def limit_exceeded_metadata(error:, resource:, limit:, actual:)
+    def ocr_candidate_count_metadata(ocr_result, key)
+      result = normalized_hash(ocr_result)
+      counts = normalized_hash(result[:candidate_counts])
+      metadata = normalize_count_metadata(counts[key])
+      return metadata if metadata[:actual_count]
+
+      values = Array(normalized_hash(result[:candidates])[key])
+      { actual_count: values.size, snapshot_count: values.size }
+    end
+
+    def ai_attribute_count_metadata(ai_result, key)
+      result = normalized_hash(ai_result)
+      counts = normalized_hash(result[:attribute_counts])
+      metadata = normalize_count_metadata(counts[key])
+      return metadata if metadata[:actual_count]
+
+      values = Array(result[key])
+      { actual_count: values.size, snapshot_count: values.size }
+    end
+
+    def normalize_count_metadata(value)
+      if value.respond_to?(:to_h)
+        metadata = value.to_h.with_indifferent_access
+        return {
+          actual_count: normalize_count(metadata[:actual_count]),
+          snapshot_count: normalize_count(metadata[:snapshot_count])
+        }
+      end
+
+      count = normalize_count(value)
+      { actual_count: count, snapshot_count: count }
+    end
+
+    def normalize_count(value)
+      Integer(value, exception: false)
+    end
+
+    def limit_exceeded_metadata(error:, resource:, limit:, actual_count:, snapshot_count: nil)
       {
         error: error,
         resource: resource,
         limit: limit,
-        actual: actual
-      }
+        actual_count: actual_count,
+        snapshot_count: snapshot_count
+      }.compact
     end
 
     def replace_receipt_items!(items_attributes)

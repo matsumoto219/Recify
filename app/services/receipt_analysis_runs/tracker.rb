@@ -448,7 +448,8 @@ module ReceiptAnalysisRuns
         "error" => safe_error_metadata_text(metadata[:error]),
         "resource" => safe_error_metadata_text(metadata[:resource]),
         "limit" => safe_error_metadata_integer(metadata[:limit]),
-        "actual" => safe_error_metadata_integer(metadata[:actual])
+        "actual_count" => safe_error_metadata_integer(metadata[:actual_count]),
+        "snapshot_count" => safe_error_metadata_integer(metadata[:snapshot_count])
       }.compact
     end
 

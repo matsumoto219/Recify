@@ -197,6 +197,70 @@ RSpec.describe ReceiptAnalysisPipeline do
     }
   end
 
+  def generated_ocr_items(count)
+    Array.new(count) do |index|
+      amount = index + 1
+      {
+        raw_text: "商品#{amount}",
+        price: amount,
+        quantity: 1,
+        line_total: amount,
+        confidence: 0.95
+      }
+    end
+  end
+
+  def generated_ai_items(count)
+    Array.new(count) do |index|
+      {
+        index: index,
+        suggested_name: "商品#{index + 1}",
+        category: 'other',
+        needs_review: false
+      }
+    end
+  end
+
+  def generated_payments(count)
+    Array.new(count) do |index|
+      {
+        method: "Method#{index + 1}",
+        amount: index + 1
+      }
+    end
+  end
+
+  def generated_tax_details(count)
+    Array.new(count) do |index|
+      {
+        description: "税内訳#{index + 1}",
+        amount: index + 1,
+        rate: 10,
+        net_amount: 100 + index
+      }
+    end
+  end
+
+  def generated_adjustment_lines(count)
+    [
+      'テストストア',
+      *Array.new(count) { |index| "クーポン -#{index + 1}" },
+      '合計 100'
+    ]
+  end
+
+  def generated_ai_adjustments(count)
+    Array.new(count) do |index|
+      {
+        kind: 'coupon',
+        amount: index + 1,
+        sign: 'discount',
+        source_text: "クーポン -#{index + 1}",
+        source_line_index: index + 1
+      }
+    end
+  end
+
   def amount_result(inconsistencies:, blocking_inconsistencies:, warning_inconsistencies:)
     {
       resolved: {
@@ -898,11 +962,311 @@ RSpec.describe ReceiptAnalysisPipeline do
           'error' => 'analysis_items_invalid',
           'resource' => 'receipt_items',
           'limit' => 1,
-          'actual' => 2
+          'actual_count' => 2,
+          'snapshot_count' => 2
         )
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('analysis_items_invalid')
         expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'OCR明細がdefault上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(101)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_items_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_items_invalid',
+          'resource' => 'receipt_items',
+          'limit' => 100,
+          'actual_count' => 101,
+          'snapshot_count' => 101
+        )
+        expect(run.ocr_result_snapshot.dig('candidate_counts', 'items')).to eq(
+          'actual_count' => 101,
+          'snapshot_count' => 101
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('analysis_items_invalid')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'AI補完込みの明細がdefault上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(1)
+      ai_result = successful_ai_result.deep_merge(receipt_items_attributes: generated_ai_items(101))
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_items_invalid')
+        expect(run.metadata['error_metadata']).to include(
+          'resource' => 'receipt_items',
+          'limit' => 100,
+          'actual_count' => 101,
+          'snapshot_count' => 101
+        )
+        expect(run.ai_normalized_result_snapshot.dig('attribute_counts', 'receipt_items_attributes')).to eq(
+          'actual_count' => 101,
+          'snapshot_count' => 101
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'receipt_items_per_receipt overrideで150件のOCR解析明細を保存できる' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(150)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect { described_class.run_finalize(run) }.not_to raise_error
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.metadata['error_metadata']).to be_blank
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.receipt_items.count).to eq(150)
+      end
+    end
+
+    it 'receipt_items_per_receipt overrideを超える201件のOCR解析明細はfailedにする' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(201)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_items_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_items_invalid',
+          'resource' => 'receipt_items',
+          'limit' => 200,
+          'actual_count' => 201,
+          'snapshot_count' => 201
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'receipt_items_per_receipt overrideで150件のAI補完明細を保存できる' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(150)
+      ai_result = successful_ai_result.deep_merge(receipt_items_attributes: generated_ai_items(150))
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect { described_class.run_finalize(run) }.not_to raise_error
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.metadata['error_metadata']).to be_blank
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.receipt_items.count).to eq(150)
+      end
+    end
+
+    it 'receipt_items_per_receipt overrideを超える201件のAI補完明細はfailedにする' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 200 })
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = generated_ocr_items(1)
+      ai_result = successful_ai_result.deep_merge(receipt_items_attributes: generated_ai_items(201))
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_items_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_items_invalid',
+          'resource' => 'receipt_items',
+          'limit' => 200,
+          'actual_count' => 201,
+          'snapshot_count' => 201
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it '支払い行が固定上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:payments] = generated_payments(21)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt_payments',
+          'limit' => 20,
+          'actual_count' => 21,
+          'snapshot_count' => 20
+        )
+        expect(run.ocr_result_snapshot.dig('candidate_counts', 'payments')).to eq(
+          'actual_count' => 21,
+          'snapshot_count' => 20
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_payments).to be_empty
+      end
+    end
+
+    it '税内訳が固定上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:tax_details] = generated_tax_details(21)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt_tax_details',
+          'limit' => 20,
+          'actual_count' => 21,
+          'snapshot_count' => 20
+        )
+        expect(run.ocr_result_snapshot.dig('candidate_counts', 'tax_details')).to eq(
+          'actual_count' => 21,
+          'snapshot_count' => 20
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
+    it '調整行が固定上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_merge(lines: generated_adjustment_lines(51))
+      ai_result = successful_ai_result.deep_merge(receipt_adjustments_attributes: generated_ai_adjustments(51))
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt_adjustments',
+          'limit' => 50,
+          'actual_count' => 51,
+          'snapshot_count' => 50
+        )
+        expect(run.ai_normalized_result_snapshot.dig('attribute_counts', 'receipt_adjustments_attributes')).to eq(
+          'actual_count' => 51,
+          'snapshot_count' => 50
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_adjustments).to be_empty
       end
     end
 
@@ -1016,7 +1380,8 @@ RSpec.describe ReceiptAnalysisPipeline do
           error: 'analysis_value_invalid',
           resource: 'receipt_payments',
           limit: 1,
-          actual: 2
+          actual_count: 2,
+          snapshot_count: 2
         )
       }
     end
@@ -1041,7 +1406,8 @@ RSpec.describe ReceiptAnalysisPipeline do
           error: 'analysis_value_invalid',
           resource: 'receipt_tax_details',
           limit: 1,
-          actual: 2
+          actual_count: 2,
+          snapshot_count: 2
         )
       }
     end
@@ -1075,7 +1441,8 @@ RSpec.describe ReceiptAnalysisPipeline do
           error: 'analysis_value_invalid',
           resource: 'receipt_adjustments',
           limit: 1,
-          actual: 2
+          actual_count: 2,
+          snapshot_count: 2
         )
       }
     end
@@ -1902,13 +2269,13 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'truncated flagがtrueのOCR snapshotでもfinalizeできる' do
+    it '件数上限を超えないtruncated OCR snapshotはfinalizeできる' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       long_ocr_result = successful_ocr_result.deep_merge(
         lines: Array.new(151) { |index| "line #{index}" },
         candidates: {
-          items: Array.new(101) do |index|
+          items: Array.new(100) do |index|
             {
               raw_text: "商品#{index} 180",
               line_total: 180,
@@ -1935,7 +2302,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(run.reload.ocr_result_snapshot.dig('truncated', 'lines')).to eq(true)
-        expect(run.ocr_result_snapshot.dig('truncated', 'items')).to eq(true)
+        expect(run.ocr_result_snapshot.dig('truncated', 'items')).to eq(false)
         expect(receipt.reload.status).to eq('review_needed')
       end
     end
