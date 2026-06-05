@@ -203,6 +203,9 @@ RSpec.describe 'Admin system settings', type: :request do
 
       get admin_system_setting_path('limits.receipt_adjustments_per_receipt')
 
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')
@@ -211,6 +214,10 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('0')
         expect(response.body).to include('200')
         expect(response.body).to include('50')
+        expect(note.text).to include('1レシートに保存できる調整行の最大数')
+        expect(note.text).to include('大きくしすぎると金額計算や確認画面が重くなる可能性')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
       end
     end
   end

@@ -493,6 +493,7 @@ ja:
         title: "設定詳細: %{key}"
         subtitle: 設定詳細
         snapshot_limit_note: snapshot上限を大きくすると解析snapshotのjsonbサイズが増えます。receipt_items_per_receipt の最大値以上に設定してください。
+        receipt_adjustments_limit_note: 1レシートに保存できる調整行の最大数です。値引き・返品・調整行が大量にある特殊ケース向けで、大きくしすぎると金額計算や確認画面が重くなる可能性があります。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。
