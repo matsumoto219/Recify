@@ -144,6 +144,31 @@ RSpec.describe UserSessions::RetentionCleanup do
       end
     end
 
+    it '保持期間設定が30日でもactive session保護は30日固定で対象外にする' do
+      create(:system_setting, key: 'retention.user_sessions_days', value: SystemSettings.stored_value(30))
+      user = create(:user, session_version: 7)
+      active = create_user_session(
+        user: user,
+        session_version: 7,
+        started_at: 29.days.ago,
+        last_seen_at: 29.days.ago
+      )
+      inactive = create_user_session(
+        user: user,
+        session_version: 7,
+        started_at: 31.days.ago,
+        last_seen_at: 31.days.ago
+      )
+
+      result = described_class.call(dry_run: true)
+
+      aggregate_failures do
+        expect(result[:cutoff]).to eq(30.days.ago)
+        expect(result[:sample_session_ids]).to contain_exactly(inactive.id)
+        expect(result[:sample_session_ids]).not_to include(active.id)
+      end
+    end
+
     it 'limitを守り、sample_session_idsは20件に制限する' do
       user = create(:user)
       sessions = Array.new(25) { create_user_session(user: user, signed_out_at: 91.days.ago) }
