@@ -5,6 +5,10 @@
     record: @record,
     reauthenticated: admin_passkey_reauthenticated?
   )
+  setting_card_class = "min-w-0 max-w-full overflow-hidden rounded-lg border token-border-soft token-bg-card-subtle p-3"
+  setting_value_class = "min-w-0 max-w-full break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere] md:text-lg"
+  setting_meta_value_class = "min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"
+  setting_mono_meta_value_class = "#{setting_meta_value_class} font-mono"
 %>
 
 <section class="mx-auto w-full max-w-5xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -26,21 +30,21 @@
     </div>
 
     <dl class="grid gap-3 text-sm md:grid-cols-2">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.current_value") %></dt>
-        <dd class="break-words font-mono text-lg font-bold token-text-base [overflow-wrap:anywhere]"><%= @record[:current_value].inspect %></dd>
+        <dd class="<%= setting_value_class %>"><%= @record[:current_value].inspect %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.default_value") %></dt>
-        <dd class="break-words font-mono text-lg font-bold token-text-base [overflow-wrap:anywhere]"><%= @record[:default_value].inspect %></dd>
+        <dd class="<%= setting_value_class %>"><%= @record[:default_value].inspect %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.source") %></dt>
-        <dd class="font-semibold token-text-base"><%= @record[:source] %></dd>
+        <dd class="<%= setting_meta_value_class %> font-semibold"><%= @record[:source] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.updated_by") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:updated_by_user_id].presence || "-" %></dd>
+        <dd class="<%= setting_mono_meta_value_class %>"><%= @record[:updated_by_user_id].presence || "-" %></dd>
       </div>
     </dl>
   <% end %>
@@ -48,29 +52,29 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_settings.show.definition.title") %></h2>
     <dl class="grid gap-3 text-sm md:grid-cols-2">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.category") %></dt>
-        <dd class="token-text-base"><%= @record[:category] %></dd>
+        <dd class="<%= setting_meta_value_class %>"><%= @record[:category] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.value_type") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:value_type] %></dd>
+        <dd class="<%= setting_mono_meta_value_class %>"><%= @record[:value_type] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.editable") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:editable] %></dd>
+        <dd class="<%= setting_mono_meta_value_class %>"><%= @record[:editable] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.risk_level") %></dt>
-        <dd class="token-text-base"><%= @record[:risk_level] %></dd>
+        <dd class="<%= setting_meta_value_class %>"><%= @record[:risk_level] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.min") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:min].presence || "-" %></dd>
+        <dd class="<%= setting_mono_meta_value_class %>"><%= @record[:min].presence || "-" %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.definition.max") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:max].presence || "-" %></dd>
+        <dd class="<%= setting_mono_meta_value_class %>"><%= @record[:max].presence || "-" %></dd>
       </div>
     </dl>
   <% end %>

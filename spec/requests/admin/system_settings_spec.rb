@@ -178,6 +178,9 @@ RSpec.describe 'Admin system settings', type: :request do
 
       get admin_system_setting_path('limits.receipt_upload_soft_limit')
 
+      document = Nokogiri::HTML(response.body)
+      current_value = document.at_css('dd')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('limits.receipt_upload_soft_limit')
@@ -189,6 +192,11 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('name="reason"')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('設定を更新')
+        expect(response.body).to include('min-w-0 max-w-full overflow-hidden rounded-lg border')
+        expect(current_value['class']).to include('min-w-0')
+        expect(current_value['class']).to include('[overflow-wrap:anywhere]')
+        expect(current_value['class']).to include('text-base')
+        expect(current_value['class']).to include('md:text-lg')
         expect_no_side_effects
       end
     end
