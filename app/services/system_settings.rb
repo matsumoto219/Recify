@@ -3,9 +3,15 @@ module SystemSettings
   RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
+  ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
   SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
+  ].freeze
+  ANALYSIS_RUN_RETENTION_KEYS = %w[
+    retention.analysis_runs_short_days
+    retention.analysis_runs_default_days
+    retention.analysis_runs_failed_days
   ].freeze
   USER_LIMIT_SETTING_SAFETY_KEYS = {
     "limits.receipt_uploads_per_day" => "limits.max_uploads_per_day",
@@ -361,6 +367,7 @@ module SystemSettings
       validate_receipt_items_snapshot_dependency!(definition, value)
       validate_user_limit_setting_safety!(definition, value)
       validate_user_limit_safety_ceiling!(definition, value)
+      validate_analysis_run_retention_order!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -407,6 +414,20 @@ module SystemSettings
       return unless has_exceeding_override
 
       raise ValidationError, USER_LIMIT_SAFETY_MAX_ERROR
+    end
+
+    def validate_analysis_run_retention_order!(definition, value)
+      return unless ANALYSIS_RUN_RETENTION_KEYS.include?(definition.key)
+
+      values = limits_for(ANALYSIS_RUN_RETENTION_KEYS)
+      values[definition.key] = Integer(value)
+
+      short_days = values.fetch("retention.analysis_runs_short_days")
+      default_days = values.fetch("retention.analysis_runs_default_days")
+      failed_days = values.fetch("retention.analysis_runs_failed_days")
+      return if failed_days >= default_days && default_days >= short_days
+
+      raise ValidationError, ANALYSIS_RUN_RETENTION_ORDER_ERROR
     end
 
     def override_integer_value(override)

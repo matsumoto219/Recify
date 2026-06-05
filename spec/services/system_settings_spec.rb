@@ -361,10 +361,10 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.contact_requests_days', '30')).to eq(30)
         expect(described_class.cast_update_value('retention.contact_requests_days', '730')).to eq(730)
         expect(described_class.cast_update_value('retention.analysis_runs_short_days', '1')).to eq(1)
-        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '365')).to eq(365)
-        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '1')).to eq(1)
-        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '365')).to eq(365)
-        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '30')).to eq(30)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '14')).to eq(14)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '90')).to eq(90)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '90')).to eq(90)
         expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '365')).to eq(365)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '10000')).to eq(10_000)
@@ -502,6 +502,44 @@ RSpec.describe SystemSettings do
       create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
 
       expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')).to eq(1200)
+    end
+
+    it '解析run保持期間は failed >= default >= short の関係だけ許可する' do
+      error_message = 'analysis_run_retention_order'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '30')).to eq(30)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_short_days', '31')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '14')).to eq(14)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_default_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '30')).to eq(30)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '29')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'retention.analysis_runs_short_days', value: described_class.stored_value(20))
+      create(:system_setting, key: 'retention.analysis_runs_default_days', value: described_class.stored_value(40))
+      create(:system_setting, key: 'retention.analysis_runs_failed_days', value: described_class.stored_value(80))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '40')).to eq(40)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '80')).to eq(80)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '40')).to eq(40)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_short_days', '41')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_default_days', '81')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '39')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
     end
 
     it 'upload / OCR / AI / storage系UserLimit設定はシステム上限以下だけ許可する' do

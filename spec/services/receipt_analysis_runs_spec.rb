@@ -1234,6 +1234,30 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it '設定値から算出されたexpires_atに従ってexpired runを削除する' do
+      create(:system_setting, key: 'retention.analysis_runs_default_days', value: SystemSettings.stored_value(45))
+      now = Time.current
+      expired = create(
+        :receipt_analysis_run,
+        :succeeded,
+        expires_at: ReceiptAnalysisRun.default_expires_at_for(status: 'succeeded', source: 'upload', from: now - 46.days)
+      )
+      retained = create(
+        :receipt_analysis_run,
+        :succeeded,
+        expires_at: ReceiptAnalysisRun.default_expires_at_for(status: 'succeeded', source: 'upload', from: now - 44.days)
+      )
+
+      result = described_class.cleanup_expired(cutoff: now, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(1)
+        expect(ReceiptAnalysisRun.exists?(expired.id)).to be(false)
+        expect(ReceiptAnalysisRun.exists?(retained.id)).to be(true)
+      end
+    end
+
     it 'active expired runは削除しない' do
       active = create(:receipt_analysis_run, status: 'queued', expires_at: 1.day.ago)
 
