@@ -1,10 +1,11 @@
 module Storage
   class OrphanBlobScanner
-    DEFAULT_OLDER_THAN = 24.hours
+    DEFAULT_OLDER_THAN = 48.hours
+    RETENTION_HOURS_KEY = "retention.orphan_blobs_hours"
     DEFAULT_SAMPLE_LIMIT = 10
 
     class << self
-      def call(created_before: nil, older_than: DEFAULT_OLDER_THAN, limit: nil, sample_limit: DEFAULT_SAMPLE_LIMIT)
+      def call(created_before: nil, older_than: nil, limit: nil, sample_limit: DEFAULT_SAMPLE_LIMIT)
         new(
           created_before: created_before,
           older_than: older_than,
@@ -12,9 +13,19 @@ module Storage
           sample_limit: sample_limit
         ).call
       end
+
+      def retention_duration
+        retention_hours.hours
+      end
+
+      def retention_hours
+        SystemSettings.limit_for(RETENTION_HOURS_KEY)
+      rescue StandardError
+        DEFAULT_OLDER_THAN.in_hours.to_i
+      end
     end
 
-    def initialize(created_before: nil, older_than: DEFAULT_OLDER_THAN, limit: nil, sample_limit: DEFAULT_SAMPLE_LIMIT)
+    def initialize(created_before: nil, older_than: nil, limit: nil, sample_limit: DEFAULT_SAMPLE_LIMIT)
       @created_before = created_before
       @older_than = older_than
       @limit = normalize_limit(limit)
@@ -70,7 +81,7 @@ module Storage
       return older_than if older_than.respond_to?(:ago)
       return older_than.seconds if older_than.is_a?(Numeric)
 
-      DEFAULT_OLDER_THAN
+      self.class.retention_duration
     end
 
     def older_than_seconds

@@ -28,7 +28,7 @@ production:
   orphan_blob_cleanup_dry_run:
     class: Storage::OrphanBlobCleanupJob
     queue: default
-    args: [ { dry_run: true, limit: 100, older_than: 172800 } ]
+    args: [ { dry_run: true, limit: 100 } ]
     schedule: at 3:45am every day
 
   receipt_image_purge_dry_run:

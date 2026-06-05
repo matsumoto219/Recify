@@ -32,9 +32,9 @@ RSpec.describe Storage::OrphanBlobScanner do
     it 'unattachedかつ古いblobだけをorphan候補にする' do
       user = create(:user)
       receipt = create(:receipt, user: user)
-      old_orphan = create_blob(byte_size: 12.kilobytes, created_at: 2.days.ago, filename: 'old.jpg')
+      old_orphan = create_blob(byte_size: 12.kilobytes, created_at: 3.days.ago, filename: 'old.jpg')
       new_orphan = create_blob(byte_size: 8.kilobytes, created_at: 1.hour.ago, filename: 'new.jpg')
-      attached = create_blob(byte_size: 20.kilobytes, created_at: 2.days.ago, filename: 'attached.jpg')
+      attached = create_blob(byte_size: 20.kilobytes, created_at: 3.days.ago, filename: 'attached.jpg')
       attach_blob(receipt, :image, attached)
 
       result = described_class.call
@@ -49,8 +49,37 @@ RSpec.describe Storage::OrphanBlobScanner do
           filename: 'old.jpg',
           byte_size: 12.kilobytes
         )
-        expect(result[:created_before]).to eq(1.day.ago.iso8601)
-        expect(result[:older_than_seconds]).to eq(24.hours.to_i)
+        expect(result[:created_before]).to eq(48.hours.ago.iso8601)
+        expect(result[:older_than_seconds]).to eq(48.hours.to_i)
+      end
+    end
+
+    it 'SystemSettingsの保持時間で検出閾値を変更できる' do
+      create(:system_setting, key: 'retention.orphan_blobs_hours', value: SystemSettings.stored_value(72))
+      too_new = create_blob(byte_size: 10.kilobytes, created_at: 70.hours.ago)
+      old_orphan = create_blob(byte_size: 20.kilobytes, created_at: 73.hours.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result[:blob_ids]).to eq([ old_orphan.id ])
+        expect(result[:blob_ids]).not_to include(too_new.id)
+        expect(result[:created_before]).to eq(72.hours.ago.iso8601)
+        expect(result[:older_than_seconds]).to eq(72.hours.to_i)
+      end
+    end
+
+    it '保持時間を168hに変更するとより古いblobだけを対象にする' do
+      create(:system_setting, key: 'retention.orphan_blobs_hours', value: SystemSettings.stored_value(168))
+      too_new = create_blob(byte_size: 10.kilobytes, created_at: 6.days.ago)
+      old_orphan = create_blob(byte_size: 20.kilobytes, created_at: 8.days.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result[:blob_ids]).to eq([ old_orphan.id ])
+        expect(result[:blob_ids]).not_to include(too_new.id)
+        expect(result[:older_than_seconds]).to eq(168.hours.to_i)
       end
     end
 
@@ -69,7 +98,7 @@ RSpec.describe Storage::OrphanBlobScanner do
 
     it 'limitで候補件数を制限できる' do
       first = create_blob(byte_size: 1.kilobyte, created_at: 3.days.ago)
-      second = create_blob(byte_size: 2.kilobytes, created_at: 2.days.ago)
+      second = create_blob(byte_size: 2.kilobytes, created_at: 3.days.ago)
       third = create_blob(byte_size: 3.kilobytes, created_at: 25.hours.ago)
 
       result = described_class.call(limit: 2)
