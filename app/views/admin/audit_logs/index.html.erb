@@ -176,8 +176,8 @@
     <%= render "admin/shared/table_frame", size: :xl do %>
         <thead class="token-text-muted">
           <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.audit_logs.index.table.created") %></th>
-            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.actor") %></th>
+            <th class="px-3 py-2 font-semibold whitespace-nowrap min-w-[6.5rem]"><%= t("admin.audit_logs.index.table.created") %></th>
+            <th class="px-3 py-2 font-semibold whitespace-nowrap min-w-[5.5rem]"><%= t("admin.audit_logs.index.table.actor") %></th>
             <th class="px-3 py-2 font-semibold min-w-[14rem] max-w-xs"><%= t("admin.audit_logs.index.table.action") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.outcome") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.audit_logs.index.table.target") %></th>
@@ -191,8 +191,8 @@
         <tbody>
           <% @result.records.each do |record| %>
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:created_at], format: :short) %></td>
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
+              <td class="px-3 py-3 whitespace-nowrap min-w-[6.5rem]"><%= l(record[:created_at], format: :short) %></td>
+              <td class="px-3 py-3 whitespace-nowrap min-w-[5.5rem]">
                 <div class="token-text-base"><%= record.dig(:actor, :kind) %></div>
                 <div class="font-mono text-xs token-text-muted"><%= record.dig(:actor, :user_id).present? ? "##{record.dig(:actor, :user_id)}" : "-" %></div>
               </td>
