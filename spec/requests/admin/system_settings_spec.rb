@@ -144,6 +144,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('retention.notifications_read_days')
         expect(response.body).to include('retention.guest_users_days')
         expect(response.body).to include('retention.user_sessions_days')
+        expect(response.body).to include('retention.contact_requests_days')
         expect(response.body).to include('limits.snapshot_ocr_items_max')
         expect(response.body).to include('limits.snapshot_ai_normalized_items_max')
         expect(response.body).to include('limits.api_requests_per_day')
@@ -402,6 +403,32 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('90')
         expect(note.text).to include('ユーザーセッション履歴を保持する日数')
         expect(note.text).to include('active session保護期間(30日)以上')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it '問い合わせ保持期間をmedium risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('retention.contact_requests_days')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('retention.contact_requests_days')
+        expect(response.body).to include('retention')
+        expect(response.body).to include('medium')
+        expect(response.body).to include('30')
+        expect(response.body).to include('730')
+        expect(response.body).to include('180')
+        expect(note.text).to include('解決済みまたはクローズ済み問い合わせのPIIを匿名化するまでの日数')
+        expect(note.text).to include('hard deleteではなく匿名化')
         expect(note['class']).to include('min-w-0')
         expect(note['class']).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('パスキー再認証')

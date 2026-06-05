@@ -79,7 +79,8 @@ RSpec.describe Admin::SystemSettingsQuery do
       expect(result.records.map { |record| record[:key] }).to contain_exactly(
         'retention.notifications_read_days',
         'retention.guest_users_days',
-        'retention.user_sessions_days'
+        'retention.user_sessions_days',
+        'retention.contact_requests_days'
       )
     end
 

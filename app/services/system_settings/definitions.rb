@@ -223,6 +223,16 @@ module SystemSettings
         max: 365
       ),
       Definition.new(
+        key: "retention.contact_requests_days",
+        category: "retention",
+        value_type: "integer",
+        default: 180,
+        editable: true,
+        risk_level: "medium",
+        min: 30,
+        max: 730
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",
