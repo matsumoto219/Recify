@@ -94,6 +94,23 @@ RSpec.describe 'Notifications', type: :request do
       end
     end
 
+    it '通知保持件数設定を変更してもdropdownは最新5件だけ表示し未読件数を維持する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(500))
+      insert_notifications_for(user, count: 6)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      dropdown = document.at_css('#notifications-dropdown')
+      badge = document.at_css('#notifications_unread_badge')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(dropdown.css('[data-notification-dropdown-item-title]').size).to eq(Notification::DROPDOWN_LIMIT)
+        expect(badge.text).to include('6')
+      end
+    end
+
     it '削除確認設定がOFFならdropdownの通知削除confirmを出さない' do
       user.update!(delete_confirmation_enabled: false)
       notification = create(:notification, user:, title: '通知1')
@@ -226,6 +243,48 @@ RSpec.describe 'Notifications', type: :request do
         expect(response).to have_http_status(:success)
         expect(document.at_css(%(a[href="#{receipt_path(missing_receipt_public_id)}"]))).to be_nil
         expect(response.body).to include(I18n.t('notifications.item.deleted_target'))
+      end
+    end
+
+    it '通知保持件数設定が20ならDB保持分の20件を表示する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      insert_notifications_for(user, count: 20)
+
+      get notifications_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.css('#notifications_list article[id^="notification_"]').size).to eq(20)
+      end
+    end
+
+    it '通知保持件数設定が100でも一覧は最新50件まで表示する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(100))
+      insert_notifications_for(user, count: 60)
+
+      get notifications_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.css('#notifications_list article[id^="notification_"]').size).to eq(Notification::INDEX_LIMIT)
+      end
+    end
+
+    it '通知保持件数設定が500でも一覧は最新50件まで表示する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(500))
+      insert_notifications_for(user, count: 60)
+
+      get notifications_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.css('#notifications_list article[id^="notification_"]').size).to eq(Notification::INDEX_LIMIT)
       end
     end
   end
@@ -382,5 +441,26 @@ RSpec.describe 'Notifications', type: :request do
         expect(Notification.exists?(notification.id)).to be(false)
       end
     end
+  end
+
+  def insert_notifications_for(user, count:)
+    now = Time.current
+    attributes = count.times.map do |index|
+      created_at = count.minutes.ago + index.minutes
+      {
+        user_id: user.id,
+        uid: "ntf_#{SecureRandom.base58(16)}",
+        kind: 'receipt_completed',
+        title: "通知#{index}",
+        body: '本文',
+        action_path: "/receipts/rcpt_#{index.to_s(36).upcase.rjust(16, 'A')}",
+        read_at: nil,
+        metadata: {},
+        created_at: created_at,
+        updated_at: now
+      }
+    end
+
+    Notification.insert_all!(attributes)
   end
 end

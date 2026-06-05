@@ -259,6 +259,20 @@ RSpec.describe Notification, type: :model do
       end
     end
 
+    it '通知保持件数設定を変更しても既読30日cleanupは変わらない' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(500))
+      user = create(:user)
+      old_read = create(:notification, :read, user:, read_at: 31.days.ago)
+      recent_read = create(:notification, :read, user:, read_at: 29.days.ago)
+
+      described_class.cleanup_old!(now: Time.current)
+
+      aggregate_failures do
+        expect(described_class.exists?(old_read.id)).to be(false)
+        expect(described_class.exists?(recent_read.id)).to be(true)
+      end
+    end
+
     it 'userごとに最新100件を残して古い既読通知を削除する' do
       user = create(:user)
       other_user = create(:user)
