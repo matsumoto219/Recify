@@ -141,6 +141,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('limits.receipt_uploads_per_day')
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')
         expect(response.body).to include('limits.notifications_per_user')
+        expect(response.body).to include('retention.notifications_read_days')
         expect(response.body).to include('limits.snapshot_ocr_items_max')
         expect(response.body).to include('limits.snapshot_ai_normalized_items_max')
         expect(response.body).to include('limits.api_requests_per_day')
@@ -320,6 +321,33 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('100')
         expect(note.text).to include('1ユーザーあたりDBに保持する通知の最大件数')
         expect(note.text).to include('通知一覧の1回表示件数とは別')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it '既読通知保持期間をmedium risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('retention.notifications_read_days')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('retention.notifications_read_days')
+        expect(response.body).to include('retention')
+        expect(response.body).to include('medium')
+        expect(response.body).to include('1')
+        expect(response.body).to include('365')
+        expect(response.body).to include('30')
+        expect(note.text).to include('既読通知を保持する日数')
+        expect(note.text).to include('未読通知はこの保持期間では削除されません')
+        expect(note.text).to include('1ユーザーあたりの通知保持件数とは別設定')
         expect(note['class']).to include('min-w-0')
         expect(note['class']).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('パスキー再認証')

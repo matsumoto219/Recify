@@ -193,6 +193,16 @@ module SystemSettings
         max: 500
       ),
       Definition.new(
+        key: "retention.notifications_read_days",
+        category: "retention",
+        value_type: "integer",
+        default: 30,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 365
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",
