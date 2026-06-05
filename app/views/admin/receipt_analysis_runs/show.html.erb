@@ -67,7 +67,7 @@
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.display_public_id") %></dt>
             <dd class="token-text-base">
               <%= @record.dig(:receipt_info, :display_id) %>
-              <span class="font-mono text-xs token-text-muted"><%= @record.dig(:receipt_info, :public_id) %></span>
+              <span class="block min-w-0 break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= @record.dig(:receipt_info, :public_id) %></span>
             </dd>
           </div>
           <div>
@@ -177,20 +177,20 @@
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.timing_provider") %></h2>
-      <dl class="grid gap-4 text-sm md:grid-cols-2">
+      <dl class="grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2">
         <% @record[:timestamps].each do |name, value| %>
-          <div>
+          <div class="min-w-0">
             <dt class="text-xs font-semibold token-text-muted"><%= name %></dt>
-            <dd class="token-text-base"><%= value.present? ? l(value, format: :short) : "-" %></dd>
+            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= value.present? ? l(value, format: :short) : "-" %></dd>
           </div>
         <% end %>
 
         <% @record[:latency_ms].each do |name, value| %>
-          <div>
+          <div class="min-w-0">
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.latency", name: name) %></dt>
-            <dd class="token-text-base"><%= value.present? ? "#{value}ms" : "-" %></dd>
+            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= value.present? ? "#{value}ms" : "-" %></dd>
           </div>
         <% end %>
       </dl>
@@ -217,13 +217,13 @@
           [ t("admin.receipt_analysis_runs.show.polling_metrics.retry_count"), polling_metrics[:retry_count].presence || "-" ]
         ]
       %>
-      <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.polling_metrics.title") %></h3>
-        <dl class="mt-3 grid gap-3 text-sm md:grid-cols-2">
+        <dl class="mt-3 grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
           <% polling_metric_rows.each do |label, value| %>
-            <div>
+            <div class="min-w-0">
               <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
-              <dd class="font-mono text-xs token-text-base"><%= value %></dd>
+              <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
             </div>
           <% end %>
         </dl>
@@ -257,11 +257,11 @@
           [ t("admin.receipt_analysis_runs.show.ai_metrics.token_usage"), token_usage_label ]
         ]
       %>
-      <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.ai_metrics.title") %></h3>
-        <dl class="mt-3 grid gap-3 text-sm md:grid-cols-2">
+        <dl class="mt-3 grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
           <% ai_metric_rows.each do |label, value| %>
-            <div>
+            <div class="min-w-0">
               <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
               <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
             </div>
@@ -269,9 +269,9 @@
         </dl>
       </div>
 
-      <div class="mt-4 space-y-2">
+      <div class="mt-4 min-w-0 max-w-full space-y-2">
         <% @record[:provider].each do |name, provider| %>
-          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
             <div class="text-xs font-semibold token-text-muted"><%= name %></div>
             <div class="mt-1 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= provider.presence || "-" %></div>
           </div>
