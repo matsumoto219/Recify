@@ -283,6 +283,16 @@ module SystemSettings
         max: 720
       ),
       Definition.new(
+        key: "retention.receipt_images_days",
+        category: "retention",
+        value_type: "integer",
+        default: 1,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 365
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",

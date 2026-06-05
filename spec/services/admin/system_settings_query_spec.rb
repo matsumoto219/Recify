@@ -85,7 +85,8 @@ RSpec.describe Admin::SystemSettingsQuery do
         'retention.analysis_runs_short_days',
         'retention.analysis_runs_default_days',
         'retention.analysis_runs_failed_days',
-        'retention.orphan_blobs_hours'
+        'retention.orphan_blobs_hours',
+        'retention.receipt_images_days'
       )
     end
 

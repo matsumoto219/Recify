@@ -150,6 +150,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('retention.analysis_runs_default_days')
         expect(response.body).to include('retention.analysis_runs_failed_days')
         expect(response.body).to include('retention.orphan_blobs_hours')
+        expect(response.body).to include('retention.receipt_images_days')
         expect(response.body).to include('limits.snapshot_ocr_items_max')
         expect(response.body).to include('limits.snapshot_ai_normalized_items_max')
         expect(response.body).to include('limits.api_requests_per_day')
@@ -517,6 +518,31 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('720')
         expect(response.body).to include('48')
         expect(note.text).to include('添付されていないBlobを削除対象とみなすまでの時間')
+        expect(note.text).to include('実ファイル削除に影響する高リスク設定')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it 'レシート画像保持期間をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('retention.receipt_images_days')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('retention.receipt_images_days')
+        expect(response.body).to include('retention')
+        expect(response.body).to include('high')
+        expect(response.body).to include('1')
+        expect(response.body).to include('365')
+        expect(note.text).to include('keep_image=false のレシート画像を削除対象とみなすまでの日数')
         expect(note.text).to include('実ファイル削除に影響する高リスク設定')
         expect(note['class']).to include('min-w-0')
         expect(note['class']).to include('[overflow-wrap:anywhere]')

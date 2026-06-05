@@ -33,6 +33,7 @@ RSpec.describe SystemSettings do
         'retention.analysis_runs_default_days',
         'retention.analysis_runs_failed_days',
         'retention.orphan_blobs_hours',
+        'retention.receipt_images_days',
         'limits.max_uploads_per_day',
         'limits.max_ocr_per_day',
         'limits.max_ai_per_day',
@@ -266,6 +267,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('retention.analysis_runs_default_days')).to eq(30)
         expect(described_class.limit_for('retention.analysis_runs_failed_days')).to eq(90)
         expect(described_class.limit_for('retention.orphan_blobs_hours')).to eq(48)
+        expect(described_class.limit_for('retention.receipt_images_days')).to eq(1)
         expect(described_class.limit_for('limits.max_uploads_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ocr_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ai_per_day')).to eq(1000)
@@ -374,6 +376,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.orphan_blobs_hours', '24')).to eq(24)
         expect(described_class.cast_update_value('retention.orphan_blobs_hours', '720')).to eq(720)
+        expect(described_class.cast_update_value('retention.receipt_images_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('retention.receipt_images_days', '365')).to eq(365)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.max_ocr_per_day', '50')).to eq(50)
@@ -465,6 +469,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('retention.orphan_blobs_hours', '721')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('retention.receipt_images_days', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('retention.receipt_images_days', '366')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.max_uploads_per_day', '49')
@@ -763,6 +773,16 @@ RSpec.describe SystemSettings do
         min: 24,
         max: 720,
         default: 48
+      )
+    end
+
+    it 'レシート画像保持期間はhigh risk設定として扱う' do
+      expect(described_class.definition_for('retention.receipt_images_days')).to have_attributes(
+        category: 'retention',
+        risk_level: 'high',
+        min: 1,
+        max: 365,
+        default: 1
       )
     end
 

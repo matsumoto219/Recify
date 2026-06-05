@@ -125,6 +125,37 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it 'レシート画像保持期間の変更はhigh riskとして監査ログに残す' do
+      result = described_class.call(
+        key: 'retention.receipt_images_days',
+        value: '30',
+        actor: actor,
+        reason: 'extend receipt image purge retention',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.limit_for('retention.receipt_images_days')).to eq(30)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'retention.receipt_images_days',
+          reason: 'extend receipt image purge retention'
+        )
+        expect(audit_log.metadata).to include(
+          'category' => 'retention',
+          'risk_level' => 'high',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+      end
+    end
+
     it 'unknown keyを拒否し、failed auditを残す' do
       result = described_class.call(
         key: 'secret.provider_api_key',
