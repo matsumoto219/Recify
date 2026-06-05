@@ -183,6 +183,16 @@ module SystemSettings
         max: 100
       ),
       Definition.new(
+        key: "limits.notifications_per_user",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 100,
+        editable: true,
+        risk_level: "medium",
+        min: 20,
+        max: 500
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",
