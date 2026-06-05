@@ -10,6 +10,7 @@
   used_value_label = ->(row) { row[:storage] ? format_storage_size(row[:used_bytes]) : number_with_delimiter(row[:used_count]) }
   admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   admin_control_class = "rounded-lg text-sm"
+  admin_textarea_class = "#{admin_control_class} py-2 leading-6"
   admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
@@ -270,7 +271,7 @@
                   required: true,
                   with_icon: false,
                   label_class: admin_label_class,
-                  textarea_class: admin_control_class %>
+                  textarea_class: admin_textarea_class %>
           </div>
           <%= render "shared/ui/form/text_field",
                 f: form,
@@ -392,7 +393,7 @@
                     required: true,
                     with_icon: false,
                     label_class: admin_label_class,
-                    textarea_class: admin_control_class %>
+                    textarea_class: admin_textarea_class %>
               <%= render "shared/ui/form/text_field",
                     f: form,
                     attribute: :confirmation,
@@ -422,7 +423,7 @@
                     required: true,
                     with_icon: false,
                     label_class: admin_label_class,
-                    textarea_class: admin_control_class %>
+                    textarea_class: admin_textarea_class %>
               <%= render "shared/ui/form/text_field",
                     f: form,
                     attribute: :confirmation,
@@ -457,7 +458,7 @@
                     required: true,
                     with_icon: false,
                     label_class: admin_label_class,
-                    textarea_class: admin_control_class %>
+                    textarea_class: admin_textarea_class %>
               <%= render "shared/ui/form/text_field",
                     f: form,
                     attribute: :confirmation,
@@ -492,7 +493,7 @@
                     required: true,
                     with_icon: false,
                     label_class: admin_label_class,
-                    textarea_class: admin_control_class %>
+                    textarea_class: admin_textarea_class %>
               <%= render "shared/ui/form/text_field",
                     f: form,
                     attribute: :confirmation,
@@ -523,7 +524,7 @@
                   required: true,
                   with_icon: false,
                   label_class: admin_label_class,
-                  textarea_class: admin_control_class %>
+                  textarea_class: admin_textarea_class %>
             <%= render "shared/ui/form/text_field",
                   f: form,
                   attribute: :confirmation,
@@ -569,7 +570,7 @@
                         required: true,
                         with_icon: false,
                         label_class: admin_label_class,
-                        textarea_class: admin_control_class %>
+                        textarea_class: admin_textarea_class %>
                   <%= render "shared/ui/form/text_field",
                         f: form,
                         attribute: :confirmation,
@@ -617,7 +618,7 @@
                         required: true,
                         with_icon: false,
                         label_class: admin_label_class,
-                        textarea_class: admin_control_class %>
+                        textarea_class: admin_textarea_class %>
                   <%= render "shared/ui/form/text_field",
                         f: form,
                         attribute: :confirmation,
@@ -653,7 +654,7 @@
                   required: true,
                   with_icon: false,
                   label_class: admin_label_class,
-                  textarea_class: admin_control_class %>
+                  textarea_class: admin_textarea_class %>
             <div class="grid gap-3 md:grid-cols-2">
               <%= render "shared/ui/form/text_field",
                     f: form,

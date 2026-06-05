@@ -307,6 +307,9 @@ RSpec.describe 'Admin users', type: :request do
 
       get admin_user_path(user)
 
+      document = Nokogiri::HTML(response.body)
+      textareas = document.css('textarea')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(limit_overrides_admin_user_path(user))
@@ -332,6 +335,9 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('tune')
         expect(response.body).not_to include('sliders_horizontal')
         expect(response.body).not_to include('_HORIZONTAL')
+        expect(textareas).not_to be_empty
+        expect(textareas.all? { |textarea| textarea['class'].include?('py-2') }).to be(true)
+        expect(textareas.all? { |textarea| textarea['class'].include?('leading-6') }).to be(true)
       end
     end
 

@@ -243,6 +243,9 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
 
       get admin_receipt_analysis_cleanup_path
 
+      document = Nokogiri::HTML(response.body)
+      textareas = document.css('textarea[name="reason"]')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('Stale cleanupを実行')
@@ -250,6 +253,9 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         expect(response.body).to include('name="reason"')
         expect(response.body).to include('name="confirm"')
         expect(response.body).to include('DELETE EXPIRED RUNS')
+        expect(textareas.size).to eq(2)
+        expect(textareas.all? { |textarea| textarea['class'].include?('py-2') }).to be(true)
+        expect(textareas.all? { |textarea| textarea['class'].include?('leading-6') }).to be(true)
       end
     end
   end

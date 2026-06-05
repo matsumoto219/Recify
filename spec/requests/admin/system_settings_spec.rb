@@ -263,6 +263,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(textarea).to be_present
         expect(textarea['maxlength']).to eq('1000')
+        expect(textarea['class']).to include('py-2')
+        expect(textarea['class']).to include('leading-6')
         expect(document.at_css('input[name="value"]')).to be_nil
       end
     end
@@ -281,6 +283,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(textarea).to be_present
         expect(textarea['maxlength']).to eq('1000')
+        expect(textarea['class']).to include('py-2')
+        expect(textarea['class']).to include('leading-6')
         expect(document.at_css('input[name="value"]')).to be_nil
       end
     end

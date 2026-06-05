@@ -26,6 +26,14 @@ module Admin
       "rounded-lg font-mono text-sm"
     end
 
+    def textarea_control_class
+      "rounded-lg text-sm py-2 leading-6"
+    end
+
+    def mono_textarea_control_class
+      "rounded-lg font-mono text-sm py-2 leading-6"
+    end
+
     def readonly?
       record[:editable] != true
     end
@@ -148,7 +156,7 @@ module Admin
         locals: base_locals(form).merge(
           value: Array(current_value).join("\n"),
           rows: 5,
-          textarea_class: control_class
+          textarea_class: textarea_control_class
         )
       )
     end
@@ -159,7 +167,7 @@ module Admin
         locals: base_locals(form).merge(
           value: JSON.pretty_generate(current_value),
           rows: 8,
-          textarea_class: mono_control_class
+          textarea_class: mono_textarea_control_class
         )
       )
     end
@@ -177,7 +185,7 @@ module Admin
           value: current_value,
           rows: 5,
           size: :dense,
-          textarea_class: control_class,
+          textarea_class: textarea_control_class,
           html_options: string_html_options
         )
       )

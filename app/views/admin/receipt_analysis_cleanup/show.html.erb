@@ -12,6 +12,7 @@
   retention_records = Array(retention[:records])
   admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   admin_control_class = "rounded-lg text-sm"
+  admin_textarea_class = "#{admin_control_class} py-2 leading-6"
   admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
@@ -212,7 +213,7 @@
                 required: true,
                 with_icon: false,
                 label_class: admin_label_class,
-                textarea_class: admin_control_class %>
+                textarea_class: admin_textarea_class %>
 
           <%= render "shared/ui/form/checkbox_field",
                 f: form,
@@ -318,7 +319,7 @@
                 required: true,
                 with_icon: false,
                 label_class: admin_label_class,
-                textarea_class: admin_control_class %>
+                textarea_class: admin_textarea_class %>
 
           <%= render "shared/ui/form/checkbox_field",
                 f: form,

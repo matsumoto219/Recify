@@ -703,6 +703,9 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       get admin_receipt_analysis_run_path(run.run_key)
 
+      document = Nokogiri::HTML(response.body)
+      reason_textarea = document.at_css('textarea[name="reason"]')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('パスキー再認証済みです')
@@ -711,6 +714,9 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('確認文字列 RETRY ANALYSIS')
         expect(response.body).to include('name="confirmation"')
         expect(response.body).to include('再解析を実行')
+        expect(reason_textarea).to be_present
+        expect(reason_textarea['class']).to include('py-2')
+        expect(reason_textarea['class']).to include('leading-6')
       end
     end
   end
