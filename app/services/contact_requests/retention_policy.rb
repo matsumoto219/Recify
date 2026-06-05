@@ -11,7 +11,9 @@ module ContactRequests
       def anonymizable_scope(now: Time.current)
         cutoff = retention_cutoff(now: now)
 
-        retention_scope.where(
+        retention_scope
+          .where.not(body: Anonymizer::REDACTED_BODY)
+          .where(
           <<~SQL.squish,
             (handled_at IS NOT NULL AND handled_at <= :cutoff)
             OR (handled_at IS NULL AND updated_at <= :cutoff)

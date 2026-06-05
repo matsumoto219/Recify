@@ -65,6 +65,14 @@ module ContactRequests
       Anonymizer.anonymized?(contact_request)
     end
 
+    def cleanup_retention(dry_run: true, now: Time.current, limit: 1000)
+      RetentionCleanup.call(
+        dry_run: dry_run,
+        now: now,
+        limit: limit
+      )
+    end
+
     private
 
     def normalize_attributes(user:, params:, request:)

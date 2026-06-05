@@ -18,6 +18,7 @@ module AuditLogs
     ].freeze
 
     CLEANUP_EXECUTE_ACTIONS = %w[
+      contact_requests.retention_cleanup.execute
       receipt_analysis_runs.cleanup_stale.execute
       receipt_analysis_runs.cleanup_expired.execute
       receipt_images.purge.execute
@@ -29,6 +30,7 @@ module AuditLogs
     ].freeze
 
     SYSTEM_DRY_RUN_ACTIONS = %w[
+      contact_requests.retention_cleanup.dry_run
       receipt_analysis_runs.cleanup_stale.dry_run
       receipt_analysis_runs.cleanup_expired.dry_run
       receipt_images.purge.dry_run
