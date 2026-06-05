@@ -233,6 +233,36 @@ module SystemSettings
         max: 730
       ),
       Definition.new(
+        key: "retention.analysis_runs_short_days",
+        category: "retention",
+        value_type: "integer",
+        default: 14,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 365
+      ),
+      Definition.new(
+        key: "retention.analysis_runs_default_days",
+        category: "retention",
+        value_type: "integer",
+        default: 30,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 365
+      ),
+      Definition.new(
+        key: "retention.analysis_runs_failed_days",
+        category: "retention",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 365
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",

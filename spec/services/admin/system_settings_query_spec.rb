@@ -80,7 +80,10 @@ RSpec.describe Admin::SystemSettingsQuery do
         'retention.notifications_read_days',
         'retention.guest_users_days',
         'retention.user_sessions_days',
-        'retention.contact_requests_days'
+        'retention.contact_requests_days',
+        'retention.analysis_runs_short_days',
+        'retention.analysis_runs_default_days',
+        'retention.analysis_runs_failed_days'
       )
     end
 

@@ -501,6 +501,7 @@ ja:
         guest_users_retention_note: ゲストユーザーと関連データを保持する日数です。期間を長くすると本登録前のデータ保持期間は伸びますが、ストレージ使用量も増える可能性があります。
         user_sessions_retention_note: ユーザーセッション履歴を保持する日数です。active session保護期間(30日)以上である必要があります。短くすると履歴確認期間が短くなります。
         contact_requests_retention_note: 解決済みまたはクローズ済み問い合わせのPIIを匿名化するまでの日数です。未対応・対応中の問い合わせは対象外で、hard deleteではなく匿名化します。短くしすぎると問い合わせ履歴確認期間が短くなり、長くしすぎるとPII保持期間が伸びます。
+        analysis_runs_retention_note: 解析runのexpires_at計算に使う保持期間です。shortはskipped/superseded/canceled、defaultは通常解析、failedはfailed/review/admin_retry向けです。failed >= default >= short の関係を維持してください。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。

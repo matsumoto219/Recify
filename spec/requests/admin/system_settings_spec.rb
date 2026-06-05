@@ -145,6 +145,9 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('retention.guest_users_days')
         expect(response.body).to include('retention.user_sessions_days')
         expect(response.body).to include('retention.contact_requests_days')
+        expect(response.body).to include('retention.analysis_runs_short_days')
+        expect(response.body).to include('retention.analysis_runs_default_days')
+        expect(response.body).to include('retention.analysis_runs_failed_days')
         expect(response.body).to include('limits.snapshot_ocr_items_max')
         expect(response.body).to include('limits.snapshot_ai_normalized_items_max')
         expect(response.body).to include('limits.api_requests_per_day')
@@ -433,6 +436,38 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(note['class']).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it '解析run保持期間をmedium risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      {
+        'retention.analysis_runs_short_days' => '14',
+        'retention.analysis_runs_default_days' => '30',
+        'retention.analysis_runs_failed_days' => '90'
+      }.each do |key, default_value|
+        get admin_system_setting_path(key)
+
+        document = Nokogiri::HTML(response.body)
+        note = document.at_css('p.token-bg-warning-soft')
+
+        aggregate_failures key do
+          expect(response).to have_http_status(:success)
+          expect(response.body).to include(key)
+          expect(response.body).to include('retention')
+          expect(response.body).to include('medium')
+          expect(response.body).to include('1')
+          expect(response.body).to include('365')
+          expect(response.body).to include(default_value)
+          expect(note.text).to include('解析runのexpires_at計算に使う保持期間')
+          expect(note.text).to include('failed >= default >= short')
+          expect(note['class']).to include('min-w-0')
+          expect(note['class']).to include('[overflow-wrap:anywhere]')
+          expect(response.body).to include('パスキー再認証')
+          expect(response.body).not_to include('name="reason"')
+        end
       end
     end
   end

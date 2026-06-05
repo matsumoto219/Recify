@@ -28,6 +28,9 @@ RSpec.describe SystemSettings do
         'retention.guest_users_days',
         'retention.user_sessions_days',
         'retention.contact_requests_days',
+        'retention.analysis_runs_short_days',
+        'retention.analysis_runs_default_days',
+        'retention.analysis_runs_failed_days',
         'limits.max_uploads_per_day',
         'limits.max_ocr_per_day',
         'limits.max_ai_per_day',
@@ -256,6 +259,9 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('retention.guest_users_days')).to eq(7)
         expect(described_class.limit_for('retention.user_sessions_days')).to eq(90)
         expect(described_class.limit_for('retention.contact_requests_days')).to eq(180)
+        expect(described_class.limit_for('retention.analysis_runs_short_days')).to eq(14)
+        expect(described_class.limit_for('retention.analysis_runs_default_days')).to eq(30)
+        expect(described_class.limit_for('retention.analysis_runs_failed_days')).to eq(90)
         expect(described_class.limit_for('limits.max_uploads_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ocr_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ai_per_day')).to eq(1000)
@@ -354,6 +360,12 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.user_sessions_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.contact_requests_days', '30')).to eq(30)
         expect(described_class.cast_update_value('retention.contact_requests_days', '730')).to eq(730)
+        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('retention.analysis_runs_short_days', '365')).to eq(365)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('retention.analysis_runs_default_days', '365')).to eq(365)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '365')).to eq(365)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.max_ocr_per_day', '50')).to eq(50)
@@ -415,6 +427,24 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('retention.contact_requests_days', '731')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_short_days', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_short_days', '366')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_default_days', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_default_days', '366')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '366')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.max_uploads_per_day', '49')
@@ -630,6 +660,32 @@ RSpec.describe SystemSettings do
         max: 730,
         default: 180
       )
+    end
+
+    it '解析run保持期間はmedium risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('retention.analysis_runs_short_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'medium',
+          min: 1,
+          max: 365,
+          default: 14
+        )
+        expect(described_class.definition_for('retention.analysis_runs_default_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'medium',
+          min: 1,
+          max: 365,
+          default: 30
+        )
+        expect(described_class.definition_for('retention.analysis_runs_failed_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'medium',
+          min: 1,
+          max: 365,
+          default: 90
+        )
+      end
     end
 
     it '利用上限のシステム上限はhigh risk設定として扱う' do
