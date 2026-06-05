@@ -158,6 +158,26 @@ RSpec.describe Storage::OrphanBlobCleanupJob, type: :job do
       end
     end
 
+    it '未指定時はlimit 100固定でscanする' do
+      scan = {
+        count: 0,
+        bytes: 0,
+        blob_ids: [],
+        sample: [],
+        created_before: 48.hours.ago.iso8601,
+        older_than_seconds: 48.hours.to_i
+      }
+      allow(Storage).to receive(:orphan_blob_scan).and_return(scan)
+
+      described_class.perform_now
+
+      expect(Storage).to have_received(:orphan_blob_scan).with(
+        created_before: nil,
+        older_than: nil,
+        limit: 100
+      )
+    end
+
     it 'SystemSettingsの保持時間をcleanup対象判定に使う' do
       create(:system_setting, key: 'retention.orphan_blobs_hours', value: SystemSettings.stored_value(72))
       too_new = create_blob(byte_size: 8.kilobytes, created_at: 70.hours.ago)

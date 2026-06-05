@@ -63,5 +63,19 @@ RSpec.describe Admin::SystemOperationsDashboard do
         expect(result.recurring_tasks).to all(include(:class_name, :queue, :schedule))
       end
     end
+
+    it 'orphan blob cleanup recurringはdry-runとlimit固定を維持しretention固定値を渡さない' do
+      config = YAML.safe_load(
+        Rails.root.join('config/recurring.yml').read,
+        permitted_classes: [],
+        aliases: false
+      )
+      task_args = config.fetch('production').fetch('orphan_blob_cleanup_dry_run').fetch('args').first
+
+      aggregate_failures do
+        expect(task_args).to include('dry_run' => true, 'limit' => 100)
+        expect(task_args).not_to include('older_than')
+      end
+    end
   end
 end

@@ -69,6 +69,20 @@ RSpec.describe Storage::OrphanBlobScanner do
       end
     end
 
+    it '保持時間を24hに変更できる' do
+      create(:system_setting, key: 'retention.orphan_blobs_hours', value: SystemSettings.stored_value(24))
+      too_new = create_blob(byte_size: 10.kilobytes, created_at: 23.hours.ago)
+      old_orphan = create_blob(byte_size: 20.kilobytes, created_at: 25.hours.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result[:blob_ids]).to eq([ old_orphan.id ])
+        expect(result[:blob_ids]).not_to include(too_new.id)
+        expect(result[:older_than_seconds]).to eq(24.hours.to_i)
+      end
+    end
+
     it '保持時間を168hに変更するとより古いblobだけを対象にする' do
       create(:system_setting, key: 'retention.orphan_blobs_hours', value: SystemSettings.stored_value(168))
       too_new = create_blob(byte_size: 10.kilobytes, created_at: 6.days.ago)
