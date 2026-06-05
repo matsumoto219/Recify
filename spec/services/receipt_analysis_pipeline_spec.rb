@@ -1334,7 +1334,8 @@ RSpec.describe ReceiptAnalysisPipeline do
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
         expect(run.error_code).to eq('analysis_value_invalid')
-        expect(run.metadata['error_metadata']).to include(
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
           'resource' => 'receipt_adjustments',
           'limit' => 100,
           'actual_count' => 101,
@@ -1396,7 +1397,8 @@ RSpec.describe ReceiptAnalysisPipeline do
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
         expect(run.error_code).to eq('analysis_value_invalid')
-        expect(run.metadata['error_metadata']).to include(
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
           'resource' => 'receipt_adjustments',
           'limit' => 100,
           'actual_count' => 101,
