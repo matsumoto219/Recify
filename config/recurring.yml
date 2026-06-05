@@ -55,6 +55,12 @@ production:
     args: [ { dry_run: true, limit: 1000 } ]
     schedule: at 3:05am every day
 
+  contact_request_retention_cleanup_dry_run:
+    class: ContactRequestRetentionCleanupJob
+    queue: default
+    args: [ { dry_run: true, limit: 1000 } ]
+    schedule: at 3:20am every day
+
   audit_log_retention_cleanup_dry_run:
     class: AuditLogRetentionCleanupJob
     queue: default

@@ -18,9 +18,11 @@ RSpec.describe Admin::SystemOperationsDashboard do
           'receipt_finalize'
         )
         expect(result.audit_actions).to include(
+          'contact_requests.retention_cleanup.execute',
           'receipt_analysis_runs.cleanup_stale.execute',
           'receipt_analysis_runs.cleanup_expired.execute',
           'receipt_images.purge.execute',
+          'contact_requests.retention_cleanup.dry_run',
           'receipt_analysis_runs.cleanup_stale.dry_run',
           'receipt_analysis_runs.cleanup_expired.dry_run',
           'receipt_images.purge.dry_run',
@@ -51,6 +53,7 @@ RSpec.describe Admin::SystemOperationsDashboard do
         expect(recurring_keys).to include(
           'orphan_blob_cleanup_dry_run',
           'receipt_image_purge_dry_run',
+          'contact_request_retention_cleanup_dry_run',
           'receipt_analysis_run_stale_cleanup_dry_run',
           'receipt_analysis_run_retention_cleanup_dry_run',
           'user_session_retention_cleanup_dry_run',
