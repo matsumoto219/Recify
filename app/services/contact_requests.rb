@@ -42,7 +42,7 @@ module ContactRequests
     end
 
     def contact_request_retention_days
-      RetentionPolicy::CONTACT_REQUEST_RETENTION_DAYS
+      RetentionPolicy.retention_days
     end
 
     def retention_cutoff(now: Time.current)

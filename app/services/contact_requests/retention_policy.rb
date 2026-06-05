@@ -1,9 +1,16 @@
 module ContactRequests
   module RetentionPolicy
-    CONTACT_REQUEST_RETENTION_DAYS = 180
+    DEFAULT_CONTACT_REQUEST_RETENTION_DAYS = 180
+    CONTACT_REQUEST_RETENTION_DAYS = DEFAULT_CONTACT_REQUEST_RETENTION_DAYS
     TERMINAL_STATUSES = %w[resolved closed].freeze
 
     class << self
+      def retention_days
+        SystemSettings.limit_for("retention.contact_requests_days")
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        DEFAULT_CONTACT_REQUEST_RETENTION_DAYS
+      end
+
       def retention_scope
         ContactRequest.where(status: TERMINAL_STATUSES)
       end
@@ -23,7 +30,7 @@ module ContactRequests
       end
 
       def retention_cutoff(now: Time.current)
-        now - CONTACT_REQUEST_RETENTION_DAYS.days
+        now - retention_days.days
       end
     end
   end

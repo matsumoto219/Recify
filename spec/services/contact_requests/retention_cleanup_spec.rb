@@ -81,6 +81,25 @@ RSpec.describe ContactRequests::RetentionCleanup do
       end
     end
 
+    it "uses the configured retention period in result metadata" do
+      create(
+        :system_setting,
+        key: "retention.contact_requests_days",
+        value: SystemSettings.stored_value(90)
+      )
+      expired = create(:contact_request, status: "resolved", handled_at: 91.days.ago)
+      create(:contact_request, status: "resolved", handled_at: 89.days.ago)
+
+      result = described_class.call(dry_run: true, now: Time.current)
+
+      aggregate_failures do
+        expect(result[:cutoff]).to eq(90.days.ago)
+        expect(result[:retention_days]).to eq(90)
+        expect(result[:candidate_count]).to eq(1)
+        expect(result[:sample_request_uids]).to contain_exactly(expired.request_uid)
+      end
+    end
+
     it "does not include PII in the result payload" do
       create(
         :contact_request,

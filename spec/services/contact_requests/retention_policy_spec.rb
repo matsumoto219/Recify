@@ -53,6 +53,21 @@ RSpec.describe ContactRequests::RetentionPolicy do
         expect(described_class.anonymizable_scope(now: now)).not_to include(recent_request)
       end
     end
+
+    it "uses the configured retention period" do
+      create(
+        :system_setting,
+        key: "retention.contact_requests_days",
+        value: SystemSettings.stored_value(90)
+      )
+      old_request = create(:contact_request, status: "resolved", handled_at: 91.days.before(now))
+      recent_request = create(:contact_request, status: "resolved", handled_at: 89.days.before(now))
+
+      aggregate_failures do
+        expect(described_class.anonymizable_scope(now: now)).to include(old_request)
+        expect(described_class.anonymizable_scope(now: now)).not_to include(recent_request)
+      end
+    end
   end
 
   describe ".retention_cutoff" do
@@ -60,8 +75,25 @@ RSpec.describe ContactRequests::RetentionPolicy do
       now = Time.zone.local(2026, 6, 5, 12, 0, 0)
 
       aggregate_failures do
+        expect(described_class::DEFAULT_CONTACT_REQUEST_RETENTION_DAYS).to eq(180)
         expect(described_class::CONTACT_REQUEST_RETENTION_DAYS).to eq(180)
+        expect(described_class.retention_days).to eq(180)
         expect(described_class.retention_cutoff(now: now)).to eq(180.days.before(now))
+      end
+    end
+
+    it "uses SystemSettings when configured" do
+      create(
+        :system_setting,
+        key: "retention.contact_requests_days",
+        value: SystemSettings.stored_value(90)
+      )
+      now = Time.zone.local(2026, 6, 5, 12, 0, 0)
+
+      aggregate_failures do
+        expect(described_class.retention_days).to eq(90)
+        expect(ContactRequests.contact_request_retention_days).to eq(90)
+        expect(described_class.retention_cutoff(now: now)).to eq(90.days.before(now))
       end
     end
   end
