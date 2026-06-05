@@ -1,23 +1,42 @@
-<nav class="rounded-lg border token-border-soft token-bg-card px-4 py-3" aria-label="<%= t("admin.navigation.aria_label") %>">
+<%
+  navigation_items = [
+    { label: t("admin.navigation.dashboard"), path: admin_root_path, icon: "dashboard" },
+    { label: t("admin.navigation.receipt_analysis_runs"), path: admin_receipt_analysis_runs_path, icon: "analytics" },
+    { label: t("admin.navigation.audit_logs"), path: admin_audit_logs_path, icon: "manage_search" },
+    { label: t("admin.navigation.contact_requests"), path: admin_contact_requests_path, icon: "contact_support" },
+    { label: t("admin.navigation.users"), path: admin_users_path, icon: "group" },
+    { label: t("admin.navigation.cleanup"), path: admin_receipt_analysis_cleanup_path, icon: "cleaning_services" },
+    { label: t("admin.navigation.system_operations"), path: admin_system_operations_path, icon: "manufacturing" },
+    { label: t("admin.navigation.system_settings"), path: admin_system_settings_path, icon: "settings" }
+  ]
+
+  base_link_class = "admin-navigation-link inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 font-semibold transition-colors hover:underline"
+%>
+
+<nav class="admin-navigation rounded-lg border token-border-soft token-bg-card px-4 py-3" aria-label="<%= t("admin.navigation.aria_label") %>">
   <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-    <div class="flex flex-wrap items-center gap-2 text-sm">
-      <%= link_to t("admin.navigation.dashboard"), admin_root_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.receipt_analysis_runs"), admin_receipt_analysis_runs_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.audit_logs"), admin_audit_logs_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.contact_requests"), admin_contact_requests_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.users"), admin_users_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.cleanup"), admin_receipt_analysis_cleanup_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.system_operations"), admin_system_operations_path, class: "font-semibold token-text-brand hover:underline" %>
-      <span class="token-text-muted" aria-hidden="true">/</span>
-      <%= link_to t("admin.navigation.system_settings"), admin_system_settings_path, class: "font-semibold token-text-brand hover:underline" %>
+    <div class="admin-navigation-items flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <% navigation_items.each_with_index do |item, index| %>
+        <% active = current_page?(item[:path]) %>
+        <% link_class = [ base_link_class, "token-text-brand", active ? "admin-navigation-current" : nil ].compact.join(" ") %>
+        <%= link_to item[:path],
+              class: link_class,
+              aria: { label: item[:label], current: active ? "page" : nil } do %>
+          <span class="admin-navigation-icon material-symbols-outlined hidden text-base leading-none" aria-hidden="true"><%= item[:icon] %></span>
+          <span class="admin-navigation-label min-w-0 break-words [overflow-wrap:anywhere]"><%= item[:label] %></span>
+        <% end %>
+
+        <% unless index == navigation_items.size - 1 %>
+          <span class="admin-navigation-separator token-text-muted" aria-hidden="true">/</span>
+        <% end %>
+      <% end %>
     </div>
 
-    <%= link_to t("admin.navigation.back_to_app"), receipts_path, class: "text-sm font-semibold token-text-muted hover:underline" %>
+    <%= link_to receipts_path,
+          class: "admin-navigation-link admin-navigation-back inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-sm font-semibold token-text-muted transition-colors hover:underline",
+          aria: { label: t("admin.navigation.back_to_app") } do %>
+      <span class="admin-navigation-icon material-symbols-outlined hidden text-base leading-none" aria-hidden="true">arrow_back</span>
+      <span class="admin-navigation-label min-w-0 break-words [overflow-wrap:anywhere]"><%= t("admin.navigation.back_to_app") %></span>
+    <% end %>
   </div>
 </nav>

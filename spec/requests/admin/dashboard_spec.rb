@@ -238,6 +238,10 @@ RSpec.describe 'Admin dashboard', type: :request do
       get admin_root_path
       document = Nokogiri::HTML(response.body)
       height_matched_cards = document.css('section.surface-card-blur.h-full.flex.flex-col')
+      admin_navigation = document.at_css('nav.admin-navigation')
+      admin_navigation_links = admin_navigation.css('a.admin-navigation-link')
+      admin_navigation_labels = admin_navigation.css('.admin-navigation-label')
+      tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -257,6 +261,15 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('data-action="service-status-polling#pollNow"')
         expect(document.at_css('[data-controller="service-status-polling"].h-full')).to be_present
         expect(document.at_css('[data-service-status-polling-target="serviceStatusCard"].h-full')).to be_present
+        expect(admin_navigation).to be_present
+        expect(admin_navigation_links.size).to eq(9)
+        expect(admin_navigation_links.all? { |link| link['aria-label'].present? }).to be(true)
+        expect(admin_navigation_labels.size).to eq(9)
+        expect(admin_navigation.at_css('a[aria-current="page"]')['href']).to eq(admin_root_path)
+        expect(admin_navigation.at_css('a[aria-current="page"]')['class']).to include('admin-navigation-current')
+        expect(tailwind_css).to include('@media (height <= 700px) and (width <= 380px)')
+        expect(tailwind_css).to include('.admin-navigation-label')
+        expect(tailwind_css).to include('.admin-navigation-current')
         expect(height_matched_cards.size).to be >= 7
         expect(response.body).to include('更新')
         expect(response.body).to include('ストレージ状態')
