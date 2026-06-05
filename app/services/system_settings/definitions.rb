@@ -95,6 +95,16 @@ module SystemSettings
         max: 1000
       ),
       Definition.new(
+        key: "security.admin_passkey_reauth_window_minutes",
+        category: "security",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 60
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",

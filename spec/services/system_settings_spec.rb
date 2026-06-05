@@ -14,6 +14,7 @@ RSpec.describe SystemSettings do
         'maintenance.mode',
         'maintenance.title',
         'maintenance.body',
+        'security.admin_passkey_reauth_window_minutes',
         'storage.keep_receipt_images_default',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
@@ -330,6 +331,12 @@ RSpec.describe SystemSettings do
           described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '201')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
+          described_class.cast_update_value('security.admin_passkey_reauth_window_minutes', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security.admin_passkey_reauth_window_minutes', '61')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
@@ -381,6 +388,16 @@ RSpec.describe SystemSettings do
         min: 0,
         max: 200,
         default: 50
+      )
+    end
+
+    it '管理者再認証期間はhigh risk設定として扱う' do
+      expect(described_class.definition_for('security.admin_passkey_reauth_window_minutes')).to have_attributes(
+        category: 'security',
+        risk_level: 'high',
+        min: 1,
+        max: 60,
+        default: 5
       )
     end
 

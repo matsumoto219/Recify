@@ -220,6 +220,25 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(note['class']).to include('[overflow-wrap:anywhere]')
       end
     end
+
+    it '管理者再認証期間をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('security.admin_passkey_reauth_window_minutes')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('security.admin_passkey_reauth_window_minutes')
+        expect(response.body).to include('security')
+        expect(response.body).to include('high')
+        expect(response.body).to include('1')
+        expect(response.body).to include('60')
+        expect(response.body).to include('5')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
   end
 
   describe 'GET /admin/system_settings/:key' do
