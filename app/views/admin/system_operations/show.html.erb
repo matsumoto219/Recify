@@ -9,15 +9,15 @@
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm md:text-base" %>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full overflow-hidden" do %>
     <div class="mb-4">
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_operations.policy.title") %></h2>
       <p class="text-sm token-text-muted"><%= t("admin.system_operations.policy.description") %></p>
     </div>
 
-    <ul class="grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
+    <ul class="grid min-w-0 max-w-full gap-3 overflow-hidden text-sm md:grid-cols-2">
       <% @dashboard.policy_items.each do |item| %>
-        <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= item %></li>
+        <li class="min-w-0 max-w-full overflow-hidden break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= item %></li>
       <% end %>
     </ul>
   <% end %>
@@ -72,35 +72,35 @@
     <% end %>
   </div>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full overflow-hidden" do %>
     <div class="mb-4">
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.system_operations.jobs.title") %></h2>
       <p class="text-sm token-text-muted"><%= t("admin.system_operations.jobs.description") %></p>
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-2">
-      <div>
+    <div class="grid min-w-0 max-w-full gap-6 overflow-hidden lg:grid-cols-2">
+      <div class="min-w-0 max-w-full overflow-hidden">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.jobs.queues") %></h3>
-        <ul class="grid gap-2 text-sm md:grid-cols-2">
+        <ul class="grid min-w-0 max-w-full gap-2 overflow-hidden text-sm md:grid-cols-2">
           <% @dashboard.queues.each do |queue| %>
-            <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
+            <li class="min-w-0 max-w-full overflow-hidden break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
           <% end %>
         </ul>
       </div>
 
-      <div>
+      <div class="min-w-0 max-w-full overflow-hidden">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.jobs.recurring_tasks") %></h3>
-        <div class="space-y-2 text-sm">
+        <div class="min-w-0 max-w-full space-y-2 overflow-hidden text-sm">
           <% @dashboard.recurring_tasks.each do |task| %>
-            <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
-              <div class="min-w-0 max-w-full break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></div>
-              <div class="min-w-0 max-w-full break-words font-semibold token-text-base [overflow-wrap:anywhere]"><%= task[:class_name] %></div>
-              <div class="min-w-0 max-w-full break-words token-text-muted [overflow-wrap:anywhere]"><%= t("admin.system_operations.jobs.recurring_task_detail", queue: task[:queue], schedule: task[:schedule], preview: task[:dry_run]) %></div>
+            <div class="min-w-0 max-w-full overflow-hidden rounded-lg border token-border-soft token-bg-card-subtle p-3">
+              <div class="min-w-0 max-w-full overflow-hidden break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></div>
+              <div class="min-w-0 max-w-full overflow-hidden break-words font-semibold token-text-base [overflow-wrap:anywhere]"><%= task[:class_name] %></div>
+              <div class="min-w-0 max-w-full overflow-hidden break-words token-text-muted [overflow-wrap:anywhere]"><%= t("admin.system_operations.jobs.recurring_task_detail", queue: task[:queue], schedule: task[:schedule], preview: task[:dry_run]) %></div>
             </div>
           <% end %>
 
           <% if @dashboard.recurring_tasks.empty? %>
-            <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-muted"><%= t("admin.system_operations.jobs.empty") %></p>
+            <p class="min-w-0 max-w-full overflow-hidden rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-muted"><%= t("admin.system_operations.jobs.empty") %></p>
           <% end %>
         </div>
       </div>
@@ -140,9 +140,9 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.locked_operations.title") %></h2>
     <p class="mb-4 text-sm token-text-muted"><%= t("admin.system_operations.locked_operations.description") %></p>
-    <ul class="grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
+    <ul class="grid min-w-0 max-w-full gap-3 overflow-hidden text-sm md:grid-cols-2">
       <% @dashboard.locked_future_operations.each do |operation| %>
-        <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]"><%= operation %></li>
+        <li class="min-w-0 max-w-full overflow-hidden break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]"><%= operation %></li>
       <% end %>
     </ul>
   <% end %>

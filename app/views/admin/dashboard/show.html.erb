@@ -213,7 +213,7 @@
     <% end %>
   </div>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full overflow-hidden" do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.system_operations.title") %></h2>
@@ -222,25 +222,25 @@
       <%= link_to t("admin.dashboard.system_operations.link"), admin_system_operations_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-2">
-      <div>
+    <div class="grid min-w-0 max-w-full gap-6 overflow-hidden lg:grid-cols-2">
+      <div class="min-w-0 max-w-full overflow-hidden">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.dashboard.system_operations.queues") %></h3>
-        <ul class="grid gap-2 text-sm md:grid-cols-2">
+        <ul class="grid min-w-0 max-w-full gap-2 overflow-hidden text-sm md:grid-cols-2">
           <% system_operations[:queues].each do |queue| %>
-            <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
+            <li class="min-w-0 max-w-full overflow-hidden break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= queue %></li>
           <% end %>
         </ul>
       </div>
 
-      <div>
+      <div class="min-w-0 max-w-full overflow-hidden">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.dashboard.system_operations.recurring_summary") %></h3>
         <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-base">
           <%= t("admin.dashboard.system_operations.recurring_tasks") %>:
           <span class="font-mono font-bold"><%= system_operations[:recurring_dry_run_count] %></span>
         </p>
-        <div class="mt-3 flex flex-wrap gap-2 text-sm">
+        <div class="mt-3 flex min-w-0 max-w-full flex-wrap gap-2 overflow-hidden text-sm">
           <% system_operations[:recurring_tasks].first(3).each do |task| %>
-            <span class="min-w-0 max-w-full break-words rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></span>
+            <span class="inline-flex min-w-0 max-w-full overflow-hidden break-words whitespace-normal rounded-lg border token-border-soft px-3 py-2 font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= task[:key] %></span>
           <% end %>
         </div>
       </div>
@@ -250,9 +250,9 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.dashboard.locked_operations.title") %></h2>
     <p class="mb-4 text-sm token-text-muted"><%= t("admin.dashboard.locked_operations.description") %></p>
-    <ul class="grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
+    <ul class="grid min-w-0 max-w-full gap-3 overflow-hidden text-sm md:grid-cols-2 lg:grid-cols-3">
       <% @dashboard.locked_future_operations.each do |operation| %>
-        <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]"><%= operation %></li>
+        <li class="min-w-0 max-w-full overflow-hidden break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]"><%= operation %></li>
       <% end %>
     </ul>
   <% end %>
