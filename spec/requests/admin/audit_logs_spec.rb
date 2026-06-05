@@ -85,6 +85,7 @@ RSpec.describe 'Admin audit logs', type: :request do
         expect(response.body).to include('通常画面へ戻る')
         expect(response.body).to include(log.action)
         expect(response.body).to include('rcpt_index')
+        expect(response.body).to include('min-w-[14rem] max-w-xs break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]')
       end
     end
 

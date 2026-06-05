@@ -178,7 +178,7 @@
           <tr class="border-b token-border-soft">
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.audit_logs.index.table.created") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.actor") %></th>
-            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.audit_logs.index.table.action") %></th>
+            <th class="px-3 py-2 font-semibold min-w-[14rem] max-w-xs"><%= t("admin.audit_logs.index.table.action") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.outcome") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.audit_logs.index.table.target") %></th>
             <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.audit_logs.index.table.error") %></th>
@@ -196,7 +196,7 @@
                 <div class="token-text-base"><%= record.dig(:actor, :kind) %></div>
                 <div class="font-mono text-xs token-text-muted"><%= record.dig(:actor, :user_id).present? ? "##{record.dig(:actor, :user_id)}" : "-" %></div>
               </td>
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:action] %></td>
+              <td class="min-w-[14rem] max-w-xs break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]"><%= record[:action] %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:outcome] %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                 <div class="token-text-base"><%= record[:target_uid].presence || "-" %></div>
