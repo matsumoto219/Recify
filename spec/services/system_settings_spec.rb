@@ -17,11 +17,14 @@ RSpec.describe SystemSettings do
         'storage.keep_receipt_images_default',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
+        'limits.manual_receipts_per_day',
+        'limits.receipt_items_per_receipt',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
         'limits.retry_operations_per_day',
         'limits.guest_receipt_uploads_per_day',
+        'limits.guest_manual_receipts_per_day',
         'limits.guest_batch_files_per_day',
         'limits.guest_ocr_jobs_per_day',
         'limits.guest_ai_jobs_per_day',
@@ -228,11 +231,14 @@ RSpec.describe SystemSettings do
     it 'usage limit defaultをintegerで返す' do
       aggregate_failures do
         expect(described_class.limit_for('limits.receipt_uploads_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.manual_receipts_per_day')).to eq(50)
+        expect(described_class.limit_for('limits.receipt_items_per_receipt')).to eq(100)
         expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ocr_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ai_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.retry_operations_per_day')).to eq(20)
         expect(described_class.limit_for('limits.guest_receipt_uploads_per_day')).to eq(5)
+        expect(described_class.limit_for('limits.guest_manual_receipts_per_day')).to eq(5)
         expect(described_class.limit_for('limits.guest_batch_files_per_day')).to eq(5)
         expect(described_class.limit_for('limits.guest_ocr_jobs_per_day')).to eq(5)
         expect(described_class.limit_for('limits.guest_ai_jobs_per_day')).to eq(5)

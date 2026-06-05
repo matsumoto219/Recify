@@ -123,6 +123,26 @@ module SystemSettings
         max: 1000
       ),
       Definition.new(
+        key: "limits.manual_receipts_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.receipt_items_per_receipt",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 100,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 1000
+      ),
+      Definition.new(
         key: "limits.batch_files_per_day",
         category: "usage_limit",
         value_type: "integer",
@@ -164,6 +184,16 @@ module SystemSettings
       ),
       Definition.new(
         key: "limits.guest_receipt_uploads_per_day",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.guest_manual_receipts_per_day",
         category: "usage_limit",
         value_type: "integer",
         default: 5,

@@ -5,6 +5,8 @@ RSpec.describe UserLimits do
     it 'user別override対象keyだけを返す' do
       expect(described_class.definitions.keys).to contain_exactly(
         'receipt_uploads_per_day',
+        'manual_receipts_per_day',
+        'receipt_items_per_receipt',
         'batch_files_per_day',
         'ocr_jobs_per_day',
         'ai_jobs_per_day',
@@ -90,11 +92,14 @@ RSpec.describe UserLimits do
       guest = create(:user, guest: true)
 
       aggregate_failures do
-        %w[receipt_uploads_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
+        %w[receipt_uploads_per_day manual_receipts_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
           entry = described_class.entry_for(user: guest, key: key)
           expect(entry.value).to eq(5)
           expect(entry.source).to eq('guest_global_default')
         end
+        entry = described_class.entry_for(user: guest, key: 'receipt_items_per_receipt')
+        expect(entry.value).to eq(100)
+        expect(entry.source).to eq('global_default')
       end
     end
 
@@ -102,11 +107,14 @@ RSpec.describe UserLimits do
       user = create(:user)
 
       aggregate_failures do
-        %w[receipt_uploads_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
+        %w[receipt_uploads_per_day manual_receipts_per_day batch_files_per_day ocr_jobs_per_day ai_jobs_per_day].each do |key|
           entry = described_class.entry_for(user: user, key: key)
           expect(entry.value).to eq(50)
           expect(entry.source).to eq('global_default')
         end
+        entry = described_class.entry_for(user: user, key: 'receipt_items_per_receipt')
+        expect(entry.value).to eq(100)
+        expect(entry.source).to eq('global_default')
       end
     end
 

@@ -628,6 +628,8 @@ ja:
             guest_global_default: ゲスト上限
           keys:
             receipt_uploads_per_day: レシートアップロード数 / 日
+            manual_receipts_per_day: 手動レシート作成数 / 日
+            receipt_items_per_receipt: 明細数 / レシート
             batch_files_per_day: 複数画像アップロード数 / 日
             ocr_jobs_per_day: OCR解析数 / 日
             ai_jobs_per_day: AI補完数 / 日

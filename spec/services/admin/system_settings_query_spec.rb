@@ -41,11 +41,14 @@ RSpec.describe Admin::SystemSettingsQuery do
 
       expect(result.records.map { |record| record[:key] }).to contain_exactly(
         'limits.receipt_uploads_per_day',
+        'limits.manual_receipts_per_day',
+        'limits.receipt_items_per_receipt',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
         'limits.retry_operations_per_day',
         'limits.guest_receipt_uploads_per_day',
+        'limits.guest_manual_receipts_per_day',
         'limits.guest_batch_files_per_day',
         'limits.guest_ocr_jobs_per_day',
         'limits.guest_ai_jobs_per_day',

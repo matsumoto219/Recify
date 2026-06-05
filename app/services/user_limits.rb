@@ -35,6 +35,19 @@ module UserLimits
       max: 1000
     ),
     Definition.new(
+      key: "manual_receipts_per_day",
+      system_setting_key: "limits.manual_receipts_per_day",
+      guest_system_setting_key: "limits.guest_manual_receipts_per_day",
+      min: 1,
+      max: 1000
+    ),
+    Definition.new(
+      key: "receipt_items_per_receipt",
+      system_setting_key: "limits.receipt_items_per_receipt",
+      min: 1,
+      max: 1000
+    ),
+    Definition.new(
       key: "batch_files_per_day",
       system_setting_key: "limits.batch_files_per_day",
       guest_system_setting_key: "limits.guest_batch_files_per_day",
