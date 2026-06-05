@@ -23,6 +23,8 @@
       "usage_limit_safety_note"
     elsif @record[:key].to_s == "limits.receipt_adjustments_per_receipt"
       "receipt_adjustments_limit_note"
+    elsif @record[:key].to_s == "limits.receipt_payments_per_receipt"
+      "receipt_payments_limit_note"
     end
   setting_notice = setting_notice_key.present? ? t("admin.system_settings.show.#{setting_notice_key}") : nil
 %>

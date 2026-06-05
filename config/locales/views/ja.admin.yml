@@ -495,6 +495,7 @@ ja:
         snapshot_limit_note: snapshot上限を大きくすると解析snapshotのjsonbサイズが増えます。receipt_items_per_receipt の最大値以上に設定してください。
         usage_limit_safety_note: UserLimitsで設定できる最大値のシステム上限です。アップロード、OCR、AI、ストレージのコストに直結するため、変更前に関連する利用上限とユーザー別上限を確認してください。
         receipt_adjustments_limit_note: 1レシートに保存できる調整行の最大数です。値引き・返品・調整行が大量にある特殊ケース向けで、大きくしすぎると金額計算や確認画面が重くなる可能性があります。
+        receipt_payments_limit_note: 1レシートに保存できる支払い情報の最大数です。OCRのPayments配列が異常に多い場合のDB肥大化を防ぎます。大きくしすぎると解析snapshotや管理画面表示が重くなる可能性があります。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。
