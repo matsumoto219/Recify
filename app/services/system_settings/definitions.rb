@@ -213,6 +213,16 @@ module SystemSettings
         max: 90
       ),
       Definition.new(
+        key: "retention.user_sessions_days",
+        category: "retention",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "medium",
+        min: 30,
+        max: 365
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",

@@ -26,6 +26,7 @@ RSpec.describe SystemSettings do
         'limits.notifications_per_user',
         'retention.notifications_read_days',
         'retention.guest_users_days',
+        'retention.user_sessions_days',
         'limits.max_uploads_per_day',
         'limits.max_ocr_per_day',
         'limits.max_ai_per_day',
@@ -252,6 +253,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
         expect(described_class.limit_for('retention.notifications_read_days')).to eq(30)
         expect(described_class.limit_for('retention.guest_users_days')).to eq(7)
+        expect(described_class.limit_for('retention.user_sessions_days')).to eq(90)
         expect(described_class.limit_for('limits.max_uploads_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ocr_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ai_per_day')).to eq(1000)
@@ -346,6 +348,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.notifications_read_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.guest_users_days', '1')).to eq(1)
         expect(described_class.cast_update_value('retention.guest_users_days', '90')).to eq(90)
+        expect(described_class.cast_update_value('retention.user_sessions_days', '30')).to eq(30)
+        expect(described_class.cast_update_value('retention.user_sessions_days', '365')).to eq(365)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.max_uploads_per_day', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.max_ocr_per_day', '50')).to eq(50)
@@ -395,6 +399,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('retention.guest_users_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('retention.user_sessions_days', '29')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('retention.user_sessions_days', '366')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.max_uploads_per_day', '49')
@@ -589,6 +599,16 @@ RSpec.describe SystemSettings do
         min: 1,
         max: 90,
         default: 7
+      )
+    end
+
+    it 'セッション保持期間はmedium risk設定として扱う' do
+      expect(described_class.definition_for('retention.user_sessions_days')).to have_attributes(
+        category: 'retention',
+        risk_level: 'medium',
+        min: 30,
+        max: 365,
+        default: 90
       )
     end
 

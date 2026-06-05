@@ -31,6 +31,8 @@
       "notifications_read_retention_note"
     elsif @record[:key].to_s == "retention.guest_users_days"
       "guest_users_retention_note"
+    elsif @record[:key].to_s == "retention.user_sessions_days"
+      "user_sessions_retention_note"
     end
   setting_notice = setting_notice_key.present? ? t("admin.system_settings.show.#{setting_notice_key}") : nil
 %>

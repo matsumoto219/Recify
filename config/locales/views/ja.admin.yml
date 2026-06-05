@@ -499,6 +499,7 @@ ja:
         notifications_limit_note: 1ユーザーあたりDBに保持する通知の最大件数です。通知一覧の1回表示件数とは別で、大きくしすぎると通知一覧とDB容量に影響する可能性があります。
         notifications_read_retention_note: 既読通知を保持する日数です。未読通知はこの保持期間では削除されません。1ユーザーあたりの通知保持件数とは別設定です。
         guest_users_retention_note: ゲストユーザーと関連データを保持する日数です。期間を長くすると本登録前のデータ保持期間は伸びますが、ストレージ使用量も増える可能性があります。
+        user_sessions_retention_note: ユーザーセッション履歴を保持する日数です。active session保護期間(30日)以上である必要があります。短くすると履歴確認期間が短くなります。
         current:
           title: 現在値
           description: 現在の設定値と既定値を確認できます。
