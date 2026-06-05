@@ -1264,6 +1264,24 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '一括アップロード件数上限の設定値をUIへ渡す' do
+      create(:system_setting, key: 'limits.batch_upload_max_files', value: SystemSettings.stored_value(10))
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      upload_root = document.at_css('[data-controller~="receipt-upload"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(upload_root['data-receipt-upload-max-file-count-value']).to eq('10')
+        expect(upload_root['data-receipt-upload-max-file-count-message-value']).to eq(I18n.t('receipts.new_upload.js.max_files', max: 10))
+        expect(response.body).to include(I18n.t('receipts.new_upload.multiple_hint', max: 10))
+      end
+    end
+
     it 'OCR down時は警告を表示しアップロード操作をdisabledにする' do
       allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })

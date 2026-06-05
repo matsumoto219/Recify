@@ -1,5 +1,6 @@
 class ReceiptBatchUploadService
-  MAX_FILES = 5
+  DEFAULT_MAX_FILES = 5
+  MAX_FILES = DEFAULT_MAX_FILES
   private_constant :MAX_FILES
 
   Result = Struct.new(:created_receipts, :errors, keyword_init: true) do
@@ -17,7 +18,9 @@ class ReceiptBatchUploadService
   end
 
   def self.max_files
-    MAX_FILES
+    SystemSettings.limit_for("limits.batch_upload_max_files")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    DEFAULT_MAX_FILES
   end
 
   def initialize(user:, files:)
@@ -27,7 +30,7 @@ class ReceiptBatchUploadService
 
   def call
     return failure(I18n.t("receipts.batch_upload.errors.empty")) if files.blank?
-    return failure(I18n.t("receipts.batch_upload.errors.too_many", max: MAX_FILES)) if files.size > MAX_FILES
+    return failure(I18n.t("receipts.batch_upload.errors.too_many", max: max_files)) if files.size > max_files
     return failure(I18n.t("receipts.batch_upload.errors.quota_exceeded")) unless storage_quota_available?
 
     create_receipts
@@ -38,6 +41,10 @@ class ReceiptBatchUploadService
   private
 
   attr_reader :user, :files
+
+  def max_files
+    self.class.max_files
+  end
 
   def create_receipts
     created_receipts = []

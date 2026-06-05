@@ -164,6 +164,40 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it 'SystemSettingsの最大件数を適用する' do
+    create(:system_setting, key: 'limits.batch_upload_max_files', value: SystemSettings.stored_value(10))
+    allowed_files = Array.new(10) { uploaded_receipt_fixture }
+    too_many_files = Array.new(11) { uploaded_receipt_fixture }
+
+    allowed_result = described_class.call(user:, files: allowed_files)
+    too_many_result = described_class.call(user:, files: too_many_files)
+
+    aggregate_failures do
+      expect(described_class.max_files).to eq(10)
+      expect(allowed_result).to be_success
+      expect(allowed_result.count).to eq(10)
+      expect(too_many_result).not_to be_success
+      expect(too_many_result.errors).to include(I18n.t('receipts.batch_upload.errors.too_many', max: 10))
+    end
+  end
+
+  it 'SystemSettingsの最大値20件まで許可し21件は拒否する' do
+    create(:system_setting, key: 'limits.batch_upload_max_files', value: SystemSettings.stored_value(20))
+    allowed_files = Array.new(20) { uploaded_receipt_fixture }
+    too_many_files = Array.new(21) { uploaded_receipt_fixture }
+
+    allowed_result = described_class.call(user:, files: allowed_files)
+    too_many_result = described_class.call(user:, files: too_many_files)
+
+    aggregate_failures do
+      expect(described_class.max_files).to eq(20)
+      expect(allowed_result).to be_success
+      expect(allowed_result.count).to eq(20)
+      expect(too_many_result).not_to be_success
+      expect(too_many_result.errors).to include(I18n.t('receipts.batch_upload.errors.too_many', max: 20))
+    end
+  end
+
   it '1件でもvalidation errorがあればall-or-nothingでrollbackする' do
     files = [
       uploaded_receipt_fixture,
