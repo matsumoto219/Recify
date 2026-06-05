@@ -19,6 +19,7 @@ RSpec.describe SystemSettings do
         'limits.receipt_uploads_per_day',
         'limits.manual_receipts_per_day',
         'limits.receipt_items_per_receipt',
+        'limits.receipt_adjustments_per_receipt',
         'limits.snapshot_ocr_items_max',
         'limits.snapshot_ai_normalized_items_max',
         'limits.batch_files_per_day',
@@ -235,6 +236,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_uploads_per_day')).to eq(50)
         expect(described_class.limit_for('limits.manual_receipts_per_day')).to eq(50)
         expect(described_class.limit_for('limits.receipt_items_per_receipt')).to eq(100)
+        expect(described_class.limit_for('limits.receipt_adjustments_per_receipt')).to eq(50)
         expect(described_class.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.snapshot_ai_normalized_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
@@ -313,11 +315,19 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '0')).to eq(0)
+        expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '200')).to eq(200)
         expect {
           described_class.cast_update_value('limits.snapshot_ocr_items_max', '99')
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '-1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '201')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
@@ -362,6 +372,16 @@ RSpec.describe SystemSettings do
           max: 10_000
         )
       end
+    end
+
+    it '調整行件数上限はmedium risk設定として扱う' do
+      expect(described_class.definition_for('limits.receipt_adjustments_per_receipt')).to have_attributes(
+        category: 'usage_limit',
+        risk_level: 'medium',
+        min: 0,
+        max: 200,
+        default: 50
+      )
     end
 
     it 'stringのmaxを検証する' do

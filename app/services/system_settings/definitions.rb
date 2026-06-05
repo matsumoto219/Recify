@@ -143,6 +143,16 @@ module SystemSettings
         max: 10_000
       ),
       Definition.new(
+        key: "limits.receipt_adjustments_per_receipt",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "medium",
+        min: 0,
+        max: 200
+      ),
+      Definition.new(
         key: "limits.snapshot_ocr_items_max",
         category: "snapshot_limit",
         value_type: "integer",
