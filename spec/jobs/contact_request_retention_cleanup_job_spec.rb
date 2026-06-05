@@ -91,6 +91,50 @@ RSpec.describe ContactRequestRetentionCleanupJob, type: :job do
     end
   end
 
+  it "SystemSettingsの保持期間をdry-run audit metadataへ反映しPIIを残さない" do
+    create(
+      :system_setting,
+      key: "retention.contact_requests_days",
+      value: SystemSettings.stored_value(90)
+    )
+    expired = create(
+      :contact_request,
+      status: "resolved",
+      handled_at: 91.days.ago,
+      email: "secret@example.com",
+      body: "secret body",
+      user_agent: "Sensitive Browser"
+    )
+    create(:contact_request, status: "resolved", handled_at: 89.days.ago)
+
+    expect do
+      described_class.perform_now
+    end.to change(AuditLog, :count).by(1)
+
+    audit_log = AuditLog.last
+    metadata_json = audit_log.metadata.to_json
+
+    aggregate_failures do
+      expect(audit_log).to have_attributes(
+        actor_kind: "system",
+        action: "contact_requests.retention_cleanup.dry_run",
+        outcome: "succeeded"
+      )
+      expect(audit_log.metadata).to include(
+        "dry_run" => true,
+        "retention_days" => 90,
+        "candidate_count" => 1,
+        "anonymized_count" => 0,
+        "failed_count" => 0
+      )
+      expect(audit_log.metadata["cutoff"]).to eq(90.days.ago.iso8601)
+      expect(metadata_json).not_to include(expired.request_uid)
+      expect(metadata_json).not_to include("secret@example.com")
+      expect(metadata_json).not_to include("secret body")
+      expect(metadata_json).not_to include("Sensitive Browser")
+    end
+  end
+
   it "cleanup失敗時にfailed auditを残して例外を再raiseする" do
     error = StandardError.new("boom")
     allow(ContactRequests).to receive(:cleanup_retention).and_raise(error)
