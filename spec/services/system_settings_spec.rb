@@ -24,6 +24,7 @@ RSpec.describe SystemSettings do
         'limits.receipt_payments_per_receipt',
         'limits.receipt_tax_details_per_receipt',
         'limits.notifications_per_user',
+        'limits.batch_upload_max_files',
         'retention.notifications_read_days',
         'retention.guest_users_days',
         'retention.user_sessions_days',
@@ -255,6 +256,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_payments_per_receipt')).to eq(20)
         expect(described_class.limit_for('limits.receipt_tax_details_per_receipt')).to eq(20)
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
+        expect(described_class.limit_for('limits.batch_upload_max_files')).to eq(5)
         expect(described_class.limit_for('retention.notifications_read_days')).to eq(30)
         expect(described_class.limit_for('retention.guest_users_days')).to eq(7)
         expect(described_class.limit_for('retention.user_sessions_days')).to eq(90)
@@ -352,6 +354,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.notifications_per_user', '20')).to eq(20)
         expect(described_class.cast_update_value('limits.notifications_per_user', '500')).to eq(500)
+        expect(described_class.cast_update_value('limits.batch_upload_max_files', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.batch_upload_max_files', '20')).to eq(20)
         expect(described_class.cast_update_value('retention.notifications_read_days', '1')).to eq(1)
         expect(described_class.cast_update_value('retention.notifications_read_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.guest_users_days', '1')).to eq(1)
@@ -403,6 +407,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.notifications_per_user', '501')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.batch_upload_max_files', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.batch_upload_max_files', '21')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('retention.notifications_read_days', '0')
@@ -657,6 +667,16 @@ RSpec.describe SystemSettings do
         min: 20,
         max: 500,
         default: 100
+      )
+    end
+
+    it '一括アップロード件数上限はmedium risk設定として扱う' do
+      expect(described_class.definition_for('limits.batch_upload_max_files')).to have_attributes(
+        category: 'usage_limit',
+        risk_level: 'medium',
+        min: 1,
+        max: 20,
+        default: 5
       )
     end
 

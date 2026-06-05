@@ -141,6 +141,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('limits.receipt_uploads_per_day')
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')
         expect(response.body).to include('limits.notifications_per_user')
+        expect(response.body).to include('limits.batch_upload_max_files')
         expect(response.body).to include('retention.notifications_read_days')
         expect(response.body).to include('retention.guest_users_days')
         expect(response.body).to include('retention.user_sessions_days')
@@ -327,6 +328,32 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('100')
         expect(note.text).to include('1ユーザーあたりDBに保持する通知の最大件数')
         expect(note.text).to include('通知一覧の1回表示件数とは別')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it '一括アップロード件数上限をmedium risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('limits.batch_upload_max_files')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('limits.batch_upload_max_files')
+        expect(response.body).to include('usage_limit')
+        expect(response.body).to include('medium')
+        expect(response.body).to include('1')
+        expect(response.body).to include('20')
+        expect(response.body).to include('5')
+        expect(note.text).to include('1回の操作でアップロードできる最大ファイル数')
+        expect(note.text).to include('日次アップロード上限、OCR/AIの日次上限、ストレージ上限とは別設定')
         expect(note['class']).to include('min-w-0')
         expect(note['class']).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('パスキー再認証')

@@ -32,6 +32,8 @@
       "receipt_payments_limit_note"
     elsif @record[:key].to_s == "limits.notifications_per_user"
       "notifications_limit_note"
+    elsif @record[:key].to_s == "limits.batch_upload_max_files"
+      "batch_upload_max_files_note"
     elsif @record[:key].to_s == "retention.notifications_read_days"
       "notifications_read_retention_note"
     elsif @record[:key].to_s == "retention.guest_users_days"

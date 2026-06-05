@@ -193,6 +193,16 @@ module SystemSettings
         max: 500
       ),
       Definition.new(
+        key: "limits.batch_upload_max_files",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 20
+      ),
+      Definition.new(
         key: "retention.notifications_read_days",
         category: "retention",
         value_type: "integer",
