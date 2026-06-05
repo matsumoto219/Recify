@@ -275,6 +275,37 @@ RSpec.describe Notification, type: :model do
       end
     end
 
+    it '通知保持件数設定が20なら最新20件を残して古い既読通知を削除する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      user = create(:user)
+      other_user = create(:user)
+      old_notifications = insert_notifications_for(user, count: 21, read_at: 1.day.ago)
+      insert_notifications_for(other_user, count: 21, read_at: 1.day.ago)
+
+      deleted_count = described_class.prune_for_user!(user, broadcast: false)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(1)
+        expect(user.notifications.count).to eq(20)
+        expect(other_user.notifications.count).to eq(21)
+        expect(described_class.exists?(old_notifications.first[:id])).to be(false)
+      end
+    end
+
+    it '通知保持件数設定が500なら最新500件を残して古い既読通知を削除する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(500))
+      user = create(:user)
+      old_notifications = insert_notifications_for(user, count: 501, read_at: 1.day.ago)
+
+      deleted_count = described_class.prune_for_user!(user, broadcast: false)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(1)
+        expect(user.notifications.count).to eq(500)
+        expect(described_class.exists?(old_notifications.first[:id])).to be(false)
+      end
+    end
+
     it '100件超でも未読通知は削除しない' do
       user = create(:user)
       insert_notifications_for(user, count: 100, read_at: 1.day.ago)
