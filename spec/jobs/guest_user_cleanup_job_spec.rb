@@ -42,6 +42,34 @@ RSpec.describe GuestUserCleanupJob, type: :job do
       end
     end
 
+    it '保持期間設定が30日なら31日前のguestを削除し29日前のguestは残す' do
+      create(:system_setting, key: 'retention.guest_users_days', value: SystemSettings.stored_value(30))
+      old_guest = create(:user, guest: true, last_sign_in_at: 31.days.ago)
+      recent_guest = create(:user, guest: true, last_sign_in_at: 29.days.ago)
+
+      result = described_class.perform_now
+
+      aggregate_failures do
+        expect(User.exists?(old_guest.id)).to be(false)
+        expect(User.exists?(recent_guest.id)).to be(true)
+        expect(result).to eq(deleted_count: 1, failed_count: 0)
+      end
+    end
+
+    it '保持期間設定が90日なら91日前のguestを削除し89日前のguestは残す' do
+      create(:system_setting, key: 'retention.guest_users_days', value: SystemSettings.stored_value(90))
+      old_guest = create(:user, guest: true, last_sign_in_at: 91.days.ago)
+      recent_guest = create(:user, guest: true, last_sign_in_at: 89.days.ago)
+
+      result = described_class.perform_now
+
+      aggregate_failures do
+        expect(User.exists?(old_guest.id)).to be(false)
+        expect(User.exists?(recent_guest.id)).to be(true)
+        expect(result).to eq(deleted_count: 1, failed_count: 0)
+      end
+    end
+
     it '通常ユーザーは削除しない' do
       regular_user = create(:user, guest: false, last_sign_in_at: 8.days.ago)
 

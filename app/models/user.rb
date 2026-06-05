@@ -30,7 +30,8 @@ class User < ApplicationRecord
 
   THEME_PREFERENCES = %w[system light dark].freeze
   ROUNDING_MODES = %w[floor round ceil].freeze
-  GUEST_CLEANUP_RETENTION_PERIOD = 7.days
+  DEFAULT_GUEST_CLEANUP_RETENTION_DAYS = 7
+  GUEST_CLEANUP_RETENTION_PERIOD = DEFAULT_GUEST_CLEANUP_RETENTION_DAYS.days
   LEGAL_TERMS_VERSION = "2026-05-23"
   LEGAL_PRIVACY_VERSION = "2026-05-23"
 
@@ -47,7 +48,13 @@ class User < ApplicationRecord
 
   before_validation :record_legal_acceptance, if: -> { legal_agreement_required? && legal_agreement_accepted? }
 
-  scope :guest_cleanup_candidates, ->(cutoff = GUEST_CLEANUP_RETENTION_PERIOD.ago) {
+  def self.guest_cleanup_retention_period
+    SystemSettings.limit_for("retention.guest_users_days").days
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    GUEST_CLEANUP_RETENTION_PERIOD
+  end
+
+  scope :guest_cleanup_candidates, ->(cutoff = guest_cleanup_retention_period.ago) {
     where(guest: true)
       .where.not(confirmed_at: nil)
       .where("COALESCE(last_sign_in_at, updated_at) <= ?", cutoff)
