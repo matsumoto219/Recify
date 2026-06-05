@@ -128,6 +128,27 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
       end
     end
 
+    it 'SystemSettingsの保持期間でexpires_atを設定する' do
+      create(:system_setting, key: 'retention.analysis_runs_short_days', value: SystemSettings.stored_value(7))
+      create(:system_setting, key: 'retention.analysis_runs_default_days', value: SystemSettings.stored_value(45))
+      create(:system_setting, key: 'retention.analysis_runs_failed_days', value: SystemSettings.stored_value(120))
+
+      succeeded = create(:receipt_analysis_run, :succeeded)
+      failed = create(:receipt_analysis_run, :failed)
+      superseded = create(:receipt_analysis_run, :superseded)
+      admin_retry = create(:receipt_analysis_run, :admin_retry, :succeeded)
+
+      aggregate_failures do
+        expect(described_class.short_retention_period).to eq(7.days)
+        expect(described_class.default_retention_period).to eq(45.days)
+        expect(described_class.long_retention_period).to eq(120.days)
+        expect(succeeded.expires_at).to eq(45.days.from_now)
+        expect(failed.expires_at).to eq(120.days.from_now)
+        expect(superseded.expires_at).to eq(7.days.from_now)
+        expect(admin_retry.expires_at).to eq(120.days.from_now)
+      end
+    end
+
     it '明示されたexpires_atは上書きしない' do
       expires_at = 7.days.from_now
       run = create(:receipt_analysis_run, expires_at:)

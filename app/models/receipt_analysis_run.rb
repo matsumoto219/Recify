@@ -31,9 +31,12 @@ class ReceiptAnalysisRun < ApplicationRecord
   LONG_RETENTION_SOURCES = %w[admin_retry].freeze
   LONG_RETENTION_RECEIPT_STATUSES = %w[review_needed failed].freeze
 
-  DEFAULT_RETENTION_PERIOD = 30.days
-  SHORT_RETENTION_PERIOD = 14.days
-  LONG_RETENTION_PERIOD = 90.days
+  SHORT_RETENTION_DAYS = 14
+  DEFAULT_RETENTION_DAYS = 30
+  LONG_RETENTION_DAYS = 90
+  SHORT_RETENTION_PERIOD = SHORT_RETENTION_DAYS.days
+  DEFAULT_RETENTION_PERIOD = DEFAULT_RETENTION_DAYS.days
+  LONG_RETENTION_PERIOD = LONG_RETENTION_DAYS.days
 
   # Store only bounded, sanitized summaries/snapshots here. Do not persist Azure
   # raw response bodies, headers, Operation-Location URLs, endpoints, API keys,
@@ -85,12 +88,30 @@ class ReceiptAnalysisRun < ApplicationRecord
     normalized_source = source.to_s
     normalized_receipt_status = receipt_status.to_s
 
-    return LONG_RETENTION_PERIOD if LONG_RETENTION_SOURCES.include?(normalized_source)
-    return LONG_RETENTION_PERIOD if LONG_RETENTION_STATUSES.include?(normalized_status)
-    return LONG_RETENTION_PERIOD if LONG_RETENTION_RECEIPT_STATUSES.include?(normalized_receipt_status)
-    return SHORT_RETENTION_PERIOD if SHORT_RETENTION_STATUSES.include?(normalized_status)
+    return long_retention_period if LONG_RETENTION_SOURCES.include?(normalized_source)
+    return long_retention_period if LONG_RETENTION_STATUSES.include?(normalized_status)
+    return long_retention_period if LONG_RETENTION_RECEIPT_STATUSES.include?(normalized_receipt_status)
+    return short_retention_period if SHORT_RETENTION_STATUSES.include?(normalized_status)
 
-    DEFAULT_RETENTION_PERIOD
+    default_retention_period
+  end
+
+  def self.short_retention_period
+    retention_days_for("retention.analysis_runs_short_days", SHORT_RETENTION_DAYS).days
+  end
+
+  def self.default_retention_period
+    retention_days_for("retention.analysis_runs_default_days", DEFAULT_RETENTION_DAYS).days
+  end
+
+  def self.long_retention_period
+    retention_days_for("retention.analysis_runs_failed_days", LONG_RETENTION_DAYS).days
+  end
+
+  def self.retention_days_for(key, default_days)
+    SystemSettings.limit_for(key)
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    default_days
   end
 
   def active?

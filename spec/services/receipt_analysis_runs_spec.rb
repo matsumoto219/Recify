@@ -940,6 +940,31 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'SystemSettingsの保持期間でterminal遷移時のexpires_atを更新する' do
+      create(:system_setting, key: 'retention.analysis_runs_short_days', value: SystemSettings.stored_value(7))
+      create(:system_setting, key: 'retention.analysis_runs_default_days', value: SystemSettings.stored_value(45))
+      create(:system_setting, key: 'retention.analysis_runs_failed_days', value: SystemSettings.stored_value(120))
+      completed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      review_needed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      failed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      superseded_run = described_class.start(receipt: create(:receipt), source: 'upload').run
+      finalized_at = Time.zone.parse('2026-05-23 10:05:00')
+
+      described_class.record_final_result(completed_run, receipt_attributes: { status: 'completed' }, at: finalized_at)
+      described_class.record_final_result(review_needed_run, receipt_attributes: { status: 'review_needed' }, at: finalized_at)
+      described_class.succeed(completed_run, at: finalized_at)
+      described_class.succeed(review_needed_run, at: finalized_at)
+      described_class.fail(failed_run, error_stage: 'ai', error_code: 'ai_api_error', at: finalized_at)
+      described_class.supersede(superseded_run, at: finalized_at)
+
+      aggregate_failures do
+        expect(completed_run.reload.expires_at).to eq(finalized_at + 45.days)
+        expect(review_needed_run.reload.expires_at).to eq(finalized_at + 120.days)
+        expect(failed_run.reload.expires_at).to eq(finalized_at + 120.days)
+        expect(superseded_run.reload.expires_at).to eq(finalized_at + 7.days)
+      end
+    end
+
     it 'failed / superseded / canceled のterminal状態に遷移できる' do
       failed_run = described_class.start(receipt: create(:receipt), source: 'upload').run
       superseded_run = described_class.start(receipt: create(:receipt), source: 'upload').run
