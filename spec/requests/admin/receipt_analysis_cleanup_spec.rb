@@ -172,6 +172,24 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
       end
     end
 
+    it '空状態は横スクロールtable内ではなく折り返し可能なブロックで表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_receipt_analysis_cleanup_path
+
+      empty_state_class = 'max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]'
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('admin.receipt_analysis_cleanup.stale.empty'))
+        expect(response.body).to include(I18n.t('admin.receipt_analysis_cleanup.retention.empty'))
+        expect(response.body).to include(empty_state_class)
+        expect(response.body).not_to include('colspan="5"')
+        expect(response.body).not_to include('colspan="4"')
+      end
+    end
+
     it 'raw/prompt/secret系を表示しない' do
       admin = create(:user, :admin)
       run = create_stale_run

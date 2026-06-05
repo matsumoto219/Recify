@@ -158,38 +158,38 @@
       </div>
     </dl>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
-        <thead class="token-text-muted">
-          <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.receipt_status") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.stale.updated_at") %></th>
-          </tr>
-        </thead>
-        <tbody>
-          <% stale_records.each do |record| %>
+    <% if stale_records.any? %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="token-text-muted">
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 font-mono text-xs">
-                <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
-              </td>
-              <td class="px-3 py-3"><%= record[:status] %></td>
-              <td class="px-3 py-3"><%= record[:stage] %></td>
-              <td class="px-3 py-3"><%= record[:receipt_status] %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= record[:updated_at].present? ? l(record[:updated_at], format: :short) : "-" %></td>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.receipt_status") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.stale.updated_at") %></th>
             </tr>
-          <% end %>
-
-          <% if stale_records.empty? %>
-            <tr>
-              <td colspan="5" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.empty") %></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            <% stale_records.each do |record| %>
+              <tr class="border-b token-border-soft">
+                <td class="px-3 py-3 font-mono text-xs">
+                  <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
+                </td>
+                <td class="px-3 py-3"><%= record[:status] %></td>
+                <td class="px-3 py-3"><%= record[:stage] %></td>
+                <td class="px-3 py-3"><%= record[:receipt_status] %></td>
+                <td class="px-3 py-3 whitespace-nowrap"><%= record[:updated_at].present? ? l(record[:updated_at], format: :short) : "-" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
+        <%= t("admin.receipt_analysis_cleanup.stale.empty") %>
+      </div>
+    <% end %>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.stale.execute_title") %></h3>
@@ -266,36 +266,36 @@
       </div>
     </dl>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-left text-sm">
-        <thead class="token-text-muted">
-          <tr class="border-b token-border-soft">
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
-            <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.retention.expires_at") %></th>
-          </tr>
-        </thead>
-        <tbody>
-          <% retention_records.each do |record| %>
+    <% if retention_records.any? %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="token-text-muted">
             <tr class="border-b token-border-soft">
-              <td class="px-3 py-3 font-mono text-xs">
-                <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
-              </td>
-              <td class="px-3 py-3"><%= record[:status] %></td>
-              <td class="px-3 py-3"><%= record[:stage] %></td>
-              <td class="px-3 py-3 whitespace-nowrap"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : "-" %></td>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.run_key") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.status") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.common.stage") %></th>
+              <th class="px-3 py-2 font-semibold"><%= t("admin.receipt_analysis_cleanup.retention.expires_at") %></th>
             </tr>
-          <% end %>
-
-          <% if retention_records.empty? %>
-            <tr>
-              <td colspan="4" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.empty") %></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            <% retention_records.each do |record| %>
+              <tr class="border-b token-border-soft">
+                <td class="px-3 py-3 font-mono text-xs">
+                  <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
+                </td>
+                <td class="px-3 py-3"><%= record[:status] %></td>
+                <td class="px-3 py-3"><%= record[:stage] %></td>
+                <td class="px-3 py-3 whitespace-nowrap"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : "-" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
+        <%= t("admin.receipt_analysis_cleanup.retention.empty") %>
+      </div>
+    <% end %>
 
     <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.retention.execute_title") %></h3>
