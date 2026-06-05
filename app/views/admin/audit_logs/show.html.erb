@@ -11,12 +11,12 @@
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm" %>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <div class="grid gap-6 lg:grid-cols-3">
-      <section class="space-y-3">
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.action") %></h2>
         <dl class="space-y-3 text-sm">
-          <div>
+          <div class="min-w-0 max-w-full">
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.action") %></dt>
             <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:action] %></dd>
           </div>
@@ -35,7 +35,7 @@
         </dl>
       </section>
 
-      <section class="space-y-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.actor_target") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
@@ -59,7 +59,7 @@
         </dl>
       </section>
 
-      <section class="space-y-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.request") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
