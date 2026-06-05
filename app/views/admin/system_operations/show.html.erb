@@ -15,9 +15,9 @@
       <p class="text-sm token-text-muted"><%= t("admin.system_operations.policy.description") %></p>
     </div>
 
-    <ul class="grid gap-3 text-sm md:grid-cols-2">
+    <ul class="grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
       <% @dashboard.policy_items.each do |item| %>
-        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base"><%= item %></li>
+        <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]"><%= item %></li>
       <% end %>
     </ul>
   <% end %>
@@ -140,9 +140,9 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.system_operations.locked_operations.title") %></h2>
     <p class="mb-4 text-sm token-text-muted"><%= t("admin.system_operations.locked_operations.description") %></p>
-    <ul class="grid gap-3 text-sm md:grid-cols-2">
+    <ul class="grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
       <% @dashboard.locked_future_operations.each do |operation| %>
-        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base"><%= operation %></li>
+        <li class="min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]"><%= operation %></li>
       <% end %>
     </ul>
   <% end %>

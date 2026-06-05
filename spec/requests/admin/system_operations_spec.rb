@@ -111,6 +111,8 @@ RSpec.describe 'Admin system operations', type: :request do
         expect(response.body).to include('退会代行ログ')
         expect(response.body).to include('自動整理の対象外')
         expect(response.body).to include('重要な管理操作')
+        expect(response.body).to include('min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 font-mono token-text-base [overflow-wrap:anywhere]')
+        expect(response.body).to include('min-w-0 max-w-full break-words rounded-lg border token-border-soft token-bg-card-subtle p-3 token-text-base [overflow-wrap:anywhere]')
         expect(response.body).to include('orphan_blob_cleanup_dry_run')
         expect(response.body).to include('機能公開設定の変更')
         expect(response.body).to include('処理時間設定の変更')
