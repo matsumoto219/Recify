@@ -21,6 +21,24 @@ RSpec.describe Usage do
     end
   end
 
+  describe '.consume_manual_receipt!' do
+    it 'manual receipt counterをlimit付きで加算する' do
+      allow(UserLimits).to receive(:effective_limit)
+        .with(user: user, key: 'manual_receipts_per_day')
+        .and_return(50)
+      allow(Usage::Counters).to receive(:check_and_increment!).and_return(true)
+
+      expect(described_class.consume_manual_receipt!(user: user)).to eq(true)
+
+      expect(Usage::Counters).to have_received(:check_and_increment!).with(
+        user: user,
+        key: 'manual_receipts_per_day',
+        amount: 1,
+        limit: 50
+      )
+    end
+  end
+
   describe '.consume_batch_upload!' do
     it 'batch upload counterを指定件数で加算する' do
       allow(UserLimits).to receive(:effective_limit)

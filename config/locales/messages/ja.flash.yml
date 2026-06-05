@@ -36,6 +36,9 @@ ja:
       uploads_exceeded: |-
         本日のアップロード上限に達しました。
         時間をおいてから、もう一度お試しください。
+      manual_receipts_exceeded: |-
+        本日の手動レシート作成上限に達しました。
+        時間をおいてから、もう一度お試しください。
     receipts:
       create: レシートを登録しました
       update: レシートを更新しました

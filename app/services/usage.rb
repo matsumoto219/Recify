@@ -31,6 +31,15 @@ module Usage
       )
     end
 
+    def consume_manual_receipt!(user:)
+      Usage::Counters.check_and_increment!(
+        user: user,
+        key: "manual_receipts_per_day",
+        amount: 1,
+        limit: effective_limit(user: user, key: "manual_receipts_per_day")
+      )
+    end
+
     def consume_batch_upload!(user:, amount:)
       Usage::Counters.check_and_increment!(
         user: user,

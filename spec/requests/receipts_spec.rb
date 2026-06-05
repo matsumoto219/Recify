@@ -1898,6 +1898,83 @@ RSpec.describe 'Receipts', type: :request do
       expect(Receipt.order(:id).last.status).to eq('completed')
     end
 
+    it '手動作成成功時にmanual receipt counterを消費する' do
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 49)
+
+      expect do
+        post receipts_path, params: valid_params
+      end.to change(Receipt, :count).by(1)
+
+      expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(50)
+    end
+
+    it '手動作成の日次上限到達時はreceiptを作成しない' do
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
+
+      expect do
+        post receipts_path, params: valid_params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.usage_limits.manual_receipts_exceeded'))
+        expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(50)
+      end
+    end
+
+    it 'guestの手動作成日次上限はguest用limitで拒否する' do
+      guest = create(:user, guest: true)
+      sign_in guest
+      create(:usage_counter, user: guest, key: 'manual_receipts_per_day', used_count: 5)
+
+      expect do
+        post receipts_path, params: valid_params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.usage_limits.manual_receipts_exceeded'))
+        expect(UsageCounter.find_by!(user: guest, key: 'manual_receipts_per_day').used_count).to eq(5)
+      end
+    end
+
+    it 'user overrideで手動作成日次上限を引き上げられる' do
+      create(:user_limit_override, user: user, key: 'manual_receipts_per_day', value: { 'value' => 60 })
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
+
+      expect do
+        post receipts_path, params: valid_params
+      end.to change(Receipt, :count).by(1)
+
+      expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(51)
+    end
+
+    it 'validation error時はmanual receipt counterを消費しない' do
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 10)
+
+      expect do
+        post receipts_path, params: invalid_params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
+      end
+    end
+
+    it 'upload作成ではmanual receipt counterを消費しない' do
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 10)
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.to change(Receipt, :count).by(1)
+
+      expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
+    end
+
     it '明細数がuser limitを超える手動作成を拒否する' do
       create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
       params = valid_params.deep_dup
@@ -5174,6 +5251,17 @@ RSpec.describe 'Receipts', type: :request do
           'context' => 'edit_save',
           'resolved' => include('total_amount' => 2000)
         )
+      end
+    end
+
+    it '更新ではmanual receipt counterを消費しない' do
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
+
+      patch receipt_path(receipt), params: valid_update_params
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(50)
       end
     end
 

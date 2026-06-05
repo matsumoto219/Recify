@@ -134,7 +134,26 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    if @receipt.save
+    saved = false
+
+    begin
+      ActiveRecord::Base.transaction do
+        if @receipt.valid?
+          consume_manual_receipt_limit!
+          saved = @receipt.save
+        end
+
+        raise ActiveRecord::Rollback unless saved
+      end
+    rescue Usage::LimitExceeded
+      render_manual_receipt_usage_limit_exceeded(
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
+    if saved
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
       replace_manual_amount_errors!(create_params)
@@ -358,10 +377,22 @@ class ReceiptsController < ApplicationController
     Usage.consume_receipt_upload!(user: current_user)
   end
 
+  def consume_manual_receipt_limit!
+    Usage.consume_manual_receipt!(user: current_user)
+  end
+
   def render_upload_usage_limit_exceeded
     @receipt = current_user.receipts.new
     flash.now[:alert] = t("flash.usage_limits.uploads_exceeded")
     render :new_upload, status: :unprocessable_content, formats: :html
+  end
+
+  def render_manual_receipt_usage_limit_exceeded(rebuild_blank_item_row_after_failure:, rebuild_blank_adjustment_row_after_failure:)
+    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = t("flash.usage_limits.manual_receipts_exceeded")
+    render :new, status: :unprocessable_content, formats: :html
   end
 
   def consume_ocr_job_limit_for!(run, user)
