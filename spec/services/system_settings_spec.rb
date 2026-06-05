@@ -21,6 +21,10 @@ RSpec.describe SystemSettings do
         'limits.manual_receipts_per_day',
         'limits.receipt_items_per_receipt',
         'limits.receipt_adjustments_per_receipt',
+        'limits.max_uploads_per_day',
+        'limits.max_ocr_per_day',
+        'limits.max_ai_per_day',
+        'limits.max_storage_bytes',
         'limits.snapshot_ocr_items_max',
         'limits.snapshot_ai_normalized_items_max',
         'limits.batch_files_per_day',
@@ -238,6 +242,10 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.manual_receipts_per_day')).to eq(50)
         expect(described_class.limit_for('limits.receipt_items_per_receipt')).to eq(100)
         expect(described_class.limit_for('limits.receipt_adjustments_per_receipt')).to eq(50)
+        expect(described_class.limit_for('limits.max_uploads_per_day')).to eq(1000)
+        expect(described_class.limit_for('limits.max_ocr_per_day')).to eq(1000)
+        expect(described_class.limit_for('limits.max_ai_per_day')).to eq(1000)
+        expect(described_class.limit_for('limits.max_storage_bytes')).to eq(100.gigabytes)
         expect(described_class.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.snapshot_ai_normalized_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
@@ -318,6 +326,14 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '0')).to eq(0)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '200')).to eq(200)
+        expect(described_class.cast_update_value('limits.max_uploads_per_day', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.max_uploads_per_day', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.max_ocr_per_day', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.max_ocr_per_day', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.max_ai_per_day', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.max_ai_per_day', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.max_storage_bytes', 1.gigabyte.to_s)).to eq(1.gigabyte)
+        expect(described_class.cast_update_value('limits.max_storage_bytes', 1.terabyte.to_s)).to eq(1.terabyte)
         expect {
           described_class.cast_update_value('limits.snapshot_ocr_items_max', '99')
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
@@ -329,6 +345,30 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '201')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.max_uploads_per_day', '49')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.max_uploads_per_day', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.max_ocr_per_day', '49')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.max_ocr_per_day', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.max_ai_per_day', '49')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.max_ai_per_day', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.max_storage_bytes', (1.gigabyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.max_storage_bytes', (1.terabyte + 1).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('security.admin_passkey_reauth_window_minutes', '0')
@@ -389,6 +429,39 @@ RSpec.describe SystemSettings do
         max: 200,
         default: 50
       )
+    end
+
+    it '利用上限のシステム上限はhigh risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('limits.max_uploads_per_day')).to have_attributes(
+          category: 'usage_limit_safety',
+          risk_level: 'high',
+          min: 50,
+          max: 10_000,
+          default: 1000
+        )
+        expect(described_class.definition_for('limits.max_ocr_per_day')).to have_attributes(
+          category: 'usage_limit_safety',
+          risk_level: 'high',
+          min: 50,
+          max: 10_000,
+          default: 1000
+        )
+        expect(described_class.definition_for('limits.max_ai_per_day')).to have_attributes(
+          category: 'usage_limit_safety',
+          risk_level: 'high',
+          min: 50,
+          max: 10_000,
+          default: 1000
+        )
+        expect(described_class.definition_for('limits.max_storage_bytes')).to have_attributes(
+          category: 'usage_limit_safety',
+          risk_level: 'high',
+          min: 1.gigabyte,
+          max: 1.terabyte,
+          default: 100.gigabytes
+        )
+      end
     end
 
     it '管理者再認証期間はhigh risk設定として扱う' do

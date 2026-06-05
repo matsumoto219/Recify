@@ -163,6 +163,46 @@ module SystemSettings
         max: 200
       ),
       Definition.new(
+        key: "limits.max_uploads_per_day",
+        category: "usage_limit_safety",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "high",
+        min: 50,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.max_ocr_per_day",
+        category: "usage_limit_safety",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "high",
+        min: 50,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.max_ai_per_day",
+        category: "usage_limit_safety",
+        value_type: "integer",
+        default: 1000,
+        editable: true,
+        risk_level: "high",
+        min: 50,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.max_storage_bytes",
+        category: "usage_limit_safety",
+        value_type: "integer",
+        default: 100.gigabytes,
+        editable: true,
+        risk_level: "high",
+        min: 1.gigabyte,
+        max: 1.terabyte
+      ),
+      Definition.new(
         key: "limits.snapshot_ocr_items_max",
         category: "snapshot_limit",
         value_type: "integer",

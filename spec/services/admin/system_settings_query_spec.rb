@@ -59,6 +59,17 @@ RSpec.describe Admin::SystemSettingsQuery do
       )
     end
 
+    it 'usage limit safety filterを適用できる' do
+      result = described_class.call(category: 'usage_limit_safety')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'limits.max_uploads_per_day',
+        'limits.max_ocr_per_day',
+        'limits.max_ai_per_day',
+        'limits.max_storage_bytes'
+      )
+    end
+
     it 'unknown keyは空結果にする' do
       result = described_class.call(key: 'secret.provider_api_key')
 

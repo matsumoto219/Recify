@@ -240,6 +240,25 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('name="reason"')
       end
     end
+
+    it '利用上限のシステム上限をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('limits.max_ocr_per_day')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('limits.max_ocr_per_day')
+        expect(response.body).to include('usage_limit_safety')
+        expect(response.body).to include('high')
+        expect(response.body).to include('50')
+        expect(response.body).to include('10000')
+        expect(response.body).to include('1000')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
   end
 
   describe 'GET /admin/system_settings/:key' do
