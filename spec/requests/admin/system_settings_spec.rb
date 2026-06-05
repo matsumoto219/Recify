@@ -255,6 +255,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('50')
         expect(response.body).to include('10000')
         expect(response.body).to include('1000')
+        expect(response.body).to include('アップロード、OCR、AI、ストレージのコストに直結')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
       end
