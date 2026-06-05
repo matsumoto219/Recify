@@ -369,6 +369,33 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR tax detail snapshot上限はSystemSettings値を参照しactual_countを維持する' do
+      create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(50))
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        candidates: {
+          tax_details: Array.new(51) { |index| { description: "税#{index}", rate: 0.1, amount: index, net_amount: index * 10 } }
+        }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'tax_details').size).to eq(50)
+        expect(snapshot.dig('candidate_counts', 'tax_details')).to eq('actual_count' => 51, 'snapshot_count' => 50)
+        expect(snapshot.dig('truncated', 'tax_details')).to eq(true)
+      end
+    end
+
+    it 'tax detail snapshot上限の設定可能最大値はreceipt_tax_details_per_receiptの最大値と同期する' do
+      aggregate_failures do
+        expect(SystemSettings.definition_for('limits.receipt_tax_details_per_receipt').max).to eq(100)
+        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_TAX_DETAILS).to eq(SystemSettings.definition_for('limits.receipt_tax_details_per_receipt').default)
+      end
+    end
+
     it 'OCR item snapshot上限はSystemSettings値を参照しactual_countを維持する' do
       create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(500))
       run = described_class.start(receipt:, source: 'upload').run

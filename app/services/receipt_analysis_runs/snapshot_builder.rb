@@ -19,7 +19,8 @@ module ReceiptAnalysisRuns
     MAX_OCR_ITEMS = DEFAULT_MAX_OCR_ITEMS
     DEFAULT_MAX_OCR_PAYMENTS = 20
     MAX_OCR_PAYMENTS = DEFAULT_MAX_OCR_PAYMENTS
-    MAX_OCR_TAX_DETAILS = 20
+    DEFAULT_MAX_OCR_TAX_DETAILS = 20
+    MAX_OCR_TAX_DETAILS = DEFAULT_MAX_OCR_TAX_DETAILS
     DEFAULT_MAX_AI_NORMALIZED_ITEMS = 1000
     MAX_AI_NORMALIZED_ITEMS = DEFAULT_MAX_AI_NORMALIZED_ITEMS
     MAX_FULL_CONTEXT_LINES = 150
@@ -215,7 +216,7 @@ module ReceiptAnalysisRuns
             lines: Array(result[:lines]).size > MAX_OCR_LINES,
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
-            tax_details: Array(candidates[:tax_details]).size > MAX_OCR_TAX_DETAILS,
+            tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
             adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit
           }
         }.compact
@@ -492,7 +493,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_ocr_tax_details(tax_details)
-      Array(tax_details).first(MAX_OCR_TAX_DETAILS).filter_map do |tax_detail|
+      Array(tax_details).first(receipt_tax_details_snapshot_limit).filter_map do |tax_detail|
         tax_detail = normalized_hash(tax_detail)
         next if tax_detail.blank?
 
@@ -503,6 +504,12 @@ module ReceiptAnalysisRuns
           net_amount: safe_value(tax_detail[:net_amount])
         }.compact
       end
+    end
+
+    def receipt_tax_details_snapshot_limit
+      SystemSettings.limit_for("limits.receipt_tax_details_per_receipt")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      DEFAULT_MAX_OCR_TAX_DETAILS
     end
 
     def normalized_receipt_attributes_snapshot(value)

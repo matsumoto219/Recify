@@ -1282,6 +1282,41 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '税内訳が設定上限を超える場合は設定値をmetadataへ残して部分保存しない' do
+      create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(50))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:tax_details] = generated_tax_details(51)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt_tax_details',
+          'limit' => 50,
+          'actual_count' => 51,
+          'snapshot_count' => 50
+        )
+        expect(run.ocr_result_snapshot.dig('candidate_counts', 'tax_details')).to eq(
+          'actual_count' => 51,
+          'snapshot_count' => 50
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_tax_details).to be_empty
+      end
+    end
+
     it '調整行が設定上限を超える場合は部分保存せずrunをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
