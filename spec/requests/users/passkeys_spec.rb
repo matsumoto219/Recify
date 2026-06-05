@@ -60,6 +60,41 @@ RSpec.describe 'User passkeys', type: :request do
         expect(user.reload.webauthn_id).to be_present
       end
     end
+
+    it '9個登録済みでもoptionsを取得できる' do
+      create_list(:passkey, Passkey::MAX_PER_USER - 1, user: user)
+      sign_in user
+
+      post settings_passkeys_options_path, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body.fetch('publicKey').fetch('challenge')).to be_present
+    end
+
+    it '10個登録済みの場合はoptions発行を拒否する' do
+      create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+      sign_in user
+
+      post settings_passkeys_options_path, as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('ok')).to be(false)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('settings.security.auth.passkey.messages.limit_reached', count: Passkey::MAX_PER_USER))
+        expect(session[:passkey_registration_challenge]).to be_blank
+      end
+    end
+
+    it 'adminも10個登録済みの場合はoptions発行を拒否する' do
+      admin = create(:user, :admin)
+      create_list(:passkey, Passkey::MAX_PER_USER, user: admin)
+      sign_in admin
+
+      post settings_passkeys_options_path, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.fetch('error')).to eq(I18n.t('settings.security.auth.passkey.messages.limit_reached', count: Passkey::MAX_PER_USER))
+    end
   end
 
   describe 'POST /settings/passkeys' do
@@ -95,6 +130,26 @@ RSpec.describe 'User passkeys', type: :request do
         expect(passkey.transports).to eq([ 'internal' ])
         expect(passkey.backup_eligible).to be(true)
         expect(passkey.backed_up).to be(true)
+        expect(session[:passkey_registration_challenge]).to be_blank
+      end
+    end
+
+    it '10個登録済みの場合はcreate直叩きを拒否する' do
+      create_list(:passkey, Passkey::MAX_PER_USER - 1, user: user)
+      options = registration_options_payload
+      credential = fake_registration_credential(options)
+      create(:passkey, user: user)
+
+      expect do
+        post settings_passkeys_path,
+             params: { label: 'Over limit', credential: credential },
+             as: :json
+      end.not_to change(user.passkeys, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('ok')).to be(false)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('settings.security.auth.passkey.messages.limit_reached', count: Passkey::MAX_PER_USER))
         expect(session[:passkey_registration_challenge]).to be_blank
       end
     end
@@ -165,6 +220,32 @@ RSpec.describe 'User passkeys', type: :request do
         expect(settings_passkey_path(passkey)).to eq("/settings/passkeys/#{passkey.uid}")
         expect(response).to redirect_to(settings_security_path(anchor: 'passkeys'))
       end
+    end
+
+    it '10個登録済みでも削除できる' do
+      passkeys = create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+
+      expect do
+        delete settings_passkey_path(passkeys.first)
+      end.to change(user.passkeys, :count).by(-1)
+
+      expect(response).to redirect_to(settings_security_path(anchor: 'passkeys'))
+    end
+
+    it '削除後はoptions取得と再登録ができる' do
+      passkeys = create_list(:passkey, Passkey::MAX_PER_USER, user: user)
+      delete settings_passkey_path(passkeys.first)
+
+      options = registration_options_payload
+      credential = fake_registration_credential(options)
+
+      expect do
+        post settings_passkeys_path,
+             params: { label: 'Recreated', credential: credential },
+             as: :json
+      end.to change(user.passkeys, :count).by(1)
+
+      expect(response).to have_http_status(:created)
     end
 
     it '内部IDのURLでは削除できない' do

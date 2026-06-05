@@ -4,6 +4,7 @@ class Users::PasskeysController < ApplicationController
 
   before_action :authenticate_user!
   before_action :ensure_passkey_registration_allowed!
+  before_action :ensure_passkey_registration_limit_available!, only: %i[options create]
 
   def options
     options = Passkeys.registration_options(user: current_user)
@@ -60,6 +61,25 @@ class Users::PasskeysController < ApplicationController
           ok: false,
           error: t("settings.security.auth.passkey.messages.unavailable")
         }, status: :forbidden
+      end
+    end
+  end
+
+  def ensure_passkey_registration_limit_available!
+    return unless Passkeys.registration_limit_reached?(current_user)
+
+    session.delete(REGISTRATION_CHALLENGE_SESSION_KEY) if action_name == "create"
+
+    respond_to do |format|
+      format.html do
+        redirect_to settings_security_path(anchor: "passkeys"),
+                    alert: t("settings.security.auth.passkey.messages.limit_reached", count: Passkeys.registration_limit)
+      end
+      format.json do
+        render json: {
+          ok: false,
+          error: t("settings.security.auth.passkey.messages.limit_reached", count: Passkeys.registration_limit)
+        }, status: :unprocessable_content
       end
     end
   end
