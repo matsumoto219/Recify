@@ -41,6 +41,22 @@ module ContactRequests
       ContactRequest::CATEGORIES
     end
 
+    def contact_request_retention_days
+      RetentionPolicy::CONTACT_REQUEST_RETENTION_DAYS
+    end
+
+    def retention_cutoff(now: Time.current)
+      RetentionPolicy.retention_cutoff(now: now)
+    end
+
+    def retention_scope
+      RetentionPolicy.retention_scope
+    end
+
+    def anonymizable_scope(now: Time.current)
+      RetentionPolicy.anonymizable_scope(now: now)
+    end
+
     private
 
     def normalize_attributes(user:, params:, request:)
