@@ -32,6 +32,7 @@ ja:
         review_reasons: 確認理由
         processing_error_code: 処理エラーコード
         processing_error_message: 処理エラーメッセージ
+        receipt_items: 明細
       receipt_item:
         receipt: レシート
         raw_text: OCR原文
@@ -116,6 +117,8 @@ ja:
               image_too_small: "画像サイズが小さすぎます（100px以上にしてください）"
               image_too_large: "画像サイズが大きすぎます（10000px以下にしてください）"
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
+            receipt_items:
+              too_many: "は%{limit}件まで登録できます（現在%{count}件）"
         user:
           attributes:
             email:

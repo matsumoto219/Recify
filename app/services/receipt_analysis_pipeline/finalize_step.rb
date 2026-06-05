@@ -116,6 +116,7 @@ class ReceiptAnalysisPipeline
     def save_ai_result!(ocr_result, ai_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
       record_build_params_snapshot(params)
+      validate_receipt_items_limit!(params[:receipt_items_attributes])
 
       # === AmountService integration ===
       amount_result = ReceiptAmountService.call(
@@ -187,6 +188,7 @@ class ReceiptAnalysisPipeline
     def save_ocr_only_result!(ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
+      validate_receipt_items_limit!(params[:receipt_items_attributes])
 
       # === AmountService integration point (OCR only) ===
       amount_result = ReceiptAmountService.call(
@@ -245,6 +247,7 @@ class ReceiptAnalysisPipeline
     def save_fallback_result!(ocr_result, error_code, processing_error_message: nil)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       record_build_params_snapshot(params)
+      validate_receipt_items_limit!(params[:receipt_items_attributes])
 
       # === AmountService integration point (fallback) ===
       amount_result = ReceiptAmountService.call(
@@ -319,6 +322,8 @@ class ReceiptAnalysisPipeline
     end
 
     def persist_result_full!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:, adjustments_attributes: [])
+      validate_receipt_items_limit!(items_attributes)
+
       Receipt.transaction do
         receipt.update!(receipt_attributes)
 
@@ -335,6 +340,17 @@ class ReceiptAnalysisPipeline
           receipt.receipt_tax_details.create!(attrs)
         end
       end
+    end
+
+    def validate_receipt_items_limit!(items_attributes)
+      limit = receipt.receipt_items_limit
+      count = Array(items_attributes).size
+      return if count <= limit
+
+      raise ReceiptAnalysisPipeline::AnalysisError.new(
+        "analysis_items_invalid",
+        "receipt_items_limit_exceeded count=#{count} limit=#{limit}"
+      )
     end
 
     def replace_receipt_items!(items_attributes)

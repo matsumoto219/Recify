@@ -1898,6 +1898,28 @@ RSpec.describe 'Receipts', type: :request do
       expect(Receipt.order(:id).last.status).to eq('completed')
     end
 
+    it '明細数がuser limitを超える手動作成を拒否する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_items_attributes]['1'] = {
+        confirmed_name: '追加商品',
+        price: 200,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 200,
+        needs_review: false
+      }
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('明細は1件まで登録できます')
+      end
+    end
+
     it 'redirect flashをnotice_surfaceのtoastとして描画する' do
       post receipts_path, params: valid_params
 

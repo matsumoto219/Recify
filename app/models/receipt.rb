@@ -125,6 +125,7 @@ class Receipt < ApplicationRecord
   validate :validate_image_dimensions
   validate :validate_image_presence_for_processing
   validate :validate_store_address_components_shape
+  validate :validate_receipt_items_count_within_limit
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
@@ -199,6 +200,12 @@ class Receipt < ApplicationRecord
 
   def receipt_tax_basis_for_form
     external_tax_basis_from_details? ? "external" : "internal"
+  end
+
+  def receipt_items_limit
+    return UserLimits.effective_limit(user: user, key: "receipt_items_per_receipt") if user
+
+    SystemSettings.limit_for("limits.receipt_items_per_receipt")
   end
 
   def external_tax_basis_from_details?
@@ -418,6 +425,14 @@ class Receipt < ApplicationRecord
     return if store_address_components.is_a?(Hash)
 
     errors.add(:store_address_components, :invalid)
+  end
+
+  def validate_receipt_items_count_within_limit
+    limit = receipt_items_limit
+    count = receipt_items.reject(&:marked_for_destruction?).size
+    return if count <= limit
+
+    errors.add(:receipt_items, :too_many, count: count, limit: limit)
   end
 
   def validate_image_content_type

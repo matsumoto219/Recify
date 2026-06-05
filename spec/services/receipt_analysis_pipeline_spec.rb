@@ -870,6 +870,36 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '明細数がuser limitを超える解析結果は金額計算前にrunをfailedにする' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = [
+        { raw_text: '商品A', price: 100, quantity: 1, line_total: 100 },
+        { raw_text: '商品B', price: 100, quantity: 1, line_total: 100 }
+      ]
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_stage).to eq('finalize')
+        expect(run.error_code).to eq('analysis_items_invalid')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('analysis_items_invalid')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
     it 'finalize中に計算結果へ負値item金額が混じっても通常明細へ保存しない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)

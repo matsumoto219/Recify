@@ -773,6 +773,64 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'receipt item count limit' do
+    def build_items(receipt, count)
+      count.times do |index|
+        receipt.receipt_items.build(
+          raw_text: "商品#{index}",
+          confirmed_name: "商品#{index}",
+          price: 100,
+          quantity: 1,
+          line_total: 100,
+          position_index: index + 1
+        )
+      end
+    end
+
+    it 'default上限までは有効にする' do
+      receipt = build(:receipt)
+      build_items(receipt, 100)
+
+      expect(receipt).to be_valid
+    end
+
+    it 'default上限を超える明細を拒否する' do
+      receipt = build(:receipt)
+      build_items(receipt, 101)
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors.of_kind?(:receipt_items, :too_many)).to be(true)
+      end
+    end
+
+    it 'user overrideで上限を引き上げられる' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 150 })
+      receipt = build(:receipt, user: user)
+      build_items(receipt, 150)
+
+      expect(receipt).to be_valid
+    end
+
+    it '削除予定の明細は件数に含めない' do
+      user = create(:user)
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 2 })
+      receipt = create(:receipt, user: user)
+      existing = receipt.receipt_items.create!(confirmed_name: '既存', price: 100, quantity: 1, line_total: 100)
+
+      receipt.assign_attributes(
+        receipt_items_attributes: {
+          '0' => { id: existing.id, _destroy: '1' },
+          '1' => { confirmed_name: '新規1', price: 100, quantity: 1, line_total: 100 },
+          '2' => { confirmed_name: '新規2', price: 100, quantity: 1, line_total: 100 }
+        }
+      )
+
+      expect(receipt).to be_valid
+    end
+  end
+
   describe 'query indexes' do
     it 'receipts index / KPI / status count 用の複合indexを持つ' do
       indexes = ActiveRecord::Base.connection.indexes(:receipts)
