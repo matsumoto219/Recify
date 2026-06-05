@@ -303,6 +303,35 @@ RSpec.describe Notification, type: :model do
       end
     end
 
+    it '既読保持期間設定が365日なら365日基準で削除し保持件数上限とは混ざらない' do
+      create(:system_setting, key: 'retention.notifications_read_days', value: SystemSettings.stored_value(365))
+      user = create(:user)
+      old_read = create(:notification, :read, user:, read_at: 366.days.ago)
+      recent_read = create(:notification, :read, user:, read_at: 364.days.ago)
+
+      described_class.cleanup_old!(now: Time.current)
+
+      aggregate_failures do
+        expect(described_class.exists?(old_read.id)).to be(false)
+        expect(described_class.exists?(recent_read.id)).to be(true)
+      end
+    end
+
+    it '通知保持件数設定が20でも既読保持期間は別に効き、件数pruneは保持件数基準で動く' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      create(:system_setting, key: 'retention.notifications_read_days', value: SystemSettings.stored_value(365))
+      user = create(:user)
+      old_notifications = insert_notifications_for(user, count: 25, read_at: 1.day.ago)
+
+      deleted_count = described_class.cleanup_old!(now: Time.current)
+
+      aggregate_failures do
+        expect(deleted_count).to eq(5)
+        expect(user.notifications.count).to eq(20)
+        expect(described_class.where(id: old_notifications.first(5).map { |attributes| attributes[:id] })).to be_empty
+      end
+    end
+
     it 'userごとに最新100件を残して古い既読通知を削除する' do
       user = create(:user)
       other_user = create(:user)
