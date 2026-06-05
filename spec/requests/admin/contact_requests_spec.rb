@@ -63,6 +63,22 @@ RSpec.describe 'Admin contact requests', type: :request do
       end
     end
 
+    it '匿名化済み問い合わせを一覧で確認できる' do
+      admin = create(:user, :admin)
+      contact_request = create(:contact_request, status: 'resolved', handled_at: 181.days.ago)
+      ContactRequests.anonymize(contact_request)
+      sign_in admin
+
+      get admin_contact_requests_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(contact_request.request_uid)
+        expect(response.body).to include('匿名化済み')
+        expect(response.body).to include('re***@example.invalid')
+      end
+    end
+
     it 'filterとpaginationを適用する' do
       admin = create(:user, :admin)
       target = create(:contact_request, status: 'open', category: 'security')
@@ -101,6 +117,36 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include('min-w-0 max-w-full md:col-span-2 lg:col-span-3')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
+      end
+    end
+
+    it '匿名化済み問い合わせ詳細を閲覧できる' do
+      admin = create(:user, :admin)
+      contact_request = create(
+        :contact_request,
+        status: 'closed',
+        handled_at: 181.days.ago,
+        sender_name: '送信 太郎',
+        email: 'sender@example.com',
+        subject: '問い合わせ件名',
+        body: '問い合わせ本文'
+      )
+      ContactRequests.anonymize(contact_request)
+      sign_in admin
+
+      get admin_contact_request_path(contact_request)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(contact_request.request_uid)
+        expect(response.body).to include('匿名化済み')
+        expect(response.body).to include('[redacted]')
+        expect(response.body).to include('[redacted by retention policy]')
+        expect(response.body).to include('re***@example.invalid')
+        expect(response.body).to include(contact_request.email_digest)
+        expect(response.body).not_to include('送信 太郎')
+        expect(response.body).not_to include('sender@example.com')
+        expect(response.body).not_to include('問い合わせ本文')
       end
     end
   end

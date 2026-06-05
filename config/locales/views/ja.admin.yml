@@ -788,6 +788,7 @@ ja:
           default: ユーザー別上限を更新できませんでした。
     contact_requests:
       common:
+        redacted: 匿名化済み
         sender_name_blank: 未入力
       categories:
         bug: 不具合

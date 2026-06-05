@@ -117,6 +117,7 @@ module Admin
         contact_request: contact_request,
         id: contact_request.id,
         request_uid: contact_request.request_uid,
+        anonymized: ContactRequests.anonymized?(contact_request),
         status: contact_request.status,
         category: contact_request.category,
         source: contact_request.source,
