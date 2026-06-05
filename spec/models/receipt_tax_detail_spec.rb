@@ -1,10 +1,40 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptTaxDetail do
-  it '1レシートあたりの税内訳数を固定上限までにする' do
-    stub_const("#{described_class}::MAX_PER_RECEIPT", 1)
+  it '1レシートあたりの税内訳数をdefault上限までにする' do
     receipt = create(:receipt)
-    receipt.receipt_tax_details.create!(description: '10%対象', rate: 0.1, amount: 10, net_amount: 100)
+    described_class::MAX_PER_RECEIPT.times do |index|
+      receipt.receipt_tax_details.create!(description: "#{index}%対象", rate: 0.1, amount: 10, net_amount: 100)
+    end
+
+    tax_detail = receipt.receipt_tax_details.build(description: '8%対象', rate: 0.08, amount: 8, net_amount: 100)
+
+    aggregate_failures do
+      expect(described_class.per_receipt_limit).to eq(20)
+      expect(tax_detail).not_to be_valid
+      expect(tax_detail.errors.of_kind?(:receipt, :receipt_tax_details_limit_exceeded)).to be(true)
+    end
+  end
+
+  it 'SystemSettingsの税内訳上限を参照する' do
+    create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(50))
+    receipt = create(:receipt)
+    50.times do |index|
+      receipt.receipt_tax_details.create!(description: "#{index}%対象", rate: 0.1, amount: 10, net_amount: 100)
+    end
+
+    tax_detail = receipt.receipt_tax_details.build(description: '8%対象', rate: 0.08, amount: 8, net_amount: 100)
+
+    aggregate_failures do
+      expect(described_class.per_receipt_limit).to eq(50)
+      expect(tax_detail).not_to be_valid
+      expect(tax_detail.errors.of_kind?(:receipt, :receipt_tax_details_limit_exceeded)).to be(true)
+    end
+  end
+
+  it '上限0なら税内訳を保存不可にする' do
+    create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(0))
+    receipt = create(:receipt)
 
     tax_detail = receipt.receipt_tax_details.build(description: '8%対象', rate: 0.08, amount: 8, net_amount: 100)
 
@@ -15,7 +45,7 @@ RSpec.describe ReceiptTaxDetail do
   end
 
   it '他レシートの税内訳数は上限判定へ影響しない' do
-    stub_const("#{described_class}::MAX_PER_RECEIPT", 1)
+    create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(1))
     create(:receipt).receipt_tax_details.create!(description: '10%対象', rate: 0.1, amount: 10, net_amount: 100)
     receipt = create(:receipt)
 

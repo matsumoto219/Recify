@@ -457,7 +457,7 @@ class Receipt < ApplicationRecord
   def validate_receipt_tax_details_count_within_limit
     validate_child_records_count_within_limit(
       :receipt_tax_details,
-      ReceiptTaxDetail::MAX_PER_RECEIPT,
+      ReceiptTaxDetail.per_receipt_limit,
       :too_many
     )
   end

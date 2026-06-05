@@ -863,8 +863,8 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
-    it '税内訳は固定上限を超えると無効にする' do
-      stub_const('ReceiptTaxDetail::MAX_PER_RECEIPT', 1)
+    it '税内訳は設定上限を超えると無効にする' do
+      create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(1))
       receipt = build(:receipt)
       receipt.receipt_tax_details.build(description: '10%対象', rate: 0.1, amount: 10, net_amount: 100)
       receipt.receipt_tax_details.build(description: '8%対象', rate: 0.08, amount: 8, net_amount: 100)

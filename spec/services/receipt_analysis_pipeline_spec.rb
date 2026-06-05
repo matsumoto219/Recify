@@ -1248,7 +1248,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '税内訳が固定上限を超える場合は部分保存せずrunをfailedにする' do
+    it '税内訳がdefault上限を超える場合は部分保存せずrunをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       decision = finalize_decision(:ocr_only)
@@ -1559,8 +1559,8 @@ RSpec.describe ReceiptAnalysisPipeline do
       }
     end
 
-    it '税内訳が固定上限を超える解析結果は金額計算前に拒否する' do
-      stub_const('ReceiptTaxDetail::MAX_PER_RECEIPT', 1)
+    it '税内訳が設定上限を超える解析結果は金額計算前に拒否する' do
+      create(:system_setting, key: 'limits.receipt_tax_details_per_receipt', value: SystemSettings.stored_value(1))
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:tax_details] = [

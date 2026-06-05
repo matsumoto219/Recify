@@ -550,7 +550,7 @@ class ReceiptsController < ApplicationController
         attributes_key: "receipt_tax_details_attributes",
         association_name: :receipt_tax_details,
         error_attribute: :receipt_tax_details,
-        limit: ReceiptTaxDetail::MAX_PER_RECEIPT
+        limit: ReceiptTaxDetail.per_receipt_limit
       )
     ].compact
   end

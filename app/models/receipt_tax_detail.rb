@@ -1,5 +1,6 @@
 class ReceiptTaxDetail < ApplicationRecord
-  MAX_PER_RECEIPT = 20
+  DEFAULT_MAX_PER_RECEIPT = 20
+  MAX_PER_RECEIPT = DEFAULT_MAX_PER_RECEIPT
 
   belongs_to :receipt
 
@@ -14,13 +15,20 @@ class ReceiptTaxDetail < ApplicationRecord
   # validates :amount, presence: true
   # validates :net_amount, presence: true
 
+  def self.per_receipt_limit
+    SystemSettings.limit_for("limits.receipt_tax_details_per_receipt")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    DEFAULT_MAX_PER_RECEIPT
+  end
+
   private
 
   def tax_details_per_receipt_within_limit
     return if receipt.blank?
-    return if sibling_count_for_limit(:receipt_tax_details) < MAX_PER_RECEIPT
+    limit = self.class.per_receipt_limit
+    return if sibling_count_for_limit(:receipt_tax_details) < limit
 
-    errors.add(:receipt, :receipt_tax_details_limit_exceeded, limit: MAX_PER_RECEIPT)
+    errors.add(:receipt, :receipt_tax_details_limit_exceeded, limit: limit)
   end
 
   def sibling_count_for_limit(association_name)
