@@ -163,6 +163,16 @@ module SystemSettings
         max: 200
       ),
       Definition.new(
+        key: "limits.receipt_payments_per_receipt",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 20,
+        editable: true,
+        risk_level: "medium",
+        min: 0,
+        max: 100
+      ),
+      Definition.new(
         key: "limits.max_uploads_per_day",
         category: "usage_limit_safety",
         value_type: "integer",

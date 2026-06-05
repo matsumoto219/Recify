@@ -260,6 +260,25 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('name="reason"')
       end
     end
+
+    it '支払い情報上限をmedium risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('limits.receipt_payments_per_receipt')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('limits.receipt_payments_per_receipt')
+        expect(response.body).to include('usage_limit')
+        expect(response.body).to include('medium')
+        expect(response.body).to include('0')
+        expect(response.body).to include('100')
+        expect(response.body).to include('20')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
   end
 
   describe 'GET /admin/system_settings/:key' do
