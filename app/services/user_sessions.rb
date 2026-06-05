@@ -5,6 +5,8 @@ module UserSessions
   DIGEST_SALT = "recify/user-session-uid-digest"
   MAX_USER_AGENT_BYTES = 500
   TOUCH_INTERVAL = 5.minutes
+  DEFAULT_RETENTION_DAYS = 90
+  RETENTION_PERIOD = DEFAULT_RETENTION_DAYS.days
 
   Summary = Struct.new(
     :active_sessions_count,
@@ -17,12 +19,22 @@ module UserSessions
   )
 
   class << self
-    def cleanup_retention(dry_run: true, cutoff: 90.days.ago, limit: 1000)
+    def cleanup_retention(dry_run: true, cutoff: nil, limit: 1000)
       RetentionCleanup.call(
         dry_run: dry_run,
         cutoff: cutoff,
         limit: limit
       )
+    end
+
+    def retention_cutoff(now: Time.current)
+      now - retention_days.days
+    end
+
+    def retention_days
+      SystemSettings.limit_for("retention.user_sessions_days")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      DEFAULT_RETENTION_DAYS
     end
 
     def record_sign_in(user:, request:, session:, method:)

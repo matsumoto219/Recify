@@ -5,14 +5,14 @@ module UserSessions
     ACTIVE_LAST_SEEN_PERIOD = 30.days
 
     class << self
-      def call(dry_run: true, cutoff: 90.days.ago, limit: DEFAULT_LIMIT)
+      def call(dry_run: true, cutoff: nil, limit: DEFAULT_LIMIT)
         new(dry_run: dry_run, cutoff: cutoff, limit: limit).call
       end
     end
 
     def initialize(dry_run:, cutoff:, limit:)
       @dry_run = ActiveModel::Type::Boolean.new.cast(dry_run)
-      @cutoff = cutoff || 90.days.ago
+      @cutoff = cutoff || UserSessions.retention_cutoff
       @limit = normalize_limit(limit)
     end
 

@@ -5,7 +5,7 @@ class UserSessionRetentionCleanupJob < ApplicationJob
   AUDIT_ACTION = "user_sessions.retention_cleanup.dry_run".freeze
   SAMPLE_SESSION_ID_LIMIT = 20
 
-  def perform(cutoff: 90.days.ago, limit: DEFAULT_LIMIT, dry_run: true)
+  def perform(cutoff: nil, limit: DEFAULT_LIMIT, dry_run: true)
     result = UserSessions.cleanup_retention(
       cutoff: cutoff,
       limit: limit,

@@ -24,7 +24,7 @@ RSpec.describe UserSessionRetentionCleanupJob, type: :job do
 
     aggregate_failures do
       expect(UserSessions).to have_received(:cleanup_retention).with(
-        cutoff: 90.days.ago,
+        cutoff: nil,
         limit: 1000,
         dry_run: true
       )

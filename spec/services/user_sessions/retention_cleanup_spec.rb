@@ -20,6 +20,50 @@ RSpec.describe UserSessions::RetentionCleanup do
   end
 
   describe '.call' do
+    it 'default 90日基準でretention対象を判定する' do
+      user = create(:user)
+      old_session = create_user_session(user: user, signed_out_at: 91.days.ago)
+      recent_session = create_user_session(user: user, signed_out_at: 89.days.ago)
+
+      result = described_class.call(dry_run: true)
+
+      aggregate_failures do
+        expect(result[:cutoff]).to eq(90.days.ago)
+        expect(result[:sample_session_ids]).to contain_exactly(old_session.id)
+        expect(result[:sample_session_ids]).not_to include(recent_session.id)
+      end
+    end
+
+    it '保持期間設定が180日なら181日前のsessionだけを対象にする' do
+      create(:system_setting, key: 'retention.user_sessions_days', value: SystemSettings.stored_value(180))
+      user = create(:user)
+      old_session = create_user_session(user: user, signed_out_at: 181.days.ago)
+      recent_session = create_user_session(user: user, signed_out_at: 179.days.ago)
+
+      result = described_class.call(dry_run: true)
+
+      aggregate_failures do
+        expect(result[:cutoff]).to eq(180.days.ago)
+        expect(result[:sample_session_ids]).to contain_exactly(old_session.id)
+        expect(result[:sample_session_ids]).not_to include(recent_session.id)
+      end
+    end
+
+    it '保持期間設定が365日なら366日前のsessionだけを対象にする' do
+      create(:system_setting, key: 'retention.user_sessions_days', value: SystemSettings.stored_value(365))
+      user = create(:user)
+      old_session = create_user_session(user: user, signed_out_at: 366.days.ago)
+      recent_session = create_user_session(user: user, signed_out_at: 364.days.ago)
+
+      result = described_class.call(dry_run: true)
+
+      aggregate_failures do
+        expect(result[:cutoff]).to eq(365.days.ago)
+        expect(result[:sample_session_ids]).to contain_exactly(old_session.id)
+        expect(result[:sample_session_ids]).not_to include(recent_session.id)
+      end
+    end
+
     it 'retention対象をdry-runで返し、削除しない' do
       user = create(:user, session_version: 3)
       signed_out = create_user_session(user: user, signed_out_at: 91.days.ago)
