@@ -66,6 +66,44 @@ RSpec.describe 'Receipts', type: :request do
     sign_out_form['data-turbo-confirm'] || sign_out_form.at_css('button')&.[]('data-turbo-confirm')
   end
 
+  def manual_item_params(index)
+    {
+      confirmed_name: "商品#{index}",
+      price: 100,
+      quantity: 1,
+      quantity_unit: '個',
+      line_total: 100,
+      needs_review: false
+    }
+  end
+
+  def manual_adjustment_params(index)
+    {
+      kind: 'delivery_fee',
+      label: "調整#{index}",
+      amount: 10,
+      sign: 'surcharge',
+      tax_rate: '10',
+      position_index: index
+    }
+  end
+
+  def manual_payment_params(index)
+    {
+      method: "method-#{index}",
+      amount: 100
+    }
+  end
+
+  def manual_tax_detail_params(index)
+    {
+      description: "税内訳#{index}",
+      amount: 10,
+      rate: 10,
+      net_amount: 100
+    }
+  end
+
   def selected_receipt_index_control(document, name)
     receipt_index_controls(document).at_css("select[name='#{name}'] option[selected]")&.[]('value')
   end
@@ -1977,6 +2015,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '明細数がuser limitを超える手動作成を拒否する' do
       create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 10)
       params = valid_params.deep_dup
       params[:receipt][:receipt_items_attributes]['1'] = {
         confirmed_name: '追加商品',
@@ -1986,6 +2025,7 @@ RSpec.describe 'Receipts', type: :request do
         line_total: 200,
         needs_review: false
       }
+      expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
         post receipts_path, params: params
@@ -1994,6 +2034,55 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include('明細は1件まで登録できます')
+        expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
+      end
+    end
+
+    it '調整行が固定上限を超える手動作成を金額計算前に拒否する' do
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_adjustments_attributes] =
+        (0..ReceiptAdjustment::MAX_PER_RECEIPT).to_h { |index| [ index.to_s, manual_adjustment_params(index) ] }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("調整行は#{ReceiptAdjustment::MAX_PER_RECEIPT}件まで登録できます")
+      end
+    end
+
+    it '支払い行が固定上限を超える手動作成paramsを金額計算前に拒否する' do
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_payments_attributes] =
+        (0..ReceiptPayment::MAX_PER_RECEIPT).to_h { |index| [ index.to_s, manual_payment_params(index) ] }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("支払い行は#{ReceiptPayment::MAX_PER_RECEIPT}件まで登録できます")
+      end
+    end
+
+    it '税内訳が固定上限を超える手動作成paramsを金額計算前に拒否する' do
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_tax_details_attributes] =
+        (0..ReceiptTaxDetail::MAX_PER_RECEIPT).to_h { |index| [ index.to_s, manual_tax_detail_params(index) ] }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("税内訳は#{ReceiptTaxDetail::MAX_PER_RECEIPT}件まで登録できます")
       end
     end
 
@@ -5282,6 +5371,46 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.store_name).to eq('更新後')
         expect(receipt.receipt_items).to contain_exactly(item)
+      end
+    end
+
+    it '明細数がuser limitを超える手動更新を金額計算前に拒否する' do
+      create(:user_limit_override, user: user, key: 'receipt_items_per_receipt', value: { 'value' => 1 })
+      item = receipt.receipt_items.create!(
+        confirmed_name: '既存商品',
+        price: 700,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 700,
+        needs_review: false
+      )
+      params = {
+        receipt: {
+          store_name: '更新後',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: item.quantity_unit,
+              line_total: item.line_total,
+              needs_review: false
+            },
+            '1' => manual_item_params(1)
+          }
+        }
+      }
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        patch receipt_path(receipt), params: params
+      end.not_to change { receipt.reload.receipt_items.count }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('明細は1件まで登録できます')
+        expect(receipt.reload.store_name).to eq('更新前')
       end
     end
 

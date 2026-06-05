@@ -114,6 +114,16 @@ class ReceiptsController < ApplicationController
     create_params = normalized_receipt_params.to_h
     @receipt = current_user.receipts.new
 
+    if manual_child_count_limit_exceeded?(create_params)
+      render_manual_child_count_limit_exceeded(
+        create_params,
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
     amount_result = apply_amount_calculation!(create_params, context: :manual)
     create_params["review_reasons"] = manual_update_blocking_review_reasons(amount_result)
     apply_current_image_retention_snapshot!(
@@ -181,6 +191,15 @@ class ReceiptsController < ApplicationController
     end
 
     update_params = normalized_receipt_params.to_h
+    if manual_child_count_limit_exceeded?(update_params)
+      render_manual_child_count_limit_exceeded(
+        update_params,
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
     if uploaded_receipt_image.present?
       apply_current_image_retention_snapshot!(update_params, purge_eligible: true)
     end
@@ -395,6 +414,17 @@ class ReceiptsController < ApplicationController
     render :new, status: :unprocessable_content, formats: :html
   end
 
+  def render_manual_child_count_limit_exceeded(permitted, template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    violations = manual_child_count_limit_violations(permitted)
+    @receipt.assign_attributes(permitted)
+    add_manual_child_count_limit_errors!(violations)
+    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render template, status: :unprocessable_content, formats: :html
+  end
+
   def consume_ocr_job_limit_for!(run, user)
     Usage.consume_ocr_job!(user: user)
     true
@@ -486,6 +516,102 @@ class ReceiptsController < ApplicationController
     prune_blank_new_receipt_adjustments!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
+  end
+
+  def manual_child_count_limit_exceeded?(permitted)
+    manual_child_count_limit_violations(permitted).any?
+  end
+
+  def manual_child_count_limit_violations(permitted)
+    [
+      manual_child_count_limit_violation(
+        permitted,
+        attributes_key: "receipt_items_attributes",
+        association_name: :receipt_items,
+        error_attribute: :receipt_items,
+        limit: @receipt.receipt_items_limit
+      ),
+      manual_child_count_limit_violation(
+        permitted,
+        attributes_key: "receipt_adjustments_attributes",
+        association_name: :receipt_adjustments,
+        error_attribute: :receipt_adjustments,
+        limit: ReceiptAdjustment::MAX_PER_RECEIPT
+      ),
+      manual_child_count_limit_violation(
+        permitted,
+        attributes_key: "receipt_payments_attributes",
+        association_name: :receipt_payments,
+        error_attribute: :receipt_payments,
+        limit: ReceiptPayment::MAX_PER_RECEIPT
+      ),
+      manual_child_count_limit_violation(
+        permitted,
+        attributes_key: "receipt_tax_details_attributes",
+        association_name: :receipt_tax_details,
+        error_attribute: :receipt_tax_details,
+        limit: ReceiptTaxDetail::MAX_PER_RECEIPT
+      )
+    ].compact
+  end
+
+  def manual_child_count_limit_violation(permitted, attributes_key:, association_name:, error_attribute:, limit:)
+    attributes = manual_child_attributes_for_limit(permitted, attributes_key)
+    count = manual_child_count_after_submit(attributes, association_name)
+    return if count <= limit
+
+    { attribute: error_attribute, count: count, limit: limit }
+  end
+
+  def manual_child_attributes_for_limit(permitted, attributes_key)
+    permitted_attributes = permitted[attributes_key]
+    return permitted_attributes if permitted_attributes.present?
+
+    params.dig(:receipt, attributes_key)
+  end
+
+  def manual_child_count_after_submit(attributes, association_name)
+    submitted = manual_child_attribute_values(attributes)
+    return @receipt.public_send(association_name).count if submitted.blank? && @receipt.persisted?
+    return submitted.count { |attrs| !manual_child_marked_for_destruction?(attrs) } unless @receipt.persisted?
+
+    current_count = @receipt.public_send(association_name).count
+    destroyed_existing_ids = submitted.filter_map do |attrs|
+      attrs["id"].to_s if attrs["id"].present? && manual_child_marked_for_destruction?(attrs)
+    end.uniq
+    new_count = submitted.count do |attrs|
+      attrs["id"].blank? && !manual_child_marked_for_destruction?(attrs)
+    end
+
+    current_count - destroyed_existing_ids.size + new_count
+  end
+
+  def manual_child_attribute_values(attributes)
+    case attributes
+    when ActionController::Parameters
+      attributes.to_unsafe_h.values
+    when Hash
+      attributes.values
+    when Array
+      attributes
+    else
+      []
+    end.map { |attrs| attrs.respond_to?(:with_indifferent_access) ? attrs.with_indifferent_access : {}.with_indifferent_access }
+  end
+
+  def manual_child_marked_for_destruction?(attrs)
+    ActiveModel::Type::Boolean.new.cast(attrs["_destroy"])
+  end
+
+  def add_manual_child_count_limit_errors!(violations)
+    violations.each do |violation|
+      @receipt.errors.add(
+        violation.fetch(:attribute),
+        :too_many,
+        count: violation.fetch(:count),
+        limit: violation.fetch(:limit)
+      )
+    end
   end
 
   def remove_image_requested?
