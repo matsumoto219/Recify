@@ -77,5 +77,20 @@ RSpec.describe Admin::SystemOperationsDashboard do
         expect(task_args).not_to include('older_than')
       end
     end
+
+    it 'receipt image purge recurringはdry-runとlimit固定を維持しretention固定値を渡さない' do
+      config = YAML.safe_load(
+        Rails.root.join('config/recurring.yml').read,
+        permitted_classes: [],
+        aliases: false
+      )
+      task_args = config.fetch('production').fetch('receipt_image_purge_dry_run').fetch('args').first
+
+      aggregate_failures do
+        expect(task_args).to include('dry_run' => true, 'limit' => 100)
+        expect(task_args).not_to include('cutoff')
+        expect(task_args).not_to include('retention_days')
+      end
+    end
   end
 end

@@ -141,5 +141,19 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
         expect(result[:sample_receipt_ids]).not_to include(too_new.id)
       end
     end
+
+    it '保持日数90日なら91日前の画像だけを対象にする' do
+      create(:system_setting, key: 'retention.receipt_images_days', value: SystemSettings.stored_value(90))
+      too_new = purgeable_receipt(image_purge_eligible_at: 89.days.ago)
+      old_receipt = purgeable_receipt(image_purge_eligible_at: 91.days.ago)
+
+      result = described_class.call
+
+      aggregate_failures do
+        expect(result).to include(retention_days: 90, candidate_count: 1)
+        expect(result[:sample_receipt_ids]).to eq([ old_receipt.id ])
+        expect(result[:sample_receipt_ids]).not_to include(too_new.id)
+      end
+    end
   end
 end
