@@ -30,6 +30,8 @@ ja:
       subtotal: 税抜金額
       tax_amount: 税額
       tax_rate: 税率
+      payment_adjustment: 支払調整
+      final_payment_total: 実支払額
       tax_details: 税率別内訳
       tax_rate_unset: 税率未設定
       target: 対象

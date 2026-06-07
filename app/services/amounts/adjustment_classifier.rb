@@ -30,6 +30,7 @@ module Amounts
       {
         effect: effect,
         signed_amount: signed_amount,
+        tax_treatment: tax_treatment,
         taxable: tax_rate.positive?,
         tax_rate: tax_rate,
         warnings: warnings,
@@ -43,11 +44,17 @@ module Amounts
 
     def effect
       return :payment_adjustment if payment_adjustment_kind? || cashless_payment_adjustment?
-      return :taxable_adjustment if purchase_known? && tax_rate.positive?
-      return :non_taxable_adjustment if purchase_known? && tax_rate.zero?
       return :unknown_adjustment if adjustment[:kind] == "other" && adjustment[:source].to_s != "manual"
 
       :purchase_adjustment
+    end
+
+    def tax_treatment
+      return :not_applicable if effect == :payment_adjustment
+      return :unknown if effect == :unknown_adjustment
+      return :taxable if tax_rate.positive?
+
+      :non_taxable
     end
 
     def payment_adjustment_kind?
@@ -90,6 +97,7 @@ module Amounts
         sign: adjustment[:sign],
         amount: adjustment[:amount],
         effect: effect,
+        tax_treatment: tax_treatment,
         tax_rate: tax_rate
       }
     end

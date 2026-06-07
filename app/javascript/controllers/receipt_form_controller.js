@@ -35,7 +35,11 @@ export default class extends Controller {
     'totalAmount',
     'subtotalAmount',
     'taxAmount',
-    'taxRateSummary'
+    'taxRateSummary',
+    'paymentAdjustmentRow',
+    'paymentAdjustmentAmount',
+    'finalPaymentRow',
+    'finalPaymentAmount'
   ]
 
   static values = {
@@ -50,6 +54,7 @@ export default class extends Controller {
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
     multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' },
+    adjustmentPaymentKinds: { type: String, default: 'point_usage' },
     adjustmentSurchargeKinds: { type: String, default: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee' },
     adjustmentDiscountKinds: { type: String, default: 'receipt_discount,coupon,point_usage,return_refund' },
     adjustmentSurchargeLabel: { type: String, default: 'Surcharge' },
@@ -145,6 +150,7 @@ export default class extends Controller {
 
   adjustmentKindChanged (event) {
     const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
+    this.syncAdjustmentEffectForRow(row)
     this.syncAdjustmentSignForRow(row)
     this.recalculate()
   }
@@ -392,6 +398,7 @@ export default class extends Controller {
     let subtotalSum = 0
     let taxSum = 0
     let total = 0
+    let paymentAdjustmentTotal = 0
     const taxRates = new Set()
     const externalTaxGroups = new Map()
     const externalTax = this.usesExternalTax()
@@ -458,22 +465,24 @@ export default class extends Controller {
 
       this.syncAdjustmentSignForRow(row)
 
-      const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
       const amountInput = row.querySelector('[data-receipt-form-target="adjustmentAmountInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="adjustmentTaxRateInput"]')
-      const kind = String(kindInput?.value ?? '')
+      const effect = this.adjustmentEffectForRow(row)
       const sign = this.adjustmentSignForRow(row)
       const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, 999999999)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
       if (amount <= 0) return
 
-      if (taxRatePercent > 0 && kind !== 'point_usage') {
+      if (taxRatePercent > 0 && effect !== 'payment_adjustment') {
         taxRates.add(taxRatePercent)
       }
 
-      if (kind === 'point_usage') return
-
       const signedAmount = sign === 'surcharge' ? amount : -amount
+      if (effect === 'payment_adjustment') {
+        paymentAdjustmentTotal += signedAmount
+        return
+      }
+
       let adjustmentTax = 0
       let adjustmentSubtotal = signedAmount
 
@@ -500,6 +509,7 @@ export default class extends Controller {
     total = this.clampNumber(total, 0, 999999999)
     subtotalSum = this.clampNumber(subtotalSum, 0, 999999999)
     taxSum = this.clampNumber(taxSum, 0, 999999999)
+    const finalPaymentTotal = this.clampNumber(total + paymentAdjustmentTotal, 0, 999999999)
 
     // 合計更新（存在する場合のみ）
     if (this.hasTotalAmountTarget) {
@@ -517,10 +527,38 @@ export default class extends Controller {
     if (this.hasTaxRateSummaryTarget) {
       this.taxRateSummaryTarget.textContent = this.formatTaxRateSummary(taxRates)
     }
+
+    this.syncPaymentAdjustmentSummary(paymentAdjustmentTotal, finalPaymentTotal)
   }
 
   syncAdjustmentSigns () {
     this.adjustmentRowTargets.forEach((row) => this.syncAdjustmentSignForRow(row))
+  }
+
+  syncAdjustmentEffectForRow (row) {
+    if (!row) return
+
+    const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+    row.dataset.receiptFormAdjustmentEffect = this.adjustmentEffectForKind(kindInput?.value)
+  }
+
+  adjustmentEffectForRow (row) {
+    const effect = String(row?.dataset.receiptFormAdjustmentEffect ?? '').trim()
+    if (this.validAdjustmentEffect(effect)) return effect
+
+    const kindInput = row?.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+    return this.adjustmentEffectForKind(kindInput?.value)
+  }
+
+  adjustmentEffectForKind (kind) {
+    const normalizedKind = String(kind ?? '').trim()
+    if (this.adjustmentPaymentKindList().includes(normalizedKind)) return 'payment_adjustment'
+
+    return 'purchase_adjustment'
+  }
+
+  validAdjustmentEffect (effect) {
+    return ['purchase_adjustment', 'payment_adjustment', 'unknown_adjustment'].includes(effect)
   }
 
   syncAdjustmentSignForRow (row) {
@@ -600,6 +638,30 @@ export default class extends Controller {
       .filter((kind) => kind !== '')
   }
 
+  adjustmentPaymentKindList () {
+    return this.adjustmentPaymentKindsValue
+      .split(',')
+      .map((kind) => kind.trim())
+      .filter((kind) => kind !== '')
+  }
+
+  syncPaymentAdjustmentSummary (paymentAdjustmentTotal, finalPaymentTotal) {
+    const visible = paymentAdjustmentTotal !== 0
+
+    this.paymentAdjustmentRowTargets.forEach((row) => row.classList.toggle('hidden', !visible))
+    this.finalPaymentRowTargets.forEach((row) => row.classList.toggle('hidden', !visible))
+
+    if (this.hasPaymentAdjustmentAmountTarget) {
+      const text = this.formatSignedAmount(paymentAdjustmentTotal)
+      this.paymentAdjustmentAmountTarget.textContent = text
+      this.paymentAdjustmentAmountTarget.title = text
+    }
+
+    if (this.hasFinalPaymentAmountTarget) {
+      this.animateAmount(this.finalPaymentAmountTarget, finalPaymentTotal)
+    }
+  }
+
   animateLineTotal (target, nextValue, { withLabel = false } = {}) {
     const duration = 250
     const startValue = this.currentAmountValue(target)
@@ -667,6 +729,13 @@ export default class extends Controller {
 
   applyDiscountRounding (value) {
     return this.applyRounding(value, this.discountRoundingModeValue)
+  }
+
+  formatSignedAmount (value) {
+    const amount = Math.floor(Math.abs(value))
+    const sign = value < 0 ? '-' : '+'
+
+    return `${sign}¥${this.formatNumber(amount)}`
   }
 
   usesExternalTax () {

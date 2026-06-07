@@ -56,6 +56,18 @@ module ReceiptsHelper
     "#{currency_prefix}#{number_with_delimiter(amount)}"
   end
 
+  def receipt_signed_amount_display(amount, currency_prefix: "¥")
+    return t("receipts.common.not_available") if amount.nil?
+
+    signed_amount = amount.to_i
+    sign = signed_amount.negative? ? "-" : "+"
+    "#{sign}#{receipt_detail_amount_display(signed_amount.abs, currency_prefix: currency_prefix)}"
+  end
+
+  def receipt_payment_adjustment_summary(receipt)
+    ReceiptAmountService.payment_adjustment_summary(receipt: receipt)
+  end
+
   def receipt_rate_display(rate)
     return t("receipts.common.not_available") if rate.nil?
     return rate if rate.is_a?(String) && rate.include?("%")

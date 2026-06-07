@@ -36,7 +36,8 @@
        data-swipe-action-target="foreground"
        data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
     <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
-         data-receipt-form-target="adjustmentRow">
+         data-receipt-form-target="adjustmentRow"
+         data-receipt-form-adjustment-effect="<%= row_state.calculation_effect %>">
   <div class="col-span-2 md:col-span-4">
     <div class="flex items-center gap-2 md:block">
       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.adjustment_fields.label") %></span>
@@ -173,7 +174,7 @@
           <div class="space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.adjustment_fields.sign") %></p>
 
-            <%# 種別から加算/減算を自動設定し、その他のみ選択可能にする。ポイント利用は支払調整として扱う。 %>
+            <%# 種別から加算/減算を自動設定し、合計反映位置はサーバー分類済みeffectで扱う。 %>
             <div data-receipt-form-target="adjustmentSignLabelWrapper"
                  class="<%= row_state.sign_label_wrapper_class %>">
               <span class="inline-flex h-10 w-full items-center justify-center rounded-lg border token-border-soft token-bg-card px-3 text-sm font-bold token-text-muted"

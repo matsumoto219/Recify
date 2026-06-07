@@ -67,6 +67,25 @@ class ReceiptAmountService
     Amounts::NumberParser.parse_quantity(value, default: default)
   end
 
+  def self.adjustment_classification(adjustment)
+    Amounts::AdjustmentClassifier.call(adjustment)
+  end
+
+  def self.adjustment_effect(adjustment)
+    adjustment_classification(adjustment)[:effect].to_s
+  end
+
+  def self.payment_adjustment_kinds
+    Amounts::AdjustmentClassifier::PAYMENT_ADJUSTMENT_KINDS
+  end
+
+  def self.payment_adjustment_summary(receipt:, receipt_adjustments: nil)
+    Amounts::PaymentAdjustmentSummary.call(
+      receipt: receipt,
+      receipt_adjustments: receipt_adjustments
+    )
+  end
+
   def self.warning_mismatch_codes
     Amounts::MismatchSeverity::WARNING
   end

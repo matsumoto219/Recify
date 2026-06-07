@@ -1130,6 +1130,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(sign_select).to be_present
         expect(sign_hidden).to be_present
         expect(sign_hidden['value']).to eq('surcharge')
+        expect(adjustment_row['data-receipt-form-adjustment-effect']).to eq('purchase_adjustment')
         expect(template.text).not_to include('種別に応じて加算または減算を自動設定します')
         expect(template.text).not_to include('ポイント利用は支払調整として扱い')
         expect(response.body).not_to include('種別に応じて加算または減算を自動設定します')
@@ -3902,6 +3903,64 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '詳細画面は支払調整がある時だけ支払調整と実支払額を表示する' do
+      receipt.update!(
+        subtotal_amount: 1_066,
+        tax_amount: 95,
+        total_amount: 1_161,
+        amount_calculation_profile: {
+          computed: {
+            payment_adjustment_total: -22,
+            final_payment_total: 1_139
+          }
+        }
+      )
+      receipt.receipt_adjustments.create!(
+        kind: 'receipt_discount',
+        label: 'キャッシュレス還元額',
+        amount: 22,
+        sign: 'discount',
+        source: 'ai',
+        source_text: 'キャッシュレス還元額 -22',
+        needs_review: false,
+        position_index: 1
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      text = document.text.squish
+
+      aggregate_failures do
+        # 検算: 購入合計 1,161 + 支払調整 -22 = 実支払額 1,139。
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq('¥1,161')
+        expect(text).to include("#{I18n.t('shared.amount_summary_card.payment_adjustment')} -¥22")
+        expect(text).to include("#{I18n.t('shared.amount_summary_card.final_payment_total')} ¥1,139")
+      end
+    end
+
+    it '詳細画面は支払調整がない時は実支払額を表示しない' do
+      receipt.update!(
+        amount_calculation_profile: {
+          computed: {
+            payment_adjustment_total: 0,
+            final_payment_total: receipt.total_amount
+          }
+        }
+      )
+
+      get receipt_path(receipt)
+
+      text = Nokogiri::HTML(response.body).text
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(text).not_to include(I18n.t('shared.amount_summary_card.payment_adjustment'))
+        expect(text).not_to include(I18n.t('shared.amount_summary_card.final_payment_total'))
+      end
+    end
+
     it '詳細画面の税率表示はreceipt_tax_detailsが複数なら明細税率より優先して複数税率を表示する' do
       receipt.receipt_items.create!(
         confirmed_name: 'MIX SWEETS',
@@ -4689,6 +4748,47 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
+        expect(form['data-receipt-form-adjustment-payment-kinds-value']).to eq('point_usage')
+      end
+    end
+
+    it '編集フォームへ支払調整effectと実支払額を渡す' do
+      receipt.update!(
+        subtotal_amount: 1_066,
+        tax_amount: 95,
+        total_amount: 1_161,
+        amount_calculation_profile: {
+          computed: {
+            payment_adjustment_total: -22,
+            final_payment_total: 1_139
+          }
+        }
+      )
+      receipt.receipt_adjustments.create!(
+        kind: 'receipt_discount',
+        label: 'キャッシュレス還元額',
+        amount: 22,
+        sign: 'discount',
+        source: 'ai',
+        source_text: 'キャッシュレス還元額 -22',
+        needs_review: false,
+        position_index: 1
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      adjustment_row = document.css('[data-receipt-form-target="adjustmentRow"]').find do |row|
+        row.at_css('input[name*="[label]"]')&.[]('value') == 'キャッシュレス還元額'
+      end
+
+      aggregate_failures do
+        # 検算: 購入合計 1,161 + 支払調整 -22 = 実支払額 1,139。
+        expect(response).to have_http_status(:success)
+        expect(adjustment_row['data-receipt-form-adjustment-effect']).to eq('payment_adjustment')
+        expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq('¥1,161')
+        expect(document.at_css('[data-receipt-form-target="paymentAdjustmentAmount"]').text.strip).to eq('-¥22')
+        expect(document.at_css('[data-receipt-form-target="finalPaymentAmount"]').text.strip).to eq('¥1,139')
       end
     end
 

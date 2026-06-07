@@ -41,6 +41,10 @@ class ReceiptFormPresenter
     ReceiptAdjustment::DISCOUNT_KINDS.join(",")
   end
 
+  def adjustment_payment_kinds_value
+    ReceiptAmountService.payment_adjustment_kinds.join(",")
+  end
+
   def decimal_quantity_units_value
     ReceiptItem::DECIMAL_QUANTITY_UNITS.join(",")
   end
@@ -248,6 +252,10 @@ class ReceiptFormPresenter
 
     def tax_rate_value
       adjustment.tax_rate.present? ? adjustment.tax_rate * 100 : nil
+    end
+
+    def calculation_effect
+      ReceiptAmountService.adjustment_effect(adjustment)
     end
 
     def kind_options

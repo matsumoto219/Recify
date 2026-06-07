@@ -30,6 +30,7 @@
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
                   "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates"),
+                  "receipt-form-adjustment-payment-kinds-value": form_presenter.adjustment_payment_kinds_value,
                   "receipt-form-adjustment-surcharge-kinds-value": form_presenter.adjustment_surcharge_kinds_value,
                   "receipt-form-adjustment-discount-kinds-value": form_presenter.adjustment_discount_kinds_value,
                   "receipt-form-adjustment-surcharge-label-value": t("enums.receipt_adjustment.sign.surcharge"),
@@ -49,6 +50,7 @@
   <% total_amount_value = receipt.total_amount %>
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
+  <% payment_adjustment_summary = receipt_payment_adjustment_summary(receipt) %>
 
   <%
     tax_rate_summary = receipt_tax_rate_summary(receipt, items: visible_receipt_items)
@@ -318,9 +320,15 @@
               tax_amount: tax_amount_value,
               tax_rate: receipt.tax_rate,
               tax_rate_summary: tax_rate_summary,
+              payment_adjustment_total: payment_adjustment_summary&.payment_adjustment_total,
+              final_payment_total: payment_adjustment_summary&.final_payment_total,
               subtotal_target: "subtotalAmount",
               tax_amount_target: "taxAmount",
-              tax_rate_target: "taxRateSummary" %>
+              tax_rate_target: "taxRateSummary",
+              payment_adjustment_row_target: "paymentAdjustmentRow",
+              payment_adjustment_total_target: "paymentAdjustmentAmount",
+              final_payment_row_target: "finalPaymentRow",
+              final_payment_total_target: "finalPaymentAmount" %>
 
         <%= render "shared/ui/card/receipt_image_card",
               receipt: receipt,

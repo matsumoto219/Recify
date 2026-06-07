@@ -45,8 +45,30 @@ RSpec.describe Amounts::AdjustmentClassifier do
     )
 
     expect(result).to include(
-      effect: :non_taxable_adjustment,
+      effect: :purchase_adjustment,
+      tax_treatment: :non_taxable,
       signed_amount: -100
     )
+  end
+
+  it '配送料・深夜料金・手数料を購入調整として分類する' do
+    results = %w[delivery_fee late_night_charge service_charge bag_fee handling_fee].map do |kind|
+      described_class.call(
+        kind: kind,
+        sign: 'surcharge',
+        amount: 100,
+        source: 'ocr'
+      )
+    end
+
+    aggregate_failures do
+      results.each do |result|
+        expect(result).to include(
+          effect: :purchase_adjustment,
+          tax_treatment: :non_taxable,
+          signed_amount: 100
+        )
+      end
+    end
   end
 end
