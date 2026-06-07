@@ -17,7 +17,11 @@ module Amounts
       zero_amount_item_incomplete: "ZERO_AMOUNT_ITEM_INCOMPLETE",
       discount_data_incomplete: "DISCOUNT_DATA_INCOMPLETE",
       adjustment_uncertain: "ADJUSTMENT_UNCERTAIN",
-      adjustment_tax_rate_missing: "ADJUSTMENT_TAX_RATE_MISSING"
+      adjustment_tax_rate_missing: "ADJUSTMENT_TAX_RATE_MISSING",
+      invalid_amount_relation: "INVALID_AMOUNT_RELATION",
+      payment_amount_mismatch: "PAYMENT_AMOUNT_MISMATCH",
+      tax_details_double_counted: "TAX_DETAILS_DOUBLE_COUNTED",
+      tax_detail_gross_item_mismatch: "TAX_DETAIL_GROSS_ITEM_MISMATCH"
     }.freeze
 
     def self.code(symbol)

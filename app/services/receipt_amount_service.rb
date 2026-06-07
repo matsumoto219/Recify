@@ -13,6 +13,8 @@
 #     :amount, :rate, :net_amount (optional)
 # - receipt_adjustments: Array<Hash> with:
 #     :amount, :sign, :kind, :needs_review, :review_reasons
+# - receipt_payments: Array<Hash> with:
+#     :method, :amount
 #
 # Output:
 # {
@@ -31,12 +33,13 @@
 # }
 #
 class ReceiptAmountService
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_tax_details: receipt_tax_details,
       receipt_adjustments: receipt_adjustments,
+      receipt_payments: receipt_payments,
       context: context,
       rounding_mode: rounding_mode,
       tax_rounding_mode: tax_rounding_mode,
@@ -68,11 +71,12 @@ class ReceiptAmountService
     Amounts::MismatchSeverity::WARNING
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
+    @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
     @context = normalize_context(context)
     @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
     @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
@@ -169,7 +173,7 @@ class ReceiptAmountService
     mismatch_messages = build_mismatch_messages(inconsistencies)
 
     # --- 5) ResultTemplate（出力整形）
-    Amounts::ResultTemplate.build(
+    legacy_result = Amounts::ResultTemplate.build(
       computed: {
         subtotal: calc[:subtotal],
         tax: calc[:tax],
@@ -199,6 +203,17 @@ class ReceiptAmountService
         discount: active_discount_rounding_mode
       }
     )
+
+    Amounts::Engine.new(
+      receipt: @receipt,
+      items: @items,
+      tax_details: @tax_details,
+      adjustments: @adjustments,
+      payments: @payments,
+      context: @context,
+      tax_rounding_modes: candidate_tax_rounding_modes,
+      legacy_result: legacy_result
+    ).call
   end
 
   private
@@ -417,7 +432,7 @@ class ReceiptAmountService
 
   def positive_adjustment_tax_rates
     @adjustments.filter_map do |adjustment|
-      next if adjustment[:kind] == "point_usage"
+      next if Amounts::AdjustmentClassifier.payment_adjustment?(adjustment)
 
       rate = normalize_rate(adjustment[:tax_rate])
       rate.positive? ? rate : nil
@@ -531,7 +546,23 @@ class ReceiptAmountService
       needs_review: normalized[:needs_review] == true,
       review_reasons: Array(normalized[:review_reasons]).map(&:to_s),
       source: normalized[:source],
-      label: normalized[:label]
+      label: normalized[:label],
+      source_text: normalized[:source_text]
+    }
+  end
+
+  def normalize_payment(payment)
+    normalized = if payment.respond_to?(:attributes)
+      payment.attributes.symbolize_keys
+    elsif payment.respond_to?(:to_h)
+      payment.to_h.symbolize_keys
+    else
+      {}
+    end
+
+    {
+      method: normalized[:method],
+      amount: to_i_or_nil(normalized[:amount])
     }
   end
 

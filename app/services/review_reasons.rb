@@ -42,6 +42,10 @@ module ReviewReasons
     adjustment_tax_rate_missing
     price_tax_inclusion_uncertain
     calculation_profile_uncertain
+    invalid_amount_relation
+    payment_amount_mismatch
+    tax_details_double_counted
+    tax_detail_gross_item_mismatch
     insufficient_data
   ].freeze
 

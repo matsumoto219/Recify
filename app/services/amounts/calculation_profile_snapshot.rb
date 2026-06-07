@@ -15,7 +15,7 @@ module Amounts
     end
 
     def call
-      {
+      snapshot = {
         profile: sanitized_profile,
         score: result[:calculation_profile_score],
         warnings: normalized_array(result[:warnings].presence || result[:warning_reasons]),
@@ -27,6 +27,11 @@ module Amounts
         computed: amount_summary(result[:computed]),
         resolved: amount_summary(result[:resolved])
       }
+
+      amount_engine = sanitized_amount_engine(result[:amount_engine])
+      snapshot[:amount_engine] = amount_engine if amount_engine.present?
+
+      snapshot
     end
 
     private
@@ -77,10 +82,50 @@ module Amounts
         adjusted_item_total: normalize_value(amounts[:adjusted_item_total]),
         adjustment_discount_total: normalize_value(amounts[:adjustment_discount_total]),
         adjustment_surcharge_total: normalize_value(amounts[:adjustment_surcharge_total]),
+        purchase_adjustment_total: normalize_value(amounts[:purchase_adjustment_total]),
         payment_adjustment_total: normalize_value(amounts[:payment_adjustment_total]),
+        payment_amount_sum: normalize_value(amounts[:payment_amount_sum]),
+        final_payment_total: normalize_value(amounts[:final_payment_total]),
         adjustment_tax_rate_missing_total: normalize_value(amounts[:adjustment_tax_rate_missing_total]),
         tax_detail_amount_basis: normalize_scalar(amounts[:tax_detail_amount_basis])
       }.compact
+    end
+
+    def sanitized_amount_engine(value)
+      return nil unless value.respond_to?(:with_indifferent_access)
+
+      engine = value.with_indifferent_access
+      {
+        selected_candidate_id: normalize_scalar(engine[:selected_candidate_id]),
+        selected_basis: normalize_scalar(engine[:selected_basis]),
+        candidates: sanitized_engine_candidates(engine[:candidates])
+      }.compact
+    end
+
+    def sanitized_engine_candidates(candidates)
+      Array(candidates).filter_map do |candidate|
+        next unless candidate.respond_to?(:with_indifferent_access)
+
+        candidate = candidate.with_indifferent_access
+        {
+          candidate_id: normalize_scalar(candidate[:candidate_id]),
+          basis: normalize_scalar(candidate[:basis]),
+          subtotal: normalize_value(candidate[:subtotal]),
+          tax: normalize_value(candidate[:tax]),
+          purchase_total: normalize_value(candidate[:purchase_total]),
+          final_payment_total: normalize_value(candidate[:final_payment_total]),
+          purchase_adjustment_total: normalize_value(candidate[:purchase_adjustment_total]),
+          payment_adjustment_total: normalize_value(candidate[:payment_adjustment_total]),
+          payment_amount_sum: normalize_value(candidate[:payment_amount_sum]),
+          rounding_mode: normalize_scalar(candidate[:rounding_mode]),
+          rounding_scope: normalize_scalar(candidate[:rounding_scope]),
+          score: normalize_value(candidate[:score]),
+          score_breakdown: normalize_value(candidate[:score_breakdown]),
+          warnings: normalized_array(candidate[:warnings]),
+          hard_reject_reasons: normalized_array(candidate[:hard_reject_reasons]),
+          evidence: normalize_value(candidate[:evidence])
+        }.compact
+      end
     end
 
     def normalized_array(value)

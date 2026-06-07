@@ -2,8 +2,6 @@
 
 module Amounts
   class AdjustmentTotalAggregator
-    PAYMENT_ADJUSTMENT_KINDS = %w[point_usage].freeze
-
     def initialize(adjustments:, items: [], rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, receipt_tax_basis: :total_includes_tax)
       @adjustments = Array(adjustments).map { |adjustment| normalize_adjustment(adjustment) }
       @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE)
@@ -17,7 +15,9 @@ module Amounts
         amount = adjustment[:amount].to_i
         next unless amount.positive?
 
-        if payment_adjustment?(adjustment)
+        classification = Amounts::AdjustmentClassifier.call(adjustment)
+
+        if classification[:effect] == :payment_adjustment
           totals[:payment_adjustment_total] += signed_amount(adjustment)
           next
         end
@@ -98,10 +98,6 @@ module Amounts
       adjustment[:sign] == "surcharge" ? adjustment[:amount].to_i : -adjustment[:amount].to_i
     end
 
-    def payment_adjustment?(adjustment)
-      PAYMENT_ADJUSTMENT_KINDS.include?(adjustment[:kind].to_s)
-    end
-
     def uncertain_adjustment?(adjustment)
       adjustment[:needs_review] == true || (adjustment[:kind] == "other" && adjustment[:source].to_s != "manual")
     end
@@ -136,7 +132,8 @@ module Amounts
         needs_review: normalized[:needs_review] == true,
         review_reasons: Array(normalized[:review_reasons]).map(&:to_s),
         source: normalized[:source],
-        label: normalized[:label]
+        label: normalized[:label],
+        source_text: normalized[:source_text]
       }
     end
 
@@ -156,15 +153,6 @@ module Amounts
     def normalize_receipt_tax_basis(value)
       basis = value.to_s.to_sym
       %i[total_includes_tax tax_added_to_subtotal].include?(basis) ? basis : :total_includes_tax
-    end
-
-    def fetch_value(object, key)
-      if object.respond_to?(:key?)
-        return object[key] if object.key?(key)
-        object[key.to_s] if object.key?(key.to_s)
-      elsif object.respond_to?(key)
-        object.public_send(key)
-      end
     end
 
     def to_i(value)

@@ -127,6 +127,7 @@ class ReceiptAnalysisPipeline
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],
+        receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
 
@@ -200,6 +201,7 @@ class ReceiptAnalysisPipeline
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],
+        receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
 
@@ -260,6 +262,7 @@ class ReceiptAnalysisPipeline
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],
+        receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
 
@@ -603,11 +606,13 @@ class ReceiptAnalysisPipeline
     end
 
     def amount_review_reasons(amount_result)
-      if amount_result.key?(:blocking_inconsistencies)
-        Array(amount_result[:blocking_inconsistencies]).uniq
+      amount_reasons = if amount_result.key?(:blocking_inconsistencies)
+        Array(amount_result[:blocking_inconsistencies])
       else
         Array(amount_result[:inconsistencies])
       end
+
+      (amount_reasons + Array(amount_result[:review_reasons])).uniq
     end
 
     def ocr_review_reasons_for(ocr_result)

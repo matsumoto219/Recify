@@ -1,0 +1,166 @@
+# frozen_string_literal: true
+
+module Amounts
+  class TaxDetailBasisDetector
+    BASIS_VALUES = %i[gross net tax_only summary intermediate unknown].freeze
+    INTERMEDIATE_PATTERNS = /小計.*税抜|税抜.*小計|課税小計|対象小計/i.freeze
+    GROSS_PATTERNS = /対象|税込|内消費税|内税|included/i.freeze
+    NET_PATTERNS = /外税|税別|税抜|別途消費税|net|exclusive|tax\s*exclusive/i.freeze
+    TAX_ONLY_PATTERNS = /消費税等?$|消費税$|税額$|tax$/i.freeze
+
+    class << self
+      def call(tax_details, rounding_modes: %i[floor round ceil])
+        new(tax_details, rounding_modes: rounding_modes).call
+      end
+    end
+
+    def initialize(tax_details, rounding_modes: %i[floor round ceil])
+      @tax_details = Array(tax_details).map.with_index { |tax_detail, index| normalize_tax_detail(tax_detail, index) }
+      @rounding_modes = Array(rounding_modes).map { |mode| Amounts::Rounding.normalize_rounding_mode(mode) }.uniq
+    end
+
+    def call
+      tax_details.map do |tax_detail|
+        basis = detect_basis(tax_detail)
+        tax_amount = tax_detail[:amount].to_i
+        net_amount = tax_detail[:net_amount].to_i
+
+        {
+          index: tax_detail[:index],
+          basis: basis,
+          rate: tax_detail[:rate],
+          net_amount: net_amount,
+          amount: tax_amount,
+          target_net_amount: target_net_amount(basis, net_amount, tax_amount),
+          target_gross_amount: target_gross_amount(basis, net_amount, tax_amount),
+          description: tax_detail[:description],
+          intermediate: basis == :intermediate,
+          evidence: evidence_for(tax_detail, basis)
+        }
+      end
+    end
+
+    private
+
+    attr_reader :tax_details, :rounding_modes
+
+    def detect_basis(tax_detail)
+      description = tax_detail[:description].to_s
+      rate = tax_detail[:rate]
+      net_amount = tax_detail[:net_amount].to_i
+      tax_amount = tax_detail[:amount].to_i
+
+      return :summary if summary_detail?(tax_detail)
+      return :intermediate if intermediate_detail?(tax_detail)
+      return :tax_only if net_amount <= 0 && tax_amount.positive?
+      return :unknown unless rate.positive? && net_amount.positive? && tax_amount.positive?
+      return :net if description.match?(NET_PATTERNS)
+
+      gross_match = tax_from_gross_matches?(net_amount, rate, tax_amount)
+      net_match = tax_from_net_matches?(net_amount, rate, tax_amount)
+
+      return :gross if gross_match && description.match?(GROSS_PATTERNS)
+      return :net if net_match && !gross_match
+      return :gross if gross_match && !net_match
+      return :net if net_match
+
+      :unknown
+    end
+
+    def summary_detail?(tax_detail)
+      tax_detail[:rate].zero? &&
+        tax_detail[:net_amount].to_i.zero? &&
+        tax_detail[:amount].to_i.positive? &&
+        tax_detail[:description].to_s.match?(TAX_ONLY_PATTERNS)
+    end
+
+    def intermediate_detail?(tax_detail)
+      return false unless tax_detail[:description].to_s.match?(INTERMEDIATE_PATTERNS)
+
+      same_rate_final_detail_exists?(tax_detail)
+    end
+
+    def same_rate_final_detail_exists?(tax_detail)
+      tax_details.any? do |other|
+        next false if other[:index] == tax_detail[:index]
+
+        other[:rate] == tax_detail[:rate] &&
+          other[:net_amount].to_i.positive? &&
+          other[:amount].to_i.positive? &&
+          !other[:description].to_s.match?(INTERMEDIATE_PATTERNS)
+      end
+    end
+
+    def target_net_amount(basis, net_amount, tax_amount)
+      case basis
+      when :gross
+        [ net_amount - tax_amount, 0 ].max
+      when :net
+        net_amount
+      else
+        net_amount
+      end
+    end
+
+    def target_gross_amount(basis, net_amount, tax_amount)
+      case basis
+      when :gross
+        net_amount
+      when :net
+        net_amount + tax_amount
+      else
+        net_amount
+      end
+    end
+
+    def evidence_for(tax_detail, basis)
+      {
+        source: "receipt_tax_detail",
+        index: tax_detail[:index],
+        basis: basis,
+        rate: tax_detail[:rate],
+        net_amount: tax_detail[:net_amount],
+        amount: tax_detail[:amount]
+      }
+    end
+
+    def tax_from_gross_matches?(gross_amount, rate, tax_amount)
+      rounding_modes.any? do |rounding_mode|
+        Amounts::Rounding.apply_rounding(BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate), rounding_mode) == tax_amount
+      end
+    end
+
+    def tax_from_net_matches?(net_amount, rate, tax_amount)
+      rounding_modes.any? do |rounding_mode|
+        Amounts::Rounding.apply_rounding(BigDecimal(net_amount.to_s) * rate, rounding_mode) == tax_amount
+      end
+    end
+
+    def normalize_tax_detail(value, index)
+      normalized = if value.respond_to?(:attributes)
+        value.attributes.symbolize_keys
+      elsif value.respond_to?(:to_h)
+        value.to_h.symbolize_keys
+      else
+        {}
+      end
+
+      {
+        index: index,
+        amount: Amounts::NumberParser.parse_amount(normalized[:amount]),
+        rate: normalize_rate(normalized[:rate]),
+        net_amount: Amounts::NumberParser.parse_amount(normalized[:net_amount]),
+        description: normalized[:description]
+      }
+    end
+
+    def normalize_rate(value)
+      return BigDecimal("0") if value.nil? || value == ""
+
+      rate = BigDecimal(value.to_s.delete("%"))
+      rate > 1 ? rate / 100 : rate
+    rescue ArgumentError
+      BigDecimal("0")
+    end
+  end
+end

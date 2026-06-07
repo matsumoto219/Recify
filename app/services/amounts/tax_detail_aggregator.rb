@@ -71,7 +71,7 @@ module Amounts
     def adjustment_tax_details
       @adjustments.each_with_object({}) do |adjustment, grouped|
         normalized = normalize_adjustment(adjustment)
-        next if payment_adjustment?(normalized)
+        next if Amounts::AdjustmentClassifier.payment_adjustment?(normalized)
 
         tax_rate = normalize_tax_rate(normalized[:tax_rate])
         amount = normalized[:amount].to_i
@@ -148,16 +148,16 @@ module Amounts
         kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
         sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_sign_for(kind),
         amount: to_i(normalized[:amount]).abs,
-        tax_rate: normalized[:tax_rate]
+        tax_rate: normalized[:tax_rate],
+        source: normalized[:source],
+        label: normalized[:label],
+        source_text: normalized[:source_text],
+        needs_review: normalized[:needs_review] == true
       }
     end
 
     def default_sign_for(kind)
       %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
-    end
-
-    def payment_adjustment?(adjustment)
-      adjustment[:kind] == "point_usage"
     end
 
     def signed_amount(adjustment)

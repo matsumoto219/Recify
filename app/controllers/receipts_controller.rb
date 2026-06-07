@@ -896,6 +896,7 @@ class ReceiptsController < ApplicationController
       receipt_items: amount_receipt_items(permitted),
       receipt_tax_details: receipt_tax_details,
       receipt_adjustments: amount_receipt_adjustments(permitted, context),
+      receipt_payments: amount_receipt_payments(permitted, context),
       context: context,
       tax_rounding_mode: current_user.tax_rounding_mode,
       discount_rounding_mode: current_user.discount_rounding_mode
@@ -1091,6 +1092,25 @@ class ReceiptsController < ApplicationController
         needs_review: adjustment.needs_review?,
         review_reasons: adjustment.review_reasons,
         source: adjustment.source
+      }
+    end
+  end
+
+  def amount_receipt_payments(permitted, context)
+    payments_attributes = permitted["receipt_payments_attributes"]
+    if payments_attributes.present?
+      return payments_attributes.values.reject do |payment_attributes|
+        ActiveModel::Type::Boolean.new.cast(payment_attributes["_destroy"])
+      end
+    end
+
+    return [] unless context == :edit_save
+    return [] unless @receipt&.persisted?
+
+    @receipt.receipt_payments.map do |payment|
+      {
+        method: payment.method,
+        amount: payment.amount
       }
     end
   end
