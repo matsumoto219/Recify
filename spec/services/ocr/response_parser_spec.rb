@@ -533,6 +533,57 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'TaxDetails descriptionが汎用語でも周辺OCR行から税抜小計/税込対象の文脈を保持する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        小 計 (税抜10%)
+        ¥300
+        消費税等 (10%)
+        ¥30
+        (税率10%対象
+        ¥820)
+        (内消費税等10%
+        ¥74)
+      TEXT
+      response['analyzeResult']['documents'].first['fields']['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '消費税等' },
+              'Amount' => { 'valueCurrency' => { 'amount' => 30, 'currencyCode' => 'JPY' } },
+              'Rate' => { 'valueNumber' => 10 },
+              'NetAmount' => { 'valueCurrency' => { 'amount' => 300, 'currencyCode' => 'JPY' } }
+            }
+          },
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '内消費税等' },
+              'Amount' => { 'valueCurrency' => { 'amount' => 74, 'currencyCode' => 'JPY' } },
+              'Rate' => { 'valueNumber' => 10 },
+              'NetAmount' => { 'valueCurrency' => { 'amount' => 820, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :tax_details)).to include(
+          hash_including(
+            net_amount: 300,
+            amount: 30,
+            description: include('小 計 (税抜10%)', '消費税等')
+          ),
+          hash_including(
+            net_amount: 820,
+            amount: 74,
+            description: include('(税率10%対象', '(内消費税等10%')
+          )
+        )
+      end
+    end
+
     it '単一内税fixtureでは対象額をTaxDetails net_amountへ推定しない' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
 

@@ -215,6 +215,31 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'Payments[] が空でも支払行と次行金額からreceipt_paymentsを補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'nanaco'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:lines] = [
+          '合 計',
+          '¥1,161',
+          'キャッシュレス還元額',
+          '-22',
+          'nanaco支払',
+          '¥1,139',
+          'nanaco番号',
+          '************ 9999'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: レシート購入合計 1,161、キャッシュレス還元 -22、nanaco支払 1,139。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'nanaco支払', amount: 1_139)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [

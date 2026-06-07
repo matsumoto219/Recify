@@ -18,6 +18,24 @@ RSpec.describe Amounts::AdjustmentClassifier do
     )
   end
 
+  it 'receipt_discountとして来たキャッシュレス還元も税率欠損warningなしの支払調整にする' do
+    result = described_class.call(
+      kind: 'receipt_discount',
+      label: 'キャッシュレス還元額',
+      source_text: 'キャッシュレス還元額',
+      sign: 'discount',
+      amount: 22,
+      source: 'ai',
+      needs_review: true
+    )
+
+    expect(result).to include(
+      effect: :payment_adjustment,
+      signed_amount: -22,
+      warnings: []
+    )
+  end
+
   it 'クーポン値引きを購入調整として分類する' do
     result = described_class.call(
       kind: 'coupon',

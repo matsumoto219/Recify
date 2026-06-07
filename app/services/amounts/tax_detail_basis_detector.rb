@@ -3,7 +3,7 @@
 module Amounts
   class TaxDetailBasisDetector
     BASIS_VALUES = %i[gross net tax_only summary intermediate unknown].freeze
-    INTERMEDIATE_PATTERNS = /小計.*税抜|税抜.*小計|課税小計|対象小計/i.freeze
+    INTERMEDIATE_PATTERNS = /小\s*計.*税抜|税抜.*小\s*計|課税小計|対象小計/i.freeze
     GROSS_PATTERNS = /対象|税込|内消費税|内税|included/i.freeze
     NET_PATTERNS = /外税|税別|税抜|別途消費税|net|exclusive|tax\s*exclusive/i.freeze
     TAX_ONLY_PATTERNS = /消費税等?$|消費税$|税額$|tax$/i.freeze
@@ -75,9 +75,9 @@ module Amounts
     end
 
     def intermediate_detail?(tax_detail)
-      return false unless tax_detail[:description].to_s.match?(INTERMEDIATE_PATTERNS)
+      return true if tax_detail[:description].to_s.match?(INTERMEDIATE_PATTERNS) && same_rate_final_detail_exists?(tax_detail)
 
-      same_rate_final_detail_exists?(tax_detail)
+      inferred_intermediate_detail?(tax_detail)
     end
 
     def same_rate_final_detail_exists?(tax_detail)
@@ -88,6 +88,29 @@ module Amounts
           other[:net_amount].to_i.positive? &&
           other[:amount].to_i.positive? &&
           !other[:description].to_s.match?(INTERMEDIATE_PATTERNS)
+      end
+    end
+
+    def inferred_intermediate_detail?(tax_detail)
+      rate = tax_detail[:rate]
+      net_amount = tax_detail[:net_amount].to_i
+      tax_amount = tax_detail[:amount].to_i
+      return false unless rate.positive? && net_amount.positive? && tax_amount.positive?
+      return false unless tax_from_net_matches?(net_amount, rate, tax_amount)
+
+      same_rate_containing_gross_detail_exists?(tax_detail)
+    end
+
+    def same_rate_containing_gross_detail_exists?(tax_detail)
+      current_gross = tax_detail[:net_amount].to_i + tax_detail[:amount].to_i
+
+      tax_details.any? do |other|
+        next false if other[:index] == tax_detail[:index]
+        next false unless other[:rate] == tax_detail[:rate]
+        next false unless other[:net_amount].to_i.positive? && other[:amount].to_i.positive?
+        next false unless tax_from_gross_matches?(other[:net_amount].to_i, other[:rate], other[:amount].to_i)
+
+        other[:net_amount].to_i > current_gross && other[:amount].to_i >= tax_detail[:amount].to_i
       end
     end
 

@@ -107,6 +107,48 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
         expect(snapshot).not_to be_empty
       end
     end
+
+    it 'amount_engineのselected candidate詳細をsnapshotに残す' do
+      snapshot = described_class.call(
+        {
+          context: :analysis,
+          computed: { total: 1_161, subtotal: 1_066, tax: 95 },
+          resolved: { total: 1_161, subtotal: 1_066, tax: 95 },
+          amount_engine: {
+            selected_candidate_id: 'mixed_by_tax_rate_group/floor',
+            selected_basis: 'mixed_by_tax_rate_group',
+            selected_candidate: {
+              candidate_id: 'mixed_by_tax_rate_group/floor',
+              basis: 'mixed_by_tax_rate_group',
+              subtotal: 1_066,
+              tax: 95,
+              purchase_total: 1_161,
+              final_payment_total: 1_139,
+              payment_adjustment_total: -22,
+              payment_amount_sum: 1_139,
+              evidence: [
+                { source: 'receipt_payments', payment_amount_sum: 1_139, final_payment_total: 1_139 },
+                { source: 'ocr_raw_text', raw_text: '保存しない' }
+              ]
+            },
+            candidates: []
+          }
+        }
+      )
+
+      aggregate_failures do
+        # 検算: purchase_total 1,161 + payment_adjustment -22 = final_payment_total 1,139。
+        expect(snapshot.dig(:amount_engine, :selected_candidate)).to include(
+          candidate_id: 'mixed_by_tax_rate_group/floor',
+          basis: 'mixed_by_tax_rate_group',
+          purchase_total: 1_161,
+          final_payment_total: 1_139,
+          payment_adjustment_total: -22,
+          payment_amount_sum: 1_139
+        )
+        expect(snapshot.to_json).not_to include('保存しない')
+      end
+    end
   end
 
   describe 'receipts.amount_calculation_profile schema' do

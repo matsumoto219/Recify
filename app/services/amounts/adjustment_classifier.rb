@@ -72,7 +72,7 @@ module Amounts
     def warnings
       results = []
       results << :adjustment_uncertain if uncertain?
-      results << :adjustment_tax_rate_missing if purchase_known? && tax_rate.zero? && signed_amount.nonzero?
+      results << :adjustment_tax_rate_missing if effect != :payment_adjustment && purchase_known? && tax_rate.zero? && signed_amount.nonzero?
       results
     end
 

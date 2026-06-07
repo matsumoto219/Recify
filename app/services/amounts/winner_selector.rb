@@ -41,6 +41,7 @@ module Amounts
       return false if candidate.rejected?
 
       mixed_tax_inclusion_candidate?(candidate) ||
+        receipt_and_payment_reconciled_candidate?(candidate) ||
         external_tax_candidate?(candidate) ||
         payment_reconciled_candidate?(candidate) ||
         payment_adjusted_candidate?(candidate) ||
@@ -69,6 +70,14 @@ module Amounts
     def receipt_total_matches?(candidate)
       total = receipt_amount(:total_amount)
       total.nil? || total == candidate.purchase_total.to_i
+    end
+
+    def receipt_and_payment_reconciled_candidate?(candidate)
+      return false unless candidate.score.to_i < legacy_score
+      return false unless receipt_total_matches?(candidate)
+
+      !candidate.payment_amount_sum.nil? &&
+        candidate.payment_amount_sum.to_i == candidate.final_payment_total.to_i
     end
 
     def receipt_amounts_complete?(_candidate)

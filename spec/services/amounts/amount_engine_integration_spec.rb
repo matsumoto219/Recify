@@ -68,6 +68,63 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it '2019年サンプルコンビニのOCR descriptionが潰れた再解析データでもlegacyではなく混在候補を採用する' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 10,
+        tax_amount: 125,
+        total_amount: 1_161
+      },
+      items: [
+        { line_total: 130, tax_rate: BigDecimal('0.08') },
+        { line_total: 140, tax_rate: BigDecimal('0.08') },
+        { line_total: 300, tax_rate: BigDecimal('0.10') },
+        { line_total: 490, tax_rate: BigDecimal('0.10') },
+        { line_total: 50, tax_rate: BigDecimal('0') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '消費税等' },
+        { rate: BigDecimal('0.10'), net_amount: 300, amount: 30, description: '消費税等' },
+        { rate: BigDecimal('0.10'), net_amount: 820, amount: 74, description: '内消費税等' }
+      ],
+      adjustments: [
+        {
+          kind: 'receipt_discount',
+          label: 'キャッシュレス還元額',
+          source_text: 'キャッシュレス還元額 -22',
+          sign: 'discount',
+          amount: 22,
+          source: 'ai',
+          needs_review: true
+        }
+      ],
+      payments: [
+        { method: 'nanaco支払', amount: 1_139 }
+      ]
+    )
+
+    selected = result.dig(:amount_engine, :selected_candidate)
+
+    aggregate_failures do
+      # 検算:
+      # 8%: 130税抜 -> 140税込, 140税抜 -> 151税込, gross=291, tax=21。
+      # 10%: 300税抜 -> 330税込, 490税込, gross=820, tax=floor(820 * 10 / 110)=74。
+      # 0%: 50。purchase_total=291 + 820 + 50 = 1,161。cashless_reward=-22でfinal=1,139。
+      expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
+      expect(result.dig(:amount_engine, :selected_basis)).to eq('mixed_by_tax_rate_group')
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+      expect(selected).to include(
+        purchase_total: 1_161,
+        final_payment_total: 1_139,
+        payment_adjustment_total: -22,
+        payment_amount_sum: 1_139
+      )
+      expect(result.dig(:computed, :items).map { |item| item['line_total'] || item[:line_total] }).to eq([ 140, 151, 330, 490, 50 ])
+      expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
+      expect(result[:amount_engine][:candidates].map { |candidate| candidate[:candidate_id] }).to include('mixed_by_tax_rate_group/floor')
+    end
+  end
+
   it 'スーパーの複数税率とレシート全体値引きを購入合計として計算する' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 800, tax_amount: 78, total_amount: 878 },

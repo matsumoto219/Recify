@@ -19,7 +19,8 @@ module Amounts
       {
         selected_candidate_id: selected&.candidate_id,
         selected_basis: selected&.basis,
-        candidates: candidates.sort_by { |candidate| [ candidate.rejected? ? 1 : 0, candidate.score.to_i ] }.first(MAX_CANDIDATES).map do |candidate|
+        selected_candidate: selected ? snapshot_candidate(selected) : nil,
+        candidates: snapshot_candidates.map do |candidate|
           snapshot_candidate(candidate)
         end
       }.compact
@@ -28,6 +29,11 @@ module Amounts
     private
 
     attr_reader :selected, :candidates
+
+    def snapshot_candidates
+      ranked = candidates.sort_by { |candidate| [ candidate.rejected? ? 1 : 0, candidate.score.to_i ] }
+      ([ selected ] + ranked).compact.uniq(&:candidate_id).first(MAX_CANDIDATES)
+    end
 
     def snapshot_candidate(candidate)
       {
@@ -64,6 +70,8 @@ module Amounts
           :net_amount,
           :gross_amount,
           :tax_amount,
+          :target_net_amount,
+          :target_gross_amount,
           :purchase_total,
           :final_payment_total,
           :payment_amount_sum,

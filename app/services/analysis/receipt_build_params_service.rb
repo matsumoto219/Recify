@@ -1,7 +1,9 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|決済|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|d払い|au pay|メルペイ|line pay|デビット|debit/i
+    FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
     FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/
     FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i
     FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
@@ -28,7 +30,7 @@ module Analysis
           normalized_ai_result[:receipt_items_attributes],
           skipped_negative_items:
         )
-        receipt_payments_attributes = build_receipt_payments_attributes(candidates)
+        receipt_payments_attributes = build_receipt_payments_attributes(candidates, lines)
         receipt_tax_details_attributes = build_receipt_tax_details_attributes(candidates)
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
@@ -306,9 +308,8 @@ module Analysis
         end
       end
 
-      def build_receipt_payments_attributes(candidates)
-        # NOTE: Payments[] が取れた場合のみ保存。現状は payment_method への fallback 利用が主で、receipt_payments 自体は未活用
-        Array(candidates[:payments]).map do |payment|
+      def build_receipt_payments_attributes(candidates, lines)
+        structured_payments = Array(candidates[:payments]).map do |payment|
           normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
 
           {
@@ -318,6 +319,59 @@ module Analysis
             amount: normalize_amount(normalized_payment[:amount])
           }.compact
         end
+        return structured_payments if structured_payments.present?
+
+        fallback_payments_from_lines(lines)
+      end
+
+      def fallback_payments_from_lines(lines)
+        Array(lines).each_with_index.filter_map do |line, index|
+          next unless fallback_payment_context_line?(line)
+
+          amount = fallback_payment_amount(line)
+          if amount.blank?
+            next unless fallback_payment_neighbor_amount_allowed?(line)
+
+            amount = fallback_payment_amount(lines[index + 1])
+          end
+          next unless amount&.positive?
+
+          method = fallback_payment_method_text(line)
+          next if method.blank?
+
+          {
+            method: method,
+            amount: amount
+          }
+        end.uniq { |payment| [ payment[:method], payment[:amount] ] }
+      end
+
+      def fallback_payment_context_line?(line)
+        text = line.to_s.strip
+        return false if text.blank?
+        return false if text.match?(FALLBACK_PAYMENT_EXCLUDED_PATTERN)
+        return false unless text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
+
+        fallback_payment_amount(text).present? || text.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
+      end
+
+      def fallback_payment_neighbor_amount_allowed?(line)
+        line.to_s.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
+      end
+
+      def fallback_payment_amount(line)
+        text = line.to_s
+        return nil if text.match?(/[▲△\-−]\s*[¥￥]?\s*\d/)
+
+        matches = text.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match.to_s }
+        matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?).max
+      end
+
+      def fallback_payment_method_text(line)
+        text = line.to_s.strip
+        amount_text = rightmost_fallback_amount_candidate(text)
+        text = text.sub(amount_text.to_s, "") if amount_text.present?
+        text.gsub(/[¥￥,，\d\s　]+/, " ").strip.presence
       end
 
       def build_receipt_tax_details_attributes(candidates)

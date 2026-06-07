@@ -17,4 +17,19 @@ RSpec.describe Amounts::TaxDetailBasisDetector do
       expect(details[2]).to include(basis: :gross, target_net_amount: 746, target_gross_amount: 820)
     end
   end
+
+  it 'descriptionがOCRで潰れても同一税率の中間税抜小計を区別する' do
+    details = described_class.call([
+      { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '消費税等' },
+      { rate: BigDecimal('0.10'), net_amount: 300, amount: 30, description: '消費税等' },
+      { rate: BigDecimal('0.10'), net_amount: 820, amount: 74, description: '内消費税等' }
+    ])
+
+    aggregate_failures do
+      # 検算: 300 * 10% = 30 なので税抜小計。820 * 10 / 110 = 74.54 -> floor 74 の税込対象が後続するため中間行。
+      expect(details[1]).to include(basis: :intermediate, intermediate: true)
+      # 検算: 820は税込対象、税額74、税抜746として最終10%対象にする。
+      expect(details[2]).to include(basis: :gross, target_net_amount: 746, target_gross_amount: 820)
+    end
+  end
 end

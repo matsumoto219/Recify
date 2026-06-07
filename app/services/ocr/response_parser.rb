@@ -27,6 +27,7 @@ class Ocr::ResponseParser
   TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
   PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
   PAYMENT_QUERY_FIELD_NAME = "PaymentMethods"
+  GENERIC_TAX_DETAIL_DESCRIPTION_PATTERN = /\A(?:内)?消費税等?\z|\A税額\z|\Atax\z/i.freeze
   POLLING_METRICS_KEY = Ocr::Client::POLLING_METRICS_KEY
   POLLING_METRIC_KEYS = %i[
     elapsed_ms
@@ -1159,10 +1160,16 @@ class Ocr::ResponseParser
         value_object.dig("NetAmount", "valueNumber")
       inferred_net_amount = infer_tax_detail_target_amount_from_lines(lines, rate) if infer_target_amounts && explicit_net_amount.nil?
       {
-        description: value_object.dig("Description", "valueString") || value_object.dig("Description", "content"),
         amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber"),
         rate: rate,
         net_amount: explicit_net_amount || inferred_net_amount,
+        description: tax_detail_description(
+          value_object,
+          lines,
+          rate: rate,
+          amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber"),
+          net_amount: explicit_net_amount || inferred_net_amount
+        ),
         _net_amount_inferred: explicit_net_amount.nil? && inferred_net_amount.present?
       }
     end
@@ -1170,6 +1177,70 @@ class Ocr::ResponseParser
     deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) }
   rescue NoMethodError, TypeError
     []
+  end
+
+  def tax_detail_description(value_object, lines, rate:, amount:, net_amount:)
+    structured = value_object.dig("Description", "valueString") || value_object.dig("Description", "content")
+    return structured.to_s.strip.presence if structured.present? && !generic_tax_detail_description?(structured)
+
+    context = tax_detail_context_description(lines, rate:, amount:, net_amount:)
+
+    [ context, structured ].filter_map { |value| value.to_s.strip.presence }.uniq.join(" / ").presence
+  end
+
+  def generic_tax_detail_description?(description)
+    description.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, "").match?(GENERIC_TAX_DETAIL_DESCRIPTION_PATTERN)
+  end
+
+  def tax_detail_context_description(lines, rate:, amount:, net_amount:)
+    normalized_rate = normalize_rate_value(rate)
+    return if normalized_rate.blank?
+
+    rate_label = rate_percentage_label(normalized_rate)
+    labels = []
+    labels << tax_detail_amount_context_label(lines, rate_label, net_amount) if net_amount.present?
+    labels << tax_detail_amount_context_label(lines, rate_label, amount) if amount.present?
+
+    labels.compact.uniq.join(" / ").presence
+  end
+
+  def tax_detail_amount_context_label(lines, rate_label, amount)
+    normalized_amount = ReceiptAmountService.parse_amount_or_nil(amount)&.to_i
+    return if normalized_amount.blank? || normalized_amount <= 0
+
+    Array(lines).each_with_index do |line, index|
+      next unless tax_detail_line_amounts(line).include?(normalized_amount)
+
+      label = nearest_tax_detail_context_label(lines, index, rate_label)
+      return label if label.present?
+    end
+
+    nil
+  end
+
+  def nearest_tax_detail_context_label(lines, amount_line_index, rate_label)
+    [ -2, -1, 0, 1 ].filter_map do |offset|
+      line_index = amount_line_index + offset
+      next if line_index.negative? || line_index >= lines.size
+
+      line = lines[line_index]
+      next if line.blank?
+      next unless tax_detail_context_label_line?(line, rate_label)
+
+      [ offset.abs, offset.negative? ? 0 : 1, line.to_s.strip ]
+    end.min_by { |entry| [ entry[0], entry[1] ] }&.last
+  end
+
+  def tax_detail_context_label_line?(line, rate_label)
+    text = line.to_s
+    text.match?(/#{Regexp.escape(rate_label)}\s*[%％]/) &&
+      text.match?(/小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i)
+  end
+
+  def tax_detail_line_amounts(line)
+    line.to_s.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
+      ReceiptAmountService.parse_amount_or_nil(match)&.to_i
+    end
   end
 
   def deduplicate_inferred_tax_details(tax_details)

@@ -98,33 +98,69 @@ module Amounts
       {
         selected_candidate_id: normalize_scalar(engine[:selected_candidate_id]),
         selected_basis: normalize_scalar(engine[:selected_basis]),
+        selected_candidate: sanitized_engine_candidate(engine[:selected_candidate]),
         candidates: sanitized_engine_candidates(engine[:candidates])
       }.compact
     end
 
     def sanitized_engine_candidates(candidates)
       Array(candidates).filter_map do |candidate|
-        next unless candidate.respond_to?(:with_indifferent_access)
+        sanitized_engine_candidate(candidate)
+      end
+    end
 
-        candidate = candidate.with_indifferent_access
-        {
-          candidate_id: normalize_scalar(candidate[:candidate_id]),
-          basis: normalize_scalar(candidate[:basis]),
-          subtotal: normalize_value(candidate[:subtotal]),
-          tax: normalize_value(candidate[:tax]),
-          purchase_total: normalize_value(candidate[:purchase_total]),
-          final_payment_total: normalize_value(candidate[:final_payment_total]),
-          purchase_adjustment_total: normalize_value(candidate[:purchase_adjustment_total]),
-          payment_adjustment_total: normalize_value(candidate[:payment_adjustment_total]),
-          payment_amount_sum: normalize_value(candidate[:payment_amount_sum]),
-          rounding_mode: normalize_scalar(candidate[:rounding_mode]),
-          rounding_scope: normalize_scalar(candidate[:rounding_scope]),
-          score: normalize_value(candidate[:score]),
-          score_breakdown: normalize_value(candidate[:score_breakdown]),
-          warnings: normalized_array(candidate[:warnings]),
-          hard_reject_reasons: normalized_array(candidate[:hard_reject_reasons]),
-          evidence: normalize_value(candidate[:evidence])
-        }.compact
+    def sanitized_engine_candidate(candidate)
+      return nil unless candidate.respond_to?(:with_indifferent_access)
+
+      candidate = candidate.with_indifferent_access
+      {
+        candidate_id: normalize_scalar(candidate[:candidate_id]),
+        basis: normalize_scalar(candidate[:basis]),
+        subtotal: normalize_value(candidate[:subtotal]),
+        tax: normalize_value(candidate[:tax]),
+        purchase_total: normalize_value(candidate[:purchase_total]),
+        final_payment_total: normalize_value(candidate[:final_payment_total]),
+        purchase_adjustment_total: normalize_value(candidate[:purchase_adjustment_total]),
+        payment_adjustment_total: normalize_value(candidate[:payment_adjustment_total]),
+        payment_amount_sum: normalize_value(candidate[:payment_amount_sum]),
+        rounding_mode: normalize_scalar(candidate[:rounding_mode]),
+        rounding_scope: normalize_scalar(candidate[:rounding_scope]),
+        score: normalize_value(candidate[:score]),
+        score_breakdown: normalize_value(candidate[:score_breakdown]),
+        warnings: normalized_array(candidate[:warnings]),
+        hard_reject_reasons: normalized_array(candidate[:hard_reject_reasons]),
+        evidence: sanitized_engine_evidence(candidate[:evidence])
+      }.compact
+    end
+
+    def sanitized_engine_evidence(evidence)
+      Array(evidence).filter_map do |entry|
+        next unless entry.respond_to?(:with_indifferent_access)
+
+        entry = entry.with_indifferent_access
+        normalize_value(
+          entry.slice(
+            :source,
+            :index,
+            :rate,
+            :basis,
+            :formula,
+            :amount,
+            :net_amount,
+            :gross_amount,
+            :tax_amount,
+            :target_net_amount,
+            :target_gross_amount,
+            :purchase_total,
+            :final_payment_total,
+            :payment_amount_sum,
+            :payment_delta,
+            :effect,
+            :kind,
+            :sign,
+            :tax_rate
+          )
+        )
       end
     end
 
