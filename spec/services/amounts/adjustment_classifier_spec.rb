@@ -71,4 +71,18 @@ RSpec.describe Amounts::AdjustmentClassifier do
       end
     end
   end
+
+  it 'fee aliasをhandling_feeとして購入調整へ分類する' do
+    result = described_class.call(
+      kind: 'fee',
+      sign: 'surcharge',
+      amount: 100,
+      source: 'ocr'
+    )
+
+    expect(result).to include(
+      effect: :purchase_adjustment,
+      signed_amount: 100
+    )
+  end
 end

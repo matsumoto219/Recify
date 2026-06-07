@@ -44,6 +44,10 @@ RSpec.describe 'Receipts', type: :request do
     document.css('[data-receipt-form-target="itemsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="itemRow"]')
   end
 
+  def rendered_receipt_payment_rows(document)
+    document.css('[data-receipt-form-target="paymentsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="paymentRow"]')
+  end
+
   def amount_summary_tax_rate_value(document)
     tax_rate_label = I18n.t('shared.amount_summary_card.tax_rate')
     row = document.css('div').find do |node|
@@ -4792,6 +4796,67 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '編集フォームへ支払い行と支払合計の照合情報を表示する' do
+      receipt.update!(total_amount: 1_161, subtotal_amount: 1_061, tax_amount: 100)
+      receipt.receipt_payments.create!(method: '現金', amount: 500)
+      receipt.receipt_payments.create!(method: '電子マネー', amount: 661)
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      payment_rows = rendered_receipt_payment_rows(document)
+      text = document.text.squish
+
+      aggregate_failures do
+        # 検算: 支払合計 500 + 661 = 1,161。購入合計/実支払額 1,161 と一致する。
+        expect(response).to have_http_status(:success)
+        expect(payment_rows.size).to eq(2)
+        expect(payment_rows.map { |row| row.at_css('[data-receipt-form-target="paymentMethodInput"]')['value'] }).to eq([ '現金', '電子マネー' ])
+        expect(payment_rows.map { |row| row.at_css('[data-receipt-form-target="paymentAmountInput"]')['value'] }).to eq([ '500', '661' ])
+        expect(text).to include("#{I18n.t('receipts.payment_fields.payment_amount_sum')} ¥1,161")
+        expect(text).to include("#{I18n.t('receipts.payment_fields.final_payment_total')} ¥1,161")
+        expect(text).to include("#{I18n.t('receipts.payment_fields.payment_difference')} ¥0")
+        expect(document.at_css('[data-receipt-form-target="paymentMismatchWarning"]')['class']).to include('hidden')
+      end
+    end
+
+    it '編集フォームは支払合計が不足している時に警告と実支払額同期ボタンを表示する' do
+      receipt.update!(total_amount: 1_000, subtotal_amount: 910, tax_amount: 90)
+      receipt.receipt_items.create!(
+        confirmed_name: '商品A',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        line_total: 1_000,
+        tax_rate: BigDecimal('0.1'),
+        needs_review: false
+      )
+      receipt.receipt_adjustments.create!(
+        kind: 'service_charge',
+        label: 'サービス料',
+        amount: 100,
+        sign: 'surcharge',
+        source: 'manual',
+        needs_review: false
+      )
+      receipt.update!(total_amount: 1_100, subtotal_amount: 1_010, tax_amount: 90)
+      receipt.receipt_payments.create!(method: '現金', amount: 1_000)
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        # 検算: 商品 1,000 + サービス料 100 = 実支払額 1,100。支払 1,000 なので差額 -100。
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('[data-receipt-form-target="paymentAmountSum"]').text.strip).to eq('¥1,000')
+        expect(document.at_css('[data-receipt-form-target="paymentReconciliationFinalAmount"]').text.strip).to eq('¥1,100')
+        expect(document.at_css('[data-receipt-form-target="paymentDifferenceAmount"]').text.strip).to eq('-¥100')
+        expect(document.at_css('[data-receipt-form-target="paymentMismatchWarning"]')['class']).not_to include('hidden')
+        expect(document.text).to include(I18n.t('receipts.payment_fields.sync_to_final'))
+      end
+    end
+
     it '編集フォームの単価入力欄は税込補正済みline_totalから税込priceを表示する' do
       receipt.receipt_items.destroy_all
       receipt.receipt_items.create!(
@@ -5848,6 +5913,165 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.reload.receipt_adjustments).to contain_exactly(adjustment)
+      end
+    end
+
+    it 'direct paramsでpayment rowsを更新・追加・削除できる' do
+      receipt.update!(total_amount: 1_200, subtotal_amount: 1_100, tax_amount: 100)
+      cash = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
+      old_payment = receipt.receipt_payments.create!(method: '旧支払', amount: 200)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '支払更新後',
+          receipt_payments_attributes: {
+            '0' => {
+              id: cash.id,
+              method: '現金',
+              amount: '500'
+            },
+            '1' => {
+              id: old_payment.id,
+              _destroy: '1'
+            },
+            '2' => {
+              method: '電子マネー',
+              amount: '700'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 支払合計 500 + 700 = 1,200。購入合計/実支払額 1,200 と一致する。
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_payments.order(:id).pluck(:method, :amount)).to eq([
+          [ '現金', 500 ],
+          [ '電子マネー', 700 ]
+        ])
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_200)
+        expect(receipt.review_reasons).not_to include('payment_amount_mismatch')
+      end
+    end
+
+    it 'サービス料追加後に支払額が旧金額のままならpayment_amount_mismatchにする' do
+      receipt.update!(store_name: 'サービス料追加前', total_amount: 1_000, subtotal_amount: 910, tax_amount: 90, status: 'completed')
+      item = receipt.receipt_items.create!(
+        confirmed_name: '商品A',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_000,
+        needs_review: false
+      )
+      payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: 'サービス料追加後',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: item.quantity_unit,
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'service_charge',
+              label: 'サービス料',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          },
+          receipt_payments_attributes: {
+            '0' => {
+              id: payment.id,
+              method: payment.method,
+              amount: '1000'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 商品 1,000 + サービス料 100 = 実支払額 1,100。支払 1,000 なので100円不足。
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_000)
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'サービス料追加後に支払額も直せばpayment_amount_mismatchにしない' do
+      receipt.update!(store_name: 'サービス料修正前', total_amount: 1_000, subtotal_amount: 910, tax_amount: 90, status: 'completed')
+      item = receipt.receipt_items.create!(
+        confirmed_name: '商品A',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_000,
+        needs_review: false
+      )
+      payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: 'サービス料修正後',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: item.quantity_unit,
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'service_charge',
+              label: 'サービス料',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          },
+          receipt_payments_attributes: {
+            '0' => {
+              id: payment.id,
+              method: payment.method,
+              amount: '1100'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 商品 1,000 + サービス料 100 = 実支払額 1,100。支払 1,100 と一致する。
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_100)
+        expect(receipt.review_reasons).not_to include('payment_amount_mismatch')
       end
     end
 

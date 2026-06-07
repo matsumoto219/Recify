@@ -1,10 +1,9 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::AdjustmentTotalAggregator do
-  def aggregate(adjustments:, items: [], receipt_tax_basis: :total_includes_tax)
+  def aggregate(adjustments:, receipt_tax_basis: :total_includes_tax)
     described_class.new(
       adjustments: adjustments,
-      items: items,
       rounding_mode: :floor,
       receipt_tax_basis: receipt_tax_basis
     ).call

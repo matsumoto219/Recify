@@ -343,7 +343,7 @@ module Ai
     end
 
     def normalize_adjustment_kind(value)
-      normalized = value.to_s.strip
+      normalized = ReceiptAdjustment.normalize_kind(value)
       return normalized if ReceiptAdjustment::KINDS.include?(normalized)
 
       "other"

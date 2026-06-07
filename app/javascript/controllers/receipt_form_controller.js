@@ -2,14 +2,16 @@ import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
   static targets = [
-    'itemsContainer',
     'template',
-    'adjustmentsContainer',
     'adjustmentTemplate',
+    'paymentTemplate',
     'itemRow',
     'destroyField',
     'adjustmentRow',
     'adjustmentDestroyField',
+    'paymentRow',
+    'paymentDestroyField',
+    'paymentAmountInput',
     'adjustmentKindInput',
     'adjustmentSignInput',
     'adjustmentSignLabel',
@@ -39,17 +41,24 @@ export default class extends Controller {
     'paymentAdjustmentRow',
     'paymentAdjustmentAmount',
     'finalPaymentRow',
-    'finalPaymentAmount'
+    'finalPaymentAmount',
+    'paymentAmountSum',
+    'paymentReconciliationFinalAmount',
+    'paymentDifferenceAmount',
+    'paymentMismatchWarning',
+    'syncPaymentAmountButton'
   ]
 
   static values = {
     nextIndex: Number,
     nextAdjustmentIndex: Number,
+    nextPaymentIndex: Number,
     roundingMode: { type: String, default: 'floor' },
     discountRoundingMode: { type: String, default: 'round' },
     deleteConfirmationEnabled: { type: Boolean, default: true },
     deleteConfirmationMessage: { type: String, default: 'Delete this item?' },
     deleteAdjustmentConfirmationMessage: { type: String, default: 'Delete this adjustment?' },
+    deletePaymentConfirmationMessage: { type: String, default: 'Delete this payment?' },
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
@@ -112,6 +121,20 @@ export default class extends Controller {
     this.recalculate()
   }
 
+  addPayment (event) {
+    event.preventDefault()
+
+    const template = this.paymentTemplateTarget.innerHTML.trim()
+    if (!template) return
+
+    const index = this.nextPaymentIndexValue
+    const html = template.replace(/NEW_PAYMENT_RECORD/g, String(index))
+
+    event.currentTarget.insertAdjacentHTML('beforebegin', html)
+    this.nextPaymentIndexValue = index + 1
+    this.recalculate()
+  }
+
   removeAdjustment (event) {
     event.preventDefault()
 
@@ -137,6 +160,31 @@ export default class extends Controller {
     this.recalculate()
   }
 
+  removePayment (event) {
+    event.preventDefault()
+
+    const row = this.paymentRowForAction(event.currentTarget)
+    if (!row) return
+
+    const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
+    delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
+
+    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deletePaymentConfirmationMessageValue)) return
+
+    const destroyField = row.querySelector('[data-receipt-form-target="paymentDestroyField"]')
+    const rowContainer = this.paymentRowContainer(row)
+
+    if (destroyField) {
+      destroyField.value = '1'
+      row.style.display = 'none'
+      if (rowContainer !== row) rowContainer.style.display = 'none'
+    } else {
+      rowContainer.remove()
+    }
+
+    this.recalculate()
+  }
+
   adjustmentRowForAction (element) {
     const directRow = element.closest('[data-receipt-form-target="adjustmentRow"]')
     if (directRow) return directRow
@@ -145,6 +193,17 @@ export default class extends Controller {
   }
 
   adjustmentRowContainer (row) {
+    return row.closest('[data-controller~="swipe-action"]') || row
+  }
+
+  paymentRowForAction (element) {
+    const directRow = element.closest('[data-receipt-form-target="paymentRow"]')
+    if (directRow) return directRow
+
+    return element.closest('[data-controller~="swipe-action"]')?.querySelector('[data-receipt-form-target="paymentRow"]')
+  }
+
+  paymentRowContainer (row) {
     return row.closest('[data-controller~="swipe-action"]') || row
   }
 
@@ -510,6 +569,7 @@ export default class extends Controller {
     subtotalSum = this.clampNumber(subtotalSum, 0, 999999999)
     taxSum = this.clampNumber(taxSum, 0, 999999999)
     const finalPaymentTotal = this.clampNumber(total + paymentAdjustmentTotal, 0, 999999999)
+    this.lastFinalPaymentTotal = finalPaymentTotal
 
     // 合計更新（存在する場合のみ）
     if (this.hasTotalAmountTarget) {
@@ -529,6 +589,7 @@ export default class extends Controller {
     }
 
     this.syncPaymentAdjustmentSummary(paymentAdjustmentTotal, finalPaymentTotal)
+    this.syncPaymentReconciliationSummary(this.paymentAmountSum(), finalPaymentTotal)
   }
 
   syncAdjustmentSigns () {
@@ -539,11 +600,13 @@ export default class extends Controller {
     if (!row) return
 
     const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
+    // 新規行やkind変更時だけJS側でeffectを推定する。既存行の初期effectはサーバー側分類を正とする。
     row.dataset.receiptFormAdjustmentEffect = this.adjustmentEffectForKind(kindInput?.value)
   }
 
   adjustmentEffectForRow (row) {
     const effect = String(row?.dataset.receiptFormAdjustmentEffect ?? '').trim()
+    // 初期data属性のeffectを優先し、kind判定は新規行/フォールバック用に限定する。
     if (this.validAdjustmentEffect(effect)) return effect
 
     const kindInput = row?.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
@@ -662,6 +725,83 @@ export default class extends Controller {
     }
   }
 
+  syncPaymentReconciliationSummary (paymentAmountSum, finalPaymentTotal) {
+    const hasPaymentRows = this.visiblePaymentRows().length > 0
+    const paymentDifference = paymentAmountSum - finalPaymentTotal
+    const mismatch = hasPaymentRows && paymentDifference !== 0
+
+    if (this.hasPaymentAmountSumTarget) {
+      this.animateAmount(this.paymentAmountSumTarget, paymentAmountSum)
+    }
+
+    if (this.hasPaymentReconciliationFinalAmountTarget) {
+      this.animateAmount(this.paymentReconciliationFinalAmountTarget, finalPaymentTotal)
+    }
+
+    if (this.hasPaymentDifferenceAmountTarget) {
+      this.paymentDifferenceAmountTarget.textContent = this.formatPaymentDifference(paymentDifference)
+      this.paymentDifferenceAmountTarget.title = this.paymentDifferenceAmountTarget.textContent.trim()
+      this.syncAmountDisplayState(this.paymentDifferenceAmountTarget, paymentDifference)
+    }
+
+    this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.toggle('hidden', !mismatch))
+    this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.toggle('hidden', !mismatch))
+  }
+
+  paymentAmountSum () {
+    return this.visiblePaymentRows().reduce((sum, row) => {
+      const amountInput = row.querySelector('[data-receipt-form-target="paymentAmountInput"]')
+      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, 999999999)
+
+      return sum + amount
+    }, 0)
+  }
+
+  visiblePaymentRows () {
+    return this.paymentRowTargets.filter((row) => {
+      if (row.style.display === 'none') return false
+
+      const destroyField = row.querySelector('[data-receipt-form-target="paymentDestroyField"]')
+      return String(destroyField?.value ?? '') !== '1'
+    })
+  }
+
+  syncPaymentAmountToFinal (event) {
+    event.preventDefault()
+
+    const rows = this.visiblePaymentRows()
+    if (rows.length === 0) return
+
+    const finalPaymentTotal = this.currentFinalPaymentTotal()
+    const currentPaymentSum = this.paymentAmountSum()
+    const delta = finalPaymentTotal - currentPaymentSum
+    const firstInput = rows[0].querySelector('[data-receipt-form-target="paymentAmountInput"]')
+    if (!firstInput) return
+
+    const nextFirstAmount = this.parseIntegerInput(firstInput.value) + delta
+
+    if (nextFirstAmount >= 0) {
+      firstInput.value = nextFirstAmount
+    } else {
+      firstInput.value = finalPaymentTotal
+      rows.slice(1).forEach((row) => {
+        const amountInput = row.querySelector('[data-receipt-form-target="paymentAmountInput"]')
+        if (amountInput) amountInput.value = 0
+      })
+    }
+
+    this.recalculate()
+  }
+
+  currentFinalPaymentTotal () {
+    if (Number.isFinite(this.lastFinalPaymentTotal)) return this.lastFinalPaymentTotal
+    if (this.hasFinalPaymentAmountTarget) return this.currentAmountValue(this.finalPaymentAmountTarget)
+    if (this.hasPaymentReconciliationFinalAmountTarget) return this.currentAmountValue(this.paymentReconciliationFinalAmountTarget)
+    if (this.hasTotalAmountTarget) return this.currentAmountValue(this.totalAmountTarget)
+
+    return 0
+  }
+
   animateLineTotal (target, nextValue, { withLabel = false } = {}) {
     const duration = 250
     const startValue = this.currentAmountValue(target)
@@ -736,6 +876,12 @@ export default class extends Controller {
     const sign = value < 0 ? '-' : '+'
 
     return `${sign}¥${this.formatNumber(amount)}`
+  }
+
+  formatPaymentDifference (value) {
+    if (value === 0) return `¥${this.formatNumber(0)}`
+
+    return this.formatSignedAmount(value)
   }
 
   usesExternalTax () {
@@ -1094,7 +1240,9 @@ export default class extends Controller {
       ...this.lineTotalDisplayTargets,
       ...(this.hasTotalAmountTarget ? [this.totalAmountTarget] : []),
       ...(this.hasSubtotalAmountTarget ? [this.subtotalAmountTarget] : []),
-      ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : [])
+      ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : []),
+      ...(this.hasPaymentAmountSumTarget ? [this.paymentAmountSumTarget] : []),
+      ...(this.hasPaymentReconciliationFinalAmountTarget ? [this.paymentReconciliationFinalAmountTarget] : [])
     ]
   }
 

@@ -1,0 +1,118 @@
+<%#
+  レシート支払い行入力
+
+  必須:
+  - payment_form: 支払い行用の form builder
+  - payment: 表示・編集する支払い行
+
+  任意:
+  - new_record: 新規支払い行として扱う場合は true。未指定時は false
+%>
+
+<%
+  row_state = local_assigns.fetch(:row_state)
+  new_record = row_state.new_record?
+%>
+
+<div class="swipe-action rounded-lg"
+     data-controller="swipe-action">
+  <div class="swipe-action-background md:hidden" aria-hidden="true">
+    <button type="button"
+            class="flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
+            data-action="click->receipt-form#removePayment click->swipe-action#close"
+            data-swipe-action-target="action"
+            data-swipe-ignore
+            tabindex="-1"
+            aria-label="<%= t("receipts.payment_fields.remove_aria") %>">
+      <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+    </button>
+  </div>
+
+  <div class="swipe-action-foreground"
+       data-swipe-action-target="foreground"
+       data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
+    <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
+         data-receipt-form-target="paymentRow">
+      <div class="col-span-2 md:col-span-6">
+        <div class="flex items-center gap-2 md:block">
+          <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.payment_fields.method") %></span>
+          <div class="flex-1 min-w-0 md:block">
+            <%= render "shared/ui/form/text_field",
+                       f: payment_form,
+                       attribute: :method,
+                       label: t("receipts.payment_fields.method"),
+                       value: row_state.method_value,
+                       icon: nil,
+                       with_icon: false,
+                       placeholder: t("receipts.payment_fields.method_placeholder"),
+                       show_label: false,
+                       size: :dense,
+                       html_options: {
+                         maxlength: 120,
+                         autocomplete: "off",
+                         data: {
+                           action: "input->receipt-form#recalculate",
+                           receipt_form_target: "paymentMethodInput"
+                         }
+                       } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-span-2 md:col-span-5">
+        <div class="flex items-center gap-2 md:block">
+          <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.payment_fields.amount") %></span>
+          <div class="flex-1 min-w-0 md:block">
+            <%= render "shared/ui/form/number_field",
+                       f: payment_form,
+                       attribute: :amount,
+                       label: t("receipts.payment_fields.amount"),
+                       value: row_state.amount_value,
+                       min: 0,
+                       max: 999999999,
+                       step: 1,
+                       prefix: "¥",
+                       show_label: false,
+                       text_align: :center,
+                       show_stepper_buttons: true,
+                       stepper_button_class: "md:hidden",
+                       size: :dense,
+                       html_options: {
+                         data: {
+                           action: "input->receipt-form#recalculate",
+                           receipt_form_target: "paymentAmountInput"
+                         }
+                       } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden md:col-span-1 md:flex md:justify-end">
+        <button type="button"
+                class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
+                data-action="click->receipt-form#removePayment"
+                aria-label="<%= t("receipts.payment_fields.remove_aria") %>">
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
+
+      <div class="col-span-2 md:hidden">
+        <%= render "shared/ui/layout/section_divider", class: "mb-3" %>
+
+        <div class="flex items-center justify-end">
+          <button type="button"
+                  class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
+                  data-action="click->receipt-form#removePayment"
+                  aria-label="<%= t("receipts.payment_fields.remove_aria") %>">
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </div>
+      </div>
+
+      <% unless new_record %>
+        <%= payment_form.hidden_field :id %>
+        <%= payment_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "paymentDestroyField" } %>
+      <% end %>
+    </div>
+  </div>
+</div>

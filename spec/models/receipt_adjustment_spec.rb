@@ -1,6 +1,17 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAdjustment do
+  it 'fee kindはhandling_feeへ正規化する' do
+    adjustment = build(:receipt_adjustment, kind: 'fee', sign: 'discount')
+
+    adjustment.valid?
+
+    aggregate_failures do
+      expect(adjustment.kind).to eq('handling_fee')
+      expect(described_class.default_sign_for('fee')).to eq('surcharge')
+    end
+  end
+
   it '商品単位割引をreceipt_adjustmentsのkindとして扱わない' do
     expect(described_class::KINDS).not_to include('item_discount')
   end

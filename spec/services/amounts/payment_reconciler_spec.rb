@@ -38,4 +38,22 @@ RSpec.describe Amounts::PaymentReconciler do
       warnings: [ :payment_amount_mismatch ]
     )
   end
+
+  it '支払合計が最終支払額を上回る場合もwarningを返す' do
+    result = described_class.new(
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ],
+      purchase_total: 1_000,
+      payment_adjustment_total: 0
+    ).call
+
+    expect(result).to include(
+      final_payment_total: 1_000,
+      payment_amount_sum: 1_100,
+      payment_delta: 100,
+      matched: false,
+      warnings: [ :payment_amount_mismatch ]
+    )
+  end
 end

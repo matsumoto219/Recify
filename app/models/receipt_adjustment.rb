@@ -15,6 +15,10 @@ class ReceiptAdjustment < ApplicationRecord
     other
   ].freeze
 
+  KIND_ALIASES = {
+    "fee" => "handling_fee"
+  }.freeze
+
   SURCHARGE_KINDS = %w[
     service_charge
     late_night_charge
@@ -42,6 +46,8 @@ class ReceiptAdjustment < ApplicationRecord
   ].freeze
 
   belongs_to :receipt
+
+  before_validation :normalize_kind_alias
 
   validates :kind, presence: true, inclusion: { in: KINDS }
   validates :sign, presence: true, inclusion: { in: SIGNS }
@@ -86,7 +92,12 @@ class ReceiptAdjustment < ApplicationRecord
   end
 
   def self.default_sign_for(kind)
-    SURCHARGE_KINDS.include?(kind.to_s) ? "surcharge" : "discount"
+    SURCHARGE_KINDS.include?(normalize_kind(kind)) ? "surcharge" : "discount"
+  end
+
+  def self.normalize_kind(kind)
+    normalized = kind.to_s.strip
+    KIND_ALIASES.fetch(normalized, normalized)
   end
 
   def self.per_receipt_limit
@@ -115,6 +126,10 @@ class ReceiptAdjustment < ApplicationRecord
     return if review_reasons.is_a?(Array)
 
     errors.add(:review_reasons, :invalid)
+  end
+
+  def normalize_kind_alias
+    self.kind = self.class.normalize_kind(kind)
   end
 
   def adjustments_per_receipt_within_limit

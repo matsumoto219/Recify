@@ -50,7 +50,7 @@ module Amounts
         tax_rate_groups: [],
         rounding_mode: legacy_result.dig(:rounding_mode, :tax),
         rounding_scope: :per_tax_rate_group,
-        warnings: Array(legacy_result[:warning_inconsistencies]),
+        warnings: (Array(legacy_result[:warning_inconsistencies]) + payment_warnings(payment)).uniq,
         evidence: payment[:evidence] + [ { source: "legacy_receipt_amount_service", purchase_total: purchase_total } ],
         computed_items: Array(computed[:items]),
         calculation_profile: legacy_result[:calculation_profile],
@@ -112,7 +112,7 @@ module Amounts
       purchase_total = tax_rate_groups.sum { |group| group[:gross] }
       tax = tax_rate_groups.sum { |group| group[:tax] }
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
-      warnings = adjustment_warnings
+      warnings = adjustment_warnings + payment_warnings(payment)
 
       Amounts::Candidate.new(
         candidate_id: candidate_id,
@@ -128,7 +128,7 @@ module Amounts
         tax_rate_groups: tax_rate_groups,
         rounding_mode: rounding_mode,
         rounding_scope: rounding_scope,
-        warnings: warnings,
+        warnings: warnings.uniq,
         evidence: adjustment_evidence + payment[:evidence] + [ { source: "receipt_items", formula: basis, purchase_total: purchase_total } ],
         computed_items: computed_items,
         source: :amount_engine
@@ -200,7 +200,7 @@ module Amounts
         tax_rate_groups: groups.values,
         rounding_mode: rounding_mode,
         rounding_scope: :per_tax_rate_group,
-        warnings: adjustment_warnings,
+        warnings: (adjustment_warnings + payment_warnings(payment)).uniq,
         evidence: final_detected_tax_details.map { |detail| detail[:evidence] } + adjustment_evidence + payment[:evidence],
         computed_items: items,
         source: :amount_engine
@@ -236,7 +236,7 @@ module Amounts
         tax_rate_groups: groups.values,
         rounding_mode: rounding_mode,
         rounding_scope: :per_tax_rate_group,
-        warnings: [ :tax_detail_mismatch ],
+        warnings: ([ :tax_detail_mismatch ] + payment_warnings(payment)).uniq,
         evidence: detected_tax_details.map { |detail| detail[:evidence] } + payment[:evidence],
         computed_items: items,
         source: :amount_engine
@@ -312,6 +312,7 @@ module Amounts
       purchase_total = groups.values.sum { |group| group[:gross] } + purchase_adjustment_total
       tax = groups.values.sum { |group| group[:tax] }
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
+      warnings += payment_warnings(payment)
 
       Amounts::Candidate.new(
         candidate_id: "mixed_by_tax_rate_group/#{rounding_mode}",
@@ -533,6 +534,14 @@ module Amounts
         purchase_total: purchase_total,
         payment_adjustment_total: payment_adjustment_total
       ).call
+    end
+
+    def payment_warnings(payment)
+      warnings = Array(payment[:warnings])
+      return warnings unless context.to_s.to_sym == :analysis
+      return warnings if payment[:payment_delta].to_i.negative?
+
+      []
     end
 
     def purchase_adjustment_total

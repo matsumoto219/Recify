@@ -32,6 +32,7 @@ module Amounts
         fetch_nested(profile, :computed, :payment_adjustment_total),
         fetch_nested(profile, :amount_engine, :selected_candidate, :payment_adjustment_total)
       )
+      # 支払調整がない場合、UIでは購入合計と実支払額が同じなので実支払額欄を出さない。
       return nil if payment_adjustment_total.nil?
 
       final_payment_total = first_present_amount(
@@ -52,6 +53,7 @@ module Amounts
         classification = Amounts::AdjustmentClassifier.call(adjustment)
         classification[:effect] == :payment_adjustment ? classification[:signed_amount].to_i : 0
       end
+      # 支払調整がない場合、UIでは購入合計と実支払額が同じなので実支払額欄を出さない。
       return nil unless payment_adjustment_total.nonzero?
 
       total = receipt_total_amount

@@ -25,12 +25,24 @@ class ReceiptFormPresenter
     receipt.receipt_adjustments.select(&:marked_for_destruction?)
   end
 
+  def visible_receipt_payments
+    receipt.receipt_payments.reject(&:marked_for_destruction?)
+  end
+
+  def destroyed_receipt_payments
+    receipt.receipt_payments.select(&:marked_for_destruction?)
+  end
+
   def next_item_index
     receipt.receipt_items.size
   end
 
   def next_adjustment_index
     receipt.receipt_adjustments.size
+  end
+
+  def next_payment_index
+    receipt.receipt_payments.size
   end
 
   def adjustment_surcharge_kinds_value
@@ -65,6 +77,10 @@ class ReceiptFormPresenter
     ReceiptAdjustment.new(kind: "delivery_fee", sign: "surcharge", source: "manual")
   end
 
+  def new_payment
+    ReceiptPayment.new
+  end
+
   def error_flags
     {
       store_name: receipt_review_reason_includes?("store_name_missing", "store_name_uncertain"),
@@ -85,6 +101,10 @@ class ReceiptFormPresenter
 
   def adjustment_row(adjustment, new_record:)
     AdjustmentRowState.new(adjustment: adjustment, new_record: new_record)
+  end
+
+  def payment_row(payment, new_record:)
+    PaymentRowState.new(payment: payment, new_record: new_record)
   end
 
   private
@@ -319,6 +339,27 @@ class ReceiptFormPresenter
 
     def sign_select_disabled?
       !other_kind?
+    end
+  end
+
+  class PaymentRowState
+    attr_reader :payment
+
+    def initialize(payment:, new_record:)
+      @payment = payment
+      @new_record = new_record
+    end
+
+    def new_record?
+      @new_record == true
+    end
+
+    def method_value
+      new_record? ? nil : payment.method
+    end
+
+    def amount_value
+      new_record? ? nil : payment.amount
     end
   end
 end

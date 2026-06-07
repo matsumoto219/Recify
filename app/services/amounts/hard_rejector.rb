@@ -35,6 +35,8 @@ module Amounts
     def payment_mismatch?(candidate)
       return false if candidate.payment_amount_sum.nil?
 
+      # 支払不足は候補として破綻しているため hard reject する。
+      # 過払いを含む差額全般は PaymentReconciler 側の warning/review 対象に留める。
       candidate.payment_amount_sum.to_i < candidate.final_payment_total.to_i
     end
 
@@ -98,7 +100,8 @@ module Amounts
     def fetch_value(object, key)
       if object.respond_to?(:key?)
         return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
+
+        object[key.to_s] if object.key?(key.to_s)
       elsif object.respond_to?(key)
         object.public_send(key)
       end

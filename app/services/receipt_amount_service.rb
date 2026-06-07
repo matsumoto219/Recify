@@ -553,7 +553,7 @@ class ReceiptAmountService
     else
       {}
     end
-    kind = normalized[:kind].to_s
+    kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
     sign = normalized[:sign].to_s
     amount = to_i_or_nil(normalized[:amount])
 
@@ -604,7 +604,6 @@ class ReceiptAmountService
     basis = receipt_tax_basis.to_s.to_sym
     @adjustment_totals_by_basis[basis] ||= Amounts::AdjustmentTotalAggregator.new(
       adjustments: @adjustments,
-      items: @items,
       rounding_mode: @tax_rounding_mode,
       receipt_tax_basis: basis
     ).call

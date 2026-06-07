@@ -2,7 +2,7 @@
 
 module Amounts
   class AdjustmentTotalAggregator
-    def initialize(adjustments:, items: [], rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, receipt_tax_basis: :total_includes_tax)
+    def initialize(adjustments:, rounding_mode: Amounts::Rounding::TAX_DEFAULT_MODE, receipt_tax_basis: :total_includes_tax)
       @adjustments = Array(adjustments).map { |adjustment| normalize_adjustment(adjustment) }
       @rounding_mode = Amounts::Rounding.normalize_rounding_mode(rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE)
       @receipt_tax_basis = normalize_receipt_tax_basis(receipt_tax_basis)
@@ -121,7 +121,7 @@ module Amounts
         {}
       end
 
-      kind = normalized[:kind].to_s
+      kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s
 
       {

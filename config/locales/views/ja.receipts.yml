@@ -69,6 +69,7 @@ ja:
     form:
       delete_item_confirm: この明細を削除しますか？
       delete_adjustment_confirm: この値引き・手数料を削除しますか？
+      delete_payment_confirm: この支払い行を削除しますか？
       titles:
         new: レシート登録
         edit: レシート編集
@@ -83,6 +84,7 @@ ja:
         cancel: キャンセル
         add_item: 明細追加
         add_adjustment: 値引き・手数料を追加
+        add_payment: 支払い行を追加
       review:
         blocking_description: 保存前に以下の内容を確認してください。
         warning_description: 内容を確認してください。
@@ -90,9 +92,12 @@ ja:
         basic_info: 基本情報
         items: 明細一覧
         adjustments: 値引き・手数料
+        payments: 支払い
         memo: メモ
       adjustments:
         description: レシート全体の値引き、送料、サービス料などを入力します。
+      payments:
+        description: 支払い方法ごとの支払額を入力します。
       fields:
         store_name: 店舗名
         store_name_placeholder: 店舗名を入力
@@ -151,6 +156,16 @@ ja:
       tax_rate: 税率
       sign: 加減算
       remove_aria: 値引き・手数料を削除
+    payment_fields:
+      method: 支払い方法
+      method_placeholder: "例: 現金"
+      amount: 支払額
+      remove_aria: 支払い行を削除
+      payment_amount_sum: 支払合計
+      final_payment_total: 実支払額
+      payment_difference: 差額
+      mismatch_warning: 支払合計と計算上の支払額が一致していません。
+      sync_to_final: 支払額を実支払額に合わせる
     review_notes_card:
       title: 要確認内容
       item_label: 明細

@@ -648,7 +648,7 @@ module Analysis
       end
 
       def default_adjustment_sign(kind)
-        %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
+        %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(ReceiptAdjustment.normalize_kind(kind)) ? "surcharge" : "discount"
       end
 
       def infer_ocr_adjustment_kind(source_text, sign)

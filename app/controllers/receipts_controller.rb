@@ -481,16 +481,15 @@ class ReceiptsController < ApplicationController
         :tax_rate,
         :position_index,
         :_destroy
+      ],
+      receipt_payments_attributes: [
+        :id,
+        :method,
+        :amount,
+        :_destroy
       ]
-      # NOTE: receipt_payments は保存されるがUI未活用。
       # receipt_tax_details は表示/金額計算に使い、ユーザー入力ではなく再計算結果として保存する。
       # 以下は将来 nested attributes で直接編集する場合の候補。
-      # , receipt_payments_attributes: [
-      #   :id,
-      #   :method,
-      #   :amount,
-      #   :_destroy
-      # ],
       # receipt_tax_details_attributes: [
       #   :id,
       #   :description,
@@ -514,6 +513,7 @@ class ReceiptsController < ApplicationController
     normalize_receipt_adjustment_attributes!(permitted)
     prune_blank_new_receipt_items!(permitted)
     prune_blank_new_receipt_adjustments!(permitted)
+    prune_blank_new_receipt_payments!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
   end
@@ -668,6 +668,7 @@ class ReceiptsController < ApplicationController
     return if adjustments_attributes.blank?
 
     adjustments_attributes.each_value do |adjustment_attributes|
+      adjustment_attributes["kind"] = ReceiptAdjustment.normalize_kind(adjustment_attributes["kind"])
       adjustment_attributes["tax_rate"] = normalize_tax_rate(adjustment_attributes["tax_rate"])
       adjustment_attributes["sign"] = manual_adjustment_sign(
         kind: adjustment_attributes["kind"],
@@ -714,6 +715,17 @@ class ReceiptsController < ApplicationController
     permitted.delete("receipt_adjustments_attributes") if adjustments_attributes.empty?
   end
 
+  def prune_blank_new_receipt_payments!(permitted)
+    payments_attributes = permitted["receipt_payments_attributes"]
+    return if payments_attributes.blank?
+
+    payments_attributes.delete_if do |_index, payment_attributes|
+      blank_new_receipt_payment_attributes?(payment_attributes)
+    end
+
+    permitted.delete("receipt_payments_attributes") if payments_attributes.empty?
+  end
+
   def blank_new_receipt_item_attributes?(item_attributes)
     return false if item_attributes["id"].present?
     return false if ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
@@ -737,6 +749,13 @@ class ReceiptsController < ApplicationController
     return false if ActiveModel::Type::Boolean.new.cast(adjustment_attributes["_destroy"])
 
     !receipt_adjustment_meaningful_input?(adjustment_attributes)
+  end
+
+  def blank_new_receipt_payment_attributes?(payment_attributes)
+    return false if payment_attributes["id"].present?
+    return false if ActiveModel::Type::Boolean.new.cast(payment_attributes["_destroy"])
+
+    payment_attributes["method"].blank? && !numeric_input_present?(payment_attributes["amount"])
   end
 
   def receipt_adjustment_meaningful_input?(adjustment_attributes)

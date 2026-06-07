@@ -141,7 +141,7 @@ module Amounts
         {}
       end
 
-      kind = normalized[:kind].to_s
+      kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s
 
       {

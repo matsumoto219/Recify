@@ -33,6 +33,29 @@ module Amounts
       computed[:final_payment_total] ||= selected_candidate.final_payment_total
       computed[:purchase_adjustment_total] ||= selected_candidate.purchase_adjustment_total
       computed[:payment_amount_sum] ||= selected_candidate.payment_amount_sum
+      apply_legacy_payment_mismatch!(result)
+    end
+
+    def apply_legacy_payment_mismatch!(result)
+      return unless selected_candidate.warnings.include?(:payment_amount_mismatch)
+
+      result[:inconsistencies] = (existing_inconsistencies(result) + [ :payment_amount_mismatch ]).uniq
+      result[:blocking_inconsistencies] = Amounts::MismatchSeverity.blocking(result[:inconsistencies])
+      result[:warning_inconsistencies] = Amounts::MismatchSeverity.warning(result[:inconsistencies])
+      result[:warning_reasons] = result[:warning_inconsistencies].map(&:to_s)
+      result[:mismatch_codes] = mismatch_codes_for(result[:inconsistencies])
+      result[:blocking_mismatch_codes] = mismatch_codes_for(result[:blocking_inconsistencies])
+      result[:warning_mismatch_codes] = mismatch_codes_for(result[:warning_inconsistencies])
+      result[:mismatch_messages] = mismatch_messages_for(result[:inconsistencies])
+      result[:review_reasons] = (Array(result[:review_reasons]) + [ "payment_amount_mismatch" ]).uniq
+      result[:needs_review] = true
+    end
+
+    def existing_inconsistencies(result)
+      inconsistencies = Array(result[:inconsistencies])
+      return inconsistencies if inconsistencies.present?
+
+      Array(result[:blocking_inconsistencies]) + Array(result[:warning_inconsistencies])
     end
 
     def apply_candidate_result!(result)
@@ -76,7 +99,6 @@ module Amounts
       result[:mismatch_messages] = mismatch_messages_for(result[:inconsistencies])
       result[:review_reasons] = policy[:review_reasons]
       result[:needs_review] = policy[:needs_review]
-      result[:calculation_profile] = result[:calculation_profile]
       result[:calculation_profile_score] = selected_candidate.score
     end
 

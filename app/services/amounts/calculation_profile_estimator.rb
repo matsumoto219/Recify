@@ -243,7 +243,6 @@ module Amounts
     def adjustment_tax_details(tax_rounding_mode)
       adjustment_summary = Amounts::AdjustmentTotalAggregator.new(
         adjustments: @adjustments,
-        items: @items,
         rounding_mode: tax_rounding_mode,
         receipt_tax_basis: :tax_added_to_subtotal
       ).call
@@ -366,7 +365,6 @@ module Amounts
     def adjustment_summary
       @adjustment_summary ||= Amounts::AdjustmentTotalAggregator.new(
         adjustments: @adjustments,
-        items: @items,
         rounding_mode: @tax_rounding_modes.first || Amounts::Rounding::TAX_DEFAULT_MODE,
         receipt_tax_basis: :total_includes_tax
       ).call

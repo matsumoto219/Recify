@@ -1,14 +1,14 @@
 require 'rails_helper'
 
 RSpec.describe 'Amount Engine integration' do
-  def call_amount_engine(receipt:, items:, tax_details: [], adjustments: [], payments: [])
+  def call_amount_engine(receipt:, items:, tax_details: [], adjustments: [], payments: [], context: :analysis)
     ReceiptAmountService.call(
       receipt: receipt,
       receipt_items: items,
       receipt_tax_details: tax_details,
       receipt_adjustments: adjustments,
       receipt_payments: payments,
-      context: :analysis
+      context: context
     )
   end
 
@@ -334,5 +334,26 @@ RSpec.describe 'Amount Engine integration' do
 
     expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
     expect(result[:needs_review]).to be(true)
+  end
+
+  it '支払合計がfinal_payment_totalを上回る過払いもblocking reviewにする' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000 }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ],
+      context: :manual
+    )
+
+    aggregate_failures do
+      # 検算: 実支払額 1,000 に対し支払合計 1,100 なので100円過払い。
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:needs_review]).to be(true)
+    end
   end
 end

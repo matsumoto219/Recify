@@ -21,6 +21,7 @@ module Amounts
       end
 
       return best unless legacy&.accepted?
+      # 手動/編集保存では既存入力を尊重し、accepted legacy が参照する補正済み line_total を再探索で揺らさない。
       return legacy unless context == :analysis
       return best if replacement_candidate?(best)
 

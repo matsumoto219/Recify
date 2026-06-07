@@ -453,7 +453,6 @@ module Amounts
 
       @adjustment_summary_by_basis[basis] ||= Amounts::AdjustmentTotalAggregator.new(
         adjustments: @adjustments,
-        items: @items,
         rounding_mode: @tax_rounding_mode,
         receipt_tax_basis: basis
       ).call
