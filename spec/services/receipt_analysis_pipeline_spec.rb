@@ -1568,6 +1568,102 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'Amount Engineが正規化した税込priceとline_totalを明細保存へ反映する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = [
+        {
+          raw_text: '手巻おにぎり辛子明太子',
+          price: 130,
+          quantity: 1,
+          quantity_unit: '個',
+          line_total: 130,
+          tax_rate: 8,
+          confidence: 0.95
+        }
+      ]
+      ai_result = successful_ai_result.deep_dup
+      ai_result[:receipt_items_attributes] = [
+        {
+          index: 0,
+          suggested_name: '手巻おにぎり辛子明太子',
+          category: 'food',
+          price: 130,
+          quantity: 1,
+          quantity_unit: '個',
+          line_total: 130,
+          tax_rate: 8,
+          needs_review: false,
+          confidence: 0.95
+        }
+      ]
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        {
+          resolved: { total: 140, subtotal: 130, tax: 10, tax_rate: BigDecimal('0.08') },
+          computed: {
+            total: 140,
+            subtotal: 130,
+            tax: 10,
+            items: [
+              {
+                price: 140,
+                quantity: BigDecimal('1'),
+                quantity_unit: '個',
+                original_line_total: 130,
+                line_total: 140,
+                tax_rate: BigDecimal('0.08')
+              }
+            ]
+          },
+          tax_details: [ { rate: BigDecimal('0.08'), net_amount: 130, amount: 10 } ],
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: [],
+          mismatch_codes: [],
+          blocking_mismatch_codes: [],
+          warning_mismatch_codes: [],
+          warning_reasons: [],
+          mismatch_messages: [],
+          needs_review: false,
+          amount_engine: {
+            selected_candidate_id: 'mixed_by_tax_rate_group/floor',
+            selected_basis: 'mixed_by_tax_rate_group',
+            selected_candidate: {
+              candidate_id: 'mixed_by_tax_rate_group/floor',
+              basis: 'mixed_by_tax_rate_group',
+              subtotal: 130,
+              tax: 10,
+              purchase_total: 140,
+              final_payment_total: 140,
+              computed_items: [
+                { price: 140, quantity: BigDecimal('1'), quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') }
+              ]
+            }
+          }
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        # 検算: 130税抜を8%で税込補正すると floor(130 * 1.08)=140。単価入力欄の正本になるpriceも140。
+        expect(receipt.total_amount).to eq(140)
+        expect(item.price).to eq(140)
+        expect(item.original_line_total).to eq(130)
+        expect(item.line_total).to eq(140)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate', 'computed_items', 0, 'price')).to eq(140)
+      end
+    end
+
     it '支払い行が設定上限を超える解析結果は金額計算前に拒否する' do
       create(:system_setting, key: 'limits.receipt_payments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = create(:receipt, :processing, :with_image)

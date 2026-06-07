@@ -20,11 +20,11 @@ RSpec.describe 'Amount Engine integration' do
         total_amount: 1_515
       },
       items: [
-        { line_total: 130, tax_rate: BigDecimal('0.08') },
-        { line_total: 140, tax_rate: BigDecimal('0.08') },
-        { line_total: 300, tax_rate: BigDecimal('0.10') },
-        { line_total: 490, tax_rate: BigDecimal('0.10') },
-        { line_total: 50, tax_rate: BigDecimal('0') }
+        { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
@@ -48,14 +48,16 @@ RSpec.describe 'Amount Engine integration' do
 
     aggregate_failures do
       # 検算:
-      # 8%: 130税抜 -> 140税込, 140税抜 -> 151税込, 税込291 / 税21 / 税抜270
-      # 10%: 300税抜 -> 330税込, 490税込, 税込820 / 税 floor(820 * 10 / 110)=74 / 税抜746
+      # 8%: 130税抜 -> price/line_total 140税込, 140税抜 -> price/line_total 151税込, 税込291 / 税21 / 税抜270
+      # 10%: 300税抜 -> price/line_total 330税込, 490税込は据え置き, 税込820 / 税 floor(820 * 10 / 110)=74 / 税抜746
       # 0%: 50。購入合計 291 + 820 + 50 = 1,161。支払調整 -22 で final 1,139。
       expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
       expect(result.dig(:computed, :final_payment_total)).to eq(1_139)
       expect(result.dig(:computed, :payment_adjustment_total)).to eq(-22)
       expect(result.dig(:computed, :payment_amount_sum)).to eq(1_139)
+      expect(result.dig(:computed, :items).map { |item| item['price'] || item[:price] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result.dig(:computed, :items).map { |item| item['line_total'] || item[:line_total] }).to eq([ 140, 151, 330, 490, 50 ])
+      expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:price] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result[:tax_details]).to contain_exactly(
         include(rate: BigDecimal('0.08'), net_amount: 270, amount: 21),
         include(rate: BigDecimal('0.10'), net_amount: 746, amount: 74)
@@ -76,11 +78,11 @@ RSpec.describe 'Amount Engine integration' do
         total_amount: 1_161
       },
       items: [
-        { line_total: 130, tax_rate: BigDecimal('0.08') },
-        { line_total: 140, tax_rate: BigDecimal('0.08') },
-        { line_total: 300, tax_rate: BigDecimal('0.10') },
-        { line_total: 490, tax_rate: BigDecimal('0.10') },
-        { line_total: 50, tax_rate: BigDecimal('0') }
+        { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '消費税等' },
@@ -107,8 +109,8 @@ RSpec.describe 'Amount Engine integration' do
 
     aggregate_failures do
       # 検算:
-      # 8%: 130税抜 -> 140税込, 140税抜 -> 151税込, gross=291, tax=21。
-      # 10%: 300税抜 -> 330税込, 490税込, gross=820, tax=floor(820 * 10 / 110)=74。
+      # 8%: 130税抜 -> price/line_total 140税込, 140税抜 -> price/line_total 151税込, gross=291, tax=21。
+      # 10%: 300税抜 -> price/line_total 330税込, 490税込は据え置き, gross=820, tax=floor(820 * 10 / 110)=74。
       # 0%: 50。purchase_total=291 + 820 + 50 = 1,161。cashless_reward=-22でfinal=1,139。
       expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
       expect(result.dig(:amount_engine, :selected_basis)).to eq('mixed_by_tax_rate_group')
@@ -119,9 +121,53 @@ RSpec.describe 'Amount Engine integration' do
         payment_adjustment_total: -22,
         payment_amount_sum: 1_139
       )
+      expect(result.dig(:computed, :items).map { |item| item['price'] || item[:price] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result.dig(:computed, :items).map { |item| item['line_total'] || item[:line_total] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
       expect(result[:amount_engine][:candidates].map { |candidate| candidate[:candidate_id] }).to include('mixed_by_tax_rate_group/floor')
+    end
+  end
+
+  it '税抜補正後の税込line_totalを整数数量で割り切れる時だけpriceへ反映する' do
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
+      items: [
+        { price: 100, quantity: 2, quantity_unit: '個', line_total: 200, tax_rate: BigDecimal('0.10') }
+      ],
+      payments: [
+        { method: 'cash', amount: 220 }
+      ]
+    )
+
+    item = result.dig(:computed, :items).first
+
+    aggregate_failures do
+      # 検算: 税抜 100円 x 2 = 200円。10%外税で税込line_total 220円、税込単価は 220 / 2 = 110円。
+      expect(result[:resolved]).to include(subtotal: 200, tax: 20, total: 220)
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to start_with('items_as_tax_excluded/')
+      expect(item[:price]).to eq(110)
+      expect(item[:line_total]).to eq(220)
+    end
+  end
+
+  it '割引あり明細は税込line_totalへ補正してもpriceを無理に変更しない' do
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 100, tax_amount: 10, total_amount: 110 },
+      items: [
+        { price: 100, quantity: 1, quantity_unit: '個', line_total: 100, discount_rate: BigDecimal('0.10'), tax_rate: BigDecimal('0.10') }
+      ],
+      payments: [
+        { method: 'cash', amount: 110 }
+      ]
+    )
+
+    item = result.dig(:computed, :items).first
+
+    aggregate_failures do
+      # 検算: 税抜line_total 100円を10%外税として税込110円へ補正するが、割引率があるため単価100円は保持する。
+      expect(result[:resolved]).to include(subtotal: 100, tax: 10, total: 110)
+      expect(item[:price]).to eq(100)
+      expect(item[:line_total]).to eq(110)
     end
   end
 

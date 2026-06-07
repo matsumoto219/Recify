@@ -1,12 +1,13 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptAmountService do
-  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], receipt_adjustments: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def call_service(receipt:, receipt_items: [], receipt_tax_details: [], receipt_adjustments: [], receipt_payments: [], context: :analysis, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     kwargs = {
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_tax_details: receipt_tax_details,
       receipt_adjustments: receipt_adjustments,
+      receipt_payments: receipt_payments,
       context: context
     }
     kwargs[:rounding_mode] = rounding_mode if rounding_mode
@@ -771,6 +772,46 @@ RSpec.describe ReceiptAmountService do
         expect(result[:resolved][:subtotal]).to eq(1_000)
         expect(result[:resolved][:tax]).to eq(100)
         expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
+      end
+    end
+
+    [ :manual, :edit_save ].each do |context|
+      it "#{context} context keeps tax-normalized saved items as tax-included amounts" do
+        result = call_service(
+          receipt: {
+            total_amount: 1_161,
+            subtotal_amount: 1_066,
+            tax_amount: 95
+          },
+          receipt_items: [
+            { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') },
+            { price: 151, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08') },
+            { price: 330, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10') },
+            { price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
+            { price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
+          ],
+          receipt_adjustments: [
+            { kind: 'receipt_discount', label: 'キャッシュレス還元額', sign: 'discount', amount: 22 }
+          ],
+          receipt_payments: [
+            { method: 'nanaco支払', amount: 1_139 }
+          ],
+          context: context
+        )
+
+        selected = result.dig(:amount_engine, :selected_candidate)
+
+        aggregate_failures do
+          # 検算: 税込明細 140 + 151 + 330 + 490 + 50 = 1,161。支払調整 -22 で実支払額 1,139。
+          # original_line_total はOCR元値として残っていても、manual/edit_saveの計算では現在の税込price/line_totalを正とする。
+          expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
+          expect(result.dig(:computed, :payment_adjustment_total)).to eq(-22)
+          expect(result.dig(:computed, :final_payment_total)).to eq(1_139)
+          expect(Array(result.dig(:computed, :items)).map { |item| item[:price] || item['price'] }).to eq([ 140, 151, 330, 490, 50 ])
+          expect(Array(result.dig(:computed, :items)).map { |item| item[:line_total] || item['line_total'] }).to eq([ 140, 151, 330, 490, 50 ])
+          expect(selected[:purchase_total]).to eq(1_161)
+          expect(selected[:final_payment_total]).to eq(1_139)
+        end
       end
     end
 

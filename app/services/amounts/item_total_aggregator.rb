@@ -39,6 +39,9 @@ module Amounts
     end
 
     def original_line_total_for(item)
+      # manual/edit_save は現在の入力値が正本。解析時の元値が残っていても再計算の入力にはしない。
+      return manual_input_line_total_for(item) if manual_input_context?
+
       original_line_total = to_i(fetch_value(item, :original_line_total))
       return original_line_total if original_line_total.positive?
 
@@ -48,6 +51,40 @@ module Amounts
       end
 
       item_line_total(item)
+    end
+
+    def manual_input_line_total_for(item)
+      original_line_total = to_i(fetch_value(item, :original_line_total))
+      return original_line_total if manual_discount_input?(item) && original_line_total.positive?
+
+      if manual_countable_unit_price_input?(item)
+        unit_total = countable_unit_line_total(item)
+        return normalized_saved_line_total_for(item, unit_total) || unit_total
+      end
+
+      line_total_value = fetch_value(item, :line_total)
+      return to_i(line_total_value) if value_present?(line_total_value)
+
+      0
+    end
+
+    def manual_discount_input?(item)
+      value_present?(fetch_value(item, :discount_rate)) ||
+        value_present?(fetch_value(item, :discount_amount)) ||
+        fetch_value(item, :amount_discount_amount_present) == true
+    end
+
+    def normalized_saved_line_total_for(item, unit_total)
+      return nil if value_present?(fetch_value(item, :discount_rate))
+      return nil if to_i(fetch_value(item, :discount_amount)).positive?
+
+      original_line_total = to_i(fetch_value(item, :original_line_total))
+      line_total = to_i(fetch_value(item, :line_total))
+      return nil unless original_line_total.positive? && line_total.positive?
+      return nil if original_line_total == line_total
+      return nil unless unit_total == original_line_total
+
+      line_total
     end
 
     def item_to_hash(item)

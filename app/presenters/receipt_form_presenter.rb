@@ -175,6 +175,12 @@ class ReceiptFormPresenter
       ReceiptItem.quantity_unit_options
     end
 
+    def price_value
+      return nil if new_record?
+
+      normalized_tax_included_price || item.price
+    end
+
     def discount_rate_percentage_input
       new_record? ? nil : item.discount_rate_percentage_input
     end
@@ -223,6 +229,39 @@ class ReceiptFormPresenter
 
     def review_reason_includes?(*codes)
       (review_reason_codes & codes.map(&:to_s)).any?
+    end
+
+    def normalized_tax_included_price
+      return nil if item.price.blank? || item.original_line_total.blank? || item.line_total.blank?
+      return nil if item.tax_rate.blank? || !item.tax_rate.to_d.positive?
+      return nil if discount_applied?
+      return nil if ReceiptItem.decimal_quantity_unit?(selected_unit)
+
+      quantity = item.quantity.presence || BigDecimal("1")
+      quantity = BigDecimal(quantity.to_s)
+      return nil unless quantity.positive? && quantity.frac.zero?
+
+      original_total = item.original_line_total.to_i
+      gross_total = item.line_total.to_i
+      return nil unless original_total.positive? && gross_total.positive?
+      return nil if original_total == gross_total
+      return nil unless item.price.to_i == exact_unit_amount(original_total, quantity)
+
+      exact_unit_amount(gross_total, quantity)
+    rescue ArgumentError
+      nil
+    end
+
+    def exact_unit_amount(total, quantity)
+      quantity_integer = quantity.to_i
+      return nil unless quantity_integer.positive?
+      return nil unless (total % quantity_integer).zero?
+
+      total / quantity_integer
+    end
+
+    def discount_applied?
+      item.discount_amount.to_i.positive? || (item.discount_rate.present? && item.discount_rate.to_d.positive?)
     end
   end
 

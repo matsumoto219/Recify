@@ -4792,6 +4792,62 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '編集フォームの単価入力欄は税込補正済みline_totalから税込priceを表示する' do
+      receipt.receipt_items.destroy_all
+      receipt.receipt_items.create!(
+        suggested_name: '手巻おにぎり辛子明太子',
+        category: 'food',
+        price: 130,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: 130,
+        line_total: 140,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_row = document.at_css('[data-receipt-form-target="itemRow"]')
+
+      aggregate_failures do
+        # 検算: 保存済みpriceがOCR由来の130円でも、line_totalは130税抜 -> 140税込へ補正済みなので入力欄は140を表示する。
+        expect(response).to have_http_status(:success)
+        expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['value']).to eq('140')
+        expect(item_row.at_css('[data-receipt-form-target="lineTotalInput"]')['value']).to eq('140')
+        expect(item_row.at_css('[data-receipt-form-target="lineTotalInput"]')['data-original-line-total']).to eq('130')
+      end
+    end
+
+    it '割引あり明細の単価入力欄は税込補正済みline_totalから逆算しない' do
+      receipt.receipt_items.destroy_all
+      receipt.receipt_items.create!(
+        suggested_name: '割引対象商品',
+        category: 'daily_goods',
+        price: 100,
+        quantity: 1,
+        quantity_unit: '個',
+        original_line_total: 100,
+        line_total: 110,
+        discount_rate: BigDecimal('0.10'),
+        tax_rate: BigDecimal('0.10'),
+        needs_review: false
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      item_row = document.at_css('[data-receipt-form-target="itemRow"]')
+
+      aggregate_failures do
+        # 検算: line_totalは100税抜 -> 110税込へ補正済みでも、割引率付きのpriceは明細計算の意味を持つため100を維持する。
+        expect(response).to have_http_status(:success)
+        expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['value']).to eq('100')
+        expect(item_row.at_css('[data-receipt-form-target="lineTotalInput"]')['value']).to eq('110')
+      end
+    end
+
     it '編集画面の税率サマリーもreceipt_tax_detailsを優先する' do
       receipt.receipt_items.create!(
         confirmed_name: 'MIX SWEETS',
@@ -6724,6 +6780,94 @@ RSpec.describe 'Receipts', type: :request do
         expect(observed_kwargs[:tax_rounding_mode]).to eq('ceil')
         expect(observed_kwargs[:discount_rounding_mode]).to eq('floor')
         expect(receipt.tax_amount).to eq(10)
+      end
+    end
+
+    it '税込補正済み明細は編集保存でもoriginal_line_totalへ戻らず購入合計と実支払額を維持する' do
+      receipt.update!(
+        store_name: 'サンプルコンビニ',
+        subtotal_amount: 1_066,
+        tax_amount: 95,
+        total_amount: 1_161,
+        tax_rate: nil,
+        status: 'review_needed',
+        review_reasons: [ 'price_tax_inclusion_uncertain' ],
+        amount_calculation_profile: {
+          computed: {
+            payment_adjustment_total: -22,
+            final_payment_total: 1_139
+          }
+        }
+      )
+      items = [
+        receipt.receipt_items.create!(confirmed_name: '手巻おにぎり辛子明太子', category: 'food', price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 0),
+        receipt.receipt_items.create!(confirmed_name: '炭酸飲料 500ml', category: 'drink', price: 151, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 1),
+        receipt.receipt_items.create!(confirmed_name: 'ネイルカラー サンプルPK', category: 'daily_goods', price: 330, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 2),
+        receipt.receipt_items.create!(confirmed_name: '雑貨A', category: 'other', price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 3),
+        receipt.receipt_items.create!(confirmed_name: '50円切手', category: 'other', price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0'), needs_review: false, position_index: 4)
+      ]
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'receipt_discount',
+        label: 'キャッシュレス還元額',
+        amount: 22,
+        sign: 'discount',
+        source: 'ai',
+        needs_review: false,
+        position_index: 0
+      )
+      receipt.receipt_payments.create!(method: 'nanaco支払', amount: 1_139)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: 'サンプルコンビニ 更新後',
+          payment_method: 'e_money',
+          receipt_items_attributes: items.each_with_index.to_h do |item, index|
+            [
+              index.to_s,
+              {
+                id: item.id,
+                confirmed_name: item.confirmed_name,
+                category: item.category,
+                price: item.price,
+                quantity: 1,
+                quantity_unit: '個',
+                tax_rate: item.tax_rate.to_d * 100,
+                line_total: item.line_total,
+                needs_review: false
+              }
+            ]
+          end,
+          receipt_adjustments_attributes: {
+            '0' => {
+              id: adjustment.id,
+              kind: adjustment.kind,
+              label: adjustment.label,
+              amount: adjustment.amount,
+              sign: adjustment.sign,
+              tax_rate: nil,
+              position_index: 0
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      payment_summary = ReceiptAmountService.payment_adjustment_summary(receipt: receipt)
+      saved_items = receipt.receipt_items.order(:position_index)
+      selected_candidate = receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate')
+
+      aggregate_failures do
+        # 検算: 税込明細 140 + 151 + 330 + 490 + 50 = 1,161。支払調整 -22 で実支払額 1,139。
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.subtotal_amount).to eq(1_066)
+        expect(receipt.tax_amount).to eq(95)
+        expect(receipt.total_amount).to eq(1_161)
+        expect(payment_summary.payment_adjustment_total).to eq(-22)
+        expect(payment_summary.final_payment_total).to eq(1_139)
+        expect(saved_items.pluck(:price)).to eq([ 140, 151, 330, 490, 50 ])
+        expect(saved_items.pluck(:line_total)).to eq([ 140, 151, 330, 490, 50 ])
+        expect(selected_candidate['purchase_total']).to eq(1_161)
+        expect(selected_candidate['final_payment_total']).to eq(1_139)
       end
     end
 

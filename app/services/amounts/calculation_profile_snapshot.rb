@@ -129,8 +129,33 @@ module Amounts
         score_breakdown: normalize_value(candidate[:score_breakdown]),
         warnings: normalized_array(candidate[:warnings]),
         hard_reject_reasons: normalized_array(candidate[:hard_reject_reasons]),
-        evidence: sanitized_engine_evidence(candidate[:evidence])
+        evidence: sanitized_engine_evidence(candidate[:evidence]),
+        computed_items: sanitized_engine_computed_items(candidate[:computed_items])
       }.compact
+    end
+
+    def sanitized_engine_computed_items(items)
+      Array(items).filter_map do |item|
+        next unless item.respond_to?(:with_indifferent_access)
+
+        item = item.with_indifferent_access
+        normalize_value(
+          item.slice(
+            :price,
+            :quantity,
+            :quantity_unit,
+            :original_line_total,
+            :line_total,
+            :discount_amount,
+            :discount_rate,
+            :tax_rate,
+            :amount_price_present,
+            :amount_quantity_present,
+            :amount_line_total_present,
+            :amount_discount_amount_present
+          )
+        )
+      end
     end
 
     def sanitized_engine_evidence(evidence)

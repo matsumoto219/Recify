@@ -154,6 +154,29 @@ RSpec.describe Amounts::ItemTotalAggregator do
     end
   end
 
+  it 'manual context ignores stale original_line_total when price and line_total are already tax included' do
+    result = aggregate(
+      [
+        {
+          price: 140,
+          quantity: 1,
+          quantity_unit: '個',
+          original_line_total: 130,
+          line_total: 140,
+          tax_rate: BigDecimal('0.08')
+        }
+      ],
+      context: :manual
+    )
+
+    aggregate_failures do
+      # 検算: 解析時の130円はOCR元値。手動再計算では税込正規化済みの140円を明細金額として使う。
+      expect(result[:total]).to eq(140)
+      expect(result[:items].first[:original_line_total]).to eq(140)
+      expect(result[:items].first[:line_total]).to eq(140)
+    end
+  end
+
   it 'parses decimal comma quantity as decimal when filling line_total' do
     result = aggregate([
       { price: 14_400, quantity: '0,300', quantity_unit: '個', line_total: nil }

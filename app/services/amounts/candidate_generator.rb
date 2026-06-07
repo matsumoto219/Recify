@@ -100,7 +100,11 @@ module Amounts
 
         amounts = item_basis_amounts(line_total, rate, item_basis, rounding_mode)
         group[:item_amounts] << amounts
-        computed_items[index] = item_with_line_total(item, amounts[:gross_amount])
+        computed_items[index] = item_with_line_total(
+          item,
+          amounts[:gross_amount],
+          normalize_price: item_basis == :tax_excluded
+        )
       end
 
       apply_purchase_adjustments_to_groups!(groups, item_basis: item_basis, rounding_mode: rounding_mode)
@@ -289,7 +293,11 @@ module Amounts
           tax: assignment[:tax]
         }
         assignment[:assignments].each do |entry|
-          computed_items[entry[:index]] = item_with_line_total(items[entry[:index]], entry[:gross_amount])
+          computed_items[entry[:index]] = item_with_line_total(
+            items[entry[:index]],
+            entry[:gross_amount],
+            normalize_price: entry[:basis] == :tax_excluded
+          )
         end
         warnings << :price_tax_inclusion_uncertain if assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
         evidence.concat(assignment[:assignments].map { |entry| entry.slice(:source, :index, :basis, :rate, :net_amount, :tax_amount, :gross_amount) })
@@ -579,8 +587,41 @@ module Amounts
       end
     end
 
-    def item_with_line_total(item, line_total)
-      indifferent_hash(item).merge(line_total: line_total)
+    def item_with_line_total(item, line_total, normalize_price: false)
+      item = indifferent_hash(item)
+      normalized = item.merge(line_total: line_total)
+
+      if normalize_price
+        price = normalized_unit_price_for(item, line_total)
+        normalized[:price] = price unless price.nil?
+      end
+
+      normalized
+    end
+
+    def normalized_unit_price_for(item, line_total)
+      line_total = to_i(line_total)
+      return nil unless line_total.positive?
+      return nil if discount_applied?(item)
+
+      quantity = Amounts::NumberParser.parse_quantity(item[:quantity], default: BigDecimal("1"))
+      quantity = BigDecimal("1") if quantity <= 0
+      return nil unless quantity.frac.zero?
+      return nil unless default_or_countable_quantity_unit?(item[:quantity_unit])
+
+      quantity_integer = quantity.to_i
+      return nil unless quantity_integer.positive?
+      return nil unless (line_total % quantity_integer).zero?
+
+      line_total / quantity_integer
+    end
+
+    def discount_applied?(item)
+      to_i(item[:discount_amount]).positive? || normalize_rate(item[:discount_rate]).positive?
+    end
+
+    def default_or_countable_quantity_unit?(unit)
+      unit.to_s.strip.blank? || countable_quantity_unit?(unit)
     end
 
     def item_line_total(item)

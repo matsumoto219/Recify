@@ -52,8 +52,30 @@ module Amounts
         score_breakdown: candidate.score_breakdown,
         warnings: candidate.warnings,
         hard_reject_reasons: candidate.hard_reject_reasons,
-        evidence: safe_evidence(candidate.evidence)
+        evidence: safe_evidence(candidate.evidence),
+        computed_items: safe_computed_items(candidate.computed_items)
       }.compact
+    end
+
+    def safe_computed_items(items)
+      Array(items).filter_map do |item|
+        next unless item.respond_to?(:to_h)
+
+        item.to_h.symbolize_keys.slice(
+          :price,
+          :quantity,
+          :quantity_unit,
+          :original_line_total,
+          :line_total,
+          :discount_amount,
+          :discount_rate,
+          :tax_rate,
+          :amount_price_present,
+          :amount_quantity_present,
+          :amount_line_total_present,
+          :amount_discount_amount_present
+        ).compact
+      end
     end
 
     def safe_evidence(evidence)

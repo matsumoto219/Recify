@@ -126,6 +126,17 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               final_payment_total: 1_139,
               payment_adjustment_total: -22,
               payment_amount_sum: 1_139,
+              computed_items: [
+                {
+                  raw_text: '保存しない',
+                  price: 140,
+                  quantity: BigDecimal('1'),
+                  quantity_unit: '個',
+                  original_line_total: 130,
+                  line_total: 140,
+                  tax_rate: BigDecimal('0.08')
+                }
+              ],
               evidence: [
                 { source: 'receipt_payments', payment_amount_sum: 1_139, final_payment_total: 1_139 },
                 { source: 'ocr_raw_text', raw_text: '保存しない' }
@@ -146,6 +157,16 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           payment_adjustment_total: -22,
           payment_amount_sum: 1_139
         )
+        expect(snapshot.dig(:amount_engine, :selected_candidate, :computed_items)).to eq([
+          {
+            'price' => 140,
+            'quantity' => '1.0',
+            'quantity_unit' => '個',
+            'original_line_total' => 130,
+            'line_total' => 140,
+            'tax_rate' => '0.08'
+          }
+        ])
         expect(snapshot.to_json).not_to include('保存しない')
       end
     end
