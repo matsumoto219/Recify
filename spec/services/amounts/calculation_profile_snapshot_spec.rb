@@ -20,10 +20,10 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           tax: 116,
           tax_rate: BigDecimal('0.1')
         },
-        warning_reasons: [:price_tax_inclusion_uncertain],
-        mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+        warning_reasons: [ :price_tax_inclusion_uncertain ],
+        mismatch_codes: [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
         blocking_mismatch_codes: [],
-        warning_mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+        warning_mismatch_codes: [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
         calculation_profile: {
           tax_rounding_mode: :floor,
           discount_rounding_mode: :round,
@@ -67,10 +67,10 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
             ]
           },
           score: 0,
-          warnings: ['price_tax_inclusion_uncertain'],
-          mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+          warnings: [ 'price_tax_inclusion_uncertain' ],
+          mismatch_codes: [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
           blocking_mismatch_codes: [],
-          warning_mismatch_codes: ['PRICE_TAX_INCLUSION_UNCERTAIN'],
+          warning_mismatch_codes: [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
           context: 'analysis',
           rounding_mode: { 'tax' => 'floor', 'discount' => 'round' },
           computed: {

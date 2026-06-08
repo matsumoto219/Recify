@@ -2,10 +2,11 @@
 
 module Amounts
   class CandidateScorer
-    def initialize(receipt:, payments:, tax_details: [])
+    def initialize(receipt:, payments:, tax_details: [], context: :analysis)
       @receipt = receipt
       @payments = Array(payments)
       @tax_details = Array(tax_details)
+      @context = context.to_s.to_sym
     end
 
     def call(candidate)
@@ -18,20 +19,38 @@ module Amounts
 
     private
 
-    attr_reader :receipt, :payments, :tax_details
+    attr_reader :receipt, :payments, :tax_details, :context
 
     def score_breakdown(candidate)
       {
-        receipt_total_delta: amount_delta(candidate.purchase_total, :total_amount) * 100,
-        receipt_subtotal_delta: amount_delta(candidate.subtotal, :subtotal_amount) * 30,
-        receipt_tax_delta: amount_delta(candidate.tax, :tax_amount) * 60,
+        receipt_total_delta: receipt_total_delta(candidate) * 100,
+        receipt_subtotal_delta: amount_delta(candidate.subtotal, :subtotal_amount, candidate: candidate) * 30,
+        receipt_tax_delta: amount_delta(candidate.tax, :tax_amount, candidate: candidate) * 60,
         payment_delta: payment_delta(candidate) * 120,
+        receipt_input_item_delta: receipt_input_item_delta(candidate) * 1_000,
+        warning_penalty: warning_penalty(candidate),
         hard_reject_penalty: candidate.rejected? ? 1_000_000 : 0,
+        rounding_mode_penalty: rounding_mode_penalty(candidate),
+        external_tax_exact_tax_bonus: external_tax_exact_tax_bonus(candidate),
         basis_penalty: basis_penalty(candidate)
       }
     end
 
-    def amount_delta(computed_value, receipt_key)
+    def receipt_total_delta(candidate)
+      return 0 if stale_receipt_amounts_ignored?(candidate)
+
+      printed = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :total_amount))
+      return 0 if printed.nil?
+      return 0 if gross_tax_detail_candidate?(candidate) &&
+        receipt_subtotal_matches_purchase_total?(candidate) &&
+        !net_tax_details_match_receipt_amounts?
+
+      (candidate.purchase_total.to_i - printed).abs
+    end
+
+    def amount_delta(computed_value, receipt_key, candidate:)
+      return 0 if stale_receipt_amounts_ignored?(candidate)
+
       printed = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, receipt_key))
       return 0 if printed.nil?
 
@@ -41,22 +60,183 @@ module Amounts
     def payment_delta(candidate)
       return 0 if payments.blank? || candidate.payment_amount_sum.nil?
 
-      (candidate.payment_amount_sum.to_i - candidate.final_payment_total.to_i).abs
+      delta = candidate.payment_amount_sum.to_i - candidate.final_payment_total.to_i
+      # OCR解析では現金の「お預かり」が支払額として入ることがあるため、過払い方向は候補選択に使わない。
+      return 0 if context == :analysis && delta.positive? && payment_amount_exceeds_receipt_total?(candidate)
+
+      delta.abs
+    end
+
+    def payment_amount_exceeds_receipt_total?(candidate)
+      total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :total_amount))
+      !total.nil? && candidate.payment_amount_sum.to_i > total
     end
 
     def basis_penalty(candidate)
       case candidate.basis.to_s
-      when "legacy_resolver"
-        5
       when "mixed_by_tax_rate_group"
         external_tax_evidence? ? 15 : 0
       when "external_tax_from_receipt"
-        external_tax_evidence? ? 0 : 3
-      when "items_as_tax_included", "items_as_tax_excluded"
-        10
+        net_tax_detail_candidate_supported?(candidate) || external_tax_evidence? ? 0 : 3
+      when "printed_tax_details_gross"
+        gross_tax_detail_candidate_supported?(candidate) ? 0 : 5_000
+      when "printed_tax_details_net"
+        net_tax_detail_candidate_supported?(candidate) ? net_tax_detail_basis_penalty(candidate) : 5_000
+      when "items_as_tax_included"
+        empty_item_candidate_with_tax_details?(candidate) ? 5_000 : (external_tax_evidence? ? 12 : 0)
+      when "items_as_tax_excluded"
+        empty_item_candidate_with_tax_details?(candidate) ? 5_000 : (external_tax_evidence? ? 0 : 2_000)
+      when "receipt_input_preserved"
+        -1
       else
         25
       end
+    end
+
+    def receipt_input_item_delta(candidate)
+      return 0 unless candidate.basis.to_s == "receipt_input_preserved"
+
+      evidence = candidate.evidence.find do |entry|
+        entry.respond_to?(:[]) && entry[:source].to_s == "receipt_input"
+      end
+      Amounts::NumberParser.parse_amount(evidence&.[](:item_delta))
+    end
+
+    def external_tax_exact_tax_bonus(candidate)
+      return 0 unless context == :analysis
+      return 0 unless external_tax_evidence?
+      return 0 unless external_tax_exact_tax_candidate?(candidate)
+      return 0 unless receipt_subtotal_matches_subtotal?(candidate)
+      return 0 unless receipt_tax_matches_tax?(candidate)
+      return 0 if receipt_total_matches_purchase_total?(candidate)
+      return 0 if Array(candidate.warnings).map(&:to_sym).include?(:price_tax_inclusion_uncertain)
+
+      -100
+    end
+
+    def external_tax_exact_tax_candidate?(candidate)
+      %w[
+        external_tax_from_receipt
+        items_as_tax_excluded
+        printed_tax_details_net
+      ].include?(candidate.basis.to_s) &&
+        candidate.purchase_total.to_i == candidate.subtotal.to_i + candidate.tax.to_i
+    end
+
+    def stale_receipt_amounts_ignored?(candidate)
+      manual_or_edit_context? &&
+        item_derived_candidate?(candidate) &&
+        item_total(candidate).positive?
+    end
+
+    def manual_or_edit_context?
+      %i[manual edit_save].include?(context)
+    end
+
+    def item_derived_candidate?(candidate)
+      %w[
+        items_as_tax_included
+        items_as_tax_excluded
+        mixed_by_tax_rate_group
+      ].include?(candidate.basis.to_s)
+    end
+
+    def warning_penalty(candidate)
+      blocking = Amounts::MismatchSeverity.blocking(candidate.warnings).size * 50_000
+      tax_detail_rate = candidate.warnings.include?(:tax_detail_rate_mismatch) ? 500 : 0
+
+      blocking + tax_detail_rate
+    end
+
+    def rounding_mode_penalty(candidate)
+      { floor: 0, round: 100, ceil: 200 }.fetch(candidate.rounding_mode, 300)
+    end
+
+    def gross_tax_detail_candidate_supported?(candidate)
+      gross_tax_detail_candidate?(candidate) &&
+        detected_tax_details.present? &&
+        detected_tax_details.all? { |detail| detail[:basis] == :gross } &&
+        (
+          receipt_total_matches_purchase_total?(candidate) ||
+            receipt_subtotal_matches_purchase_total?(candidate) ||
+            adjusted_item_total(candidate) == candidate.purchase_total.to_i
+        )
+    end
+
+    def net_tax_detail_candidate_supported?(candidate)
+      return true if net_tax_details_match_receipt_amounts?
+
+      detected_tax_details.present? &&
+        detected_tax_details.all? { |detail| detail[:basis] == :net } &&
+        (
+          receipt_total_matches_purchase_total?(candidate) ||
+            adjusted_item_total(candidate) == candidate.subtotal.to_i ||
+            item_total(candidate) == candidate.subtotal.to_i ||
+            item_total(candidate) == candidate.purchase_total.to_i
+        )
+    end
+
+    def net_tax_detail_basis_penalty(candidate)
+      item_total(candidate) == candidate.purchase_total.to_i ? -1 : 2
+    end
+
+    def gross_tax_detail_candidate?(candidate)
+      candidate.basis.to_s == "printed_tax_details_gross" ||
+        candidate.calculation_profile&.[](:tax_detail_amount_basis).to_s == "gross"
+    end
+
+    def receipt_total_matches_purchase_total?(candidate)
+      total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :total_amount))
+      !total.nil? && total == candidate.purchase_total.to_i
+    end
+
+    def receipt_subtotal_matches_purchase_total?(candidate)
+      subtotal = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :subtotal_amount))
+      !subtotal.nil? && subtotal == candidate.purchase_total.to_i
+    end
+
+    def receipt_subtotal_matches_subtotal?(candidate)
+      subtotal = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :subtotal_amount))
+      !subtotal.nil? && subtotal == candidate.subtotal.to_i
+    end
+
+    def receipt_tax_matches_tax?(candidate)
+      tax = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :tax_amount))
+      !tax.nil? && tax == candidate.tax.to_i
+    end
+
+    def net_tax_details_match_receipt_amounts?
+      return false unless receipt_subtotal_tax_total_consistent?
+      return false if detected_tax_details.blank?
+
+      detected_tax_details.sum { |detail| detail[:net_amount].to_i } == receipt_amount(:subtotal_amount) &&
+        detected_tax_details.sum { |detail| detail[:amount].to_i } == receipt_amount(:tax_amount)
+    end
+
+    def receipt_subtotal_tax_total_consistent?
+      subtotal = receipt_amount(:subtotal_amount)
+      tax = receipt_amount(:tax_amount)
+      total = receipt_amount(:total_amount)
+
+      !subtotal.nil? && !tax.nil? && !total.nil? && subtotal + tax == total
+    end
+
+    def receipt_amount(key)
+      Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, key))
+    end
+
+    def adjusted_item_total(candidate)
+      [ item_total(candidate) + candidate.purchase_adjustment_total.to_i, 0 ].max
+    end
+
+    def item_total(candidate)
+      Array(candidate.computed_items).sum do |item|
+        Amounts::NumberParser.parse_amount(fetch_value(item, :line_total))
+      end
+    end
+
+    def empty_item_candidate_with_tax_details?(candidate)
+      detected_tax_details.present? && item_total(candidate).zero?
     end
 
     def external_tax_evidence?
@@ -83,7 +263,7 @@ module Amounts
     def fetch_value(object, key)
       if object.respond_to?(:key?)
         return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
+        object[key.to_s] if object.key?(key.to_s)
       elsif object.respond_to?(key)
         object.public_send(key)
       end

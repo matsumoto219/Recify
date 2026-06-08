@@ -2616,6 +2616,42 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'native engineでも明細あり作成時は税込明細入力を正として保存する' do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'native engine 明細あり作成',
+          payment_method: 'cash',
+          total_amount: 9_999,
+          subtotal_amount: 9_000,
+          tax_amount: 999,
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '商品A',
+              price: 108,
+              quantity: 2,
+              quantity_unit: '個',
+              tax_rate: 10,
+              line_total: nil,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt = Receipt.order(:id).last
+      item = receipt.receipt_items.first
+
+      aggregate_failures do
+        # 検算: Recifyの手動入力単価は税込基準。108 * 2 = 216、内税10%は 216 * 10 / 110 = 19。
+        expect(response).to redirect_to(receipts_path)
+        expect(receipt.subtotal_amount).to eq(197)
+        expect(receipt.tax_amount).to eq(19)
+        expect(receipt.total_amount).to eq(216)
+        expect(item.line_total).to eq(216)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_basis')).to eq('items_as_tax_included')
+      end
+    end
+
     it 'direct paramsでmanual service_chargeを作成できる' do
       expect do
         post receipts_path, params: {
@@ -6011,6 +6047,67 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(1_100)
         expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
         expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_000)
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'native engineでもサービス料追加後の支払不足をreview reasonへ投影する' do
+      receipt.update!(store_name: 'native engine サービス料追加前', total_amount: 1_000, subtotal_amount: 910, tax_amount: 90, status: 'completed')
+      item = receipt.receipt_items.create!(
+        confirmed_name: '商品A',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit: '個',
+        tax_rate: BigDecimal('0.1'),
+        line_total: 1_000,
+        needs_review: false
+      )
+      payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: 'native engine サービス料追加後',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit: item.quantity_unit,
+              tax_rate: 10,
+              line_total: item.line_total,
+              needs_review: false
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'service_charge',
+              label: 'サービス料',
+              amount: '100',
+              sign: 'surcharge',
+              tax_rate: '10'
+            }
+          },
+          receipt_payments_attributes: {
+            '0' => {
+              id: payment.id,
+              method: payment.method,
+              amount: '1000'
+            }
+          }
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 商品 1,000 + サービス料 100 = 実支払額 1,100。支払 1,000 なので100円不足。
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_000)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_basis')).to eq('items_as_tax_included')
         expect(receipt.review_reasons).to include('payment_amount_mismatch')
         expect(receipt.status).to eq('review_needed')
       end

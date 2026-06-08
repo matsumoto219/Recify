@@ -105,6 +105,958 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'defaultではnative engine候補で通常税込明細を税抜候補へ寄せない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') }
+        ]
+      )
+
+      aggregate_failures do
+        # 検算: 税込108円、8%内税は floor(108 * 8 / 108) = 8円。税抜100円、購入合計108円。
+        expect(result[:resolved]).to include(subtotal: 100, tax: 8, total: 108)
+        expect(result.dig(:amount_engine, :selected_basis)).to eq('items_as_tax_included')
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to start_with('items_as_tax_included/')
+      end
+    end
+
+    it 'native engineでもpriceとcountable quantityからline_totalを補完する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 250円 x 2個 = 500円。税率0%なのでsubtotal/tax/totalは500/0/500。
+        expect(item[:quantity]).to eq(BigDecimal('2'))
+        expect(item[:original_line_total]).to eq(500)
+        expect(item[:line_total]).to eq(500)
+        expect(result[:resolved]).to include(subtotal: 500, tax: 0, total: 500)
+      end
+    end
+
+    it 'native engineでもnil/0 quantityを1として扱う' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 250, quantity: nil, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') },
+          { price: 300, quantity: 0, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      items = result.dig(:computed, :items)
+
+      aggregate_failures do
+        # 検算: nil quantityは1、0 quantityも1へ正規化。250 + 300 = 550円。
+        expect(items.map { |item| item[:quantity] }).to eq([ BigDecimal('1'), BigDecimal('1') ])
+        expect(items.map { |item| item[:line_total] }).to eq([ 250, 300 ])
+        expect(result[:resolved]).to include(subtotal: 550, tax: 0, total: 550)
+      end
+    end
+
+    it 'native engineではmeasurement/unknown unitのline_total欠落をprice掛け算で補完しない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil, tax_rate: BigDecimal('0') },
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '束', line_total: nil, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      items = result.dig(:computed, :items)
+
+      aggregate_failures do
+        # 検算: kg/束はcountableではないため 14,400 x 0.3 = 4,320 へは寄せず、明細金額は0円に留める。
+        expect(items.map { |item| item[:line_total] }).to eq([ 0, 0 ])
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+      end
+    end
+
+    it 'native engineでもmeasurement unitの明示line_totalは保持する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 4_320, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 重量単価からの自動補完はしないが、明示line_total 4,320円は正として保持する。
+        expect(item[:quantity]).to eq(BigDecimal('0.300'))
+        expect(item[:line_total]).to eq(4_320)
+        expect(result[:resolved]).to include(subtotal: 4_320, tax: 0, total: 4_320)
+      end
+    end
+
+    it 'native engineでもmanualのdiscount_rateからdiscount_amountとline_totalを正規化する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 999, quantity: 1, quantity_unit: '個', discount_rate: BigDecimal('0.105'), line_total: nil, tax_rate: BigDecimal('0') }
+        ],
+        context: :manual
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 999 x 10.5% = 104.895。discount rounding roundで105円、999 - 105 = 894円。
+        expect(item[:original_line_total]).to eq(999)
+        expect(item[:discount_amount]).to eq(105)
+        expect(item[:line_total]).to eq(894)
+        expect(result[:resolved]).to include(subtotal: 894, tax: 0, total: 894)
+      end
+    end
+
+    it 'analysisではdiscount_rounding_modeを候補化しreceipt totalに合う候補を採用する' do
+      result = call_service(
+        receipt: {
+          total_amount: 135
+        },
+        receipt_items: [
+          {
+            price: 271,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: nil,
+            discount_rate: BigDecimal('0.5'),
+            tax_rate: BigDecimal('0')
+          }
+        ],
+        context: :analysis
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 271円の50%引き。round/ceilは割引136円で残額135円、floorは割引135円で残額136円。
+        expect(result[:resolved]).to include(subtotal: 135, tax: 0, total: 135)
+        expect(item[:discount_amount]).to eq(136)
+        expect(item[:line_total]).to eq(135)
+        expect(result.dig(:computed, :amount_engine_candidate_id)).to start_with('items_as_tax_included/')
+      end
+    end
+
+    it 'native engineでもdiscount_amountはoriginal_line_totalから差し引く' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 300, quantity: 2, quantity_unit: '個', original_line_total: 600, discount_amount: 300, line_total: 300, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 割引前600円 - 割引300円 = 割引後line_total 300円。
+        expect(item[:original_line_total]).to eq(600)
+        expect(item[:discount_amount]).to eq(300)
+        expect(item[:line_total]).to eq(300)
+        expect(result[:resolved]).to include(subtotal: 300, tax: 0, total: 300)
+      end
+    end
+
+    it 'native engineでも割引なしの税込補正済みline_totalはstale original_line_totalより優先する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0') }
+        ],
+        context: :manual
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        # 検算: 130円はOCR元値。手動/編集保存では税込補正済みの140円を現在入力として正にする。
+        expect(item[:original_line_total]).to eq(140)
+        expect(item[:line_total]).to eq(140)
+        expect(result[:resolved]).to include(subtotal: 140, tax: 0, total: 140)
+      end
+    end
+
+    it 'native engineでもmanualのtotalのみ入力を保持する' do
+      result = call_service(
+        receipt: { total_amount: 1_100 },
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: 明細なし、入力はtotal 1,100のみ。現行Resolver同様subtotal/taxはfallback 0、totalは入力値を保持。
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 1_100, tax_rate: nil)
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('manual_receipt_input')
+      end
+    end
+
+    it 'native engineでもmanualのsubtotal/tax/total入力を保持する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: 1,000 + 100 = 1,100。入力済みtax_rate 10%も保持する。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.1'))
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('manual_receipt_input')
+      end
+    end
+
+    it 'native engineでもmanualのtax 0をnilと区別して保持する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_100,
+          tax_amount: 0,
+          total_amount: 1_100,
+          tax_rate: 0
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: 1,100 + 0 = 1,100。tax/tax_rateは明示0として保持する。
+        expect(result[:resolved]).to include(subtotal: 1_100, tax: 0, total: 1_100, tax_rate: BigDecimal('0'))
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('manual_receipt_input')
+      end
+    end
+
+    it 'native engineでもmanualのtax nilはsubtotal/totalから補完する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: nil,
+          total_amount: 1_100
+        },
+        receipt_items: [],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: tax未入力だがsubtotal 1,000 / total 1,100があるため差額100円をtax候補にする。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: nil)
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('manual_receipt_input')
+      end
+    end
+
+    it 'native engineでもedit_saveの保存済み金額を保持する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        # 検算: edit_save明細なしでは保存済み 1,000 + 100 = 1,100 を保持する。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.1'))
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+      end
+    end
+
+    it 'native engineでは明細と入力金額が一致するmanual入力候補を採用できる' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 500,
+          tax_amount: 0,
+          total_amount: 500,
+          tax_rate: 0
+        },
+        receipt_items: [
+          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: 明細 250 x 2 = 500。入力金額とも一致するためmanual_receipt_inputが採用可能。
+        expect(result[:resolved]).to include(subtotal: 500, tax: 0, total: 500, tax_rate: BigDecimal('0'))
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('manual_receipt_input')
+      end
+    end
+
+    it 'native engineでは明細と入力金額が大きく矛盾するmanual入力候補を勝たせない' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 9_000,
+          tax_amount: 999,
+          total_amount: 9_999,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        # 検算: 明細108円の10%内税floorは税9円/税抜99円。入力9,999円とは大きく矛盾するため明細候補を採用する。
+        expect(result[:resolved]).to include(subtotal: 99, tax: 9, total: 108, tax_rate: BigDecimal('0.1'))
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to start_with('items_as_tax_included/floor')
+      end
+    end
+
+    it 'native engineでもtax_detail_incompleteをwarningへ移植する' do
+      result = call_service(
+        receipt: {
+          total_amount: 108,
+          subtotal_amount: 99,
+          tax_amount: 9,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 99, amount: nil }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 明細108円の10%内税floorは税9円/税抜99円。税内訳はamount欠落なのでwarningのみ。
+        expect(result[:resolved]).to include(subtotal: 99, tax: 9, total: 108)
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_incomplete)
+        expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
+      end
+    end
+
+    it 'native engineでも不完全TaxDetailsからreceipt tax_amountを保持しreview対象にする' do
+      result = call_service(
+        receipt: {
+          total_amount: 890,
+          tax_amount: 71
+        },
+        receipt_items: [
+          { line_total: 158, tax_rate: nil },
+          { line_total: 108, tax_rate: nil },
+          { line_total: 198, tax_rate: nil },
+          { line_total: 128, tax_rate: nil },
+          { line_total: 298, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { description: '内消費税等', amount: 44 },
+          { description: '内消費税等', amount: 27 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 画像上の合計890円と税額合計71円を保持する。subtotalは 890 - 71 = 819円。
+        expect(result[:resolved]).to include(subtotal: 819, tax: 71, total: 890, tax_rate: nil)
+        expect(result.dig(:computed, :amount_engine_basis)).to eq('incomplete_tax_details_receipt_tax')
+        expect(result.dig(:computed, :item_amount_basis)).to eq(:line_total_as_recorded)
+        expect(result[:tax_details]).to be_empty
+        expect(result.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+          hash_including(source: 'receipt_tax_detail', amount: 44),
+          hash_including(source: 'receipt_tax_detail', amount: 27)
+        )
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_incomplete)
+        expect(result[:blocking_inconsistencies]).to be_empty
+        expect(result[:review_reasons]).to include('tax_detail_incomplete')
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+
+    it 'native engineのanalysisでは現金お預かりをpurchase total候補選択に使わない' do
+      result = call_service(
+        receipt: {
+          total_amount: 770,
+          subtotal_amount: 770,
+          tax_amount: 70,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { price: 220, quantity: 1, line_total: 220, tax_rate: BigDecimal('0.1') },
+          { price: 132, quantity: 1, line_total: 132, tax_rate: BigDecimal('0.1') },
+          { price: 110, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.1') },
+          { price: 308, quantity: 1, line_total: 308, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { description: '内消費税等 (10%)', amount: 70, rate: BigDecimal('0.1') },
+          { description: '内消費税等', amount: 70 }
+        ],
+        receipt_payments: [
+          { method: '現金', amount: 1_000 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 明細税込合計770円。10%内税は floor(770 * 10 / 110) = 70円、税抜700円。
+        # 現金1,000円はお預かり由来の過払い方向なので、770円を税抜として846円にする候補へ寄せない。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('items_as_tax_included/floor/per_item')
+        expect(result.dig(:amount_engine, :selected_candidate, :score_breakdown, :payment_delta)).to eq(0)
+        expect(result[:resolved]).to include(subtotal: 700, tax: 70, total: 770, tax_rate: BigDecimal('0.1'))
+        expect(result[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+        expect(result[:review_reasons]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでもtax_detail_partialをwarningへ移植する' do
+      result = call_service(
+        receipt: {
+          total_amount: 218,
+          subtotal_amount: 200,
+          tax_amount: 18
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 110, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 8%税8円 + 10%税10円 = 税18円。印字税内訳は8円のみなのでpartial warning。
+        expect(result[:resolved]).to include(subtotal: 200, tax: 18, total: 218)
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
+        expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
+      end
+    end
+
+    it 'native engineでもtax_detail_mismatchをblockingへ移植する' do
+      result = call_service(
+        receipt: {
+          total_amount: 108,
+          subtotal_amount: 99,
+          tax_amount: 9
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 90, amount: 18 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 明細からは税9円だが、税内訳は税18円なのでblocking mismatch。
+        expect(result[:resolved]).to include(subtotal: 99, tax: 9, total: 108)
+        expect(result[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
+        expect(result[:review_reasons]).to include('tax_detail_mismatch')
+      end
+    end
+
+    it 'native engineでもitem_total_mismatchをblockingへ移植する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 300, quantity: 2, quantity_unit: '個', line_total: 500, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: price x quantity は600円だがline_totalは500円。税込/税抜補正候補にも合わないのでitem_total_mismatch。
+        expect(result[:resolved]).to include(subtotal: 455, tax: 45, total: 500)
+        expect(result[:blocking_inconsistencies]).to include(:item_total_mismatch)
+        expect(result[:review_reasons]).to include('item_total_mismatch')
+      end
+    end
+
+    it 'native engineでもzero_amount_item_incompleteをwarningへ移植する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: nil,
+            quantity: nil,
+            line_total: 0,
+            amount_price_present: false,
+            amount_quantity_present: false,
+            amount_line_total_present: true
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 0円line_totalは明示されているが、price/quantityが欠けるためwarning。
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:warning_inconsistencies]).to include(:zero_amount_item_incomplete)
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでも金額情報がない明細をinsufficient_dataへ移植する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: nil,
+            quantity: 1,
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 明細にprice/line_totalがなく、receipt totalもtax detailsもないため金額を確定できない。
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:blocking_inconsistencies]).to include(:insufficient_data)
+        expect(result[:review_reasons]).to include('insufficient_data')
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+
+    it 'native engineでもtax_amount_mismatchをblockingへ移植する' do
+      result = call_service(
+        receipt: {
+          total_amount: 108,
+          tax_amount: 12
+        },
+        receipt_items: [
+          { line_total: 108, tax_rate: nil }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 税率不明明細108円は税額0円候補。receipt tax_amount 12円とは一致しない。
+        expect(result[:resolved]).to include(subtotal: 108, tax: 0, total: 108)
+        expect(result[:blocking_inconsistencies]).to include(:tax_amount_mismatch)
+        expect(result[:review_reasons]).to include('tax_amount_mismatch')
+      end
+    end
+
+    it 'native engineでもprice_tax_inclusion_uncertainをreview reasonへ移植する' do
+      result = call_service(
+        receipt: {
+          tax_rate: nil
+        },
+        receipt_items: [
+          { line_total: 130, tax_rate: BigDecimal('0.08') },
+          { line_total: 140, tax_rate: BigDecimal('0.08') },
+          { line_total: 300, tax_rate: BigDecimal('0.1') },
+          { line_total: 490, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21 },
+          { rate: BigDecimal('0.1'), net_amount: 300, amount: 30 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 明細合計は1,110円。印字税内訳は8%税21円 + 10%税30円のみで、
+        # 490円10%税込行や50円非課税行が税内訳に含まれず、税抜/税込混在の可能性が残る。
+        expect(result[:resolved]).to include(subtotal: 1_020, tax: 90, total: 1_110)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
+      end
+    end
+
+    it 'native engineでも外税のambiguous warningをreviewなしで投影する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_101
+        },
+        receipt_items: [
+          {
+            price: 1_000,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 1_000,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_tax_details: [
+          {
+            rate: BigDecimal('0.1'),
+            net_amount: 1_000,
+            amount: 100,
+            description: '外税'
+          }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 外税TaxDetailsは1,000円 + 10%税100円 = 1,100円。
+        # OCR totalの1,101円とは1円差だが、旧互換では税込/税抜判定のwarning-onlyとして扱う。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_mismatch_codes]).to include('PRICE_TAX_INCLUSION_UNCERTAIN')
+        expect(result[:warning_reasons]).to include('price_tax_inclusion_uncertain')
+        expect(result[:review_reasons]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでもお預かり誤認totalより外税税額一致候補を優先する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 601,
+          tax_amount: 48,
+          total_amount: 601,
+          tax_rate: BigDecimal('0.08')
+        },
+        receipt_items: [
+          { price: 158, quantity: 1, line_total: 158, tax_rate: BigDecimal('0.08') },
+          { price: 228, quantity: 1, line_total: 228, tax_rate: BigDecimal('0.08') },
+          { price: 215, quantity: 1, line_total: 215, tax_rate: BigDecimal('0.08') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 601, amount: 48, description: '外税額' },
+          { amount: 48, description: '内消費税等' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: OCR total=601はお預かり/小計系の誤認。外税TaxDetailsは税抜601円 + 税48円 = 649円。
+        # 648円のper_item候補はOCR totalに1円近いが、印字税額48円と一致しないため採用しない。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('external_tax_from_receipt/floor')
+        expect(result.dig(:amount_engine, :selected_candidate, :score_breakdown, :external_tax_exact_tax_bonus)).to eq(-100)
+        expect(result[:resolved]).to include(subtotal: 601, tax: 48, total: 649, tax_rate: BigDecimal('0.08'))
+        expect(result[:warning_inconsistencies]).to eq([ :ocr_total_mismatch, :price_tax_inclusion_uncertain ])
+        expect(result[:review_reasons]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでも同一税率のP3 mixed warningをreviewなしにする' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 200,
+          tax_amount: 20,
+          total_amount: 220
+        },
+        receipt_items: [
+          { line_total: 110, tax_rate: BigDecimal('0.1') },
+          { line_total: 100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 200, amount: 20 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: TaxDetailsは税抜200円 + 10%税20円 = 220円。
+        # 同一税率内の税込/税抜推定は残るが、TaxDetailsが全額説明できるためwarning-onlyにする。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(result[:resolved]).to include(subtotal: 200, tax: 20, total: 220)
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:review_reasons]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでも税率対象額をgross basis候補として採用する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { line_total: 1_100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_100, amount: 100, description: '10%対象' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 1,100円は税込10%対象額。floor(1,100 * 10 / 110) = 税100円なのでgross basis。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_gross/floor')
+        expect(result[:resolved]).to include(subtotal: 1_100, tax: 100, total: 1_100)
+        expect(result[:computed]).to include(tax_detail_amount_basis: :gross, receipt_tax_basis: :total_includes_tax)
+        expect(result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'native engineでもreceipt三点整合とTaxDetails net合計が一致する場合はnet basisを採用する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_598,
+          tax_amount: 134,
+          total_amount: 1_732
+        },
+        receipt_items: [
+          { line_total: 198, tax_rate: BigDecimal('0.08') },
+          { line_total: 248, tax_rate: BigDecimal('0.08') },
+          { line_total: 158, tax_rate: BigDecimal('0.08') },
+          { line_total: 398, tax_rate: BigDecimal('0.1') },
+          { line_total: 298, tax_rate: BigDecimal('0.1') },
+          { line_total: 298, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 604, amount: 44, description: '8%対象額' },
+          { rate: BigDecimal('0.1'), net_amount: 994, amount: 90, description: '10%対象額' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: TaxDetails net合計 604 + 994 = 1,598、税額 44 + 90 = 134。
+        # receiptも subtotal 1,598 + tax 134 = total 1,732 なので、対象額ラベルでもnet basisを正にする。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(result[:resolved]).to include(subtotal: 1_598, tax: 134, total: 1_732, tax_rate: nil)
+        expect(result[:computed]).to include(tax_detail_amount_basis: :net, receipt_tax_basis: :tax_added_to_subtotal)
+        expect(result[:warning_inconsistencies]).to eq([ :price_tax_inclusion_uncertain ])
+        expect(result[:review_reasons]).to eq([])
+        expect(result[:needs_review]).to be(false)
+      end
+    end
+
+    it 'native engineでも税抜対象額をnet basisの外税候補として採用する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税10%' }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 税抜1,000円 + 外税10% 100円 = 1,100円。明細line_totalはnet basisとして扱う。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('external_tax_from_receipt/floor')
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
+        expect(result[:computed]).to include(tax_detail_amount_basis: :net, receipt_tax_basis: :tax_added_to_subtotal)
+        expect(result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'native engineでもTaxDetailsに含まれない明示0%明細を残す' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_140
+        },
+        receipt_items: [
+          { line_total: 540, tax_rate: BigDecimal('0.08') },
+          { line_total: 550, tax_rate: BigDecimal('0.1') },
+          { line_total: 50, tax_rate: BigDecimal('0') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 500, amount: 40 },
+          { rate: BigDecimal('0.1'), net_amount: 500, amount: 50 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: TaxDetailsは taxable gross 540 + 550 = 1,090円を説明する。
+        # 明示0%の50円はTaxDetails外の非課税明細として残し、購入合計は1,090 + 50 = 1,140円。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(result[:resolved]).to include(subtotal: 1_050, tax: 90, total: 1_140, tax_rate: nil)
+        expect(result[:tax_details]).to contain_exactly(
+          include(rate: BigDecimal('0.08'), net_amount: 500, amount: 40),
+          include(rate: BigDecimal('0.1'), net_amount: 500, amount: 50)
+        )
+        expect(result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'native engineでも中間TaxDetailsを二重計上せず混在候補を採用する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_161,
+          subtotal_amount: 1_066,
+          tax_amount: 95
+        },
+        receipt_items: [
+          { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
+          { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
+          { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.1') },
+          { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.1') },
+          { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
+          { rate: BigDecimal('0.1'), net_amount: 300, amount: 30, description: '小計（税抜10%）' },
+          { rate: BigDecimal('0.1'), net_amount: 820, amount: 74, description: '10%対象' }
+        ],
+        receipt_adjustments: [
+          { kind: 'receipt_discount', label: 'キャッシュレス還元額', sign: 'discount', amount: 22 }
+        ],
+        receipt_payments: [
+          { method: 'nanaco支払', amount: 1_139 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: 8%は130税抜->140税込 + 140税抜->151税込 = 291/税21。
+        # 10%は300税抜->330税込 + 490税込 = 820/税74。非課税50。購入合計1,161、支払調整-22で実支払1,139。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+        expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
+        expect(result.dig(:computed, :final_payment_total)).to eq(1_139)
+        expect(result[:tax_details]).to contain_exactly(
+          include(rate: BigDecimal('0.08'), net_amount: 270, amount: 21),
+          include(rate: BigDecimal('0.1'), net_amount: 746, amount: 74)
+        )
+        expect(result.dig(:amount_engine, :candidates).map { |candidate| candidate[:candidate_id] }).not_to include('printed_tax_details_raw_sum/floor')
+        expect(result[:blocking_inconsistencies]).to be_empty
+        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+      end
+    end
+
+    it 'native engineでもanalysisの明細なしreceipt入力をsubtotalとtaxから補完する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: subtotal 1,000 + tax 100 = total 1,100。税率は100 / 1,000 = 10%。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('analysis_receipt_input')
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.1'))
+      end
+    end
+
+    it 'native engineでもanalysisの明細なしreceipt入力をtotalとsubtotalから補完する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          total_amount: 1_100
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: total 1,100 - subtotal 1,000 = tax 100。tax_amountは未入力なのでtax_rateはnilのまま。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: nil)
+      end
+    end
+
+    it 'native engineでもanalysisの明細なしreceipt入力をtotalとtaxから補完する' do
+      result = call_service(
+        receipt: {
+          tax_amount: 100,
+          total_amount: 1_100
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: total 1,100 - tax 100 = subtotal 1,000。税率は100 / 1,000 = 10%。
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.1'))
+      end
+    end
+
+    it 'native engineでもtax 0とtax_rate nil/0を区別する' do
+      tax_nil_result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 0
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+      tax_rate_zero_result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 0,
+          tax_rate: 0
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+      total_only_result = call_service(
+        receipt: {
+          total_amount: 1_000
+        },
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: tax_amount 0が明示されていればtotalは1,000、税率は0%。tax_rate 0明示も0%。
+        # totalのみ入力では税額根拠がないためtax_rateはnilのまま。
+        expect(tax_nil_result[:resolved]).to include(subtotal: 1_000, tax: 0, total: 1_000, tax_rate: BigDecimal('0'))
+        expect(tax_rate_zero_result[:resolved]).to include(subtotal: 1_000, tax: 0, total: 1_000, tax_rate: BigDecimal('0'))
+        expect(total_only_result[:resolved]).to include(subtotal: 0, tax: 0, total: 1_000, tax_rate: nil)
+      end
+    end
+
+    it 'native engineのmanual/edit_saveでもcalculation_profile出力を旧互換のまま保持する' do
+      manual_result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            price: 999,
+            quantity: 1,
+            quantity_unit: '個',
+            discount_rate: BigDecimal('0.105'),
+            line_total: nil,
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        context: :manual
+      )
+      edit_result = call_service(
+        receipt: {
+          subtotal_amount: 1_000,
+          tax_amount: 100,
+          total_amount: 1_100
+        },
+        receipt_items: [
+          { price: 1_000, quantity: 1, quantity_unit: '個', line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税' }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        # 検算: manual/edit_saveではAmount Engine候補を使っても、旧UI/保存互換のためprofile推定欄は出さない。
+        expect(manual_result[:calculation_profile]).to be_nil
+        expect(manual_result[:calculation_profile_score]).to be_nil
+        expect(manual_result[:calculation_profile_candidates]).to eq([])
+        expect(edit_result[:calculation_profile]).to be_nil
+        expect(edit_result[:calculation_profile_score]).to be_nil
+        expect(edit_result[:calculation_profile_candidates]).to eq([])
+        expect(edit_result[:computed]).to include(item_amount_basis: :line_total_as_recorded)
+      end
+    end
+
     it 'snapshot保存に必要なcontextとrounding_modeを返す' do
       result = call_service(
         receipt: {},
@@ -1530,8 +2482,8 @@ RSpec.describe ReceiptAmountService do
         expect(result[:calculation_profile_candidates]).to include(
           hash_including(
             same_rate_item_amount_basis_assignments: contain_exactly(
-              hash_including(assignment_scope: :item, item_indices: [0], basis: :tax_included),
-              hash_including(assignment_scope: :item, item_indices: [1], basis: :tax_excluded)
+              hash_including(assignment_scope: :item, item_indices: [ 0 ], basis: :tax_included),
+              hash_including(assignment_scope: :item, item_indices: [ 1 ], basis: :tax_excluded)
             )
           )
         )
@@ -2074,7 +3026,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'does not resolve total from partial tax_details when item_total is larger' do
+    it 'native engineではpartial tax_detailsでitem_totalが大きい混在疑いをreview_neededにする' do
       result = call_service(
         receipt: {
           tax_rate: nil
@@ -2094,6 +3046,8 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
+        # 検算: 明細合計は1,110円。partial TaxDetailsだけで 270+21 + 300+30 = 621円へは解決しない。
+        # 税内訳が一部欠け、税抜/税込混在疑いが残るため、現行Recify方針ではreview_neededにする。
         expect(result[:resolved][:total]).to eq(1_110)
         expect(result[:resolved][:total]).not_to eq(621)
         expect(result[:resolved][:tax_rate]).to be_nil
@@ -2103,7 +3057,8 @@ RSpec.describe ReceiptAmountService do
         expect(result[:warning_inconsistencies]).to include(:tax_detail_partial)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
-        expect(result[:needs_review]).to be(false)
+        expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
+        expect(result[:needs_review]).to be(true)
       end
     end
 

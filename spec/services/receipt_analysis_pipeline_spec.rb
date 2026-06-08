@@ -1969,9 +1969,9 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
-          inconsistencies: [:price_tax_inclusion_uncertain],
+          inconsistencies: [ :price_tax_inclusion_uncertain ],
           blocking_inconsistencies: [],
-          warning_inconsistencies: [:price_tax_inclusion_uncertain]
+          warning_inconsistencies: [ :price_tax_inclusion_uncertain ]
         )
       )
 
@@ -1999,8 +1999,8 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
-          inconsistencies: [:tax_detail_mismatch],
-          blocking_inconsistencies: [:tax_detail_mismatch],
+          inconsistencies: [ :tax_detail_mismatch ],
+          blocking_inconsistencies: [ :tax_detail_mismatch ],
           warning_inconsistencies: []
         )
       )
@@ -2678,7 +2678,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.subtotal_amount).to eq(700)
         expect(receipt.tax_amount).to eq(70)
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
-        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([[ 700, 70, BigDecimal('0.1') ]])
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([ [ 700, 70, BigDecimal('0.1') ] ])
         expect(amount[:needs_review]).to be(false)
         expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
         expect(amount[:blocking_inconsistencies]).to be_empty
@@ -3004,7 +3004,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'OCRノイズ由来のocr_low_confidenceとblocking mismatchを保存する' do
+    it 'OCRノイズ由来のocr_low_confidenceと不完全TaxDetails reviewを保存する' do
       ocr_result = ocr_fixture('ocr_noise_receipt')
       receipt, amount = run_finalize_ocr_fixture(
         'ocr_noise_receipt',
@@ -3018,17 +3018,15 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.status).to eq('review_needed')
         expect(receipt.review_reasons).to eq([
           'ocr_low_confidence',
-          'total_mismatch'
+          'tax_detail_incomplete'
         ])
         expect(receipt.total_amount).to eq(890)
-        expect(receipt.subtotal_amount).to eq(890)
+        # 検算: fixture画像上の合計890円と税額合計71円を保持し、subtotalは 890 - 71 = 819円。
+        expect(receipt.subtotal_amount).to eq(819)
         expect(receipt.tax_amount).to eq(71)
         expect(amount[:needs_review]).to be(true)
-        expect(amount[:mismatch_codes]).to eq([
-          'TOTAL_MISMATCH',
-          'TAX_DETAIL_INCOMPLETE'
-        ])
-        expect(amount[:blocking_inconsistencies]).to eq([ :total_mismatch ])
+        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:blocking_inconsistencies]).to be_empty
         expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
       end
     end

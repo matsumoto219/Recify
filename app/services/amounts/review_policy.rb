@@ -29,11 +29,66 @@ module Amounts
     end
 
     def review_reasons
-      (candidate.warnings & REVIEW_REQUIRED_WARNINGS).map(&:to_s)
+      (
+        Amounts::MismatchSeverity.blocking(inconsistencies) +
+          review_required_warnings
+      ).uniq.map(&:to_s)
     end
 
     def needs_review?
       Amounts::MismatchSeverity.needs_review?(inconsistencies) || review_reasons.present?
+    end
+
+    def review_required_warnings
+      warnings = candidate.warnings & REVIEW_REQUIRED_WARNINGS
+      warnings |= incomplete_tax_details_receipt_tax_review_warnings
+      return warnings unless tax_detail_net_price_tax_warning_only?
+
+      warnings - [ :price_tax_inclusion_uncertain ]
+    end
+
+    def incomplete_tax_details_receipt_tax_review_warnings
+      return [] unless candidate.basis == "incomplete_tax_details_receipt_tax"
+
+      candidate.warnings & [ :tax_detail_incomplete ]
+    end
+
+    def tax_detail_net_price_tax_warning_only?
+      candidate.basis == "printed_tax_details_net" &&
+        candidate.hard_reject_reasons.blank? &&
+        candidate.warnings.map(&:to_sym) == [ :price_tax_inclusion_uncertain ] &&
+        tax_detail_amounts_match_candidate? &&
+        receipt_total_delta.zero?
+    end
+
+    def tax_detail_amounts_match_candidate?
+      tax_details = Array(candidate.tax_details)
+      return false if tax_details.blank?
+
+      tax_details.all? { |tax_detail| tax_detail_complete?(tax_detail) } &&
+        tax_details.sum { |tax_detail| to_i(fetch_value(tax_detail, :net_amount)) } == candidate.subtotal.to_i &&
+        tax_details.sum { |tax_detail| to_i(fetch_value(tax_detail, :amount)) } == candidate.tax.to_i &&
+        candidate.subtotal.to_i + candidate.tax.to_i == candidate.purchase_total.to_i
+    end
+
+    def tax_detail_complete?(tax_detail)
+      fetch_value(tax_detail, :rate).present? &&
+        fetch_value(tax_detail, :net_amount).present? &&
+        fetch_value(tax_detail, :amount).present?
+    end
+
+    def receipt_total_delta
+      to_i(fetch_value(candidate.score_breakdown, :receipt_total_delta))
+    end
+
+    def fetch_value(hash, key)
+      return nil unless hash.respond_to?(:[])
+
+      hash[key] || hash[key.to_s]
+    end
+
+    def to_i(value)
+      value.respond_to?(:to_i) ? value.to_i : 0
     end
   end
 end

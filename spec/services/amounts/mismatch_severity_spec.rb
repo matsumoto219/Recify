@@ -34,11 +34,11 @@ RSpec.describe Amounts::MismatchSeverity do
 
   describe '.needs_review?' do
     it 'returns false for warning-only mismatches' do
-      expect(described_class.needs_review?([:ocr_total_mismatch, :tax_detail_rate_mismatch, :item_tax_rate_group_uncertain])).to be(false)
+      expect(described_class.needs_review?([ :ocr_total_mismatch, :tax_detail_rate_mismatch, :item_tax_rate_group_uncertain ])).to be(false)
     end
 
     it 'returns true when a blocking mismatch exists' do
-      expect(described_class.needs_review?([:ocr_total_mismatch, :tax_detail_mismatch])).to be(true)
+      expect(described_class.needs_review?([ :ocr_total_mismatch, :tax_detail_mismatch ])).to be(true)
     end
   end
 end

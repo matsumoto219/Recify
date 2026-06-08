@@ -46,6 +46,7 @@ module Amounts
     end
 
     def warnings
+      # 支払不足・過払いは計算候補の破綻ではなく、保存後にユーザーへ確認を促すreview対象として扱う。
       matched? ? [] : [ :payment_amount_mismatch ]
     end
 
@@ -65,7 +66,7 @@ module Amounts
     def fetch_value(object, key)
       if object.respond_to?(:key?)
         return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
+        object[key.to_s] if object.key?(key.to_s)
       elsif object.respond_to?(key)
         object.public_send(key)
       end

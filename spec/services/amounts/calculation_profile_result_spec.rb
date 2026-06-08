@@ -29,7 +29,7 @@ RSpec.describe Amounts::CalculationProfileResult do
   end
 
   describe '#with_applied_profile' do
-    it 'returns a new result with applied profile metadata without changing ResultTemplate hash shape' do
+    it 'returns a new result with applied profile metadata without changing result hash shape' do
       profile = {
         tax_rounding_mode: :floor,
         discount_rounding_mode: :round,

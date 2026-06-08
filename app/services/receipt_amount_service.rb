@@ -112,115 +112,11 @@ class ReceiptAmountService
     active_profile = profile_estimation.applied_profile || {}
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
-    active_receipt_tax_basis = active_profile[:receipt_tax_basis] || :auto
-    active_item_amount_basis = active_profile[:item_amount_basis] || :line_total_as_recorded
-    active_item_amount_basis_assignments = active_profile[:item_amount_basis_assignments]
-
-    # --- 1) Calculator（純計算）
-    calc = Amounts::Calculator.new(
-      receipt: @receipt,
-      items: @items,
-      tax_details: @tax_details,
-      adjustments: @adjustments,
-      context: @context,
+    active_receipt_tax_basis = active_profile[:receipt_tax_basis] || :total_includes_tax
+    base_result = engine_base_result(
       tax_rounding_mode: active_tax_rounding_mode,
       discount_rounding_mode: active_discount_rounding_mode,
-      receipt_tax_basis: active_receipt_tax_basis,
-      item_amount_basis: active_item_amount_basis,
-      item_amount_basis_assignments: active_item_amount_basis_assignments
-    ).call
-
-    # --- 2) Resolver（最終値決定）
-    resolved = Amounts::Resolver.new(
-      computed: calc,
-      receipt: @receipt,
-      context: @context,
-      items: calc[:items] || @items,
-      tax_details: @tax_details
-    ).call
-
-    # --- 3) TaxDetailAggregator（税率別集計）
-    tax_details = if calc[:item_amount_basis] == :mixed_by_tax_rate_group && Array(calc[:tax_details]).present?
-      Array(calc[:tax_details]).map do |tax_detail|
-        {
-          description: tax_detail[:description],
-          rate: tax_detail[:rate],
-          net_amount: tax_detail[:net_amount],
-          amount: tax_detail[:amount]
-        }
-      end
-    elsif calc[:external_tax] || calc[:tax_details_primary] || calc[:tax_detail_amount_basis] == :gross
-      source_tax_details_for_external_tax.map do |t|
-        {
-          description: "#{(t[:rate].to_f * 100).to_i}%対象",
-          rate: t[:rate],
-          net_amount: t[:net_amount],
-          amount: t[:amount]
-        }
-      end
-    else
-      Amounts::TaxDetailAggregator.new(
-        items: calc[:items] || @items,
-        adjustments: @adjustments,
-        fallback_tax_rate: calc[:tax_rate],
-        fallback_net_amount: resolved[:subtotal],
-        fallback_tax_amount: resolved[:tax],
-        rounding_mode: active_tax_rounding_mode,
-        receipt_tax_basis: calc[:receipt_tax_basis]
-      ).call
-    end
-
-    # --- 4) ConsistencyChecker（整合性チェック）
-    inconsistencies = Amounts::ConsistencyChecker.new(
-      computed: calc,
-      resolved: resolved,
-      item_total: calc[:adjusted_item_total] || calc[:item_total],
-      tax_total: calc[:tax_total],
-      receipt: @receipt,
-      context: @context,
-      items: calc[:items] || @items,
-      item_count: @items.size,
-      external_tax: calc[:external_tax],
-      source_tax_details: @tax_details,
-      generated_tax_details: tax_details,
-      tax_details_primary: calc[:tax_details_primary],
-      tax_rounding_mode: active_tax_rounding_mode
-    ).call
-    inconsistencies = (inconsistencies + profile_estimation.warnings + adjustment_inconsistencies).uniq
-
-    mismatch_codes = build_mismatch_codes(inconsistencies)
-    mismatch_messages = build_mismatch_messages(inconsistencies)
-
-    # --- 5) ResultTemplate（出力整形）
-    legacy_result = Amounts::ResultTemplate.build(
-      computed: {
-        subtotal: calc[:subtotal],
-        tax: calc[:tax],
-        total: calc[:total],
-        tax_rate: calc[:tax_rate],
-        receipt_tax_basis: calc[:receipt_tax_basis],
-        item_amount_basis: calc[:item_amount_basis],
-        tax_detail_amount_basis: calc[:tax_detail_amount_basis],
-        adjustment_discount_total: calc[:adjustment_discount_total],
-        adjustment_surcharge_total: calc[:adjustment_surcharge_total],
-        payment_adjustment_total: calc[:payment_adjustment_total],
-        adjustment_tax_rate_missing_total: calc.dig(:adjustment_summary, :tax_rate_missing_adjustment_total),
-        adjusted_item_total: calc[:adjusted_item_total],
-        items: calc[:items]
-      },
-      resolved: resolved,
-      tax_details: tax_details,
-      inconsistencies: inconsistencies,
-      mismatch_codes: mismatch_codes,
-      mismatch_messages: mismatch_messages,
-      calculation_profile: profile_estimation.profile,
-      calculation_profile_score: profile_estimation.score,
-      calculation_profile_candidates: profile_estimation.candidates,
-      context: @context,
-      rounding_mode: {
-        tax: active_tax_rounding_mode,
-        discount: active_discount_rounding_mode
-      }
+      receipt_tax_basis: active_receipt_tax_basis
     )
 
     Amounts::Engine.new(
@@ -231,11 +127,45 @@ class ReceiptAmountService
       payments: @payments,
       context: @context,
       tax_rounding_modes: candidate_tax_rounding_modes,
-      legacy_result: legacy_result
+      discount_rounding_mode: active_discount_rounding_mode,
+      discount_rounding_modes: engine_discount_rounding_modes(active_discount_rounding_mode),
+      base_result: base_result,
+      calculation_profile_result: profile_estimation
     ).call
   end
 
   private
+
+  def engine_base_result(tax_rounding_mode:, discount_rounding_mode:, receipt_tax_basis:)
+    items = Amounts::ItemTotalAggregator.new(
+      items: @items,
+      context: @context,
+      discount_rounding_mode: discount_rounding_mode
+    ).call[:items]
+    adjustment_summary = adjustment_totals_for(receipt_tax_basis, rounding_mode: tax_rounding_mode)
+    item_total = items.sum { |item| to_i(item[:line_total]) }
+
+    {
+      context: @context,
+      rounding_mode: {
+        tax: tax_rounding_mode,
+        discount: discount_rounding_mode
+      },
+      computed: {
+        adjustment_discount_total: adjustment_summary[:discount_total],
+        adjustment_surcharge_total: adjustment_summary[:surcharge_total],
+        payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
+        adjustment_tax_rate_missing_total: adjustment_summary[:tax_rate_missing_adjustment_total],
+        adjusted_item_total: [ item_total + adjustment_summary[:receipt_total_delta].to_i, 0 ].max,
+        items: items
+      },
+      resolved: {},
+      tax_details: [],
+      inconsistencies: [],
+      mismatch_codes: [],
+      mismatch_messages: []
+    }
+  end
 
   def applicable_calculation_profile(profile_estimation)
     profile_estimation = Amounts::CalculationProfileResult.wrap(profile_estimation)
@@ -468,46 +398,76 @@ class ReceiptAmountService
   def estimate_calculation_profile
     return empty_calculation_profile unless @context == :analysis
 
-    Amounts::CalculationProfileResult.wrap(
-      Amounts::CalculationProfileEstimator.new(
-        receipt: @receipt,
-        items: @items,
-        tax_details: @tax_details,
-        adjustments: @adjustments,
-        context: @context,
-        tax_rounding_modes: candidate_tax_rounding_modes,
-        discount_rounding_modes: candidate_discount_rounding_modes
-      ).call
+    scored_candidates = native_profile_candidates
+    Amounts::ProfileSummary.call(
+      selected_candidate: Amounts::WinnerSelector.new(scored_candidates).call,
+      candidates: scored_candidates,
+      context: @context,
+      receipt: @receipt,
+      items: @items,
+      tax_details: @tax_details
     )
   end
 
   def candidate_tax_rounding_modes
-    @tax_rounding_mode_explicit ? [ @tax_rounding_mode ] : Amounts::CalculationProfileEstimator::ROUNDING_MODES
+    @tax_rounding_mode_explicit ? [ @tax_rounding_mode ] : Amounts::CandidateGenerator::ROUNDING_MODES
   end
 
   def candidate_discount_rounding_modes
-    @discount_rounding_mode_explicit ? [ @discount_rounding_mode ] : Amounts::CalculationProfileEstimator::ROUNDING_MODES
+    @discount_rounding_mode_explicit ? [ @discount_rounding_mode ] : Amounts::CandidateGenerator::ROUNDING_MODES
+  end
+
+  def engine_discount_rounding_modes(active_discount_rounding_mode)
+    return [ active_discount_rounding_mode ] unless @context == :analysis
+
+    candidate_discount_rounding_modes
   end
 
   def empty_calculation_profile
     Amounts::CalculationProfileResult.new
   end
 
+  def native_profile_candidates
+    raw_candidates = Amounts::CandidateGenerator.new(
+      receipt: @receipt,
+      items: @items,
+      tax_details: @tax_details,
+      adjustments: @adjustments,
+      payments: @payments,
+      context: @context,
+      tax_rounding_modes: candidate_tax_rounding_modes,
+      discount_rounding_modes: candidate_discount_rounding_modes
+    ).call
+    normalized_items = Amounts::ItemTotalAggregator.new(
+      items: @items,
+      context: @context,
+      discount_rounding_mode: @discount_rounding_mode
+    ).call[:items]
+    hard_rejector = Amounts::HardRejector.new(
+      receipt: @receipt,
+      items: normalized_items,
+      tax_details: @tax_details,
+      payments: @payments
+    )
+    reviewer = Amounts::CandidateConsistencyReviewer.new(
+      receipt: @receipt,
+      items: normalized_items,
+      tax_details: @tax_details,
+      context: @context
+    )
+    scorer = Amounts::CandidateScorer.new(
+      receipt: @receipt,
+      payments: @payments,
+      tax_details: @tax_details,
+      context: @context
+    )
+
+    raw_candidates.map { |candidate| scorer.call(reviewer.call(hard_rejector.call(candidate))) }
+  end
+
   def normalize_context(value)
     context = value.to_s.to_sym
     %i[analysis edit_save manual].include?(context) ? context : :analysis
-  end
-
-  def build_mismatch_codes(inconsistencies)
-    Array(inconsistencies).filter_map do |inconsistency|
-      Amounts::MismatchCodes.code(inconsistency.to_sym)
-    end
-  end
-
-  def build_mismatch_messages(inconsistencies)
-    Array(inconsistencies).filter_map do |inconsistency|
-      I18n.t("enums.receipt_item.review_reason.#{inconsistency}", default: nil)
-    end
   end
 
   # -----------------------------
@@ -589,31 +549,14 @@ class ReceiptAmountService
     %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind.to_s) ? "surcharge" : "discount"
   end
 
-  def adjustment_inconsistencies
-    return [] if @adjustments.blank?
-
-    summary = adjustment_totals_for(:total_includes_tax)
-    inconsistencies = []
-    inconsistencies << :adjustment_uncertain if summary[:uncertain_adjustments].present?
-    inconsistencies << :adjustment_tax_rate_missing if summary[:tax_rate_missing_adjustment_total].to_i.positive?
-    inconsistencies
-  end
-
-  def adjustment_totals_for(receipt_tax_basis)
+  def adjustment_totals_for(receipt_tax_basis, rounding_mode: @tax_rounding_mode)
     @adjustment_totals_by_basis ||= {}
-    basis = receipt_tax_basis.to_s.to_sym
-    @adjustment_totals_by_basis[basis] ||= Amounts::AdjustmentTotalAggregator.new(
+    key = [ receipt_tax_basis.to_s.to_sym, rounding_mode.to_s.to_sym ]
+    @adjustment_totals_by_basis[key] ||= Amounts::AdjustmentTotalAggregator.new(
       adjustments: @adjustments,
-      rounding_mode: @tax_rounding_mode,
-      receipt_tax_basis: basis
+      rounding_mode: rounding_mode,
+      receipt_tax_basis: key.first
     ).call
-  end
-
-  def source_tax_details_for_external_tax
-    details_with_net_amount = @tax_details.select { |tax_detail| to_i(tax_detail[:net_amount]).positive? }
-    return details_with_net_amount if details_with_net_amount.present?
-
-    @tax_details
   end
 
   def normalize_tax_detail(t)

@@ -6,56 +6,226 @@ module Amounts
     SAME_RATE_MIXED_MAX_ITEMS = 20
     SAME_RATE_MIXED_MAX_STATES = 50_000
 
-    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, legacy_result:)
+    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, discount_rounding_modes: nil)
       @receipt = receipt
-      @items = Array(items)
+      @source_items = Array(items)
+      @items = @source_items
       @tax_details = Array(tax_details)
       @adjustments = Array(adjustments)
       @payments = Array(payments)
       @context = context
       @tax_rounding_modes = Array(tax_rounding_modes).presence || ROUNDING_MODES
-      @legacy_result = legacy_result || {}
+      @discount_rounding_modes = normalize_rounding_modes(discount_rounding_modes || [ Amounts::Rounding::DISCOUNT_DEFAULT_MODE ])
     end
 
     def call
+      discount_rounding_modes.flat_map { |rounding_mode| candidates_for_discount_rounding_mode(rounding_mode) }
+    end
+
+    private
+
+    attr_reader :receipt, :source_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_modes, :discount_rounding_mode
+
+    def candidates_for_discount_rounding_mode(rounding_mode)
+      @discount_rounding_mode = rounding_mode
+      @items = normalize_items(rounding_mode)
+      reset_item_dependent_cache
+
       [
-        legacy_candidate,
+        receipt_input_candidate,
+        incomplete_tax_details_receipt_tax_candidate,
         item_candidates,
         printed_tax_detail_candidates,
         mixed_candidates
       ].flatten.compact
     end
 
-    private
+    def normalize_items(rounding_mode)
+      Amounts::ItemTotalAggregator.new(
+        items: source_items,
+        context: context,
+        discount_rounding_mode: rounding_mode
+      ).call[:items]
+    end
 
-    attr_reader :receipt, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :legacy_result
+    def reset_item_dependent_cache
+      @item_total = nil
+      @fallback_tax_rate = nil
+      @incomplete_source_tax_details = nil
+    end
 
-    def legacy_candidate
-      resolved = indifferent_hash(legacy_result[:resolved])
-      computed = indifferent_hash(legacy_result[:computed])
-      purchase_total = to_i(resolved[:total] || computed[:total])
-      payment = payment_reconciliation(purchase_total, to_i(computed[:payment_adjustment_total]))
+    def receipt_input_candidate
+      return nil unless receipt_input_candidate_needed?
+
+      resolved = receipt_input_resolved_values
+      purchase_total = to_i(resolved[:total])
+      payment = payment_reconciliation(purchase_total, payment_adjustment_total)
+      item_delta = item_total_delta(purchase_total)
 
       Amounts::Candidate.new(
-        candidate_id: "legacy_resolver",
-        basis: "legacy_resolver",
-        subtotal: to_i(resolved[:subtotal] || computed[:subtotal]),
-        tax: to_i(resolved[:tax] || computed[:tax]),
+        candidate_id: receipt_input_candidate_id,
+        basis: "receipt_input_preserved",
+        subtotal: to_i(resolved[:subtotal]),
+        tax: to_i(resolved[:tax]),
         purchase_total: purchase_total,
         final_payment_total: payment[:final_payment_total],
-        purchase_adjustment_total: to_i(computed[:adjustment_surcharge_total]) - to_i(computed[:adjustment_discount_total]),
-        payment_adjustment_total: to_i(computed[:payment_adjustment_total]),
+        purchase_adjustment_total: purchase_adjustment_total,
+        payment_adjustment_total: payment_adjustment_total,
         payment_amount_sum: payment[:payment_amount_sum],
-        tax_details: Array(legacy_result[:tax_details]),
-        tax_rate_groups: [],
-        rounding_mode: legacy_result.dig(:rounding_mode, :tax),
-        rounding_scope: :per_tax_rate_group,
-        warnings: (Array(legacy_result[:warning_inconsistencies]) + payment_warnings(payment)).uniq,
-        evidence: payment[:evidence] + [ { source: "legacy_receipt_amount_service", purchase_total: purchase_total } ],
-        computed_items: Array(computed[:items]),
-        calculation_profile: legacy_result[:calculation_profile],
-        source: :legacy
+        tax_details: [],
+        tax_rate_groups: receipt_input_tax_rate_groups(resolved),
+        rounding_mode: :floor,
+        rounding_scope: :per_receipt,
+        warnings: (receipt_input_warnings(item_delta) + payment_warnings(payment)).uniq,
+        evidence: payment[:evidence] + [ {
+          source: "receipt_input",
+          formula: "receipt_input_preserved",
+          purchase_total: purchase_total,
+          item_total: item_data_present? ? item_total : nil,
+          item_delta: item_delta
+        }.compact ],
+        computed_items: items,
+        calculation_profile: calculation_profile(
+          receipt_input_resolved: resolved,
+          receipt_input_tax_rate_present: value_present?(receipt[:tax_rate])
+        ),
+        source: :amount_engine
       )
+    end
+
+    def receipt_input_candidate_needed?
+      case context.to_s.to_sym
+      when :manual
+        receipt_input_present? || (!item_data_present? && !tax_detail_data_present?)
+      when :edit_save
+        receipt_input_present?
+      when :analysis
+        receipt_input_present? && !item_data_present? && !tax_detail_data_present?
+      else
+        false
+      end
+    end
+
+    def receipt_input_candidate_id
+      case context.to_s.to_sym
+      when :edit_save
+        "edit_saved_input"
+      when :manual
+        "manual_receipt_input"
+      else
+        "analysis_receipt_input"
+      end
+    end
+
+    def receipt_input_present?
+      %i[total_amount subtotal_amount tax_amount tax_rate].any? { |key| value_present?(receipt[key]) }
+    end
+
+    def tax_detail_data_present?
+      tax_details.any? do |tax_detail|
+        %i[rate net_amount amount].any? { |key| value_present?(fetch_value(tax_detail, key)) }
+      end
+    end
+
+    def receipt_input_resolved_values
+      return empty_receipt_input_values unless receipt_input_present?
+
+      total = amount_or_nil(receipt[:total_amount])
+      subtotal = amount_or_nil(receipt[:subtotal_amount])
+      tax = amount_or_nil(receipt[:tax_amount])
+
+      {
+        subtotal: subtotal.nil? ? fallback_subtotal(total, tax) : subtotal,
+        tax: tax.nil? ? fallback_tax(total, subtotal) : tax,
+        total: total.nil? ? fallback_total(subtotal, tax) : total,
+        tax_rate: receipt_input_tax_rate(subtotal, tax, total)
+      }
+    end
+
+    def empty_receipt_input_values
+      {
+        subtotal: nil,
+        tax: nil,
+        total: nil,
+        tax_rate: nil
+      }
+    end
+
+    def fallback_subtotal(total, tax)
+      return total - tax if total && tax
+
+      0
+    end
+
+    def fallback_tax(total, subtotal)
+      return total - subtotal if total && subtotal
+
+      0
+    end
+
+    def fallback_total(subtotal, tax)
+      return subtotal + tax if subtotal && tax
+
+      0
+    end
+
+    def receipt_input_tax_rate(subtotal, tax, total)
+      return normalize_rate(receipt[:tax_rate]) if value_present?(receipt[:tax_rate])
+
+      resolved_subtotal = subtotal || (total && tax ? fallback_subtotal(total, tax) : nil)
+      resolved_tax = tax
+
+      return nil if resolved_tax.nil? || resolved_subtotal.nil?
+      return BigDecimal("0") if resolved_tax.zero?
+      return nil unless receipt_input_tax_rate_inference_allowed?
+      return nil unless resolved_subtotal.to_i.positive?
+
+      BigDecimal(resolved_tax.to_s) / BigDecimal(resolved_subtotal.to_s)
+    end
+
+    def receipt_input_tax_rate_inference_allowed?
+      positive_item_rates = items.filter_map do |item|
+        rate = normalize_rate(indifferent_hash(item)[:tax_rate])
+        rate if rate.positive?
+      end.uniq
+      positive_detail_rates = tax_details.filter_map do |tax_detail|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        rate if rate.positive?
+      end.uniq
+
+      positive_item_rates.size <= 1 && positive_detail_rates.size <= 1
+    end
+
+    def receipt_input_tax_rate_groups(resolved)
+      rate = resolved[:tax_rate]
+      return [] unless rate.respond_to?(:positive?)
+
+      [
+        {
+          rate: rate,
+          gross: to_i(resolved[:total]),
+          net: to_i(resolved[:subtotal]),
+          tax: to_i(resolved[:tax])
+        }
+      ]
+    end
+
+    def receipt_input_warnings(item_delta)
+      warnings = []
+      warnings << :item_total_mismatch if item_delta.to_i > receipt_input_item_delta_threshold
+      warnings
+    end
+
+    def item_total_delta(purchase_total)
+      return 0 unless item_data_present?
+
+      ([ item_total + purchase_adjustment_total, 0 ].max - purchase_total.to_i).abs
+    end
+
+    def receipt_input_item_delta_threshold
+      return 0 unless item_data_present?
+
+      [ 100, (BigDecimal(item_total.to_s) * BigDecimal("0.20")).to_i ].max
     end
 
     def item_candidates
@@ -63,10 +233,57 @@ module Amounts
         Amounts::RoundingScope::SCOPES.flat_map do |rounding_scope|
           [
             items_as_tax_included_candidate(rounding_mode, rounding_scope),
-            items_as_tax_excluded_candidate(rounding_mode, rounding_scope)
-          ]
+            items_as_tax_excluded_candidate(rounding_mode, rounding_scope),
+            discounted_original_line_total_tax_excluded_candidate(rounding_mode, rounding_scope)
+          ].compact
         end
       end
+    end
+
+    def incomplete_tax_details_receipt_tax_candidate
+      return nil unless context.to_s.to_sym == :analysis
+
+      total = amount_or_nil(receipt[:total_amount])
+      tax = amount_or_nil(receipt[:tax_amount])
+      return nil unless total&.positive? && tax&.positive? && total >= tax
+      return nil unless adjusted_item_total == total
+      return nil unless item_tax_rates_missing?
+      return nil unless incomplete_tax_detail_amounts_present?
+
+      payment = payment_reconciliation(total, payment_adjustment_total)
+
+      Amounts::Candidate.new(
+        candidate_id: "incomplete_tax_details_receipt_tax/floor",
+        basis: "incomplete_tax_details_receipt_tax",
+        subtotal: total - tax,
+        tax: tax,
+        purchase_total: total,
+        final_payment_total: payment[:final_payment_total],
+        purchase_adjustment_total: purchase_adjustment_total,
+        payment_adjustment_total: payment_adjustment_total,
+        payment_amount_sum: payment[:payment_amount_sum],
+        tax_details: [],
+        tax_rate_groups: [],
+        rounding_mode: :floor,
+        rounding_scope: :per_receipt,
+        warnings: (adjustment_warnings + payment_warnings(payment) + [ :tax_detail_incomplete ]).uniq,
+        evidence: incomplete_tax_detail_evidence + adjustment_evidence + payment[:evidence] + [ {
+          source: "receipt_input",
+          formula: "incomplete_tax_details_receipt_tax",
+          purchase_total: total,
+          tax: tax,
+          subtotal: total - tax,
+          item_total: item_total
+        } ],
+        computed_items: items,
+        calculation_profile: calculation_profile(
+          receipt_tax_basis: :total_includes_tax,
+          item_amount_basis: :line_total_as_recorded,
+          tax_detail_amount_basis: :unknown,
+          receipt_tax_amount_preserved: true
+        ),
+        source: :amount_engine
+      )
     end
 
     def items_as_tax_included_candidate(rounding_mode, rounding_scope)
@@ -89,12 +306,25 @@ module Amounts
       )
     end
 
-    def build_item_candidate(candidate_id:, basis:, item_basis:, rounding_mode:, rounding_scope:)
+    def discounted_original_line_total_tax_excluded_candidate(rounding_mode, rounding_scope)
+      return nil unless discounted_original_line_total_tax_excluded_candidate_needed?
+
+      build_item_candidate(
+        candidate_id: "items_as_tax_excluded/#{rounding_mode}/#{rounding_scope}/original_line_total",
+        basis: "items_as_tax_excluded",
+        item_basis: :tax_excluded,
+        rounding_mode: rounding_mode,
+        rounding_scope: rounding_scope,
+        line_total_source: :discounted_original_line_total
+      )
+    end
+
+    def build_item_candidate(candidate_id:, basis:, item_basis:, rounding_mode:, rounding_scope:, line_total_source: :line_total)
       groups = empty_groups
       computed_items = []
 
       items.each_with_index do |item, index|
-        line_total = item_line_total(item)
+        line_total = item_basis_line_total(item, item_basis: item_basis, line_total_source: line_total_source)
         rate = item_tax_rate(item)
         group = groups[rate]
 
@@ -129,8 +359,16 @@ module Amounts
         rounding_mode: rounding_mode,
         rounding_scope: rounding_scope,
         warnings: warnings.uniq,
-        evidence: adjustment_evidence + payment[:evidence] + [ { source: "receipt_items", formula: basis, purchase_total: purchase_total } ],
+        evidence: adjustment_evidence + payment[:evidence] + [
+          {
+            source: "receipt_items",
+            formula: basis,
+            purchase_total: purchase_total,
+            line_total_source: item_candidate_line_total_source(line_total_source)
+          }.compact
+        ],
         computed_items: computed_items,
+        calculation_profile: item_candidate_calculation_profile(line_total_source),
         source: :amount_engine
       )
     end
@@ -175,34 +413,49 @@ module Amounts
         hash[rate][:tax] += amounts[:tax]
       end
 
-      non_taxable_item_total = items.select { |item| item_tax_rate(item).zero? }.sum { |item| item_line_total(item) }
+      non_taxable_item_total = non_taxable_item_total_for_printed_tax_details(groups.values)
       if non_taxable_item_total.positive?
         groups[BigDecimal("0")] ||= { rate: BigDecimal("0"), gross: 0, net: 0, tax: 0 }
         groups[BigDecimal("0")][:gross] += non_taxable_item_total
         groups[BigDecimal("0")][:net] += non_taxable_item_total
       end
 
-      purchase_total = groups.values.sum { |group| group[:gross] } + purchase_adjustment_total
+      gross_basis = gross_tax_detail_candidate?(amount_basis)
+      applied_purchase_adjustment_total = tax_detail_purchase_adjustment_total(groups.values, gross_basis: gross_basis)
+      purchase_total = groups.values.sum { |group| group[:gross] } + applied_purchase_adjustment_total
       tax = groups.values.sum { |group| group[:tax] }
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
+      tax_detail_amount_basis = gross_basis ? :gross : :net
 
       Amounts::Candidate.new(
         candidate_id: candidate_id,
         basis: basis,
-        subtotal: purchase_total - tax,
+        subtotal: gross_basis ? purchase_total : purchase_total - tax,
         tax: tax,
         purchase_total: purchase_total,
         final_payment_total: payment[:final_payment_total],
         purchase_adjustment_total: purchase_adjustment_total,
         payment_adjustment_total: payment_adjustment_total,
         payment_amount_sum: payment[:payment_amount_sum],
-        tax_details: tax_details_from_groups(groups.values),
+        tax_details: tax_details_from_printed_groups(groups.values, gross_basis: gross_basis),
         tax_rate_groups: groups.values,
         rounding_mode: rounding_mode,
         rounding_scope: :per_tax_rate_group,
         warnings: (adjustment_warnings + payment_warnings(payment)).uniq,
-        evidence: final_detected_tax_details.map { |detail| detail[:evidence] } + adjustment_evidence + payment[:evidence],
+        evidence: final_detected_tax_details.map { |detail| detail[:evidence] } + adjustment_evidence + payment[:evidence] + [
+          {
+            source: "amount_engine",
+            formula: basis,
+            tax_detail_amount_basis: tax_detail_amount_basis,
+            applied_purchase_adjustment_total: applied_purchase_adjustment_total
+          }
+        ],
         computed_items: items,
+        calculation_profile: calculation_profile(
+          receipt_tax_basis: gross_basis ? :total_includes_tax : :tax_added_to_subtotal,
+          item_amount_basis: printed_tax_detail_item_amount_basis(basis, purchase_total),
+          tax_detail_amount_basis: tax_detail_amount_basis
+        ),
         source: :amount_engine
       )
     end
@@ -239,6 +492,11 @@ module Amounts
         warnings: ([ :tax_detail_mismatch ] + payment_warnings(payment)).uniq,
         evidence: detected_tax_details.map { |detail| detail[:evidence] } + payment[:evidence],
         computed_items: items,
+        calculation_profile: calculation_profile(
+          receipt_tax_basis: :tax_added_to_subtotal,
+          item_amount_basis: :line_total_as_net,
+          tax_detail_amount_basis: :net
+        ),
         source: :amount_engine
       )
     end
@@ -260,12 +518,20 @@ module Amounts
       warnings = adjustment_warnings.dup
       exact = true
       evidence = final_detected_tax_details.map { |detail| detail[:evidence] }
+      profile_assignments = []
 
       indexed_items_by_rate.each do |rate, indexed_items|
         if rate.zero?
           gross = indexed_items.sum { |item, _index| item_line_total(item) }
           groups[rate] = { rate: rate, gross: gross, net: gross, tax: 0 }
           indexed_items.each { |item, index| computed_items[index] = item_with_line_total(item, item_line_total(item)) }
+          profile_assignments << {
+            tax_rate: BigDecimal("0"),
+            basis: :non_taxable,
+            net_amount: gross,
+            tax_amount: 0,
+            gross_amount: gross
+          }
           next
         end
 
@@ -298,6 +564,13 @@ module Amounts
             entry[:gross_amount],
             normalize_price: entry[:basis] == :tax_excluded
           )
+          profile_assignments << {
+            tax_rate: entry[:rate],
+            basis: entry[:basis],
+            net_amount: entry[:net_amount],
+            tax_amount: entry[:tax_amount],
+            gross_amount: entry[:gross_amount]
+          }
         end
         warnings << :price_tax_inclusion_uncertain if assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
         evidence.concat(assignment[:assignments].map { |entry| entry.slice(:source, :index, :basis, :rate, :net_amount, :tax_amount, :gross_amount) })
@@ -332,6 +605,7 @@ module Amounts
         hard_reject_reasons: exact ? [] : [ :tax_detail_mismatch ],
         evidence: evidence + adjustment_evidence + payment[:evidence] + [ { source: "amount_engine", formula: "mixed_by_tax_rate_group", purchase_total: purchase_total } ],
         computed_items: computed_items.map.with_index { |item, index| item || item_with_line_total(items[index], item_line_total(items[index])) },
+        calculation_profile: mixed_calculation_profile(profile_assignments),
         source: :amount_engine
       )
     end
@@ -454,6 +728,152 @@ module Amounts
       end
     end
 
+    def discounted_original_line_total_tax_excluded_candidate_needed?
+      context.to_s.to_sym == :analysis &&
+        items.any? { |item| discounted_original_line_total_for(item) }
+    end
+
+    def item_basis_line_total(item, item_basis:, line_total_source:)
+      return item_line_total(item) unless item_basis == :tax_excluded
+      return item_line_total(item) unless line_total_source == :discounted_original_line_total
+
+      discounted_original_line_total_for(item) || item_line_total(item)
+    end
+
+    def discounted_original_line_total_for(item)
+      item = indifferent_hash(item)
+      return nil unless discount_applied?(item)
+
+      original_line_total = to_i(item[:original_line_total])
+      current_line_total = item_line_total(item)
+      return nil unless original_line_total.positive?
+      return nil unless current_line_total.positive?
+      return nil unless original_line_total > current_line_total
+
+      original_line_total
+    end
+
+    def non_taxable_item_total_for_printed_tax_details(tax_detail_groups)
+      explicit = explicit_non_taxable_items.sum { |item| item_line_total(item) }
+      unknown = unknown_tax_rate_items.sum { |item| item_line_total(item) }
+      return explicit if tax_detail_purchase_total_matches_item_total?(tax_detail_groups)
+
+      explicit + unknown
+    end
+
+    def tax_detail_purchase_total_matches_item_total?(tax_detail_groups)
+      tax_detail_purchase_total = Array(tax_detail_groups).sum { |group| group[:gross].to_i }
+      tax_detail_purchase_total.positive? && tax_detail_purchase_total == item_total
+    end
+
+    def adjusted_item_total
+      [ item_total + purchase_adjustment_total, 0 ].max
+    end
+
+    def item_tax_rates_missing?
+      items.present? && items.all? do |item|
+        item = indifferent_hash(item)
+        !value_present?(item[:tax_rate])
+      end
+    end
+
+    def incomplete_tax_detail_amounts_present?
+      incomplete_source_tax_details.present?
+    end
+
+    def incomplete_source_tax_details
+      @incomplete_source_tax_details ||= detected_tax_details.filter_map do |detail|
+        next unless detail[:amount].to_i.positive?
+        next if detail[:rate].positive? && detail[:net_amount].to_i.positive?
+
+        {
+          description: detail[:description],
+          rate: nil,
+          net_amount: nil,
+          amount: detail[:amount]
+        }
+      end
+    end
+
+    def incomplete_tax_detail_evidence
+      incomplete_source_tax_details.map.with_index do |detail, index|
+        {
+          source: "receipt_tax_detail",
+          index: index,
+          basis: :tax_only,
+          description: detail[:description],
+          amount: detail[:amount]
+        }
+      end
+    end
+
+    def printed_tax_detail_item_amount_basis(basis, purchase_total)
+      return :line_total_as_recorded unless basis == "external_tax_from_receipt"
+      return :line_total_as_net if strict_external_tax_receipt_amounts_match?(purchase_total)
+
+      :line_total_as_recorded
+    end
+
+    def strict_external_tax_receipt_amounts_match?(purchase_total)
+      subtotal = amount_or_nil(receipt[:subtotal_amount])
+      tax = amount_or_nil(receipt[:tax_amount])
+      total = amount_or_nil(receipt[:total_amount])
+
+      !subtotal.nil? &&
+        !tax.nil? &&
+        !total.nil? &&
+        subtotal + tax == total &&
+        total == purchase_total.to_i
+    end
+
+    def explicit_non_taxable_items
+      items.select do |item|
+        item = indifferent_hash(item)
+        value_present?(item[:tax_rate]) && normalize_rate(item[:tax_rate]).zero?
+      end
+    end
+
+    def unknown_tax_rate_items
+      items.select do |item|
+        item = indifferent_hash(item)
+        !value_present?(item[:tax_rate]) && item_tax_rate(item).zero?
+      end
+    end
+
+    def item_candidate_line_total_source(line_total_source)
+      return nil if line_total_source == :line_total
+
+      line_total_source
+    end
+
+    def item_candidate_calculation_profile(line_total_source)
+      source = item_candidate_line_total_source(line_total_source)
+      return calculation_profile unless source
+
+      calculation_profile(line_total_source: source)
+    end
+
+    def calculation_profile(attributes = {})
+      { discount_rounding_mode: discount_rounding_mode }.merge(attributes).compact
+    end
+
+    def mixed_calculation_profile(assignments)
+      bases = Array(assignments).map { |assignment| assignment[:basis] }.uniq
+      positive_rates = Array(assignments).filter_map do |assignment|
+        rate = assignment[:tax_rate]
+        rate if rate.respond_to?(:positive?) && rate.positive?
+      end.uniq
+      return calculation_profile(receipt_tax_basis: :total_includes_tax, item_amount_basis: :line_total_as_recorded, tax_detail_amount_basis: :gross) unless positive_rates.many? || bases.include?(:non_taxable)
+      return calculation_profile(receipt_tax_basis: :total_includes_tax, item_amount_basis: :line_total_as_recorded, tax_detail_amount_basis: :gross) unless bases.many? && (bases & %i[tax_included tax_excluded]).any?
+
+      calculation_profile(
+        receipt_tax_basis: :total_includes_tax,
+        item_amount_basis: :mixed_by_tax_rate_group,
+        tax_detail_amount_basis: :gross,
+        item_amount_basis_assignments: assignments
+      )
+    end
+
     def apply_purchase_adjustments_to_groups!(groups, item_basis:, rounding_mode:)
       classified_adjustments.each do |entry|
         classification = entry[:classification]
@@ -508,6 +928,26 @@ module Amounts
       end
     end
 
+    def gross_tax_detail_candidate?(amount_basis)
+      return true if amount_basis == :gross
+      return false unless amount_basis == :detected
+
+      final_detected_tax_details.present? && final_detected_tax_details.all? { |detail| detail[:basis] == :gross }
+    end
+
+    def tax_detail_purchase_adjustment_total(groups, gross_basis:)
+      return 0 if purchase_adjustment_total.zero?
+      return purchase_adjustment_total unless item_total.positive?
+
+      basis_total = Array(groups).sum { |group| gross_basis ? group[:gross].to_i : group[:net].to_i }
+      adjusted_item_total = [ item_total + purchase_adjustment_total, 0 ].max
+
+      return 0 if basis_total == adjusted_item_total
+      return purchase_adjustment_total if basis_total == item_total
+
+      purchase_adjustment_total
+    end
+
     def tax_details_from_groups(groups)
       Array(groups).filter_map do |group|
         rate = group[:rate]
@@ -517,6 +957,22 @@ module Amounts
           description: description_for(rate),
           rate: rate,
           net_amount: group[:net],
+          amount: group[:tax]
+        }
+      end
+    end
+
+    def tax_details_from_printed_groups(groups, gross_basis:)
+      return tax_details_from_groups(groups) unless gross_basis
+
+      Array(groups).filter_map do |group|
+        rate = group[:rate]
+        next if rate <= 0
+
+        {
+          description: description_for(rate),
+          rate: rate,
+          net_amount: group[:gross],
           amount: group[:tax]
         }
       end
@@ -644,6 +1100,39 @@ module Amounts
       (BigDecimal(price.to_s) * quantity).round(0).to_i
     end
 
+    def item_total
+      @item_total ||= items.sum { |item| item_line_total(item) }
+    end
+
+    def item_data_present?
+      items.any? do |item|
+        normalized = indifferent_hash(item)
+        item_line_total(normalized).positive? ||
+          explicit_zero_amount_item?(normalized) ||
+          to_i(normalized[:original_line_total]).positive? ||
+          to_i(normalized[:discount_amount]).positive?
+      end
+    end
+
+    def explicit_zero_amount_item?(item)
+      explicit_zero_line_total?(item) || explicit_zero_price_total?(item)
+    end
+
+    def explicit_zero_line_total?(item)
+      value_was_present?(item, :line_total) && to_i(item[:line_total]).zero?
+    end
+
+    def explicit_zero_price_total?(item)
+      value_was_present?(item, :price) && to_i(item[:price]).zero?
+    end
+
+    def value_was_present?(item, key)
+      flag = item[:"amount_#{key}_present"]
+      return flag if [ true, false ].include?(flag)
+
+      present?(item[key])
+    end
+
     def item_tax_rate(item)
       rate = normalize_rate(indifferent_hash(item)[:tax_rate])
       return rate if rate.positive?
@@ -677,6 +1166,10 @@ module Amounts
       BigDecimal("0")
     end
 
+    def normalize_rounding_modes(values)
+      Array(values).map { |value| Amounts::Rounding.normalize_rounding_mode(value) }.uniq
+    end
+
     def indifferent_hash(value)
       if value.respond_to?(:with_indifferent_access)
         value.with_indifferent_access
@@ -691,8 +1184,25 @@ module Amounts
       Amounts::NumberParser.parse_amount(value)
     end
 
+    def amount_or_nil(value)
+      Amounts::NumberParser.parse_amount_or_nil(value)
+    end
+
     def present?(value)
       !value.nil? && value != ""
+    end
+
+    def value_present?(value)
+      present?(value)
+    end
+
+    def fetch_value(object, key)
+      if object.respond_to?(:key?)
+        return object[key] if object.key?(key)
+        object[key.to_s] if object.key?(key.to_s)
+      elsif object.respond_to?(key)
+        object.public_send(key)
+      end
     end
   end
 end

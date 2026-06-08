@@ -66,7 +66,7 @@ module Amounts
       parts = text.split(".")
       return text if parts.size <= 2
 
-      [parts.first, parts[1..].join].join(".")
+      [ parts.first, parts[1..].join ].join(".")
     end
 
     def blank?(value)
