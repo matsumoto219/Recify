@@ -1210,6 +1210,10 @@ body {
   );
 }
 
+.receipt-form-payment-summary.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .receipt-form-line-total-tooltip {
   box-shadow: var(--neutral-glass-shadow);
 }

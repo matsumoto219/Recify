@@ -45,6 +45,7 @@ export default class extends Controller {
     'paymentAmountSum',
     'paymentReconciliationFinalAmount',
     'paymentDifferenceAmount',
+    'paymentSummaryGrid',
     'paymentMismatchWarning',
     'syncPaymentAmountButton'
   ]
@@ -82,6 +83,7 @@ export default class extends Controller {
     this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
     this.syncAdjustmentSigns()
+    this.syncPaymentSummaryLayout()
   }
 
   disconnect () {
@@ -746,6 +748,22 @@ export default class extends Controller {
 
     this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.toggle('hidden', !mismatch))
     this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.toggle('hidden', !mismatch))
+    this.syncPaymentSummaryLayout()
+  }
+
+  syncPaymentSummaryLayout () {
+    if (!this.hasPaymentSummaryGridTarget) return
+
+    const amountTargets = [
+      this.hasPaymentAmountSumTarget ? this.paymentAmountSumTarget : null,
+      this.hasPaymentReconciliationFinalAmountTarget ? this.paymentReconciliationFinalAmountTarget : null,
+      this.hasPaymentDifferenceAmountTarget ? this.paymentDifferenceAmountTarget : null
+    ].filter(Boolean)
+    const maxLength = amountTargets.reduce((length, target) => {
+      return Math.max(length, target.textContent.trim().length)
+    }, 0)
+
+    this.paymentSummaryGridTarget.classList.toggle('is-stacked', maxLength >= 14)
   }
 
   paymentAmountSum () {
@@ -1149,6 +1167,7 @@ export default class extends Controller {
       target.textContent = `¥${this.formatNumber(displayValue)}`
       target.title = target.textContent.trim()
       this.syncAmountDisplayState(target, displayValue)
+      this.syncPaymentSummaryLayout()
     }
 
     if (startValue === endValue || renderImmediately) {
