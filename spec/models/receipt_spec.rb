@@ -56,6 +56,31 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'amount limit validation' do
+    def configure_amount_limits(total:, item_price:, item_line_total:, tax:, adjustment:, payment:)
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(item_price))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(item_line_total))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(tax))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(adjustment))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(payment))
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(total))
+    end
+
+    it 'SystemSettingsのレシート金額上限を参照する' do
+      configure_amount_limits(total: 500, item_price: 500, item_line_total: 500, tax: 100, adjustment: 50, payment: 500)
+
+      receipt = build(:receipt, total_amount: 501, subtotal_amount: 501, tax_amount: 101, tip_amount: 51)
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors[:total_amount]).to be_present
+        expect(receipt.errors[:subtotal_amount]).to be_present
+        expect(receipt.errors[:tax_amount]).to be_present
+        expect(receipt.errors[:tip_amount]).to be_present
+      end
+    end
+  end
+
   describe '.summary_for' do
     it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)

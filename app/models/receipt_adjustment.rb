@@ -54,7 +54,11 @@ class ReceiptAdjustment < ApplicationRecord
   validates :source, presence: true, inclusion: { in: SOURCES }
   validates :amount,
             presence: true,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 }
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_adjustment) { ReceiptAmountLimits.receipt_adjustment_amount_max }
+            }
   validates :tax_rate,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
             allow_nil: true

@@ -4,6 +4,13 @@ class ReceiptPayment < ApplicationRecord
 
   belongs_to :receipt
 
+  validates :amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_payment) { ReceiptAmountLimits.receipt_payment_amount_max }
+            },
+            allow_nil: true
   validate :payments_per_receipt_within_limit, on: :create
 
   def self.per_receipt_limit

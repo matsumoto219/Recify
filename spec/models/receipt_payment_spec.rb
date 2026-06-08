@@ -1,6 +1,17 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptPayment do
+  it 'SystemSettingsの支払い額上限を参照する' do
+    create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+
+    payment = build(:receipt).receipt_payments.build(method: 'CreditCard', amount: 501)
+
+    aggregate_failures do
+      expect(payment).not_to be_valid
+      expect(payment.errors[:amount]).to be_present
+    end
+  end
+
   it '1レシートあたりの支払い行数をdefault上限までにする' do
     receipt = create(:receipt)
     described_class::MAX_PER_RECEIPT.times do |index|

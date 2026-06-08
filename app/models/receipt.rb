@@ -105,9 +105,34 @@ class Receipt < ApplicationRecord
   # 合計金額数値と範囲指定
   validates :total_amount, presence: true, unless: :allow_partial_ocr_data?
   validates :total_amount,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 },
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_total_amount_max }
+            },
             allow_blank: true,
             unless: :allow_partial_ocr_data?
+  validates :subtotal_amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_total_amount_max }
+            },
+            allow_blank: true
+  validates :tax_amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_tax_amount_max }
+            },
+            allow_blank: true
+  validates :tip_amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_adjustment_amount_max }
+            },
+            allow_blank: true
 
   validates :store_name, presence: true, unless: :allow_partial_ocr_data?
   validates :store_name, length: { maximum: 100 }, allow_blank: true  # ストア名(MAX100文字)

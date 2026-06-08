@@ -54,10 +54,20 @@ class ReceiptItem < ApplicationRecord
 
   # 数値の最低値を0以上に
   validates :price,
-            :line_total,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_item) { ReceiptAmountLimits.receipt_item_price_max }
+            },
+            allow_blank: true
+  validates :line_total,
             :original_line_total,
             :discount_amount,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 999_999_999 },
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_item) { ReceiptAmountLimits.receipt_item_line_total_max }
+            },
             allow_blank: true
 
   validates :quantity,

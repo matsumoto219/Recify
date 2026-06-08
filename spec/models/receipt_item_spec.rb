@@ -54,6 +54,33 @@ RSpec.describe ReceiptItem, type: :model do
     end
   end
 
+  describe 'amount limit validation' do
+    it 'SystemSettingsの明細単価/合計上限を参照する' do
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(800))
+
+      item = build(
+        :receipt
+      ).receipt_items.build(
+        confirmed_name: '高額商品',
+        price: 501,
+        line_total: 801,
+        original_line_total: 801,
+        discount_amount: 801,
+        quantity: 1,
+        needs_review: false
+      )
+
+      aggregate_failures do
+        expect(item).not_to be_valid
+        expect(item.errors[:price]).to be_present
+        expect(item.errors[:line_total]).to be_present
+        expect(item.errors[:original_line_total]).to be_present
+        expect(item.errors[:discount_amount]).to be_present
+      end
+    end
+  end
+
   describe 'per receipt limit' do
     it 'direct createでもuser limitを超える明細を拒否する' do
       user = create(:user)

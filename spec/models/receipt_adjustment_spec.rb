@@ -32,6 +32,17 @@ RSpec.describe ReceiptAdjustment do
     end
   end
 
+  it 'SystemSettingsの調整額上限を参照する' do
+    create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(500))
+
+    adjustment = build(:receipt_adjustment, amount: 501)
+
+    aggregate_failures do
+      expect(adjustment).not_to be_valid
+      expect(adjustment.errors[:amount]).to be_present
+    end
+  end
+
   it 'requires review_reasons to be an array' do
     adjustment = build(:receipt_adjustment, review_reasons: 'invalid')
 

@@ -1,6 +1,18 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptTaxDetail do
+  it 'SystemSettingsの税額上限を参照する' do
+    create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(500))
+
+    tax_detail = build(:receipt).receipt_tax_details.build(description: '10%対象', rate: 0.1, amount: 501, net_amount: 501)
+
+    aggregate_failures do
+      expect(tax_detail).not_to be_valid
+      expect(tax_detail.errors[:amount]).to be_present
+      expect(tax_detail.errors[:net_amount]).to be_present
+    end
+  end
+
   it '1レシートあたりの税内訳数をdefault上限までにする' do
     receipt = create(:receipt)
     described_class::MAX_PER_RECEIPT.times do |index|

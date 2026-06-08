@@ -6,8 +6,18 @@ class ReceiptTaxDetail < ApplicationRecord
 
   # --- Validations ---
   validates :rate, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
-  validates :amount, numericality: { greater_than_or_equal_to: 0 }
-  validates :net_amount, numericality: { greater_than_or_equal_to: 0 }
+  validates :amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountLimits.receipt_tax_amount_max }
+            }
+  validates :net_amount,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountLimits.receipt_tax_amount_max }
+            }
   validate :tax_details_per_receipt_within_limit, on: :create
 
   # --- Optional: presence constraints (if you want stricter control) ---
