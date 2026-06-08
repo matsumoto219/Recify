@@ -88,7 +88,7 @@ module Ai
             "enum" => ReceiptAdjustment::KINDS + [ nil ]
           },
           "label" => nullable_string,
-          "amount" => nullable_integer(minimum: 0, maximum: 999_999_999),
+          "amount" => nullable_integer(minimum: 0, maximum: ReceiptAmountLimits.receipt_adjustment_amount_max),
           "sign" => {
             "type" => [ "string", "null" ],
             "enum" => ReceiptAdjustment::SIGNS + [ nil ]

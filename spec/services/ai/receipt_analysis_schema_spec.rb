@@ -66,5 +66,15 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
         expect(schema.dig('properties', 'items', 'items', 'properties', 'tax_rate', 'type')).to eq([ 'number', 'null' ])
       end
     end
+
+    it '調整行金額maximumはdefaultの金額上限を使う' do
+      expect(schema.dig('properties', 'receipt_adjustments', 'items', 'properties', 'amount', 'maximum')).to eq(999_999_999)
+    end
+
+    it '調整行金額maximumはSystemSettingsの金額上限に追従する' do
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(1_500))
+
+      expect(schema.dig('properties', 'receipt_adjustments', 'items', 'properties', 'amount', 'maximum')).to eq(1_500)
+    end
   end
 end
