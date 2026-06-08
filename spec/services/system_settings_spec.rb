@@ -23,6 +23,12 @@ RSpec.describe SystemSettings do
         'limits.receipt_adjustments_per_receipt',
         'limits.receipt_payments_per_receipt',
         'limits.receipt_tax_details_per_receipt',
+        'limits.receipt_total_amount_max',
+        'limits.receipt_item_price_max',
+        'limits.receipt_item_line_total_max',
+        'limits.receipt_tax_amount_max',
+        'limits.receipt_adjustment_amount_max',
+        'limits.receipt_payment_amount_max',
         'limits.notifications_per_user',
         'limits.batch_upload_max_files',
         'retention.notifications_read_days',
@@ -257,6 +263,12 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_adjustments_per_receipt')).to eq(50)
         expect(described_class.limit_for('limits.receipt_payments_per_receipt')).to eq(20)
         expect(described_class.limit_for('limits.receipt_tax_details_per_receipt')).to eq(20)
+        expect(described_class.limit_for('limits.receipt_total_amount_max')).to eq(999_999_999)
+        expect(described_class.limit_for('limits.receipt_item_price_max')).to eq(999_999_999)
+        expect(described_class.limit_for('limits.receipt_item_line_total_max')).to eq(999_999_999)
+        expect(described_class.limit_for('limits.receipt_tax_amount_max')).to eq(999_999_999)
+        expect(described_class.limit_for('limits.receipt_adjustment_amount_max')).to eq(999_999_999)
+        expect(described_class.limit_for('limits.receipt_payment_amount_max')).to eq(999_999_999)
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
         expect(described_class.limit_for('limits.batch_upload_max_files')).to eq(5)
         expect(described_class.limit_for('retention.notifications_read_days')).to eq(30)
@@ -356,6 +368,18 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.receipt_payments_per_receipt', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '0')).to eq(0)
         expect(described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.receipt_total_amount_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_total_amount_max', '999999999999')).to eq(999_999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_item_price_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_item_price_max', '999999999999')).to eq(999_999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_item_line_total_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_item_line_total_max', '999999999999')).to eq(999_999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_tax_amount_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_tax_amount_max', '999999999999')).to eq(999_999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_adjustment_amount_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_adjustment_amount_max', '999999999999')).to eq(999_999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_payment_amount_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_payment_amount_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.notifications_per_user', '20')).to eq(20)
         expect(described_class.cast_update_value('limits.notifications_per_user', '500')).to eq(500)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '1')).to eq(1)
@@ -409,6 +433,42 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_total_amount_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_total_amount_max', '1000000000000')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_item_price_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_item_price_max', '1000000000000')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_item_line_total_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_item_line_total_max', '1000000000000')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_tax_amount_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_tax_amount_max', '1000000000000')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_adjustment_amount_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_adjustment_amount_max', '1000000000000')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_payment_amount_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_payment_amount_max', '1000000000000')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.notifications_per_user', '19')
@@ -678,6 +738,18 @@ RSpec.describe SystemSettings do
         max: 100,
         default: 20
       )
+    end
+
+    it '金額上限はhigh risk設定として扱う' do
+      SystemSettings::AMOUNT_LIMIT_KEYS.each do |key|
+        expect(described_class.definition_for(key)).to have_attributes(
+          category: 'amount_limit',
+          risk_level: 'high',
+          min: 1,
+          max: 999_999_999_999,
+          default: 999_999_999
+        )
+      end
     end
 
     it '通知保持件数上限はmedium risk設定として扱う' do

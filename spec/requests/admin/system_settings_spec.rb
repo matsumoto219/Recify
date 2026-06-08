@@ -140,6 +140,12 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('limits.receipt_upload_soft_limit')
         expect(response.body).to include('limits.receipt_uploads_per_day')
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')
+        expect(response.body).to include('limits.receipt_total_amount_max')
+        expect(response.body).to include('limits.receipt_item_price_max')
+        expect(response.body).to include('limits.receipt_item_line_total_max')
+        expect(response.body).to include('limits.receipt_tax_amount_max')
+        expect(response.body).to include('limits.receipt_adjustment_amount_max')
+        expect(response.body).to include('limits.receipt_payment_amount_max')
         expect(response.body).to include('limits.notifications_per_user')
         expect(response.body).to include('limits.batch_upload_max_files')
         expect(response.body).to include('retention.notifications_read_days')
@@ -306,6 +312,32 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('0')
         expect(response.body).to include('100')
         expect(response.body).to include('20')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it '金額上限をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('limits.receipt_total_amount_max')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('limits.receipt_total_amount_max')
+        expect(response.body).to include('amount_limit')
+        expect(response.body).to include('high')
+        expect(response.body).to include('1')
+        expect(response.body).to include('999999999999')
+        expect(response.body).to include('999999999')
+        expect(note.text).to include('金額系フィールドのアプリ上限')
+        expect(note.text).to include('DBはbigint')
+        expect(note['class']).to include('min-w-0')
+        expect(note['class']).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
       end

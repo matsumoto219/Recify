@@ -1,5 +1,15 @@
 module SystemSettings
   VALUE_KEY = "value"
+  AMOUNT_LIMIT_DEFAULT = 999_999_999
+  AMOUNT_LIMIT_CONFIGURABLE_MAX = 999_999_999_999
+  AMOUNT_LIMIT_KEYS = %w[
+    limits.receipt_total_amount_max
+    limits.receipt_item_price_max
+    limits.receipt_item_line_total_max
+    limits.receipt_tax_amount_max
+    limits.receipt_adjustment_amount_max
+    limits.receipt_payment_amount_max
+  ].freeze
   RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"

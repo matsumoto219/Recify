@@ -10,6 +10,7 @@
   setting_meta_value_class = "min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"
   setting_mono_meta_value_class = "#{setting_meta_value_class} font-mono"
   snapshot_limit_keys = %w[limits.snapshot_ocr_items_max limits.snapshot_ai_normalized_items_max]
+  amount_limit_keys = SystemSettings::AMOUNT_LIMIT_KEYS
   analysis_run_retention_keys = %w[
     retention.analysis_runs_short_days
     retention.analysis_runs_default_days
@@ -24,6 +25,8 @@
   setting_notice_key =
     if snapshot_limit_keys.include?(@record[:key].to_s)
       "snapshot_limit_note"
+    elsif amount_limit_keys.include?(@record[:key].to_s)
+      "amount_limit_note"
     elsif usage_limit_safety_keys.include?(@record[:key].to_s)
       "usage_limit_safety_note"
     elsif @record[:key].to_s == "limits.receipt_adjustments_per_receipt"

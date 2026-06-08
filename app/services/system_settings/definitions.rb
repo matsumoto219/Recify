@@ -183,6 +183,66 @@ module SystemSettings
         max: 100
       ),
       Definition.new(
+        key: "limits.receipt_total_amount_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
+        key: "limits.receipt_item_price_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
+        key: "limits.receipt_item_line_total_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
+        key: "limits.receipt_tax_amount_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
+        key: "limits.receipt_adjustment_amount_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
+        key: "limits.receipt_payment_amount_max",
+        category: "amount_limit",
+        value_type: "integer",
+        default: SystemSettings::AMOUNT_LIMIT_DEFAULT,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX
+      ),
+      Definition.new(
         key: "limits.notifications_per_user",
         category: "usage_limit",
         value_type: "integer",

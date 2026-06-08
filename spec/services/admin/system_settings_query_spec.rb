@@ -74,6 +74,19 @@ RSpec.describe Admin::SystemSettingsQuery do
       )
     end
 
+    it 'amount limit filterを適用できる' do
+      result = described_class.call(category: 'amount_limit')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'limits.receipt_total_amount_max',
+        'limits.receipt_item_price_max',
+        'limits.receipt_item_line_total_max',
+        'limits.receipt_tax_amount_max',
+        'limits.receipt_adjustment_amount_max',
+        'limits.receipt_payment_amount_max'
+      )
+    end
+
     it 'retention filterを適用できる' do
       result = described_class.call(category: 'retention')
 
