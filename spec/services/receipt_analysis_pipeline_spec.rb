@@ -1179,6 +1179,96 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'OCR解析の保存予定明細金額が上限を超える場合は部分保存せずrunをfailedにする' do
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(500))
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ocr_only)
+      ocr_result = successful_ocr_result.deep_dup
+      amount_result_with_exceeded_item = amount_result(
+        inconsistencies: [],
+        blocking_inconsistencies: [],
+        warning_inconsistencies: []
+      ).deep_merge(
+        computed: {
+          items: [
+            {
+              price: 180,
+              original_line_total: 501,
+              line_total: 501,
+              discount_amount: 0
+            }
+          ]
+        }
+      )
+      allow(ReceiptAmountService).to receive(:call).and_return(amount_result_with_exceeded_item)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_amount_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt_items',
+          'field' => 'line_total',
+          'limit' => 500,
+          'actual_value' => 501,
+          'index' => 0
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
+    it 'AI解析の保存予定レシート金額が上限を超える場合は部分保存せずrunをfailedにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(500))
+      decision = finalize_decision(:ai_success)
+      ocr_result = successful_ocr_result.deep_dup
+      ai_result = successful_ai_result.deep_dup
+      amount_result_with_exceeded_total = amount_result(
+        inconsistencies: [],
+        blocking_inconsistencies: [],
+        warning_inconsistencies: []
+      ).deep_merge(resolved: { total: 501, subtotal: 501, tax: 0, tax_rate: BigDecimal('0') })
+      allow(ReceiptAmountService).to receive(:call).and_return(amount_result_with_exceeded_total)
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+
+      expect {
+        described_class.run_finalize(run)
+      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_amount_limit_exceeded/)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('analysis_value_invalid')
+        expect(run.metadata['error_metadata']).to eq(
+          'error' => 'analysis_value_invalid',
+          'resource' => 'receipt',
+          'field' => 'total_amount',
+          'limit' => 500,
+          'actual_value' => 501
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.receipt_items).to be_empty
+      end
+    end
+
     it '支払い行がdefault上限を超える場合は部分保存せずrunをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)

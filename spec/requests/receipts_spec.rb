@@ -2190,6 +2190,24 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '金額上限を超える手動作成を金額計算前に拒否する' do
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))
+      create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 10)
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_items_attributes]['0'][:price] = 501
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        post receipts_path, params: params
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('receipt_items.price は500以下で入力してください')
+        expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
+      end
+    end
+
     it 'redirect flashをnotice_surfaceのtoastとして描画する' do
       post receipts_path, params: valid_params
 
@@ -5810,6 +5828,27 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include('明細は200件まで登録できます')
+        expect(receipt.reload.store_name).to eq('更新前')
+      end
+    end
+
+    it '金額上限を超える手動更新を金額計算前に拒否する' do
+      receipt
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(500))
+      expect(ReceiptAmountService).not_to receive(:call)
+
+      expect do
+        patch receipt_path(receipt), params: { receipt: { store_name: '更新後' } }
+      end.not_to change { receipt.reload.updated_at }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('receipt.total_amount は500以下で入力してください')
         expect(receipt.reload.store_name).to eq('更新前')
       end
     end

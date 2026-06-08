@@ -31,4 +31,44 @@ RSpec.describe ReceiptAmountLimits do
       expect(described_class.receipt_payment_amount_max).to eq(999_999_999)
     end
   end
+
+  describe '.violations_for' do
+    it '金額上限超過をresource/field/limit/actual_value付きで返す' do
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(400))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(300))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(200))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(500))
+
+      violations = described_class.violations_for(
+        receipt: { total_amount: 501, tax_amount: 301 },
+        receipt_items: [
+          { price: 401, line_total: 501 }
+        ],
+        receipt_adjustments: [
+          { amount: 201 }
+        ],
+        receipt_payments: [
+          { amount: 501 }
+        ],
+        receipt_tax_details: [
+          { amount: 301, net_amount: 301 }
+        ]
+      )
+
+      aggregate_failures do
+        expect(violations).to include(
+          hash_including(resource: 'receipt', field: 'total_amount', limit: 500, actual_value: 501),
+          hash_including(resource: 'receipt', field: 'tax_amount', limit: 300, actual_value: 301),
+          hash_including(resource: 'receipt_items', field: 'price', limit: 400, actual_value: 401, index: 0),
+          hash_including(resource: 'receipt_items', field: 'line_total', limit: 500, actual_value: 501, index: 0),
+          hash_including(resource: 'receipt_adjustments', field: 'amount', limit: 200, actual_value: 201, index: 0),
+          hash_including(resource: 'receipt_payments', field: 'amount', limit: 500, actual_value: 501, index: 0),
+          hash_including(resource: 'receipt_tax_details', field: 'amount', limit: 300, actual_value: 301, index: 0),
+          hash_including(resource: 'receipt_tax_details', field: 'net_amount', limit: 300, actual_value: 301, index: 0)
+        )
+      end
+    end
+  end
 end

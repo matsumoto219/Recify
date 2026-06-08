@@ -124,7 +124,28 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    if manual_amount_limit_exceeded?(create_params, context: :manual)
+      render_manual_amount_limit_exceeded(
+        create_params,
+        manual_amount_limit_violations(create_params, context: :manual),
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
     amount_result = apply_amount_calculation!(create_params, context: :manual)
+    if manual_amount_limit_exceeded?(create_params, context: :manual)
+      render_manual_amount_limit_exceeded(
+        create_params,
+        manual_amount_limit_violations(create_params, context: :manual),
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
     create_params["review_reasons"] = manual_update_blocking_review_reasons(amount_result)
     apply_current_image_retention_snapshot!(
       create_params,
@@ -200,11 +221,30 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    if manual_amount_limit_exceeded?(update_params, context: :edit_save)
+      render_manual_amount_limit_exceeded(
+        update_params,
+        manual_amount_limit_violations(update_params, context: :edit_save),
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
     if uploaded_receipt_image.present?
       apply_current_image_retention_snapshot!(update_params, purge_eligible: true)
     end
     clear_review_flags_for_edited_items!(update_params)
     amount_result = apply_amount_calculation!(update_params, context: :edit_save)
+    if manual_amount_limit_exceeded?(update_params, context: :edit_save)
+      render_manual_amount_limit_exceeded(
+        update_params,
+        manual_amount_limit_violations(update_params, context: :edit_save),
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
     rebuild_review_state_after_manual_update!(update_params, amount_result)
     clear_processing_error_after_manual_update!(update_params)
 
@@ -425,6 +465,16 @@ class ReceiptsController < ApplicationController
     render template, status: :unprocessable_content, formats: :html
   end
 
+  def render_manual_amount_limit_exceeded(permitted, violations, template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    @receipt.assign_attributes(permitted)
+    add_manual_amount_limit_errors!(violations)
+    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render template, status: :unprocessable_content, formats: :html
+  end
+
   def consume_ocr_job_limit_for!(run, user)
     Usage.consume_ocr_job!(user: user)
     true
@@ -522,6 +572,20 @@ class ReceiptsController < ApplicationController
     manual_child_count_limit_violations(permitted).any?
   end
 
+  def manual_amount_limit_exceeded?(permitted, context:)
+    manual_amount_limit_violations(permitted, context: context).any?
+  end
+
+  def manual_amount_limit_violations(permitted, context:)
+    ReceiptAmountLimits.violations_for(
+      receipt: amount_receipt(permitted, context, clear_amounts: false),
+      receipt_items: amount_receipt_items(permitted),
+      receipt_adjustments: amount_receipt_adjustments(permitted, context),
+      receipt_payments: amount_receipt_payments(permitted, context),
+      receipt_tax_details: amount_receipt_tax_details_for_limit(permitted, context)
+    )
+  end
+
   def manual_child_count_limit_violations(permitted)
     [
       manual_child_count_limit_violation(
@@ -610,6 +674,21 @@ class ReceiptsController < ApplicationController
         :too_many,
         count: violation.fetch(:count),
         limit: violation.fetch(:limit)
+      )
+    end
+  end
+
+  def add_manual_amount_limit_errors!(violations)
+    violations.each do |violation|
+      @receipt.errors.add(
+        :base,
+        t(
+          "receipts.form.errors.amount_limit_exceeded",
+          resource: violation.fetch(:resource),
+          field: violation.fetch(:field),
+          limit: violation.fetch(:limit),
+          actual_value: violation.fetch(:actual_value)
+        )
       )
     end
   end
@@ -1176,6 +1255,18 @@ class ReceiptsController < ApplicationController
         description: tax_detail.description
       }
     end
+  end
+
+  def amount_receipt_tax_details_for_limit(permitted, context)
+    tax_details_attributes = permitted["receipt_tax_details_attributes"]
+    if tax_details_attributes.present?
+      values = tax_details_attributes.respond_to?(:values) ? tax_details_attributes.values : Array(tax_details_attributes)
+      return values.reject do |tax_detail_attributes|
+        ActiveModel::Type::Boolean.new.cast(tax_detail_attributes["_destroy"])
+      end
+    end
+
+    amount_receipt_tax_details(context)
   end
 
   def clear_review_flags_for_edited_items!(permitted)

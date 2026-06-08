@@ -129,6 +129,7 @@ ja:
       errors:
         items_required: 明細を1件以上入力してください。
         item_amount_required: 明細の金額を入力してください。
+        amount_limit_exceeded: "%{resource}.%{field} は%{limit}以下で入力してください（入力値: %{actual_value}）"
     item_fields:
       name: 品名
       name_placeholder: 品名を入力

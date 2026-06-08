@@ -166,6 +166,13 @@ class ReceiptAnalysisPipeline
         params[:receipt_items_attributes],
         amount_result.dig(:computed, :items)
       )
+      validate_amount_limits!(
+        receipt_attributes: params[:receipt_attributes],
+        items_attributes: items_attributes,
+        payments_attributes: params[:receipt_payments_attributes],
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
+      )
 
       persist_result_full!(
         receipt_attributes: params[:receipt_attributes].merge(
@@ -215,6 +222,13 @@ class ReceiptAnalysisPipeline
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
         amount_result.dig(:computed, :items)
+      )
+      validate_amount_limits!(
+        receipt_attributes: params[:receipt_attributes],
+        items_attributes: items_attributes,
+        payments_attributes: params[:receipt_payments_attributes],
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
@@ -276,6 +290,13 @@ class ReceiptAnalysisPipeline
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
         amount_result.dig(:computed, :items)
+      )
+      validate_amount_limits!(
+        receipt_attributes: params[:receipt_attributes],
+        items_attributes: items_attributes,
+        payments_attributes: params[:receipt_payments_attributes],
+        tax_details_attributes: amount_result[:tax_details],
+        adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
@@ -381,6 +402,23 @@ class ReceiptAnalysisPipeline
         name: "receipt_tax_details",
         attributes: params[:receipt_tax_details_attributes],
         limit: receipt_tax_details_limit
+      )
+    end
+
+    def validate_amount_limits!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:, adjustments_attributes:)
+      violation = ReceiptAmountLimits.violations_for(
+        receipt: receipt_attributes,
+        receipt_items: items_attributes,
+        receipt_adjustments: adjustments_attributes,
+        receipt_payments: payments_attributes,
+        receipt_tax_details: tax_details_attributes
+      ).first
+      return if violation.blank?
+
+      raise ReceiptAnalysisPipeline::AnalysisError.new(
+        "analysis_value_invalid",
+        "#{violation.fetch(:resource)}_amount_limit_exceeded field=#{violation.fetch(:field)} actual=#{violation.fetch(:actual_value)} limit=#{violation.fetch(:limit)}",
+        metadata: amount_limit_exceeded_metadata(violation)
       )
     end
 
@@ -533,6 +571,17 @@ class ReceiptAnalysisPipeline
         limit: limit,
         actual_count: actual_count,
         snapshot_count: snapshot_count
+      }.compact
+    end
+
+    def amount_limit_exceeded_metadata(violation)
+      {
+        error: "analysis_value_invalid",
+        resource: violation.fetch(:resource),
+        field: violation.fetch(:field),
+        limit: violation.fetch(:limit),
+        actual_value: violation.fetch(:actual_value),
+        index: violation[:index]
       }.compact
     end
 
