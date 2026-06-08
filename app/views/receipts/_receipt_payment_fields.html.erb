@@ -69,7 +69,7 @@
                        label: t("receipts.payment_fields.amount"),
                        value: row_state.amount_value,
                        min: 0,
-                       max: 999999999,
+                       max: ReceiptAmountLimits.receipt_payment_amount_max,
                        step: 1,
                        show_label: false,
                        text_align: :center,

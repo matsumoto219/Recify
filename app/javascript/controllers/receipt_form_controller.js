@@ -71,7 +71,13 @@ export default class extends Controller {
     adjustmentDiscountLabel: { type: String, default: 'Discount' },
     decimalQuantityUnits: { type: String, default: 'kg,g,mg,L,ml,cc' },
     integerQuantityStep: { type: String, default: '1' },
-    decimalQuantityStep: { type: String, default: '0.001' }
+    decimalQuantityStep: { type: String, default: '0.001' },
+    receiptTotalAmountMax: { type: Number, default: 999999999 },
+    receiptItemPriceMax: { type: Number, default: 999999999 },
+    receiptItemLineTotalMax: { type: Number, default: 999999999 },
+    receiptTaxAmountMax: { type: Number, default: 999999999 },
+    receiptAdjustmentAmountMax: { type: Number, default: 999999999 },
+    receiptPaymentAmountMax: { type: Number, default: 999999999 }
   }
 
   connect () {
@@ -478,7 +484,7 @@ export default class extends Controller {
 
       let quantity = this.clampNumber(this.parseDecimalInput(quantityInput?.value), 0, 9999)
       if (quantity <= 0) quantity = 1
-      const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, 999999999)
+      const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, this.receiptItemPriceMaxValue)
       const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
       const quantityUnit = quantityUnitInput?.value
@@ -504,9 +510,9 @@ export default class extends Controller {
         subtotal = lineTotal - tax
       }
 
-      lineTotal = this.clampNumber(lineTotal, 0, 999999999)
-      subtotal = this.clampNumber(subtotal, 0, 999999999)
-      tax = this.clampNumber(tax, 0, 999999999)
+      lineTotal = this.clampNumber(lineTotal, 0, this.receiptItemLineTotalMaxValue)
+      subtotal = this.clampNumber(subtotal, 0, this.receiptTotalAmountMaxValue)
+      tax = this.clampNumber(tax, 0, this.receiptTaxAmountMaxValue)
 
       subtotalSum += subtotal
       taxSum += tax
@@ -530,7 +536,7 @@ export default class extends Controller {
       const taxRateInput = row.querySelector('[data-receipt-form-target="adjustmentTaxRateInput"]')
       const effect = this.adjustmentEffectForRow(row)
       const sign = this.adjustmentSignForRow(row)
-      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, 999999999)
+      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptAdjustmentAmountMaxValue)
       const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
       if (amount <= 0) return
 
@@ -567,10 +573,10 @@ export default class extends Controller {
       total = subtotalSum + taxSum
     }
 
-    total = this.clampNumber(total, 0, 999999999)
-    subtotalSum = this.clampNumber(subtotalSum, 0, 999999999)
-    taxSum = this.clampNumber(taxSum, 0, 999999999)
-    const finalPaymentTotal = this.clampNumber(total + paymentAdjustmentTotal, 0, 999999999)
+    total = this.clampNumber(total, 0, this.receiptTotalAmountMaxValue)
+    subtotalSum = this.clampNumber(subtotalSum, 0, this.receiptTotalAmountMaxValue)
+    taxSum = this.clampNumber(taxSum, 0, this.receiptTaxAmountMaxValue)
+    const finalPaymentTotal = this.clampNumber(total + paymentAdjustmentTotal, 0, this.receiptTotalAmountMaxValue)
     this.lastFinalPaymentTotal = finalPaymentTotal
 
     // 合計更新（存在する場合のみ）
@@ -769,7 +775,7 @@ export default class extends Controller {
   paymentAmountSum () {
     return this.visiblePaymentRows().reduce((sum, row) => {
       const amountInput = row.querySelector('[data-receipt-form-target="paymentAmountInput"]')
-      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, 999999999)
+      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptPaymentAmountMaxValue)
 
       return sum + amount
     }, 0)

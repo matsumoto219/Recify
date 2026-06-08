@@ -1054,6 +1054,40 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'SystemSettingsの金額上限をform data属性と入力maxへ渡す' do
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(320))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(420))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(210))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(220))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(430))
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(500))
+
+      get new_receipt_path
+
+      document = Nokogiri::HTML(response.body)
+      form = document.at_css('[data-controller~="receipt-form"]')
+      adjustment_template = Nokogiri::HTML.fragment(document.at_css('template[data-receipt-form-target="adjustmentTemplate"]')&.inner_html.to_s)
+      payment_template = Nokogiri::HTML.fragment(document.at_css('template[data-receipt-form-target="paymentTemplate"]')&.inner_html.to_s)
+
+      aggregate_failures do
+        expect(form['data-receipt-form-receipt-total-amount-max-value']).to eq('500')
+        expect(form['data-receipt-form-receipt-item-price-max-value']).to eq('320')
+        expect(form['data-receipt-form-receipt-item-line-total-max-value']).to eq('420')
+        expect(form['data-receipt-form-receipt-tax-amount-max-value']).to eq('210')
+        expect(form['data-receipt-form-receipt-adjustment-amount-max-value']).to eq('220')
+        expect(form['data-receipt-form-receipt-payment-amount-max-value']).to eq('430')
+        expect(document.at_css('[data-receipt-form-target="priceInput"]')['max']).to eq('320')
+        expect(adjustment_template.at_css('[data-receipt-form-target="adjustmentAmountInput"]')['max']).to eq('220')
+        expect(payment_template.at_css('[data-receipt-form-target="paymentAmountInput"]')['max']).to eq('430')
+      end
+    end
+
+    it 'receipt form controllerの金額clampは固定値ではなくdata属性の上限値を使う' do
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_form_controller.js').read
+
+      expect(controller_source).not_to match(/clampNumber\([^\n]+999999999/)
+    end
+
     it 'current_userのrounding modeをform data属性へ渡す' do
       user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
 

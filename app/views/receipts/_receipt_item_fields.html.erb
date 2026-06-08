@@ -125,7 +125,7 @@
                    stepper_button_class: "md:hidden",
                    value: row_state.price_value,
                    min: 0,
-                   max: 999999999,
+                   max: ReceiptAmountLimits.receipt_item_price_max,
                    step: 1,
                    size: :dense,
                    highlight_variant: row_state.price_highlight_variant,
