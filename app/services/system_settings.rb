@@ -14,6 +14,14 @@ module SystemSettings
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
   ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
+  AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
+  AMOUNT_LIMIT_RELATIONSHIPS = [
+    [ "limits.receipt_total_amount_max", "limits.receipt_item_line_total_max" ],
+    [ "limits.receipt_total_amount_max", "limits.receipt_adjustment_amount_max" ],
+    [ "limits.receipt_total_amount_max", "limits.receipt_payment_amount_max" ],
+    [ "limits.receipt_total_amount_max", "limits.receipt_tax_amount_max" ],
+    [ "limits.receipt_item_line_total_max", "limits.receipt_item_price_max" ]
+  ].freeze
   SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
@@ -378,6 +386,7 @@ module SystemSettings
       validate_user_limit_setting_safety!(definition, value)
       validate_user_limit_safety_ceiling!(definition, value)
       validate_analysis_run_retention_order!(definition, value)
+      validate_amount_limit_relationships!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -438,6 +447,20 @@ module SystemSettings
       return if failed_days >= default_days && default_days >= short_days
 
       raise ValidationError, ANALYSIS_RUN_RETENTION_ORDER_ERROR
+    end
+
+    def validate_amount_limit_relationships!(definition, value)
+      return unless AMOUNT_LIMIT_KEYS.include?(definition.key)
+
+      values = limits_for(AMOUNT_LIMIT_KEYS)
+      values[definition.key] = Integer(value)
+
+      invalid_relationship = AMOUNT_LIMIT_RELATIONSHIPS.any? do |parent_key, child_key|
+        values.fetch(parent_key) < values.fetch(child_key)
+      end
+      return unless invalid_relationship
+
+      raise ValidationError, AMOUNT_LIMIT_RELATION_ERROR
     end
 
     def override_integer_value(override)

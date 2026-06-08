@@ -368,18 +368,11 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.receipt_payments_per_receipt', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '0')).to eq(0)
         expect(described_class.cast_update_value('limits.receipt_tax_details_per_receipt', '100')).to eq(100)
-        expect(described_class.cast_update_value('limits.receipt_total_amount_max', '1')).to eq(1)
         expect(described_class.cast_update_value('limits.receipt_total_amount_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.receipt_item_price_max', '1')).to eq(1)
-        expect(described_class.cast_update_value('limits.receipt_item_price_max', '999999999999')).to eq(999_999_999_999)
-        expect(described_class.cast_update_value('limits.receipt_item_line_total_max', '1')).to eq(1)
-        expect(described_class.cast_update_value('limits.receipt_item_line_total_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.receipt_tax_amount_max', '1')).to eq(1)
-        expect(described_class.cast_update_value('limits.receipt_tax_amount_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.receipt_adjustment_amount_max', '1')).to eq(1)
-        expect(described_class.cast_update_value('limits.receipt_adjustment_amount_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.receipt_payment_amount_max', '1')).to eq(1)
-        expect(described_class.cast_update_value('limits.receipt_payment_amount_max', '999999999999')).to eq(999_999_999_999)
         expect(described_class.cast_update_value('limits.notifications_per_user', '20')).to eq(20)
         expect(described_class.cast_update_value('limits.notifications_per_user', '500')).to eq(500)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '1')).to eq(1)
@@ -592,6 +585,46 @@ RSpec.describe SystemSettings do
       create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
 
       expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')).to eq(1200)
+    end
+
+    it '金額上限は関連する上限との大小関係を維持する' do
+      error_message = 'amount_limit_relationship'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_total_amount_max', '999999999')).to eq(999_999_999)
+        expect(described_class.cast_update_value('limits.receipt_item_line_total_max', '999999999')).to eq(999_999_999)
+        expect {
+          described_class.cast_update_value('limits.receipt_total_amount_max', '999999998')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.receipt_payment_amount_max', '1000000000')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.receipt_item_line_total_max', '999999998')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      %w[
+        limits.receipt_total_amount_max
+        limits.receipt_item_line_total_max
+        limits.receipt_adjustment_amount_max
+        limits.receipt_payment_amount_max
+        limits.receipt_tax_amount_max
+        limits.receipt_item_price_max
+      ].each do |key|
+        create(:system_setting, key: key, value: described_class.stored_value(2_000_000_000))
+      end
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_total_amount_max', '2000000000')).to eq(2_000_000_000)
+        expect(described_class.cast_update_value('limits.receipt_payment_amount_max', '1500000000')).to eq(1_500_000_000)
+        expect {
+          described_class.cast_update_value('limits.receipt_payment_amount_max', '2500000000')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('limits.receipt_item_line_total_max', '1500000000')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
     end
 
     it '解析run保持期間は failed >= default >= short の関係だけ許可する' do

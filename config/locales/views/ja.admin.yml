@@ -547,6 +547,7 @@ ja:
           receipt_items_snapshot_limit: receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。
           user_limit_safety_max: UserLimitsのシステム上限を超えています。関連する利用上限またはユーザー別上限を先に同等以下へ変更してください。
           analysis_run_retention_order: 解析run保持期間は failed >= default >= short の関係を維持してください。
+          amount_limit_relationship: 金額上限の大小関係を維持してください。receipt_total_amount_max は明細合計、調整額、支払い額、税額以上にし、receipt_item_line_total_max は receipt_item_price_max 以上にしてください。
     users:
       common:
         yes: はい

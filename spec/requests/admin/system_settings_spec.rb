@@ -908,6 +908,32 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it '金額上限の大小関係が崩れる場合は日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('limits.receipt_payment_amount_max'),
+              params: {
+                value: '1000000000',
+                reason: 'raise payment amount max',
+                confirm: '1'
+              }
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('limits.receipt_payment_amount_max'))
+        expect(flash[:alert]).to include('金額上限の大小関係を維持してください')
+        expect(SystemSetting.find_by(key: 'limits.receipt_payment_amount_max')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'amount_limit_relationship'
+        )
+      end
+    end
+
     it '利用上限がシステム上限を超える場合は日本語の理由を表示して拒否する' do
       admin = create(:user, :admin)
       create(:system_setting, key: 'limits.max_ocr_per_day', value: SystemSettings.stored_value(100))
