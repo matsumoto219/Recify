@@ -164,7 +164,7 @@
   <div class="col-span-2 md:col-span-12 collapsible-grid" data-receipt-form-target="itemDetailsPanel" aria-hidden="true" inert>
     <div class="collapsible-grid-inner min-w-0">
       <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
-        <div class="col-span-2 md:col-span-2">
+        <div class="col-span-2 md:col-span-3">
           <div class="space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
             <div>
@@ -196,7 +196,7 @@
           </div>
         </div>
 
-        <div class="col-span-2 md:col-span-2">
+        <div class="col-span-2 md:col-span-3">
           <div class="space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.tax_rate") %></p>
             <div>
@@ -247,10 +247,10 @@
           </div>
         </div>
 
-        <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-5 md:flex md:justify-end">
-          <div class="space-y-2">
+        <div class="receipt-form-item-detail-subtotal col-span-2 hidden md:col-span-3 md:flex md:items-start">
+          <div class="w-full space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider invisible" aria-hidden="true"><%= t("receipts.item_fields.subtotal") %></p>
-            <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2 md:max-w-[280px]">
+            <div class="flex h-10 w-full items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card px-3 py-2">
               <span class="text-sm font-medium token-text-muted shrink-0"><%= t("receipts.item_fields.subtotal") %></span>
               <span class="text-base font-bold token-text-base truncate text-right" data-receipt-form-target="lineTotalDisplay"><%= line_total_display %></span>
             </div>

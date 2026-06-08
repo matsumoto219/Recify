@@ -5300,6 +5300,12 @@ RSpec.describe 'Receipts', type: :request do
 
         item_details_toggle = item_row.at_css('[data-receipt-form-target="itemDetailsToggle"]')
         item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+        discount_rate_wrapper = item_details_panel.at_css('[data-receipt-form-target="discountRateInput"]').ancestors.find { |node| node['class'].to_s.include?('md:col-span-') }
+        tax_rate_wrapper = item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]').ancestors.find { |node| node['class'].to_s.include?('md:col-span-') }
+        category_wrapper = item_details_panel.at_css('select[name$="[category]"]').ancestors.find { |node| node['class'].to_s.include?('md:col-span-') }
+        subtotal_wrapper = item_details_panel.at_css('.receipt-form-item-detail-subtotal')
+        subtotal_inner = subtotal_wrapper.at_css('.space-y-2')
+        subtotal_box = subtotal_wrapper.at_css('[data-receipt-form-target="lineTotalDisplay"]').ancestors.find { |node| node['class'].to_s.include?('h-10') }
         mobile_summary = item_row.at_css('.receipt-form-item-mobile-summary')
         swipe_wrapper = item_row.ancestors.find { |node| node['data-controller'].to_s.include?('swipe-action') }
 
@@ -5313,6 +5319,14 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_present
         expect(item_details_panel.at_css('select[name$="[category]"]')).to be_present
+        expect(discount_rate_wrapper['class']).to include('md:col-span-3')
+        expect(tax_rate_wrapper['class']).to include('md:col-span-3')
+        expect(category_wrapper['class']).to include('md:col-span-3')
+        expect(subtotal_wrapper['class']).to include('md:col-span-3')
+        expect(subtotal_wrapper['class']).to include('md:items-start')
+        expect(subtotal_inner['class']).to include('w-full')
+        expect(subtotal_box['class']).to include('h-10')
+        expect(subtotal_box['class']).not_to include('md:max-w-[280px]')
         expect(template_html).to include('data-receipt-form-target="itemDetailsToggle"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsPanel"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsIcon"')
