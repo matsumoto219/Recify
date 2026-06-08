@@ -71,4 +71,54 @@ RSpec.describe ReceiptAmountLimits do
       end
     end
   end
+
+  describe '金額上限設定の連動' do
+    it '設定値を大きくした場合もモデル検証とAI schemaが同じ上限を参照する' do
+      configured_limit = 1_500_000_000
+      create(:system_setting, key: 'limits.receipt_total_amount_max', value: SystemSettings.stored_value(configured_limit))
+      create(:system_setting, key: 'limits.receipt_item_line_total_max', value: SystemSettings.stored_value(configured_limit))
+      create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(configured_limit))
+      create(:system_setting, key: 'limits.receipt_tax_amount_max', value: SystemSettings.stored_value(configured_limit))
+      create(:system_setting, key: 'limits.receipt_adjustment_amount_max', value: SystemSettings.stored_value(configured_limit))
+      create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(configured_limit))
+
+      receipt = build(
+        :receipt,
+        total_amount: 1_200_000_000,
+        subtotal_amount: 1_200_000_000,
+        tax_amount: 1_200_000_000,
+        tip_amount: 1_200_000_000
+      )
+      item = ReceiptItem.new(
+        receipt: receipt,
+        confirmed_name: '高額商品',
+        price: 1_200_000_000,
+        original_line_total: 1_200_000_000,
+        line_total: 1_200_000_000,
+        discount_amount: 0
+      )
+      adjustment = build(:receipt_adjustment, receipt: receipt, amount: 1_200_000_000)
+      payment = ReceiptPayment.new(receipt: receipt, amount: 1_200_000_000)
+      tax_detail = ReceiptTaxDetail.new(receipt: receipt, amount: 1_200_000_000, net_amount: 1_200_000_000)
+
+      aggregate_failures do
+        expect(described_class.receipt_total_amount_max).to eq(configured_limit)
+        expect(receipt).to be_valid
+        expect(item).to be_valid
+        expect(adjustment).to be_valid
+        expect(payment).to be_valid
+        expect(tax_detail).to be_valid
+        expect(
+          Ai::ReceiptAnalysisSchema.to_json_schema.dig(
+            'properties',
+            'receipt_adjustments',
+            'items',
+            'properties',
+            'amount',
+            'maximum'
+          )
+        ).to eq(configured_limit)
+      end
+    end
+  end
 end
