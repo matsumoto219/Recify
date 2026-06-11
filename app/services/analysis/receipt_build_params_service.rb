@@ -163,6 +163,9 @@ module Analysis
         normalized_store_name = compact_store_name(store_name)
         return store_name if normalized_store_name.blank?
 
+        local_complete_replacement = local_complete_store_name_replacement(store_name, lines)
+        return local_complete_replacement if local_complete_replacement.present?
+
         legal_entity_extension = legal_entity_brand_store_name_extension(store_name, lines)
         return legal_entity_extension if legal_entity_extension.present?
 
@@ -170,6 +173,17 @@ module Analysis
         return printed_extension if printed_extension.present?
 
         store_name
+      end
+
+      def local_complete_store_name_replacement(store_name, lines)
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+
+        header_lines.find do |line|
+          customer_facing_store_line?(line) &&
+            Analysis::StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(store_name, line)
+        end
       end
 
       def printed_store_name_extension(store_name, lines)
@@ -268,6 +282,7 @@ module Analysis
 
       def store_name_needs_preceding_brand?(store_name)
         normalized = Analysis::StoreNameCandidateClassifier.normalize_name(store_name).to_s
+        return false if Analysis::StoreNameCandidateClassifier.complete_local_store_name?(normalized)
         return false if store_brand_type_line?(normalized)
 
         customer_facing_branch_line?(normalized)

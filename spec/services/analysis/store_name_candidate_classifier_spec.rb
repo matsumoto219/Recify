@@ -36,6 +36,23 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
       end
     end
 
+    it '英字ロゴ行とローカル完結店舗名が隣接する場合はローカル店舗名を優先する' do
+      lines = [
+        'SampleBrand',
+        'サンプルブランド東京中央店',
+        'TEL 000-0000-0000',
+        '領収証'
+      ]
+
+      candidates = described_class.customer_facing_heading_candidates(lines)
+
+      aggregate_failures do
+        expect(candidates.first).to eq('サンプルブランド東京中央店')
+        expect(candidates).to include('SampleBrand')
+        expect(candidates).not_to include('SampleBrand サンプルブランド東京中央店')
+      end
+    end
+
     it '上部の施設名と売場名を結合する' do
       lines = [
         'サンプル公園',
@@ -89,6 +106,15 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
         expect(described_class.isolated_logo_fragment?('Q')).to be(false)
         expect(described_class.isolated_logo_fragment?('一')).to be(false)
         expect(described_class.isolated_logo_fragment?('Sample Life Market')).to be(false)
+      end
+    end
+  end
+
+  describe '.complete_local_store_name?' do
+    it 'ローカル表記だけで完結した店舗名と支店名だけの行を区別する' do
+      aggregate_failures do
+        expect(described_class.complete_local_store_name?('サンプルブランド東京中央店')).to be(true)
+        expect(described_class.complete_local_store_name?('中央南三丁目店')).to be(false)
       end
     end
   end

@@ -1087,6 +1087,35 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 中央南三丁目店')
       end
 
+      it 'AIが英字ロゴとローカル完結店舗名の重複結合を返した場合はローカル店舗名へ寄せる' do
+        local_complete_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'SampleBrand サンプルブランド東京中央店',
+            store_address: '東京都中央区サンプル1-2-3',
+            country_region: 'JPN',
+            total_amount: 100,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'SampleBrand',
+            'サンプルブランド東京中央店',
+            'TEL 000-0000-0000',
+            '領収証'
+          ]
+        )
+        local_complete_ai_result = {
+          receipt_attributes: {
+            store_name: 'SampleBrand サンプルブランド東京中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: local_complete_ocr_result, ai_result: local_complete_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプルブランド東京中央店')
+      end
+
       it 'ブランドのみ・施設名・ブランド+locationはOCR表記を保存し未印字suffixを足さない' do
         examples = [
           {

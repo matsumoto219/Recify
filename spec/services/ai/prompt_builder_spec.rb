@@ -254,6 +254,32 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '英字ロゴ行とローカル完結店舗名が重複する場合はローカル店舗名を先に候補化する' do
+      local_complete_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'SampleBrand',
+          'サンプルブランド東京中央店',
+          'TEL 000-0000-0000',
+          '領収証'
+        ],
+        candidates: {
+          store_name: 'SampleBrand サンプルブランド東京中央店',
+          country_region: 'JPN',
+          total_amount: 100,
+          items: []
+        }
+      )
+
+      result = described_class.build(local_complete_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('サンプルブランド東京中央店')
+        expect(store_payload[:customer_facing_store_candidates].first).to eq('サンプルブランド東京中央店')
+        expect(store_payload[:customer_facing_store_candidates]).to include('SampleBrand')
+      end
+    end
+
     it 'ブランドのみ・施設名・ブランド+locationをOCR表記どおり候補化し未印字suffixを足さない' do
       examples = [
         {

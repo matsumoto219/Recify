@@ -64,9 +64,29 @@ module Analysis
         end
 
         candidates = []
-        candidates << join_heading_lines(heading_lines) if heading_lines.size > 1
+        preferred_local_name = preferred_local_complete_store_name(heading_lines)
+        if preferred_local_name.present?
+          candidates << preferred_local_name
+        else
+          candidates << join_heading_lines(heading_lines) if heading_lines.size > 1
+        end
         candidates.concat(heading_lines)
         candidates.compact_blank.uniq
+      end
+
+      def latin_logo_prefix_duplicate?(combined_name, local_name)
+        combined = normalize_name(combined_name)
+        local = normalize_name(local_name)
+        return false if combined.blank? || local.blank?
+        return false if normalize_compact_name(combined).to_s.casecmp?(normalize_compact_name(local).to_s)
+        return false unless local_complete_store_name?(local)
+
+        latin_prefix = latin_prefix_before_local_name(combined, local)
+        latin_logo_brand_line?(latin_prefix)
+      end
+
+      def complete_local_store_name?(text)
+        local_complete_store_name?(text)
       end
 
       def operator_candidates(lines, merchant_name: nil)
@@ -167,6 +187,55 @@ module Analysis
           normalized_candidate = normalize_name(candidate).to_s
           !isolated_logo_fragment?(normalized_candidate) && customer_facing_heading_line?(normalized_candidate)
         end
+      end
+
+      def preferred_local_complete_store_name(lines)
+        compacted = Array(lines).map { |line| normalize_name(line) }.compact_blank
+        return nil if compacted.size < 2
+
+        latin_line = compacted.first
+        local_line = compacted.second
+        return nil unless latin_logo_brand_line?(latin_line)
+        return nil unless local_complete_store_name?(local_line)
+
+        local_line
+      end
+
+      def latin_prefix_before_local_name(combined, local)
+        compact_combined = normalize_compact_name(combined).to_s
+        compact_local = normalize_compact_name(local).to_s
+        return nil if compact_combined.blank? || compact_local.blank?
+        return nil unless compact_combined.downcase.end_with?(compact_local.downcase)
+
+        compact_combined[0...(compact_combined.length - compact_local.length)]
+      end
+
+      def latin_logo_brand_line?(text)
+        normalized = normalize_name(text).to_s
+        return false if normalized.blank?
+        return false if japanese_text?(normalized)
+        return false if legal_entity_name?(normalized)
+        return false if operator_context_line?(normalized)
+        return false if heading_boundary_line?(normalized)
+        return false if descriptive_heading_line?(normalized)
+        return false if normalized.match?(MONEY_OR_NUMERIC_PATTERN)
+
+        normalized.match?(/\A[A-Za-z][A-Za-z0-9&.'-]{1,30}\z/)
+      end
+
+      def local_complete_store_name?(text)
+        normalized = normalize_name(text).to_s
+        return false if normalized.blank?
+        return false unless japanese_text?(normalized)
+        return false if legal_entity_name?(normalized)
+        return false if operator_context_line?(normalized)
+        return false if heading_boundary_line?(normalized)
+        return false if descriptive_heading_line?(normalized)
+        return false if normalized.match?(ADDRESS_LIKE_PATTERN)
+        return false if normalized.match?(MONEY_OR_NUMERIC_PATTERN)
+        return false unless normalized.match?(/\A[ァ-ヶー]{2,}/)
+
+        normalized.match?(/店|本店|支店|営業所|センター|マーケット|スーパー|ストア|ショップ|カフェ|レストラン|食堂|商店|薬局|ドラッグ|コンビニ|駐車場/)
       end
 
       def heading_boundary_line?(text)

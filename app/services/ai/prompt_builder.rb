@@ -253,14 +253,15 @@ module Ai
       operator_store_name = operator_store_name_candidate?
       customer_facing_extension = customer_facing_store_name_extends_ocr_store_name?
       operator_brand_replacement = operator_brand_store_name_replacement_candidate?
+      local_complete_replacement = local_complete_store_name_replacement_candidate?
 
-      if operator_store_name || customer_facing_extension || operator_brand_replacement
+      if operator_store_name || customer_facing_extension || operator_brand_replacement || local_complete_replacement
         candidates.concat(customer_facing_store_candidates)
       end
 
       # OCRのstore_nameも候補に含める。ただし運営主体文脈の法人名は operator_candidates 側へ逃がす。
       candidates << candidate_value(:store_name) unless operator_store_name && customer_facing_store_candidates.present?
-      candidates.concat(customer_facing_store_candidates) unless operator_store_name || customer_facing_extension || operator_brand_replacement
+      candidates.concat(customer_facing_store_candidates) unless operator_store_name || customer_facing_extension || operator_brand_replacement || local_complete_replacement
 
       # 先頭行から候補抽出（ブランド＋支店を拾うため）
       candidates.concat(lines.first(10))
@@ -333,6 +334,15 @@ module Ai
           branch.present? &&
           ocr_store_name.include?(branch) &&
           !ocr_store_name.include?(brand)
+      end
+    end
+
+    def local_complete_store_name_replacement_candidate?
+      ocr_store_name = Analysis::StoreNameCandidateClassifier.normalize_name(candidate_value(:store_name))
+      return false if ocr_store_name.blank?
+
+      customer_facing_store_candidates.any? do |candidate|
+        Analysis::StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(ocr_store_name, candidate)
       end
     end
 
