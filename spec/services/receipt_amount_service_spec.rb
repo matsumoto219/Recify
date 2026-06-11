@@ -1861,6 +1861,44 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'does not need review for recovered mixed-rate tax-included details and matching cash payment' do
+      result = call_service(
+        receipt: {
+          total_amount: 844,
+          subtotal_amount: nil,
+          tax_amount: 70,
+          tax_rate: nil
+        },
+        receipt_items: [
+          { raw_text: '商品A', price: 151, quantity: 1, line_total: 151, tax_rate: BigDecimal('0.08') },
+          { raw_text: '商品B', price: 178, quantity: 1, line_total: 178, tax_rate: BigDecimal('0.08') },
+          { raw_text: '商品C', price: 155, quantity: 1, line_total: 155, tax_rate: BigDecimal('0.1') },
+          { raw_text: '商品D', price: 360, quantity: 1, line_total: 360, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { description: '8%対象', rate: BigDecimal('0.08'), net_amount: 305, amount: 24 },
+          { description: '10%対象', rate: BigDecimal('0.1'), net_amount: 469, amount: 46 }
+        ],
+        receipt_payments: [
+          { method: 'cash', amount: 844 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        # 検算: subtotal 305 + 469 = 774, tax 24 + 46 = 70, total 844。
+        expect(result[:resolved]).to include(
+          subtotal: 774,
+          tax: 70,
+          total: 844,
+          tax_rate: nil
+        )
+        expect(result[:needs_review]).to be(false)
+        expect(result[:warning_inconsistencies]).to be_empty
+        expect(result[:mismatch_codes]).to be_empty
+      end
+    end
+
     it 'does not need review for receipt 59 style line-total-only item with matching tax_details' do
       result = call_service(
         receipt: {

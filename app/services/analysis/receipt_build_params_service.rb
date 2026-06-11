@@ -4,6 +4,9 @@ module Analysis
     FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit|電子マネー/i
     FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|決済|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|d払い|au pay|メルペイ|line pay|デビット|debit/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
+    CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
+    CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
+    REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
     FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/
     FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i
     FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
@@ -31,7 +34,11 @@ module Analysis
           skipped_negative_items:
         )
         receipt_payments_attributes = build_receipt_payments_attributes(candidates, lines)
-        receipt_tax_details_attributes = build_receipt_tax_details_attributes(candidates)
+        receipt_tax_details_attributes = recover_receipt_tax_details_from_lines(
+          build_receipt_tax_details_attributes(candidates),
+          lines,
+          receipt_attributes
+        )
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
           candidates[:adjustment_candidates],
@@ -43,6 +50,10 @@ module Analysis
           receipt_items_attributes,
           receipt_adjustments_attributes,
           receipt_tax_details_attributes
+        ) || apply_tax_marker_group_amount_match_policy(
+          receipt_items_attributes,
+          receipt_tax_details_attributes,
+          lines
         ) || apply_single_tax_detail_rate_policy(
           receipt_items_attributes,
           receipt_adjustments_attributes,
@@ -162,6 +173,11 @@ module Analysis
         store_index = header_lines.find_index { |line| compact_store_name(line) == normalized_store_name }
         return nil if store_index.nil?
 
+        brand_line = header_lines[0...store_index]&.reverse&.find do |line|
+          customer_facing_brand_line?(line)
+        end
+        return "#{brand_line} #{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)}" if brand_line.present?
+
         branch_line = header_lines[(store_index + 1)..(store_index + 3)]&.find do |line|
           customer_facing_branch_line?(line)
         end
@@ -228,6 +244,15 @@ module Analysis
         return false if normalized.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
 
         normalized.length <= 30
+      end
+
+      def customer_facing_brand_line?(line)
+        normalized = line.to_s
+        return false unless customer_facing_store_line?(normalized)
+        return false if normalized.match?(/店|支店|本店|営業所|センター|モール|ショップ|通り|駅前|南口|北口|東口|西口|market|store/i)
+        return false if normalized.match?(/[¥￥円$€£]/)
+
+        normalized.length <= 40
       end
 
       def store_name_context_noise_line?(line)
@@ -434,7 +459,65 @@ module Analysis
         end
         return structured_payments if structured_payments.present?
 
+        deposit_change_payment = cash_payment_from_deposit_change_lines(
+          lines,
+          normalize_amount(candidates[:total_amount]),
+          tax_details: candidates[:tax_details]
+        )
+        return [ deposit_change_payment ] if deposit_change_payment.present?
+
         fallback_payments_from_lines(lines)
+      end
+
+      def cash_payment_from_deposit_change_lines(lines, receipt_total, tax_details: [])
+        total = normalize_amount(receipt_total)&.to_i
+        return nil unless total&.positive?
+        return nil if external_tax_details_conflict_with_receipt_total?(tax_details, total)
+
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        return nil unless deposit_amount&.positive? && change_amount&.positive?
+        return nil unless deposit_amount - change_amount == total
+
+        {
+          method: "cash",
+          amount: total
+        }
+      end
+
+      def external_tax_details_conflict_with_receipt_total?(tax_details, receipt_total)
+        details = usable_tax_details_with_gross_amount(tax_details)
+        return false if details.blank?
+
+        net_sum = details.sum { |tax_detail| tax_detail[:net_amount] }
+        gross_sum = details.sum { |tax_detail| tax_detail[:gross_amount] }
+
+        net_sum == receipt_total && gross_sum != receipt_total
+      end
+
+      def settlement_amount_from_lines(lines, label_pattern)
+        Array(lines).each_with_index do |line, index|
+          next unless settlement_label_line?(lines, index, label_pattern)
+
+          same_line_amount = positive_amounts_from_text(line).max
+          return same_line_amount if same_line_amount.present?
+
+          neighboring_amount = Array(lines)[(index + 1)..(index + 3)].to_a.filter_map do |candidate|
+            positive_amounts_from_text(candidate).max
+          end.first
+          return neighboring_amount if neighboring_amount.present?
+        end
+
+        nil
+      end
+
+      def settlement_label_line?(lines, index, label_pattern)
+        text = Array(lines)[index].to_s.unicode_normalize(:nfkc)
+        return true if text.match?(label_pattern)
+        return false if positive_amounts_from_text(text).present?
+
+        joined = Array(lines)[index, 2].join.unicode_normalize(:nfkc)
+        joined.match?(label_pattern)
       end
 
       def fallback_payments_from_lines(lines)
@@ -480,6 +563,12 @@ module Analysis
         matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?).max
       end
 
+      def positive_amounts_from_text(text)
+        text.to_s.to_enum(:scan, ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN).filter_map do |match|
+          normalize_amount(match)&.to_i&.abs
+        end.select(&:positive?)
+      end
+
       def fallback_payment_method_text(line)
         text = line.to_s.strip
         amount_text = rightmost_fallback_amount_candidate(text)
@@ -503,6 +592,86 @@ module Analysis
             net_amount: normalize_amount(normalized_tax_detail[:net_amount])
           }.compact
         end
+      end
+
+      def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)
+        return tax_details if complete_multi_rate_tax_details?(tax_details)
+
+        inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes)
+        return tax_details if inferred_tax_details.blank?
+
+        inferred_tax_details
+      end
+
+      def complete_multi_rate_tax_details?(tax_details)
+        details = usable_tax_details_with_gross_amount(tax_details)
+        details.map { |tax_detail| tax_detail[:rate] }.uniq.size > 1
+      end
+
+      def tax_details_from_rate_targets(lines, receipt_attributes)
+        receipt_total = normalize_amount(receipt_attributes[:total_amount])&.to_i
+        receipt_tax = normalize_amount(receipt_attributes[:tax_amount])&.to_i
+        return [] unless receipt_total&.positive? && receipt_tax&.positive?
+
+        targets = tax_rate_targets_from_lines(lines)
+        return [] unless targets.size >= 2
+
+        target_sum = targets.sum { |target| target[:gross_amount] }
+        return [] unless target_sum == receipt_total
+
+        inferred = targets.map do |target|
+          tax = included_tax_amount(target[:gross_amount], target[:rate])
+          next unless tax.positive?
+
+          {
+            description: "#{rate_percentage_label(target[:rate])}%対象",
+            rate: target[:rate],
+            net_amount: target[:gross_amount] - tax,
+            amount: tax
+          }
+        end
+        return [] if inferred.any?(&:blank?)
+        return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == receipt_tax
+
+        inferred
+      end
+
+      def tax_rate_targets_from_lines(lines)
+        Array(lines).each_with_index.filter_map do |line, index|
+          rate = tax_target_rate_from_line(line)
+          next if rate.blank?
+
+          amount = tax_target_amount_from_line(line) || tax_target_amount_from_line(lines[index + 1])
+          next unless amount&.positive?
+
+          {
+            rate: rate,
+            gross_amount: amount
+          }
+        end.uniq { |target| [ target[:rate].to_s("F"), target[:gross_amount] ] }
+      end
+
+      def tax_target_rate_from_line(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        return nil unless text.match?(/対象/)
+        return nil if text.match?(/消費税|税額|tax/i)
+
+        match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
+        normalize_rate(match[1]) if match
+      end
+
+      def tax_target_amount_from_line(line)
+        positive_amounts_from_text(line).select { |amount| amount > 20 }.max
+      end
+
+      def included_tax_amount(gross_amount, rate)
+        tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
+        Amounts::Rounding.apply_rounding(tax, :floor)
+      end
+
+      def rate_percentage_label(rate)
+        value = rate * 100
+        value.frac.zero? ? value.to_i.to_s : value.to_s("F")
       end
 
       def apply_single_tax_detail_rate_policy(items, adjustments, tax_details, receipt_attributes)
@@ -565,6 +734,46 @@ module Analysis
         }
       end
 
+      def apply_tax_marker_group_amount_match_policy(items, tax_details, lines)
+        positive_items = Array(items).select { |item| normalize_amount(item[:line_total]).to_i.positive? }
+        usable_tax_details = usable_tax_details_with_gross_amount(tax_details)
+        return nil unless positive_items.present? && usable_tax_details.size >= 2
+
+        sorted_details = usable_tax_details.sort_by { |tax_detail| tax_detail[:rate] }
+        reduced_detail = sorted_details.first
+        standard_details = sorted_details.drop(1)
+        return nil unless standard_details.one?
+
+        standard_detail = standard_details.first
+        marked_items, unmarked_items = positive_items.partition do |item|
+          item_reduced_tax_marker?(item, lines)
+        end
+        return nil if marked_items.blank? || unmarked_items.blank?
+        return nil unless item_amount_sum(marked_items) == reduced_detail[:gross_amount]
+        return nil unless item_amount_sum(unmarked_items) == standard_detail[:gross_amount]
+
+        changed_item_count = 0
+        marked_items.each do |item|
+          changed_item_count += 1 unless normalize_rate(item[:tax_rate]) == reduced_detail[:rate]
+          item[:tax_rate] = reduced_detail[:rate]
+        end
+        unmarked_items.each do |item|
+          changed_item_count += 1 unless normalize_rate(item[:tax_rate]) == standard_detail[:rate]
+          item[:tax_rate] = standard_detail[:rate]
+        end
+
+        {
+          reason: "tax_marker_group_amount_match",
+          source: "printed_tax_detail",
+          matches: [
+            { target: "items", amount: reduced_detail[:gross_amount], rate: reduced_detail[:rate].to_s("F") },
+            { target: "items", amount: standard_detail[:gross_amount], rate: standard_detail[:rate].to_s("F") }
+          ],
+          item_count: changed_item_count,
+          adjustment_count: 0
+        }
+      end
+
       def usable_tax_details_with_target_amount(tax_details)
         Array(tax_details).filter_map do |tax_detail|
           rate = normalize_rate(tax_detail[:rate])
@@ -580,6 +789,56 @@ module Analysis
             target_amount: target_amount.to_i
           }
         end
+      end
+
+      def usable_tax_details_with_gross_amount(tax_details)
+        Array(tax_details).filter_map do |tax_detail|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])
+          net_amount = normalize_amount(tax_detail[:net_amount])
+          next unless rate&.positive?
+          next unless amount&.positive?
+          next unless net_amount&.positive?
+
+          {
+            rate: rate,
+            amount: amount.to_i,
+            net_amount: net_amount.to_i,
+            gross_amount: net_amount.to_i + amount.to_i
+          }
+        end
+      end
+
+      def item_reduced_tax_marker?(item, lines)
+        item_amount = normalize_amount(item[:line_total])&.to_i
+        return false unless item_amount&.positive?
+
+        item_line_indexes(item, lines).any? do |index|
+          Array(lines)[index..(index + 4)].to_a.any? do |line|
+            line.to_s.match?(REDUCED_TAX_MARKER_PATTERN) &&
+              positive_amounts_from_text(line).include?(item_amount)
+          end
+        end
+      end
+
+      def item_line_indexes(item, lines)
+        raw_text = compact_item_text(item[:raw_text])
+        return [] if raw_text.blank?
+
+        Array(lines).each_with_index.filter_map do |line, index|
+          line_text = compact_item_text(line)
+          next if line_text.blank?
+
+          index if line_text.include?(raw_text) || raw_text.include?(line_text)
+        end
+      end
+
+      def compact_item_text(value)
+        value.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, "").strip.downcase.presence
+      end
+
+      def item_amount_sum(items)
+        Array(items).sum { |item| normalize_amount(item[:line_total]).to_i }
       end
 
       def tax_rate_match_entries(items, adjustments)

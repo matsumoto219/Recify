@@ -313,6 +313,10 @@ class Ocr::ResponseParser
       normalized_lines
     )
     branch_name = extract_branch_like_store_name(normalized_lines, merchant_name)
+    if branch_like_store_name?(normalized_merchant_name) &&
+        !Analysis::StoreNameCandidateClassifier.legal_entity_name?(normalized_merchant_name)
+      branch_name ||= normalized_merchant_name
+    end
     brand_name = extract_brand_like_store_name(normalized_lines, branch_name)
 
     candidates = []
@@ -1155,7 +1159,7 @@ class Ocr::ResponseParser
   def extract_tax_details(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
-    return [] unless details.is_a?(Array)
+    details = [] unless details.is_a?(Array)
 
     tax_detail_rates = details.filter_map do |detail|
       normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))
@@ -1182,9 +1186,94 @@ class Ocr::ResponseParser
       }
     end
 
+    inferred_from_lines = infer_included_tax_details_from_rate_targets(fields, details, lines)
+    return inferred_from_lines if inferred_from_lines.present? && !complete_multi_rate_tax_details?(tax_details)
+
     deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) }
   rescue NoMethodError, TypeError
     []
+  end
+
+  def complete_multi_rate_tax_details?(tax_details)
+    Array(tax_details).filter_map do |tax_detail|
+      rate = normalize_rate_value(tax_detail[:rate])
+      amount = ReceiptAmountService.parse_amount_or_nil(tax_detail[:amount])
+      net_amount = ReceiptAmountService.parse_amount_or_nil(tax_detail[:net_amount])
+      rate if rate&.positive? && amount&.positive? && net_amount&.positive?
+    end.uniq.size > 1
+  end
+
+  def infer_included_tax_details_from_rate_targets(fields, details, lines)
+    total_amount = extract_field_amount(fields, "Total")&.to_i
+    tax_amount = extract_field_amount(fields, "TotalTax")&.to_i || extract_field_amount(fields, "Tax")&.to_i
+    tax_amount ||= single_summary_tax_detail_amount(details)
+    return [] unless total_amount&.positive? && tax_amount&.positive?
+
+    targets = tax_rate_targets_from_lines(lines)
+    return [] unless targets.size >= 2
+    return [] unless targets.sum { |target| target[:gross_amount] } == total_amount
+
+    inferred = targets.map do |target|
+      tax = included_tax_amount(target[:gross_amount], target[:rate])
+      next unless tax.positive?
+
+      {
+        description: "#{rate_percentage_label(target[:rate])}%対象",
+        rate: target[:rate].to_f,
+        net_amount: target[:gross_amount] - tax,
+        amount: tax
+      }
+    end
+    return [] if inferred.any?(&:blank?)
+    return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == tax_amount
+
+    inferred
+  end
+
+  def extract_field_amount(fields, field_name)
+    field = fields[field_name]
+    return nil unless field.is_a?(Hash)
+
+    field.dig("valueCurrency", "amount") || field["valueNumber"]
+  end
+
+  def single_summary_tax_detail_amount(details)
+    return nil unless Array(details).one?
+
+    value_object = details.first["valueObject"] || {}
+    return nil if value_object.dig("Rate", "valueNumber").present?
+    return nil if value_object.dig("NetAmount", "valueCurrency", "amount").present? || value_object.dig("NetAmount", "valueNumber").present?
+
+    value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber")
+  end
+
+  def tax_rate_targets_from_lines(lines)
+    Array(lines).each_with_index.filter_map do |line, index|
+      rate = tax_target_rate_from_line(line)
+      next if rate.blank?
+
+      amount = tax_target_amount_from_line(line) || tax_target_amount_from_line(lines[index + 1])
+      next unless amount&.positive?
+
+      {
+        rate: rate,
+        gross_amount: amount
+      }
+    end.uniq { |target| [ target[:rate].to_s("F"), target[:gross_amount] ] }
+  end
+
+  def tax_target_rate_from_line(line)
+    text = line.to_s
+    return nil unless text.match?(/対象/)
+    return nil if text.match?(/消費税|税額|tax/i)
+
+    match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
+    normalize_rate_value(match[1]) if match
+  end
+
+  def included_tax_amount(gross_amount, rate)
+    tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
+    Amounts::Rounding.apply_rounding(tax, :floor)
   end
 
   def tax_detail_description(value_object, lines, rate:, amount:, net_amount:)

@@ -533,6 +533,56 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '税率別対象額と税合計だけがOCR行にある内税レシートからTaxDetailsを復元する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        SampleMart
+        中央南三丁目店
+        商品A
+        ¥151軽
+        商品B
+        ¥178軽
+        商品C
+        ¥155
+        商品D
+        ¥360
+        合 計
+        ¥844
+        (10%対象
+        ¥515)
+        ( 8%対象
+        ¥329)
+        (内消費税等
+        ¥70)
+      TEXT
+      fields = response['analyzeResult']['documents'].first['fields']
+      fields['MerchantName'] = { 'valueString' => '中央南三丁目店' }
+      fields['Total'] = { 'valueCurrency' => { 'amount' => 844, 'currencyCode' => 'JPY' } }
+      fields['Subtotal'] = nil
+      fields['TotalTax'] = { 'valueCurrency' => { 'amount' => 70, 'currencyCode' => 'JPY' } }
+      fields['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '内消費税等' },
+              'Amount' => { 'valueCurrency' => { 'amount' => 70, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      aggregate_failures do
+        # 検算: 329 * 8 / 108 = 24.37... floor 24, net 305。
+        # 検算: 515 * 10 / 110 = 46.81... floor 46, net 469。税額合計は 24 + 46 = 70。
+        expect(result.dig(:candidates, :tax_details)).to contain_exactly(
+          hash_including(description: '8%対象', rate: 0.08, net_amount: 305, amount: 24),
+          hash_including(description: '10%対象', rate: 0.1, net_amount: 469, amount: 46)
+        )
+      end
+    end
+
     it 'TaxDetails descriptionが汎用語でも周辺OCR行から税抜小計/税込対象の文脈を保持する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

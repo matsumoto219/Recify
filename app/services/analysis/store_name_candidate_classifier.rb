@@ -151,6 +151,7 @@ module Analysis
       def heading_boundary_line?(text)
         normalized = normalize_name(text).to_s
         return true if normalized.match?(HEADING_STOP_PATTERN)
+        return true if normalized.gsub(/[[:space:]]+/, "").match?(HEADING_STOP_PATTERN)
         return true if normalized.match?(ADDRESS_LIKE_PATTERN)
         return true if normalized.match?(DATE_TIME_PATTERN)
         return true if normalized.match?(/\bT\d{13}\b/i)
@@ -162,11 +163,16 @@ module Analysis
         compacted = Array(lines).map { |line| normalize_name(line) }.compact_blank
         return nil if compacted.blank?
 
-        if compacted.any? { |line| japanese_text?(line) }
+        if compacted.any? { |line| japanese_text?(line) } && !mixed_script_heading?(compacted)
           compacted.join.gsub(/[[:space:]]+/, "")
         else
           compacted.join(" ").gsub(/[[:space:]]+/, " ")
         end
+      end
+
+      def mixed_script_heading?(lines)
+        Array(lines).any? { |line| line.to_s.match?(/[A-Za-z]/) } &&
+          Array(lines).any? { |line| japanese_text?(line) }
       end
 
       def operator_context_near_candidate?(candidate, lines)

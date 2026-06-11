@@ -560,7 +560,14 @@ module Ai
       profile = line_profile(line)
       text = profile[:text]
       return false if text.empty?
-      return false if normalized_store_name(text) == normalized_store_name(candidate_value(:store_name))
+      compact_text = text.gsub(/[[:space:]]+/, "")
+      return false if text.length <= 1
+      return false if compact_text.match?(/\A(?:領|収|証|合計|お預り|お預かり|預り|預かり|お釣り?|釣り?|釣銭)\z/)
+      return false if compact_text.match?(/\A(?:t|T)?(?:会員番号|カード番号|ポイント)/)
+      if normalized_store_name(text) == normalized_store_name(candidate_value(:store_name))
+        return false unless heading_candidates_extend_ocr_store_name?
+      end
+      return false if heading_brand_line_for_ocr_store_name?(text)
       return false if profile[:address_candidate]
       return false if profile[:date_time_line]
       return false if profile[:payment_context_line]
@@ -579,10 +586,38 @@ module Ai
       return false if text.match?(/ご利用日|利用日/)
       return false if text.match?(/オーダー|注文|時刻|日時/)
       return false if text.match?(/ポイント|楽天ポイント|Tポイント|dポイント|Ponta|WAON POINT|nanacoポイント/i)
+      return false if text.match?(/明細|会員|カード|マネー|残高|貯まり|利用可能|ご確認|https?:|www\.|\.jp/i)
       return false if text.match?(/[¥￥円]/)
 
       text.match?(/店|通り|駅前|本町|中央|南|北|東|西/) ||
         (text.length <= 20 && !text.match?(/[都道府県市区町村郡]/) && !text.match?(/\d{2,}/))
+    end
+
+    def heading_candidates_extend_ocr_store_name?
+      ocr_store_name = normalized_store_name(candidate_value(:store_name))
+      return false if ocr_store_name.blank?
+
+      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines).any? do |candidate|
+        normalized_candidate = normalized_store_name(candidate)
+        normalized_candidate.present? &&
+          normalized_candidate != ocr_store_name &&
+          normalized_candidate.include?(ocr_store_name)
+      end
+    end
+
+    def heading_brand_line_for_ocr_store_name?(text)
+      normalized_text = normalized_store_name(text)
+      ocr_store_name = normalized_store_name(candidate_value(:store_name))
+      return false if normalized_text.blank? || ocr_store_name.blank?
+      return false if normalized_text == ocr_store_name
+
+      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines).any? do |candidate|
+        normalized_candidate = normalized_store_name(candidate)
+        normalized_candidate.present? &&
+          normalized_candidate.include?(normalized_text) &&
+          normalized_candidate.include?(ocr_store_name) &&
+          normalized_candidate.index(normalized_text).to_i < normalized_candidate.index(ocr_store_name).to_i
+      end
     end
 
     def address_candidate?(line)

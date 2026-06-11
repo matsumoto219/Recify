@@ -191,6 +191,38 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it 'mixed scriptのブランド名と日本語支店名を印字どおり空白ありで結合する' do
+      mixed_script_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'SampleMart',
+          '中央南三丁目店',
+          '領',
+          '収',
+          '証',
+          '合 計',
+          '東京都国分寺市サンプル1-2-3',
+          '領収証'
+        ],
+        candidates: {
+          store_name: '中央南三丁目店',
+          store_address: '東京都国分寺市サンプル1-2-3',
+          total_amount: 844,
+          items: []
+        }
+      )
+
+      result = described_class.build(mixed_script_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('SampleMart 中央南三丁目店')
+        expect(store_payload[:customer_facing_store_candidates]).to include('SampleMart 中央南三丁目店')
+        expect(store_payload[:customer_facing_store_candidates]).not_to include('SampleMart中央南三丁目店')
+        expect(store_payload[:branch_name_candidates]).to include('中央南三丁目店')
+        expect(store_payload[:branch_name_candidates] & [ '領', '収', '証', '合 計' ]).to be_empty
+      end
+    end
+
     it 'OCR店名が壊れていてもoperator法人名からブランドと場所名の候補を生成する' do
       broken_brand_ocr_result = ocr_result.deep_merge(
         lines: [

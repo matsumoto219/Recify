@@ -3105,6 +3105,127 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'ヘッダーブランドと支店名、軽減marker、預り/釣りから複数税率レシートを安定して保存する' do
+      2.times do
+        receipt = create(:receipt, :processing, :with_image)
+        ocr_result = {
+          success: true,
+          raw_text: "SampleMart\n中央南三丁目店\n商品A\n領\n収\n証\n¥151軽\n商品B\n¥178軽\n商品C\n¥155\n商品D\n¥360\n合 計\n¥844\n(10%対象\n¥515)\n( 8%対象\n¥329)\n(内消費税等\n¥70)\nお 預 り\n¥1,044\nお\n釣\n¥200",
+          lines: [
+            'SampleMart',
+            '中央南三丁目店',
+            '商品A',
+            '領',
+            '収',
+            '証',
+            '¥151軽',
+            '商品B',
+            '¥178軽',
+            '商品C',
+            '¥155',
+            '商品D',
+            '¥360',
+            '合 計',
+            '¥844',
+            '(10%対象',
+            '¥515)',
+            '( 8%対象',
+            '¥329)',
+            '(内消費税等',
+            '¥70)',
+            'お 預 り',
+            '¥1,044',
+            'お',
+            '釣',
+            '¥200'
+          ],
+          candidates: {
+            store_name: '中央南三丁目店',
+            total_amount: 844,
+            tax_amount: 70,
+            country_region: 'JPN',
+            payment_method_text: '現金',
+            items: [
+              { raw_text: '商品A', price: 151, quantity: 1, line_total: 151, confidence: 0.95 },
+              { raw_text: '商品B', price: 178, quantity: 1, line_total: 178, confidence: 0.95 },
+              { raw_text: '商品C', price: 155, quantity: 1, line_total: 155, confidence: 0.95 },
+              { raw_text: '商品D', price: 360, quantity: 1, line_total: 360, confidence: 0.95 }
+            ],
+            payments: [],
+            tax_details: [
+              { description: '内消費税等', amount: 70 }
+            ]
+          },
+          meta: {
+            confidence_summary: {
+              overall: 0.95,
+              items_average: 0.95
+            }
+          }
+        }
+        ai_result = {
+          success: true,
+          needs_review: false,
+          receipt_attributes: {
+            store_name: '中央南三丁目店',
+            payment_method: 'cash'
+          },
+          receipt_items_attributes: [
+            { index: 0, suggested_name: '商品A', category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 1, suggested_name: '商品B', category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 2, suggested_name: '商品C', category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 3, suggested_name: '商品D', category: 'food', tax_rate: 0.08, needs_review: false }
+          ]
+        }
+        captured_amount_result = nil
+
+        allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+          captured_amount_result = original.call(**kwargs)
+        end
+
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(
+            :ai_success,
+            ocr_result: ocr_result,
+            ai_result: ai_result
+          )
+        )
+
+        receipt.reload
+
+        aggregate_failures("run #{_1 + 1}") do
+          # 検算: 151 + 178 = 329(8%), floor(329 * 8 / 108) = 24, net 305。
+          # 検算: 155 + 360 = 515(10%), floor(515 * 10 / 110) = 46, net 469。
+          # 検算: subtotal 305 + 469 = 774, tax 24 + 46 = 70, total 844。
+          # 検算: お預り1,044 - お釣り200 = 現金支払844。
+          expect(receipt.store_name).to eq('SampleMart 中央南三丁目店')
+          expect(receipt.status).to eq('completed')
+          expect(receipt.review_reasons).to be_blank
+          expect(receipt.subtotal_amount).to eq(774)
+          expect(receipt.tax_amount).to eq(70)
+          expect(receipt.total_amount).to eq(844)
+          expect(receipt.tax_rate).to be_nil
+          expect(receipt.receipt_items.pluck(:suggested_name, :line_total, :tax_rate)).to eq([
+            [ '商品A', 151, BigDecimal('0.08') ],
+            [ '商品B', 178, BigDecimal('0.08') ],
+            [ '商品C', 155, BigDecimal('0.1') ],
+            [ '商品D', 360, BigDecimal('0.1') ]
+          ])
+          expect(receipt.receipt_tax_details.pluck(:description, :net_amount, :amount, :rate)).to contain_exactly(
+            [ '8%対象', 305, 24, BigDecimal('0.08') ],
+            [ '10%対象', 469, 46, BigDecimal('0.1') ]
+          )
+          expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+            [ 'cash', 844 ]
+          ])
+          expect(captured_amount_result[:needs_review]).to be(false)
+          expect(captured_amount_result[:warning_inconsistencies]).to be_empty
+          expect(captured_amount_result[:mismatch_codes]).to be_empty
+        end
+      end
+    end
+
     it '1画像内の複数レシート疑いはblocking review reasonとしてreview_neededにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('multi_receipts_in_one_image')

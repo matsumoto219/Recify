@@ -537,6 +537,132 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'OCR行の軽減税率markerと税率別対象額が一致する場合だけ複数明細の税率を補正する' do
+        mixed_script_receipt = {
+          candidates: {
+            store_name: '中央南三丁目店',
+            total_amount: 844,
+            tax_amount: 70,
+            country_region: 'JPN',
+            payment_method_text: '現金',
+            items: [
+              { raw_text: '商品A', price: 151, quantity: 1, line_total: 151, confidence: 0.95 },
+              { raw_text: '商品B', price: 178, quantity: 1, line_total: 178, confidence: 0.95 },
+              { raw_text: '商品C', price: 155, quantity: 1, line_total: 155, confidence: 0.95 },
+              { raw_text: '商品D', price: 360, quantity: 1, line_total: 360, confidence: 0.95 }
+            ],
+            payments: [],
+            tax_details: [
+              { description: '内消費税等', amount: 70 }
+            ]
+          },
+          lines: [
+            'SampleMart',
+            '中央南三丁目店',
+            '商品A',
+            '領',
+            '収',
+            '証',
+            '¥151軽',
+            '商品B',
+            '¥178軽',
+            '商品C',
+            '¥155',
+            '商品D',
+            '¥360',
+            '合 計',
+            '¥844',
+            '(10%対象',
+            '¥515)',
+            '( 8%対象',
+            '¥329)',
+            '(内消費税等',
+            '¥70)',
+            'お 預 り',
+            '¥1,044',
+            'お',
+            '釣',
+            '¥200'
+          ]
+        }
+        ai_result = {
+          receipt_attributes: {
+            store_name: '中央南三丁目店',
+            payment_method: 'cash'
+          },
+          receipt_items_attributes: [
+            { index: 0, category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 1, category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 2, category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 3, category: 'food', tax_rate: 0.08, needs_review: false }
+          ]
+        }
+
+        params = described_class.call(ocr_result: mixed_script_receipt, ai_result: ai_result)
+
+        aggregate_failures do
+          # 検算: 151 + 178 = 329(8%対象), floor(329 * 8 / 108) = 24, net = 305。
+          # 検算: 155 + 360 = 515(10%対象), floor(515 * 10 / 110) = 46, net = 469。
+          # 検算: 税込合計 329 + 515 = 844, 税額 24 + 46 = 70, お預り1044 - お釣り200 = 現金844。
+          expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 中央南三丁目店')
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total, :tax_rate)).to eq([
+            [ '商品A', 151, BigDecimal('0.08') ],
+            [ '商品B', 178, BigDecimal('0.08') ],
+            [ '商品C', 155, BigDecimal('0.1') ],
+            [ '商品D', 360, BigDecimal('0.1') ]
+          ])
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+            include(description: '8%対象', rate: BigDecimal('0.08'), net_amount: 305, amount: 24),
+            include(description: '10%対象', rate: BigDecimal('0.1'), net_amount: 469, amount: 46)
+          )
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'cash', amount: 844)
+          )
+          expect(params[:tax_rate_correction]).to include(
+            reason: 'tax_marker_group_amount_match',
+            source: 'printed_tax_detail',
+            item_count: 2
+          )
+        end
+      end
+
+      it '軽減税率markerの明細合計が税率別対象額に一致しない場合は複数明細の税率を補正しない' do
+        mismatched_marker_receipt = {
+          candidates: {
+            store_name: 'Sample Store',
+            total_amount: 844,
+            tax_amount: 70,
+            items: [
+              { raw_text: '商品A', line_total: 151 },
+              { raw_text: '商品B', line_total: 178 },
+              { raw_text: '商品C', line_total: 155 },
+              { raw_text: '商品D', line_total: 360 }
+            ],
+            tax_details: [
+              { description: '8%対象', rate: 8, net_amount: 306, amount: 24 },
+              { description: '10%対象', rate: 10, net_amount: 468, amount: 46 }
+            ]
+          },
+          lines: [
+            '商品A',
+            '¥151軽',
+            '商品B',
+            '¥178',
+            '商品C',
+            '¥155',
+            '商品D',
+            '¥360'
+          ]
+        }
+
+        params = described_class.call(ocr_result: mismatched_marker_receipt, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(be_nil)
+          expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
       it '海外風VAT summaryでも税率別対象額と明細額の一致を優先する' do
         vat_ocr_result = {
           candidates: {
