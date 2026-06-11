@@ -2408,6 +2408,53 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'ocr_only decisionではitem_sum drift検出を発火させない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        raw_text: "サンプル外税店\n先頭商品 ¥17\n別商品 ¥822\n外8%対象 ¥1,000\n外税 ¥80\n合計 ¥1,080\n現金 ¥1,080",
+        lines: [
+          'サンプル外税店',
+          '先頭商品 ¥17',
+          '別商品 ¥822',
+          '外8%対象 ¥1,000',
+          '外税 ¥80',
+          '合計 ¥1,080',
+          '現金 ¥1,080'
+        ],
+        candidates: {
+          store_name: 'サンプル外税店',
+          subtotal_amount: 1_000,
+          tax_amount: 80,
+          total_amount: 1_080,
+          payment_method_text: '現金',
+          items: [
+            { raw_text: '先頭商品', price: 17, quantity: 1, line_total: 17, tax_rate: 8, confidence: 0.95 },
+            { raw_text: '別商品', price: 822, quantity: 1, line_total: 822, tax_rate: 8, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'Cash', amount: 1_080 }
+          ],
+          tax_details: [
+            { description: '外8%対象', rate: 8, net_amount: 1_000, amount: 80 }
+          ]
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).not_to include('item_total_mismatch')
+        expect(receipt.subtotal_amount).to eq(1_000)
+        expect(receipt.tax_amount).to eq(80)
+        expect(receipt.total_amount).to eq(1_080)
+        expect(receipt.receipt_items.sum(:line_total)).to eq(839)
+      end
+    end
+
     it '画像保持OFFのocr_only完了後にpurge候補化する' do
       receipt = create(:receipt, :processing, :with_image, keep_image: false)
       allow(ReceiptAmountService).to receive(:call).and_return(
@@ -2577,6 +2624,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_amount).to eq(116)
         expect(receipt.review_reasons).to be_blank
         expect(items.size).to eq(2)
+        expect(items.sum(&:line_total)).to eq(receipt.total_amount)
         expect(items.first.raw_text).to eq('コーヒー')
         expect(items.second.quantity).to eq(BigDecimal('2'))
         expect(receipt.receipt_tax_details.size).to eq(1)
@@ -3704,6 +3752,128 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '最終保存店舗名がOCR根拠のあるclean名ならAIのstore_name_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "毎日ちょうどいい価格\nプロ品質マーケット 松風店\n商品A ¥500\n合計 ¥500\n電子マネー ¥500",
+        lines: [
+          '毎日ちょうどいい価格',
+          'プロ品質マーケット 松風店',
+          '商品A ¥500',
+          '合計 ¥500',
+          '電子マネー ¥500'
+        ],
+        candidates: {
+          store_name: '毎日ちょうどいい価格 005905松風店',
+          total_amount: 500,
+          country_region: 'JPN',
+          payment_method_text: '電子マネー',
+          items: [
+            { raw_text: '商品A', price: 500, quantity: 1, line_total: 500, confidence: 0.95 }
+          ],
+          payments: [
+            { method: '電子マネー', amount: 500 }
+          ],
+          tax_details: []
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'store_name_uncertain' ],
+        receipt_attributes: {
+          store_name: 'プロ品質マーケット 松風店',
+          payment_method: 'e_money'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品A', category: 'food', needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.store_name).to eq('プロ品質マーケット 松風店')
+        expect(receipt.review_reasons).not_to include('store_name_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it '最終保存店舗名が法人名の場合はAIのstore_name_uncertainを残す' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "株式会社サンプル食堂\n商品A ¥500\n合計 ¥500\n現金 ¥500",
+        lines: [
+          '株式会社サンプル食堂',
+          '商品A ¥500',
+          '合計 ¥500',
+          '現金 ¥500'
+        ],
+        candidates: {
+          store_name: '株式会社サンプル食堂',
+          total_amount: 500,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            { raw_text: '商品A', price: 500, quantity: 1, line_total: 500, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'Cash', amount: 500 }
+          ],
+          tax_details: []
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'store_name_uncertain' ],
+        receipt_attributes: {
+          store_name: '株式会社サンプル食堂',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品A', category: 'food', needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.store_name).to eq('株式会社サンプル食堂')
+        expect(receipt.review_reasons).to include('store_name_uncertain')
+      end
+    end
+
     it '1画像内の複数レシート疑いはblocking review reasonとしてreview_neededにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('multi_receipts_in_one_image')
@@ -3752,6 +3922,239 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(amount[:needs_review]).to be(false)
         expect(amount[:mismatch_codes]).to be_empty
         expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
+      end
+    end
+
+    it 'AI item税率が8%でも単一10%対象計と内税額が明細合計に一致すれば印字税情報で補正する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "サンプルリア みどりモール店\n海星サラダ ¥350\nピリカラチキン ¥300\n合計 ¥3,130\n10%対象計 ¥3,130\n(内税額 ¥284)\nクレジット ¥3,130",
+        lines: [
+          '架空ワイン&カフェレストラン',
+          'サンプルリア みどりモール店',
+          '04629 海星サラダ',
+          '¥350',
+          '04352 ピリカラチキン',
+          '¥300',
+          '04728 香草チキンの前菜',
+          '¥280',
+          '02631 青空ドリア',
+          '¥300',
+          '04887 ガーリックパスタ',
+          '¥300',
+          '04949 黒ソースパスタ',
+          '¥500',
+          '04868 きのこ野菜ピザ',
+          '¥400',
+          '04901 グリルプレート',
+          '¥400',
+          '01311 赤ぶどうドリンク',
+          '¥100',
+          '02554 セットドリンク200',
+          '¥200',
+          '小計',
+          '¥3,130',
+          '合計',
+          '¥3,130',
+          '10%対象計',
+          '¥3,130',
+          '(内税額',
+          '¥284)',
+          'クレジット',
+          '¥3,130'
+        ],
+        candidates: {
+          store_name: 'サンプルリア',
+          total_amount: 3_130,
+          tax_amount: 284,
+          country_region: 'JPN',
+          payment_method_text: 'クレジット',
+          items: [
+            { raw_text: '海星サラダ', line_total: 350, confidence: 0.979 },
+            { raw_text: 'ピリカラチキン', line_total: 300, confidence: 0.981 },
+            { raw_text: '香草チキンの前菜', line_total: 280, confidence: 0.981 },
+            { raw_text: '青空ドリア', line_total: 300, confidence: 0.982 },
+            { raw_text: 'ガーリックパスタ', line_total: 300, confidence: 0.976 },
+            { raw_text: '黒ソースパスタ', line_total: 500, confidence: 0.94 },
+            { raw_text: 'きのこ野菜ピザ', line_total: 400, confidence: 0.979 },
+            { raw_text: 'グリルプレート', line_total: 400, confidence: 0.979 },
+            { raw_text: '赤ぶどうドリンク', line_total: 100, confidence: 0.982 },
+            { raw_text: 'セットドリンク200', line_total: 200, confidence: 0.978 }
+          ],
+          payments: [],
+          tax_details: [
+            { description: '内税額', amount: 284 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.98,
+            items_average: 0.976
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプルリア',
+          payment_method: 'credit_card'
+        },
+        receipt_items_attributes: Array.new(10) do |index|
+          { index: index, category: 'food', tax_rate: 0.08, needs_review: false }
+        end
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+      tax_detail = receipt.receipt_tax_details.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.store_name).to eq('サンプルリア みどりモール店')
+        expect(receipt.subtotal_amount).to eq(2_846)
+        expect(receipt.tax_amount).to eq(284)
+        expect(receipt.total_amount).to eq(3_130)
+        expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([ [ 'クレジット', 3_130 ] ])
+        expect(receipt.receipt_items.count).to eq(10)
+        expect(receipt.receipt_items.pluck(:tax_rate)).to all(eq(BigDecimal('0.1')))
+        expect(tax_detail.rate).to eq(BigDecimal('0.1'))
+        expect(tax_detail.net_amount).to eq(2_846)
+        expect(tax_detail.amount).to eq(284)
+        expect(tax_detail.net_amount + tax_detail.amount).to eq(3_130)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to be_in(
+          [
+            'items_as_tax_included/floor/per_receipt',
+            'printed_tax_details_net/floor',
+            'printed_tax_details_gross/floor'
+          ]
+        )
+      end
+    end
+
+    it 'AI成功かつ印字tax details採用時にitem_sumが会計候補すべてとズレればitem_total_mismatchを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        raw_text: "サンプル外税マート 松風店\n先頭商品 ¥17\nその他商品 ¥7,076\n外8%対象 ¥7,254\n外税 ¥580\n合計 ¥7,834\n電子マネー ¥7,834",
+        lines: [
+          'サンプル外税マート 松風店',
+          '先頭商品 ¥17',
+          'その他商品 ¥7,076',
+          '外8%対象 ¥7,254',
+          '外税 ¥580',
+          '合計 ¥7,834',
+          '電子マネー ¥7,834'
+        ],
+        candidates: {
+          store_name: 'サンプル外税マート 松風店',
+          subtotal_amount: 7_254,
+          tax_amount: 580,
+          total_amount: 7_834,
+          payment_method_text: '電子マネー',
+          items: [
+            { raw_text: '先頭商品', price: 17, quantity: 1, line_total: 17, tax_rate: 8, confidence: 0.95 },
+            { raw_text: 'その他商品', price: 7_076, quantity: 1, line_total: 7_076, tax_rate: 8, confidence: 0.95 }
+          ],
+          payments: [
+            { method: '電子マネー', amount: 7_834 }
+          ],
+          tax_details: [
+            { description: '外8%対象', rate: 8, net_amount: 7_254, amount: 580 }
+          ]
+        }
+      )
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプル外税マート 松風店',
+          payment_method: 'e_money'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '先頭商品', category: 'food', needs_review: false },
+          { index: 1, suggested_name: 'その他商品', category: 'food', needs_review: false }
+        ]
+      }
+      captured_amount_result = nil
+
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_amount_result = original.call(**kwargs)
+      end
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('item_total_mismatch')
+        expect(receipt.store_name).to eq('サンプル外税マート 松風店')
+        expect(receipt.subtotal_amount).to eq(7_254)
+        expect(receipt.tax_amount).to eq(580)
+        expect(receipt.total_amount).to eq(7_834)
+        expect(receipt.payment_method).to eq('e_money')
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([ [ '電子マネー', 7_834 ] ])
+        expect(receipt.receipt_items.sum(:line_total)).to eq(7_093)
+        expect(captured_amount_result[:blocking_inconsistencies]).to be_empty
+        expect(captured_amount_result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+      end
+    end
+
+    it 'AI成功でも税込明細合計がtotalと一致する正常ケースではitem_total_mismatchを出さない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプルストア',
+          payment_method: 'credit_card'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'コーヒー', category: 'drink', needs_review: false },
+          { index: 1, suggested_name: 'サンド', category: 'food', needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.subtotal_amount).to eq(1_164)
+        expect(receipt.tax_amount).to eq(116)
+        expect(receipt.total_amount).to eq(1_280)
+        expect(receipt.receipt_items.sum(:line_total)).to eq(1_280)
       end
     end
 

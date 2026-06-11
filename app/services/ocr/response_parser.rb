@@ -1225,7 +1225,8 @@ class Ocr::ResponseParser
     return [] unless total_amount&.positive? && tax_amount&.positive?
 
     targets = tax_rate_targets_from_lines(lines)
-    return [] unless targets.size >= 2
+    return [] if targets.blank?
+    return [] if targets.one? && !single_rate_target_recovery_allowed?(details)
     return [] unless targets.sum { |target| target[:gross_amount] } == total_amount
 
     inferred = targets.map do |target|
@@ -1243,6 +1244,12 @@ class Ocr::ResponseParser
     return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == tax_amount
 
     inferred
+  end
+
+  def single_rate_target_recovery_allowed?(details)
+    Array(details).none? do |detail|
+      normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))&.positive?
+    end
   end
 
   def extract_field_amount(fields, field_name)

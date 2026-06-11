@@ -412,6 +412,7 @@ module Analysis
             fallback_items
           end
         end
+        source_items = repair_amount_only_split_items(source_items, lines)
 
         ai_items_present = normalized_ai_items.present?
         # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit は編集/表示で利用する。
@@ -921,7 +922,7 @@ module Analysis
       def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)
         return tax_details if complete_multi_rate_tax_details?(tax_details)
 
-        inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes)
+        inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         return tax_details if inferred_tax_details.blank?
 
         inferred_tax_details
@@ -932,13 +933,14 @@ module Analysis
         details.map { |tax_detail| tax_detail[:rate] }.uniq.size > 1
       end
 
-      def tax_details_from_rate_targets(lines, receipt_attributes)
+      def tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         receipt_total = normalize_amount(receipt_attributes[:total_amount])&.to_i
         receipt_tax = normalize_amount(receipt_attributes[:tax_amount])&.to_i
         return [] unless receipt_total&.positive? && receipt_tax&.positive?
 
         targets = tax_rate_targets_from_lines(lines)
-        return [] unless targets.size >= 2
+        return [] if targets.blank?
+        return [] if targets.one? && !single_rate_target_recovery_allowed?(tax_details)
 
         target_sum = targets.sum { |target| target[:gross_amount] }
         return [] unless target_sum == receipt_total
@@ -958,6 +960,12 @@ module Analysis
         return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == receipt_tax
 
         inferred
+      end
+
+      def single_rate_target_recovery_allowed?(tax_details)
+        Array(tax_details).none? do |tax_detail|
+          normalize_rate(tax_detail[:rate])&.positive?
+        end
       end
 
       def tax_rate_targets_from_lines(lines)
@@ -1002,7 +1010,7 @@ module Analysis
         return unless items.present?
 
         override_rate = single_tax_detail_rate_covering_total(tax_details, receipt_attributes)
-        if override_rate
+        if override_rate && single_tax_detail_matches_taxable_total?(items, adjustments, tax_details, receipt_attributes)
           changed_item_count = apply_tax_rate_to_items(items, override_rate)
           changed_adjustment_count = apply_tax_rate_to_taxable_adjustments(adjustments, override_rate)
 
@@ -1233,6 +1241,51 @@ module Analysis
         nil
       end
 
+      def single_tax_detail_matches_taxable_total?(items, adjustments, tax_details, receipt_attributes)
+        total_amount = normalize_amount(receipt_attributes[:total_amount])&.to_i
+        return false unless total_amount&.positive?
+
+        usable_tax_details = Array(tax_details).filter_map do |tax_detail|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])
+          next unless rate&.positive?
+          next unless amount&.positive?
+
+          {
+            rate: rate,
+            amount: amount,
+            net_amount: normalize_amount(tax_detail[:net_amount])
+          }
+        end
+        return false unless usable_tax_details.one?
+
+        target_total = single_tax_detail_gross_target_amount(usable_tax_details.first, total_amount)
+        return false unless target_total&.positive?
+
+        taxable_entry_total(items, adjustments) == target_total
+      end
+
+      def single_tax_detail_gross_target_amount(tax_detail, total_amount)
+        amount = tax_detail[:amount]
+        net_amount = tax_detail[:net_amount]
+        total = total_amount.to_i
+
+        return net_amount.to_i + amount.to_i if net_amount&.positive? && (net_amount.to_i + amount.to_i == total)
+        return net_amount.to_i if net_amount&.positive? && net_amount.to_i == total && tax_amount_matches_inclusive_total?(total_amount, amount, tax_detail[:rate])
+        return total if tax_amount_matches_inclusive_total?(total_amount, amount, tax_detail[:rate])
+
+        nil
+      end
+
+      def taxable_entry_total(items, adjustments)
+        item_amount_sum(items) + Array(adjustments).sum do |adjustment|
+          next 0 unless taxable_adjustment?(adjustment)
+
+          amount = normalize_amount(adjustment[:amount]).to_i
+          adjustment[:sign].to_s == "discount" ? -amount : amount
+        end
+      end
+
       def tax_detail_covers_total_amount?(tax_detail, total_amount)
         amount = tax_detail[:amount]
         net_amount = tax_detail[:net_amount]
@@ -1308,6 +1361,157 @@ module Analysis
           item_hash = item.is_a?(Hash) ? item : item.to_h
           item_hash.with_indifferent_access
         end
+      end
+
+      def repair_amount_only_split_items(items, lines)
+        source_items = Array(items)
+        return source_items if source_items.size < 2
+
+        repaired_items = []
+        index = 0
+        while index < source_items.size
+          current_item = normalized_item_hash(source_items[index])
+          following_item = normalized_item_hash(source_items[index + 1])
+          amount = amount_only_split_item_amount(current_item)
+
+          if amount.present? &&
+              name_only_split_item?(following_item) &&
+              item_name_amount_supported_by_lines?(split_item_name(following_item), amount, lines)
+            repaired_items << merge_amount_only_split_items(current_item, following_item, amount)
+            index += 2
+          else
+            repaired_items << source_items[index]
+            index += 1
+          end
+        end
+
+        repaired_items
+      end
+
+      def normalized_item_hash(item)
+        if item.respond_to?(:with_indifferent_access)
+          item.with_indifferent_access
+        elsif item.respond_to?(:deep_symbolize_keys)
+          item.deep_symbolize_keys.with_indifferent_access
+        elsif item.respond_to?(:to_h)
+          item.to_h.with_indifferent_access
+        else
+          {}.with_indifferent_access
+        end
+      end
+
+      def amount_only_split_item_amount(item)
+        amount = amount_only_text_amount(split_item_name(item))
+        return nil unless amount&.positive?
+
+        amount_values_for_split(item, keys: %i[price line_total]).include?(amount) ? amount : nil
+      end
+
+      def name_only_split_item?(item)
+        name = split_item_name(item)
+        return false if name.blank?
+        return false if amount_only_text_amount(name).present?
+
+        amount_values = amount_values_for_split(item)
+        amount_values.blank? || amount_values.all?(&:zero?)
+      end
+
+      def split_item_name(item)
+        item[:suggested_name].presence || item[:confirmed_name].presence || item[:raw_text].to_s.presence
+      end
+
+      def amount_values_for_split(item, keys: %i[price line_total original_line_total])
+        keys.filter_map do |key|
+          normalize_amount(item[key])&.to_i
+        end
+      end
+
+      def amount_only_text_amount(text)
+        source = text.to_s.strip
+        return nil if source.blank?
+        return nil unless amount_only_text?(source)
+
+        amounts = positive_amounts_from_text(source).uniq
+        amounts.one? ? amounts.first : nil
+      end
+
+      def amount_only_text?(text)
+        source = text.to_s.unicode_normalize(:nfkc).strip
+        return false unless source.match?(/[¥￥円\d]/)
+
+        remainder = source.gsub(FALLBACK_AMOUNT_CANDIDATE_PATTERN, "")
+        remainder = remainder.gsub(/[¥￥円,，\s　:：*＊\-−+＋().（）\[\]【】]/, "")
+        remainder.blank?
+      end
+
+      def item_name_amount_supported_by_lines?(name, amount, lines)
+        name_compact = compact_item_text(name)
+        return false if name_compact.blank?
+
+        Array(lines).each_with_index.any? do |line, index|
+          line_compact = compact_item_text(line)
+          next false if line_compact.blank?
+
+          if line_compact.include?(name_compact) && positive_amounts_from_text(line).include?(amount.to_i)
+            next true
+          end
+
+          next false unless line_compact.include?(name_compact)
+
+          adjacent_amount_line_supported?(lines, index, amount)
+        end
+      end
+
+      def adjacent_amount_line_supported?(lines, index, amount)
+        [ index - 1, index + 1 ].any? do |candidate_index|
+          next false if candidate_index.negative?
+
+          line = Array(lines)[candidate_index]
+          next false if line.blank?
+          next false unless amount_only_text?(line)
+
+          positive_amounts_from_text(line).include?(amount.to_i)
+        end
+      end
+
+      def merge_amount_only_split_items(amount_item, name_item, amount)
+        amount_line_total = normalize_amount(amount_item[:line_total]) || amount
+        amount_price = normalize_amount(amount_item[:price]) || amount_line_total
+        amount_original_line_total = normalize_amount(amount_item[:original_line_total]) || amount_line_total
+        review_reasons = merged_split_item_review_reasons(amount_item, name_item)
+        confidence = [
+          normalize_confidence(amount_item[:confidence]),
+          normalize_confidence(name_item[:confidence])
+        ].compact.min
+
+        amount_item.merge(name_item.compact).merge(
+          raw_text: split_item_name(name_item),
+          suggested_name: split_item_name(name_item),
+          price: amount_price,
+          original_line_total: amount_original_line_total,
+          line_total: amount_line_total,
+          discount_amount: normalize_amount(amount_item[:discount_amount]),
+          discount_rate: amount_item[:discount_rate],
+          quantity: name_item[:quantity].presence || amount_item[:quantity],
+          quantity_unit: name_item[:quantity_unit].presence || amount_item[:quantity_unit],
+          product_code: name_item[:product_code].presence || amount_item[:product_code],
+          tax_rate: name_item[:tax_rate].presence || amount_item[:tax_rate],
+          tax_rate_confidence: name_item[:tax_rate_confidence].presence || amount_item[:tax_rate_confidence],
+          tax_rate_reason: name_item[:tax_rate_reason].presence || amount_item[:tax_rate_reason],
+          position_index: amount_item[:position_index] || amount_item[:index] || name_item[:position_index] || name_item[:index],
+          index: amount_item[:index] || amount_item[:position_index] || name_item[:index] || name_item[:position_index],
+          confidence: confidence,
+          needs_review: review_reasons.present?,
+          review_reasons: review_reasons
+        ).compact
+      end
+
+      def merged_split_item_review_reasons(amount_item, name_item)
+        (
+          normalize_review_reasons(amount_item[:review_reasons]) -
+            [ "item_name_uncertain" ] +
+          normalize_review_reasons(name_item[:review_reasons])
+        ).uniq
       end
 
       def negative_item_amount?(price:, original_line_total:, line_total:)

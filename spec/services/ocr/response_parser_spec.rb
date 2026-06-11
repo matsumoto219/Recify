@@ -630,6 +630,49 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '単一税率でも対象計と内税額が合計に一致する場合はTaxDetailsを復元する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプルリア
+        みどりモール店
+        海星サラダ
+        ¥350
+        ピリカラチキン
+        ¥300
+        合計
+        ¥3,130
+        10%対象計
+        ¥3,130
+        (内税額
+        ¥284)
+        クレジット
+        ¥3,130
+      TEXT
+      fields = response['analyzeResult']['documents'].first['fields']
+      fields['MerchantName'] = { 'valueString' => 'サンプルリア' }
+      fields['Total'] = { 'valueCurrency' => { 'amount' => 3130, 'currencyCode' => 'JPY' } }
+      fields['Subtotal'] = nil
+      fields['TotalTax'] = { 'valueCurrency' => { 'amount' => 284, 'currencyCode' => 'JPY' } }
+      fields['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '内税額' },
+              'Amount' => { 'valueCurrency' => { 'amount' => 284, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :tax_details)).to contain_exactly(
+          hash_including(description: '10%対象', rate: 0.1, net_amount: 2846, amount: 284)
+        )
+      end
+    end
+
     it 'TaxDetails descriptionが汎用語でも周辺OCR行から税抜小計/税込対象の文脈を保持する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

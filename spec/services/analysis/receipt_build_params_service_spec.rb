@@ -122,6 +122,90 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'OCR行に商品名と金額の根拠があるamount-only itemを後続name-only itemへ統合する' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: '¥275',
+            price: 275,
+            line_total: 275,
+            confidence: 0.59
+          },
+          {
+            raw_text: 'Sample Kimchi Special',
+            price: nil,
+            line_total: 0,
+            confidence: 0.93
+          }
+        ]
+        ocr_result[:lines] = [
+          'Sample Store',
+          'Sample Kimchi Special ¥275'
+        ]
+        ai_result = {
+          receipt_items_attributes: [
+            {
+              index: 0,
+              suggested_name: '¥275',
+              needs_review: true,
+              review_reasons: [ 'item_name_uncertain' ]
+            },
+            {
+              index: 1,
+              suggested_name: 'Sample Kimchi Special',
+              needs_review: false,
+              review_reasons: []
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.size).to eq(1)
+          expect(items.first[:raw_text]).to eq('Sample Kimchi Special')
+          expect(items.first[:suggested_name]).to eq('Sample Kimchi Special')
+          expect(items.first[:price]).to eq(275)
+          expect(items.first[:original_line_total]).to eq(275)
+          expect(items.first[:line_total]).to eq(275)
+          expect(items.first[:needs_review]).to be(false)
+          expect(items.first[:review_reasons]).to be_empty
+          expect(items.first[:confidence]).to eq(BigDecimal('0.59'))
+        end
+      end
+
+      it 'OCR根拠がないamount-only itemは後続name-only itemへ統合しない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: '¥275',
+            price: 275,
+            line_total: 275,
+            confidence: 0.59
+          },
+          {
+            raw_text: 'Sample Kimchi Special',
+            price: nil,
+            line_total: nil,
+            confidence: 0.93
+          }
+        ]
+        ocr_result[:lines] = [
+          'Sample Store',
+          'Another Item ¥275'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.size).to eq(2)
+          expect(items.first[:raw_text]).to eq('¥275')
+          expect(items.first[:line_total]).to eq(275)
+          expect(items.second[:raw_text]).to eq('Sample Kimchi Special')
+          expect(items.second[:line_total]).to be_nil
+        end
+      end
+
       it '小数quantityとquantity_unitを保持する' do
         ocr_result[:candidates][:items].first[:quantity] = 0.3
         ocr_result[:candidates][:items].first[:quantity_unit] = 'kg'
@@ -804,6 +888,157 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(items.first[:tax_rate]).to eq(BigDecimal('0.08'))
           expect(items.second[:tax_rate]).to be_nil
+        end
+      end
+
+      it '単一税率の対象計と内税額が明細合計に一致する場合はAI item税率を印字税率へ補正する' do
+        sample_dining_ocr_result = {
+          candidates: {
+            store_name: 'サンプルリア',
+            total_amount: 3_130,
+            tax_amount: 284,
+            country_region: 'JPN',
+            payment_method_text: 'クレジット',
+            items: [
+              { raw_text: '海星サラダ', line_total: 350, confidence: 0.979 },
+              { raw_text: 'ピリカラチキン', line_total: 300, confidence: 0.981 },
+              { raw_text: '香草チキンの前菜', line_total: 280, confidence: 0.981 },
+              { raw_text: '青空ドリア', line_total: 300, confidence: 0.982 },
+              { raw_text: 'ガーリックパスタ', line_total: 300, confidence: 0.976 },
+              { raw_text: '黒ソースパスタ', line_total: 500, confidence: 0.94 },
+              { raw_text: 'きのこ野菜ピザ', line_total: 400, confidence: 0.979 },
+              { raw_text: 'グリルプレート', line_total: 400, confidence: 0.979 },
+              { raw_text: '赤ぶどうドリンク', line_total: 100, confidence: 0.982 },
+              { raw_text: 'セットドリンク200', line_total: 200, confidence: 0.978 }
+            ],
+            tax_details: [
+              { description: '内税額', amount: 284 }
+            ]
+          },
+          lines: [
+            'サンプルリア',
+            'みどりモール店',
+            '小計',
+            '¥3,130',
+            '合計',
+            '¥3,130',
+            '10%対象計',
+            '¥3,130',
+            '(内税額',
+            '¥284)',
+            'クレジット',
+            '¥3,130'
+          ]
+        }
+        ai_result = {
+          receipt_items_attributes: Array.new(10) do |index|
+            { index: index, category: 'food', tax_rate: 0.08, needs_review: false }
+          end
+        }
+
+        params = described_class.call(ocr_result: sample_dining_ocr_result, ai_result: ai_result)
+        tax_detail = params[:receipt_tax_details_attributes].first
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(eq(BigDecimal('0.1')))
+          expect(tax_detail).to include(
+            description: '10%対象',
+            rate: BigDecimal('0.1'),
+            net_amount: 2_846,
+            amount: 284
+          )
+          expect(params[:tax_rate_correction]).to include(
+            reason: 'single_tax_detail_total_matches_receipt_total',
+            source: 'printed_tax_detail',
+            rate: '0.1',
+            item_count: 10
+          )
+        end
+      end
+
+      it 'AI item税率が既に印字税率と一致する場合も単一税率の対象計からTaxDetailsを復元する' do
+        sample_dining_ocr_result = {
+          candidates: {
+            store_name: 'サンプルリア',
+            total_amount: 3_130,
+            tax_amount: 284,
+            country_region: 'JPN',
+            items: [
+              { raw_text: '海星サラダ', line_total: 350, confidence: 0.979 },
+              { raw_text: 'ピリカラチキン', line_total: 300, confidence: 0.981 },
+              { raw_text: '香草チキンの前菜', line_total: 280, confidence: 0.981 },
+              { raw_text: '青空ドリア', line_total: 300, confidence: 0.982 },
+              { raw_text: 'ガーリックパスタ', line_total: 300, confidence: 0.976 },
+              { raw_text: '黒ソースパスタ', line_total: 500, confidence: 0.94 },
+              { raw_text: 'きのこ野菜ピザ', line_total: 400, confidence: 0.979 },
+              { raw_text: 'グリルプレート', line_total: 400, confidence: 0.979 },
+              { raw_text: '赤ぶどうドリンク', line_total: 100, confidence: 0.982 },
+              { raw_text: 'セットドリンク200', line_total: 200, confidence: 0.978 }
+            ],
+            tax_details: [
+              { description: '内税額', amount: 284 }
+            ]
+          },
+          lines: [
+            '10%対象計',
+            '¥3,130',
+            '(内税額',
+            '¥284)'
+          ]
+        }
+        ai_result = {
+          receipt_items_attributes: Array.new(10) do |index|
+            { index: index, category: 'food', tax_rate: 0.1, needs_review: false }
+          end
+        }
+
+        params = described_class.call(ocr_result: sample_dining_ocr_result, ai_result: ai_result)
+        tax_detail = params[:receipt_tax_details_attributes].first
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(eq(BigDecimal('0.1')))
+          expect(tax_detail).to include(rate: BigDecimal('0.1'), net_amount: 2_846, amount: 284)
+          expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
+      it '単一税率の対象計が明細合計に一致しない場合はAI item税率を自動補正しない' do
+        mismatched_items_ocr_result = {
+          candidates: {
+            store_name: 'サンプルリア',
+            total_amount: 3_130,
+            tax_amount: 284,
+            country_region: 'JPN',
+            items: [
+              { raw_text: '商品A', line_total: 1_000, confidence: 0.95 },
+              { raw_text: '商品B', line_total: 1_000, confidence: 0.95 },
+              { raw_text: '商品C', line_total: 1_000, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: '内税額', amount: 284 }
+            ]
+          },
+          lines: [
+            '10%対象計',
+            '¥3,130',
+            '(内税額',
+            '¥284)'
+          ]
+        }
+        ai_result = {
+          receipt_items_attributes: [
+            { index: 0, category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 1, category: 'food', tax_rate: 0.08, needs_review: false },
+            { index: 2, category: 'food', tax_rate: 0.08, needs_review: false }
+          ]
+        }
+
+        params = described_class.call(ocr_result: mismatched_items_ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(eq(BigDecimal('0.08')))
+          expect(params[:receipt_tax_details_attributes].first).to include(rate: BigDecimal('0.1'), net_amount: 2_846, amount: 284)
+          expect(params[:tax_rate_correction]).to be_nil
         end
       end
 

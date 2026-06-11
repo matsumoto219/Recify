@@ -1,6 +1,19 @@
 class ReceiptAnalysisPipeline
   class FinalizeStep
     REVIEW_NEEDED_CONFIDENCE_THRESHOLD = Config::REVIEW_NEEDED_CONFIDENCE_THRESHOLD
+    ITEM_TOTAL_DRIFT_REVIEW_REASON = "item_total_mismatch"
+    ITEM_TOTAL_DRIFT_ABSOLUTE_THRESHOLD = 100
+    ITEM_TOTAL_DRIFT_RELATIVE_THRESHOLD = BigDecimal("0.01")
+    ITEM_TOTAL_DRIFT_SELECTED_BASES = %w[
+      printed_tax_details_net
+      printed_tax_details_gross
+      external_tax_from_receipt
+    ].freeze
+    ITEM_TOTAL_DRIFT_SUPPRESSION_REASONS = %w[
+      adjustment_uncertain
+      discount_data_incomplete
+      price_tax_inclusion_uncertain
+    ].freeze
 
     def self.call(receipt:, decision:, run: nil)
       new(receipt: receipt, decision: decision, run: run).call
@@ -145,12 +158,14 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
-      ai_review_reasons = resolved_ai_review_reasons(ai_result, params, amount_result)
+      ai_review_reasons = resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       ai_needs_review = ai_result[:needs_review] == true && ai_review_reasons.any?
+      item_drift_review_reasons = item_total_drift_review_reasons(params, amount_result, ai_result:)
 
       review_reasons = merge_review_reasons(
         ai_review_reasons,
         params[:review_reasons],
+        item_drift_review_reasons,
         amount_review_reasons(amount_result),
         ocr_review_reasons
       )
@@ -161,7 +176,7 @@ class ReceiptAnalysisPipeline
         items_attributes: params[:receipt_items_attributes],
         ai_needs_review: ai_needs_review,
         amount_needs_review: amount_result[:needs_review],
-        build_review_reasons: params[:review_reasons],
+        build_review_reasons: params[:review_reasons] + item_drift_review_reasons,
         ocr_review_reasons: ocr_review_reasons,
         ocr_low_quality: ocr_low_quality
       )
@@ -667,12 +682,141 @@ class ReceiptAnalysisPipeline
       (amount_reasons + Array(amount_result[:review_reasons])).uniq
     end
 
-    def resolved_ai_review_reasons(ai_result, params, amount_result)
+    def item_total_drift_review_reasons(params, amount_result, ai_result:)
+      return [] if Array(ai_result[:receipt_items_attributes]).blank?
+      return [] if Array(params[:receipt_items_attributes]).blank?
+      return [] unless item_total_drift_selected_basis?(amount_result)
+      return [] if item_total_drift_suppressed?(params, amount_result)
+
+      item_totals = item_total_drift_item_totals(params, amount_result)
+      comparison_totals = item_total_drift_comparison_totals(params, amount_result)
+      return [] if item_totals.blank? || comparison_totals.blank?
+      matches_existing_total = item_totals.any? do |item_total|
+        comparison_totals.any? { |comparison_total| item_total_drift_within_tolerance?(item_total, comparison_total) }
+      end
+      return [] if matches_existing_total
+
+      [ ITEM_TOTAL_DRIFT_REVIEW_REASON ]
+    end
+
+    def item_total_drift_selected_basis?(amount_result)
+      engine = normalized_hash(amount_result[:amount_engine])
+      selected_candidate = normalized_hash(engine[:selected_candidate])
+      basis = selected_candidate[:basis].presence || engine[:selected_basis].presence || engine[:selected_candidate_id].to_s.split("/").first
+
+      ITEM_TOTAL_DRIFT_SELECTED_BASES.include?(basis.to_s)
+    end
+
+    def item_total_drift_suppressed?(params, amount_result)
+      reasons = [
+        params[:review_reasons],
+        amount_result[:review_reasons],
+        amount_result[:inconsistencies],
+        amount_result[:blocking_inconsistencies],
+        amount_result[:warning_inconsistencies]
+      ].flatten.compact.map(&:to_s)
+
+      reasons.intersect?(ITEM_TOTAL_DRIFT_SUPPRESSION_REASONS)
+    end
+
+    def item_total_drift_item_totals(params, amount_result)
+      computed_items = Array(amount_result.dig(:computed, :items)).presence || Array(params[:receipt_items_attributes])
+      item_total = computed_items.sum do |item|
+        normalize_amount(normalized_hash(item)[:line_total])&.to_i || 0
+      end
+      adjusted_item_total = normalize_amount(amount_result.dig(:computed, :adjusted_item_total))&.to_i
+
+      [ item_total, adjusted_item_total ].compact.select(&:positive?).uniq
+    end
+
+    def item_total_drift_comparison_totals(params, amount_result)
+      resolved = normalized_hash(amount_result[:resolved])
+      tax_details = Array(amount_result[:tax_details]).presence || Array(params[:receipt_tax_details_attributes])
+      tax_detail_net_total = tax_details.sum do |tax_detail|
+        normalize_amount(normalized_hash(tax_detail)[:net_amount])&.to_i || 0
+      end
+      tax_detail_gross_total = tax_details.sum do |tax_detail|
+        normalized = normalized_hash(tax_detail)
+        gross_amount = normalize_amount(normalized[:gross_amount])&.to_i
+        next gross_amount if gross_amount&.positive?
+
+        net_amount = normalize_amount(normalized[:net_amount])&.to_i || 0
+        tax_amount = normalize_amount(normalized[:amount])&.to_i || 0
+        net_amount + tax_amount
+      end
+
+      [
+        normalize_amount(resolved[:subtotal])&.to_i,
+        normalize_amount(resolved[:total])&.to_i,
+        tax_detail_gross_total,
+        tax_detail_net_total
+      ].compact.select(&:positive?).uniq
+    end
+
+    def item_total_drift_within_tolerance?(item_total, comparison_total)
+      drift = (item_total.to_i - comparison_total.to_i).abs
+
+      drift <= item_total_drift_threshold(comparison_total)
+    end
+
+    def item_total_drift_threshold(comparison_total)
+      relative_threshold = (BigDecimal(comparison_total.to_s) * ITEM_TOTAL_DRIFT_RELATIVE_THRESHOLD).ceil
+
+      [ ITEM_TOTAL_DRIFT_ABSOLUTE_THRESHOLD, relative_threshold ].max
+    end
+
+    def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
+      review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
       return review_reasons unless review_reasons.include?("payment_method_uncertain")
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
       review_reasons - [ "payment_method_uncertain" ]
+    end
+
+    def remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      return review_reasons unless review_reasons.include?("store_name_uncertain")
+      return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
+
+      review_reasons - [ "store_name_uncertain" ]
+    end
+
+    def resolved_store_name_supported_by_ocr?(params, ocr_result)
+      store_name = Analysis::StoreNameCandidateClassifier.normalize_name(
+        params.dig(:receipt_attributes, :store_name)
+      )
+      return false unless resolved_customer_facing_store_name?(store_name)
+
+      compact_store_name = compact_store_name_for_review(store_name)
+      header_lines = Array(ocr_result[:lines]).first(8).filter_map do |line|
+        Analysis::StoreNameCandidateClassifier.normalize_name(line)
+      end
+      return true if header_lines.any? { |line| compact_store_name_for_review(line) == compact_store_name }
+
+      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(header_lines).any? do |candidate|
+        compact_store_name_for_review(candidate) == compact_store_name
+      end
+    end
+
+    def resolved_customer_facing_store_name?(store_name)
+      normalized = store_name.to_s
+      return false if normalized.blank?
+      return false if normalized.length < 2 || normalized.length > 60
+      return false if Analysis::StoreNameCandidateClassifier.legal_entity_name?(normalized)
+      return false if Analysis::StoreNameCandidateClassifier.operator_context_line?(normalized)
+      return false if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
+      return false if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
+      return false if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
+      return false if normalized.split.any? { |part| Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(part) }
+      return false if normalized.match?(/[¥￥$€£]|\b(?:receipt|invoice|total|subtotal|tax|payment)\b/i)
+      return false if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?|\d{1,2}[:：]\d{2}/)
+      return false if normalized.match?(/[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/)
+
+      normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
+    end
+
+    def compact_store_name_for_review(value)
+      Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
     end
 
     def payment_method_resolved_after_build?(params, amount_result)
