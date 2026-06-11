@@ -37,6 +37,7 @@ RSpec.describe Receipts::UploadPagePresenter do
         )
         expect(presenter.storage_used_bytes).to eq(12)
         expect(presenter.storage_limit_bytes).to eq(34)
+        expect(presenter.storage_usage).to eq(storage_usage)
       end
     end
   end

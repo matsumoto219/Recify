@@ -206,6 +206,26 @@ ja:
       multiple_hint: "ライブラリ選択とドラッグ＆ドロップは複数選択可・最大%{max}件"
       queued_hint: アップロード後は解析キューに追加されます
       back: 戻る
+      guidance:
+        flow_title: 解析フロー
+        flow_steps:
+          select: 画像選択
+          ocr: OCR解析
+          ai: AI補完
+          review: 確認・保存
+        formats_title: 対応フォーマット
+        formats: JPG, PNG, BMP, TIFF, HEIF, HEIC
+        tips_title: きれいに撮影するコツ
+        tips:
+          bright: 明るい場所で撮影してください
+          straight: 斜めにならないよう、真上から撮影してください
+          full_receipt: レシート全体が枠内に収まるようにしてください
+          one_receipt: 1枚の画像につき、レシートは1枚のみにしてください
+        manual_title: 手動入力
+        manual_description: 画像なしでも登録できます。解析がうまくいかない場合はこちらを利用してください。
+        manual_link: 手動で入力する
+        limits_title: アップロード上限
+        storage_title: ストレージ使用量
       buttons:
         camera: カメラを起動
         library: ファイルを選択

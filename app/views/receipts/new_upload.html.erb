@@ -3,7 +3,7 @@
 %>
 
 <section
-  class="max-w-3xl mx-auto space-y-8 pb-28 md:pb-2"
+  class="max-w-3xl lg:max-w-7xl mx-auto space-y-8 pb-28 md:pb-2"
   data-controller="service-status-polling"
   data-service-status-polling-status-url-value="<%= external_services_status_path %>"
   data-service-status-polling-interval-value="30000">
@@ -45,162 +45,170 @@
     </div>
   </div>
 
-  <%= render "shared/ui/layout/surface_card", padding: :md, class: "group" do %>
-    <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
-          multipart: true,
-          data: {
-            controller: "receipt-upload",
-            action: "submit->receipt-upload#disableSubmit",
-            service_status_polling_target: "uploadRoot",
-            receipt_upload_ocr_available_value: upload_page.ocr_available?,
-            receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
-            receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file"),
-            receipt_upload_quota_exceeded_message_value: t("receipts.new_upload.js.quota_exceeded"),
-            receipt_upload_max_file_count_value: upload_page.file_count_limit,
-            receipt_upload_max_file_count_message_value: upload_page.file_count_limit_message,
-            receipt_upload_selected_files_message_value: t("receipts.new_upload.js.selected_files"),
-            receipt_upload_preview_counter_message_value: t("receipts.new_upload.js.preview_counter"),
-            receipt_upload_storage_used_bytes_value: upload_page.storage_used_bytes,
-            receipt_upload_storage_limit_bytes_value: upload_page.storage_limit_bytes
-          }
-        } do |form| %>
-      <div class="space-y-6">
-        <div>
-          <p class="block text-sm font-medium token-text-base"><%= t("receipts.new_upload.image_label") %></p>
+  <div class="space-y-8 lg:grid lg:grid-cols-3 lg:items-start lg:gap-8 lg:space-y-0" data-receipt-upload-layout>
+    <div class="lg:col-span-2" data-receipt-upload-column>
+      <%= render "shared/ui/layout/surface_card", padding: :md, class: "group" do %>
+        <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
+              multipart: true,
+              data: {
+                controller: "receipt-upload",
+                action: "submit->receipt-upload#disableSubmit",
+                service_status_polling_target: "uploadRoot",
+                receipt_upload_ocr_available_value: upload_page.ocr_available?,
+                receipt_upload_invalid_image_message_value: t("receipts.new_upload.js.invalid_image"),
+                receipt_upload_empty_file_message_value: t("receipts.new_upload.js.empty_file"),
+                receipt_upload_quota_exceeded_message_value: t("receipts.new_upload.js.quota_exceeded"),
+                receipt_upload_max_file_count_value: upload_page.file_count_limit,
+                receipt_upload_max_file_count_message_value: upload_page.file_count_limit_message,
+                receipt_upload_selected_files_message_value: t("receipts.new_upload.js.selected_files"),
+                receipt_upload_preview_counter_message_value: t("receipts.new_upload.js.preview_counter"),
+                receipt_upload_storage_used_bytes_value: upload_page.storage_used_bytes,
+                receipt_upload_storage_limit_bytes_value: upload_page.storage_limit_bytes
+              }
+            } do |form| %>
+          <div class="space-y-6">
+            <div>
+              <p class="block text-sm font-medium token-text-base"><%= t("receipts.new_upload.image_label") %></p>
 
-          <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed upload-dropzone px-6 py-10 text-center transition-colors"
-               data-receipt-upload-target="dropzone"
-               data-action="dragenter->receipt-upload#handleDragEnter dragover->receipt-upload#handleDragOver dragleave->receipt-upload#handleDragLeave drop->receipt-upload#handleDrop">
-            <div class="flex flex-col items-center gap-4" data-receipt-upload-target="emptyState">
-              <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
-              <p class="text-base font-medium token-text-base"><%= t("receipts.new_upload.empty_title") %></p>
-              <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
-              <p class="text-xs token-text-subtle"><%= upload_page.multiple_upload_hint %></p>
-            </div>
+              <div class="mt-3 relative flex h-[400px] items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed upload-dropzone px-6 py-10 text-center transition-colors"
+                   data-receipt-upload-target="dropzone"
+                   data-action="dragenter->receipt-upload#handleDragEnter dragover->receipt-upload#handleDragOver dragleave->receipt-upload#handleDragLeave drop->receipt-upload#handleDrop">
+                <div class="flex flex-col items-center gap-4" data-receipt-upload-target="emptyState">
+                  <span class="material-symbols-outlined text-5xl token-text-brand opacity-80">photo_camera</span>
+                  <p class="text-base font-medium token-text-base"><%= t("receipts.new_upload.empty_title") %></p>
+                  <p class="text-xs token-text-muted">JPG, PNG, BMP, TIFF, HEIF, HEIC</p>
+                  <p class="text-xs token-text-subtle"><%= upload_page.multiple_upload_hint %></p>
+                </div>
 
-            <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
-              <img src="" alt="<%= t("receipts.new_upload.preview_alt") %>" class="h-full w-full object-contain" data-receipt-upload-target="preview">
+                <div class="hidden absolute inset-0 h-full w-full" data-receipt-upload-target="previewWrapper">
+                  <img src="" alt="<%= t("receipts.new_upload.preview_alt") %>" class="h-full w-full object-contain" data-receipt-upload-target="preview">
 
-              <div class="glass-panel hidden absolute inset-x-3 bottom-3 z-20 rounded-xl px-3 py-2"
-                   data-receipt-upload-target="previewControls">
-                <div class="flex items-center gap-3">
-                  <button
-                    type="button"
-                    class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full token-bg-card-subtle token-text-base token-hover-bg-elevated transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="<%= t("receipts.new_upload.preview_previous_aria") %>"
-                    data-receipt-upload-target="previewPreviousButton"
-                    data-action="receipt-upload#previousPreview">
-                    <span class="material-symbols-outlined text-xl" aria-hidden="true">chevron_left</span>
-                  </button>
+                  <div class="glass-panel hidden absolute inset-x-3 bottom-3 z-20 rounded-xl px-3 py-2"
+                       data-receipt-upload-target="previewControls">
+                    <div class="flex items-center gap-3">
+                      <button
+                        type="button"
+                        class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full token-bg-card-subtle token-text-base token-hover-bg-elevated transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="<%= t("receipts.new_upload.preview_previous_aria") %>"
+                        data-receipt-upload-target="previewPreviousButton"
+                        data-action="receipt-upload#previousPreview">
+                        <span class="material-symbols-outlined text-xl" aria-hidden="true">chevron_left</span>
+                      </button>
 
-                  <div class="min-w-0 flex-1 text-center">
-                    <p class="text-xs font-semibold token-text-muted"
-                       aria-live="polite"
-                       data-receipt-upload-target="previewCounter"></p>
-                    <p class="mt-0.5 truncate text-[11px] token-text-muted"
-                       data-receipt-upload-target="previewCurrentFileName"></p>
+                      <div class="min-w-0 flex-1 text-center">
+                        <p class="text-xs font-semibold token-text-muted"
+                           aria-live="polite"
+                           data-receipt-upload-target="previewCounter"></p>
+                        <p class="mt-0.5 truncate text-[11px] token-text-muted"
+                           data-receipt-upload-target="previewCurrentFileName"></p>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full token-bg-card-subtle token-text-base token-hover-bg-elevated transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="<%= t("receipts.new_upload.preview_next_aria") %>"
+                        data-receipt-upload-target="previewNextButton"
+                        data-action="receipt-upload#nextPreview">
+                        <span class="material-symbols-outlined text-xl" aria-hidden="true">chevron_right</span>
+                      </button>
+                    </div>
                   </div>
+                </div>
 
-                  <button
-                    type="button"
-                    class="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full token-bg-card-subtle token-text-base token-hover-bg-elevated transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="<%= t("receipts.new_upload.preview_next_aria") %>"
-                    data-receipt-upload-target="previewNextButton"
-                    data-action="receipt-upload#nextPreview">
-                    <span class="material-symbols-outlined text-xl" aria-hidden="true">chevron_right</span>
-                  </button>
+                <div class="pointer-events-none hidden absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl token-bg-card/90 backdrop-blur-sm" data-receipt-upload-target="dropOverlay">
+                  <span class="material-symbols-outlined text-5xl token-text-brand">upload_file</span>
+                  <p class="text-sm font-medium token-text-base"><%= t("receipts.new_upload.drop_here") %></p>
                 </div>
               </div>
             </div>
 
-            <div class="pointer-events-none hidden absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl token-bg-card/90 backdrop-blur-sm" data-receipt-upload-target="dropOverlay">
-              <span class="material-symbols-outlined text-5xl token-text-brand">upload_file</span>
-              <p class="text-sm font-medium token-text-base"><%= t("receipts.new_upload.drop_here") %></p>
-            </div>
-          </div>
-        </div>
+            <section class="flex flex-col gap-4">
+              <div class="grid grid-cols-2 gap-4">
+                <%= render "shared/ui/actions/button",
+                  label: t("receipts.new_upload.buttons.camera"),
+                  variant: :secondary,
+                  size: :md,
+                  icon: "camera_alt",
+                  full_width: true,
+                  type: "button",
+                  disabled: upload_page.ocr_down?,
+                  data: {
+                    action: "receipt-upload#openCamera",
+                    service_status_polling_target: "uploadControl"
+                  } %>
 
-        <section class="flex flex-col gap-4">
-          <div class="grid grid-cols-2 gap-4">
-            <%= render "shared/ui/actions/button",
-              label: t("receipts.new_upload.buttons.camera"),
-              variant: :secondary,
-              size: :md,
-              icon: "camera_alt",
-              full_width: true,
-              type: "button",
+                <%= render "shared/ui/actions/button",
+                  label: t("receipts.new_upload.buttons.library"),
+                  variant: :secondary,
+                  size: :md,
+                  icon: "folder_open",
+                  full_width: true,
+                  type: "button",
+                  disabled: upload_page.ocr_down?,
+                  data: {
+                    action: "receipt-upload#openLibrary",
+                    service_status_polling_target: "uploadControl"
+                  } %>
+              </div>
+
+              <div class="space-y-1 text-center text-xs token-text-muted"
+                   aria-live="polite"
+                   data-receipt-upload-target="fileName">
+                <p class="font-medium" data-receipt-upload-target="selectedFileCount">
+                  <%= t("receipts.new_upload.file_empty") %>
+                </p>
+                <p class="hidden max-w-full break-words leading-relaxed [overflow-wrap:anywhere]"
+                   data-receipt-upload-target="selectedFileNames"></p>
+              </div>
+              <p class="text-xs text-center token-text-subtle">
+                <%= upload_page.multiple_upload_hint %>
+              </p>
+
+              <%= render "shared/ui/actions/button",
+                label: t("receipts.new_upload.buttons.upload"),
+                variant: :primary,
+                size: :lg,
+                type: "submit",
+                full_width: true,
+                disabled: true,
+                disable_with: t("receipts.new_upload.buttons.uploading"),
+                icon: "cloud_upload",
+                data: {
+                  receipt_upload_target: "submitButton",
+                  service_status_polling_target: "uploadSubmit"
+                } %>
+            </section>
+
+            <%= form.file_field :image,
+              accept: receipt_image_accept,
+              capture: "environment",
+              class: "hidden",
               disabled: upload_page.ocr_down?,
               data: {
-                action: "receipt-upload#openCamera",
-                service_status_polling_target: "uploadControl"
+                receipt_upload_target: "cameraInput",
+                service_status_polling_target: "uploadControl",
+                action: "change->receipt-upload#previewCamera"
               } %>
 
-            <%= render "shared/ui/actions/button",
-              label: t("receipts.new_upload.buttons.library"),
-              variant: :secondary,
-              size: :md,
-              icon: "folder_open",
-              full_width: true,
-              type: "button",
+            <%= file_field_tag "receipt[images][]",
+              accept: receipt_image_accept,
+              multiple: true,
+              class: "hidden",
               disabled: upload_page.ocr_down?,
               data: {
-                action: "receipt-upload#openLibrary",
-                service_status_polling_target: "uploadControl"
+                receipt_upload_target: "libraryInput",
+                service_status_polling_target: "uploadControl",
+                action: "change->receipt-upload#previewLibrary"
               } %>
           </div>
+        <% end %>
+      <% end %>
+    </div>
 
-          <div class="space-y-1 text-center text-xs token-text-muted"
-               aria-live="polite"
-               data-receipt-upload-target="fileName">
-            <p class="font-medium" data-receipt-upload-target="selectedFileCount">
-              <%= t("receipts.new_upload.file_empty") %>
-            </p>
-            <p class="hidden max-w-full break-words leading-relaxed [overflow-wrap:anywhere]"
-               data-receipt-upload-target="selectedFileNames"></p>
-          </div>
-          <p class="text-xs text-center token-text-subtle">
-            <%= upload_page.multiple_upload_hint %>
-          </p>
-
-          <%= render "shared/ui/actions/button",
-            label: t("receipts.new_upload.buttons.upload"),
-            variant: :primary,
-            size: :lg,
-            type: "submit",
-            full_width: true,
-            disabled: true,
-            disable_with: t("receipts.new_upload.buttons.uploading"),
-            icon: "cloud_upload",
-            data: {
-              receipt_upload_target: "submitButton",
-              service_status_polling_target: "uploadSubmit"
-            } %>
-        </section>
-
-        <%= form.file_field :image,
-          accept: receipt_image_accept,
-          capture: "environment",
-          class: "hidden",
-          disabled: upload_page.ocr_down?,
-          data: {
-            receipt_upload_target: "cameraInput",
-            service_status_polling_target: "uploadControl",
-            action: "change->receipt-upload#previewCamera"
-          } %>
-
-        <%= file_field_tag "receipt[images][]",
-          accept: receipt_image_accept,
-          multiple: true,
-          class: "hidden",
-          disabled: upload_page.ocr_down?,
-          data: {
-            receipt_upload_target: "libraryInput",
-            service_status_polling_target: "uploadControl",
-            action: "change->receipt-upload#previewLibrary"
-          } %>
-      </div>
-    <% end %>
-  <% end %>
+    <aside class="hidden lg:block" data-receipt-upload-guidance>
+      <%= render "receipts/upload_guidance_panel", upload_page: upload_page %>
+    </aside>
+  </div>
 
   <footer class="text-center space-y-6">
     <div class="flex items-center justify-center gap-2 text-sm token-text-muted token-bg-card-subtle py-2 px-4 rounded-full w-fit mx-auto">

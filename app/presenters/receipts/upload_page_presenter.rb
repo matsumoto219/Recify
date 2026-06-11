@@ -46,6 +46,10 @@ module Receipts
       storage_usage.limit_bytes
     end
 
+    def storage_usage
+      @storage_usage ||= user.storage_usage
+    end
+
     private
 
     attr_reader :user, :ocr_state_payload, :ai_state_payload
@@ -60,10 +64,6 @@ module Receipts
 
     def state_from(payload)
       (payload || {}).with_indifferent_access[:state].to_s
-    end
-
-    def storage_usage
-      @storage_usage ||= user.storage_usage
     end
   end
 end
