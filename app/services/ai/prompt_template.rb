@@ -171,6 +171,7 @@ module Ai
         - Use the store brand name as the core store_name. When the receipt explicitly prints a brand followed by a branch, location, venue, department, sales area, or in-facility name, preserve that printed combined name as store_name.
         - Do not shorten a printed brand-plus-branch/location/facility name to brand-only unless the extra text is clearly unrelated, address-only, operator/legal context, or non-store text.
         - Combine branch names, shopping facility names, venue names, department names, or regional/location names only when they are clearly connected in the receipt text and produce a natural store_name.
+        - If a store candidate contains an isolated leading character, symbol, or logo fragment that is not supported by nearby text, prefer the clean customer-facing name that is otherwise supported by OCR. Do not invent or remove real brand words.
         - Do NOT use descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, tax IDs, timestamps, receipt labels, operator/legal labels, or payment text as store_name.
         - Use meta.country_region only to interpret local formatting already present in OCR. Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes, words, or legal designators based on external knowledge, common naming conventions, or assumptions.
         - Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.

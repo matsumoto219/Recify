@@ -112,6 +112,13 @@ module Analysis
         normalize_name(text).to_s.match?(DESCRIPTIVE_ONLY_HEADING_PATTERN)
       end
 
+      def isolated_logo_fragment?(text)
+        compacted = normalize_name(text).to_s.gsub(/[[:space:]]+/, "")
+        return false unless compacted.length == 1
+
+        compacted.match?(/\A(?:\p{Katakana}|[[:punct:]])\z/u)
+      end
+
       def operator_legal_entity_candidate?(candidate, lines)
         normalized_candidate = normalize_name(candidate)
         return false unless legal_entity_name?(normalized_candidate)

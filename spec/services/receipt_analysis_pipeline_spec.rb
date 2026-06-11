@@ -3226,6 +3226,73 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'ロゴ由来の孤立1文字をAIのclean店舗名へ前置せず保存する' do
+      variants = {
+        'Sample Life Market' => 'Sample Life Market',
+        'サンプルライフマーケット 恵比寿店' => 'サンプルライフマーケット 恵比寿店'
+      }
+
+      variants.each do |ai_store_name, expected_store_name|
+        receipt = create(:receipt, :processing, :with_image)
+        ocr_result = {
+          success: true,
+          raw_text: "プ\nSample Life Market\nサンプルライフマーケット 恵比寿店\n商品A ¥100\n合計 ¥100\n現金 ¥100",
+          lines: [
+            'プ',
+            'Sample Life Market',
+            'サンプルライフマーケット 恵比寿店',
+            '商品A ¥100',
+            '合計 ¥100',
+            '現金 ¥100'
+          ],
+          candidates: {
+            store_name: 'Sample Life Market',
+            total_amount: 100,
+            country_region: 'JPN',
+            payment_method_text: '現金',
+            items: [
+              { raw_text: '商品A', price: 100, quantity: 1, line_total: 100, confidence: 0.95 }
+            ],
+            payments: [
+              { method: 'Cash', amount: 100 }
+            ],
+            tax_details: []
+          },
+          meta: {
+            confidence_summary: {
+              overall: 0.95,
+              items_average: 0.95
+            }
+          }
+        }
+        ai_result = {
+          success: true,
+          needs_review: false,
+          receipt_attributes: {
+            store_name: ai_store_name,
+            payment_method: 'cash'
+          },
+          receipt_items_attributes: [
+            { index: 0, suggested_name: '商品A', category: 'other', needs_review: false }
+          ]
+        }
+
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(
+            :ai_success,
+            ocr_result: ocr_result,
+            ai_result: ai_result
+          )
+        )
+
+        aggregate_failures(ai_store_name) do
+          expect(receipt.reload.store_name).to eq(expected_store_name)
+          expect(receipt.store_name).not_to start_with('プ ')
+        end
+      end
+    end
+
     it '1画像内の複数レシート疑いはblocking review reasonとしてreview_neededにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('multi_receipts_in_one_image')

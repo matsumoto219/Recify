@@ -937,6 +937,96 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('サンプルレストラン サンプルモール渋谷')
       end
 
+      it 'ロゴ由来の孤立1文字を英字ブランドへ前置しない' do
+        logo_fragment_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'Sample Life Market',
+            total_amount: 1288,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'プ',
+            'Sample Life Market',
+            'サンプルライフマーケット 恵比寿店',
+            '東京都渋谷区サンプル1-2-3',
+            'サンプルプラザビルB1F',
+            '領収証'
+          ]
+        )
+        logo_fragment_ai_result = {
+          receipt_attributes: {
+            store_name: 'Sample Life Market'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: logo_fragment_ocr_result, ai_result: logo_fragment_ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:store_name]).to eq('Sample Life Market')
+          expect(params[:receipt_attributes][:store_name]).not_to start_with('プ ')
+        end
+      end
+
+      it 'ロゴ由来の孤立1文字を日本語の完全な店舗名へ前置しない' do
+        logo_fragment_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'Sample Life Market',
+            total_amount: 1288,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'プ',
+            'Sample Life Market',
+            'サンプルライフマーケット 恵比寿店',
+            '東京都渋谷区サンプル1-2-3',
+            'サンプルプラザビルB1F',
+            '領収証'
+          ]
+        )
+        logo_fragment_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプルライフマーケット 恵比寿店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: logo_fragment_ocr_result, ai_result: logo_fragment_ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:store_name]).to eq('サンプルライフマーケット 恵比寿店')
+          expect(params[:receipt_attributes][:store_name]).not_to start_with('プ ')
+        end
+      end
+
+      it '1文字の英字ブランドは支店名と組み合わせる' do
+        one_letter_brand_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '中央店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'Q',
+            '中央店',
+            '東京都渋谷区サンプル1-2-3'
+          ]
+        )
+        one_letter_brand_ai_result = {
+          receipt_attributes: {
+            store_name: '中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: one_letter_brand_ocr_result, ai_result: one_letter_brand_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('Q 中央店')
+      end
+
       it 'AI payment_method は OCR field や Payments[] より優先される' do
         ocr_result[:candidates][:payment_method_text] = 'Master'
         ocr_result[:candidates][:payments] = [

@@ -148,6 +148,8 @@ RSpec.describe Ai::PromptTemplate do
         expect(user_prompt).to include('Legal entity designators, company suffixes, or jurisdiction-specific corporate forms')
         expect(user_prompt).to include('management, operation, ownership, contracting, licensing, facility administration')
         expect(user_prompt).to include('preserve that printed combined name as store_name')
+        expect(user_prompt).to include('isolated leading character, symbol, or logo fragment')
+        expect(user_prompt).to include('prefer the clean customer-facing name')
         expect(user_prompt).to include('Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes')
         expect(user_prompt).to include('operator_candidates')
         expect(store_information_prompt).not_to include('common local notation')

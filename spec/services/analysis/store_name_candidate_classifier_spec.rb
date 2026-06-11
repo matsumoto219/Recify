@@ -2,6 +2,23 @@ require 'rails_helper'
 
 RSpec.describe Analysis::StoreNameCandidateClassifier do
   describe '.customer_facing_heading_candidates' do
+    it 'ロゴ由来の孤立1文字を見出し候補へ含めず、後続の自然な店名候補を使う' do
+      lines = [
+        'プ',
+        'Sample Life Market',
+        'サンプルライフマーケット 恵比寿店',
+        '東京都渋谷区サンプル1-2-3'
+      ]
+
+      candidates = described_class.customer_facing_heading_candidates(lines)
+
+      aggregate_failures do
+        expect(candidates).to include('Sample Life Market サンプルライフマーケット 恵比寿店')
+        expect(candidates).not_to include('プ Sample Life Market')
+        expect(candidates).not_to include('プ')
+      end
+    end
+
     it '上部の施設名と売場名を結合する' do
       lines = [
         'サンプル公園',
@@ -43,6 +60,17 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
       aggregate_failures do
         expect(candidates).to include('サンプルレストランサンプルモール渋谷')
         expect(candidates).not_to include('イタリアンワイン&カフェレストランサンプルレストランサンプルモール渋谷')
+      end
+    end
+  end
+
+  describe '.isolated_logo_fragment?' do
+    it '孤立したカタカナ1文字をロゴ片候補として扱い、英字や漢字の1文字ブランドは除外しない' do
+      aggregate_failures do
+        expect(described_class.isolated_logo_fragment?('プ')).to be(true)
+        expect(described_class.isolated_logo_fragment?('Q')).to be(false)
+        expect(described_class.isolated_logo_fragment?('一')).to be(false)
+        expect(described_class.isolated_logo_fragment?('Sample Life Market')).to be(false)
       end
     end
   end

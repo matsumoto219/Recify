@@ -223,6 +223,40 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it 'ロゴ由来の孤立1文字をstore候補から除外し、Marketを含む英字ブランドを候補に残す' do
+      logo_fragment_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'プ',
+          'Sample Life Market',
+          'サンプルライフマーケット 恵比寿店',
+          '東京都渋谷区サンプル1-2-3',
+          'サンプルプラザビルB1F',
+          '毎度ありがとうございます。',
+          '領 収 証'
+        ],
+        candidates: {
+          store_name: 'Sample Life Market',
+          store_address: '東京都渋谷区サンプル1-2-3',
+          total_amount: 1288,
+          items: []
+        }
+      )
+
+      result = described_class.build(logo_fragment_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:customer_facing_store_candidates]).to include(
+          'Sample Life Market',
+          'サンプルライフマーケット 恵比寿店'
+        )
+        expect(store_payload[:store_candidates]).to include('Sample Life Market')
+        expect(store_payload[:store_candidates] & [ 'プ', 'プ Sample Life Market', 'サンプルプラザビルB1F', '領 収 証', '毎度ありがとうございます。' ]).to be_empty
+        expect(store_payload[:branch_name_candidates]).not_to include('プ')
+        expect(store_payload[:branch_name_candidates]).not_to include('サンプルプラザビルB1F')
+      end
+    end
+
     it 'OCR店名が壊れていてもoperator法人名からブランドと場所名の候補を生成する' do
       broken_brand_ocr_result = ocr_result.deep_merge(
         lines: [

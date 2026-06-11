@@ -394,7 +394,12 @@ module Ai
 
     def store_name_candidate_noise_line?(text)
       normalized = text.to_s.strip
+      compact_text = normalized.gsub(/[[:space:]]+/, "")
+      return true if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
       return true if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
+      return true if compact_text.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
+      return true if normalized.match?(/ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i)
+      return true if normalized.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
       return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
       return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
       return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
@@ -580,6 +585,8 @@ module Ai
       return false if text.match?(/株式会社|有限会社|合同会社/)
       return false if text.match?(/お客様相談室|サポート|ヘルプデスク|コールセンター/)
       return false if text.match?(/登録番号|電話|tel|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/i)
+      return false if text.gsub(/[[:space:]]+/, "").match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
+      return false if text.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
       return false if text.match?(/\d{4}年|\d{1,2}月|\d{1,2}日/)
       return false if text.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
       return false if text.match?(/ます[。.]?\z/)

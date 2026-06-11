@@ -173,10 +173,13 @@ module Analysis
         store_index = header_lines.find_index { |line| compact_store_name(line) == normalized_store_name }
         return nil if store_index.nil?
 
-        brand_line = header_lines[0...store_index]&.reverse&.find do |line|
-          customer_facing_brand_line?(line)
+        if store_name_needs_preceding_brand?(store_name)
+          brand_entry = header_lines[0...store_index]&.each_with_index&.to_a&.reverse&.find do |line, index|
+            customer_facing_brand_line?(line, header_lines:, line_index: index)
+          end
+          brand_line = brand_entry&.first
+          return "#{brand_line} #{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)}" if brand_line.present?
         end
-        return "#{brand_line} #{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)}" if brand_line.present?
 
         branch_line = header_lines[(store_index + 1)..(store_index + 3)]&.find do |line|
           customer_facing_branch_line?(line)
@@ -239,6 +242,8 @@ module Analysis
         normalized = line.to_s
         return false unless customer_facing_store_line?(normalized)
         return false if normalized.match?(/株式会社|有限会社|合同会社/)
+        return false if store_brand_type_line?(normalized)
+        return false if building_or_floor_line?(normalized)
         return false if normalized.match?(/[¥￥円$€£]/)
         return false if normalized.match?(/\d{2,}/)
         return false if normalized.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
@@ -246,17 +251,46 @@ module Analysis
         normalized.length <= 30
       end
 
-      def customer_facing_brand_line?(line)
+      def store_name_needs_preceding_brand?(store_name)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(store_name).to_s
+        return false if store_brand_type_line?(normalized)
+
+        customer_facing_branch_line?(normalized)
+      end
+
+      def customer_facing_brand_line?(line, header_lines: [], line_index: nil)
         normalized = line.to_s
         return false unless customer_facing_store_line?(normalized)
-        return false if normalized.match?(/店|支店|本店|営業所|センター|モール|ショップ|通り|駅前|南口|北口|東口|西口|market|store/i)
+        return false if isolated_logo_fragment_prefix?(normalized, header_lines:, line_index:)
+        return false if normalized.match?(/店|支店|本店|営業所|センター|モール|通り|駅前|南口|北口|東口|西口/i)
         return false if normalized.match?(/[¥￥円$€£]/)
 
         normalized.length <= 40
       end
 
+      def isolated_logo_fragment_prefix?(line, header_lines:, line_index:)
+        return false unless Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(line)
+        return false if line_index.nil?
+
+        Array(header_lines)[(line_index + 1)..].to_a.any? do |candidate|
+          customer_facing_store_line?(candidate) &&
+            !Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(candidate)
+        end
+      end
+
+      def store_brand_type_line?(line)
+        line.to_s.match?(/マーケット|スーパー|ストア|ショップ|カフェ|レストラン|食堂|商店|薬局|ドラッグ|コンビニ|market|mart|store|shop|cafe|restaurant/i)
+      end
+
+      def building_or_floor_line?(line)
+        line.to_s.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
+      end
+
       def store_name_context_noise_line?(line)
         normalized = line.to_s
+        compact = normalized.gsub(/[[:space:]]+/, "")
+        return true if compact.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
+        return true if building_or_floor_line?(normalized)
         return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
         return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
         return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
