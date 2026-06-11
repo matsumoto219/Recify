@@ -335,6 +335,32 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '記号始まりの短いロゴ片をcustomer-facing候補から除外する' do
+      logo_fragment_ocr_result = ocr_result.deep_merge(
+        lines: [
+          '/smp',
+          'サンプル中央店',
+          'TEL 000-0000-0000',
+          '領収証'
+        ],
+        candidates: {
+          store_name: '/smp サンプル中央店',
+          total_amount: 100,
+          items: []
+        }
+      )
+
+      result = described_class.build(logo_fragment_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル中央店')
+        expect(store_payload[:customer_facing_store_candidates]).not_to include('/smp')
+        expect(store_payload[:store_candidates]).not_to include('/smp')
+        expect(store_payload[:branch_name_candidates]).not_to include('/smp')
+      end
+    end
+
     it 'OCR店名が壊れていてもoperator法人名からブランドと場所名の候補を生成する' do
       broken_brand_ocr_result = ocr_result.deep_merge(
         lines: [

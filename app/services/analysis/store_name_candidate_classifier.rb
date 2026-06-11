@@ -48,12 +48,15 @@ module Analysis
       def customer_facing_heading_candidates(lines, max_lines: 8)
         heading_lines = []
 
-        Array(lines).first(max_lines).each do |line|
+        header_lines = Array(lines).first(max_lines)
+
+        header_lines.each_with_index do |line, index|
           text = normalize_name(line)
           next if text.blank?
 
           break if heading_lines.any? && heading_boundary_line?(text)
           next if heading_lines.empty? && heading_boundary_line?(text)
+          next if isolated_logo_fragment_prefix?(text, header_lines:, line_index: index)
           next unless customer_facing_heading_line?(text)
 
           heading_lines << text
@@ -114,6 +117,7 @@ module Analysis
 
       def isolated_logo_fragment?(text)
         compacted = normalize_name(text).to_s.gsub(/[[:space:]]+/, "")
+        return true if compacted.match?(/\A[[:punct:]]+[A-Za-z]{1,8}\z/)
         return false unless compacted.length == 1
 
         compacted.match?(/\A(?:\p{Katakana}|[[:punct:]])\z/u)
@@ -153,6 +157,16 @@ module Analysis
         return false if text.match?(MONEY_OR_NUMERIC_PATTERN)
 
         text.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
+      end
+
+      def isolated_logo_fragment_prefix?(line, header_lines:, line_index:)
+        return false unless isolated_logo_fragment?(line)
+        return false if line_index.nil?
+
+        Array(header_lines)[(line_index + 1)..].to_a.any? do |candidate|
+          normalized_candidate = normalize_name(candidate).to_s
+          !isolated_logo_fragment?(normalized_candidate) && customer_facing_heading_line?(normalized_candidate)
+        end
       end
 
       def heading_boundary_line?(text)

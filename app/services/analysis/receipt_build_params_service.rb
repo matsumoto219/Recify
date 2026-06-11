@@ -1,14 +1,15 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
-    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|cash|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
     FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
     FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i
-    FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal|voucher/i
+    FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i
     PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
+    VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
     CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
     REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
@@ -49,6 +50,14 @@ module Analysis
           candidates[:adjustment_candidates],
           lines,
           receipt_items_attributes
+        )
+        receipt_adjustments_attributes, receipt_payments_attributes = move_voucher_adjustments_to_payments(
+          receipt_adjustments_attributes,
+          receipt_payments_attributes
+        )
+        receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
+          receipt_attributes[:payment_method],
+          receipt_payments_attributes
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
@@ -459,6 +468,37 @@ module Analysis
             review_reasons: review_reasons.uniq,
             position_index: normalized[:position_index] || index + 1
           }.compact
+        end
+      end
+
+      def move_voucher_adjustments_to_payments(adjustments, payments)
+        normalized_payments = Array(payments).map(&:dup)
+        filtered_adjustments = Array(adjustments).filter_map do |adjustment|
+          next adjustment unless voucher_payment_text?(adjustment[:label]) || voucher_payment_text?(adjustment[:source_text])
+
+          payment = {
+            method: voucher_payment_method_text(adjustment),
+            amount: adjustment[:amount]
+          }.compact
+          normalized_payments << payment unless voucher_payment_present?(normalized_payments, payment)
+          nil
+        end
+
+        [ filtered_adjustments, normalized_payments ]
+      end
+
+      def voucher_payment_text?(text)
+        text.to_s.match?(VOUCHER_PAYMENT_PATTERN)
+      end
+
+      def voucher_payment_method_text(adjustment)
+        adjustment[:source_text].presence || adjustment[:label].presence || "商品券"
+      end
+
+      def voucher_payment_present?(payments, payment)
+        Array(payments).any? do |existing|
+          existing[:amount].to_i == payment[:amount].to_i &&
+            voucher_payment_text?(existing[:method].to_s)
         end
       end
 
@@ -1410,6 +1450,16 @@ module Analysis
         return detected_from_text if detected_from_text.present?
 
         detect_payment_method_from_payments(candidates[:payments])
+      end
+
+      def reconcile_payment_method_with_payments(current_method, payments)
+        current = normalize_detected_payment_method(current_method)
+        return current unless Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
+
+        detected_from_payments = detect_payment_method_from_payments(payments)
+        return normalize_detected_payment_method(detected_from_payments) if detected_from_payments.present?
+
+        "other"
       end
 
       def detect_payment_method_from_payments(payments)

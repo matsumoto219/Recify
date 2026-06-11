@@ -399,6 +399,52 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '商品券系はAI adjustmentではなくpaymentへ寄せて電子マネーとの複数支払にする' do
+        ocr_result[:candidates][:payment_method_text] = '商品券'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 1_872
+        ocr_result[:lines] = [
+          '合 計',
+          '¥1,872',
+          '店換金商品券',
+          '¥1,000',
+          'QUICPay支払',
+          '¥872',
+          'お釣り',
+          '¥0'
+        ]
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'qr_payment'
+          },
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: '店換金商品券',
+              amount: 1_000,
+              sign: 'discount',
+              source_text: '店換金商品券',
+              source_line_index: 2,
+              confidence: 0.95,
+              needs_review: false,
+              review_reasons: []
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          # 検算: 商品券 1,000 + QUICPay 872 = 支払合計 1,872。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: '店換金商品券', amount: 1_000),
+            include(method: 'QUICPay支払', amount: 872)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [
@@ -476,7 +522,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to be_nil
       end
 
-      it '商品券のみでは payment_method を無理に埋めない' do
+      it '商品券のみでは payment_method を other にする' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [
           { method: '商品券', amount: 1280 }
@@ -484,7 +530,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
-        expect(params[:receipt_attributes][:payment_method]).to be_nil
+        expect(params[:receipt_attributes][:payment_method]).to eq('other')
       end
 
       it '複数の実決済手段では固定優先順位で代表値を選ぶ' do
@@ -1238,6 +1284,36 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(params[:receipt_attributes][:store_name]).to eq('サンプルライフマーケット 恵比寿店')
           expect(params[:receipt_attributes][:store_name]).not_to start_with('プ ')
+        end
+      end
+
+      it '記号始まりの短いロゴ片をAIの自然な店舗名へ前置しない' do
+        logo_fragment_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '/smp サンプル中央店',
+            total_amount: 100,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            '/smp',
+            'サンプル中央店',
+            'TEL 000-0000-0000',
+            '領収証'
+          ]
+        )
+        logo_fragment_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプル中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: logo_fragment_ocr_result, ai_result: logo_fragment_ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:store_name]).to eq('サンプル中央店')
+          expect(params[:receipt_attributes][:store_name]).not_to start_with('/smp ')
         end
       end
 
