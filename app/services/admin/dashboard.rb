@@ -22,6 +22,7 @@ module Admin
       :security,
       :external_services,
       :storage,
+      :database_status,
       :system_operations,
       :locked_future_operations,
       keyword_init: true
@@ -49,6 +50,7 @@ module Admin
         security: security_summary,
         external_services: ExternalServices.status_snapshot,
         storage: Storage.system_usage_snapshot,
+        database_status: Admin.database_status_snapshot,
         system_operations: system_operations_summary(system_dashboard),
         locked_future_operations: system_dashboard.locked_future_operations
       )

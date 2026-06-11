@@ -57,6 +57,10 @@ module Admin
       SystemOperationsDashboard.call
     end
 
+    def database_status_snapshot
+      DatabaseStatusSnapshot.call
+    end
+
     def system_settings(**filters)
       SystemSettingsQuery.call(**filters)
     end

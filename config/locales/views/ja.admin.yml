@@ -99,6 +99,18 @@ ja:
         expired_candidates: 期限切れ候補
         cutoff_suffix: 基準
         execution_requirement: 実行にはパスキー再認証、理由入力、確認チェックが必要です。
+      database_status:
+        title: DB状態
+        description: データベース接続とschema状態
+        primary: Primary DB
+        migration: Migration
+        database_time: DB時刻
+        readonly_note: このカードではDB操作やmigrationは実行しません。
+        states:
+          ok: 正常
+          current: 最新
+          pending: 未適用あり
+          unavailable: 確認不可
       audit:
         title: 監査ログ
         description: 直近24時間の管理操作概要

@@ -234,6 +234,11 @@ RSpec.describe 'Admin dashboard', type: :request do
         quota_total_bytes: 1.gigabyte,
         quota_used_bytes: 20.kilobytes
       )
+      allow(Admin).to receive(:database_status_snapshot).and_return(
+        primary: 'ok',
+        migration: 'current',
+        database_time: Time.zone.parse('2026-05-26 12:00:00')
+      )
 
       get admin_root_path
       document = Nokogiri::HTML(response.body)
@@ -287,6 +292,14 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('unattached')
         expect(response.body).to include('24KB')
         expect(response.body).to include('4KB')
+        expect(response.body).to include('DB状態')
+        expect(response.body).to include('データベース接続とschema状態')
+        expect(response.body).to include('Primary DB')
+        expect(response.body).to include('Migration')
+        expect(response.body).to include('DB時刻')
+        expect(response.body).to include('正常')
+        expect(response.body).to include('最新')
+        expect(response.body).to include('このカードではDB操作やmigrationは実行しません。')
         expect(response.body).to include('システム運用')
         expect(response.body).to include('管理トップでは直接実行しない操作')
         expect(response.body).to include(admin_receipt_analysis_runs_path)
@@ -349,6 +362,11 @@ RSpec.describe 'Admin dashboard', type: :request do
         quota_total_bytes: 1.gigabyte,
         quota_used_bytes: 0
       )
+      allow(Admin).to receive(:database_status_snapshot).and_return(
+        primary: 'ok',
+        migration: 'current',
+        database_time: Time.zone.parse('2026-05-26 12:00:00')
+      )
 
       get admin_root_path
 
@@ -357,6 +375,27 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('管理トップ')
         expect(response.body).to include('システム運用')
         expect(response.body).to include(admin_system_settings_path)
+      end
+    end
+
+    it 'DB状態確認に失敗してもdashboard全体は表示し確認不可を出す' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(Admin).to receive(:database_status_snapshot).and_return(
+        primary: 'unavailable',
+        migration: 'unavailable',
+        database_time: nil
+      )
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('管理トップ')
+        expect(response.body).to include('DB状態')
+        expect(response.body).to include('確認不可')
+        expect(response.body).to include('DB時刻')
+        expect(response.body).to include('-')
       end
     end
 

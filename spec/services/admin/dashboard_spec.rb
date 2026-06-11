@@ -27,8 +27,14 @@ RSpec.describe Admin::Dashboard do
         quota_total_bytes: 3.gigabytes,
         quota_used_bytes: 20.kilobytes
       }
+      database_status_snapshot = {
+        primary: "ok",
+        migration: "current",
+        database_time: Time.zone.parse("2026-05-26 12:00:00")
+      }
       allow(ExternalServices).to receive(:status_snapshot).and_return(external_services_snapshot)
       allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
+      allow(Admin).to receive(:database_status_snapshot).and_return(database_status_snapshot)
       create(:passkey, user: admin)
       active_run = create(:receipt_analysis_run, :running, updated_at: 7.hours.ago)
       failed_run = create(:receipt_analysis_run, :failed, created_at: 1.hour.ago)
@@ -76,6 +82,7 @@ RSpec.describe Admin::Dashboard do
         expect(result.security).to include(admin_passkey_count: 1)
         expect(result.external_services).to eq(external_services_snapshot)
         expect(result.storage).to eq(storage_snapshot)
+        expect(result.database_status).to eq(database_status_snapshot)
         expect(result.system_operations[:queues]).to contain_exactly(
           'default',
           'receipt_ocr',

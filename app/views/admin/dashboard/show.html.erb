@@ -8,6 +8,7 @@
   security = @dashboard.security
   external_services = @dashboard.external_services
   storage = @dashboard.storage
+  database_status = @dashboard.database_status
   system_operations = @dashboard.system_operations
   reauth_context = admin_reauthentication_context
   reauth_active = admin_passkey_reauthenticated?
@@ -130,6 +131,8 @@
         <%= t("admin.dashboard.cleanup.execution_requirement") %>
       </p>
     <% end %>
+
+    <%= render "admin/dashboard/database_status_card", database_status: database_status %>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
