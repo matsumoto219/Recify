@@ -1,11 +1,11 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
-    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|cash|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
     FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
-    FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i
+    FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現\s*計|cash\s*total|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i
     FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i
     PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
@@ -685,15 +685,10 @@ module Analysis
         payments = Array(lines).each_with_index.filter_map do |line, index|
           next unless fallback_payment_context_line?(line)
 
-          amount = fallback_payment_amount(line, receipt_total: total)
-          if amount.blank?
-            next unless fallback_payment_neighbor_amount_allowed?(line)
-
-            amount = fallback_payment_amount(lines[index + 1], receipt_total: total)
-          end
+          amount = fallback_payment_context_amount(lines, index, receipt_total: total)
           next unless amount&.positive?
 
-          method = fallback_payment_method_text(line)
+          method = cash_total_payment_line?(line) ? "cash" : fallback_payment_method_text(line)
           method = nil if fallback_payment_amount_label_line?(line)
           method = fallback_method.presence if method.blank?
           next if method.blank?
@@ -734,6 +729,61 @@ module Analysis
 
       def fallback_payment_neighbor_amount_allowed?(line)
         line.to_s.match?(FALLBACK_PAYMENT_ACTION_PATTERN) || fallback_payment_amount_label_line?(line)
+      end
+
+      def fallback_payment_context_amount(lines, index, receipt_total:)
+        line = Array(lines)[index].to_s
+        return cash_total_payment_amount(lines, index, receipt_total:) if cash_total_payment_line?(line)
+
+        amount = fallback_payment_amount(line, receipt_total: receipt_total)
+        if amount.blank?
+          return nil unless fallback_payment_neighbor_amount_allowed?(line)
+
+          amount = fallback_payment_amount(Array(lines)[index + 1], receipt_total: receipt_total)
+        end
+
+        amount
+      end
+
+      def cash_total_payment_line?(line)
+        line.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]/, "").match?(/現計|cashtotal/i)
+      end
+
+      def cash_total_payment_amount(lines, index, receipt_total:)
+        total = normalize_amount(receipt_total)&.to_i
+        same_line_amount = fallback_payment_amount(Array(lines)[index], receipt_total: total)
+        return same_line_amount if cash_total_payment_amount_allowed?(same_line_amount, total)
+
+        nearby_total = nearby_receipt_total_amount(lines, index, total)
+        return nearby_total if nearby_total.present?
+
+        return nil if total&.positive?
+        return nil unless fallback_payment_neighbor_amount_allowed?(Array(lines)[index])
+
+        fallback_payment_amount(Array(lines)[index + 1], receipt_total: total)
+      end
+
+      def cash_total_payment_amount_allowed?(amount, total)
+        return false if amount.blank?
+        return true unless total&.positive?
+
+        amount.to_i == total
+      end
+
+      def nearby_receipt_total_amount(lines, index, total)
+        return nil unless total&.positive?
+
+        preceding_indices = ((index - 4)...index).to_a.reverse
+        following_indices = ((index + 1)..(index + 3)).to_a
+
+        found = (preceding_indices + following_indices).find do |candidate_index|
+          candidate_line = Array(lines)[candidate_index]
+          next false if candidate_line.blank?
+
+          positive_amounts_from_text(candidate_line).include?(total)
+        end
+
+        found ? total : nil
       end
 
       def fallback_payment_amount(line, receipt_total: nil)

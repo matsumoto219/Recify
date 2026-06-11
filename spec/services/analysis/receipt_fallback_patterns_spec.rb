@@ -59,6 +59,7 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         'お釣り' => 'cash',
         '釣銭' => 'cash',
         '現計' => 'cash',
+        '現 計' => 'cash',
         'debit' => 'debit_card',
         'デビット' => 'debit_card',
         'Debit Card' => 'debit_card'

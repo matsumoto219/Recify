@@ -445,6 +445,76 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '現計の直前にあるreceipt totalをcash paymentとして補完し直後の税額を拾わない' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '駐車券自家用車等',
+          '¥500',
+          '10%対象',
+          '10%税',
+          '¥500',
+          '現 計',
+          '¥45',
+          '(うち消費税等',
+          '¥500',
+          '¥45)'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: receipt total 500 と一致する現計直前の金額を支払額にし、直後の税額45は採用しない。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'cash', amount: 500)
+          )
+          expect(params[:receipt_payments_attributes]).not_to include(include(amount: 45))
+          expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+        end
+      end
+
+      it '現計と同じ行にreceipt totalがある通常ケースをcash paymentとして補完する' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計',
+          '¥500',
+          '現計 ¥500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'cash', amount: 500)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+        end
+      end
+
+      it '現計近傍にreceipt totalがない場合は直後の税額をpaymentにしない' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '小計',
+          '¥455',
+          '10%税',
+          '¥45',
+          '現 計',
+          '¥45'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to eq([])
+          expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+        end
+      end
+
       it '同一商品券行が複数ある場合は枚数分を集約してpaymentにする' do
         ocr_result[:candidates][:payment_method_text] = '商品券'
         ocr_result[:candidates][:payments] = []

@@ -1781,6 +1781,98 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '現計の直前にreceipt totalがある場合はcash paymentを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "サンプル公園駐車場\n駐車券自家用車等\n¥500\n10%対象\n10%税\n¥500\n現 計\n¥45\n(うち消費税等\n¥500\n¥45)",
+        lines: [
+          'サンプル公園駐車場',
+          '駐車券自家用車等',
+          '¥500',
+          '10%対象',
+          '10%税',
+          '¥500',
+          '現 計',
+          '¥45',
+          '(うち消費税等',
+          '¥500',
+          '¥45)'
+        ],
+        candidates: {
+          store_name: 'サンプル公園駐車場',
+          total_amount: 500,
+          subtotal_amount: 455,
+          tax_amount: 45,
+          tax_rate: 10,
+          payment_method_text: '現金',
+          items: [
+            {
+              raw_text: '駐車券自家用車等',
+              price: 500,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 500,
+              tax_rate: 10,
+              confidence: 0.95
+            }
+          ],
+          payments: [],
+          tax_details: [
+            { description: '10%対象', rate: 10, net_amount: 455, amount: 45 }
+          ]
+        }
+      )
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプル公園駐車場',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: '駐車券自家用車等',
+            category: 'other',
+            price: 500,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 500,
+            tax_rate: 0.1,
+            needs_review: false,
+            confidence: 0.95
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 455 + 45 = 500。現計直後の税額45ではなく、receipt total 500を支払額にする。
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.subtotal_amount).to eq(455)
+        expect(receipt.tax_amount).to eq(45)
+        expect(receipt.total_amount).to eq(500)
+        expect(receipt.payment_method).to eq('cash')
+        expect(receipt.receipt_payments.map { |payment| [ payment.method, payment.amount ] }).to contain_exactly(
+          [ 'cash', 500 ]
+        )
+        expect(receipt.receipt_tax_details.map { |detail| [ detail.rate, detail.net_amount, detail.amount, detail.net_amount + detail.amount ] }).to contain_exactly(
+          [ BigDecimal('0.1'), 455, 45, 500 ]
+        )
+      end
+    end
+
     it 'Amount Engineが正規化した税込priceとline_totalを明細保存へ反映する' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_dup

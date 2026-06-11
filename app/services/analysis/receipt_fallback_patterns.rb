@@ -70,7 +70,7 @@ module Analysis
         /釣銭/i,
         /預り/i,
         /お預り/i,
-        /現計/i
+        /現\s*計/i
       ]
     }.freeze
 
