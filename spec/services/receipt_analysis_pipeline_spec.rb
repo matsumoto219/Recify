@@ -3226,6 +3226,132 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'カード売上票のカード会社コードを支払額にせずreceipt total一致のクレジット支払を保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: [
+          'サンプル牛丼',
+          'サンプル通り店',
+          '領収証',
+          '商品A ¥450',
+          '商品B ¥200',
+          '商品A ¥450',
+          '商品C ¥210',
+          '商品B ¥200',
+          '合計 ¥1,510',
+          '(10%対象 ¥1,510内消費税 ¥137)',
+          'クレジット',
+          '¥1,510',
+          'クレジットカード売上票',
+          'カード会社',
+          'Mastercard(701)',
+          '伝票番号',
+          '34593',
+          '端末番号',
+          '30677-200-13077',
+          '金額',
+          '¥1,510',
+          '合計金額',
+          '¥1,510',
+          '承認番号',
+          '312615'
+        ].join("\n"),
+        lines: [
+          'サンプル牛丼',
+          'サンプル通り店',
+          '領収証',
+          '商品A',
+          '¥450',
+          '商品B',
+          '¥200',
+          '商品A',
+          '¥450',
+          '商品C',
+          '¥210',
+          '商品B',
+          '¥200',
+          '合計',
+          '¥1,510',
+          '(10%対象',
+          '¥1,510内消費税',
+          '¥137)',
+          'クレジット',
+          '¥1,510',
+          'クレジットカード売上票',
+          'カード会社',
+          'Mastercard(701)',
+          '伝票番号',
+          '34593',
+          '端末番号',
+          '30677-200-13077',
+          '金額',
+          '¥1,510',
+          '合計金額',
+          '¥1,510',
+          '承認番号',
+          '312615'
+        ],
+        candidates: {
+          store_name: 'サンプル牛丼 サンプル通り店',
+          store_address: '東京都港区サンプル1-1-1',
+          total_amount: 1_510,
+          tax_amount: 137,
+          payment_method_text: 'クレジット',
+          payments: [],
+          items: [
+            { raw_text: '商品A', price: 450, quantity: 1, line_total: 450 },
+            { raw_text: '商品B', price: 200, quantity: 1, line_total: 200 },
+            { raw_text: '商品A', price: 450, quantity: 1, line_total: 450 },
+            { raw_text: '商品C', price: 210, quantity: 1, line_total: 210 },
+            { raw_text: '商品B', price: 200, quantity: 1, line_total: 200 }
+          ],
+          tax_details: [
+            { description: '(10%対象 / 内消費税', rate: 0.1, amount: 137 }
+          ]
+        }
+      }
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_attributes: {
+          store_name: 'サンプル牛丼 サンプル通り店',
+          payment_method: 'credit_card'
+        }
+      )
+      captured_amount_result = nil
+
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_amount_result = original.call(**kwargs)
+      end
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 商品合計 450 + 200 + 450 + 210 + 200 = 1,510。
+        # 検算: 10%内税 floor(1,510 * 10 / 110) = 137、税抜 1,510 - 137 = 1,373。
+        # 検算: クレジット支払 1,510 = final_payment_total 1,510。
+        expect(receipt.subtotal_amount).to eq(1_373)
+        expect(receipt.tax_amount).to eq(137)
+        expect(receipt.total_amount).to eq(1_510)
+        expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'クレジット', 1_510 ]
+        ])
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(captured_amount_result.dig(:computed, :payment_amount_sum)).to eq(1_510)
+        expect(captured_amount_result[:review_reasons]).to be_blank
+      end
+    end
+
     it 'ロゴ由来の孤立1文字をAIのclean店舗名へ前置せず保存する' do
       variants = {
         'Sample Life Market' => 'Sample Life Market',

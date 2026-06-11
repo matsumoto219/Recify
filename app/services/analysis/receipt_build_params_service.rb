@@ -1,11 +1,14 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
     FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
     FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
     FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i
+    FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i
+    FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal|voucher/i
+    PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
     CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
     REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
@@ -509,7 +512,11 @@ module Analysis
         )
         return [ deposit_change_payment ] if deposit_change_payment.present?
 
-        fallback_payments_from_lines(lines)
+        fallback_payments_from_lines(
+          lines,
+          receipt_total: normalize_amount(candidates[:total_amount]),
+          fallback_method: candidates[:payment_method_text]
+        )
       end
 
       def cash_payment_from_deposit_change_lines(lines, receipt_total, tax_details: [])
@@ -563,34 +570,43 @@ module Analysis
         joined.match?(label_pattern)
       end
 
-      def fallback_payments_from_lines(lines)
-        Array(lines).each_with_index.filter_map do |line, index|
+      def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil)
+        total = normalize_amount(receipt_total)&.to_i
+        payments = Array(lines).each_with_index.filter_map do |line, index|
           next unless fallback_payment_context_line?(line)
 
-          amount = fallback_payment_amount(line)
+          amount = fallback_payment_amount(line, receipt_total: total)
           if amount.blank?
             next unless fallback_payment_neighbor_amount_allowed?(line)
 
-            amount = fallback_payment_amount(lines[index + 1])
+            amount = fallback_payment_amount(lines[index + 1], receipt_total: total)
           end
           next unless amount&.positive?
 
           method = fallback_payment_method_text(line)
+          method = nil if fallback_payment_amount_label_line?(line)
+          method = fallback_method.presence if method.blank?
           next if method.blank?
 
           {
             method: method,
-            amount: amount
+            amount: amount,
+            source_index: index,
+            transaction_context: fallback_payment_transaction_context_line?(line)
           }
         end.uniq { |payment| [ payment[:method], payment[:amount] ] }
+
+        select_fallback_payments(payments, receipt_total: total)
       end
 
       def fallback_payment_context_line?(line)
         text = line.to_s.strip
         return false if text.blank?
         return false if text.match?(FALLBACK_PAYMENT_EXCLUDED_PATTERN)
+        return false if fallback_payment_metadata_label_line?(text)
         return false if fallback_payment_support_only_line?(text)
-        return false unless text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
+        return true if fallback_payment_amount_label_line?(text)
+        return false unless text.match?(FALLBACK_PAYMENT_LINE_PATTERN) || fallback_payment_amount_label_line?(text)
 
         fallback_payment_amount(text).present? || text.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
       end
@@ -601,16 +617,60 @@ module Analysis
           !text.match?(FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN)
       end
 
-      def fallback_payment_neighbor_amount_allowed?(line)
-        line.to_s.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
+      def fallback_payment_transaction_context_line?(line)
+        line.to_s.unicode_normalize(:nfkc).match?(FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN)
       end
 
-      def fallback_payment_amount(line)
-        text = line.to_s
+      def fallback_payment_neighbor_amount_allowed?(line)
+        line.to_s.match?(FALLBACK_PAYMENT_ACTION_PATTERN) || fallback_payment_amount_label_line?(line)
+      end
+
+      def fallback_payment_amount(line, receipt_total: nil)
+        text = fallback_payment_amount_source(line)
         return nil if text.match?(/[▲△\-−]\s*[¥￥]?\s*\d/)
 
         matches = text.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match.to_s }
-        matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?).max
+        amounts = matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?)
+        return nil if amounts.blank?
+
+        total = normalize_amount(receipt_total)&.to_i
+        return total if total&.positive? && amounts.include?(total)
+
+        amounts.max
+      end
+
+      def fallback_payment_amount_source(line)
+        line.to_s.unicode_normalize(:nfkc).gsub(PARENTHESIZED_PAYMENT_CODE_PATTERN, "")
+      end
+
+      def fallback_payment_amount_label_line?(line)
+        text = line.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]:：]/, "")
+        text.match?(FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN)
+      end
+
+      def fallback_payment_metadata_label_line?(line)
+        line.to_s.unicode_normalize(:nfkc).match?(FALLBACK_PAYMENT_METADATA_LABEL_PATTERN)
+      end
+
+      def select_fallback_payments(payments, receipt_total:)
+        candidates = Array(payments)
+        total = normalize_amount(receipt_total)&.to_i
+        exact_matches = if total&.positive?
+          candidates.select { |payment| payment[:amount].to_i == total }
+        else
+          []
+        end
+
+        selected = if exact_matches.present?
+          [ exact_matches.min_by { |payment| payment[:source_index].to_i } ]
+        elsif total&.positive? && candidates.sum { |payment| payment[:amount].to_i } == total
+          candidates
+        elsif total&.positive?
+          candidates.select { |payment| payment[:transaction_context] }
+        else
+          candidates
+        end
+        selected.map { |payment| payment.except(:source_index, :transaction_context) }
       end
 
       def positive_amounts_from_text(text)
@@ -620,7 +680,7 @@ module Analysis
       end
 
       def fallback_payment_method_text(line)
-        text = line.to_s.strip
+        text = fallback_payment_amount_source(line).strip
         amount_text = rightmost_fallback_amount_candidate(text)
         text = text.sub(amount_text.to_s, "") if amount_text.present?
         text.gsub(/[¥￥,，\d\s　]+/, " ").strip.presence

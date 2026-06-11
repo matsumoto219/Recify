@@ -320,6 +320,85 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'カードブランド行の括弧内コードを支払金額として扱わない' do
+        ocr_result[:candidates][:payment_method_text] = 'Mastercard'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 1_510
+        ocr_result[:lines] = [
+          'クレジットカード売上票',
+          'カード会社',
+          'Mastercard(701)',
+          '伝票番号',
+          '34593',
+          '端末番号',
+          '30677-200-13077',
+          '承認番号',
+          '312615'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+          expect(params[:receipt_payments_attributes]).to eq([])
+        end
+      end
+
+      it 'クレジット支払行の近傍金額をreceipt total一致で保存する' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 1_510
+        ocr_result[:lines] = [
+          '合計',
+          '¥1,510',
+          'クレジット',
+          '¥1,510',
+          'カード会社',
+          'Mastercard(701)'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: 購入合計 1,510 とクレジット行の次行金額 1,510 が一致する。
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'クレジット', amount: 1_510)
+          )
+        end
+      end
+
+      it 'カード売上票の金額ラベル近傍からreceipt total一致の支払額を補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'Mastercard'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 1_510
+        ocr_result[:lines] = [
+          'クレジットカード売上票',
+          'カード会社',
+          'Mastercard(701)',
+          '伝票番号',
+          '34593',
+          '端末番号',
+          '30677-200-13077',
+          '金額',
+          '¥1,510',
+          '合計金額',
+          '¥1,510',
+          '承認番号',
+          '312615'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: カード会社コード 701 ではなく、金額/合計金額ラベルの 1,510 を支払額にする。
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'Mastercard', amount: 1_510)
+          )
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [
