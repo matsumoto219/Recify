@@ -2,7 +2,10 @@
 
 module Amounts
   class CandidateSnapshot
-    MAX_CANDIDATES = 5
+    SETTING_KEY = "amount_engine.max_candidate_snapshot_count"
+    DEFAULT_CANDIDATE_COUNT = 3
+    MIN_CANDIDATE_COUNT = 1
+    MAX_CANDIDATE_COUNT = 20
 
     class << self
       def call(selected:, candidates:)
@@ -32,7 +35,14 @@ module Amounts
 
     def snapshot_candidates
       ranked = candidates.sort_by { |candidate| [ candidate.rejected? ? 1 : 0, candidate.score.to_i ] }
-      ([ selected ] + ranked).compact.uniq(&:candidate_id).first(MAX_CANDIDATES)
+      ([ selected ] + ranked).compact.uniq(&:candidate_id).first(snapshot_candidate_count)
+    end
+
+    def snapshot_candidate_count
+      count = SystemSettings.limit_for(SETTING_KEY)
+      count.clamp(MIN_CANDIDATE_COUNT, MAX_CANDIDATE_COUNT)
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      DEFAULT_CANDIDATE_COUNT
     end
 
     def snapshot_candidate(candidate)

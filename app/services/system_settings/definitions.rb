@@ -50,6 +50,16 @@ module SystemSettings
         risk_level: "high"
       ),
       Definition.new(
+        key: "amount_engine.max_candidate_snapshot_count",
+        category: "amount_engine",
+        value_type: "integer",
+        default: 3,
+        editable: true,
+        risk_level: "low",
+        min: 1,
+        max: 20
+      ),
+      Definition.new(
         key: "ui.maintenance_notice_enabled",
         category: "ui_toggle",
         value_type: "boolean",

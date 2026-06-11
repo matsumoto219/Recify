@@ -9,6 +9,7 @@ RSpec.describe SystemSettings do
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
         'amount_engine.tax_excluded_price_conversion_enabled',
+        'amount_engine.max_candidate_snapshot_count',
         'ui.maintenance_notice_enabled',
         'ui.maintenance_notice_title',
         'ui.maintenance_notice_body',
@@ -90,6 +91,10 @@ RSpec.describe SystemSettings do
 
     it '税抜単価の税込補正defaultはtrueを返す' do
       expect(described_class.value_for('amount_engine.tax_excluded_price_conversion_enabled')).to eq(true)
+    end
+
+    it 'Amount Engine候補snapshot保存件数defaultは3を返す' do
+      expect(described_class.value_for('amount_engine.max_candidate_snapshot_count')).to eq(3)
     end
 
     it 'お知らせ文言defaultはlocale fallback用の空文字を返す' do
@@ -945,6 +950,17 @@ RSpec.describe SystemSettings do
         value_type: 'boolean',
         risk_level: 'high',
         default: true
+      )
+    end
+
+    it 'Amount Engine候補snapshot保存件数はlow risk設定として扱う' do
+      expect(described_class.definition_for('amount_engine.max_candidate_snapshot_count')).to have_attributes(
+        category: 'amount_engine',
+        value_type: 'integer',
+        risk_level: 'low',
+        min: 1,
+        max: 20,
+        default: 3
       )
     end
 

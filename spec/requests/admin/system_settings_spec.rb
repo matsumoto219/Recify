@@ -138,6 +138,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('管理対象設定')
         expect(response.body).to include('feature.receipt_logo_display_enabled')
         expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
+        expect(response.body).to include('amount_engine.max_candidate_snapshot_count')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
         expect(response.body).to include('limits.receipt_uploads_per_day')
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')

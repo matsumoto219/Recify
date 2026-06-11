@@ -170,6 +170,34 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
         expect(snapshot.to_json).not_to include('保存しない')
       end
     end
+
+    it 'Amount Engine候補snapshot件数設定で制限済みの候補一覧を保持する' do
+      create(
+        :system_setting,
+        key: Amounts::CandidateSnapshot::SETTING_KEY,
+        value: SystemSettings.stored_value(1)
+      )
+      result = ReceiptAmountService.call(
+        receipt: { total_amount: 100 },
+        receipt_items: [
+          { line_total: 100, tax_rate: BigDecimal('0') }
+        ],
+        receipt_tax_details: [],
+        context: :analysis
+      )
+
+      snapshot = described_class.call(result)
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :candidates).size).to eq(1)
+        expect(snapshot.dig(:amount_engine, :selected_candidate)).to be_present
+        expect(snapshot.dig(:amount_engine, :candidates).size).to eq(1)
+        expect(snapshot.dig(:amount_engine, :candidates, 0, :candidate_id)).to eq(
+          snapshot.dig(:amount_engine, :selected_candidate_id)
+        )
+        expect(snapshot.dig(:resolved, :total_amount)).to eq(100)
+      end
+    end
   end
 
   describe 'receipts.amount_calculation_profile schema' do

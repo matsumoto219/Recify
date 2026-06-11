@@ -239,6 +239,30 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'Amount Engine候補snapshot件数設定はsnapshot件数だけを変え金額計算結果を変えない' do
+    receipt = { total_amount: 100 }
+    items = [
+      { line_total: 100, tax_rate: BigDecimal('0') }
+    ]
+    default_result = call_amount_engine(receipt: receipt, items: items)
+
+    create(
+      :system_setting,
+      key: Amounts::CandidateSnapshot::SETTING_KEY,
+      value: SystemSettings.stored_value(5)
+    )
+    expanded_snapshot_result = call_amount_engine(receipt: receipt, items: items)
+
+    aggregate_failures do
+      # 検算: 非課税100円なので、snapshot件数に関わらずtotal/subtotal/taxは100/100/0。
+      expect(default_result[:resolved]).to include(subtotal: 100, tax: 0, total: 100)
+      expect(expanded_snapshot_result[:resolved]).to eq(default_result[:resolved])
+      expect(default_result.dig(:amount_engine, :candidates).size).to eq(3)
+      expect(expanded_snapshot_result.dig(:amount_engine, :candidates).size).to eq(5)
+      expect(expanded_snapshot_result.dig(:amount_engine, :selected_candidate)).to be_present
+    end
+  end
+
   it '税抜補正後の税込line_totalを整数数量で割り切れる時だけpriceへ反映する' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
