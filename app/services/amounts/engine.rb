@@ -2,7 +2,7 @@
 
 module Amounts
   class Engine
-    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil)
+    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true)
       @receipt = receipt
       @raw_items = Array(items)
       @tax_details = Array(tax_details)
@@ -12,6 +12,7 @@ module Amounts
       @tax_rounding_modes = Array(tax_rounding_modes).presence || Amounts::CandidateGenerator::ROUNDING_MODES
       @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
       @discount_rounding_modes = normalize_discount_rounding_modes(discount_rounding_modes)
+      @tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled != false
       @base_result = base_result
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
       @items = normalize_items(raw_items, discount_rounding_mode)
@@ -33,7 +34,7 @@ module Amounts
 
     private
 
-    attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :base_result, :calculation_profile_result
+    attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result
 
     def generated_candidates
       @generated_candidates ||= Amounts::CandidateGenerator.new(
@@ -44,7 +45,8 @@ module Amounts
         payments: payments,
         context: context,
         tax_rounding_modes: tax_rounding_modes,
-        discount_rounding_modes: discount_rounding_modes
+        discount_rounding_modes: discount_rounding_modes,
+        tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled
       ).call
     end
 

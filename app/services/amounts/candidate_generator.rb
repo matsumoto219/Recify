@@ -6,7 +6,7 @@ module Amounts
     SAME_RATE_MIXED_MAX_ITEMS = 20
     SAME_RATE_MIXED_MAX_STATES = 50_000
 
-    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, discount_rounding_modes: nil)
+    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true)
       @receipt = receipt
       @source_items = Array(items)
       @items = @source_items
@@ -16,6 +16,7 @@ module Amounts
       @context = context
       @tax_rounding_modes = Array(tax_rounding_modes).presence || ROUNDING_MODES
       @discount_rounding_modes = normalize_rounding_modes(discount_rounding_modes || [ Amounts::Rounding::DISCOUNT_DEFAULT_MODE ])
+      @tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled != false
     end
 
     def call
@@ -24,7 +25,7 @@ module Amounts
 
     private
 
-    attr_reader :receipt, :source_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_modes, :discount_rounding_mode
+    attr_reader :receipt, :source_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_modes, :discount_rounding_mode, :tax_excluded_price_conversion_enabled
 
     def candidates_for_discount_rounding_mode(rounding_mode)
       @discount_rounding_mode = rounding_mode
@@ -297,6 +298,8 @@ module Amounts
     end
 
     def items_as_tax_excluded_candidate(rounding_mode, rounding_scope)
+      return nil unless tax_excluded_price_conversion_enabled?
+
       build_item_candidate(
         candidate_id: "items_as_tax_excluded/#{rounding_mode}/#{rounding_scope}",
         basis: "items_as_tax_excluded",
@@ -307,6 +310,7 @@ module Amounts
     end
 
     def discounted_original_line_total_tax_excluded_candidate(rounding_mode, rounding_scope)
+      return nil unless tax_excluded_price_conversion_enabled?
       return nil unless discounted_original_line_total_tax_excluded_candidate_needed?
 
       build_item_candidate(
@@ -659,9 +663,7 @@ module Amounts
       return [] unless line_total.positive?
 
       included_tax = rounded_tax_from_gross(line_total, rate, rounding_mode)
-      excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(line_total.to_s) * rate, rounding_mode)
-
-      [
+      candidates = [
         {
           source: "receipt_items",
           index: index,
@@ -670,8 +672,12 @@ module Amounts
           net_amount: line_total - included_tax,
           tax_amount: included_tax,
           gross_amount: line_total
-        },
-        {
+        }
+      ]
+      return candidates unless tax_excluded_price_conversion_enabled?
+
+      excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(line_total.to_s) * rate, rounding_mode)
+      candidates << {
           source: "receipt_items",
           index: index,
           rate: rate,
@@ -680,7 +686,13 @@ module Amounts
           tax_amount: excluded_tax,
           gross_amount: line_total + excluded_tax
         }
-      ]
+      candidates
+    end
+
+    def tax_excluded_price_conversion_enabled?
+      return true unless context.to_s.to_sym == :analysis
+
+      tax_excluded_price_conversion_enabled
     end
 
     def item_basis_amounts(line_total, rate, item_basis, rounding_mode)

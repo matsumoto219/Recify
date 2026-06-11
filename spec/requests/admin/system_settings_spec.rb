@@ -137,6 +137,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('システム設定')
         expect(response.body).to include('管理対象設定')
         expect(response.body).to include('feature.receipt_logo_display_enabled')
+        expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
         expect(response.body).to include('limits.receipt_uploads_per_day')
         expect(response.body).to include('limits.receipt_adjustments_per_receipt')
@@ -212,6 +213,29 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(note.text).to include('receipt_items_per_receipt の最大値以上')
         expect(note['class']).to include('min-w-0')
         expect(note['class']).to include('[overflow-wrap:anywhere]')
+      end
+    end
+
+    it '税抜単価の税込補正切り替えをhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('amount_engine.tax_excluded_price_conversion_enabled')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
+        expect(response.body).to include('amount_engine')
+        expect(response.body).to include('boolean')
+        expect(response.body).to include('high')
+        expect(response.body).to include('true')
+        expect(note.text).to include('OCR/AI解析時に税抜と判断した明細を税込のprice/line_totalへ補正')
+        expect(note.text).to include('手動作成・編集保存には適用されません')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
       end
     end
 
@@ -855,6 +879,43 @@ RSpec.describe 'Admin system settings', type: :request do
           'reauthentication_method' => 'passkey'
         )
         expect(audit_log.attributes.to_json).not_to include('credential_id', 'challenge', 'public_key', 'secret')
+      end
+    end
+
+    it '税抜単価の税込補正切り替えを実SystemOperations経由で更新する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('amount_engine.tax_excluded_price_conversion_enabled'),
+              params: {
+                value: 'false',
+                reason: 'verify tax excluded conversion fallback',
+                confirm: '1'
+              },
+              headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+      }.to change(AuditLog, :count).by(1)
+
+      setting = SystemSetting.find_by!(key: 'amount_engine.tax_excluded_price_conversion_enabled')
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('amount_engine.tax_excluded_price_conversion_enabled'))
+        expect(setting.value).to eq('value' => false)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'amount_engine.tax_excluded_price_conversion_enabled',
+          reason: 'verify tax excluded conversion fallback'
+        )
+        expect(audit_log.before_state).to eq('value' => true, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => false, 'source' => 'db')
+        expect(audit_log.metadata).to include(
+          'category' => 'amount_engine',
+          'risk_level' => 'high',
+          'reauthenticated' => true
+        )
       end
     end
 

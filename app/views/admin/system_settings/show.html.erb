@@ -25,6 +25,8 @@
   setting_notice_key =
     if snapshot_limit_keys.include?(@record[:key].to_s)
       "snapshot_limit_note"
+    elsif @record[:key].to_s == "amount_engine.tax_excluded_price_conversion_enabled"
+      "amount_engine_tax_excluded_price_conversion_note"
     elsif amount_limit_keys.include?(@record[:key].to_s)
       "amount_limit_note"
     elsif usage_limit_safety_keys.include?(@record[:key].to_s)

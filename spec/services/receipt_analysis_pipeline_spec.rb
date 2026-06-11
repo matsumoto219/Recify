@@ -1754,6 +1754,68 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '税抜単価の税込補正OFFではanalysis保存時もpriceとline_totalを補正しない' do
+      create(
+        :system_setting,
+        key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
+        value: SystemSettings.stored_value(false)
+      )
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "テストストア\n手巻おにぎり辛子明太子 130\n外税8% 10\n合計 140\n現金 140",
+        lines: [
+          'テストストア',
+          '手巻おにぎり辛子明太子 130',
+          '外税8% 10',
+          '合計 140',
+          '現金 140'
+        ],
+        candidates: {
+          total_amount: 140,
+          subtotal_amount: 130,
+          tax_amount: 10,
+          payment_method_text: '現金',
+          items: [
+            {
+              raw_text: '手巻おにぎり辛子明太子',
+              price: 130,
+              quantity: 1,
+              quantity_unit: '個',
+              original_line_total: 130,
+              line_total: 130,
+              tax_rate: 8,
+              confidence: 0.95
+            }
+          ],
+          tax_details: [
+            { description: '外税8%', rate: 8, net_amount: 130, amount: 10 }
+          ],
+          payments: [
+            { method: 'Cash', amount: 140 }
+          ]
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        # 検算: 外税8%として購入合計は130 + 10 = 140にするが、検証用OFFなので明細price/line_totalはOCR値130を保持する。
+        expect(receipt.total_amount).to eq(140)
+        expect(receipt.subtotal_amount).to eq(130)
+        expect(receipt.tax_amount).to eq(10)
+        expect(item.price).to eq(130)
+        expect(item.original_line_total).to eq(130)
+        expect(item.line_total).to eq(130)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('external_tax_from_receipt/floor')
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate', 'computed_items', 0, 'price')).to eq(130)
+      end
+    end
+
     it '支払い行が設定上限を超える解析結果は金額計算前に拒否する' do
       create(:system_setting, key: 'limits.receipt_payments_per_receipt', value: SystemSettings.stored_value(1))
       receipt = create(:receipt, :processing, :with_image)

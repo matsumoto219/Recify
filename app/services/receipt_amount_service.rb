@@ -33,6 +33,8 @@
 # }
 #
 class ReceiptAmountService
+  TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY = "amount_engine.tax_excluded_price_conversion_enabled"
+
   def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     new(
       receipt: receipt,
@@ -108,6 +110,7 @@ class ReceiptAmountService
   end
 
   def call
+    tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled?
     profile_estimation = applicable_calculation_profile(estimate_calculation_profile)
     active_profile = profile_estimation.applied_profile || {}
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
@@ -129,6 +132,7 @@ class ReceiptAmountService
       tax_rounding_modes: candidate_tax_rounding_modes,
       discount_rounding_mode: active_discount_rounding_mode,
       discount_rounding_modes: engine_discount_rounding_modes(active_discount_rounding_mode),
+      tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled,
       base_result: base_result,
       calculation_profile_result: profile_estimation
     ).call
@@ -436,7 +440,8 @@ class ReceiptAmountService
       payments: @payments,
       context: @context,
       tax_rounding_modes: candidate_tax_rounding_modes,
-      discount_rounding_modes: candidate_discount_rounding_modes
+      discount_rounding_modes: candidate_discount_rounding_modes,
+      tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled?
     ).call
     normalized_items = Amounts::ItemTotalAggregator.new(
       items: @items,
@@ -463,6 +468,14 @@ class ReceiptAmountService
     )
 
     raw_candidates.map { |candidate| scorer.call(reviewer.call(hard_rejector.call(candidate))) }
+  end
+
+  def tax_excluded_price_conversion_enabled?
+    return true unless @context == :analysis
+
+    SystemSettings.enabled?(TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY)
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError
+    true
   end
 
   def normalize_context(value)

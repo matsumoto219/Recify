@@ -128,6 +128,117 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'SystemSettingsで税抜単価の税込補正をOFFにするとanalysisでは税抜補正系候補を生成しない' do
+    create(
+      :system_setting,
+      key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
+      value: SystemSettings.stored_value(false)
+    )
+
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 1_390,
+        tax_amount: 125,
+        total_amount: 1_515
+      },
+      items: [
+        { price: 130, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
+        { rate: BigDecimal('0.10'), net_amount: 300, amount: 30, description: '小計（税抜10%）' },
+        { rate: BigDecimal('0.10'), net_amount: 820, amount: 74, description: '10%対象' }
+      ],
+      adjustments: [
+        {
+          kind: 'other',
+          label: 'キャッシュレス還元額',
+          source_text: 'キャッシュレス還元額 -22',
+          sign: 'discount',
+          amount: 22,
+          source: 'ocr'
+        }
+      ],
+      payments: [
+        { method: 'nanaco', amount: 1_139 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: OFF時は130/140/300を税込へ補正しない。TaxDetails gross候補は
+      # 8%対象270 + 10%対象820 + 非課税50 = 1,140、税額21 + 74 = 95を候補として残す。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_gross/floor')
+      expect(result[:resolved]).to include(subtotal: 1_140, tax: 95, total: 1_140, tax_rate: nil)
+      expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 130, 140, 300, 490, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 130, 140, 300, 490, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 130, 140, 300, 490, 50 ])
+      expect(result.dig(:amount_engine, :candidates).map { |candidate| candidate[:candidate_id] }.grep(%r{\Aitems_as_tax_excluded/})).to be_empty
+      expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:price] }).to eq([ 130, 140, 300, 490, 50 ])
+    end
+  end
+
+  it '税抜単価の税込補正OFFでも外税receipt候補は維持する' do
+    create(
+      :system_setting,
+      key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
+      value: SystemSettings.stored_value(false)
+    )
+
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 1_000, tax_amount: 100, total_amount: 1_100, tax_rate: BigDecimal('0.10') },
+      items: [
+        { line_total: 400, tax_rate: BigDecimal('0.10') },
+        { line_total: 600, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100, description: '外税10%' }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 外税候補は明細税込補正ではなく、印字の税抜小計1,000 + 外税100 = 1,100を説明する候補。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('external_tax_from_receipt/floor')
+      expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.10'))
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 400, 600 ])
+    end
+  end
+
+  it '税抜単価の税込補正OFFはmanual/edit_saveに影響しない' do
+    create(
+      :system_setting,
+      key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
+      value: SystemSettings.stored_value(false)
+    )
+
+    %i[manual edit_save].each do |context|
+      result = call_amount_engine(
+        receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
+        items: [
+          { price: 100, quantity: 2, quantity_unit: '個', line_total: 200, tax_rate: BigDecimal('0.10') }
+        ],
+        payments: [
+          { method: 'cash', amount: 220 }
+        ],
+        context: context
+      )
+
+      aggregate_failures context do
+        # 検算: manual/edit_saveはSystemSettingsの検証用OFFを無視する。
+        # 既存挙動どおり、税抜line_total 200 + 10% = 220、税込単価は220 / 2 = 110。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to start_with('items_as_tax_excluded/')
+        expect(result[:resolved]).to include(subtotal: 200, tax: 20, total: 220)
+        expect(result.dig(:computed, :items).first).to include(price: 110, line_total: 220)
+      end
+    end
+  end
+
   it '税抜補正後の税込line_totalを整数数量で割り切れる時だけpriceへ反映する' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },

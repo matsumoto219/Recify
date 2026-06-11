@@ -8,6 +8,7 @@ RSpec.describe SystemSettings do
         'feature.receipt_logo_display_enabled',
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
+        'amount_engine.tax_excluded_price_conversion_enabled',
         'ui.maintenance_notice_enabled',
         'ui.maintenance_notice_title',
         'ui.maintenance_notice_body',
@@ -85,6 +86,10 @@ RSpec.describe SystemSettings do
 
     it 'レシート画像保持defaultはtrueを返す' do
       expect(described_class.value_for('storage.keep_receipt_images_default')).to eq(true)
+    end
+
+    it '税抜単価の税込補正defaultはtrueを返す' do
+      expect(described_class.value_for('amount_engine.tax_excluded_price_conversion_enabled')).to eq(true)
     end
 
     it 'お知らせ文言defaultはlocale fallback用の空文字を返す' do
@@ -931,6 +936,15 @@ RSpec.describe SystemSettings do
         min: 1,
         max: 60,
         default: 5
+      )
+    end
+
+    it '税抜単価の税込補正切り替えはhigh risk設定として扱う' do
+      expect(described_class.definition_for('amount_engine.tax_excluded_price_conversion_enabled')).to have_attributes(
+        category: 'amount_engine',
+        value_type: 'boolean',
+        risk_level: 'high',
+        default: true
       )
     end
 
