@@ -145,8 +145,11 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
+      ai_review_reasons = resolved_ai_review_reasons(ai_result, params, amount_result)
+      ai_needs_review = ai_result[:needs_review] == true && ai_review_reasons.any?
+
       review_reasons = merge_review_reasons(
-        ai_result[:review_reasons],
+        ai_review_reasons,
         params[:review_reasons],
         amount_review_reasons(amount_result),
         ocr_review_reasons
@@ -156,7 +159,7 @@ class ReceiptAnalysisPipeline
         ocr_result: ocr_result,
         receipt_attributes: params[:receipt_attributes],
         items_attributes: params[:receipt_items_attributes],
-        ai_needs_review: ai_result[:needs_review],
+        ai_needs_review: ai_needs_review,
         amount_needs_review: amount_result[:needs_review],
         build_review_reasons: params[:review_reasons],
         ocr_review_reasons: ocr_review_reasons,
@@ -662,6 +665,33 @@ class ReceiptAnalysisPipeline
       end
 
       (amount_reasons + Array(amount_result[:review_reasons])).uniq
+    end
+
+    def resolved_ai_review_reasons(ai_result, params, amount_result)
+      review_reasons = normalize_review_reasons(ai_result[:review_reasons])
+      return review_reasons unless review_reasons.include?("payment_method_uncertain")
+      return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
+
+      review_reasons - [ "payment_method_uncertain" ]
+    end
+
+    def payment_method_resolved_after_build?(params, amount_result)
+      receipt_attributes = (params[:receipt_attributes] || {}).with_indifferent_access
+      return false if receipt_attributes[:payment_method].blank?
+
+      payments = Array(params[:receipt_payments_attributes])
+      return false if payments.blank?
+
+      final_payment_total = final_payment_total_from_amount_result(amount_result)
+      return false unless final_payment_total&.positive?
+
+      payments.sum { |payment| payment.with_indifferent_access[:amount].to_i } == final_payment_total
+    end
+
+    def final_payment_total_from_amount_result(amount_result)
+      result = amount_result.respond_to?(:with_indifferent_access) ? amount_result.with_indifferent_access : {}
+      selected_candidate = result.dig(:amount_engine, :selected_candidate) || {}
+      selected_candidate[:final_payment_total] || result.dig(:resolved, :total)
     end
 
     def ocr_review_reasons_for(ocr_result)

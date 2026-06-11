@@ -55,9 +55,15 @@ module Analysis
           receipt_adjustments_attributes,
           receipt_payments_attributes
         )
+        receipt_payments_attributes = add_cash_difference_payment(
+          receipt_payments_attributes,
+          lines,
+          receipt_attributes[:total_amount]
+        )
         receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
           receipt_attributes[:payment_method],
-          receipt_payments_attributes
+          receipt_payments_attributes,
+          lines:
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
@@ -488,18 +494,20 @@ module Analysis
 
       def move_voucher_adjustments_to_payments(adjustments, payments)
         normalized_payments = Array(payments).map(&:dup)
+        voucher_payment_present = normalized_payments.any? { |payment| voucher_payment_text?(payment[:method]) }
         filtered_adjustments = Array(adjustments).filter_map do |adjustment|
           next adjustment unless voucher_payment_text?(adjustment[:label]) || voucher_payment_text?(adjustment[:source_text])
+          next nil if voucher_payment_present
 
           payment = {
             method: voucher_payment_method_text(adjustment),
             amount: adjustment[:amount]
           }.compact
-          normalized_payments << payment unless voucher_payment_present?(normalized_payments, payment)
+          normalized_payments << payment
           nil
         end
 
-        [ filtered_adjustments, normalized_payments ]
+        [ filtered_adjustments, aggregate_voucher_payments(normalized_payments) ]
       end
 
       def voucher_payment_text?(text)
@@ -507,13 +515,41 @@ module Analysis
       end
 
       def voucher_payment_method_text(adjustment)
-        adjustment[:source_text].presence || adjustment[:label].presence || "商品券"
+        voucher_payment_base_method(adjustment[:source_text].presence || adjustment[:label].presence)
       end
 
-      def voucher_payment_present?(payments, payment)
-        Array(payments).any? do |existing|
-          existing[:amount].to_i == payment[:amount].to_i &&
-            voucher_payment_text?(existing[:method].to_s)
+      def aggregate_voucher_payments(payments)
+        voucher_groups = {}
+
+        Array(payments).filter_map do |payment|
+          next payment unless voucher_payment_text?(payment[:method])
+
+          method = voucher_payment_base_method(payment[:method])
+          voucher_groups[method] ||= { method: method, amount: 0 }
+          voucher_groups[method][:amount] += payment[:amount].to_i
+
+          nil
+        end + voucher_groups.values
+      end
+
+      def voucher_payment_base_method(text)
+        source = text.to_s.strip
+        amount_text = rightmost_fallback_amount_candidate(source)
+        source = source.sub(amount_text.to_s, "") if amount_text.present?
+        source.gsub(/[¥￥,，\d\s　]+/, " ").strip.presence || "商品券"
+      end
+
+      def deduplicate_fallback_payments(payments)
+        seen = {}
+
+        Array(payments).filter_map do |payment|
+          next payment if voucher_payment_text?(payment[:method])
+
+          key = [ payment[:method], payment[:amount] ]
+          next if seen[key]
+
+          seen[key] = true
+          payment
         end
       end
 
@@ -590,6 +626,25 @@ module Analysis
         }
       end
 
+      def add_cash_difference_payment(payments, lines, receipt_total)
+        normalized_payments = Array(payments).map(&:dup)
+        return normalized_payments if normalized_payments.blank?
+
+        total = normalize_amount(receipt_total)&.to_i
+        return normalized_payments unless total&.positive?
+
+        payment_sum = normalized_payments.sum { |payment| payment[:amount].to_i }
+        missing_amount = total - payment_sum
+        return normalized_payments unless missing_amount.positive?
+
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        return normalized_payments unless deposit_amount&.positive? && change_amount&.positive?
+        return normalized_payments unless deposit_amount - change_amount == missing_amount
+
+        normalized_payments + [ { method: "cash", amount: missing_amount } ]
+      end
+
       def external_tax_details_conflict_with_receipt_total?(tax_details, receipt_total)
         details = usable_tax_details_with_gross_amount(tax_details)
         return false if details.blank?
@@ -649,7 +704,8 @@ module Analysis
             source_index: index,
             transaction_context: fallback_payment_transaction_context_line?(line)
           }
-        end.uniq { |payment| [ payment[:method], payment[:amount] ] }
+        end
+        payments = deduplicate_fallback_payments(payments)
 
         select_fallback_payments(payments, receipt_total: total)
       end
@@ -721,7 +777,7 @@ module Analysis
         elsif total&.positive? && candidates.sum { |payment| payment[:amount].to_i } == total
           candidates
         elsif total&.positive?
-          candidates.select { |payment| payment[:transaction_context] }
+          candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
         else
           candidates
         end
@@ -1467,14 +1523,29 @@ module Analysis
         detect_payment_method_from_payments(candidates[:payments])
       end
 
-      def reconcile_payment_method_with_payments(current_method, payments)
+      def reconcile_payment_method_with_payments(current_method, payments, lines: [])
         current = normalize_detected_payment_method(current_method)
         return current unless Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
+        return "other" if cash_payments_are_settlement_difference?(payments, lines)
 
         detected_from_payments = detect_payment_method_from_payments(payments)
         return normalize_detected_payment_method(detected_from_payments) if detected_from_payments.present?
 
         "other"
+      end
+
+      def cash_payments_are_settlement_difference?(payments, lines)
+        non_voucher_payments = Array(payments).reject { |payment| voucher_payment_text?(payment[:method]) }
+        return false if non_voucher_payments.blank?
+        return false unless non_voucher_payments.all? do |payment|
+          normalize_detected_payment_method(Analysis::ReceiptFallbackPatterns.detect_payment_method(payment[:method])) == "cash"
+        end
+
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        return false unless deposit_amount&.positive? && change_amount&.positive?
+
+        non_voucher_payments.sum { |payment| payment[:amount].to_i } == deposit_amount - change_amount
       end
 
       def detect_payment_method_from_payments(payments)

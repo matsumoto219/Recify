@@ -445,6 +445,151 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '同一商品券行が複数ある場合は枚数分を集約してpaymentにする' do
+        ocr_result[:candidates][:payment_method_text] = '商品券'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 5_184
+        ocr_result[:lines] = [
+          '合計',
+          '¥5,184',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: 商品券 1,000 x 5 = 5,000。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'サンプル商品券', amount: 5_000)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_attributes][:payment_method]).to eq('other')
+        end
+      end
+
+      it 'AI adjustmentの商品券が1件だけでもOCR上の複数商品券行を優先して集約paymentにする' do
+        ocr_result[:candidates][:payment_method_text] = '商品券'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 5_184
+        ocr_result[:lines] = [
+          '合計',
+          '¥5,184',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: 'サンプル商品券1000',
+              amount: 1_000,
+              sign: 'discount',
+              source_text: 'サンプル商品券1000',
+              source_line_index: 2,
+              confidence: 0.9,
+              needs_review: false,
+              review_reasons: []
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          # 検算: AIの1件ではなく、OCR行の 1,000 x 5 = 5,000 を支払額にする。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'サンプル商品券', amount: 5_000)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it '商品券支払の不足額がお預りとお釣りの差額に一致する場合はcash paymentを追加する' do
+        ocr_result[:candidates][:payment_method_text] = '商品券'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 5_184
+        ocr_result[:lines] = [
+          '合計',
+          '¥5,184',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'お預り',
+          '¥200',
+          'お釣り',
+          '¥16'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: 商品券 1,000 x 5 = 5,000, 現金 200 - 16 = 184, 支払合計 5,184。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'サンプル商品券', amount: 5_000),
+            include(method: 'cash', amount: 184)
+          )
+          expect(params[:receipt_payments_attributes].sum { |payment| payment[:amount].to_i }).to eq(5_184)
+          expect(params[:receipt_attributes][:payment_method]).to eq('other')
+        end
+      end
+
+      it 'お預りとお釣りの差額が不足額と一致しない場合はcash paymentを追加しない' do
+        ocr_result[:candidates][:payment_method_text] = '商品券'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 5_184
+        ocr_result[:lines] = [
+          '合計',
+          '¥5,184',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'お預り',
+          '¥300',
+          'お釣り',
+          '¥16'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'サンプル商品券', amount: 5_000)
+          )
+          expect(params[:receipt_payments_attributes]).not_to include(include(method: 'cash'))
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [

@@ -1658,6 +1658,129 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '商品券複数枚とお預り差額で支払合計が一致すればAIの支払方法uncertainを解消する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "サンプルスーパー 東京中央店\n商品A ¥4,800\n小計 ¥4,800\n外税 8%対象額 ¥4,800\n外税額 8% ¥384\n合計 ¥5,184\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nお預り ¥200\nお釣り ¥16",
+        lines: [
+          'サンプルスーパー 東京中央店',
+          '商品A',
+          '¥4,800',
+          '小計',
+          '¥4,800',
+          '外税 8%対象額',
+          '¥4,800',
+          '外税額 8%',
+          '¥384',
+          '合計',
+          '¥5,184',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'サンプル商品券1000',
+          '¥1,000',
+          'お預り',
+          '¥200',
+          'お釣り',
+          '¥16'
+        ],
+        candidates: {
+          store_name: 'サンプルスーパー 東京中央店',
+          total_amount: 5_184,
+          subtotal_amount: 4_800,
+          tax_amount: 384,
+          tax_rate: 8,
+          payment_method_text: '商品券',
+          items: [
+            {
+              raw_text: '商品A',
+              price: 4_800,
+              quantity: 1,
+              quantity_unit: '個',
+              line_total: 4_800,
+              tax_rate: 8,
+              confidence: 0.95
+            }
+          ],
+          payments: [],
+          tax_details: [
+            { description: '外税 8%', rate: 8, net_amount: 4_800, amount: 384 }
+          ]
+        }
+      )
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: [ 'payment_method_uncertain' ],
+        receipt_attributes: {
+          store_name: 'サンプルスーパー 東京中央店',
+          payment_method: 'other'
+        },
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: '商品A',
+            category: 'food',
+            price: 4_800,
+            quantity: 1,
+            quantity_unit: '個',
+            line_total: 4_800,
+            tax_rate: 0.08,
+            needs_review: false,
+            confidence: 0.95
+          }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'coupon',
+            label: 'サンプル商品券1000',
+            amount: 1_000,
+            sign: 'discount',
+            source_text: 'サンプル商品券1000',
+            source_line_index: 11,
+            confidence: 0.9,
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 商品合計4,800 + 外税384 = 5,184。商品券1,000 x 5 + 現金(200 - 16) = 5,184。
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.subtotal_amount).to eq(4_800)
+        expect(receipt.tax_amount).to eq(384)
+        expect(receipt.total_amount).to eq(5_184)
+        expect(receipt.payment_method).to eq('other')
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.receipt_payments.map { |payment| [ payment.method, payment.amount ] }).to contain_exactly(
+          [ 'サンプル商品券', 5_000 ],
+          [ 'cash', 184 ]
+        )
+        expect(receipt.receipt_payments.sum(&:amount)).to eq(5_184)
+        expect(receipt.receipt_tax_details.map { |detail| [ detail.rate, detail.net_amount, detail.amount, detail.net_amount + detail.amount ] }).to contain_exactly(
+          [ BigDecimal('0.08'), 4_800, 384, 5_184 ]
+        )
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('external_tax_from_receipt/floor')
+      end
+    end
+
     it 'Amount Engineが正規化した税込priceとline_totalを明細保存へ反映する' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_dup
