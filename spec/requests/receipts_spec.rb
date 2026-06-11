@@ -4155,7 +4155,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '詳細ヘッダーは長い店舗名と住所を省略し、statusとIDを共通メタ領域に1回だけ表示する' do
+    it '詳細ヘッダーは店舗名の表示幅を優先し、statusとIDを店舗名行から分離する' do
       receipt.update!(
         store_name: 'とても長い店舗名' * 10,
         store_address: '東京都千代田区とても長い住所' * 10
@@ -4167,30 +4167,54 @@ RSpec.describe 'Receipts', type: :request do
       main = document.at_css('#receipt-detail-main')
       store_heading = main.css('h2').find { |node| node.text.include?(receipt.store_name) }
       text_column = store_heading.parent
+      info_row = text_column.parent
+      header = info_row.parent
       address = text_column.css('p').find { |node| node.text.include?(receipt.store_address) }
-      id_nodes = main.css('p').select { |node| node.text.strip == "ID: #{receipt.display_id}" }
-      meta = id_nodes.first.parent
-      status_badge = meta.css('span').find { |node| node.text.strip == receipt.status_label }
-      mobile_only_id_rows = main.css('div').select do |node|
-        node['class'].to_s.include?('md:hidden') && node.text.include?("ID: #{receipt.display_id}")
+      mobile_eyebrow_row = header.css('div').find do |node|
+        node['class'].to_s.include?('md:hidden') &&
+          node['class'].to_s.include?('justify-between') &&
+          node.text.include?(I18n.t('receipts.show.store_information')) &&
+          node.text.include?(receipt.status_label)
       end
+      desktop_badge_area = header.css('div').find do |node|
+        node['class'].to_s.include?('hidden') &&
+          node['class'].to_s.include?('md:block') &&
+          node.text.include?(receipt.status_label)
+      end
+      id_nodes = main.css('p').select { |node| node.text.strip == "ID: #{receipt.display_id}" }
+      mobile_id = text_column.css('p').find do |node|
+        node['class'].to_s.include?('md:hidden') && node.text.strip == "ID: #{receipt.display_id}"
+      end
+      desktop_id = desktop_badge_area.css('p').find { |node| node.text.strip == "ID: #{receipt.display_id}" }
+      floating_id_rows = id_nodes.map(&:parent).select { |node| node['class'].to_s.include?('justify-end') }
+      mobile_status_badge = mobile_eyebrow_row.css('span').find { |node| node.text.strip == receipt.status_label }
+      desktop_status_badge = desktop_badge_area.css('span').find { |node| node.text.strip == receipt.status_label }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(text_column['class']).to include('flex-1')
+        expect(header['class']).to include('md:flex')
+        expect(header['class']).to include('md:justify-between')
+        expect(info_row['class']).to include('mt-3')
+        expect(info_row['class']).to include('flex')
+        expect(info_row['class']).to include('md:flex-1')
         expect(text_column['class']).to include('min-w-0')
         expect(text_column['class']).to include('max-w-full')
+        expect(text_column['class']).to include('flex-1')
         expect(text_column['class']).to include('overflow-hidden')
         expect(store_heading['class']).to include('truncate')
         expect(store_heading['title']).to eq(receipt.store_name)
         expect(address['class']).to include('truncate')
         expect(address['title']).to eq(receipt.store_address)
-        expect(id_nodes.size).to eq(1)
-        expect(meta['class']).to include('shrink-0')
-        expect(meta['class']).to include('whitespace-nowrap')
-        expect(meta['class']).to include('text-right')
-        expect(status_badge['class']).to include('shrink-0')
-        expect(mobile_only_id_rows).to be_empty
+        expect(mobile_eyebrow_row['class']).to include('md:hidden')
+        expect(desktop_badge_area['class']).to include('md:block')
+        expect(desktop_badge_area['class']).to include('whitespace-nowrap')
+        expect(desktop_badge_area['class']).to include('text-right')
+        expect(id_nodes.size).to eq(2)
+        expect(mobile_id['class']).to include('md:hidden')
+        expect(desktop_id['class']).to include('mt-2')
+        expect(floating_id_rows).to be_empty
+        expect(mobile_status_badge['class']).to include('shrink-0')
+        expect(desktop_status_badge['class']).to include('shrink-0')
       end
     end
 
