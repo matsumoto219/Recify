@@ -23,6 +23,12 @@ ja:
       description: 短時間に多くのリクエストを受け取りました。
       retry_after: "%{minutes}分後に再度お試しください。"
       back_link: 前の画面へ戻る
+    service_unavailable:
+      page_title: ただいま一時停止しています
+      title: ただいま一時停止しています
+      description: |-
+        アクセス集中のため、サイトを一時的に停止しています。
+        しばらく時間をおいてから再度お試しください。
     internal_server_error:
       page_title: 予期しないエラーが発生しました
       title: 予期しないエラーが発生しました

@@ -1,4 +1,6 @@
 class ErrorsController < ApplicationController
+  SERVICE_UNAVAILABLE_RETRY_AFTER_SECONDS = 300
+
   layout "error"
   helper_method :error_primary_label, :error_primary_path
 
@@ -22,7 +24,29 @@ class ErrorsController < ApplicationController
     render status: :internal_server_error, formats: :html
   end
 
+  def service_unavailable
+    log_error_page(status: 503, level: :warn)
+    set_service_unavailable_headers
+
+    respond_to do |format|
+      format.html { render status: :service_unavailable, formats: :html }
+      format.json do
+        render json: {
+          error: t("errors.service_unavailable.title"),
+          message: t("errors.service_unavailable.description"),
+          status: Rack::Utils.status_code(:service_unavailable),
+          retry_after: SERVICE_UNAVAILABLE_RETRY_AFTER_SECONDS
+        }, status: :service_unavailable
+      end
+    end
+  end
+
   private
+
+  def set_service_unavailable_headers
+    response.set_header("Cache-Control", "no-store")
+    response.set_header("Retry-After", SERVICE_UNAVAILABLE_RETRY_AFTER_SECONDS.to_s)
+  end
 
   def error_primary_label
     if user_signed_in?

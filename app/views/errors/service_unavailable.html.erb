@@ -1,0 +1,7 @@
+<% content_for :title, t("errors.service_unavailable.page_title") %>
+
+<%= render "errors/error_page",
+  status_code: 503,
+  icon: "pause_circle",
+  title: t("errors.service_unavailable.title"),
+  description: simple_format(t("errors.service_unavailable.description"), {}, wrapper_tag: "span") %>

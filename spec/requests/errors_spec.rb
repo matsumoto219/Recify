@@ -122,6 +122,38 @@ RSpec.describe 'Error pages', type: :request do
       expect_support_id(request_id)
     end
 
+    it 'GET /503 はRecify error layoutで表示される' do
+      get '/503'
+
+      expect_error_page(
+        status_code: :service_unavailable,
+        icon: 'pause_circle',
+        title: I18n.t('errors.service_unavailable.title'),
+        primary_cta: nil,
+        primary_href: nil
+      )
+      expect(response.body).to include('アクセス集中のため、サイトを一時的に停止しています。')
+      expect(response.body).to include('しばらく時間をおいてから再度お試しください。')
+      expect(response.headers['Cache-Control']).to include('no-store')
+      expect(response.headers['Retry-After']).to eq('300')
+      expect(Nokogiri::HTML(response.body).at_css('main a')).to be_nil
+    end
+
+    it 'GET /503 はJSONリクエストに503 JSONを返す' do
+      get '/503', headers: { 'ACCEPT' => 'application/json' }
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.media_type).to eq('application/json')
+      expect(response.headers['Cache-Control']).to include('no-store')
+      expect(response.headers['Retry-After']).to eq('300')
+      expect(JSON.parse(response.body)).to eq(
+        'error' => I18n.t('errors.service_unavailable.title'),
+        'message' => I18n.t('errors.service_unavailable.description'),
+        'status' => 503,
+        'retry_after' => 300
+      )
+    end
+
     it 'ログイン済みならGET /404はレシート一覧へ戻す' do
       sign_in create(:user)
 
@@ -242,6 +274,18 @@ RSpec.describe 'Error pages', type: :request do
       end
     end
 
+    it 'direct /503 はwarnで記録する' do
+      messages = capture_error_page_logs(:warn)
+
+      get '/503'
+
+      aggregate_failures do
+        expect(messages.join("\n")).to include('[ErrorPage] status=503')
+        expect(messages.join("\n")).to include('path=/503')
+        expect(messages.join("\n")).to include('exception_class=nil')
+      end
+    end
+
     it '500 exceptionがある場合はclass/messageをerrorで記録する' do
       messages = capture_error_page_logs(:error)
       allow_any_instance_of(HomeController).to receive(:index).and_raise(RuntimeError, 'intentional failure for log')
@@ -345,6 +389,25 @@ RSpec.describe 'Error pages', type: :request do
       expect(response.body).to include(I18n.t('receipts.new_upload.title'))
       expect(response.body).not_to include('Error Code: 422')
       expect(response.body).not_to match(/translation missing/i)
+    end
+  end
+
+  describe '503 static fallback' do
+    it 'public/503.html が存在し、基本文言を含む' do
+      static_page = Rails.root.join('public/503.html')
+
+      expect(static_page).to exist
+      html = static_page.read
+      expect(html).to include('ただいま一時停止しています')
+      expect(html).to include('アクセス集中のため、サイトを一時的に停止しています。')
+      expect(html).to include('Error Code: 503')
+      expect(html).to include('no-store')
+    end
+
+    it 'ErrorPageStaticBypass は /503 を動的エラー画面へ渡す' do
+      expect(Recify::ErrorPageStaticBypass::ERROR_ROUTES).to include(
+        '/503' => '/errors/service_unavailable'
+      )
     end
   end
 end
