@@ -623,7 +623,9 @@ module ReceiptAnalysisRuns
         store_name: safe_string(store[:store_name]),
         store_address: safe_string(store[:store_address]),
         store_phone_number: safe_string(store[:store_phone_number]),
+        customer_facing_store_candidates: limited_strings(store[:customer_facing_store_candidates], MAX_STORE_CANDIDATES),
         store_candidates: limited_strings(store[:store_candidates], MAX_STORE_CANDIDATES),
+        operator_candidates: limited_strings(store[:operator_candidates], MAX_STORE_CANDIDATES),
         branch_name_candidates: limited_strings(store[:branch_name_candidates], MAX_STORE_CANDIDATES),
         address_candidates: limited_strings(store[:address_candidates], MAX_STORE_CANDIDATES)
       }.compact

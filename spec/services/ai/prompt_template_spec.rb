@@ -139,6 +139,22 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it '店舗名と運営主体・法的主体を区別するよう指示する' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(user_prompt).to include('customer-facing store, venue, facility')
+        expect(user_prompt).to include('operator, management company, contractor, franchisee, licensee')
+        expect(user_prompt).to include('Legal entity designators, company suffixes, or jurisdiction-specific corporate forms')
+        expect(user_prompt).to include('management, operation, ownership, contracting, licensing, facility administration')
+        expect(user_prompt).to include('preserve that printed combined name as store_name')
+        expect(user_prompt).to include('Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes')
+        expect(user_prompt).to include('operator_candidates')
+        expect(store_information_prompt).not_to include('common local notation')
+        expect(store_information_prompt).not_to match(/[一-龠ぁ-んァ-ヶ]/)
+      end
+    end
+
     it 'not receipt の rejection_reason 許可リストを指示する' do
       aggregate_failures do
         expect(system_prompt).to include('Allowed rejection_reason values:')

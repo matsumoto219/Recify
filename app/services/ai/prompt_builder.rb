@@ -46,7 +46,9 @@ module Ai
         store_name: candidate_value(:store_name),
         store_address: candidate_value(:store_address),
         store_phone_number: candidate_value(:store_phone_number),
+        customer_facing_store_candidates: customer_facing_store_candidates,
         store_candidates: store_name_candidates,
+        operator_candidates: operator_candidates,
         branch_name_candidates: branch_name_candidates,
         address_candidates: address_candidates
       }.compact
@@ -248,9 +250,17 @@ module Ai
 
     def store_name_candidates
       candidates = []
+      operator_store_name = operator_store_name_candidate?
+      customer_facing_extension = customer_facing_store_name_extends_ocr_store_name?
+      operator_brand_replacement = operator_brand_store_name_replacement_candidate?
 
-      # OCRのstore_nameも候補に含める
-      candidates << candidate_value(:store_name)
+      if operator_store_name || customer_facing_extension || operator_brand_replacement
+        candidates.concat(customer_facing_store_candidates)
+      end
+
+      # OCRのstore_nameも候補に含める。ただし運営主体文脈の法人名は operator_candidates 側へ逃がす。
+      candidates << candidate_value(:store_name) unless operator_store_name && customer_facing_store_candidates.present?
+      candidates.concat(customer_facing_store_candidates) unless operator_store_name || customer_facing_extension || operator_brand_replacement
 
       # 先頭行から候補抽出（ブランド＋支店を拾うため）
       candidates.concat(lines.first(10))
@@ -263,6 +273,13 @@ module Ai
         next if profile[:address_candidate]
         next if profile[:payment_context_line]
         next if profile[:purchase_context_line]
+        if customer_facing_store_candidates.present? &&
+            Analysis::StoreNameCandidateClassifier.legal_entity_name?(text) &&
+            !operator_derived_customer_facing_candidate?(text)
+          next
+        end
+        next if operator_reference_line?(text) && customer_facing_store_candidates.present?
+        next if store_name_candidate_noise_line?(text)
         next if text.match?(/tel|電話|レジ|伝票|領収|日時|合計|小計/i)
         next if text.match?(/^\d+[\d\s\-\/:]*$/)
 
@@ -270,6 +287,141 @@ module Ai
       end
 
       cleaned.uniq.first(10)
+    end
+
+    def customer_facing_store_candidates
+      @customer_facing_store_candidates ||= (
+        operator_brand_with_branch_candidates +
+          operator_brand_candidates_with_branch_context +
+          store_name_with_branch_candidates +
+          Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines)
+      ).uniq
+    end
+
+    def operator_candidates
+      @operator_candidates ||= Analysis::StoreNameCandidateClassifier.operator_candidates(
+        lines,
+        merchant_name: candidate_value(:store_name)
+      )
+    end
+
+    def operator_store_name_candidate?
+      Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(candidate_value(:store_name), lines)
+    end
+
+    def customer_facing_store_name_extends_ocr_store_name?
+      ocr_store_name = normalized_store_name(candidate_value(:store_name))
+      return false if ocr_store_name.blank?
+
+      customer_facing_store_candidates.any? do |candidate|
+        normalized_candidate = normalized_store_name(candidate)
+        normalized_candidate.present? &&
+          normalized_candidate != ocr_store_name &&
+          normalized_candidate.include?(ocr_store_name)
+      end
+    end
+
+    def operator_brand_store_name_replacement_candidate?
+      ocr_store_name = normalized_store_name(candidate_value(:store_name))
+      return false if ocr_store_name.blank?
+
+      operator_brand_branch_pairs.any? do |pair|
+        brand = normalized_store_name(pair[:brand])
+        branch = normalized_store_name(pair[:branch])
+
+        brand.present? &&
+          branch.present? &&
+          ocr_store_name.include?(branch) &&
+          !ocr_store_name.include?(brand)
+      end
+    end
+
+    def store_name_with_branch_candidates
+      ocr_store_name = Analysis::StoreNameCandidateClassifier.normalize_name(candidate_value(:store_name))
+      return [] if ocr_store_name.blank? || operator_store_name_candidate?
+
+      branch_name_candidates.filter_map do |branch_name|
+        branch = Analysis::StoreNameCandidateClassifier.normalize_name(branch_name)
+        next if branch.blank?
+        next if normalized_store_name(branch) == normalized_store_name(ocr_store_name)
+        next if normalized_store_name(ocr_store_name).include?(normalized_store_name(branch))
+        next if normalized_store_name(branch).include?(normalized_store_name(ocr_store_name))
+        next unless adjacent_header_lines?(ocr_store_name, branch)
+
+        "#{ocr_store_name} #{branch}"
+      end.uniq.first(3)
+    end
+
+    def operator_brand_with_branch_candidates
+      operator_brand_branch_pairs.map { |pair| "#{pair[:brand]} #{pair[:branch]}" }.uniq
+    end
+
+    def operator_brand_candidates_with_branch_context
+      operator_brand_branch_pairs.map { |pair| pair[:brand] }.uniq
+    end
+
+    def operator_derived_customer_facing_candidate?(text)
+      normalized = normalized_store_name(text)
+      return false if normalized.blank?
+
+      (operator_brand_with_branch_candidates + operator_brand_candidates_with_branch_context).any? do |candidate|
+        normalized_store_name(candidate) == normalized
+      end
+    end
+
+    def operator_brand_branch_pairs
+      @operator_brand_branch_pairs ||= lines.first(8).each_with_index.filter_map do |line, index|
+        brand = Analysis::StoreNameCandidateClassifier.brand_candidate_from_legal_entity(line)
+        next if brand.blank?
+
+        branch = following_branch_line(index)
+        next if branch.blank?
+
+        { brand: brand, branch: branch }
+      end
+    end
+
+    def following_branch_line(index)
+      Array(lines)[(index + 1)..(index + 3)]&.find do |line|
+        branch_name_candidate?(line)
+      end
+    end
+
+    def operator_reference_line?(text)
+      Analysis::StoreNameCandidateClassifier.operator_context_line?(text) ||
+        Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(text, lines)
+    end
+
+    def store_name_candidate_noise_line?(text)
+      normalized = text.to_s.strip
+      return true if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
+      return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
+      return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
+      return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
+
+      false
+    end
+
+    def adjacent_header_lines?(store_name, branch_name)
+      store_index = header_line_index(store_name)
+      branch_index = header_line_index(branch_name)
+      return false if store_index.nil? || branch_index.nil?
+
+      branch_index > store_index && (branch_index - store_index) <= 3
+    end
+
+    def header_line_index(value)
+      normalized_value = normalized_store_name(value)
+      return nil if normalized_value.blank?
+
+      lines.first(8).find_index do |line|
+        normalized_line = normalized_store_name(line)
+        normalized_line == normalized_value
+      end
+    end
+
+    def normalized_store_name(value)
+      Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
     end
 
     def purchase_context_line?(line)
@@ -408,17 +560,23 @@ module Ai
       profile = line_profile(line)
       text = profile[:text]
       return false if text.empty?
+      return false if normalized_store_name(text) == normalized_store_name(candidate_value(:store_name))
       return false if profile[:address_candidate]
       return false if profile[:date_time_line]
       return false if profile[:payment_context_line]
+      return false if store_name_candidate_noise_line?(text)
+      return false if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(text)
       # item OCR原文と近い行は支店名候補から除外する。
       # ただし店舗名と商品名が同一になる特殊ケースはあり得るため、最終判定は filtered_content も参照する AI に委ねる。
       return false if item_like_line?(text)
       return false if text.match?(/\A[\d\-\+]{6,}\z/)
       return false if text.match?(/株式会社|有限会社|合同会社/)
       return false if text.match?(/お客様相談室|サポート|ヘルプデスク|コールセンター/)
-      return false if text.match?(/登録番号|電話|TEL|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/)
+      return false if text.match?(/登録番号|電話|tel|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/i)
       return false if text.match?(/\d{4}年|\d{1,2}月|\d{1,2}日/)
+      return false if text.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
+      return false if text.match?(/ます[。.]?\z/)
+      return false if text.match?(/ご利用日|利用日/)
       return false if text.match?(/オーダー|注文|時刻|日時/)
       return false if text.match?(/ポイント|楽天ポイント|Tポイント|dポイント|Ponta|WAON POINT|nanacoポイント/i)
       return false if text.match?(/[¥￥円]/)

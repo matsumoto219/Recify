@@ -307,15 +307,22 @@ class Ocr::ResponseParser
   def extract_store_name_candidates(lines, merchant_name)
     normalized_lines = Array(lines).filter_map { |line| normalize_store_name_candidate(line) }
     normalized_merchant_name = normalize_store_name_candidate(merchant_name)
+    heading_candidates = Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(normalized_lines)
+    operator_merchant_name = Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(
+      normalized_merchant_name,
+      normalized_lines
+    )
     branch_name = extract_branch_like_store_name(normalized_lines, merchant_name)
     brand_name = extract_brand_like_store_name(normalized_lines, branch_name)
 
     candidates = []
+    candidates.concat(heading_candidates) if operator_merchant_name
     candidates << combine_brand_and_branch_name(brand_name, branch_name)
-    candidates << normalized_merchant_name if normalized_merchant_name.present? && branch_name.blank?
+    candidates << normalized_merchant_name if normalized_merchant_name.present? && branch_name.blank? && !operator_merchant_name
     candidates << brand_name
     candidates << branch_name
     candidates << normalized_merchant_name
+    candidates.concat(heading_candidates) unless operator_merchant_name
 
     candidates.compact_blank.uniq
   end
@@ -363,7 +370,7 @@ class Ocr::ResponseParser
     Array(lines).find do |line|
       normalized_line = normalize_store_name_candidate(line)
       next false if normalized_line.blank?
-      next false if normalized_merchant_name.present? && normalized_line == normalized_merchant_name
+      next false if normalized_merchant_name.present? && normalized_line.casecmp?(normalized_merchant_name)
       next false if store_name_noise_line?(normalized_line, allow_branch_like: true)
 
       branch_like_store_name?(normalized_line)
@@ -384,6 +391,7 @@ class Ocr::ResponseParser
 
     return true if normalized.match?(/店$/)
     return true if normalized.match?(/支店|本店|営業所|センター|モール|ショップ|market|mart|store/i)
+    return true if normalized.match?(/通り|駅前|南口|北口|東口|西口/)
 
     false
   end

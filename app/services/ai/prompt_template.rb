@@ -163,18 +163,24 @@ module Ai
         - If uncertain, do not set is_receipt = false. Set needs_review = true and use low-to-medium is_receipt_confidence.
 
         For store information:
-        - store_name: prefer OCR store_name. Only when it is blank or clearly wrong, use store_candidates, filtered_content, and full_context_lines as supporting evidence.
-        - Use the store brand name as the core store_name. Combine branch names, shopping facility names, or regional/location names only when they are clearly connected to the store and produce a natural store_name.
-        - Do NOT use descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, timestamps, receipt labels, or payment text as store_name.
-        - Use meta.country_region as a reference for natural local store-name notation. Do NOT normalize to a different brand name unless OCR candidates and context support it.
-        - If the store brand notation is unnatural for country_region and a common local notation is clearly supported, normalize it to that common local notation.
+        - store_name: choose the customer-facing store, venue, facility, department, or sales-location name that a customer would use to identify where the purchase happened.
+        - Prefer prominent receipt header names and customer-facing candidates over legal entities when both are present.
+        - OCR store_name is an important reference, but do NOT treat it as absolute when it appears to be an operator, management company, contractor, franchisee, licensee, tax-registered entity, legal entity, designated manager, or merchant-of-record.
+        - Legal entity designators, company suffixes, or jurisdiction-specific corporate forms (e.g. Inc., Ltd., LLC, GmbH, S.A., Pty Ltd and similar) may be valid store_name only when that legal name is the only clearly supported customer-facing name.
+        - If a legal entity appears near text that indicates management, operation, ownership, contracting, licensing, facility administration, merchant-of-record, tax-registration, or similar operator/legal-entity context, treat it as operator/legal-entity evidence rather than the primary store_name.
+        - Use the store brand name as the core store_name. When the receipt explicitly prints a brand followed by a branch, location, venue, department, sales area, or in-facility name, preserve that printed combined name as store_name.
+        - Do not shorten a printed brand-plus-branch/location/facility name to brand-only unless the extra text is clearly unrelated, address-only, operator/legal context, or non-store text.
+        - Combine branch names, shopping facility names, venue names, department names, or regional/location names only when they are clearly connected in the receipt text and produce a natural store_name.
+        - Do NOT use descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, tax IDs, timestamps, receipt labels, operator/legal labels, or payment text as store_name.
+        - Use meta.country_region only to interpret local formatting already present in OCR. Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes, words, or legal designators based on external knowledge, common naming conventions, or assumptions.
+        - Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.
         - store_address: prefer OCR store_address. If it is blank or appears to be a headquarters or customer support address, look for a store-level address in address_candidates, filtered_content, and full_context_lines.
         - store_address MUST be a physical address only. Do NOT fill it with phone numbers, fax numbers, contact information, or URLs.
         - If one store-level address is clearly supported, return it. If multiple plausible store-level addresses remain unresolved, set store_address_uncertain. If no clear physical address exists, return null.
         - store_phone_number: prefer OCR store_phone_number. Do NOT invent phone numbers.
         - If a plausible phone number exists, keep it unless there is strong evidence that it is not a store phone number. If uncertain, use store_phone_number_uncertain instead of treating it as missing.
         - Prefer phone numbers clearly tied to the store or branch context over headquarters or customer support numbers.
-        - store_candidates, branch_name_candidates, and address_candidates are supporting references only. Do NOT output those arrays.
+        - customer_facing_store_candidates, store_candidates, operator_candidates, branch_name_candidates, and address_candidates are supporting references only. Do NOT output those arrays.
 
         For purchase:
         - purchased_at_text: prefer OCR purchased_at_text. Do NOT invent timestamps.

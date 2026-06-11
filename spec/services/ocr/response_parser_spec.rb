@@ -613,6 +613,92 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '指定管理者近傍の法人MerchantNameより上部の顧客向け施設名を優先する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプル公園
+        駐車場
+        領収書
+        登録番号:t7490001001867
+        東京都中央区銀座1-1-1
+        駐車券自家用車等 ¥500
+        現 計 ¥500
+        サンプル公園指定管理者
+        株式会社
+        サンプル管理
+      TEXT
+      response['analyzeResult']['documents'][0]['fields']['MerchantName'] = {
+        'valueString' => "株式会社\nサンプル管理",
+        'confidence' => 0.972
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      # 上部見出し2行を結合し、下部の指定管理者法人名より優先する:
+      # 「サンプル公園」 + 「駐車場」 = 「サンプル公園駐車場」
+      expect(result.dig(:candidates, :store_name)).to eq('サンプル公園駐車場')
+    end
+
+    it '法人名が唯一の上部店舗名ならMerchantNameを維持する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        ABC Stores Inc.
+        Receipt
+        Coffee $4.00
+        Total $4.00
+      TEXT
+      response['analyzeResult']['documents'][0]['fields']['MerchantName'] = {
+        'valueString' => 'ABC Stores Inc.',
+        'confidence' => 0.95
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :store_name)).to eq('ABC Stores Inc.')
+    end
+
+    it 'ブランド名と印字された場所名を結合し、未印字のsuffixは追加しない' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプル食堂
+        株式会社サンプル食堂
+        サンプル通り
+        東京都渋谷区道玄坂1-2-3
+        お客様相談室 0120-498-007
+        登録番号:t2010401093920
+        合計 ¥1,510
+      TEXT
+      response['analyzeResult']['documents'][0]['fields']['MerchantName'] = {
+        'valueString' => 'サンプル食堂',
+        'confidence' => 0.95
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :store_name)).to eq('サンプル食堂 サンプル通り')
+    end
+
+    it 'managed by近傍の海外法人MerchantNameより上部の施設名を優先する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        Harbor Parking
+        North Garage
+        Receipt
+        Parking fee $12.00
+        Total $12.00
+        Managed by
+        Harima House Ltd.
+      TEXT
+      response['analyzeResult']['documents'][0]['fields']['MerchantName'] = {
+        'valueString' => 'Harima House Ltd.',
+        'confidence' => 0.94
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :store_name)).to eq('harbor parking north garage')
+    end
+
     it 'discount_heavy_receiptでは商品単位値引きを対象商品へ紐付け、レシート単位値引きを明細化しない' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
 

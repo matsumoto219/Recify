@@ -106,9 +106,10 @@ module Analysis
 
       def build_receipt_attributes(candidates, ai_receipt_attributes, lines)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
+        store_name = resolve_store_name(ai_attrs[:store_name].presence || candidates[:store_name], lines)
 
         {
-          store_name: ai_attrs[:store_name].presence || candidates[:store_name],
+          store_name: store_name,
           store_address: ai_attrs[:store_address].presence || candidates[:store_address],           # 実レシートでは未取得が多いが、取得値は住所として表示/編集対象にする
           store_address_components: normalize_store_address_components(
             ai_attrs[:store_address_components].presence || candidates[:store_address_components]
@@ -130,6 +131,118 @@ module Analysis
           processing_error_message: ai_attrs[:processing_error_message],
           ocr_completed_at: ai_attrs[:ocr_completed_at]
         }.compact
+      end
+
+      def resolve_store_name(store_name, lines)
+        normalized_store_name = compact_store_name(store_name)
+        return store_name if normalized_store_name.blank?
+
+        legal_entity_extension = legal_entity_brand_store_name_extension(store_name, lines)
+        return legal_entity_extension if legal_entity_extension.present?
+
+        printed_extension = printed_store_name_extension(store_name, lines)
+        return printed_extension if printed_extension.present?
+
+        store_name
+      end
+
+      def printed_store_name_extension(store_name, lines)
+        normalized_store_name = compact_store_name(store_name)
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+        return nil if header_lines.blank?
+
+        containing_line = header_lines.find do |line|
+          normalized_line = compact_store_name(line)
+          normalized_line != normalized_store_name && normalized_line.include?(normalized_store_name)
+        end
+        return containing_line if containing_line.present? && customer_facing_store_line?(containing_line)
+
+        store_index = header_lines.find_index { |line| compact_store_name(line) == normalized_store_name }
+        return nil if store_index.nil?
+
+        branch_line = header_lines[(store_index + 1)..(store_index + 3)]&.find do |line|
+          customer_facing_branch_line?(line)
+        end
+        return nil if branch_line.blank?
+
+        "#{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)} #{branch_line}"
+      end
+
+      def legal_entity_brand_store_name_extension(store_name, lines)
+        current_store_name = compact_store_name(store_name)
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+        return nil if header_lines.blank?
+
+        current_store_name_in_header = header_lines.any? do |line|
+          compact_store_name(line) == current_store_name
+        end
+
+        legal_entity_brand_branch_pairs(header_lines).each do |pair|
+          brand = pair[:brand]
+          branch = pair[:branch]
+          compact_brand = compact_store_name(brand)
+          compact_branch = compact_store_name(branch)
+          next if compact_brand.blank? || compact_branch.blank?
+          next if current_store_name.include?(compact_brand)
+          next unless current_store_name.include?(compact_branch) || current_store_name_in_header
+
+          return "#{brand} #{branch}"
+        end
+
+        nil
+      end
+
+      def legal_entity_brand_branch_pairs(header_lines)
+        Array(header_lines).each_with_index.filter_map do |line, index|
+          brand = Analysis::StoreNameCandidateClassifier.brand_candidate_from_legal_entity(line)
+          next if brand.blank?
+
+          branch = Array(header_lines)[(index + 1)..(index + 3)]&.find do |candidate|
+            customer_facing_branch_line?(candidate)
+          end
+          next if branch.blank?
+
+          { brand: brand, branch: branch }
+        end
+      end
+
+      def customer_facing_store_line?(line)
+        normalized = line.to_s
+        return false if store_name_context_noise_line?(normalized)
+        return false if Analysis::StoreNameCandidateClassifier.legal_entity_name?(normalized)
+        return false if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
+
+        normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
+      end
+
+      def customer_facing_branch_line?(line)
+        normalized = line.to_s
+        return false unless customer_facing_store_line?(normalized)
+        return false if normalized.match?(/株式会社|有限会社|合同会社/)
+        return false if normalized.match?(/[¥￥円$€£]/)
+        return false if normalized.match?(/\d{2,}/)
+        return false if normalized.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
+
+        normalized.length <= 30
+      end
+
+      def store_name_context_noise_line?(line)
+        normalized = line.to_s
+        return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
+        return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
+        return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
+        return true if normalized.match?(/[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/)
+        return true if normalized.match?(/tel|電話|fax|領収書|領収証|レシート|合計|小計|消費税|税率|税額|支払|決済|total|subtotal|tax|payment/i)
+
+        false
+      end
+
+      def compact_store_name(value)
+        Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
       end
 
       def build_receipt_items_attributes(candidates, lines, ai_items, skipped_negative_items: [])

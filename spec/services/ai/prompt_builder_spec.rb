@@ -125,6 +125,208 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '顧客向け施設名候補と運営主体候補をAI入力で分ける' do
+      parking_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'サンプル公園',
+          '駐車場',
+          '領収書',
+          '登録番号:t7490001001867',
+          '東京都中央区銀座1-1-1',
+          '駐車券自家用車等',
+          '現 計',
+          'サンプル公園指定管理者',
+          '株式会社',
+          'サンプル管理'
+        ],
+        candidates: {
+          store_name: "株式会社\nサンプル管理",
+          store_address: '東京都中央区銀座1-1-1',
+          total_amount: 500,
+          items: [
+            { raw_text: '駐車券自家用車等', line_total: 500, confidence: 0.975 }
+          ]
+        }
+      )
+
+      result = described_class.build(parking_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル公園駐車場')
+        expect(store_payload[:store_candidates].first).to eq('サンプル公園駐車場')
+        expect(store_payload[:operator_candidates]).to include('株式会社サンプル管理')
+        expect(store_payload[:store_candidates]).not_to include("株式会社\nサンプル管理")
+      end
+    end
+
+    it '印字されたブランド名と場所名を結合した候補を短いOCR店舗名より優先する' do
+      branch_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'サンプル食堂',
+          '株式会社サンプル食堂',
+          'サンプル通り',
+          '東京都渋谷区道玄坂1-2-3',
+          'お客様相談室 0120-498-007',
+          '登録番号:t2010401093920',
+          '店no:0003077'
+        ],
+        candidates: {
+          store_name: 'サンプル食堂',
+          store_address: '東京都渋谷区道玄坂1-2-3',
+          total_amount: 1510,
+          items: []
+        }
+      )
+
+      result = described_class.build(branch_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('サンプル食堂 サンプル通り')
+        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル食堂 サンプル通り')
+        expect(store_payload[:branch_name_candidates]).to include('サンプル通り')
+        expect(store_payload[:operator_candidates]).to include('株式会社サンプル食堂')
+        expect(store_payload[:operator_candidates]).not_to include('株式会社サンプル食堂サンプル通り')
+      end
+    end
+
+    it 'OCR店名が壊れていてもoperator法人名からブランドと場所名の候補を生成する' do
+      broken_brand_ocr_result = ocr_result.deep_merge(
+        lines: [
+          '小乐',
+          '株式会社サンプル食堂',
+          'サンプル通り',
+          '東京都渋谷区道玄坂1-2-3',
+          'お客様相談室',
+          '0120-498-007',
+          '登録番号:t2010401093920'
+        ],
+        candidates: {
+          store_name: '小乐 サンプル通り',
+          store_address: '東京都渋谷区道玄坂1-2-3',
+          total_amount: 1391,
+          items: []
+        }
+      )
+
+      result = described_class.build(broken_brand_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('サンプル食堂 サンプル通り')
+        expect(store_payload[:customer_facing_store_candidates]).to include(
+          'サンプル食堂 サンプル通り',
+          'サンプル食堂'
+        )
+        expect(store_payload[:operator_candidates]).to include('株式会社サンプル食堂')
+        expect(store_payload[:store_candidates]).not_to include('サンプル食堂 サンプル通り店')
+      end
+    end
+
+    it 'operator法人名だけではブランド候補をstore候補の先頭にしない' do
+      operator_only_ocr_result = ocr_result.deep_merge(
+        lines: [
+          '株式会社サンプル食堂',
+          '領収証',
+          '合計 ¥500'
+        ],
+        candidates: {
+          store_name: '株式会社サンプル食堂',
+          total_amount: 500,
+          items: []
+        }
+      )
+
+      result = described_class.build(operator_only_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('株式会社サンプル食堂')
+        expect(store_payload[:customer_facing_store_candidates]).not_to include('サンプル食堂')
+      end
+    end
+
+    it '海外風のoperator法人名からブランドと場所名の候補を生成する' do
+      overseas_broken_brand_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'Starbueks',
+          'Sample Coffee Company LLC',
+          'Downtown',
+          'Receipt',
+          'Total $8.40'
+        ],
+        candidates: {
+          store_name: 'Starbueks Downtown',
+          country_region: 'USA',
+          total_amount: 8.40,
+          items: []
+        }
+      )
+
+      result = described_class.build(overseas_broken_brand_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('Sample Coffee Company Downtown')
+        expect(store_payload[:customer_facing_store_candidates]).to include('Sample Coffee Company')
+        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Company Downtown Store')
+      end
+    end
+
+    it '業態説明行を除外し、ブランド名と施設内の場所名を結合した候補を優先する' do
+      facility_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'イタリアンワイン&カフェレストラン',
+          'サンプルレストラン',
+          'サンプルモール渋谷',
+          'tel 03-0000-0000',
+          '領収証'
+        ],
+        candidates: {
+          store_name: 'サンプルレストラン',
+          total_amount: 3480,
+          items: []
+        }
+      )
+
+      result = described_class.build(facility_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('サンプルレストラン サンプルモール渋谷')
+        expect(store_payload[:customer_facing_store_candidates]).to include('サンプルレストラン サンプルモール渋谷')
+        expect(store_payload[:store_candidates]).not_to include('イタリアンワイン&カフェレストランサンプルレストランサンプルモール渋谷')
+        expect(store_payload[:branch_name_candidates]).to include('サンプルモール渋谷')
+      end
+    end
+
+    it '海外風のブランド名と場所名は印字どおり結合し、未印字のsuffixを候補へ足さない' do
+      overseas_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'Sample Coffee',
+          'Downtown',
+          'Receipt',
+          'Total $8.40'
+        ],
+        candidates: {
+          store_name: 'Sample Coffee',
+          country_region: 'USA',
+          total_amount: 8.40,
+          items: []
+        }
+      )
+
+      result = described_class.build(overseas_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('Sample Coffee Downtown')
+        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Downtown Store')
+        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Downtown Branch')
+      end
+    end
+
     it 'adjustment_context_linesは返品レシートでもfull_context_linesと同じ広い文脈を返す' do
       raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/return_receipt.json').read)
       parsed_ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call

@@ -448,7 +448,9 @@ RSpec.describe ReceiptAnalysisRuns do
         response_body: 'RAW RESPONSE MUST NOT BE STORED',
         store: {
           store_name: 'テストストア',
-          store_candidates: Array.new(12) { |index| "店舗候補#{index}" }
+          customer_facing_store_candidates: Array.new(12) { |index| "施設候補#{index}" },
+          store_candidates: Array.new(12) { |index| "店舗候補#{index}" },
+          operator_candidates: Array.new(12) { |index| "運営候補#{index}" }
         },
         full_context_lines: Array.new(155) do |index|
           {
@@ -495,7 +497,9 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot.dig('truncated', 'full_context_lines')).to eq(true)
         expect(snapshot['full_context_lines'].size).to eq(150)
         expect(snapshot['items'].size).to eq(50)
+        expect(snapshot.dig('store', 'customer_facing_store_candidates').size).to eq(10)
         expect(snapshot.dig('store', 'store_candidates').size).to eq(10)
+        expect(snapshot.dig('store', 'operator_candidates').size).to eq(10)
         expect(snapshot.dig('purchase', 'purchased_at_candidates').size).to eq(5)
         expect(snapshot.dig('payment', 'payment_candidates').size).to eq(10)
         expect(snapshot.dig('tax', 'tax_details').size).to eq(10)

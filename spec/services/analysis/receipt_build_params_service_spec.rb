@@ -696,6 +696,121 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AIがブランド名だけを返した場合でも印字された場所名を補って保存店舗名にする' do
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サンプル食堂',
+            store_address: '東京都渋谷区道玄坂1-2-3',
+            total_amount: 1510,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'サンプル食堂',
+            '株式会社サンプル食堂',
+            'サンプル通り',
+            '東京都渋谷区道玄坂1-2-3',
+            'お客様相談室 0120-498-007',
+            '登録番号:t2010401093920'
+          ]
+        )
+        branch_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプル食堂'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプル食堂 サンプル通り')
+      end
+
+      it 'AIが壊れたOCRブランド名を返した場合はoperator法人名からブランド名を復元する' do
+        broken_brand_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '小乐 サンプル通り',
+            store_address: '東京都渋谷区道玄坂1-2-3',
+            total_amount: 1391,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            '小乐',
+            '株式会社サンプル食堂',
+            'サンプル通り',
+            '東京都渋谷区道玄坂1-2-3',
+            'お客様相談室',
+            '0120-498-007',
+            '登録番号:t2010401093920'
+          ]
+        )
+        broken_brand_ai_result = {
+          receipt_attributes: {
+            store_name: '小乐 サンプル通り'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: broken_brand_ocr_result, ai_result: broken_brand_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプル食堂 サンプル通り')
+      end
+
+      it 'operator法人名だけでは法人格除去後のブランド名へ自動置換しない' do
+        operator_only_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '株式会社サンプル食堂',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            '株式会社サンプル食堂',
+            '領収証',
+            '合計 ¥500'
+          ]
+        )
+        operator_only_ai_result = {
+          receipt_attributes: {
+            store_name: '株式会社サンプル食堂'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: operator_only_ocr_result, ai_result: operator_only_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('株式会社サンプル食堂')
+      end
+
+      it '施設内店舗の場所名を補い、業態説明行は保存店舗名へ含めない' do
+        facility_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サンプルレストラン',
+            total_amount: 3480,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'イタリアンワイン&カフェレストラン',
+            'サンプルレストラン',
+            'サンプルモール渋谷',
+            'tel 03-0000-0000',
+            '領収証'
+          ]
+        )
+        facility_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプルレストラン'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: facility_ocr_result, ai_result: facility_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプルレストラン サンプルモール渋谷')
+      end
+
       it 'AI payment_method は OCR field や Payments[] より優先される' do
         ocr_result[:candidates][:payment_method_text] = 'Master'
         ocr_result[:candidates][:payments] = [
