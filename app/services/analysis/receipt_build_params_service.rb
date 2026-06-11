@@ -1,9 +1,11 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|jcb|amex|american express|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakuten pay|d払い|au pay|メルペイ|line pay|デビット|debit|電子マネー/i
-    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|決済|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|d払い|au pay|メルペイ|line pay|デビット|debit/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|cash|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|cash|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
+    FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
+    FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
     CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
     REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
@@ -42,7 +44,8 @@ module Analysis
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
           candidates[:adjustment_candidates],
-          lines
+          lines,
+          receipt_items_attributes
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
 
@@ -405,7 +408,7 @@ module Analysis
         end
       end
 
-      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines)
+      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [])
         source = Array(ai_adjustments).present? ? "ai" : "ocr"
         adjustments = if source == "ai"
           Array(ai_adjustments)
@@ -422,6 +425,12 @@ module Analysis
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
+          next if item_level_discount_adjustment?(
+            amount: amount,
+            source_line_index: source_line_index,
+            lines: lines,
+            receipt_items: receipt_items
+          )
 
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
           sign_value = normalized[:sign].presence || normalized[:sign_hint]
@@ -580,9 +589,16 @@ module Analysis
         text = line.to_s.strip
         return false if text.blank?
         return false if text.match?(FALLBACK_PAYMENT_EXCLUDED_PATTERN)
+        return false if fallback_payment_support_only_line?(text)
         return false unless text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
 
         fallback_payment_amount(text).present? || text.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
+      end
+
+      def fallback_payment_support_only_line?(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        text.match?(FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN) &&
+          !text.match?(FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN)
       end
 
       def fallback_payment_neighbor_amount_allowed?(line)
@@ -1045,6 +1061,50 @@ module Analysis
         context << lines[source_line_index + 1]
         context.compact!
         context.any? { |text| adjustment_amounts_in_text(text).include?(amount.to_i.abs) }
+      end
+
+      def item_level_discount_adjustment?(amount:, source_line_index:, lines:, receipt_items:)
+        return false if source_line_index.nil?
+        return false unless item_discount_amounts(receipt_items).include?(amount.to_i.abs)
+
+        context = lines_around(lines, source_line_index, before: 4, after: 4)
+        return false unless item_discount_context?(context, amount)
+
+        !receipt_level_adjustment_context?(lines, source_line_index)
+      end
+
+      def item_discount_amounts(receipt_items)
+        Array(receipt_items).filter_map do |item|
+          normalize_amount(item[:discount_amount])&.to_i
+        end.select(&:positive?).uniq
+      end
+
+      def lines_around(lines, index, before:, after:)
+        return [] if index.nil?
+        return [] if index.negative?
+
+        start_index = [ index - before, 0 ].max
+        end_index = [ index + after, Array(lines).length - 1 ].min
+        Array(lines)[start_index..end_index].to_a
+      end
+
+      def item_discount_context?(context, amount)
+        texts = Array(context).map(&:to_s)
+        discount_label_present = texts.any? { |text| text.match?(/割引|discount|off/i) }
+        signed_amount_present = texts.any? do |text|
+          text.match?(/[▲△\-−]/) && adjustment_amounts_in_text(text).include?(amount.to_i.abs)
+        end
+        rate_present = texts.any? { |text| text.match?(/\d+(?:\.\d+)?\s*%/) }
+
+        discount_label_present && signed_amount_present && rate_present
+      end
+
+      def receipt_level_adjustment_context?(lines, source_line_index)
+        line = Array(lines)[source_line_index].to_s
+        return true if line.match?(/クーポン|ポイント|coupon|point/i)
+
+        previous_lines = lines_around(lines, source_line_index - 1, before: 2, after: 0)
+        previous_lines.any? { |previous_line| previous_line.to_s.match?(/小計|合計|総合計|total|subtotal/i) }
       end
 
       def adjustment_amounts_in_text(text)

@@ -1,6 +1,88 @@
 require 'rails_helper'
 
 RSpec.describe Analysis::ReceiptFallbackPatterns do
+  describe '.detect_payment_method' do
+    it '主要な支払方法の表記揺れをカテゴリへ正規化する' do
+      cases = {
+        'QUICPay' => 'e_money',
+        'QUIC Pay' => 'e_money',
+        'QuickPay' => 'e_money',
+        'QUI CPay' => 'e_money',
+        'qui cpay' => 'e_money',
+        'iD' => 'e_money',
+        'ID' => 'e_money',
+        'ｉＤ' => 'e_money',
+        'Suica' => 'e_money',
+        'PASMO' => 'e_money',
+        'ICOCA' => 'e_money',
+        '交通系IC' => 'e_money',
+        '交通系電子マネー' => 'e_money',
+        'WAON' => 'e_money',
+        'nanaco' => 'e_money',
+        'Edy' => 'e_money',
+        '楽天Edy' => 'e_money',
+        '電子マネー支払' => 'e_money',
+        'contactless payment' => 'e_money',
+        'タッチ決済' => 'e_money',
+        'コンタクトレス決済' => 'e_money',
+        'NFC payment' => 'e_money',
+        'mobile payment' => 'e_money',
+        'Apple Pay' => 'e_money',
+        'Google Pay' => 'e_money',
+        'PayPay' => 'qr_payment',
+        '楽天ペイ' => 'qr_payment',
+        'Rakuten Pay' => 'qr_payment',
+        'd払い' => 'qr_payment',
+        'd payment' => 'qr_payment',
+        'au PAY' => 'qr_payment',
+        'aupay' => 'qr_payment',
+        'メルペイ' => 'qr_payment',
+        'LINE Pay' => 'qr_payment',
+        'Alipay' => 'qr_payment',
+        'WeChat Pay' => 'qr_payment',
+        'クレジット' => 'credit_card',
+        'credit' => 'credit_card',
+        'VISA' => 'credit_card',
+        'Mastercard' => 'credit_card',
+        'Master Card' => 'credit_card',
+        'JCB' => 'credit_card',
+        'AMEX' => 'credit_card',
+        'American Express' => 'credit_card',
+        'Diners' => 'credit_card',
+        'Discover' => 'credit_card',
+        'UnionPay' => 'credit_card',
+        'Union Pay' => 'credit_card',
+        '銀聯' => 'credit_card',
+        '現金' => 'cash',
+        'cash' => 'cash',
+        'お預り' => 'cash',
+        'お釣り' => 'cash',
+        '釣銭' => 'cash',
+        '現計' => 'cash',
+        'debit' => 'debit_card',
+        'デビット' => 'debit_card',
+        'Debit Card' => 'debit_card'
+      }
+
+      aggregate_failures do
+        cases.each do |text, expected|
+          expect(described_class.detect_payment_method(text)).to eq(expected), text
+        end
+      end
+    end
+
+    it '広告・対応表記やポイント文脈だけでは代表支払方法にしない' do
+      aggregate_failures do
+        expect(described_class.detect_payment_method('電子マネー対応')).to be_nil
+        expect(described_class.detect_payment_method('PayPay使えます')).to be_nil
+        expect(described_class.detect_payment_method('各種クレジット取扱')).to be_nil
+        expect(described_class.detect_payment_method('WAON POINT')).to be_nil
+        expect(described_class.detect_payment_method('ポイント利用')).to be_nil
+        expect(described_class.detect_payment_method('card')).to eq('other')
+      end
+    end
+  end
+
   describe '.detect_category' do
     it '安全な食品語を food に分類する' do
       aggregate_failures do

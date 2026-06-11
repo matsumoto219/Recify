@@ -87,6 +87,27 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
       expect(described_class.operator_candidates(lines)).to include('株式会社サンプル管理')
     end
 
+    it '各国固有の法人格とoperator文脈を運営主体候補として扱う' do
+      lines = [
+        'SampleMart Downtown',
+        'Operated by',
+        'Sample Retail LLC',
+        'Managed by',
+        'Sample Verwaltung GmbH',
+        'Franchisee',
+        'Sample Foods Pty Ltd'
+      ]
+
+      candidates = described_class.operator_candidates(lines)
+
+      aggregate_failures do
+        expect(candidates).to include('Sample Retail LLC')
+        expect(candidates).to include('Sample Verwaltung GmbH')
+        expect(candidates).to include('Sample Foods Pty Ltd')
+        expect(candidates).not_to include('SampleMart Downtown')
+      end
+    end
+
     it '完全な法人名の次行にある支店・場所名を運営主体候補へ連結しない' do
       lines = [
         'サンプル食堂',

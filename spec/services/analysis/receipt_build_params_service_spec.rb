@@ -240,6 +240,86 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'QUICPayのOCR揺れでも支払行と次行金額からreceipt_paymentsを補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'qui cpay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 4_215
+        ocr_result[:lines] = [
+          '合 計',
+          '¥4,215',
+          'qui cpay支払',
+          '¥4,215',
+          'お釣り',
+          '¥0'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: 支払行の次行金額 4,215 が購入合計 4,215 と一致する。
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'qui cpay支払', amount: 4_215)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+        end
+      end
+
+      it '主要な支払方法の表記揺れでもpayment_methodはカテゴリ化しreceipt_payments.methodは原文寄りで残す' do
+        cases = [
+          { line: '交通系IC支払', amount: 700, expected_category: 'e_money' },
+          { line: '電子マネー決済', amount: 710, expected_category: 'e_money' },
+          { line: 'タッチ決済', amount: 720, expected_category: 'e_money' },
+          { line: 'contactless payment', amount: 730, expected_category: 'e_money' },
+          { line: 'PayPay支払', amount: 740, expected_category: 'qr_payment' },
+          { line: '楽天ペイ決済', amount: 750, expected_category: 'qr_payment' },
+          { line: 'VISA Credit', amount: 760, expected_category: 'credit_card' },
+          { line: 'Master Card支払', amount: 770, expected_category: 'credit_card' },
+          { line: 'Debit Card', amount: 780, expected_category: 'debit_card' }
+        ]
+
+        cases.each do |example|
+          ocr_result[:candidates][:payment_method_text] = example[:line]
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = example[:amount]
+          ocr_result[:lines] = [
+            '合計',
+            "¥#{example[:amount]}",
+            example[:line],
+            "¥#{example[:amount]}"
+          ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(example[:line]) do
+            expect(params[:receipt_attributes][:payment_method]).to eq(example[:expected_category])
+            expect(params[:receipt_payments_attributes]).to contain_exactly(
+              include(method: example[:line], amount: example[:amount])
+            )
+          end
+        end
+      end
+
+      it '広告や対応ブランド一覧だけではrepresentative payment_methodやreceipt_paymentsを作らない' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 1_280
+        ocr_result[:lines] = [
+          'サンプルストア',
+          'PayPay使えます',
+          '電子マネー対応',
+          '各種クレジット取扱',
+          '合計',
+          '¥1,280'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to be_nil
+          expect(params[:receipt_payments_attributes]).to eq([])
+        end
+      end
+
       it 'Payments[] が複数件ある場合も全件保存する' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [
@@ -850,6 +930,87 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
 
         expect(params[:receipt_attributes][:store_name]).to eq('サンプル食堂 サンプル通り')
+      end
+
+      it '店舗名表記ポリシーとして顧客向けブランドと支店・場所名だけを保存店舗名にする' do
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '中央南三丁目店',
+            store_address: '東京都国分寺市サンプル1-2-3',
+            total_amount: 844,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'SampleMart',
+            '中央南三丁目店',
+            'Managed by',
+            'Sample Retail LLC',
+            '東京都国分寺市サンプル1-2-3',
+            '領収証'
+          ]
+        )
+        branch_ai_result = {
+          receipt_attributes: {
+            store_name: '中央南三丁目店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 中央南三丁目店')
+      end
+
+      it 'ブランドのみ・施設名・ブランド+locationはOCR表記を保存し未印字suffixを足さない' do
+        examples = [
+          {
+            lines: [ 'SampleMart', 'Receipt' ],
+            store_name: 'SampleMart',
+            expected: 'SampleMart'
+          },
+          {
+            lines: [ 'サンプル浜公園駐車場', '領収証' ],
+            store_name: 'サンプル浜公園駐車場',
+            expected: 'サンプル浜公園駐車場'
+          },
+          {
+            lines: [ 'Sample Cafe Downtown', 'Receipt' ],
+            store_name: 'Sample Cafe Downtown',
+            expected: 'Sample Cafe Downtown'
+          },
+          {
+            lines: [ 'SampleMart Downtown', 'Receipt' ],
+            store_name: 'SampleMart Downtown',
+            expected: 'SampleMart Downtown'
+          }
+        ]
+
+        examples.each do |example|
+          store_ocr_result = ocr_result.deep_merge(
+            candidates: {
+              store_name: example[:store_name],
+              total_amount: 100,
+              items: [],
+              tax_details: []
+            },
+            lines: example[:lines]
+          )
+          store_ai_result = {
+            receipt_attributes: {
+              store_name: example[:store_name]
+            },
+            receipt_items_attributes: []
+          }
+
+          params = described_class.call(ocr_result: store_ocr_result, ai_result: store_ai_result)
+
+          aggregate_failures(example[:expected]) do
+            expect(params[:receipt_attributes][:store_name]).to eq(example[:expected])
+            expect(params[:receipt_attributes][:store_name]).not_to eq("#{example[:expected]} Store")
+            expect(params[:receipt_attributes][:store_name]).not_to eq("#{example[:expected]} Branch")
+          end
+        end
       end
 
       it 'AIが壊れたOCRブランド名を返した場合はoperator法人名からブランド名を復元する' do
@@ -1993,6 +2154,118 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           include(kind: 'late_night_charge', label: 'After hours surcharge', amount: 3, sign: 'surcharge'),
           include(kind: 'other', label: 'Manual adjustment', amount: 2, sign: 'discount', needs_review: true)
         )
+      end
+
+      it '商品単位割引がitemに保存される場合は同額AI adjustmentを保存しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', price: 300, quantity: 2, original_line_total: 600, discount_amount: 300, line_total: 300 },
+          { raw_text: '商品B', price: 598, quantity: 2, original_line_total: 1196, discount_amount: 598, line_total: 598 }
+        ]
+        ocr_result[:lines] = [
+          '商品A',
+          '600※',
+          '(2個 × 単300)',
+          '割引',
+          '50%',
+          '-300',
+          '商品B',
+          '1,196※',
+          '(2個 × 単598)',
+          '割引',
+          '50%',
+          '-598',
+          '小計',
+          '¥898'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            { kind: 'receipt_discount', label: '割引 50%', amount: 300, sign: 'discount', source_text: '割引', source_line_index: 2 },
+            { kind: 'receipt_discount', label: '割引 50%', amount: 598, sign: 'discount', source_text: '割引', source_line_index: 8 }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          # 検算: 商品A 600 - 300 = 300、商品B 1,196 - 598 = 598。割引は明細内で表現済み。
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :discount_amount, :line_total)).to eq([
+            [ '商品A', 300, 300 ],
+            [ '商品B', 598, 598 ]
+          ])
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it 'レシート全体値引きは商品割引と同額でもreceipt adjustmentとして残す' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', price: 300, quantity: 2, original_line_total: 600, discount_amount: 300, line_total: 300 },
+          { raw_text: '商品B', line_total: 700 }
+        ]
+        ocr_result[:lines] = [
+          '商品A',
+          '600',
+          '割引',
+          '50%',
+          '-300',
+          '商品B',
+          '700',
+          '小計',
+          '¥1,000',
+          '会員値引',
+          '-300',
+          '合計',
+          '¥700'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            { kind: 'receipt_discount', label: '会員値引', amount: 300, sign: 'discount', source_text: '会員値引', source_line_index: 9 }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'receipt_discount', label: '会員値引', amount: 300, sign: 'discount')
+        )
+      end
+
+      it '商品単位割引とレシート全体値引きが混在しても全体値引きだけをadjustmentに残す' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', price: 300, quantity: 2, original_line_total: 600, discount_amount: 300, line_total: 300 },
+          { raw_text: '商品B', line_total: 700 }
+        ]
+        ocr_result[:lines] = [
+          '商品A',
+          '600',
+          '(2個 × 単300)',
+          '割引',
+          '50%',
+          '-300',
+          '商品B',
+          '700',
+          '小計',
+          '¥1,000',
+          'クーポン値引',
+          '-100',
+          '合計',
+          '¥900'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            { kind: 'receipt_discount', label: '割引 50%', amount: 300, sign: 'discount', source_text: '割引', source_line_index: 2 },
+            { kind: 'coupon', label: 'クーポン値引', amount: 100, sign: 'discount', source_text: 'クーポン値引', source_line_index: 10 }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          # 検算: 商品A 600 - 300 = 300、商品B 700、クーポン100円。receipt adjustmentはクーポンのみ。
+          expect(params[:receipt_items_attributes].first).to include(discount_amount: 300, line_total: 300)
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'coupon', label: 'クーポン値引', amount: 100, sign: 'discount')
+          )
+        end
       end
 
       it 'AI adjustmentがない場合だけ高信頼OCR candidateをsource ocrとしてfallback採用する' do

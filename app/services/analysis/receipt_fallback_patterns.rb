@@ -12,6 +12,7 @@ module Analysis
         /クレジット(?:カード)?/i,
         /credit(?:\s*card)?/i,
         /master(?:card)?/i,
+        /master\s*card/i,
         /visa(?!\s*debit)/i,
         /jcb/i,
         /amex/i,
@@ -21,6 +22,7 @@ module Analysis
         /uc/i,
         /dc/i,
         /銀聯/i,
+        /unionpay/i,
         /union\s*pay/i
       ],
       "qr_payment" => [
@@ -41,6 +43,9 @@ module Analysis
         /suica/i,
         /pasmo/i,
         /icoca/i,
+        /交通系\s*ic/i,
+        /交通系電子マネー/i,
+        /電子マネー/i,
         /waon(?!\s*point)/i,
         /nanaco/i,
         /楽天edy/i,
@@ -48,6 +53,12 @@ module Analysis
         /\bid\b/i,
         /quick\s*pay/i,
         /quic\s*pay/i,
+        /qui\s*c\s*pay/i,
+        /contactless/i,
+        /タッチ決済/i,
+        /コンタクトレス/i,
+        /\bnfc\b/i,
+        /mobile\s*payment/i,
         /apple\s*pay/i,
         /google\s*pay/i
       ],
@@ -197,6 +208,22 @@ module Analysis
       /dポイント/i,
       /ponta/i
     ].freeze
+    PAYMENT_METHOD_SUPPORT_ONLY_PATTERNS = [
+      /対応/i,
+      /使えます/i,
+      /使える/i,
+      /利用可/i,
+      /ご利用(?:いただけます|できます|可能)/i,
+      /取扱/i,
+      /取り扱/i,
+      /accepted/i,
+      /available/i,
+      /supported/i,
+      /we\s+accept/i
+    ].freeze
+    PAYMENT_METHOD_TRANSACTION_CONTEXT_PATTERN = /
+      支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge
+    /ix.freeze
 
     module_function
 
@@ -234,8 +261,10 @@ module Analysis
     def payment_noise_only?(text)
       has_exclusion = PAYMENT_METHOD_EXCLUSION_PATTERNS.any? { |pattern| text.match?(pattern) }
       has_payment_signal = detect_by_patterns(text, PAYMENT_METHOD_PATTERNS).present?
+      support_only = PAYMENT_METHOD_SUPPORT_ONLY_PATTERNS.any? { |pattern| text.match?(pattern) } &&
+        !text.match?(PAYMENT_METHOD_TRANSACTION_CONTEXT_PATTERN)
 
-      has_exclusion && !has_payment_signal
+      support_only || (has_exclusion && !has_payment_signal)
     end
   end
 end

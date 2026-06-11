@@ -1,7 +1,9 @@
 class Ocr::ResponseParser
-  PAYMENT_METHOD_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|master|jcb|amex|american\s*express|suica|pasmo|icoca|waon|nanaco|edy|\bid\b|quickpay|quicpay|paypay|楽天ペイ|rakuten\s*pay|d払い|au\s*pay|メルペイ|line\s*pay|デビット|debit/i.freeze
+  PAYMENT_METHOD_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
   POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
-  PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|suica|pasmo|icoca|waon|nanaco|edy|id|quickpay|quicpay|paypay|楽天ペイ|rakutenpay|d払い|aupay|メルペイ|linepay|デビット|debit|カード|支払|決済/i.freeze
+  PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|diners|discover|unionpay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|edy|id|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|nfc|mobilepayment|applepay|googlepay|paypay|楽天ペイ|rakutenpay|d払い|dpayment|aupay|メルペイ|linepay|alipay|wechatpay|デビット|debit|カード|支払|決済/i.freeze
+  PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|weaccept/i.freeze
+  PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i.freeze
   CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
   VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
   SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
@@ -562,8 +564,13 @@ class Ocr::ResponseParser
     strong_line = extract_payment_method_from_lines(lines)
     return strong_line if strong_line.present?
 
-    normalized_raw_match = normalize_payment_text(raw_text.to_s.match(payment_method_pattern)&.[](0))
-    return normalized_raw_match if normalized_raw_match.present? && !point_or_membership_only_payment_text?(normalized_raw_match)
+    normalized_raw = normalize_payment_text(raw_text)
+    normalized_raw_match = normalized_raw.to_s.match(payment_method_pattern)&.[](0)
+    if normalized_raw_match.present? &&
+        !point_or_membership_only_payment_text?(normalized_raw_match) &&
+        !support_only_payment_text?(normalized_raw)
+      return normalized_raw_match
+    end
 
     nil
   end
@@ -616,6 +623,7 @@ class Ocr::ResponseParser
       focused_profiles = profiles[[ card_slip_index - 2, 0 ].max..[ card_slip_index + 5, profiles.length - 1 ].min]
       focused_match = focused_profiles.find do |profile|
         next false if profile[:point_only]
+        next false if profile[:support_only]
 
         profile[:payment_match].present?
       end
@@ -624,6 +632,7 @@ class Ocr::ResponseParser
 
     payment_line = profiles.find do |profile|
       next false if profile[:point_only]
+      next false if profile[:support_only]
 
       profile[:payment_text].match?(/支払|決済|payment/i) && profile[:payment_match].present?
     end
@@ -631,6 +640,7 @@ class Ocr::ResponseParser
 
     general_match = profiles.find do |profile|
       next false if profile[:point_only]
+      next false if profile[:support_only]
 
       profile[:payment_match].present?
     end
@@ -664,6 +674,10 @@ class Ocr::ResponseParser
     normalized.match?(POINT_KEYWORDS_PATTERN) && !normalized.match?(PAYMENT_KEYWORDS_PATTERN)
   end
 
+  def support_only_payment_text?(normalized)
+    normalized.match?(PAYMENT_SUPPORT_ONLY_PATTERN) && !normalized.match?(PAYMENT_TRANSACTION_CONTEXT_PATTERN)
+  end
+
   def payment_method_pattern
     PAYMENT_METHOD_PATTERN
   end
@@ -680,6 +694,7 @@ class Ocr::ResponseParser
         normalized: raw,
         payment_text: payment_text,
         point_only: payment_text.present? && point_or_membership_only_payment_text?(payment_text),
+        support_only: payment_text.present? && support_only_payment_text?(payment_text),
         cash_total: payment_text.present? && payment_text.match?(CASH_TOTAL_PATTERN),
         voucher: payment_text.present? && payment_text.match?(VOUCHER_PAYMENT_PATTERN),
         settlement: raw.match?(SETTLEMENT_LINE_PATTERN),

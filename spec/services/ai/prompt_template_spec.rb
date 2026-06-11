@@ -157,6 +157,20 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it '店舗名表記ポリシーを英語のみの概念指示として固定する' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(store_information_prompt).to include('Use the store brand name as the core store_name.')
+        expect(store_information_prompt).to include('preserve that printed combined name as store_name')
+        expect(store_information_prompt).to include('Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes')
+        expect(store_information_prompt).to include('Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.')
+        expect(store_information_prompt).not_to match(/[一-龠ぁ-んァ-ヶ]/)
+        expect(store_information_prompt).not_to include('店')
+        expect(store_information_prompt).not_to include('支店')
+      end
+    end
+
     it 'not receipt の rejection_reason 許可リストを指示する' do
       aggregate_failures do
         expect(system_prompt).to include('Allowed rejection_reason values:')

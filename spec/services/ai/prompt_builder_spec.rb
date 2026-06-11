@@ -223,6 +223,84 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '店舗名表記ポリシーとして顧客向けブランドと支店・場所名だけを候補化する' do
+      policy_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'SampleMart',
+          '中央南三丁目店',
+          'Managed by',
+          'Sample Retail LLC',
+          '東京都国分寺市サンプル1-2-3',
+          '領収証'
+        ],
+        candidates: {
+          store_name: '中央南三丁目店',
+          store_address: '東京都国分寺市サンプル1-2-3',
+          country_region: 'JPN',
+          total_amount: 844,
+          items: []
+        }
+      )
+
+      result = described_class.build(policy_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:store_candidates].first).to eq('SampleMart 中央南三丁目店')
+        expect(store_payload[:customer_facing_store_candidates]).to include('SampleMart 中央南三丁目店')
+        expect(store_payload[:branch_name_candidates]).to include('中央南三丁目店')
+        expect(store_payload[:operator_candidates]).to include('Sample Retail LLC')
+        expect(store_payload[:store_candidates]).not_to include('Sample Retail LLC')
+      end
+    end
+
+    it 'ブランドのみ・施設名・ブランド+locationをOCR表記どおり候補化し未印字suffixを足さない' do
+      examples = [
+        {
+          lines: [ 'SampleMart', 'Receipt' ],
+          store_name: 'SampleMart',
+          expected: 'SampleMart'
+        },
+        {
+          lines: [ 'サンプル浜公園', '駐車場', '領収証' ],
+          store_name: 'サンプル浜公園駐車場',
+          expected: 'サンプル浜公園駐車場'
+        },
+        {
+          lines: [ 'Sample Cafe Downtown', 'Receipt' ],
+          store_name: 'Sample Cafe Downtown',
+          expected: 'Sample Cafe Downtown'
+        },
+        {
+          lines: [ 'SampleMart Downtown', 'Receipt' ],
+          store_name: 'SampleMart Downtown',
+          expected: 'SampleMart Downtown'
+        }
+      ]
+
+      examples.each do |example|
+        result = described_class.build(
+          ocr_result.deep_merge(
+            lines: example[:lines],
+            candidates: {
+              store_name: example[:store_name],
+              country_region: 'USA',
+              total_amount: 100,
+              items: []
+            }
+          )
+        )
+        store_payload = result[:store]
+
+        aggregate_failures(example[:expected]) do
+          expect(store_payload[:store_candidates].first).to eq(example[:expected])
+          expect(store_payload[:customer_facing_store_candidates]).to include(example[:expected])
+          expect(store_payload[:store_candidates]).not_to include("#{example[:expected]} Store")
+          expect(store_payload[:store_candidates]).not_to include("#{example[:expected]} Branch")
+        end
+      end
+    end
+
     it 'ロゴ由来の孤立1文字をstore候補から除外し、Marketを含む英字ブランドを候補に残す' do
       logo_fragment_ocr_result = ocr_result.deep_merge(
         lines: [

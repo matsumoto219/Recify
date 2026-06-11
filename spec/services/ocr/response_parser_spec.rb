@@ -447,6 +447,53 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '主要な支払方法の表記揺れをOCR行からpayment_method_textへ抽出する' do
+      cases = {
+        '交通系IC支払' => '交通系ic',
+        '電子マネー決済' => '電子マネー',
+        'タッチ決済' => 'タッチ決済',
+        'contactless payment' => 'contactless',
+        'mobile payment' => 'mobilepayment',
+        'Apple Pay' => 'applepay',
+        'Google Pay' => 'googlepay',
+        'Union Pay' => 'unionpay',
+        'Master Card' => 'mastercard',
+        'Debit Card' => 'debit'
+      }
+
+      aggregate_failures do
+        cases.each do |line, expected|
+          response = raw_response.deep_dup
+          response['analyzeResult']['content'] = <<~TEXT
+            サンプルストア
+            合計 1280
+            #{line}
+          TEXT
+          response.dig('analyzeResult', 'documents', 0, 'fields').delete('Payments')
+
+          result = described_class.new(response: response).call
+
+          expect(result.dig(:candidates, :payment_method_text)).to eq(expected), line
+        end
+      end
+    end
+
+    it '広告や対応ブランド一覧だけではpayment_method_textへ昇格しない' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプルストア
+        PayPay使えます
+        電子マネー対応
+        各種クレジット取扱
+        合計 1280
+      TEXT
+      response.dig('analyzeResult', 'documents', 0, 'fields').delete('Payments')
+
+      result = described_class.new(response: response).call
+
+      expect(result.dig(:candidates, :payment_method_text)).to be_nil
+    end
+
     it '1画像内の複数レシート疑いをpolygonクラスタから検知する' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/multi_receipts_in_one_image.json').read)
 
