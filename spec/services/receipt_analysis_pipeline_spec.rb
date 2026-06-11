@@ -3634,6 +3634,76 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '販促文や営業時間案内をAIのclean店舗名へ追記せず保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: <<~TEXT,
+          プロの品質とプロの価格
+          サンプルスーパー 東京中央店
+          毎日安い!この価格!
+          営業時間AM9:00〜PM9:00
+          商品A ¥500
+          合計 ¥500
+          現金 ¥500
+        TEXT
+        lines: [
+          'プロの品質とプロの価格',
+          'サンプルスーパー 東京中央店',
+          '毎日安い!この価格!',
+          '営業時間AM9:00〜PM9:00',
+          '商品A ¥500',
+          '合計 ¥500',
+          '現金 ¥500'
+        ],
+        candidates: {
+          store_name: 'プロの品質とプロの価格 001001東京中央店',
+          total_amount: 500,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            { raw_text: '商品A', price: 500, quantity: 1, line_total: 500, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'Cash', amount: 500 }
+          ],
+          tax_details: []
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: {
+          store_name: 'サンプルスーパー 東京中央店',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品A', category: 'other', needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.store_name).to eq('サンプルスーパー 東京中央店')
+        expect(receipt.store_name).not_to include('毎日安い')
+        expect(receipt.store_name).not_to include('営業時間')
+      end
+    end
+
     it '1画像内の複数レシート疑いはblocking review reasonとしてreview_neededにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('multi_receipts_in_one_image')

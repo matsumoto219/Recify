@@ -1561,6 +1561,88 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AIの自然な店舗名へ販促文や営業時間案内を追記しない' do
+        message_line_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'プロの品質とプロの価格 001001東京中央店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'プロの品質とプロの価格',
+            'サンプルスーパー 東京中央店',
+            '毎日安い!この価格!',
+            '営業時間AM9:00〜PM9:00',
+            '001001東京中央店',
+            '領収証'
+          ]
+        )
+        message_line_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプルスーパー 東京中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: message_line_ocr_result, ai_result: message_line_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプルスーパー 東京中央店')
+      end
+
+      it 'AIが自然なブランド+支店名を返している場合は後続候補を追加しない' do
+        complete_ai_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サンプルスーパー 東京中央店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'サンプルスーパー 東京中央店',
+            '毎日安い!この価格!',
+            '営業時間AM9:00〜PM9:00',
+            '領収証'
+          ]
+        )
+        complete_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプルスーパー 東京中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: complete_ai_ocr_result, ai_result: complete_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプルスーパー 東京中央店')
+      end
+
+      it 'AIがブランド名だけを返した場合はOCR上の支店名を補完する' do
+        brand_only_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'SampleMart',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'SampleMart',
+            '東京中央店',
+            '領収証'
+          ]
+        )
+        brand_only_ai_result = {
+          receipt_attributes: {
+            store_name: 'SampleMart'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: brand_only_ocr_result, ai_result: brand_only_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 東京中央店')
+      end
+
       it '1文字の英字ブランドは支店名と組み合わせる' do
         one_letter_brand_ocr_result = ocr_result.deep_merge(
           candidates: {

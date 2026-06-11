@@ -138,7 +138,12 @@ module Analysis
 
       def build_receipt_attributes(candidates, ai_receipt_attributes, lines)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
-        store_name = resolve_store_name(ai_attrs[:store_name].presence || candidates[:store_name], lines)
+        ai_store_name = ai_attrs[:store_name].presence
+        store_name = resolve_store_name(
+          ai_store_name || candidates[:store_name],
+          lines,
+          ai_store_name: ai_store_name.present?
+        )
 
         {
           store_name: store_name,
@@ -165,12 +170,16 @@ module Analysis
         }.compact
       end
 
-      def resolve_store_name(store_name, lines)
+      def resolve_store_name(store_name, lines, ai_store_name: false)
         normalized_store_name = compact_store_name(store_name)
         return store_name if normalized_store_name.blank?
 
         local_complete_replacement = local_complete_store_name_replacement(store_name, lines)
         return local_complete_replacement if local_complete_replacement.present?
+
+        if ai_store_name && complete_customer_facing_ai_store_name?(store_name, lines)
+          return Analysis::StoreNameCandidateClassifier.normalize_name(store_name)
+        end
 
         legal_entity_extension = legal_entity_brand_store_name_extension(store_name, lines)
         return legal_entity_extension if legal_entity_extension.present?
@@ -179,6 +188,49 @@ module Analysis
         return printed_extension if printed_extension.present?
 
         store_name
+      end
+
+      def complete_customer_facing_ai_store_name?(store_name, lines)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(store_name).to_s
+        return false if normalized.blank?
+        return false unless customer_facing_store_line?(normalized)
+        return false if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
+        return false if normalized.split.any? { |part| Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(part) }
+        return false if store_name_needs_preceding_brand?(normalized)
+        return false if store_name_has_following_branch_candidate?(normalized, lines)
+
+        store_name_supported_by_header?(normalized, lines)
+      end
+
+      def store_name_supported_by_header?(store_name, lines)
+        normalized_store_name = compact_store_name(store_name)
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+
+        header_lines.any? { |line| compact_store_name(line) == normalized_store_name } ||
+          Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(header_lines).any? do |candidate|
+            compact_store_name(candidate) == normalized_store_name
+          end
+      end
+
+      def store_name_has_following_branch_candidate?(store_name, lines)
+        return false if store_name_has_location_marker?(store_name)
+
+        normalized_store_name = compact_store_name(store_name)
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+        store_index = header_lines.find_index { |line| compact_store_name(line) == normalized_store_name }
+        return false if store_index.nil?
+
+        header_lines[(store_index + 1)..(store_index + 3)]&.any? do |line|
+          customer_facing_branch_line?(line)
+        end
+      end
+
+      def store_name_has_location_marker?(store_name)
+        store_name.to_s.match?(/店|支店|本店|営業所|センター|モール|通り|駅前|南口|北口|東口|西口|\bdowntown\b|\bnorth\b|\bsouth\b|\beast\b|\bwest\b/i)
       end
 
       def local_complete_store_name_replacement(store_name, lines)
@@ -325,6 +377,7 @@ module Analysis
       def store_name_context_noise_line?(line)
         normalized = line.to_s
         compact = normalized.gsub(/[[:space:]]+/, "")
+        return true if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
         return true if compact.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
         return true if building_or_floor_line?(normalized)
         return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)

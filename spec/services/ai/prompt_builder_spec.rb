@@ -387,6 +387,36 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '販促文や営業時間案内をstore候補やbranch候補に含めない' do
+      message_line_ocr_result = ocr_result.deep_merge(
+        lines: [
+          'プロの品質とプロの価格',
+          'サンプルスーパー 東京中央店',
+          '毎日安い!この価格!',
+          '営業時間AM9:00〜PM9:00',
+          '001001東京中央店',
+          '領収証'
+        ],
+        candidates: {
+          store_name: 'プロの品質とプロの価格 001001東京中央店',
+          total_amount: 500,
+          items: []
+        }
+      )
+
+      result = described_class.build(message_line_ocr_result)
+      store_payload = result[:store]
+
+      aggregate_failures do
+        expect(store_payload[:customer_facing_store_candidates]).to include('サンプルスーパー 東京中央店')
+        expect(store_payload[:store_candidates]).to include('サンプルスーパー 東京中央店')
+        expect(store_payload[:store_candidates]).not_to include('プロの品質とプロの価格')
+        expect(store_payload[:store_candidates]).not_to include('毎日安い!この価格!')
+        expect(store_payload[:branch_name_candidates]).not_to include('毎日安い!この価格!')
+        expect(store_payload[:branch_name_candidates]).not_to include('営業時間AM9:00~PM9:00')
+      end
+    end
+
     it 'OCR店名が壊れていてもoperator法人名からブランドと場所名の候補を生成する' do
       broken_brand_ocr_result = ocr_result.deep_merge(
         lines: [

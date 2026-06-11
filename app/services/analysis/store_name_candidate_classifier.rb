@@ -36,6 +36,13 @@ module Analysis
         restaurant|cafe|coffee|bar|grill|dining|wine|bistro|kitchen
       )+\z
     /ix.freeze
+    STORE_MESSAGE_LINE_PATTERN = /
+      営業時間|営業案内|年中無休|定休日|元旦を除く|毎日.*安い|この価格|品質.*価格|
+      暮らし応援価格|地域一番店|お買得|お買い得|特売|セール|
+      business\s+hours|opening\s+hours|store\s+hours|hours\s*[:：]|open\s+\d|open\s+daily|
+      everyday\s+low\s+price|low\s+price|best\s+price|quality\s+and\s+price|
+      promotion|campaign|special\s+offer
+    /ix.freeze
     LEGAL_ENTITY_DESIGNATOR_ONLY_PATTERN = /
       \A(
         株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|
@@ -135,6 +142,10 @@ module Analysis
         normalize_name(text).to_s.match?(DESCRIPTIVE_ONLY_HEADING_PATTERN)
       end
 
+      def store_message_line?(text)
+        normalize_name(text).to_s.match?(STORE_MESSAGE_LINE_PATTERN)
+      end
+
       def isolated_logo_fragment?(text)
         compacted = normalize_name(text).to_s.gsub(/[[:space:]]+/, "")
         return true if compacted.match?(/\A[[:punct:]]+[A-Za-z]{1,8}\z/)
@@ -174,6 +185,7 @@ module Analysis
         return false if operator_context_line?(text)
         return false if heading_boundary_line?(text)
         return false if descriptive_heading_line?(text)
+        return false if store_message_line?(text)
         return false if text.match?(MONEY_OR_NUMERIC_PATTERN)
 
         text.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
@@ -218,6 +230,7 @@ module Analysis
         return false if operator_context_line?(normalized)
         return false if heading_boundary_line?(normalized)
         return false if descriptive_heading_line?(normalized)
+        return false if store_message_line?(normalized)
         return false if normalized.match?(MONEY_OR_NUMERIC_PATTERN)
 
         normalized.match?(/\A[A-Za-z][A-Za-z0-9&.'-]{1,30}\z/)
@@ -231,6 +244,7 @@ module Analysis
         return false if operator_context_line?(normalized)
         return false if heading_boundary_line?(normalized)
         return false if descriptive_heading_line?(normalized)
+        return false if store_message_line?(normalized)
         return false if normalized.match?(ADDRESS_LIKE_PATTERN)
         return false if normalized.match?(MONEY_OR_NUMERIC_PATTERN)
         return false unless normalized.match?(/\A[ァ-ヶー]{2,}/)
@@ -240,6 +254,7 @@ module Analysis
 
       def heading_boundary_line?(text)
         normalized = normalize_name(text).to_s
+        return true if store_message_line?(normalized)
         return true if normalized.match?(HEADING_STOP_PATTERN)
         return true if normalized.gsub(/[[:space:]]+/, "").match?(HEADING_STOP_PATTERN)
         return true if normalized.match?(ADDRESS_LIKE_PATTERN)

@@ -96,6 +96,38 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
         expect(candidates).not_to include('イタリアンワイン&カフェレストランサンプルレストランサンプルモール渋谷')
       end
     end
+
+    it '販促文や営業時間案内を店舗名候補へ結合しない' do
+      lines = [
+        'プロの品質とプロの価格',
+        'サンプルスーパー 東京中央店',
+        '毎日安い!この価格!',
+        '営業時間AM9:00〜PM9:00',
+        '領収証'
+      ]
+
+      candidates = described_class.customer_facing_heading_candidates(lines)
+
+      aggregate_failures do
+        expect(candidates).to include('サンプルスーパー 東京中央店')
+        expect(candidates).not_to include('プロの品質とプロの価格サンプルスーパー東京中央店')
+        expect(candidates).not_to include('サンプルスーパー東京中央店毎日安い!この価格!')
+        expect(candidates).not_to include('営業時間AM9:00~PM9:00')
+      end
+    end
+  end
+
+  describe '.store_message_line?' do
+    it '店舗名ではなく広告文・営業案内として扱う行を判定する' do
+      aggregate_failures do
+        expect(described_class.store_message_line?('毎日安い!この価格!')).to be(true)
+        expect(described_class.store_message_line?('プロの品質とプロの価格')).to be(true)
+        expect(described_class.store_message_line?('営業時間AM9:00〜PM9:00')).to be(true)
+        expect(described_class.store_message_line?('Open Daily 9:00-21:00')).to be(true)
+        expect(described_class.store_message_line?('サンプルスーパー 東京中央店')).to be(false)
+        expect(described_class.store_message_line?('SampleMart Downtown')).to be(false)
+      end
+    end
   end
 
   describe '.isolated_logo_fragment?' do

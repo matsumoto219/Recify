@@ -407,6 +407,7 @@ module Ai
       compact_text = normalized.gsub(/[[:space:]]+/, "")
       return true if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
       return true if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
+      return true if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
       return true if compact_text.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
       return true if normalized.match?(/ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i)
       return true if normalized.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
