@@ -7,9 +7,16 @@ class CreateReceiptItems < ActiveRecord::Migration[8.1]
       t.string :confirmed_name
       t.string :category
       t.bigint :price
-      t.integer :quantity
+      t.decimal :quantity, precision: 10, scale: 3
+      t.string :quantity_unit
+      t.string :product_code
+      t.bigint :original_line_total
       t.bigint :line_total
+      t.bigint :discount_amount
+      t.decimal :discount_rate, precision: 5, scale: 3
+      t.decimal :tax_rate, precision: 5, scale: 4
       t.boolean :needs_review, default: false, null: false
+      t.jsonb :review_reasons, default: [], null: false
       t.integer :position_index
       t.decimal :confidence
 

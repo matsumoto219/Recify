@@ -23,8 +23,10 @@ class CreateReceiptAnalysisRuns < ActiveRecord::Migration[8.1]
       t.string :error_code
       t.text :error_message
       t.jsonb :ocr_summary, null: false, default: {}
+      t.jsonb :ocr_result_snapshot, null: false, default: {}
       t.jsonb :ai_input_snapshot, null: false, default: {}
       t.jsonb :ai_result_summary, null: false, default: {}
+      t.jsonb :ai_normalized_result_snapshot, null: false, default: {}
       t.jsonb :final_result_summary, null: false, default: {}
       t.jsonb :metadata, null: false, default: {}
       t.datetime :started_at

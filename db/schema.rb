@@ -200,7 +200,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
     t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
     t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
-    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text]))"
     t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
     t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
     t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
@@ -288,7 +288,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"
-    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying, 'system_purge'::character varying]::text[]))", name: "check_receipts_image_purged_reason"
+    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying::text, 'system_purge'::character varying::text]))", name: "check_receipts_image_purged_reason"
   end
 
   create_table "recovery_codes", force: :cascade do |t|
