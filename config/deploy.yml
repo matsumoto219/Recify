@@ -80,6 +80,9 @@ volumes:
 # version inside the asset_path.
 asset_path: /rails/public/assets
 
+# Copy static error pages to kamal-proxy for proxy fallback responses.
+error_pages_path: public
+
 # Configure the image builder.
 builder:
   arch: amd64

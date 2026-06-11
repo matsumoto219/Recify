@@ -392,16 +392,33 @@ RSpec.describe 'Error pages', type: :request do
     end
   end
 
-  describe '503 static fallback' do
-    it 'public/503.html が存在し、基本文言を含む' do
-      static_page = Rails.root.join('public/503.html')
+  describe 'proxy static fallback pages' do
+    it 'public/502.html, public/503.html, public/504.html が存在し、基本文言を含む' do
+      expected_pages = {
+        '502.html' => [ '接続に問題が発生しています', 'サーバーへの接続が一時的に不安定です。' ],
+        '503.html' => [ 'ただいま一時停止しています', 'アクセス集中のため、サイトを一時的に停止しています。' ],
+        '504.html' => [ '応答に時間がかかっています', 'サーバーからの応答に時間がかかっています。' ]
+      }
 
-      expect(static_page).to exist
-      html = static_page.read
-      expect(html).to include('ただいま一時停止しています')
-      expect(html).to include('アクセス集中のため、サイトを一時的に停止しています。')
-      expect(html).to include('Error Code: 503')
-      expect(html).to include('no-store')
+      expected_pages.each do |filename, expected_texts|
+        static_page = Rails.root.join('public', filename)
+
+        expect(static_page).to exist
+        html = static_page.read
+        expected_texts.each { |text| expect(html).to include(text) }
+        expect(html).to include("Error Code: #{filename.delete_suffix('.html')}")
+        expect(html).to include('no-store')
+      end
+    end
+
+    it 'Kamal proxyへpublic配下の4xx/5xx静的エラーを配布できる' do
+      config = YAML.safe_load_file(Rails.root.join('config/deploy.yml').to_s, aliases: true)
+
+      expect(config['error_pages_path']).to eq('public')
+      error_pages = Dir[Rails.root.join(config['error_pages_path'], '{4??.html,5??.html}')].map do |path|
+        File.basename(path)
+      end
+      expect(error_pages).to include('502.html', '503.html', '504.html')
     end
 
     it 'ErrorPageStaticBypass は /503 を動的エラー画面へ渡す' do
