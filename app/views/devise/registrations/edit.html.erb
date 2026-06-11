@@ -6,6 +6,8 @@
   guidance_description = guest_user ? t("auth.registrations.edit.guest.description") : t("auth.registrations.edit.normal.description")
 %>
 
+<%# Direct-access fallback for /users/edit. Actual profile, email, password, and guest registration updates live in settings pages. %>
+
 <div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
   <div class="w-full max-w-[520px] z-10 space-y-8">
     <section aria-labelledby="edit-registration-title">

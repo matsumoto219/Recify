@@ -723,14 +723,14 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
-  describe 'GET /users/edit' do
+  describe 'GET /users/edit fallback guide page' do
     let(:user) { create(:user) }
 
     before do
       sign_in user
     end
 
-    it '本登録ユーザーにはsettingsへの案内だけを表示する' do
+    it '本登録ユーザーにはsettingsへの案内fallbackだけを表示する' do
       get edit_user_registration_path
 
       document = Nokogiri::HTML(response.body)
@@ -752,7 +752,7 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
-    it 'guestには本登録化への案内だけを表示し、内部メールを表示しない' do
+    it 'guestには本登録化への案内fallbackだけを表示し、内部メールを表示しない' do
       sign_out user
       guest = User.guest!
       fake_email = guest.email
@@ -777,7 +777,7 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
-    it 'registration contextを直接送っても旧更新処理を実行しない' do
+    it 'registration contextを直接送っても旧Devise registration edit更新処理を実行しない' do
       original_email = user.email
       original_encrypted_password = user.encrypted_password
 
@@ -897,8 +897,8 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
-  describe 'GET /users/password/edit' do
-    it 'renders password edit copy and keeps reset password token' do
+  describe 'GET /users/password/edit reset-token page' do
+    it 'renders password reset-token edit copy and keeps reset password token' do
       get edit_user_password_path(reset_password_token: reset_password_token)
 
       document = Nokogiri::HTML(response.body)
