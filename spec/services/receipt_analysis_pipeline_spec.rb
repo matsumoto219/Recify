@@ -4315,30 +4315,52 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'OCRノイズ由来のocr_low_confidenceと不完全TaxDetails reviewを保存する' do
+    it 'OCRノイズがあっても印字税詳細を復元して税額を安定保存する' do
       ocr_result = ocr_fixture('ocr_noise_receipt')
-      receipt, amount = run_finalize_ocr_fixture(
-        'ocr_noise_receipt',
-        ai_result: ai_success_result_for(
-          ocr_result,
-          review_reasons: [ 'ocr_low_confidence' ]
-        )
-      )
+      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_success_result_for(ocr_result))
 
       aggregate_failures do
-        expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to eq([
-          'ocr_low_confidence',
-          'tax_detail_incomplete'
-        ])
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
         expect(receipt.total_amount).to eq(890)
         # 検算: fixture画像上の合計890円と税額合計71円を保持し、subtotalは 890 - 71 = 819円。
         expect(receipt.subtotal_amount).to eq(819)
         expect(receipt.tax_amount).to eq(71)
-        expect(amount[:needs_review]).to be(true)
-        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_tax_details.pluck(:rate, :net_amount, :amount)).to contain_exactly(
+          [ BigDecimal('0.08'), 548, 44 ],
+          [ BigDecimal('0.1'), 271, 27 ]
+        )
+        expect(amount[:needs_review]).to be(false)
+        expect(amount[:mismatch_codes]).to be_empty
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+        expect(amount[:warning_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'AIが全明細を8%として返しても印字税詳細で税率と会計値を安定させる' do
+      ocr_result = ocr_fixture('ocr_noise_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_index.map do |index|
+          { index: index, category: 'other', tax_rate: 0.08, needs_review: false }
+        end
+      )
+      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.subtotal_amount).to eq(819)
+        expect(receipt.tax_amount).to eq(71)
+        expect(receipt.total_amount).to eq(890)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.receipt_items.order(:position_index).pluck(:tax_rate)).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1')
+        ])
+        expect(amount.dig(:amount_engine, :selected_candidate, :candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(amount[:mismatch_codes]).to be_empty
       end
     end
 

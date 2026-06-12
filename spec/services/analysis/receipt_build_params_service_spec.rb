@@ -1260,6 +1260,68 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'amount-only TaxDetailsとOCR行の複数税率対象額から内税TaxDetailsを復元する' do
+        noisy_tax_ocr_result = {
+          candidates: {
+            store_name: 'Sample Market',
+            total_amount: 890,
+            tax_amount: 71,
+            country_region: 'JPN',
+            payment_method_text: 'クレジット',
+            items: [
+              { raw_text: 'Sample Bread', line_total: 158, confidence: 0.95 },
+              { raw_text: 'Sample Egg Sandwich', line_total: 108, confidence: 0.95 },
+              { raw_text: 'Sample Orange Drink', line_total: 198, confidence: 0.95 },
+              { raw_text: 'Sample Coffee', line_total: 128, confidence: 0.95 },
+              { raw_text: 'Sample Tissue', line_total: 298, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: '内消費税等', amount: 44 },
+              { description: '内消費税等', amount: 27 }
+            ]
+          },
+          lines: [
+            'Sample Market',
+            'Sample Bread',
+            '¥158軽',
+            'Sample Egg Sandwich',
+            '¥108軽',
+            'Sample Orange Drink',
+            '¥198軽',
+            'Sample Coffee',
+            '¥128軽',
+            'Sample Tissue',
+            '¥298',
+            '合 計',
+            '¥890',
+            '( 8%対象',
+            '¥592',
+            '(内消費税等',
+            '¥44 )',
+            '(10%対象',
+            '(内消費税等',
+            '¥298)',
+            '¥27)',
+            'クレジット支払',
+            '¥890',
+            '(内消費税等合計',
+            '¥71 )',
+            'スマイルポイント',
+            '12P'
+          ]
+        }
+
+        params = described_class.call(ocr_result: noisy_tax_ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:tax_rate]).to be_nil
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+            include(description: '8%対象', rate: BigDecimal('0.08'), net_amount: 548, amount: 44),
+            include(description: '10%対象', rate: BigDecimal('0.1'), net_amount: 271, amount: 27)
+          )
+        end
+      end
+
       it '単一税率の対象計が明細合計に一致しない場合はAI item税率を自動補正しない' do
         mismatched_items_ocr_result = {
           candidates: {
@@ -3075,6 +3137,63 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           )
           expect(params[:receipt_adjustments_attributes]).not_to include(include(amount: 999))
         end
+      end
+
+      it 'ポイント数だけのAI adjustmentは保存向けattributesへ通さない' do
+        ocr_result[:lines] = [
+          '合計',
+          '¥890',
+          'クレジット支払',
+          '¥890',
+          'スマイルポイント',
+          '12P'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'point_usage',
+              label: 'スマイルポイント',
+              amount: 12,
+              sign: 'discount',
+              source_text: 'スマイルポイント',
+              source_line_index: 4
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to eq([])
+      end
+
+      it 'ポイント利用に金額根拠があるAI adjustmentは保存向けattributesへ通す' do
+        ocr_result[:lines] = [
+          '合計',
+          '¥571',
+          'お支払い方法:',
+          'ポイント利用 300P',
+          '¥300',
+          'クレジットカード',
+          '¥271'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'point_usage',
+              label: 'ポイント利用',
+              amount: 300,
+              sign: 'discount',
+              source_text: 'ポイント利用 300P',
+              source_line_index: 3
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'point_usage', label: 'ポイント利用', amount: 300, sign: 'discount')
+        )
       end
 
       it 'ラベル行と金額行が分かれた深夜料金を近傍行照合で保存向けattributesへ通す' do

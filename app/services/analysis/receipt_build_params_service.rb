@@ -22,6 +22,8 @@ module Analysis
     FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
     FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
     ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
+    POINT_ONLY_TEXT_PATTERN = /ポイント|point|(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i
+    POINT_MONEY_CONTEXT_PATTERN = /[¥￥円]|[▲△\-−]|利用額|支払額|決済額|金額|amount|payment|paid/i
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
@@ -682,6 +684,7 @@ module Analysis
           next unless amount.positive?
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
           next if item_level_discount_adjustment?(
             amount: amount,
@@ -1236,7 +1239,7 @@ module Analysis
         return [] unless target_sum == receipt_total
 
         inferred = targets.map do |target|
-          tax = included_tax_amount(target[:gross_amount], target[:rate])
+          tax = target[:tax_amount] || included_tax_amount(target[:gross_amount], target[:rate])
           next unless tax.positive?
 
           {
@@ -1263,14 +1266,37 @@ module Analysis
           rate = tax_target_rate_from_line(line)
           next if rate.blank?
 
-          amount = tax_target_amount_from_line(line) || tax_target_amount_from_line(lines[index + 1])
+          amount = tax_target_amount_near_line(lines, index)
           next unless amount&.positive?
 
           {
             rate: rate,
-            gross_amount: amount
+            gross_amount: amount,
+            tax_amount: tax_target_tax_amount_near_line(lines, index, rate, amount)
           }
         end.uniq { |target| [ target[:rate].to_s("F"), target[:gross_amount] ] }
+      end
+
+      def tax_target_amount_near_line(lines, index)
+        lines_window_until_next_tax_target(lines, index).filter_map do |line|
+          tax_target_amount_from_line(line)
+        end.find(&:positive?)
+      end
+
+      def tax_target_tax_amount_near_line(lines, index, rate, gross_amount)
+        amounts = lines_window_until_next_tax_target(lines, index).flat_map do |line|
+          positive_amounts_from_text(line).select { |amount| amount > 20 }
+        end
+        gross_seen = false
+
+        amounts.find do |amount|
+          if amount == gross_amount && !gross_seen
+            gross_seen = true
+            next false
+          end
+
+          included_tax_amount_matches?(gross_amount, rate, amount)
+        end
       end
 
       def tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details)
@@ -1349,9 +1375,22 @@ module Analysis
         positive_amounts_from_text(line).select { |amount| amount > 20 }.max
       end
 
+      def lines_window_until_next_tax_target(lines, index)
+        Array(lines)[index, 4].to_a.take_while.with_index do |line, offset|
+          offset.zero? || tax_target_rate_from_line(line).blank?
+        end
+      end
+
       def included_tax_amount(gross_amount, rate)
         tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
         Amounts::Rounding.apply_rounding(tax, :floor)
+      end
+
+      def included_tax_amount_matches?(gross_amount, rate, amount)
+        tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
+        %i[floor round ceil].any? do |rounding_mode|
+          Amounts::Rounding.apply_rounding(tax, rounding_mode) == amount.to_i
+        end
       end
 
       def rate_percentage_label(rate)
@@ -1943,6 +1982,28 @@ module Analysis
         context << lines[source_line_index + 1]
         context.compact!
         context.any? { |text| adjustment_amounts_in_text(text).include?(amount.to_i.abs) }
+      end
+
+      def point_count_only_adjustment?(adjustment, amount:, source_line_index:, lines:)
+        context = adjustment_context_text(adjustment, source_line_index, lines)
+        return false unless context.match?(POINT_ONLY_TEXT_PATTERN)
+        return false if point_money_context?(context, amount)
+
+        true
+      end
+
+      def adjustment_context_text(adjustment, source_line_index, lines)
+        context = [ adjustment[:label], adjustment[:source_text] ]
+        context.concat(lines_around(lines, source_line_index, before: 0, after: 1)) if source_line_index.present?
+
+        context.compact.join(" ").unicode_normalize(:nfkc)
+      end
+
+      def point_money_context?(text, amount)
+        source = text.to_s
+        return false unless source.match?(POINT_MONEY_CONTEXT_PATTERN)
+
+        adjustment_amounts_in_text(source).include?(amount.to_i.abs)
       end
 
       def item_level_discount_adjustment?(amount:, source_line_index:, lines:, receipt_items:)
