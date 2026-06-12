@@ -4364,6 +4364,29 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'TaxDetailsが内部矛盾するfixtureは印字totalとpaymentを保持してreview_neededにする' do
+      ocr_result = ocr_fixture('tax_detail_item_conflict_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_attributes: {
+          payment_method: 'qr_payment'
+        }
+      )
+      receipt, amount = run_finalize_ocr_fixture('tax_detail_item_conflict_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.total_amount).to eq(999)
+        expect(receipt.payment_method).to eq('qr_payment')
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'paypay支払', 999 ]
+        ])
+        expect(receipt.review_reasons).to include('tax_detail_mismatch')
+        expect(amount.dig(:amount_engine, :selected_candidate_id)).to eq('analysis_receipt_input')
+        expect(amount[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
+      end
+    end
+
     it 'subtotal欠損レシートはwarningのみでsubtotal/taxを補完する' do
       receipt, amount = run_finalize_ocr_fixture('missing_subtotal_receipt')
 
@@ -4430,19 +4453,22 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'tax_detailsと明細が矛盾するレシートはwarningのみで保存する' do
+    it 'tax_detailsと明細が矛盾するレシートはtax_detail_mismatchでreviewにする' do
       receipt, amount = run_finalize_ocr_fixture('tax_detail_item_conflict_receipt')
 
       aggregate_failures do
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to be_blank
-        expect(receipt.total_amount).to eq(301)
-        expect(receipt.subtotal_amount).to eq(279)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('tax_detail_mismatch')
+        expect(receipt.total_amount).to eq(999)
+        expect(receipt.subtotal_amount).to eq(977)
         expect(receipt.tax_amount).to eq(22)
-        expect(amount[:needs_review]).to be(false)
-        expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :ocr_total_mismatch ])
-        expect(amount[:mismatch_codes]).to eq([ 'OCR_TOTAL_MISMATCH' ])
+        expect(receipt.receipt_tax_details.pluck(:rate, :net_amount, :amount)).to contain_exactly(
+          [ BigDecimal('0.08'), 279, 22 ],
+          [ BigDecimal('0.1'), 0, 54 ]
+        )
+        expect(amount[:needs_review]).to be(true)
+        expect(amount[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
+        expect(amount[:mismatch_codes]).to include('TAX_DETAIL_MISMATCH')
       end
     end
   end

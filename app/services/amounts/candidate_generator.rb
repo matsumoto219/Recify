@@ -73,7 +73,7 @@ module Amounts
         purchase_adjustment_total: purchase_adjustment_total,
         payment_adjustment_total: payment_adjustment_total,
         payment_amount_sum: payment[:payment_amount_sum],
-        tax_details: [],
+        tax_details: receipt_input_tax_details,
         tax_rate_groups: receipt_input_tax_rate_groups(resolved),
         rounding_mode: :floor,
         rounding_scope: :per_receipt,
@@ -101,7 +101,11 @@ module Amounts
       when :edit_save
         receipt_input_present?
       when :analysis
-        receipt_input_present? && !item_data_present? && !tax_detail_data_present?
+        receipt_input_present? &&
+          (
+            (!item_data_present? && !tax_detail_data_present?) ||
+              analysis_receipt_input_conflict_candidate_needed?
+          )
       else
         false
       end
@@ -134,6 +138,12 @@ module Amounts
       total = amount_or_nil(receipt[:total_amount])
       subtotal = amount_or_nil(receipt[:subtotal_amount])
       tax = amount_or_nil(receipt[:tax_amount])
+      if analysis_receipt_input_conflict_candidate_needed? &&
+          total&.positive? &&
+          tax&.positive? &&
+          (subtotal.nil? || subtotal + tax != total)
+        subtotal = fallback_subtotal(total, tax)
+      end
 
       {
         subtotal: subtotal.nil? ? fallback_subtotal(total, tax) : subtotal,
@@ -211,10 +221,51 @@ module Amounts
       ]
     end
 
+    def receipt_input_tax_details
+      return [] unless analysis_receipt_input_conflict_candidate_needed?
+
+      tax_details.map do |tax_detail|
+        {
+          description: fetch_value(tax_detail, :description),
+          rate: normalize_rate(fetch_value(tax_detail, :rate)),
+          net_amount: amount_or_nil(fetch_value(tax_detail, :net_amount)),
+          amount: amount_or_nil(fetch_value(tax_detail, :amount))
+        }.compact
+      end
+    end
+
     def receipt_input_warnings(item_delta)
       warnings = []
       warnings << :item_total_mismatch if item_delta.to_i > receipt_input_item_delta_threshold
+      warnings << :tax_detail_mismatch if impossible_tax_detail_present?
       warnings
+    end
+
+    def analysis_receipt_input_conflict_candidate_needed?
+      context.to_s.to_sym == :analysis &&
+        receipt_payment_total_matches? &&
+        impossible_tax_detail_present?
+    end
+
+    def receipt_payment_total_matches?
+      total = amount_or_nil(receipt[:total_amount])
+      return false unless total&.positive?
+
+      payment_sum = payments.sum { |payment| amount_or_nil(fetch_value(payment, :amount)).to_i }
+      payment_sum == total
+    end
+
+    def impossible_tax_detail_present?
+      tax_details.any? do |tax_detail|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        net_amount = fetch_value(tax_detail, :net_amount)
+        tax_amount = amount_or_nil(fetch_value(tax_detail, :amount))
+
+        rate.positive? &&
+          value_present?(net_amount) &&
+          amount_or_nil(net_amount).to_i <= 0 &&
+          tax_amount&.positive?
+      end
     end
 
     def item_total_delta(purchase_total)

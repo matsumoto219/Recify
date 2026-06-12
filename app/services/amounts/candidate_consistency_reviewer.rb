@@ -26,6 +26,7 @@ module Amounts
       warnings << :tax_detail_incomplete if tax_detail_incomplete?
       warnings << :tax_detail_partial if tax_detail_partial?(candidate)
       warnings << :tax_detail_mismatch if tax_detail_mismatch?(candidate)
+      warnings << :tax_detail_mismatch if impossible_tax_detail_present?
       warnings << :tax_detail_rate_mismatch if tax_detail_rate_mismatch?(candidate)
       warnings << :item_tax_rate_group_uncertain if item_tax_rate_group_uncertain?
       warnings << :zero_amount_item_incomplete if zero_amount_item_incomplete?
@@ -88,6 +89,19 @@ module Amounts
         candidate.tax.to_i.positive? &&
         source_tax_detail_total != candidate.tax.to_i &&
         !tax_details_match_rounding_candidate?(candidate)
+    end
+
+    def impossible_tax_detail_present?
+      tax_details.any? do |tax_detail|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        net_amount = fetch_value(tax_detail, :net_amount)
+        tax_amount = to_i(fetch_value(tax_detail, :amount))
+
+        rate.positive? &&
+          present?(net_amount) &&
+          to_i(net_amount) <= 0 &&
+          tax_amount.positive?
+      end
     end
 
     def tax_detail_rate_mismatch?(candidate)

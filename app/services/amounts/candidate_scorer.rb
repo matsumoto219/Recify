@@ -95,11 +95,19 @@ module Amounts
 
     def receipt_input_item_delta(candidate)
       return 0 unless candidate.basis.to_s == "receipt_input_preserved"
+      return 0 if receipt_input_conflict_candidate_payment_matches?(candidate)
 
       evidence = candidate.evidence.find do |entry|
         entry.respond_to?(:[]) && entry[:source].to_s == "receipt_input"
       end
       Amounts::NumberParser.parse_amount(evidence&.[](:item_delta))
+    end
+
+    def receipt_input_conflict_candidate_payment_matches?(candidate)
+      return false unless candidate.warnings.map(&:to_sym).include?(:tax_detail_mismatch)
+      return false unless candidate.payment_amount_sum.present?
+
+      candidate.payment_amount_sum.to_i == candidate.final_payment_total.to_i
     end
 
     def external_tax_exact_tax_bonus(candidate)

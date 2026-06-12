@@ -560,6 +560,39 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it '印字totalとpaymentが一致しTaxDetailsが内部矛盾する場合はtotalを保持してreview対象にする' do
+      result = call_service(
+        receipt: {
+          total_amount: 999,
+          subtotal_amount: 10,
+          tax_amount: 22
+        },
+        receipt_items: [
+          { line_total: 120, tax_rate: nil },
+          { line_total: 159, tax_rate: nil }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 279, amount: 22 },
+          { rate: BigDecimal('0.1'), net_amount: 0, amount: 54 }
+        ],
+        receipt_payments: [
+          { method: 'PayPay', amount: 999 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 977, tax: 22, total: 999)
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('analysis_receipt_input')
+        expect(result[:tax_details]).to include(
+          hash_including(rate: BigDecimal('0.1'), net_amount: 0, amount: 54)
+        )
+        expect(result[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
+        expect(result[:review_reasons]).to include('tax_detail_mismatch')
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+
     it 'native engineでもitem_total_mismatchをblockingへ移植する' do
       result = call_service(
         receipt: {},

@@ -982,6 +982,32 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
       end
 
+      it 'AI payment_methodが揺れても明確なreceipt_paymentsから代表値を補正する' do
+        ocr_result[:candidates][:payment_method_text] = 'paypay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 999
+        ocr_result[:lines] = [
+          '合計',
+          '¥999',
+          'PayPay支払',
+          '¥999'
+        ]
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'e_money'
+          }
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'PayPay支払', amount: 999)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+        end
+      end
+
       it '支払ブロックのポイント利用とクレジットをreceipt_paymentsとして保存しcashにまとめない' do
         ocr_result[:candidates][:payment_method_text] = 'クレジット'
         ocr_result[:candidates][:payments] = []

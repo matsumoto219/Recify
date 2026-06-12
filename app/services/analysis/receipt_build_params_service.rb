@@ -78,7 +78,8 @@ module Analysis
         receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
           receipt_attributes[:payment_method],
           receipt_payments_attributes,
-          lines:
+          lines:,
+          receipt_total: receipt_attributes[:total_amount]
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
         amount_hints = build_amount_hints(
@@ -2395,15 +2396,28 @@ module Analysis
         detect_payment_method_from_payments(candidates[:payments])
       end
 
-      def reconcile_payment_method_with_payments(current_method, payments, lines: [])
+      def reconcile_payment_method_with_payments(current_method, payments, lines: [], receipt_total: nil)
         current = normalize_detected_payment_method(current_method)
-        return current unless Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
-        return "other" if cash_payments_are_settlement_difference?(payments, lines)
-
+        voucher_payment_present = Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
         detected_from_payments = detect_payment_method_from_payments(payments)
-        return normalize_detected_payment_method(detected_from_payments) if detected_from_payments.present?
+        if voucher_payment_present
+          return "other" if cash_payments_are_settlement_difference?(payments, lines)
+          return detected_from_payments if detected_from_payments.present?
 
-        "other"
+          return "other"
+        end
+
+        return current unless payment_sum_matches_total?(payments, receipt_total)
+        return current unless payment_method_should_follow_payments?(current, detected_from_payments)
+
+        detected_from_payments
+      end
+
+      def payment_method_should_follow_payments?(current, detected_from_payments)
+        return false if detected_from_payments.blank?
+        return true if current.blank?
+
+        current == "e_money" && detected_from_payments == "qr_payment"
       end
 
       def cash_payments_are_settlement_difference?(payments, lines)
