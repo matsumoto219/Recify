@@ -12,6 +12,10 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         'iD' => 'e_money',
         'ID' => 'e_money',
         'ｉＤ' => 'e_money',
+        'iD支払' => 'e_money',
+        'ID支払' => 'e_money',
+        'ｉＤ支払' => 'e_money',
+        'iD決済' => 'e_money',
         'Suica' => 'e_money',
         'PASMO' => 'e_money',
         'ICOCA' => 'e_money',
@@ -80,6 +84,16 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         expect(described_class.detect_payment_method('WAON POINT')).to be_nil
         expect(described_class.detect_payment_method('ポイント利用')).to be_nil
         expect(described_class.detect_payment_method('card')).to eq('other')
+      end
+    end
+
+    it '単語内部のidをiD支払として扱わない' do
+      concrete_payment_categories = %w[e_money credit_card qr_payment cash debit_card]
+
+      aggregate_failures do
+        expect(described_class.detect_payment_method('sivendidolo ros')).not_to be_in(concrete_payment_categories)
+        expect(described_class.detect_payment_method('middle')).not_to be_in(concrete_payment_categories)
+        expect(described_class.detect_payment_method('guideline')).not_to be_in(concrete_payment_categories)
       end
     end
   end

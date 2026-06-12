@@ -1,13 +1,15 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
-    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|id|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
+    FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
+    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
     FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
     FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現\s*計|cash\s*total|payment|paid|tender|settlement|charge/i
     FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i
     FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i
+    FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN = /住所|所在地|丁目|番地|登録番号|事業者番号|伝票番号|処理番号|処理通番|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|電話|tel|phone|〒|郵便|レジ\s*#?\s*\d|加盟店名|店舗|店名|支店|\d+\s*号店|merchant|address|approval|terminal|member/i
+    FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/
     PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
     VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
@@ -760,7 +762,7 @@ module Analysis
       end
 
       def fallback_payment_context_line?(line)
-        text = line.to_s.strip
+        text = line.to_s.unicode_normalize(:nfkc).strip
         return false if text.blank?
         return false if text.match?(FALLBACK_PAYMENT_EXCLUDED_PATTERN)
         return false if fallback_payment_metadata_label_line?(text)
@@ -782,7 +784,8 @@ module Analysis
       end
 
       def fallback_payment_neighbor_amount_allowed?(line)
-        line.to_s.match?(FALLBACK_PAYMENT_ACTION_PATTERN) || fallback_payment_amount_label_line?(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        text.match?(FALLBACK_PAYMENT_ACTION_PATTERN) || fallback_payment_amount_label_line?(text)
       end
 
       def fallback_payment_context_amount(lines, index, receipt_total:)
@@ -842,6 +845,7 @@ module Analysis
 
       def fallback_payment_amount(line, receipt_total: nil)
         text = fallback_payment_amount_source(line)
+        return nil if fallback_payment_amount_noise_line?(text)
         return nil if text.match?(/[▲△\-−]\s*[¥￥]?\s*\d/)
 
         matches = text.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match.to_s }
@@ -865,6 +869,12 @@ module Analysis
 
       def fallback_payment_metadata_label_line?(line)
         line.to_s.unicode_normalize(:nfkc).match?(FALLBACK_PAYMENT_METADATA_LABEL_PATTERN)
+      end
+
+      def fallback_payment_amount_noise_line?(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        text.match?(FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN) ||
+          text.match?(FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN)
       end
 
       def select_fallback_payments(payments, receipt_total:)

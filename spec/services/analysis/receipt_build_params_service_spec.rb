@@ -354,6 +354,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           { line: '電子マネー決済', amount: 710, expected_category: 'e_money' },
           { line: 'タッチ決済', amount: 720, expected_category: 'e_money' },
           { line: 'contactless payment', amount: 730, expected_category: 'e_money' },
+          { line: 'iD支払', amount: 735, expected_category: 'e_money' },
+          { line: 'ID支払', amount: 736, expected_category: 'e_money' },
+          { line: 'ｉＤ支払', amount: 737, expected_category: 'e_money', expected_method: 'iD支払' },
+          { line: 'iD 500', amount: 500, expected_category: 'e_money', expected_method: 'iD' },
+          { line: 'iD決済', amount: 738, expected_category: 'e_money' },
           { line: 'PayPay支払', amount: 740, expected_category: 'qr_payment' },
           { line: '楽天ペイ決済', amount: 750, expected_category: 'qr_payment' },
           { line: 'VISA Credit', amount: 760, expected_category: 'credit_card' },
@@ -377,9 +382,97 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           aggregate_failures(example[:line]) do
             expect(params[:receipt_attributes][:payment_method]).to eq(example[:expected_category])
             expect(params[:receipt_payments_attributes]).to contain_exactly(
-              include(method: example[:line], amount: example[:amount])
+              include(method: example[:expected_method] || example[:line], amount: example[:amount])
             )
           end
+        end
+      end
+
+      it '単語内部のidをiD支払として扱わない' do
+        %w[sivendidolo middle guideline].each do |noise|
+          ocr_result[:candidates][:payment_method_text] = nil
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = 500
+          ocr_result[:lines] = [
+            "#{noise} 500"
+          ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(noise) do
+            expect(params[:receipt_attributes][:payment_method]).not_to eq('e_money')
+            expect(params[:receipt_payments_attributes]).to eq([])
+          end
+        end
+      end
+
+      it '店名・住所・各種番号行の数字をpayment amountとして扱わない' do
+        noise_lines = [
+          'サンプル町5丁目店',
+          '東京都サンプル区田柄5丁目26-1',
+          '登録番号 T1234567890123',
+          'TEL 03-3970-6016',
+          '伝票番号 200-205-217-3365',
+          'カード番号 ****1234',
+          '会員番号 ****1234',
+          'レジ #2',
+          '処理番号 319417776',
+          '承認番号 312615',
+          '取引番号 987654'
+        ]
+
+        noise_lines.each do |noise_line|
+          ocr_result[:candidates][:payment_method_text] = 'paypay'
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = 500
+          ocr_result[:lines] = [
+            'paypay支払',
+            noise_line
+          ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(noise_line) do
+            expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+            expect(params[:receipt_payments_attributes]).to eq([])
+          end
+        end
+      end
+
+      it 'OCRノイズと店名数字で偽paymentを作らずキャッシュレス還元とPayPay支払を分けて保存する' do
+        ocr_result[:candidates][:payment_method_text] = 'paypay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 255
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'キャッシュレス還元額',
+            amount: 5,
+            sign_hint: 'discount',
+            source_line_index: 3,
+            confidence: 0.95
+          }
+        ]
+        ocr_result[:lines] = [
+          'サンプルマート',
+          'sivendidolo ros',
+          'サンプル町5丁目店',
+          'キャッシュレス還元額',
+          '-5',
+          'paypay支払',
+          '¥250'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'paypay支払', amount: 250)
+          )
+          expect(params[:receipt_payments_attributes].sum { |payment| payment[:amount].to_i }).to eq(250)
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(label: 'キャッシュレス還元額', amount: 5, sign: 'discount')
+          )
         end
       end
 

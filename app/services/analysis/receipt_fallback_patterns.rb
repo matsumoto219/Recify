@@ -50,7 +50,7 @@ module Analysis
         /nanaco/i,
         /楽天edy/i,
         /\bedy\b/i,
-        /\bid\b/i,
+        /(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])/i,
         /quick\s*pay/i,
         /quic\s*pay/i,
         /qui\s*c\s*pay/i,
