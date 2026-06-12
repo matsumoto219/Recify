@@ -214,6 +214,7 @@ module Amounts
       fallback = item_amount_basis_for(candidate)
       profile_value = calculation_profile_value(:item_amount_basis)
       return computed_basis_value(:item_amount_basis, fallback) unless profile_value.to_s == "mixed_by_tax_rate_group"
+      return computed_basis_value(:item_amount_basis, fallback) unless candidate.basis == "mixed_by_tax_rate_group"
       return :line_total_as_recorded if candidate.warnings.include?(:price_tax_inclusion_uncertain)
       return computed_basis_value(:item_amount_basis, fallback) unless candidate_totals_match_resolved?(candidate, resolved)
 

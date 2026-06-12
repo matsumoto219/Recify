@@ -143,14 +143,10 @@ class ReceiptAnalysisPipeline
         receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
+      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
 
-      # 金額を補正（resolvedを採用）
-      params[:receipt_attributes].merge!(
-        total_amount: amount_result[:resolved][:total],
-        subtotal_amount: amount_result[:resolved][:subtotal],
-        tax_amount: amount_result[:resolved][:tax],
-        tax_rate: amount_result[:resolved][:tax_rate]
-      )
+      # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
+      params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
@@ -184,11 +180,12 @@ class ReceiptAnalysisPipeline
         params[:receipt_items_attributes],
         amount_result.dig(:computed, :items)
       )
+      tax_details_attributes = tax_details_attributes_for(params, amount_result)
       validate_amount_limits!(
         receipt_attributes: params[:receipt_attributes],
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -203,7 +200,7 @@ class ReceiptAnalysisPipeline
         ).merge(image_purge_candidate_attributes),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -229,23 +226,20 @@ class ReceiptAnalysisPipeline
         receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
+      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
 
-      params[:receipt_attributes].merge!(
-        total_amount: amount_result[:resolved][:total],
-        subtotal_amount: amount_result[:resolved][:subtotal],
-        tax_amount: amount_result[:resolved][:tax],
-        tax_rate: amount_result[:resolved][:tax_rate]
-      )
+      params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
         amount_result.dig(:computed, :items)
       )
+      tax_details_attributes = tax_details_attributes_for(params, amount_result)
       validate_amount_limits!(
         receipt_attributes: params[:receipt_attributes],
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -271,7 +265,7 @@ class ReceiptAnalysisPipeline
         ).merge(image_purge_candidate_attributes),
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -297,23 +291,20 @@ class ReceiptAnalysisPipeline
         receipt_payments: params[:receipt_payments_attributes],
         context: :analysis
       )
+      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
 
-      params[:receipt_attributes].merge!(
-        total_amount: amount_result[:resolved][:total],
-        subtotal_amount: amount_result[:resolved][:subtotal],
-        tax_amount: amount_result[:resolved][:tax],
-        tax_rate: amount_result[:resolved][:tax_rate]
-      )
+      params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
         amount_result.dig(:computed, :items)
       )
+      tax_details_attributes = tax_details_attributes_for(params, amount_result)
       validate_amount_limits!(
         receipt_attributes: params[:receipt_attributes],
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -338,7 +329,7 @@ class ReceiptAnalysisPipeline
         receipt_attributes: receipt_attributes,
         items_attributes: items_attributes,
         payments_attributes: params[:receipt_payments_attributes],
-        tax_details_attributes: amount_result[:tax_details],
+        tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
@@ -682,6 +673,124 @@ class ReceiptAnalysisPipeline
       (amount_reasons + Array(amount_result[:review_reasons])).uniq
     end
 
+    def amount_result_with_receipt_amount_overrides(params, amount_result)
+      settlement_attributes = settlement_restored_receipt_amount_attributes(params, amount_result)
+      return amount_result if settlement_attributes.blank?
+
+      amount_result.deep_dup.tap do |result|
+        resolved = normalized_hash(result[:resolved]).to_h
+        result[:resolved] = resolved.merge(
+          total: settlement_attributes[:total_amount],
+          subtotal: settlement_attributes[:subtotal_amount],
+          tax: settlement_attributes[:tax_amount],
+          tax_rate: settlement_attributes[:tax_rate]
+        )
+      end
+    end
+
+    def receipt_amount_attributes_for(params, amount_result)
+      settlement_attributes = settlement_restored_receipt_amount_attributes(params, amount_result)
+      return settlement_attributes if settlement_attributes.present?
+
+      resolved = normalized_hash(amount_result[:resolved])
+      {
+        total_amount: resolved[:total],
+        subtotal_amount: resolved[:subtotal],
+        tax_amount: resolved[:tax],
+        tax_rate: resolved[:tax_rate]
+      }
+    end
+
+    def tax_details_attributes_for(params, amount_result)
+      settlement_tax_details = settlement_restored_tax_details_attributes(params)
+      return settlement_tax_details if settlement_tax_details.present?
+
+      amount_result[:tax_details]
+    end
+
+    def settlement_restored_receipt_amount_attributes(params, amount_result)
+      hints = normalized_hash(params[:amount_hints])
+      return nil unless hints[:settlement_total_from_deposit_change] == true
+
+      receipt_attributes = normalized_hash(params[:receipt_attributes])
+      restored_total = normalize_amount(hints[:settlement_total]) || normalize_amount(receipt_attributes[:total_amount])
+      return nil unless restored_total&.positive?
+      return nil unless receipt_payments_match_total?(params[:receipt_payments_attributes], restored_total)
+      return nil unless amount_candidate_overrode_settlement_total?(amount_result, restored_total)
+
+      resolved = normalized_hash(amount_result[:resolved])
+      tax_amount = normalize_amount(receipt_attributes[:tax_amount]) || normalize_amount(resolved[:tax])
+
+      {
+        total_amount: restored_total,
+        subtotal_amount: settlement_restored_subtotal(restored_total, tax_amount, receipt_attributes, resolved),
+        tax_amount: tax_amount,
+        tax_rate: resolved[:tax_rate] || receipt_attributes[:tax_rate]
+      }
+    end
+
+    def settlement_restored_tax_details_attributes(params)
+      hints = normalized_hash(params[:amount_hints])
+      return nil unless hints[:settlement_total_from_deposit_change] == true
+
+      receipt_attributes = normalized_hash(params[:receipt_attributes])
+      restored_total = normalize_amount(hints[:settlement_total]) || normalize_amount(receipt_attributes[:total_amount])
+      receipt_tax = normalize_amount(receipt_attributes[:tax_amount])
+      tax_details = Array(params[:receipt_tax_details_attributes]).map { |tax_detail| normalized_hash(tax_detail) }
+      return nil unless restored_total&.positive? && receipt_tax&.positive?
+      return nil if tax_details.blank?
+      return nil unless tax_details.all? { |tax_detail| complete_tax_detail_attributes?(tax_detail) }
+      return nil unless tax_details.sum { |tax_detail| normalize_amount(tax_detail[:amount])&.to_i || 0 } == receipt_tax.to_i
+      return nil unless tax_details.sum { |tax_detail| (normalize_amount(tax_detail[:net_amount])&.to_i || 0) + (normalize_amount(tax_detail[:amount])&.to_i || 0) } == restored_total.to_i
+
+      tax_details.map(&:to_h)
+    end
+
+    def complete_tax_detail_attributes?(tax_detail)
+      normalize_tax_rate(tax_detail[:rate]).present? &&
+        normalize_amount(tax_detail[:net_amount])&.positive? &&
+        normalize_amount(tax_detail[:amount])&.positive?
+    end
+
+    def receipt_payments_match_total?(payments, total)
+      normalized_payments = Array(payments)
+      return false if normalized_payments.blank?
+      return false unless normalized_payments.any? { |payment| cash_payment_method?(normalized_hash(payment)[:method]) }
+
+      normalized_payments.sum do |payment|
+        normalize_amount(normalized_hash(payment)[:amount])&.to_i || 0
+      end == total.to_i
+    end
+
+    def cash_payment_method?(method)
+      method.to_s.match?(/\A\s*cash\s*\z/i) || method.to_s.match?(/現金|現\s*計/)
+    end
+
+    def amount_candidate_overrode_settlement_total?(amount_result, restored_total)
+      resolved_total = normalize_amount(normalized_hash(amount_result[:resolved])[:total])
+      return false if resolved_total.blank? || resolved_total.to_i == restored_total.to_i
+
+      mismatch_reasons = [
+        amount_result.dig(:amount_engine, :selected_candidate, :warnings),
+        amount_result[:blocking_inconsistencies],
+        amount_result[:warning_inconsistencies],
+        amount_result[:inconsistencies],
+        amount_result[:review_reasons]
+      ].flatten.compact.map(&:to_s)
+
+      mismatch_reasons.intersect?(%w[payment_amount_mismatch ocr_total_mismatch])
+    end
+
+    def settlement_restored_subtotal(restored_total, tax_amount, receipt_attributes, resolved)
+      tax = normalize_amount(tax_amount)
+      return restored_total.to_i - tax.to_i if tax&.positive? && restored_total.to_i >= tax.to_i
+
+      receipt_subtotal = normalize_amount(receipt_attributes[:subtotal_amount])
+      return receipt_subtotal if receipt_subtotal&.positive? && receipt_subtotal.to_i <= restored_total.to_i
+
+      normalize_amount(resolved[:subtotal]) || restored_total
+    end
+
     def item_total_drift_review_reasons(params, amount_result, ai_result:)
       return [] if Array(ai_result[:receipt_items_attributes]).blank?
       return [] if Array(params[:receipt_items_attributes]).blank?
@@ -793,9 +902,71 @@ class ReceiptAnalysisPipeline
       end
       return true if header_lines.any? { |line| compact_store_name_for_review(line) == compact_store_name }
 
+      return true if latin_logo_local_store_name_supported_by_ocr?(store_name, header_lines)
+
       Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(header_lines).any? do |candidate|
         compact_store_name_for_review(candidate) == compact_store_name
       end
+    end
+
+    def latin_logo_local_store_name_supported_by_ocr?(store_name, header_lines)
+      parts = store_name.to_s.split
+      return false if parts.size < 3
+
+      brand = parts.first
+      branch = parts.last
+      descriptor = parts[1...-1].join
+      return false if brand.blank? || descriptor.blank? || branch.blank?
+
+      latin_brand_supported_by_header?(brand, header_lines) &&
+        descriptor_supported_by_header?(descriptor, header_lines) &&
+        branch_supported_by_header?(branch, header_lines)
+    end
+
+    def latin_brand_supported_by_header?(brand, header_lines)
+      compact_brand = compact_store_name_for_review(brand)
+      return false unless compact_brand.match?(/\A[a-z0-9&.'-]{2,30}\z/)
+
+      Array(header_lines).first(3).any? do |line|
+        compact_line = compact_store_name_for_review(line)
+        compact_line == compact_brand ||
+          compact_line.start_with?(compact_brand) ||
+          compact_brand.start_with?(compact_line)
+      end
+    end
+
+    def descriptor_supported_by_header?(descriptor, header_lines)
+      compact_descriptor = compact_store_name_for_review(descriptor)
+      return false if compact_descriptor.blank?
+
+      Array(header_lines).any? do |line|
+        compact_store_name_for_review(line).include?(compact_descriptor)
+      end
+    end
+
+    def branch_supported_by_header?(branch, header_lines)
+      compact_branch = compact_store_name_for_review(branch)
+      return false if compact_branch.blank?
+
+      Array(header_lines).any? do |line|
+        compact_line = compact_store_name_for_review(line)
+        compact_line == compact_branch ||
+          po_branch_line_supports_final_branch?(compact_line, compact_branch)
+      end
+    end
+
+    def po_branch_line_supports_final_branch?(compact_line, compact_branch)
+      return false if compact_line.blank? || compact_branch.blank?
+
+      if (match = compact_branch.match(/\A(.+)プレミアムアウトレット店\z/))
+        return compact_line == "#{match[1]}po店"
+      end
+
+      if (match = compact_branch.match(/\A(.+)店\z/))
+        return compact_line == "#{match[1]}po店"
+      end
+
+      false
     end
 
     def resolved_customer_facing_store_name?(store_name)

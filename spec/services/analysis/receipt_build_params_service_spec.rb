@@ -713,6 +713,100 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'OCR Totalが預り額の場合は預りと釣りの差額をreceipt totalとcash paymentにする' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 6_000
+        ocr_result[:candidates][:subtotal_amount] = 5_280
+        ocr_result[:lines] = [
+          'Sample Sweets',
+          '小計 [2]',
+          '5,280',
+          'お預かり',
+          '6,000',
+          'お釣り',
+          '-720'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:total_amount]).to eq(5_280)
+          expect(params[:amount_hints]).to include(
+            settlement_total_from_deposit_change: true,
+            settlement_total: 5_280
+          )
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'cash', amount: 5_280)
+          )
+        end
+      end
+
+      it '釣りのOCRがドット千区切りでも預り差額をcash paymentにする' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 5_000
+        ocr_result[:candidates][:subtotal_amount] = 2_204
+        ocr_result[:candidates][:tax_details] = [
+          { description: '軽', rate: 8, net_amount: 2_160, amount: 160 },
+          { description: '10%', rate: 10, net_amount: 44, amount: 4 }
+        ]
+        ocr_result[:lines] = [
+          'Sample Sweets',
+          '小計 [2]',
+          '2,204',
+          'お預かり',
+          '5,000',
+          'お釣り',
+          '-2.796'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:total_amount]).to eq(2_204)
+          expect(params[:amount_hints]).to include(
+            settlement_total_from_deposit_change: true,
+            settlement_total: 2_204
+          )
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'cash', amount: 2_204)
+          )
+        end
+      end
+
+      it '構造化cash paymentが預り額の場合は実支払額へ補正する' do
+        ocr_result[:candidates][:payment_method_text] = '現金'
+        ocr_result[:candidates][:payments] = [
+          { method: 'Cash', amount: 5_000 }
+        ]
+        ocr_result[:candidates][:tax_details] = []
+        ocr_result[:candidates][:total_amount] = 5_000
+        ocr_result[:candidates][:subtotal_amount] = 2_204
+        ocr_result[:lines] = [
+          'Sample Sweets',
+          '小計 [2]',
+          '2,204',
+          'お預かり',
+          '5,000',
+          'お釣り',
+          '-2.796'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:total_amount]).to eq(2_204)
+          expect(params[:amount_hints]).to include(
+            settlement_total_from_deposit_change: true,
+            settlement_total: 2_204
+          )
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'Cash', amount: 2_204)
+          )
+        end
+      end
+
       it '同一商品券行が複数ある場合は枚数分を集約してpaymentにする' do
         ocr_result[:candidates][:payment_method_text] = '商品券'
         ocr_result[:candidates][:payments] = []
@@ -1113,6 +1207,56 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to all(eq(BigDecimal('0.1')))
           expect(tax_detail).to include(rate: BigDecimal('0.1'), net_amount: 2_846, amount: 284)
           expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
+      it '税率行の近傍にある対象額と税額から単一税率TaxDetailsを復元する' do
+        sample_sweets_ocr_result = {
+          candidates: {
+            store_name: 'Sample Sweets',
+            subtotal_amount: 5_280,
+            total_amount: 6_000,
+            tax_amount: 391,
+            country_region: 'JPN',
+            items: [
+              { raw_text: 'Sample Clearance', line_total: 10_560, tax_rate: 8, confidence: 0.95 },
+              { raw_text: 'Sample Bag Discount', line_total: -5_280, tax_rate: 8, confidence: 0.94 }
+            ],
+            tax_details: [
+              { description: '軽', rate: 8, amount: 391 }
+            ]
+          },
+          lines: [
+            'Sample Sweets',
+            'Sample Clearance',
+            '10,560 軽',
+            'Sample Bag Discount',
+            '-5,280',
+            '小計 [2]',
+            '5,280',
+            'お預かり',
+            '6,000',
+            'お釣り',
+            '-720',
+            '合計',
+            '税',
+            '軽 8%',
+            '¥5,280',
+            '¥391'
+          ]
+        }
+
+        params = described_class.call(ocr_result: sample_sweets_ocr_result, ai_result: nil)
+        tax_detail = params[:receipt_tax_details_attributes].first
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:total_amount]).to eq(5_280)
+          expect(tax_detail).to include(
+            description: '8%対象',
+            rate: BigDecimal('0.08'),
+            net_amount: 4_889,
+            amount: 391
+          )
         end
       end
 
@@ -2016,6 +2160,66 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: one_letter_brand_ocr_result, ai_result: one_letter_brand_ai_result)
 
         expect(params[:receipt_attributes][:store_name]).to eq('Q 中央店')
+      end
+
+      it '英字ロゴと日本語業態行とPO支店行から自然な店舗名へ補完する' do
+        logo_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'samplecacao ふじ花園po店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'samplecacao',
+            'サムプル ショコラ ブティック&カフェ',
+            'ふじ花園po店',
+            '100-0000',
+            'サンプル市サンプル町 1 ふじ花園po 920区',
+            '領収書'
+          ]
+        )
+        logo_ai_result = {
+          receipt_attributes: {
+            store_name: 'samplecacao ふじ花園po店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: logo_ocr_result, ai_result: logo_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ ふじ花園店')
+      end
+
+      it 'URLで支持される英字ロゴの末尾ノイズを落として短い漢字PO支店を補完する' do
+        logo_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サムプル ショコラ ブティック&カフェ 青山po店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'samplecacaok',
+            'maitre sample suisse',
+            'since 1845',
+            'サムプル ショコラ ブティック&カフェ',
+            '青山po店',
+            '107-0000',
+            'サンプル区青山 1 青山po 1110区',
+            'www.samplecacao.jp'
+          ]
+        )
+        logo_ai_result = {
+          receipt_attributes: {
+            store_name: 'サムプル ショコラ ブティック&カフェ 青山po店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: logo_ocr_result, ai_result: logo_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ 青山プレミアムアウトレット店')
       end
 
       it 'AI payment_method は OCR field や Payments[] より優先される' do
@@ -3195,6 +3399,96 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         expect(params[:receipt_adjustments_attributes]).to eq([])
+      end
+
+      it '明確な負値割引itemはAI adjustmentがない場合にOCR receipt adjustmentとしてfallback採用する' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'Sample Stock Discount', line_total: -2160, confidence: BigDecimal('0.91') }
+        ]
+        ocr_result[:lines] = [
+          'Sample Stock Discount -2,160',
+          'Total 2,160'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to be_empty
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(
+              kind: 'receipt_discount',
+              label: 'Sample Stock Discount',
+              amount: 2160,
+              sign: 'discount',
+              source: 'ocr',
+              needs_review: true,
+              review_reasons: include('adjustment_uncertain')
+            )
+          )
+          expect(params[:review_reasons]).to eq([])
+        end
+      end
+
+      it '負値割引itemのラベル行と金額行が分かれていてもOCR receipt adjustmentとしてfallback採用する' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'Sample Item', original_line_total: 10_560, line_total: 10_560, confidence: BigDecimal('0.93') },
+          { raw_text: 'Sample Bag Discount', original_line_total: -5280, line_total: -5280, confidence: BigDecimal('0.92') }
+        ]
+        ocr_result[:lines] = [
+          'Sample Item',
+          '10,560',
+          'Sample Bag Discount',
+          '-5,280',
+          'Total 5,280'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to contain_exactly(include(raw_text: 'Sample Item'))
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(
+              kind: 'receipt_discount',
+              label: 'Sample Bag Discount',
+              amount: 5280,
+              sign: 'discount',
+              source: 'ocr'
+            )
+          )
+          expect(params[:review_reasons]).to eq([])
+        end
+      end
+
+      it 'AI adjustmentがある場合は負値割引itemのOCR fallbackを追加しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'Sample Stock Discount', line_total: -2160, confidence: BigDecimal('0.91') }
+        ]
+        ocr_result[:lines] = [
+          'Sample Stock Discount -2,160',
+          'Total 2,160'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'receipt_discount',
+              label: 'Sample Stock Discount',
+              amount: 2160,
+              sign: 'discount',
+              source_text: 'Sample Stock Discount',
+              source_line_index: 0
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to be_empty
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'receipt_discount', label: 'Sample Stock Discount', amount: 2160, source: 'ai')
+          )
+          expect(params[:review_reasons]).to eq([])
+        end
       end
 
       it '負値itemを通常明細から除外し、adjustmentがない場合は確認理由を付ける' do

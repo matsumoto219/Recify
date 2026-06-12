@@ -96,7 +96,7 @@ module Amounts
       return false if price_tax_inclusion_uncertain?(candidate) && ambiguous_tax_inclusion_source?
 
       source_groups = tax_details_by_rate(comparable_source_tax_details)
-      generated_groups = tax_details_by_rate(candidate.tax_details)
+      generated_groups = tax_details_by_rate(candidate.tax_details, normalize_basis: false)
 
       return false if source_groups.blank? || generated_groups.blank?
       return false if tax_details_match_rounding_candidate?(candidate, source_groups)
@@ -230,7 +230,7 @@ module Amounts
       source_groups ||= tax_details_by_rate(comparable_source_tax_details)
       return false if source_groups.blank? || items.blank?
 
-      generated_groups = tax_details_by_rate(candidate.tax_details)
+      generated_groups = tax_details_by_rate(candidate.tax_details, normalize_basis: false)
       return true if generated_groups.present? && generated_groups == source_groups
 
       %i[floor ceil round].any? do |rounding_mode|
@@ -274,17 +274,50 @@ module Amounts
         to_i(fetch_value(tax_detail, :net_amount)).positive?
       end
 
-      details_with_net_amount.presence || tax_details
+      details = details_with_net_amount.presence || tax_details
+      final_tax_details(details).presence || details
     end
 
-    def tax_details_by_rate(details)
-      Array(details).each_with_object({}) do |tax_detail, groups|
-        rate = normalize_rate(fetch_value(tax_detail, :rate))
+    def final_tax_details(details)
+      detected = Amounts::TaxDetailBasisDetector.call(details)
+      final_indexes = detected.filter_map do |detail|
+        next if detail[:intermediate] || detail[:basis] == :summary
+
+        detail[:index]
+      end
+
+      Array(details).values_at(*final_indexes).compact
+    end
+
+    def tax_details_by_rate(details, normalize_basis: true)
+      comparable_details = normalize_basis ? normalized_tax_details_for_comparison(details) : raw_tax_details_for_comparison(details)
+      comparable_details.each_with_object({}) do |tax_detail, groups|
+        rate = tax_detail[:rate]
         next if rate <= 0
 
         groups[rate] ||= { amount: 0, net_amount: 0 }
-        groups[rate][:amount] += to_i(fetch_value(tax_detail, :amount))
-        groups[rate][:net_amount] += to_i(fetch_value(tax_detail, :net_amount))
+        groups[rate][:amount] += tax_detail[:amount].to_i
+        groups[rate][:net_amount] += tax_detail[:net_amount].to_i
+      end
+    end
+
+    def raw_tax_details_for_comparison(details)
+      Array(details).map do |tax_detail|
+        {
+          rate: normalize_rate(fetch_value(tax_detail, :rate)),
+          amount: to_i(fetch_value(tax_detail, :amount)),
+          net_amount: to_i(fetch_value(tax_detail, :net_amount))
+        }
+      end
+    end
+
+    def normalized_tax_details_for_comparison(details)
+      Amounts::TaxDetailBasisDetector.call(details).map do |detail|
+        {
+          rate: detail[:rate],
+          amount: detail[:amount],
+          net_amount: detail[:target_net_amount]
+        }
       end
     end
 
@@ -330,8 +363,10 @@ module Amounts
     end
 
     def source_tax_details_match_receipt_net?
-      comparable_source_tax_details.present? &&
-        comparable_source_tax_details.sum { |tax_detail| to_i(fetch_value(tax_detail, :net_amount)) } == receipt_subtotal_amount &&
+      source_groups = tax_details_by_rate(comparable_source_tax_details)
+
+      source_groups.present? &&
+        source_groups.values.sum { |amounts| amounts[:net_amount] } == receipt_subtotal_amount &&
         source_tax_detail_total == receipt_tax_amount
     end
 

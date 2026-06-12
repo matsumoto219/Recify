@@ -434,7 +434,7 @@ module Amounts
       Amounts::Candidate.new(
         candidate_id: candidate_id,
         basis: basis,
-        subtotal: gross_basis ? purchase_total : purchase_total - tax,
+        subtotal: purchase_total - tax,
         tax: tax,
         purchase_total: purchase_total,
         final_payment_total: payment[:final_payment_total],
@@ -521,6 +521,7 @@ module Amounts
       groups = {}
       warnings = adjustment_warnings.dup
       exact = true
+      mixed_basis_used = false
       evidence = final_detected_tax_details.map { |detail| detail[:evidence] }
       profile_assignments = []
 
@@ -576,7 +577,7 @@ module Amounts
             gross_amount: entry[:gross_amount]
           }
         end
-        warnings << :price_tax_inclusion_uncertain if assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
+        mixed_basis_used ||= assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
         evidence.concat(assignment[:assignments].map { |entry| entry.slice(:source, :index, :basis, :rate, :net_amount, :tax_amount, :gross_amount) })
       end
 
@@ -588,6 +589,7 @@ module Amounts
 
       purchase_total = groups.values.sum { |group| group[:gross] } + purchase_adjustment_total
       tax = groups.values.sum { |group| group[:tax] }
+      warnings << :price_tax_inclusion_uncertain if mixed_basis_used && !receipt_amounts_match_candidate?(purchase_total, tax)
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
       warnings += payment_warnings(payment)
 
@@ -838,6 +840,19 @@ module Amounts
         total == purchase_total.to_i
     end
 
+    def receipt_amounts_match_candidate?(purchase_total, tax)
+      subtotal = amount_or_nil(receipt[:subtotal_amount])
+      receipt_tax = amount_or_nil(receipt[:tax_amount])
+      total = amount_or_nil(receipt[:total_amount])
+
+      !subtotal.nil? &&
+        !receipt_tax.nil? &&
+        !total.nil? &&
+        subtotal == purchase_total.to_i - tax.to_i &&
+        receipt_tax == tax.to_i &&
+        total == purchase_total.to_i
+    end
+
     def explicit_non_taxable_items
       items.select do |item|
         item = indifferent_hash(item)
@@ -951,6 +966,10 @@ module Amounts
       return 0 if purchase_adjustment_total.zero?
       return purchase_adjustment_total unless item_total.positive?
 
+      detail_gross_total = Array(groups).sum { |group| group[:gross].to_i }
+      receipt_total = amount_or_nil(receipt[:total_amount])
+      return 0 if receipt_total&.positive? && detail_gross_total == receipt_total
+
       basis_total = Array(groups).sum { |group| gross_basis ? group[:gross].to_i : group[:net].to_i }
       adjusted_item_total = [ item_total + purchase_adjustment_total, 0 ].max
 
@@ -984,7 +1003,7 @@ module Amounts
         {
           description: description_for(rate),
           rate: rate,
-          net_amount: group[:gross],
+          net_amount: group[:net],
           amount: group[:tax]
         }
       end

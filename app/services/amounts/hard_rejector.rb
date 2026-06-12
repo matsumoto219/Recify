@@ -17,6 +17,7 @@ module Amounts
       reasons = []
       reasons << :invalid_amount_relation unless valid_amount_relation?(candidate)
       reasons << :tax_details_double_counted if tax_details_double_counted?(candidate)
+      reasons << :unsupported_tax_detail_gross_basis if unsupported_tax_detail_gross_basis?(candidate)
       reasons << :tax_detail_gross_item_mismatch if tax_detail_gross_item_mismatch?(candidate)
       reasons << :tax_detail_gross_item_mismatch if external_tax_item_net_mismatch?(candidate)
 
@@ -39,6 +40,45 @@ module Amounts
       return true if candidate.basis == "printed_tax_details_raw_sum"
 
       false
+    end
+
+    def unsupported_tax_detail_gross_basis?(candidate)
+      return false unless candidate.basis == "printed_tax_details_gross"
+      return false if detected_tax_details.blank?
+
+      candidate_tax_rates(candidate).present? &&
+        candidate_tax_rates(candidate).none? do |rate|
+          detected_tax_details.any? do |detail|
+          same_tax_rate?(detail[:rate], rate) && gross_compatible_tax_detail?(detail)
+        end
+      end
+    end
+
+    def candidate_tax_rates(candidate)
+      Array(candidate.tax_rate_groups).filter_map do |group|
+        rate = group.respond_to?(:[]) ? group[:rate] || group["rate"] : nil
+        rate = BigDecimal(rate.to_s)
+        rate if rate.positive?
+      rescue ArgumentError
+        nil
+      end.uniq
+    end
+
+    def same_tax_rate?(left, right)
+      BigDecimal(left.to_s) == BigDecimal(right.to_s)
+    rescue ArgumentError
+      false
+    end
+
+    def gross_compatible_tax_detail?(detail)
+      rate = detail[:rate]
+      gross = detail[:net_amount].to_i
+      tax = detail[:amount].to_i
+      return false unless rate.positive? && gross.positive? && tax.positive?
+
+      %i[floor round ceil].any? do |rounding_mode|
+        Amounts::Rounding.apply_rounding(BigDecimal(gross.to_s) * rate / (BigDecimal("1") + rate), rounding_mode) == tax
+      end
     end
 
     def duplicate_or_intermediate_tax_details?

@@ -170,9 +170,10 @@ RSpec.describe 'Amount Engine integration' do
 
     aggregate_failures do
       # 検算: OFF時は130/140/300を税込へ補正しない。TaxDetails gross候補は
-      # 8%対象270 + 10%対象820 + 非課税50 = 1,140、税額21 + 74 = 95を候補として残す。
+      # 8%対象270 + 10%対象820 + 非課税50 = 1,140、税額21 + 74 = 95を候補として残し、
+      # 保存subtotalはgross - taxの実netにする。
       expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_gross/floor')
-      expect(result[:resolved]).to include(subtotal: 1_140, tax: 95, total: 1_140, tax_rate: nil)
+      expect(result[:resolved]).to include(subtotal: 1_045, tax: 95, total: 1_140, tax_rate: nil)
       expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 130, 140, 300, 490, 50 ])
       expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 130, 140, 300, 490, 50 ])
       expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 130, 140, 300, 490, 50 ])

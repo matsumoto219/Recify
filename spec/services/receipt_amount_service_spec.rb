@@ -788,7 +788,7 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         # 検算: 1,100円は税込10%対象額。floor(1,100 * 10 / 110) = 税100円なのでgross basis。
         expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_gross/floor')
-        expect(result[:resolved]).to include(subtotal: 1_100, tax: 100, total: 1_100)
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
         expect(result[:computed]).to include(tax_detail_amount_basis: :gross, receipt_tax_basis: :total_includes_tax)
         expect(result[:blocking_inconsistencies]).to be_empty
       end
@@ -818,11 +818,11 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         # 検算: TaxDetails net合計 604 + 994 = 1,598、税額 44 + 90 = 134。
-        # receiptも subtotal 1,598 + tax 134 = total 1,732 なので、対象額ラベルでもnet basisを正にする。
+        # receiptも subtotal 1,598 + tax 134 = total 1,732 なので、対象額ラベルでもnet basisを正にしてwarningは出さない。
         expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
         expect(result[:resolved]).to include(subtotal: 1_598, tax: 134, total: 1_732, tax_rate: nil)
         expect(result[:computed]).to include(tax_detail_amount_basis: :net, receipt_tax_basis: :tax_added_to_subtotal)
-        expect(result[:warning_inconsistencies]).to eq([ :price_tax_inclusion_uncertain ])
+        expect(result[:warning_inconsistencies]).to eq([])
         expect(result[:review_reasons]).to eq([])
         expect(result[:needs_review]).to be(false)
       end
@@ -921,7 +921,7 @@ RSpec.describe ReceiptAmountService do
         )
         expect(result.dig(:amount_engine, :candidates).map { |candidate| candidate[:candidate_id] }).not_to include('printed_tax_details_raw_sum/floor')
         expect(result[:blocking_inconsistencies]).to be_empty
-        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_inconsistencies]).to be_empty
       end
     end
 
@@ -1272,10 +1272,10 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         expect(result.dig(:computed, :adjusted_item_total)).to eq(2_204)
         expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
-        expect(result[:resolved]).to include(subtotal: 2_204, tax: 164, total: 2_204)
+        expect(result[:resolved]).to include(subtotal: 2_040, tax: 164, total: 2_204)
         expect(result[:tax_details]).to contain_exactly(
-          include(rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160),
-          include(rate: BigDecimal('0.1'), net_amount: 44, amount: 4)
+          include(rate: BigDecimal('0.08'), net_amount: 2_000, amount: 160),
+          include(rate: BigDecimal('0.1'), net_amount: 40, amount: 4)
         )
         expect(result[:warning_inconsistencies]).to include(:ocr_total_mismatch)
         expect(result[:blocking_inconsistencies]).not_to include(:item_total_mismatch, :tax_detail_mismatch, :total_mismatch)
@@ -1421,7 +1421,7 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
-        expect(result[:resolved]).to include(subtotal: 1_100, tax: 100, total: 1_100)
+        expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100)
         expect(result[:blocking_inconsistencies]).not_to include(:total_mismatch, :tax_detail_mismatch)
       end
     end
@@ -1447,7 +1447,7 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result.dig(:computed, :tax_detail_amount_basis)).to eq(:gross)
-        expect(result[:resolved]).to include(subtotal: 2_204, tax: 164, total: 2_204)
+        expect(result[:resolved]).to include(subtotal: 2_040, tax: 164, total: 2_204)
         expect(result[:warning_inconsistencies]).to include(:ocr_total_mismatch)
         expect(result[:blocking_inconsistencies]).not_to include(:total_mismatch)
       end
@@ -2493,7 +2493,7 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         expect(result[:calculation_profile]).to include(item_amount_basis: :mixed_by_tax_rate_group)
         expect(result[:computed]).to include(item_amount_basis: :line_total_as_recorded)
-        expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
+        expect(result[:warning_inconsistencies]).to be_empty
         expect(result[:warning_inconsistencies]).not_to include(:calculation_profile_uncertain)
       end
     end

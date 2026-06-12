@@ -75,11 +75,11 @@ module Amounts
     def basis_penalty(candidate)
       case candidate.basis.to_s
       when "mixed_by_tax_rate_group"
-        external_tax_evidence? ? 15 : 0
+        mixed_candidate_receipt_amounts_match?(candidate) ? 0 : (external_tax_evidence? ? 15 : 0)
       when "external_tax_from_receipt"
         net_tax_detail_candidate_supported?(candidate) || external_tax_evidence? ? 0 : 3
       when "printed_tax_details_gross"
-        gross_tax_detail_candidate_supported?(candidate) ? 0 : 5_000
+        gross_tax_detail_candidate_supported?(candidate) ? gross_tax_detail_basis_penalty : 5_000
       when "printed_tax_details_net"
         net_tax_detail_candidate_supported?(candidate) ? net_tax_detail_basis_penalty(candidate) : 5_000
       when "items_as_tax_included"
@@ -144,8 +144,9 @@ module Amounts
     def warning_penalty(candidate)
       blocking = Amounts::MismatchSeverity.blocking(candidate.warnings).size * 50_000
       tax_detail_rate = candidate.warnings.include?(:tax_detail_rate_mismatch) ? 500 : 0
+      price_tax_inclusion = candidate.warnings.include?(:price_tax_inclusion_uncertain) ? 10 : 0
 
-      blocking + tax_detail_rate
+      blocking + tax_detail_rate + price_tax_inclusion
     end
 
     def rounding_mode_penalty(candidate)
@@ -177,7 +178,22 @@ module Amounts
     end
 
     def net_tax_detail_basis_penalty(candidate)
+      return -1 if candidate.warnings.map(&:to_sym) == [ :price_tax_inclusion_uncertain ] &&
+        receipt_total_matches_purchase_total?(candidate) &&
+        receipt_tax_matches_tax?(candidate)
+
       item_total(candidate) == candidate.purchase_total.to_i ? -1 : 2
+    end
+
+    def gross_tax_detail_basis_penalty
+      duplicate_or_intermediate_tax_details? ? 0 : -1
+    end
+
+    def duplicate_or_intermediate_tax_details?
+      detected_tax_details.any? { |detail| detail[:basis] == :intermediate } ||
+        detected_tax_details.group_by { |detail| detail[:rate] }.any? do |rate, details|
+          rate.positive? && details.count { |detail| detail[:net_amount].to_i.positive? && detail[:amount].to_i.positive? } > 1
+        end
     end
 
     def gross_tax_detail_candidate?(candidate)
@@ -203,6 +219,12 @@ module Amounts
     def receipt_tax_matches_tax?(candidate)
       tax = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :tax_amount))
       !tax.nil? && tax == candidate.tax.to_i
+    end
+
+    def mixed_candidate_receipt_amounts_match?(candidate)
+      receipt_total_matches_purchase_total?(candidate) &&
+        receipt_subtotal_matches_subtotal?(candidate) &&
+        receipt_tax_matches_tax?(candidate)
     end
 
     def net_tax_details_match_receipt_amounts?

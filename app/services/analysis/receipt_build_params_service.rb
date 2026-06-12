@@ -14,6 +14,7 @@ module Analysis
     VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
     CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
+    SETTLEMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，.]\d{3})+|\d+)(?:円)?/
     REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
     FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/
     FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i
@@ -41,7 +42,11 @@ module Analysis
           normalized_ai_result[:receipt_items_attributes],
           skipped_negative_items:
         )
-        receipt_payments_attributes = build_receipt_payments_attributes(candidates, lines)
+        receipt_payments_attributes = build_receipt_payments_attributes(
+          candidates,
+          lines,
+          receipt_total: receipt_attributes[:total_amount]
+        )
         receipt_tax_details_attributes = recover_receipt_tax_details_from_lines(
           build_receipt_tax_details_attributes(candidates),
           lines,
@@ -51,7 +56,8 @@ module Analysis
           normalized_ai_result[:receipt_adjustments_attributes],
           candidates[:adjustment_candidates],
           lines,
-          receipt_items_attributes
+          receipt_items_attributes,
+          skipped_negative_items
         )
         receipt_adjustments_attributes, receipt_payments_attributes = move_voucher_adjustments_to_payments(
           receipt_adjustments_attributes,
@@ -68,6 +74,12 @@ module Analysis
           lines:
         )
         review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
+        amount_hints = build_amount_hints(
+          ai_receipt_attributes,
+          candidates,
+          lines,
+          receipt_attributes
+        )
 
         tax_rate_correction = apply_tax_detail_amount_match_policy(
           receipt_items_attributes,
@@ -99,6 +111,7 @@ module Analysis
           receipt_tax_details_attributes: receipt_tax_details_attributes,
           receipt_adjustments_attributes: receipt_adjustments_attributes,
           review_reasons: review_reasons,
+          amount_hints: amount_hints,
           tax_rate_correction: tax_rate_correction,
           corrections: corrections
         }
@@ -155,7 +168,7 @@ module Analysis
           ),
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
           purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
-          total_amount: ai_attrs[:total_amount] || normalize_amount(candidates[:total_amount]),
+          total_amount: resolve_receipt_total_amount(ai_attrs, candidates, lines),
           subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
           tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
           tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
@@ -172,12 +185,49 @@ module Analysis
         }.compact
       end
 
+      def resolve_receipt_total_amount(ai_attrs, candidates, lines)
+        preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
+        settlement_total = settlement_purchase_total_from_lines(lines)
+        return preferred_total if preferred_total.blank?
+        return preferred_total unless settlement_total&.positive?
+
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        return settlement_total if deposit_amount&.positive? && preferred_total.to_i == deposit_amount
+
+        preferred_total
+      end
+
+      def build_amount_hints(ai_receipt_attributes, candidates, lines, receipt_attributes)
+        return {} unless settlement_receipt_total_restored?(ai_receipt_attributes, candidates, lines, receipt_attributes)
+
+        {
+          settlement_total_from_deposit_change: true,
+          settlement_total: receipt_attributes[:total_amount]
+        }
+      end
+
+      def settlement_receipt_total_restored?(ai_receipt_attributes, candidates, lines, receipt_attributes)
+        ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
+        preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
+        settlement_total = settlement_purchase_total_from_lines(lines)
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+
+        preferred_total.present? &&
+          settlement_total&.positive? &&
+          deposit_amount&.positive? &&
+          preferred_total.to_i == deposit_amount &&
+          normalize_amount(receipt_attributes[:total_amount])&.to_i == settlement_total
+      end
+
       def resolve_store_name(store_name, lines, ai_store_name: false)
         normalized_store_name = compact_store_name(store_name)
         return store_name if normalized_store_name.blank?
 
         local_complete_replacement = local_complete_store_name_replacement(store_name, lines)
         return local_complete_replacement if local_complete_replacement.present?
+
+        latin_logo_extension = latin_logo_local_store_name_extension(store_name, lines)
+        return latin_logo_extension if latin_logo_extension.present?
 
         if ai_store_name && complete_customer_facing_ai_store_name?(store_name, lines)
           return Analysis::StoreNameCandidateClassifier.normalize_name(store_name)
@@ -244,6 +294,45 @@ module Analysis
           customer_facing_store_line?(line) &&
             Analysis::StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(store_name, line)
         end
+      end
+
+      def latin_logo_local_store_name_extension(store_name, lines)
+        current_store_name = compact_store_name(store_name)
+        return nil if current_store_name.blank?
+
+        header_lines = Array(lines).first(8).filter_map do |line|
+          Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        end
+        return nil if header_lines.blank?
+
+        logo_entry = header_lines.each_with_index.find do |line, index|
+          latin_logo_store_brand_line?(line, header_lines:, line_index: index)
+        end
+        return nil if logo_entry.blank?
+
+        logo_line, logo_index = logo_entry
+        descriptor_entry = header_lines[(logo_index + 1)..]&.each_with_index&.find do |line, _relative_index|
+          local_business_descriptor_line?(line)
+        end
+        return nil if descriptor_entry.blank?
+
+        descriptor_line, descriptor_relative_index = descriptor_entry
+        descriptor_index = logo_index + 1 + descriptor_relative_index
+        branch_line = header_lines[(descriptor_index + 1)..(descriptor_index + 3)]&.find do |line|
+          customer_facing_branch_line?(line)
+        end
+        return nil if branch_line.blank?
+
+        printed_branch = Analysis::StoreNameCandidateClassifier.normalize_name(branch_line)
+        return nil unless current_store_name.include?(compact_store_name(printed_branch)) ||
+          current_store_name.include?(compact_store_name(normalized_po_branch_line(printed_branch)))
+
+        brand = canonical_latin_logo_brand(logo_line, lines)
+        descriptor = normalize_local_business_descriptor(descriptor_line)
+        branch = normalized_po_branch_line(printed_branch)
+        return nil if brand.blank? || descriptor.blank? || branch.blank?
+
+        "#{brand} #{descriptor} #{branch}"
       end
 
       def printed_store_name_extension(store_name, lines)
@@ -358,6 +447,78 @@ module Analysis
         normalized.length <= 40
       end
 
+      def latin_logo_store_brand_line?(line, header_lines: [], line_index: nil)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        return false unless customer_facing_brand_line?(normalized, header_lines:, line_index:)
+        return false if normalized.match?(/[一-龠ぁ-んァ-ヶ]/)
+        return false if normalized.match?(/\s/)
+
+        normalized.match?(/\A[A-Za-z][A-Za-z0-9&.'-]{1,30}\z/)
+      end
+
+      def local_business_descriptor_line?(line)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        return false unless normalized.match?(/[一-龠ぁ-んァ-ヶ]/)
+        return false if customer_facing_branch_line?(normalized)
+        return false if store_name_context_noise_line?(normalized)
+
+        normalized.match?(/ショコラ|チョコ|ブティック|カフェ|レストラン|ショップ|ストア|マーケット|食堂|ダイニング/)
+      end
+
+      def normalize_local_business_descriptor(line)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        parts = normalized.split
+        if parts.size > 1
+          remainder = parts[1..].join(" ")
+          normalized = remainder if parts.first.match?(/\A[ァ-ヶー]{2,8}\z/) && local_business_descriptor_line?(remainder)
+        end
+
+        normalized.match?(/[一-龠ぁ-んァ-ヶ]/) ? normalized.gsub(/[[:space:]]+/, "") : normalized
+      end
+
+      def normalized_po_branch_line(line)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        match = normalized.match(/\A(.+?)\s*po\s*店\z/i)
+        return normalized if match.blank?
+
+        base = match[1].to_s.strip
+        suffix = base.match?(/\A[一-龠]{1,3}\z/) ? "プレミアムアウトレット店" : "店"
+        "#{base}#{suffix}"
+      end
+
+      def canonical_latin_logo_brand(line, lines)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        compact = normalized.gsub(/[^A-Za-z0-9&.'-]/, "")
+        candidate = domain_brand_tokens(lines).find do |token|
+          latin_brand_token_match?(compact.downcase, token)
+        end
+
+        format_latin_brand_name(candidate || compact)
+      end
+
+      def domain_brand_tokens(lines)
+        Array(lines).flat_map do |line|
+          line.to_s.downcase.scan(%r{(?:https?://)?(?:www\.)?([a-z0-9][a-z0-9-]{2,30})\.(?:co\.jp|jp|com|net|store|shop)\b}).flatten
+        end.uniq
+      end
+
+      def latin_brand_token_match?(brand, token)
+        return false if brand.blank? || token.blank?
+        return true if brand == token
+        return true if brand.start_with?(token) && (brand.length - token.length) <= 2
+        return true if token.start_with?(brand) && (token.length - brand.length) <= 2
+
+        false
+      end
+
+      def format_latin_brand_name(value)
+        text = value.to_s.strip
+        return nil if text.blank?
+        return text if text.match?(/[A-Z]/)
+
+        text[0].upcase + text[1..].to_s
+      end
+
       def isolated_logo_fragment_prefix?(line, header_lines:, line_index:)
         return false unless Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(line)
         return false if line_index.nil?
@@ -443,17 +604,22 @@ module Analysis
             discount_amount: discount_amount
           )
           price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
+          tax_rate = normalize_rate(normalized_item[:tax_rate])
           if negative_item_amount?(price:, original_line_total:, line_total:)
+            amount = [ price, original_line_total, line_total ].compact.map(&:to_i).find(&:negative?)&.abs
             skipped_negative_items << {
               raw_text: raw_text,
-              amount: [ price, original_line_total, line_total ].compact.map(&:to_i).find(&:negative?)&.abs
+              amount: amount,
+              source_line_index: normalize_non_negative_integer(normalized_item[:source_line_index]) ||
+                negative_adjustment_source_line_index(raw_text, amount, lines),
+              tax_rate: tax_rate,
+              confidence: normalize_confidence(normalized_item[:confidence])
             }.compact
             next
           end
           raw_category = normalized_item[:category].presence
           category = normalize_category(raw_category)
           category_invalid = raw_category.present? && category.nil?
-          tax_rate = normalize_rate(normalized_item[:tax_rate])
           tax_rate_confidence = normalize_tax_rate_confidence(normalized_item[:tax_rate_confidence])
           review_reasons = item_review_reasons(
             normalized_item,
@@ -497,12 +663,15 @@ module Analysis
         end
       end
 
-      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [])
+      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [], skipped_negative_items = [])
         source = Array(ai_adjustments).present? ? "ai" : "ocr"
         adjustments = if source == "ai"
           Array(ai_adjustments)
         else
-          fallback_ocr_adjustments(ocr_adjustment_candidates)
+          fallback_ocr_adjustments(
+            Array(ocr_adjustment_candidates) +
+              skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
+          )
         end
 
         Array(adjustments).filter_map.with_index do |adjustment, index|
@@ -639,7 +808,36 @@ module Analysis
         end
       end
 
-      def build_receipt_payments_attributes(candidates, lines)
+      def skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
+        Array(skipped_negative_items).filter_map do |item|
+          normalized = item.with_indifferent_access
+          amount = normalize_amount(normalized[:amount]).to_i.abs
+          next unless amount.positive?
+
+          source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          next if source_line_index.nil?
+
+          source_text = Array(lines)[source_line_index].to_s.strip.presence || normalized[:raw_text].to_s.strip.presence
+          next unless negative_adjustment_source_supported?(source_line_index, normalized[:raw_text], amount, lines)
+
+          raw_text = normalized[:raw_text].to_s.strip.presence || source_text
+          {
+            kind: infer_ocr_adjustment_kind(source_text || raw_text, "discount"),
+            label: raw_text,
+            amount: amount,
+            sign_hint: "discount",
+            tax_rate_hint: normalized[:tax_rate],
+            source_text: raw_text,
+            source_line_index: source_line_index,
+            confidence: normalized[:confidence] || OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD,
+            needs_review: true,
+            review_reasons: [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+          }
+        end
+      end
+
+      def build_receipt_payments_attributes(candidates, lines, receipt_total: nil)
+        total = normalize_amount(receipt_total || candidates[:total_amount])
         structured_payments = Array(candidates[:payments]).map do |payment|
           normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
 
@@ -650,36 +848,57 @@ module Analysis
             amount: normalize_amount(normalized_payment[:amount])
           }.compact
         end
-        return structured_payments if structured_payments.present?
+        return normalize_structured_payments_with_settlement(structured_payments, lines, total, tax_details: candidates[:tax_details]) if structured_payments.present?
 
         deposit_change_payment = cash_payment_from_deposit_change_lines(
           lines,
-          normalize_amount(candidates[:total_amount]),
-          tax_details: candidates[:tax_details]
+          total,
+          tax_details: candidates[:tax_details],
+          allow_tax_detail_conflict: settlement_purchase_total_from_lines(lines) == total&.to_i &&
+            !external_tax_detail_context?(candidates[:tax_details])
         )
         return [ deposit_change_payment ] if deposit_change_payment.present?
 
         fallback_payments_from_lines(
           lines,
-          receipt_total: normalize_amount(candidates[:total_amount]),
+          receipt_total: total,
           fallback_method: candidates[:payment_method_text]
         )
       end
 
-      def cash_payment_from_deposit_change_lines(lines, receipt_total, tax_details: [])
+      def cash_payment_from_deposit_change_lines(lines, receipt_total, tax_details: [], allow_tax_detail_conflict: false)
         total = normalize_amount(receipt_total)&.to_i
         return nil unless total&.positive?
-        return nil if external_tax_details_conflict_with_receipt_total?(tax_details, total)
+        return nil if !allow_tax_detail_conflict && external_tax_details_conflict_with_receipt_total?(tax_details, total)
 
         deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
         change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
-        return nil unless deposit_amount&.positive? && change_amount&.positive?
+        return nil unless deposit_amount&.positive? && !change_amount.nil?
         return nil unless deposit_amount - change_amount == total
 
         {
           method: "cash",
           amount: total
         }
+      end
+
+      def normalize_structured_payments_with_settlement(payments, lines, receipt_total, tax_details: [])
+        total = normalize_amount(receipt_total)&.to_i
+        settlement_total = settlement_purchase_total_from_lines(lines)
+        return payments unless total&.positive? && settlement_total == total
+        return payments if external_tax_detail_context?(tax_details)
+
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        return payments unless deposit_amount&.positive?
+
+        Array(payments).map do |payment|
+          next payment unless payment[:amount].to_i == deposit_amount
+          next payment unless normalize_detected_payment_method(
+            Analysis::ReceiptFallbackPatterns.detect_payment_method(payment[:method])
+          ) == "cash"
+
+          payment.merge(amount: total)
+        end
       end
 
       def add_cash_difference_payment(payments, lines, receipt_total)
@@ -695,7 +914,7 @@ module Analysis
 
         deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
         change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
-        return normalized_payments unless deposit_amount&.positive? && change_amount&.positive?
+        return normalized_payments unless deposit_amount&.positive? && !change_amount.nil?
         return normalized_payments unless deposit_amount - change_amount == missing_amount
 
         normalized_payments + [ { method: "cash", amount: missing_amount } ]
@@ -711,15 +930,22 @@ module Analysis
         net_sum == receipt_total && gross_sum != receipt_total
       end
 
+      def external_tax_detail_context?(tax_details)
+        Array(tax_details).any? do |tax_detail|
+          description = tax_detail.respond_to?(:[]) ? tax_detail[:description] || tax_detail["description"] : nil
+          description.to_s.match?(/外税|税別|税抜|消費税別|別途消費税|exclusive|sales\s*tax/i)
+        end
+      end
+
       def settlement_amount_from_lines(lines, label_pattern)
         Array(lines).each_with_index do |line, index|
           next unless settlement_label_line?(lines, index, label_pattern)
 
-          same_line_amount = positive_amounts_from_text(line).max
+          same_line_amount = settlement_amounts_from_text(line).max
           return same_line_amount if same_line_amount.present?
 
           neighboring_amount = Array(lines)[(index + 1)..(index + 3)].to_a.filter_map do |candidate|
-            positive_amounts_from_text(candidate).max
+            settlement_amounts_from_text(candidate).max
           end.first
           return neighboring_amount if neighboring_amount.present?
         end
@@ -727,10 +953,19 @@ module Analysis
         nil
       end
 
+      def settlement_purchase_total_from_lines(lines)
+        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        return nil unless deposit_amount&.positive? && !change_amount.nil?
+
+        total = deposit_amount - change_amount
+        total.positive? ? total : nil
+      end
+
       def settlement_label_line?(lines, index, label_pattern)
         text = Array(lines)[index].to_s.unicode_normalize(:nfkc)
         return true if text.match?(label_pattern)
-        return false if positive_amounts_from_text(text).present?
+        return false if settlement_amounts_from_text(text).present?
 
         joined = Array(lines)[index, 2].join.unicode_normalize(:nfkc)
         joined.match?(label_pattern)
@@ -936,6 +1171,18 @@ module Analysis
         end.select(&:positive?)
       end
 
+      def settlement_amounts_from_text(text)
+        text.to_s.unicode_normalize(:nfkc).to_enum(:scan, SETTLEMENT_AMOUNT_CANDIDATE_PATTERN).filter_map do |match|
+          normalize_settlement_amount(match)&.to_i&.abs
+        end.select { |amount| amount >= 0 }
+      end
+
+      def normalize_settlement_amount(value)
+        text = value.to_s.unicode_normalize(:nfkc).tr("，", ",")
+        text = text.gsub(/(?<=\d)\.(?=\d{3}(?:\D|\z))/, ",")
+        normalize_amount(text)
+      end
+
       def fallback_payment_method_text(line)
         text = fallback_payment_amount_source(line).strip
         amount_text = rightmost_fallback_amount_candidate(text)
@@ -965,6 +1212,7 @@ module Analysis
         return tax_details if complete_multi_rate_tax_details?(tax_details)
 
         inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
+        inferred_tax_details = tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details) if inferred_tax_details.blank?
         return tax_details if inferred_tax_details.blank?
 
         inferred_tax_details
@@ -1023,6 +1271,69 @@ module Analysis
             gross_amount: amount
           }
         end.uniq { |target| [ target[:rate].to_s("F"), target[:gross_amount] ] }
+      end
+
+      def tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details)
+        receipt_total = normalize_amount(receipt_attributes[:total_amount])&.to_i
+        receipt_tax = normalize_amount(receipt_attributes[:tax_amount])&.to_i
+        source_details = incomplete_tax_details_by_rate(tax_details)
+        return [] unless receipt_total&.positive? && receipt_tax&.positive?
+        return [] if source_details.blank?
+
+        inferred = Array(lines).each_with_index.filter_map do |line, index|
+          rate = tax_summary_rate_from_line(line)
+          next if rate.blank?
+
+          source_detail = source_details[rate.to_s("F")]
+          next if source_detail.blank?
+
+          tax = source_detail[:amount]
+          gross = tax_summary_gross_amount(lines, index, rate, tax)
+          next unless gross&.positive?
+
+          {
+            description: "#{rate_percentage_label(rate)}%対象",
+            rate: rate,
+            net_amount: gross - tax,
+            amount: tax
+          }
+        end.uniq { |detail| detail[:rate].to_s("F") }
+
+        return [] if inferred.blank?
+        return [] unless inferred.sum { |detail| detail[:net_amount] + detail[:amount] } == receipt_total
+        return [] unless inferred.sum { |detail| detail[:amount] } == receipt_tax
+
+        inferred
+      end
+
+      def incomplete_tax_details_by_rate(tax_details)
+        Array(tax_details).each_with_object({}) do |tax_detail, details|
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])
+          net_amount = normalize_amount(tax_detail[:net_amount])
+          next unless rate&.positive? && amount&.positive?
+          next if net_amount&.positive?
+
+          details[rate.to_s("F")] = { rate: rate, amount: amount.to_i }
+        end
+      end
+
+      def tax_summary_rate_from_line(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        return nil if text.match?(/外税|税別|税抜|別途消費税|exclusive|sales\s*tax/i)
+
+        match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
+        normalize_rate(match[1]) if match
+      end
+
+      def tax_summary_gross_amount(lines, index, rate, tax)
+        amounts = Array(lines)[index, 4].to_a.flat_map do |line|
+          positive_amounts_from_text(line).select { |amount| amount > 20 }
+        end
+
+        amounts.find do |amount|
+          amount != tax && included_tax_amount(amount, rate) == tax
+        end
       end
 
       def tax_target_rate_from_line(line)
@@ -1560,6 +1871,57 @@ module Analysis
         [ price, original_line_total, line_total ].compact.any? { |amount| amount.to_i.negative? }
       end
 
+      def negative_adjustment_source_line_index(raw_text, amount, lines)
+        amount = amount.to_i.abs
+        return nil unless amount.positive?
+
+        raw_compact = compact_item_text(raw_text)
+        Array(lines).each_with_index do |line, index|
+          text = line.to_s
+          if negative_adjustment_source_text?(text, amount)
+            next if raw_compact.present? && !compact_item_text(text).include?(raw_compact)
+
+            return index
+          end
+
+          next if raw_compact.blank?
+          next unless compact_item_text(text).include?(raw_compact)
+          next unless negative_adjustment_context_text?(text) || negative_adjustment_context_text?(raw_text)
+          next unless signed_adjustment_amount_near_line?(lines, index, amount)
+
+          return index
+        end
+
+        nil
+      end
+
+      def negative_adjustment_source_text?(text, amount)
+        source = text.to_s
+        return false unless source.match?(/[▲△\-−]/)
+        return false unless adjustment_amounts_in_text(source).include?(amount.to_i.abs)
+
+        negative_adjustment_context_text?(source)
+      end
+
+      def negative_adjustment_source_supported?(source_line_index, raw_text, amount, lines)
+        source_text = Array(lines)[source_line_index].to_s
+        return true if negative_adjustment_source_text?(source_text, amount)
+        return false unless negative_adjustment_context_text?(source_text) || negative_adjustment_context_text?(raw_text)
+
+        signed_adjustment_amount_near_line?(lines, source_line_index, amount)
+      end
+
+      def negative_adjustment_context_text?(text)
+        text.to_s.match?(/値引|割引|ディスカウント|discount|off|クーポン|coupon|ポイント|point|返品|返金|refund|return/i)
+      end
+
+      def signed_adjustment_amount_near_line?(lines, source_line_index, amount)
+        lines_around(lines, source_line_index, before: 1, after: 1).any? do |line|
+          source = line.to_s
+          source.match?(/[▲△\-−]/) && adjustment_amounts_in_text(source).include?(amount.to_i.abs)
+        end
+      end
+
       def skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments)
         return [] if skipped_negative_items.blank?
 
@@ -1642,7 +2004,7 @@ module Analysis
         return "return_refund" if text.match?(/返品|返金|返却|refund|return/i)
         return "coupon" if text.match?(/クーポン|coupon/i)
         return "point_usage" if text.match?(/ポイント利用|point\s*use|points?\s*redeemed/i)
-        return "receipt_discount" if text.match?(/値引|割引|discount|off/i)
+        return "receipt_discount" if text.match?(/値引|割引|ディスカウント|discount|off/i)
         return "late_night_charge" if text.match?(/深夜|late.?night|midnight|after.?hours/i)
         return "service_charge" if text.match?(/サービス料|service\s*charge/i)
         return "delivery_fee" if text.match?(/配送料|送料|delivery|shipping/i)
@@ -1892,7 +2254,7 @@ module Analysis
 
         deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
         change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
-        return false unless deposit_amount&.positive? && change_amount&.positive?
+        return false unless deposit_amount&.positive? && !change_amount.nil?
 
         non_voucher_payments.sum { |payment| payment[:amount].to_i } == deposit_amount - change_amount
       end

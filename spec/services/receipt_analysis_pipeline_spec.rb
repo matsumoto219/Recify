@@ -3095,9 +3095,9 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_rate).to eq(BigDecimal('0.1'))
         expect(receipt.receipt_tax_details.pluck(:net_amount, :amount, :rate)).to eq([ [ 700, 70, BigDecimal('0.1') ] ])
         expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:mismatch_codes]).to be_empty
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+        expect(amount[:warning_inconsistencies]).to be_empty
       end
     end
 
@@ -3321,12 +3321,15 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'receipt_discount', 2_160, 'discount', BigDecimal('0.08') ]
         ])
         expect(receipt.receipt_tax_details.pluck(:description, :net_amount, :amount, :rate)).to contain_exactly(
-          [ '8%対象', 2_160, 160, BigDecimal('0.08') ],
-          [ '10%対象', 44, 4, BigDecimal('0.1') ]
+          [ '8%対象', 2_000, 160, BigDecimal('0.08') ],
+          [ '10%対象', 40, 4, BigDecimal('0.1') ]
         )
-        expect(receipt.subtotal_amount).to eq(2_204)
+        expect(receipt.subtotal_amount).to eq(2_040)
         expect(receipt.tax_amount).to eq(164)
         expect(receipt.total_amount).to eq(2_204)
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'Cash', 2_204 ]
+        ])
         expect(receipt.amount_calculation_profile.dig('computed', 'tax_detail_amount_basis')).to eq('gross')
         expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to eq(2_204)
         expect(receipt.amount_calculation_profile.dig('profile', 'tax_rate_correction')).to include(
@@ -3335,6 +3338,97 @@ RSpec.describe ReceiptAnalysisPipeline do
           'item_count' => 1,
           'adjustment_count' => 1
         )
+      end
+    end
+
+    it 'AIが割引行を補完できない場合も預り差額で復元したtotalを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "Sample Sweets\nM V2 Clearance\n2 x 5,280\n10,560\nP&M Bag Discount\n-5,280\n小計 [2]\n5,280\nお預かり\n6,000\nお釣り\n-720\n軽 8% ¥5,280 税 ¥391",
+        lines: [
+          'Sample Sweets',
+          'M V2 Clearance',
+          '2 x 5,280',
+          '10,560',
+          'P&M Bag Discount',
+          '-5,280',
+          '小計 [2]',
+          '5,280',
+          'お預かり',
+          '6,000',
+          'お釣り',
+          '-720',
+          '軽 8% ¥5,280 税 ¥391'
+        ],
+        candidates: {
+          store_name: 'Sample Sweets',
+          purchased_at_text: '2025/05/23 10:00',
+          subtotal_amount: 5_280,
+          total_amount: 6_000,
+          tax_amount: 391,
+          country_region: 'JPN',
+          payments: [
+            { method: 'Cash', amount: 6_000 }
+          ],
+          tax_details: [
+            { description: '軽', amount: 391, rate: 8 }
+          ],
+          items: [
+            {
+              raw_text: 'M V2 Clearance',
+              price: 5_280,
+              quantity: 2,
+              line_total: 10_560,
+              tax_rate: 8,
+              confidence: 0.95
+            },
+            {
+              raw_text: 'P&M Bag Discount',
+              line_total: -5_280,
+              tax_rate: 8,
+              confidence: 0.94
+            }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: {
+          store_name: 'Sample Sweets'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'M V2 Clearance', category: 'food', tax_rate: 0.08, needs_review: false }
+        ],
+        receipt_adjustments_attributes: []
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.total_amount).to eq(5_280)
+        expect(receipt.subtotal_amount).to eq(4_889)
+        expect(receipt.tax_amount).to eq(391)
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'Cash', 5_280 ]
+        ])
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to eq(5_280)
       end
     end
 
@@ -3361,9 +3455,9 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ '10%対象', 994, 90, BigDecimal('0.1') ]
         )
         expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to eq([ 'PRICE_TAX_INCLUSION_UNCERTAIN' ])
+        expect(amount[:mismatch_codes]).to be_empty
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :price_tax_inclusion_uncertain ])
+        expect(amount[:warning_inconsistencies]).to be_empty
         expect(amount.dig(:computed, :tax_detail_amount_basis)).not_to eq(:gross)
       end
     end
@@ -3469,7 +3563,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           expect(receipt.tax_amount).to eq(70)
           expect(receipt.total_amount).to eq(844)
           expect(receipt.tax_rate).to be_nil
-          expect(receipt.receipt_items.pluck(:suggested_name, :line_total, :tax_rate)).to eq([
+          expect(receipt.receipt_items.order(:position_index).pluck(:suggested_name, :line_total, :tax_rate)).to eq([
             [ '商品A', 151, BigDecimal('0.08') ],
             [ '商品B', 178, BigDecimal('0.08') ],
             [ '商品C', 155, BigDecimal('0.1') ],
@@ -3810,6 +3904,69 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('completed')
         expect(receipt.store_name).to eq('プロ品質マーケット 松風店')
         expect(receipt.review_reasons).not_to include('store_name_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it '英字ロゴと業態行とPO支店行から補完した店舗名ならstore_name_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "samplecacaok\nサムプル ショコラ ブティック&カフェ\n青山po店\n商品A ¥500\n合計 ¥500\n現金 ¥500\nwww.samplecacao.jp",
+        lines: [
+          'samplecacaok',
+          'サムプル ショコラ ブティック&カフェ',
+          '青山po店',
+          '商品A ¥500',
+          '合計 ¥500',
+          '現金 ¥500',
+          'www.samplecacao.jp'
+        ],
+        candidates: {
+          store_name: 'サムプル ショコラ ブティック&カフェ 青山po店',
+          total_amount: 500,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            { raw_text: '商品A', price: 500, quantity: 1, line_total: 500, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'Cash', amount: 500 }
+          ],
+          tax_details: []
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'store_name_uncertain' ],
+        receipt_attributes: {
+          store_name: 'サムプル ショコラ ブティック&カフェ 青山po店',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品A', category: 'food', needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.store_name).to eq('Samplecacao ショコラブティック&カフェ 青山プレミアムアウトレット店')
         expect(receipt.review_reasons).to be_blank
       end
     end
@@ -4196,14 +4353,14 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.tax_amount).to eq(222)
         expect(receipt.tax_rate).to eq(BigDecimal('0.08'))
         expect(receipt.amount_calculation_profile).to include(
-          'warnings' => [ 'tax_detail_incomplete' ],
-          'warning_mismatch_codes' => [ 'TAX_DETAIL_INCOMPLETE' ],
+          'warnings' => [],
+          'warning_mismatch_codes' => [],
           'blocking_mismatch_codes' => []
         )
         expect(amount[:needs_review]).to be(false)
-        expect(amount[:mismatch_codes]).to eq([ 'TAX_DETAIL_INCOMPLETE' ])
+        expect(amount[:mismatch_codes]).to be_empty
         expect(amount[:blocking_inconsistencies]).to be_empty
-        expect(amount[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
+        expect(amount[:warning_inconsistencies]).to be_empty
       end
     end
 
