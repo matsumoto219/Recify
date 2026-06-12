@@ -178,7 +178,7 @@ module Analysis
           purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
           total_amount: resolve_receipt_total_amount(ai_attrs, candidates, lines),
           subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
-          tax_amount: ai_attrs[:tax_amount] || normalize_amount(candidates[:tax_amount]),
+          tax_amount: resolve_receipt_tax_amount(ai_attrs, candidates, lines),
           tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
           tip_amount: ai_attrs[:tip_amount] || normalize_amount(candidates[:tip_amount]),           # NOTE: 日本レシートではほぼ未取得。保存はするが現状未使用に近い
           currency_code: normalize_currency_code(ai_attrs[:currency_code].presence || candidates[:currency_code]),
@@ -195,6 +195,11 @@ module Analysis
 
       def resolve_receipt_total_amount(ai_attrs, candidates, lines)
         preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
+        inferred_total = tax_section_gross_total_from_lines(lines)
+        if inferred_total&.positive? && low_quality_receipt_total_candidate?(preferred_total, inferred_total)
+          return inferred_total
+        end
+
         settlement_total = settlement_purchase_total_from_lines(lines)
         return preferred_total if preferred_total.blank?
         return preferred_total unless settlement_total&.positive?
@@ -203,6 +208,24 @@ module Analysis
         return settlement_total if deposit_amount&.positive? && preferred_total.to_i == deposit_amount
 
         preferred_total
+      end
+
+      def resolve_receipt_tax_amount(ai_attrs, candidates, lines)
+        ai_tax = normalize_amount(ai_attrs[:tax_amount])
+        return ai_tax if ai_tax.present?
+
+        line_tax = tax_total_amount_from_lines(lines)
+        candidate_tax = normalize_amount(candidates[:tax_amount])
+        return line_tax if line_tax&.positive? && (candidate_tax.blank? || line_tax.to_i >= candidate_tax.to_i)
+
+        candidate_tax
+      end
+
+      def low_quality_receipt_total_candidate?(preferred_total, inferred_total)
+        return true if preferred_total.blank?
+        return false unless inferred_total&.positive?
+
+        preferred_total.to_i < inferred_total.to_i / 2
       end
 
       def build_amount_hints(ai_receipt_attributes, candidates, lines, receipt_attributes)
@@ -1133,12 +1156,19 @@ module Analysis
           return nil
         end
 
+        amount = low_quality_payment_amount_from_fragment(line, receipt_total)
+        return { amount: amount, source: :same_line_fragment } if amount.present?
+
         amount = fallback_payment_amount(line, receipt_total: receipt_total)
         return { amount: amount, source: :same_line } if amount.present?
 
         return nil unless fallback_payment_neighbor_amount_allowed?(line)
 
-        amount = fallback_payment_amount(Array(lines)[index + 1], receipt_total: receipt_total)
+        neighbor_line = Array(lines)[index + 1]
+        amount = low_quality_payment_amount_from_fragment(neighbor_line, receipt_total)
+        return { amount: amount, source: :neighbor_fragment } if amount.present?
+
+        amount = fallback_payment_amount(neighbor_line, receipt_total: receipt_total)
         return nil if amount.blank?
 
         source = fallback_payment_amount_label_line?(line) ? :amount_label_neighbor : :neighbor
@@ -1199,6 +1229,34 @@ module Analysis
         return total if total&.positive? && amounts.include?(total)
 
         amounts.max
+      end
+
+      def low_quality_payment_amount_from_fragment(line, receipt_total)
+        total = normalize_amount(receipt_total)&.to_i
+        return nil unless total && total >= 100
+
+        text = line.to_s.unicode_normalize(:nfkc)
+        return nil unless text.match?(/[¥￥]\s*\d(?:\s+\d)+/)
+
+        fragment = text.scan(/\d/).join
+        total_digits = total.to_s
+        return nil unless fragment.length >= 2 && fragment.length < total_digits.length
+        return nil unless digit_subsequence?(fragment, total_digits)
+
+        total
+      end
+
+      def digit_subsequence?(fragment, source)
+        position = 0
+        fragment.each_char.all? do |digit|
+          found_at = source.index(digit, position)
+          if found_at
+            position = found_at + 1
+            true
+          else
+            false
+          end
+        end
       end
 
       def fallback_payment_amount_source(line)
@@ -1308,6 +1366,7 @@ module Analysis
 
         inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         inferred_tax_details = tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details) if inferred_tax_details.blank?
+        inferred_tax_details = tax_details_from_tax_section_pairs(lines, receipt_attributes) if inferred_tax_details.blank?
         return tax_details if inferred_tax_details.blank?
 
         inferred_tax_details
@@ -1367,6 +1426,152 @@ module Analysis
             tax_amount: tax_target_tax_amount_near_line(lines, index, rate, amount)
           }
         end.uniq { |target| [ target[:rate].to_s("F"), target[:gross_amount] ] }
+      end
+
+      def tax_details_from_tax_section_pairs(lines, receipt_attributes)
+        details = tax_section_pair_details_from_lines(lines)
+        return [] if details.blank?
+
+        tax_sum = details.sum { |detail| detail[:amount].to_i }
+        explicit_tax_total = tax_total_amount_from_lines(lines)
+        receipt_tax = normalize_amount(receipt_attributes[:tax_amount])&.to_i
+        return [] if explicit_tax_total&.positive? && explicit_tax_total != tax_sum
+        return [] if receipt_tax&.positive? && receipt_tax != tax_sum
+
+        receipt_total = normalize_amount(receipt_attributes[:total_amount])&.to_i
+        gross_sum = details.sum { |detail| detail[:net_amount].to_i + detail[:amount].to_i }
+        return [] if receipt_total&.positive? && receipt_total != gross_sum
+
+        details
+      end
+
+      def tax_section_gross_total_from_lines(lines)
+        details = tax_section_pair_details_from_lines(lines)
+        return nil if details.blank?
+
+        tax_sum = details.sum { |detail| detail[:amount].to_i }
+        explicit_tax_total = tax_total_amount_from_lines(lines)
+        return nil if explicit_tax_total&.positive? && explicit_tax_total != tax_sum
+
+        details.sum { |detail| detail[:net_amount].to_i + detail[:amount].to_i }
+      end
+
+      def tax_total_amount_from_lines(lines)
+        Array(lines).each_with_index do |line, index|
+          next unless line.to_s.unicode_normalize(:nfkc).match?(/消費税.*合計|税額.*合計|tax\s*total/i)
+
+          amount = Array(lines)[index, 3].to_a.flat_map do |candidate|
+            positive_amounts_from_text(candidate)
+          end.select(&:positive?).max
+          return amount if amount.present?
+        end
+
+        nil
+      end
+
+      def tax_section_pair_details_from_lines(lines)
+        rate_entries = tax_target_rate_entries_from_lines(lines)
+        return [] if rate_entries.size < 2
+
+        amounts = tax_section_amount_entries(lines, rate_entries.first[:index])
+        assignments = tax_section_pair_assignments(rate_entries, amounts)
+        return [] if assignments.blank?
+
+        assignments.map do |assignment|
+          gross = assignment[:gross_amount]
+          tax = assignment[:tax_amount]
+          {
+            description: "#{rate_percentage_label(assignment[:rate])}%対象",
+            rate: assignment[:rate],
+            net_amount: gross - tax,
+            amount: tax
+          }
+        end
+      end
+
+      def tax_target_rate_entries_from_lines(lines)
+        Array(lines).each_with_index.filter_map do |line, index|
+          rates = tax_target_rate_candidates_from_line(line)
+          next if rates.blank?
+
+          { index: index, rates: rates }
+        end
+      end
+
+      def tax_target_rate_candidates_from_line(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        return [] unless text.match?(/対象/)
+        return [] if text.match?(/消費税|税額|tax/i)
+
+        text.scan(/(\d+(?:\.\d+)?)\s*[%％]/).flatten.flat_map do |raw_rate|
+          tax_rate_candidates_from_text_number(raw_rate)
+        end.uniq
+      end
+
+      def tax_rate_candidates_from_text_number(raw_rate)
+        candidates = [ normalize_rate(raw_rate) ].compact
+        if raw_rate.to_s.include?(".")
+          decimal_tail = raw_rate.to_s.split(".").last
+          candidates << normalize_rate(decimal_tail) if decimal_tail.match?(/\A(?:8|10)\z/)
+        end
+
+        candidates.select(&:positive?).uniq
+      end
+
+      def tax_section_amount_entries(lines, first_rate_index)
+        section = Array(lines)[first_rate_index..].to_a.take_while do |line|
+          !line.to_s.match?(/消費税.*合計|税額.*合計|tax\s*total/i)
+        end
+        section.each_with_index.flat_map do |line, offset|
+          positive_amounts_from_text(line).select { |amount| amount > 20 }.map do |amount|
+            { index: first_rate_index + offset, amount: amount }
+          end
+        end
+      end
+
+      def tax_section_pair_assignments(rate_entries, amounts)
+        assignments = tax_section_pair_assignment_paths(rate_entries, amounts, 0, [])
+        return [] unless assignments.one?
+
+        assignments.first
+      end
+
+      def tax_section_pair_assignment_paths(rate_entries, amounts, rate_index, selected)
+        return [ selected ] if rate_index >= rate_entries.size
+
+        used_indexes = selected.flat_map { |entry| [ entry[:gross_index], entry[:tax_index] ] }
+        entry = rate_entries[rate_index]
+        possible_tax_section_pairs(entry[:rates], amounts, used_indexes).flat_map do |pair|
+          tax_section_pair_assignment_paths(rate_entries, amounts, rate_index + 1, selected + [ pair ])
+        end
+      end
+
+      def possible_tax_section_pairs(rates, amounts, used_indexes)
+        Array(rates).flat_map do |rate|
+          amounts.combination(2).flat_map do |left, right|
+            [
+              tax_section_pair_for(rate, left, right),
+              tax_section_pair_for(rate, right, left)
+            ]
+          end
+        end.compact.reject do |pair|
+          used_indexes.include?(pair[:gross_index]) || used_indexes.include?(pair[:tax_index])
+        end.uniq { |pair| [ pair[:rate].to_s("F"), pair[:gross_index], pair[:tax_index] ] }
+      end
+
+      def tax_section_pair_for(rate, gross_entry, tax_entry)
+        gross = gross_entry[:amount].to_i
+        tax = tax_entry[:amount].to_i
+        return nil unless gross > tax
+        return nil unless included_tax_amount_matches?(gross, rate, tax)
+
+        {
+          rate: rate,
+          gross_amount: gross,
+          tax_amount: tax,
+          gross_index: gross_entry[:index],
+          tax_index: tax_entry[:index]
+        }
       end
 
       def tax_target_amount_near_line(lines, index)
@@ -1455,12 +1660,7 @@ module Analysis
       end
 
       def tax_target_rate_from_line(line)
-        text = line.to_s.unicode_normalize(:nfkc)
-        return nil unless text.match?(/対象/)
-        return nil if text.match?(/消費税|税額|tax/i)
-
-        match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
-        normalize_rate(match[1]) if match
+        tax_target_rate_candidates_from_line(line).first
       end
 
       def tax_target_amount_from_line(line)
@@ -2416,6 +2616,7 @@ module Analysis
       def payment_method_should_follow_payments?(current, detected_from_payments)
         return false if detected_from_payments.blank?
         return true if current.blank?
+        return true if current == "cash" && detected_from_payments != "cash"
 
         current == "e_money" && detected_from_payments == "qr_payment"
       end

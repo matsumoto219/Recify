@@ -804,6 +804,38 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'native engineでも印字税詳細がreceipt totalを説明する場合は税率不明itemを非課税加算しない' do
+      result = call_service(
+        receipt: {
+          total_amount: 890,
+          tax_amount: 71
+        },
+        receipt_items: [
+          { line_total: 158 },
+          { line_total: 108 },
+          { line_total: 19 },
+          { line_total: 12 },
+          { line_total: 8 }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 548, amount: 44, description: '8%対象' },
+          { rate: BigDecimal('0.1'), net_amount: 271, amount: 27, description: '10%対象' }
+        ],
+        receipt_payments: [
+          { method: 'クレジット支払', amount: 890 }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(result[:resolved]).to include(subtotal: 819, tax: 71, total: 890, tax_rate: nil)
+        expect(result.dig(:computed, :adjusted_item_total)).to eq(305)
+        expect(result[:blocking_inconsistencies]).to be_empty
+        expect(result[:warning_inconsistencies]).to be_empty
+      end
+    end
+
     it 'native engineでも税率対象額をgross basis候補として採用する' do
       result = call_service(
         receipt: {

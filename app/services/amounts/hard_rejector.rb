@@ -91,6 +91,7 @@ module Amounts
     def tax_detail_gross_item_mismatch?(candidate)
       return false unless candidate.basis.start_with?("printed_tax_details") || candidate.basis == "external_tax_from_receipt"
       return false unless item_gross_sum.positive?
+      return false if printed_tax_detail_amounts_match_receipt_and_payment?(candidate)
 
       comparable_item_total = adjusted_item_total(candidate)
       expected_total = tax_detail_item_comparison_total(candidate)
@@ -98,6 +99,20 @@ module Amounts
       threshold = [ ITEM_GROSS_MISMATCH_MIN, (BigDecimal(comparable_item_total.to_s) * ITEM_GROSS_MISMATCH_RATIO).to_i ].max
 
       delta > threshold
+    end
+
+    def printed_tax_detail_amounts_match_receipt_and_payment?(candidate)
+      return false unless candidate.basis.start_with?("printed_tax_details")
+
+      receipt_total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :total_amount))
+      receipt_tax = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :tax_amount))
+      return false unless receipt_total&.positive? && receipt_tax&.positive?
+      return false unless candidate.purchase_total.to_i == receipt_total
+      return false unless candidate.tax.to_i == receipt_tax
+      return true if payments.blank?
+
+      !candidate.payment_amount_sum.nil? &&
+        candidate.payment_amount_sum.to_i == candidate.final_payment_total.to_i
     end
 
     def external_tax_item_net_mismatch?(candidate)

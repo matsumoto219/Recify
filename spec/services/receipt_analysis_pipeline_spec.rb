@@ -4364,6 +4364,41 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '低品質OCRでも印字税詳細と支払情報を保存しfailedにしない' do
+      ocr_result = ocr_fixture('ocr_low_quality_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_attributes: {
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_index.map do |index|
+          { index: index, category: 'other', needs_review: false }
+        end
+      )
+      receipt, amount = run_finalize_ocr_fixture('ocr_low_quality_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.review_reasons).to include('item_total_mismatch')
+        expect(receipt.subtotal_amount).to eq(819)
+        expect(receipt.tax_amount).to eq(71)
+        expect(receipt.total_amount).to eq(890)
+        expect(receipt.tax_rate).to be_nil
+        expect(receipt.payment_method).to eq('credit_card')
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'クレジット支払', 890 ]
+        ])
+        expect(receipt.receipt_tax_details.pluck(:rate, :net_amount, :amount)).to contain_exactly(
+          [ BigDecimal('0.08'), 548, 44 ],
+          [ BigDecimal('0.1'), 271, 27 ]
+        )
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.receipt_items.order(:position_index).pluck(:line_total)).to eq([ 158, 108, 19, 12, 8 ])
+        expect(amount.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+        expect(amount[:needs_review]).to be(false)
+      end
+    end
+
     it 'TaxDetailsが内部矛盾するfixtureは印字totalとpaymentを保持してreview_neededにする' do
       ocr_result = ocr_fixture('tax_detail_item_conflict_receipt')
       ai_result = ai_success_result_for(ocr_result).merge(

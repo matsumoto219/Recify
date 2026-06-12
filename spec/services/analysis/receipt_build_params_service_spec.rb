@@ -1430,6 +1430,37 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '低品質OCRでも印字税詳細と支払行から会計値を復元する' do
+        low_quality_ocr_result = ocr_fixture('ocr_low_quality_receipt')
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'cash'
+          },
+          receipt_items_attributes: Array(low_quality_ocr_result.dig(:candidates, :items)).each_index.map do |index|
+            { index: index, category: 'other', needs_review: false }
+          end
+        }
+
+        params = described_class.call(ocr_result: low_quality_ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes]).to include(
+            total_amount: 890,
+            tax_amount: 71,
+            payment_method: 'credit_card'
+          )
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+            include(description: '8%対象', rate: BigDecimal('0.08'), net_amount: 548, amount: 44),
+            include(description: '10%対象', rate: BigDecimal('0.1'), net_amount: 271, amount: 27)
+          )
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'クレジット支払', amount: 890)
+          )
+          expect(params[:receipt_adjustments_attributes]).to be_empty
+          expect(params[:receipt_items_attributes].map { |item| item[:line_total] }).to eq([ 158, 108, 19, 12, 8 ])
+        end
+      end
+
       it '単一税率の対象計が明細合計に一致しない場合はAI item税率を自動補正しない' do
         mismatched_items_ocr_result = {
           candidates: {

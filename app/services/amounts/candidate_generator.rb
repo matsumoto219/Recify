@@ -822,6 +822,7 @@ module Amounts
       explicit = explicit_non_taxable_items.sum { |item| item_line_total(item) }
       unknown = unknown_tax_rate_items.sum { |item| item_line_total(item) }
       return explicit if tax_detail_purchase_total_matches_item_total?(tax_detail_groups)
+      return explicit if tax_detail_purchase_total_matches_receipt_total?(tax_detail_groups)
 
       explicit + unknown
     end
@@ -829,6 +830,14 @@ module Amounts
     def tax_detail_purchase_total_matches_item_total?(tax_detail_groups)
       tax_detail_purchase_total = Array(tax_detail_groups).sum { |group| group[:gross].to_i }
       tax_detail_purchase_total.positive? && tax_detail_purchase_total == item_total
+    end
+
+    def tax_detail_purchase_total_matches_receipt_total?(tax_detail_groups)
+      receipt_total = amount_or_nil(receipt[:total_amount])
+      return false unless receipt_total&.positive?
+
+      tax_detail_purchase_total = Array(tax_detail_groups).sum { |group| group[:gross].to_i }
+      tax_detail_purchase_total.positive? && tax_detail_purchase_total == receipt_total
     end
 
     def adjusted_item_total
