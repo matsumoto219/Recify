@@ -741,7 +741,8 @@ module Analysis
         payments = Array(lines).each_with_index.filter_map do |line, index|
           next unless fallback_payment_context_line?(line)
 
-          amount = fallback_payment_context_amount(lines, index, receipt_total: total)
+          amount_info = fallback_payment_context_amount_with_source(lines, index, receipt_total: total)
+          amount = amount_info&.fetch(:amount, nil)
           next unless amount&.positive?
 
           method = cash_total_payment_line?(line) ? "cash" : fallback_payment_method_text(line)
@@ -753,6 +754,7 @@ module Analysis
             method: method,
             amount: amount,
             source_index: index,
+            amount_source: amount_info[:source],
             transaction_context: fallback_payment_transaction_context_line?(line)
           }
         end
@@ -789,17 +791,28 @@ module Analysis
       end
 
       def fallback_payment_context_amount(lines, index, receipt_total:)
+        fallback_payment_context_amount_with_source(lines, index, receipt_total:)&.fetch(:amount, nil)
+      end
+
+      def fallback_payment_context_amount_with_source(lines, index, receipt_total:)
         line = Array(lines)[index].to_s
-        return cash_total_payment_amount(lines, index, receipt_total:) if cash_total_payment_line?(line)
+        if cash_total_payment_line?(line)
+          amount = cash_total_payment_amount(lines, index, receipt_total:)
+          return { amount: amount, source: :cash_total } if amount.present?
 
-        amount = fallback_payment_amount(line, receipt_total: receipt_total)
-        if amount.blank?
-          return nil unless fallback_payment_neighbor_amount_allowed?(line)
-
-          amount = fallback_payment_amount(Array(lines)[index + 1], receipt_total: receipt_total)
+          return nil
         end
 
-        amount
+        amount = fallback_payment_amount(line, receipt_total: receipt_total)
+        return { amount: amount, source: :same_line } if amount.present?
+
+        return nil unless fallback_payment_neighbor_amount_allowed?(line)
+
+        amount = fallback_payment_amount(Array(lines)[index + 1], receipt_total: receipt_total)
+        return nil if amount.blank?
+
+        source = fallback_payment_amount_label_line?(line) ? :amount_label_neighbor : :neighbor
+        { amount: amount, source: source }
       end
 
       def cash_total_payment_line?(line)
@@ -881,21 +894,40 @@ module Analysis
         candidates = Array(payments)
         total = normalize_amount(receipt_total)&.to_i
         exact_matches = if total&.positive?
-          candidates.select { |payment| payment[:amount].to_i == total }
+          candidates.select do |payment|
+            payment[:amount].to_i == total && reliable_total_match_payment_candidate?(payment)
+          end
         else
           []
         end
 
         selected = if exact_matches.present?
           [ exact_matches.min_by { |payment| payment[:source_index].to_i } ]
-        elsif total&.positive? && candidates.sum { |payment| payment[:amount].to_i } == total
+        elsif total&.positive? &&
+              candidates.sum { |payment| payment[:amount].to_i } == total &&
+              candidates.all? { |payment| reliable_total_match_payment_candidate?(payment) }
           candidates
         elsif total&.positive?
           candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
         else
           candidates
         end
-        selected.map { |payment| payment.except(:source_index, :transaction_context) }
+        selected.map { |payment| payment.except(:source_index, :transaction_context, :amount_source) }
+      end
+
+      def reliable_total_match_payment_candidate?(payment)
+        return true if payment[:transaction_context]
+        return true if payment[:amount_source] == :cash_total
+        return true if voucher_payment_text?(payment[:method])
+
+        strong_fallback_payment_method?(payment[:method]) &&
+          %i[same_line neighbor amount_label_neighbor].include?(payment[:amount_source])
+      end
+
+      def strong_fallback_payment_method?(method)
+        normalize_detected_payment_method(
+          Analysis::ReceiptFallbackPatterns.detect_payment_method(method)
+        ).present?
       end
 
       def positive_amounts_from_text(text)

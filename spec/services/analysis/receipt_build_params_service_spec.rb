@@ -476,6 +476,27 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'total一致だけでは弱いfallback method由来のpaymentを保存しない' do
+        ocr_result[:candidates][:payment_method_text] = 'sivendidolo ros'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 255
+        ocr_result[:lines] = [
+          '金額',
+          '¥5',
+          'paypay支払',
+          '¥250'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:payment_method]).to be_nil
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'paypay支払', amount: 250)
+          )
+        end
+      end
+
       it '広告や対応ブランド一覧だけではrepresentative payment_methodやreceipt_paymentsを作らない' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = []
