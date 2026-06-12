@@ -12,6 +12,11 @@ module Analysis
     FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/
     PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
     VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i
+    POINT_PAYMENT_LINE_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:redemption|payment|used|use|redeemed)|points?\s*(?:redemption|payment|used|redeemed)/i
+    POINT_PAYMENT_STRONG_LINE_PATTERN = /ポイント\s*(?:支払|払い|決済)|point\s*(?:redemption|payment|redeemed)|points?\s*(?:redemption|payment|redeemed)/i
+    POINT_DISPLAY_LINE_PATTERN = /獲得ポイント|現在ポイント|保有ポイント|ポイント残高|スマイルポイント|付与ポイント|earned\s*points?|current\s*points?|points?\s*balance/i
+    PAYMENT_BLOCK_ANCHOR_PATTERN = /お支払い方法|お支払方法|支払方法|payment\s*method|payment|tender|settlement/i
+    EXPLICIT_PAYMENT_MONEY_PATTERN = /[¥￥]\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)|(?:\d{1,3}(?:[,，]\d{3})+|\d+)\s*円/
     CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
     CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
     SETTLEMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，.]\d{3})+|\d+)(?:円)?/
@@ -684,6 +689,7 @@ module Analysis
           next unless amount.positive?
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
           next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
           next if item_level_discount_adjustment?(
@@ -853,6 +859,13 @@ module Analysis
         end
         return normalize_structured_payments_with_settlement(structured_payments, lines, total, tax_details: candidates[:tax_details]) if structured_payments.present?
 
+        explicit_fallback_payments = fallback_payments_from_lines(
+          lines,
+          receipt_total: total,
+          fallback_method: candidates[:payment_method_text]
+        )
+        return explicit_fallback_payments if payment_sum_matches_total?(explicit_fallback_payments, total)
+
         deposit_change_payment = cash_payment_from_deposit_change_lines(
           lines,
           total,
@@ -923,6 +936,14 @@ module Analysis
         normalized_payments + [ { method: "cash", amount: missing_amount } ]
       end
 
+      def payment_sum_matches_total?(payments, total)
+        normalized_total = normalize_amount(total)&.to_i
+        return false unless normalized_total&.positive?
+
+        Array(payments).present? &&
+          Array(payments).sum { |payment| payment[:amount].to_i } == normalized_total
+      end
+
       def external_tax_details_conflict_with_receipt_total?(tax_details, receipt_total)
         details = usable_tax_details_with_gross_amount(tax_details)
         return false if details.blank?
@@ -977,6 +998,9 @@ module Analysis
       def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil)
         total = normalize_amount(receipt_total)&.to_i
         payments = Array(lines).each_with_index.filter_map do |line, index|
+          point_payment = point_payment_from_payment_block(lines, index)
+          next point_payment if point_payment.present?
+
           next unless fallback_payment_context_line?(line)
 
           amount_info = fallback_payment_context_amount_with_source(lines, index, receipt_total: total)
@@ -999,6 +1023,73 @@ module Analysis
         payments = deduplicate_fallback_payments(payments)
 
         select_fallback_payments(payments, receipt_total: total)
+      end
+
+      def point_payment_from_payment_block(lines, index)
+        return nil unless point_payment_context_line?(lines, index)
+
+        amount_info = point_payment_amount_with_source(lines, index)
+        amount = amount_info&.fetch(:amount, nil)
+        return nil unless amount&.positive?
+
+        {
+          method: point_payment_method_text(lines[index]),
+          amount: amount,
+          source_index: index,
+          amount_source: amount_info[:source],
+          transaction_context: true
+        }
+      end
+
+      def point_payment_context_line?(lines, index)
+        text = Array(lines)[index].to_s.unicode_normalize(:nfkc).strip
+        return false if text.blank?
+        return false if text.match?(POINT_DISPLAY_LINE_PATTERN)
+        return false unless text.match?(POINT_PAYMENT_LINE_PATTERN)
+
+        text.match?(POINT_PAYMENT_STRONG_LINE_PATTERN) || payment_block_context?(lines, index)
+      end
+
+      def payment_block_context?(lines, index)
+        context = lines_around(lines, index, before: 3, after: 0).join(" ").unicode_normalize(:nfkc)
+        context.match?(PAYMENT_BLOCK_ANCHOR_PATTERN)
+      end
+
+      def point_payment_amount_with_source(lines, index)
+        same_line_amount = explicit_money_amount_from_text(lines[index])
+        return { amount: same_line_amount, source: :same_line } if same_line_amount.present?
+
+        ((index + 1)..(index + 2)).each do |candidate_index|
+          candidate = Array(lines)[candidate_index]
+          next if candidate.blank?
+
+          amount = explicit_money_amount_from_text(candidate)
+          return { amount: amount, source: :neighbor } if amount.present?
+          break if payment_method_like_line?(candidate)
+        end
+
+        nil
+      end
+
+      def explicit_money_amount_from_text(text)
+        amounts = text.to_s.unicode_normalize(:nfkc).to_enum(:scan, EXPLICIT_PAYMENT_MONEY_PATTERN).filter_map do |match|
+          normalize_amount(match)&.to_i
+        end.select(&:positive?)
+        amounts.max
+      end
+
+      def payment_method_like_line?(line)
+        text = line.to_s.unicode_normalize(:nfkc)
+        text.match?(FALLBACK_PAYMENT_LINE_PATTERN) ||
+          text.match?(POINT_PAYMENT_LINE_PATTERN) ||
+          text.match?(PAYMENT_BLOCK_ANCHOR_PATTERN)
+      end
+
+      def point_payment_method_text(line)
+        text = line.to_s.unicode_normalize(:nfkc).strip
+        text = text.gsub(EXPLICIT_PAYMENT_MONEY_PATTERN, " ")
+        text = text.gsub(/(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i, " ")
+        text.gsub(/[¥￥,，\d\s　:：]+/, " ").strip.presence || "ポイント利用"
       end
 
       def fallback_payment_context_line?(line)
@@ -1990,6 +2081,15 @@ module Analysis
         return false if point_money_context?(context, amount)
 
         true
+      end
+
+      def point_payment_adjustment?(adjustment, amount:, source_line_index:, lines:)
+        return false unless adjustment[:kind].to_s == "point_usage"
+        return false if source_line_index.nil?
+        return false unless point_payment_context_line?(lines, source_line_index)
+
+        payment_amount = point_payment_amount_with_source(lines, source_line_index)&.fetch(:amount, nil)
+        payment_amount.present? && payment_amount.to_i == amount.to_i.abs
       end
 
       def adjustment_context_text(adjustment, source_line_index, lines)

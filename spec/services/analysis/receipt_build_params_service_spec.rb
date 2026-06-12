@@ -982,6 +982,88 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
       end
 
+      it '支払ブロックのポイント利用とクレジットをreceipt_paymentsとして保存しcashにまとめない' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 571
+        ocr_result[:lines] = [
+          '合計',
+          '¥571',
+          'お支払い方法:',
+          'ポイント利用 300P',
+          '¥300',
+          'クレジットカード',
+          '¥271',
+          'お預り',
+          '¥571',
+          'お釣り',
+          '¥0'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'ポイント利用', amount: 300),
+            include(method: 'クレジットカード', amount: 271)
+          )
+          expect(params[:receipt_payments_attributes]).not_to include(include(method: 'cash'))
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+        end
+      end
+
+      it 'ポイント支払に円金額がある場合はpoint paymentとして保存する' do
+        ocr_result[:candidates][:payment_method_text] = nil
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計',
+          '¥500',
+          'ポイント支払 500P ¥500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'ポイント支払', amount: 500)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to be_nil
+        end
+      end
+
+      it 'ポイント表示だけではpaymentやadjustmentを作らない' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 890
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'スマイルポイント',
+            amount: 12,
+            sign_hint: 'discount',
+            source_line_index: 4,
+            confidence: 0.95
+          }
+        ]
+        ocr_result[:lines] = [
+          '合計',
+          '¥890',
+          'クレジット支払',
+          '¥890',
+          'スマイルポイント',
+          '12P'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'クレジット支払', amount: 890)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
       it 'coupon + cash では coupon を代表値にせず cash を選ぶ' do
         ocr_result[:candidates][:payment_method_text] = nil
         ocr_result[:candidates][:payments] = [
@@ -3166,7 +3248,10 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_adjustments_attributes]).to eq([])
       end
 
-      it 'ポイント利用に金額根拠があるAI adjustmentは保存向けattributesへ通す' do
+      it '支払ブロックのポイント利用AI adjustmentはpaymentへ寄せてadjustmentにしない' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 571
         ocr_result[:lines] = [
           '合計',
           '¥571',
@@ -3191,9 +3276,13 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
-        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
-          include(kind: 'point_usage', label: 'ポイント利用', amount: 300, sign: 'discount')
-        )
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'ポイント利用', amount: 300),
+            include(method: 'クレジットカード', amount: 271)
+          )
+        end
       end
 
       it 'ラベル行と金額行が分かれた深夜料金を近傍行照合で保存向けattributesへ通す' do

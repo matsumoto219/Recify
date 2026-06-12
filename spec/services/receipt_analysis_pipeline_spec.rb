@@ -4404,6 +4404,11 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'coupon', 200, 'discount' ],
           [ 'receipt_discount', 31, 'discount' ]
         )
+        expect(receipt.receipt_payments.order(:id).pluck(:method, :amount)).to eq([
+          [ 'ポイント利用', 300 ],
+          [ 'クレジットカード', 271 ]
+        ])
+        expect(receipt.receipt_payments.sum(&:amount)).to eq(571)
         expect(amount.dig(:computed, :adjusted_item_total)).to eq(571)
         expect(amount[:blocking_inconsistencies]).to eq([ :adjustment_uncertain ])
       end
