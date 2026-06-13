@@ -372,6 +372,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       run = create(:receipt_analysis_run, receipt:)
 
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+      allow(ExternalServices).to receive(:down?).and_return(false)
       allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
 
       result = described_class.run_ocr(run)
@@ -487,6 +488,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       ai_down_run = create(:receipt_analysis_run, receipt: ai_down_receipt)
 
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+      allow(ExternalServices).to receive(:down?).and_return(false)
 
       with_env('RECEIPT_AI_ENABLED', 'false') do
         disabled_result = described_class.run_ocr(ai_disabled_run)
@@ -527,6 +529,29 @@ RSpec.describe ReceiptAnalysisPipeline do
             'error_code' => 'ocr_disabled'
           )
         end
+      end
+    end
+
+    it 'SystemSettingsでOCR停止中ならOCR上限判定とprovider呼び出しを行わずFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      allow(ReceiptOcrService).to receive(:call)
+      allow(Usage).to receive(:ensure_ocr_job_within_limit!)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+        expect(result.finalize_decision.error_code).to eq('ocr_disabled')
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(Usage).not_to have_received(:ensure_ocr_job_within_limit!)
+        expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_disabled')
+        expect(run.ocr_result_snapshot).to include(
+          'success' => false,
+          'error_code' => 'ocr_disabled'
+        )
       end
     end
 

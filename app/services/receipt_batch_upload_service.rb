@@ -31,6 +31,7 @@ class ReceiptBatchUploadService
   def call
     return failure(I18n.t("receipts.batch_upload.errors.empty")) if files.blank?
     return failure(I18n.t("receipts.batch_upload.errors.too_many", max: max_files)) if files.size > max_files
+    return failure(I18n.t("flash.receipts.ocr_unavailable")) if ExternalServices.down?(:ocr)
     return failure(I18n.t("receipts.batch_upload.errors.quota_exceeded")) unless storage_quota_available?
 
     create_receipts

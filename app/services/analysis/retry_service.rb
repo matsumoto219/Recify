@@ -193,6 +193,7 @@ module Analysis
       case type
       when "full_reanalyze", "ocr_retry"
         return "image_missing" unless receipt&.image&.attached?
+        return "ocr_unavailable" if ExternalServices.down?(:ocr)
       when "ai_retry"
         return "parent_run_missing" if parent_run.blank?
         return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
@@ -227,6 +228,8 @@ module Analysis
         "receipt already has an active analysis run"
       when "image_missing"
         "receipt image is required"
+      when "ocr_unavailable"
+        "OCR service is unavailable"
       when "parent_run_missing"
         "parent_run is required"
       when "ocr_snapshot_missing"

@@ -1766,6 +1766,21 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'SystemSettingsでOCR停止中はreceiptを作成せず解析jobもenqueueしない' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        expect(UsageCounter.where(user: user)).to be_empty
+      end
+    end
+
     it 'Turbo requestでもOCR down guardはglobal error pageへ飛ばさずupload画面を維持する' do
       allow(ExternalServices).to receive(:down?).with(:ocr).and_return(true)
       allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })

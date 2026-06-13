@@ -151,6 +151,29 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it 'OCR停止中はreceipt作成とcounter消費を行わず拒否する' do
+    create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+    files = [
+      uploaded_receipt_fixture,
+      uploaded_receipt_fixture('single_tax_receipt.png', 'image/png')
+    ]
+
+    expect do
+      result = described_class.call(user:, files:)
+
+      aggregate_failures do
+        expect(result).not_to be_success
+        expect(result.errors).to include(I18n.t('flash.receipts.ocr_unavailable'))
+      end
+    end.not_to change(user.receipts, :count)
+
+    aggregate_failures do
+      expect(ReceiptAnalysisRun.count).to eq(0)
+      expect(UsageCounter.where(user: user)).to be_empty
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
+    end
+  end
+
   it '最大件数を超える場合は失敗する' do
     files = Array.new(ReceiptBatchUploadService.max_files + 1) { uploaded_receipt_fixture }
 

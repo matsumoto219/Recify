@@ -46,6 +46,7 @@ class ReceiptAnalysisPipeline
   def run_ocr
     return skipped_result(:terminal_run) if terminal_run?
     return cancel_and_skip(:not_processing) unless receipt.processing?
+    return ocr_service_disabled_result if ExternalServices.down?(:ocr)
     return usage_limit_blocked_result("ocr") unless ocr_provider_call_allowed?
 
     with_run_failure do
@@ -312,6 +313,30 @@ class ReceiptAnalysisPipeline
     Result.new(next_step: :skipped, skip_reason: error_code.to_sym)
   rescue ReceiptAnalysisRuns::TerminalRunError
     Result.new(next_step: :skipped, skip_reason: :terminal_run)
+  end
+
+  def ocr_service_disabled_result
+    with_run_failure do
+      mark_processing!
+      ReceiptAnalysisRuns.start_stage(run, "ocr")
+
+      ocr_result = ReceiptOcrService.error_result(
+        error_code: "ocr_disabled",
+        provider: "azure_document_intelligence"
+      )
+      log_ocr_result(ocr_result)
+      ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+
+      decision = finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_disabled")
+      record_finalize_decision(decision)
+
+      Result.new(
+        ocr_result: ocr_result,
+        finalize_decision: decision,
+        next_step: :finalize
+      )
+    end
   end
 
   def ocr_provider_call_allowed?

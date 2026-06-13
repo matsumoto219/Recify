@@ -147,6 +147,24 @@ RSpec.describe ReceiptOcrJob, type: :job do
         expect(UsageCounter.find_by!(user: guest, key: 'ocr_jobs_per_day').used_count).to eq(6)
       end
     end
+
+    it 'OCR停止中の既存runはproviderとOCR counterを使わずfinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      allow(ReceiptOcrService).to receive(:call)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_disabled')
+        expect(run.ocr_result_snapshot).to include('error_code' => 'ocr_disabled')
+        expect(UsageCounter.where(user: receipt.user, key: 'ocr_jobs_per_day')).to be_empty
+        expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
   end
 
   private

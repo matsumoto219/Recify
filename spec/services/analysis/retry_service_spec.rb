@@ -165,6 +165,39 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'OCR停止中はfull_reanalyzeをrun作成やcounter消費前に拒否する' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'OCR停止中の再解析',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('ocr_unavailable')
+          expect(result.error_message).to eq('OCR service is unavailable')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_completed
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect(UsageCounter.where(user: actor, key: 'retry_operations_per_day')).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'ocr_unavailable'
+        )
+      end
+    end
+
     it 'reauthentication contextをaudit metadataに保存し、credential materialは保存しない' do
       reauthenticated_at = Time.current
 
@@ -721,6 +754,19 @@ RSpec.describe Analysis::RetryService do
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'image_missing')
         expect(options['ocr_retry']).to include(possible: false, disabled_reason: 'image_missing')
+      end
+    end
+
+    it 'OCR停止中はfull_reanalyze / ocr_retryを不可にする' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
+
+      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+
+      aggregate_failures do
+        expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'ocr_unavailable')
+        expect(options['ocr_retry']).to include(possible: false, disabled_reason: 'ocr_unavailable')
+        expect(options['ai_retry']).to include(possible: true, disabled_reason: nil)
       end
     end
 
