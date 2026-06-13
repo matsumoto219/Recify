@@ -54,6 +54,10 @@ module ExternalServices
       StatusStore.mark_monitor_failure!(service, error_code: error_code)
     end
 
+    def error_detail(...)
+      ErrorDetail.build(...)
+    end
+
     def reset!(service = nil)
       return services.each { |service_name| StatusStore.reset!(service_name) } if service.nil?
 
