@@ -212,8 +212,27 @@ module Ai
           ENV.fetch("OPENAI_API_KEY") do
             raise Ai::Errors::AuthError.new(
               message: "OPENAI_API_KEY is not set",
-              error_code: "ai_api_error",
-              provider: PROVIDER_NAME
+              error_code: "ai_auth_error",
+              provider: PROVIDER_NAME,
+              category: :auth,
+              retryable: false,
+              fallbackable: false,
+              provider_status: "configuration",
+              provider_error_code: "api_key_missing",
+              provider_error_type: "configuration",
+              provider_message: "OpenAI API key is missing",
+              auth_error: true,
+              phase: "configuration",
+              metrics: error_metrics(
+                provider_status: "configuration",
+                error_detail: {
+                  provider_error_code: "api_key_missing",
+                  provider_error_type: "configuration",
+                  provider_message_safe: "OpenAI API key is missing",
+                  auth_error: true,
+                  phase: "configuration"
+                }
+              )
             )
           end
         end

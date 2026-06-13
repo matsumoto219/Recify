@@ -32,6 +32,7 @@ module Analysis
       "ai_not_receipt" => "image_error",
       "ai_not_receipt_uncertain" => "image_error",
       "ai_invalid_response" => "ai_error",
+      "ai_config_error" => "system_error",
       "analysis_missing_keys" => "ai_error",
       "ai_primary_failed" => "ai_error",
       "ai_fallback_failed" => "ai_error",

@@ -405,6 +405,7 @@ RSpec.describe ExternalServices::StatusStore do
       expect(described_class.external_error?('ai_quota_exceeded')).to eq(true)
       expect(described_class.external_error?('ai_rate_limited')).to eq(true)
       expect(described_class.external_error?('ai_timeout')).to eq(true)
+      expect(described_class.external_error?('ai_config_error')).to eq(true)
     end
 
     it '対象外エラーでは false を返す' do

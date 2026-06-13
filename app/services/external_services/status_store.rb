@@ -14,6 +14,7 @@ module ExternalServices
       ai_quota_exceeded
       ai_rate_limited
       ai_timeout
+      ai_config_error
       ai_api_error
       ai_primary_failed
       ai_fallback_failed

@@ -74,6 +74,16 @@ class ReceiptAiEnrichmentService
       review_reasons: [ e.error_code ],
       meta: { message: e.message }
     )
+  rescue Ai::Errors::ProviderError => e
+    error_code = e.error_code.presence || "ai_api_error"
+    detail = provider_error_detail_from_exception(e)
+    Rails.logger.error("[AIEnrichment] provider_error code=#{error_code} provider=#{e.provider}")
+    mark_external_failure(error_code, detail: detail)
+    Ai::ResultTemplate.error(
+      error_code: error_code,
+      review_reasons: [ error_code ],
+      meta: { final_error_detail: detail }.compact
+    )
   rescue StandardError => e
     Rails.logger.error("[AIEnrichment] unexpected_error #{e.class}: #{e.message}")
     ExternalServices.mark_failure!(:ai, error_code: "ai_api_error")
@@ -108,6 +118,26 @@ class ReceiptAiEnrichmentService
     return unless meta.respond_to?(:to_h)
 
     meta.to_h.with_indifferent_access[:final_error_detail].presence
+  end
+
+  def provider_error_detail_from_exception(error)
+    metrics = error.respond_to?(:metrics) ? error.metrics || {} : {}
+
+    ExternalServices.error_detail(
+      service: :ai,
+      provider: error.respond_to?(:provider) ? error.provider : metrics[:provider],
+      phase: (error.respond_to?(:phase) ? error.phase : nil) || metrics[:phase],
+      http_status: error.respond_to?(:provider_status) ? error.provider_status : metrics[:provider_status],
+      provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : metrics[:provider_error_code],
+      provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : metrics[:provider_error_type],
+      provider_message: error.respond_to?(:provider_message) ? error.provider_message : metrics[:provider_message],
+      request_id: error.respond_to?(:request_id) ? error.request_id : metrics[:request_id],
+      retry_after: error.respond_to?(:retry_after) ? error.retry_after : metrics[:retry_after],
+      model: metrics[:model],
+      rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : metrics[:rate_limited],
+      quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : metrics[:quota_exceeded],
+      auth_error: error.respond_to?(:auth_error) ? error.auth_error : metrics[:auth_error]
+    ).presence
   end
 
   def mark_external_failure(error_code, detail: nil)

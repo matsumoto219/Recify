@@ -212,8 +212,16 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.error_code).to eq('ai_auth_error')
         expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
-        expect(run.reload.ai_normalized_result_snapshot).to include('success' => false)
+        expect(run.reload.ai_normalized_result_snapshot).to include(
+          'success' => false,
+          'error_code' => 'ai_auth_error'
+        )
+        expect(ExternalServices.snapshot(:ai)[:last_error_detail]).to include(
+          provider_error_code: 'api_key_missing',
+          auth_error: true
+        )
       end
     end
   end
@@ -232,8 +240,15 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.error_code).to eq('ai_config_error')
         expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
-        expect(run.reload.ai_normalized_result_snapshot).to include('success' => false)
+        expect(run.reload.ai_normalized_result_snapshot).to include(
+          'success' => false,
+          'error_code' => 'ai_config_error'
+        )
+        expect(ExternalServices.snapshot(:ai)[:last_error_detail]).to include(
+          provider_error_code: 'model_missing'
+        )
       end
     end
   end

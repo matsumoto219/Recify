@@ -71,6 +71,7 @@ ja:
         response_parse_failed: "解析結果の読み取りに失敗しました"
         unexpected_error: "予期しないエラーが発生しました"
         ai_invalid_response: "AIの応答が不正です"
+        ai_config_error: "AI設定に問題があります"
         analysis_missing_keys: "解析結果に必要な項目が不足しています"
         analysis_items_invalid: "商品データが不正です"
         analysis_value_invalid: "値が不正です"

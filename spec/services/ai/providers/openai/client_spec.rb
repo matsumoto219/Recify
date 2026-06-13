@@ -313,12 +313,48 @@ RSpec.describe Ai::Providers::Openai::Client do
       with_env('OPENAI_API_KEY' => nil) do
         expect do
           client.send(:post_request, request_body, before_provider_call: callback)
-        end.to raise_error(Ai::Errors::AuthError)
+        end.to raise_error(Ai::Errors::AuthError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_auth_error')
+            expect(error.provider_error_code).to eq('api_key_missing')
+            expect(error.provider_error_type).to eq('configuration')
+            expect(error.provider_message).to eq('OpenAI API key is missing')
+            expect(error.auth_error).to eq(true)
+            expect(error.phase).to eq('configuration')
+            expect(error).not_to be_fallbackable
+          end
+        }
       end
 
       aggregate_failures do
         expect(callback).not_to have_received(:call)
         expect(http).not_to have_received(:request)
+      end
+    end
+
+    it 'OPENAI_AI_MODEL未設定ではProviderError(ai_config_error)を送出しHTTPへ到達しない' do
+      callback = instance_double(Proc)
+      allow(callback).to receive(:call)
+      allow(client).to receive(:post_request)
+
+      with_env('OPENAI_AI_MODEL' => nil, 'OPENAI_API_KEY' => 'test-openai-key') do
+        expect do
+          client.call(input, before_provider_call: callback)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_config_error')
+            expect(error.provider_error_code).to eq('model_missing')
+            expect(error.provider_error_type).to eq('configuration')
+            expect(error.provider_message).to eq('OpenAI AI model is missing')
+            expect(error.phase).to eq('configuration')
+            expect(error).not_to be_fallbackable
+          end
+        }
+      end
+
+      aggregate_failures do
+        expect(callback).not_to have_received(:call)
+        expect(client).not_to have_received(:post_request)
       end
     end
 

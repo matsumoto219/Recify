@@ -56,7 +56,29 @@ module Ai
         attr_reader :input
 
         def model_name
-          ENV.fetch("OPENAI_AI_MODEL")
+          ENV.fetch("OPENAI_AI_MODEL") do
+            raise Ai::Errors::ProviderError.new(
+              message: "OPENAI_AI_MODEL is not set",
+              error_code: "ai_config_error",
+              provider: Ai::Providers::Openai::Client::PROVIDER_NAME,
+              category: :config,
+              retryable: false,
+              fallbackable: false,
+              provider_status: "configuration",
+              provider_error_code: "model_missing",
+              provider_error_type: "configuration",
+              provider_message: "OpenAI AI model is missing",
+              phase: "configuration",
+              metrics: Ai::ProviderMetrics.build(
+                provider: Ai::Providers::Openai::Client::PROVIDER_NAME,
+                provider_status: "configuration",
+                provider_error_code: "model_missing",
+                provider_error_type: "configuration",
+                provider_message: "OpenAI AI model is missing",
+                phase: "configuration"
+              )
+            )
+          end
         end
 
         def ai_name_completion_enabled?

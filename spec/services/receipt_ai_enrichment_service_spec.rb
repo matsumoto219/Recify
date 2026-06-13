@@ -170,6 +170,46 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'AI provider errorを分類したままsafe detail付きの失敗結果にする' do
+        error = Ai::Errors::AuthError.new(
+          message: 'OPENAI_API_KEY is not set',
+          error_code: 'ai_auth_error',
+          provider: 'openai',
+          provider_status: 'configuration',
+          provider_error_code: 'api_key_missing',
+          provider_error_type: 'configuration',
+          provider_message: 'OpenAI API key is missing',
+          auth_error: true,
+          phase: 'configuration'
+        )
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_raise(error)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ai_auth_error')
+          expect(result.dig(:meta, :final_error_detail)).to include(
+          service: 'ai',
+          provider: 'openai',
+          phase: 'configuration',
+          provider_error_code: 'api_key_missing',
+          provider_error_type: 'configuration',
+          provider_message_safe: 'OpenAI API key is missing',
+            auth_error: true
+          )
+          expect(ExternalServices).to have_received(:mark_failure!).with(
+            :ai,
+            error_code: 'ai_auth_error',
+            detail: hash_including(
+              provider_error_code: 'api_key_missing',
+              auth_error: true
+            )
+          )
+        end
+      end
+
       it 'AIがnot receiptと正常判定した場合はfailureを記録しない' do
         not_receipt_result = {
           success: false,

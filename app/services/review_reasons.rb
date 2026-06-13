@@ -58,6 +58,7 @@ module ReviewReasons
     analysis_items_invalid
     analysis_value_invalid
     ai_invalid_response
+    ai_config_error
     ai_primary_failed
     ai_fallback_failed
   ].freeze
