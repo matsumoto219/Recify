@@ -342,9 +342,18 @@ class ReceiptAnalysisPipeline
   end
 
   def run_ocr_step
+    return :usage_limit_blocked unless ocr_provider_call_allowed?
+
     OcrStep.call(run, before_provider_call: -> { consume_ocr_provider_call! })
   rescue Usage::LimitExceeded
     :usage_limit_blocked
+  end
+
+  def ocr_provider_call_allowed?
+    Usage.ensure_ocr_job_within_limit!(user: receipt.user)
+    true
+  rescue Usage::LimitExceeded
+    false
   end
 
   def consume_ocr_provider_call!

@@ -13,8 +13,8 @@ class ReceiptOcrService
     end
   end
 
-  def self.call(image, provider: "azure_document_intelligence")
-    new(image: image, provider: provider).call
+  def self.call(image, provider: "azure_document_intelligence", before_provider_call: nil)
+    new(image: image, provider: provider, before_provider_call: before_provider_call).call
   end
 
   def self.error_result(error_code:, provider: "azure_document_intelligence", model_id: nil, polling_metrics: nil, provider_error_detail: nil)
@@ -31,9 +31,10 @@ class ReceiptOcrService
     Ocr::AvailabilityChecker.call
   end
 
-  def initialize(image:, provider: "azure_document_intelligence")
+  def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil)
     @image = image
     @provider = provider
+    @before_provider_call = before_provider_call
   end
 
   def call
@@ -42,7 +43,7 @@ class ReceiptOcrService
     validate_image!
 
     # 1) 外部OCR API呼び出し
-    response = Ocr::Client.new(image: image, provider: provider).call
+    response = Ocr::Client.new(image: image, provider: provider, before_provider_call: before_provider_call).call
 
     # 2) レスポンスを内部形式へ正規化
     parsed = Ocr::ResponseParser.new(response: response, provider: provider).call
@@ -60,6 +61,8 @@ class ReceiptOcrService
     handle_ocr_error(e)
   rescue Ocr::OcrError, OcrError => e
     handle_ocr_error(e)
+  rescue Usage::LimitExceeded
+    raise
   rescue Timeout::Error
     Rails.logger.error("[OCR] timeout")
     ExternalServices.mark_failure!(:ocr, error_code: "ocr_timeout")
@@ -76,7 +79,7 @@ class ReceiptOcrService
 
   private
 
-  attr_reader :image, :provider
+  attr_reader :image, :provider, :before_provider_call
 
   def validate_image!
     unless image&.attached?

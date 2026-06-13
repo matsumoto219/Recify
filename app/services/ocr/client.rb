@@ -35,9 +35,10 @@ module Ocr
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethods" ].freeze
 
-    def initialize(image:, provider: "azure_document_intelligence")
+    def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil)
       @image = image
       @provider = provider
+      @before_provider_call = before_provider_call
     end
 
     def call
@@ -57,6 +58,8 @@ module Ocr
       raise OcrError.new("external_service_unavailable", polling_metrics: polling_metrics(final_status: "external_service_unavailable"))
     rescue OcrError, OcrTimeoutError => e
       raise enrich_error_with_polling_metrics(e)
+    rescue Usage::LimitExceeded
+      raise
     rescue StandardError => e
       Rails.logger.error("[OCR::Client] request failed class=#{e.class} error_code=unexpected_error")
       raise OcrError.new("unexpected_error", polling_metrics: polling_metrics(final_status: "unexpected_error"))
@@ -74,7 +77,7 @@ module Ocr
 
     private
 
-    attr_reader :image, :provider
+    attr_reader :image, :provider, :before_provider_call
 
     def connection
       @connection ||= Faraday.new(url: endpoint) do |f|
@@ -84,13 +87,18 @@ module Ocr
     end
 
     def submit_request
+      body = request_body
+      validate_endpoint_configuration!
+      validate_api_key_configuration!
+      before_provider_call&.call
+
       # POST timeout は Azure 側で受理済みの可能性があるため retry しない。
       res = with_retries(operation: :submit_request, retry_timeouts: false) do
         connection.post do |req|
           req.url analyze_path
           req.headers["Ocp-Apim-Subscription-Key"] = api_key
           req.headers["Content-Type"] = "application/octet-stream"
-          req.body = request_body
+          req.body = body
         end.tap do |response|
           handle_response_status!(response, phase: "submit")
         end

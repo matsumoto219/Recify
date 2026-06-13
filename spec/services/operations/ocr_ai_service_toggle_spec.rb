@@ -211,16 +211,19 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       request_id: 'azure-request-id',
       quota_exceeded: true
     )
-    allow(ReceiptOcrService).to receive(:call).and_return(
-      success: false,
-      error_code: 'external_service_quota_exceeded',
-      lines: [],
-      candidates: {},
-      meta: {
-        provider: 'azure_document_intelligence',
-        provider_error_detail: provider_detail
+    allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call:, **_options|
+      before_provider_call.call
+      {
+        success: false,
+        error_code: 'external_service_quota_exceeded',
+        lines: [],
+        candidates: {},
+        meta: {
+          provider: 'azure_document_intelligence',
+          provider_error_detail: provider_detail
+        }
       }
-    )
+    end
 
     result = ReceiptAnalysisPipeline.run_ocr(run)
     run.reload
@@ -235,6 +238,49 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
         'quota_exceeded' => true
       )
       expect(run.ocr_result_snapshot.to_json).not_to include('sk-secret-token')
+    end
+  end
+
+  it 'OCR endpoint未設定ではAPI未到達としてOCR counterを消費しない' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+
+    with_env(
+      'AZURE_OCR_ENDPOINT' => nil,
+      'AZURE_OCR_API_KEY' => 'test-key'
+    ) do
+      result = ReceiptAnalysisPipeline.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.error_code).to eq('external_service_unavailable')
+        expect(UsageCounter.where(user: user, key: 'ocr_jobs_per_day')).to be_empty
+        expect(run.reload.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+          'provider_error_code' => 'endpoint_missing'
+        )
+      end
+    end
+  end
+
+  it 'OCR key未設定ではAPI未到達としてOCR counterを消費しない' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+
+    with_env(
+      'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+      'AZURE_OCR_API_KEY' => nil
+    ) do
+      result = ReceiptAnalysisPipeline.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.error_code).to eq('external_service_auth_error')
+        expect(UsageCounter.where(user: user, key: 'ocr_jobs_per_day')).to be_empty
+        expect(run.reload.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+          'provider_error_code' => 'api_key_missing',
+          'auth_error' => true
+        )
+      end
     end
   end
 
@@ -264,11 +310,28 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     }
   end
 
-  def with_env(key, value)
-    original_value = ENV[key]
-    ENV[key] = value
+  def with_env(key_or_overrides, value = nil)
+    overrides =
+      if key_or_overrides.is_a?(Hash)
+        key_or_overrides
+      else
+        { key_or_overrides => value }
+      end
+    original_values = overrides.keys.to_h do |key|
+      [ key, ENV.key?(key) ? ENV[key] : :__unset__ ]
+    end
+
+    overrides.each do |key, override_value|
+      override_value.nil? ? ENV.delete(key) : ENV[key] = override_value
+    end
     yield
   ensure
-    ENV[key] = original_value
+    original_values.each do |key, original_value|
+      if original_value == :__unset__
+        ENV.delete(key)
+      else
+        ENV[key] = original_value
+      end
+    end
   end
 end

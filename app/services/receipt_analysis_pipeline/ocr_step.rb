@@ -23,8 +23,7 @@ class ReceiptAnalysisPipeline
             )
           )
         else
-          before_provider_call&.call
-          ReceiptOcrService.call(receipt.image)
+          ReceiptOcrService.call(receipt.image, before_provider_call: before_provider_call)
         end
 
       ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)

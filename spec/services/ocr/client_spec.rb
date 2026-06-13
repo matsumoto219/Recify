@@ -4,7 +4,8 @@ RSpec.describe Ocr::Client do
   let(:image_path) { Rails.root.join('spec/fixtures/files/receipt_sample.jpg') }
   let(:image) { Rack::Test::UploadedFile.new(image_path, 'image/jpeg') }
   let(:provider) { 'azure_document_intelligence' }
-  let(:client) { described_class.new(image: image, provider: provider) }
+  let(:before_provider_call) { nil }
+  let(:client) { described_class.new(image: image, provider: provider, before_provider_call: before_provider_call) }
   let(:operational_env_keys) do
     %w[
       AZURE_OCR_TIMEOUT
@@ -142,6 +143,15 @@ RSpec.describe Ocr::Client do
   end
 
   describe '#submit_request' do
+    around do |example|
+      with_env(
+        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+        'AZURE_OCR_API_KEY' => 'test-key'
+      ) do
+        example.run
+      end
+    end
+
     it 'prebuilt receipt analyze requestにPaymentMethods query fieldを指定する' do
       analyze_path = client.send(:analyze_path)
       uri = URI.parse("https://example.test#{analyze_path}")
@@ -173,6 +183,91 @@ RSpec.describe Ocr::Client do
         expect(client).to have_received(:sleep).with(0.5).once
       end
     end
+
+    it 'endpoint未設定ではprovider callbackを呼ばずsubmitしない' do
+      callback = instance_double(Proc)
+      callback_client = described_class.new(image: image, provider: provider, before_provider_call: callback)
+      connection = stub_connection_post(callback_client, accepted_response)
+      allow(callback).to receive(:call)
+
+      with_env('AZURE_OCR_ENDPOINT' => nil, 'AZURE_OCR_API_KEY' => 'test-key') do
+        expect do
+          callback_client.send(:submit_request)
+        end.to raise_error(Ocr::OcrError, 'external_service_unavailable')
+      end
+
+      aggregate_failures do
+        expect(callback).not_to have_received(:call)
+        expect(connection).not_to have_received(:post)
+      end
+    end
+
+    it 'api key未設定ではprovider callbackを呼ばずsubmitしない' do
+      callback = instance_double(Proc)
+      callback_client = described_class.new(image: image, provider: provider, before_provider_call: callback)
+      connection = stub_connection_post(callback_client, accepted_response)
+      allow(callback).to receive(:call)
+
+      with_env(
+        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+        'AZURE_OCR_API_KEY' => nil
+      ) do
+        expect do
+          callback_client.send(:submit_request)
+        end.to raise_error(Ocr::OcrError, 'external_service_auth_error')
+      end
+
+      aggregate_failures do
+        expect(callback).not_to have_received(:call)
+        expect(connection).not_to have_received(:post)
+      end
+    end
+
+    it '画像blob取得失敗ではprovider callbackを呼ばずsubmitしない' do
+      corrupt_image = instance_double('AttachedImage')
+      callback = instance_double(Proc)
+      callback_client = described_class.new(image: corrupt_image, provider: provider, before_provider_call: callback)
+      connection = stub_connection_post(callback_client, accepted_response)
+      allow(corrupt_image).to receive(:download).and_raise(ActiveStorage::FileNotFoundError)
+      allow(callback).to receive(:call)
+
+      expect do
+        callback_client.send(:submit_request)
+      end.to raise_error(ActiveStorage::FileNotFoundError)
+
+      aggregate_failures do
+        expect(callback).not_to have_received(:call)
+        expect(connection).not_to have_received(:post)
+      end
+    end
+
+    it 'Azure submitへ到達する直前にprovider callbackを呼ぶ' do
+      callback = instance_double(Proc)
+      callback_client = described_class.new(image: image, provider: provider, before_provider_call: callback)
+      connection = stub_connection_post(
+        callback_client,
+        faraday_response(
+          status: 403,
+          body: {
+            error: {
+              code: 'QuotaExceeded',
+              message: 'F0 quota exceeded'
+            }
+          }.to_json
+        )
+      )
+      allow(callback).to receive(:call)
+
+      expect do
+        callback_client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'external_service_quota_exceeded')
+
+      aggregate_failures do
+        expect(callback).to have_received(:call).once
+        expect(connection).to have_received(:post).once
+      end
+    end
+
 
     it '429のRetry-After秒数をretry delayとして優先する' do
       connection = stub_connection_post(
