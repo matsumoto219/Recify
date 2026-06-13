@@ -117,6 +117,127 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     end
   end
 
+  it 'OCR StatusStore downではpipelineもproviderとcounterを使わずsafe detailを残す' do
+    provider_detail = ExternalServices.error_detail(
+      service: :ocr,
+      provider: 'azure_document_intelligence',
+      phase: 'submit',
+      http_status: 403,
+      provider_error_code: 'QuotaExceeded',
+      provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+      request_id: 'azure-request-id',
+      retry_after: 60,
+      quota_exceeded: true
+    )
+    3.times do
+      ExternalServices.mark_failure!(
+        :ocr,
+        error_code: 'external_service_quota_exceeded',
+        reason: 'quota_exceeded',
+        detail: provider_detail
+      )
+    end
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    allow(ReceiptOcrService).to receive(:call)
+    allow(Usage).to receive(:consume_ocr_job!)
+
+    result = ReceiptAnalysisPipeline.run_ocr(run)
+    run.reload
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:finalize)
+      expect(result.finalize_decision.error_code).to eq('ocr_disabled')
+      expect(ReceiptOcrService).not_to have_received(:call)
+      expect(Usage).not_to have_received(:consume_ocr_job!)
+      expect(UsageCounter.where(user: user, key: 'ocr_jobs_per_day')).to be_empty
+      expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+        'source' => 'status_store',
+        'reason' => 'quota_exceeded',
+        'provider_error_code' => 'QuotaExceeded',
+        'quota_exceeded' => true,
+        'retry_after' => 60
+      )
+      expect(run.ocr_result_snapshot.to_json).not_to include('sk-secret-token')
+    end
+  end
+
+  it 'AI StatusStore downではpipelineもAI APIとcounterを使わずOCR-only finalizeへ進める' do
+    3.times do
+      ExternalServices.mark_failure!(
+        :ai,
+        error_code: 'ai_rate_limited',
+        reason: 'rate_limited',
+        detail: ExternalServices.error_detail(
+          service: :ai,
+          provider: 'openai',
+          phase: 'ai_request',
+          http_status: 429,
+          provider_error_code: 'rate_limit_exceeded',
+          retry_after: 30,
+          rate_limited: true
+        )
+      )
+    end
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    allow(ReceiptAiEnrichmentService).to receive(:call)
+    allow(Usage).to receive(:consume_ai_job!)
+
+    result = ReceiptAnalysisPipeline.run_ai(run)
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:finalize)
+      expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+      expect(result.finalize_decision.error_code).to eq('ai_unavailable')
+      expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+      expect(Usage).not_to have_received(:consume_ai_job!)
+      expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
+      expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
+    end
+  end
+
+  it 'OCR provider quota exceededはAPI submit到達済みとしてcounterを消費しsafe detailを保存する' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    provider_detail = ExternalServices.error_detail(
+      service: :ocr,
+      provider: 'azure_document_intelligence',
+      phase: 'submit',
+      http_status: 403,
+      provider_error_code: 'QuotaExceeded',
+      provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+      request_id: 'azure-request-id',
+      quota_exceeded: true
+    )
+    allow(ReceiptOcrService).to receive(:call).and_return(
+      success: false,
+      error_code: 'external_service_quota_exceeded',
+      lines: [],
+      candidates: {},
+      meta: {
+        provider: 'azure_document_intelligence',
+        provider_error_detail: provider_detail
+      }
+    )
+
+    result = ReceiptAnalysisPipeline.run_ocr(run)
+    run.reload
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:finalize)
+      expect(result.finalize_decision.error_code).to eq('external_service_quota_exceeded')
+      expect(ReceiptOcrService).to have_received(:call).once
+      expect(UsageCounter.find_by!(user: user, key: 'ocr_jobs_per_day').used_count).to eq(1)
+      expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+        'provider_error_code' => 'QuotaExceeded',
+        'quota_exceeded' => true
+      )
+      expect(run.ocr_result_snapshot.to_json).not_to include('sk-secret-token')
+    end
+  end
+
   private
 
   def successful_ocr_result
