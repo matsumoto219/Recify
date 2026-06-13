@@ -15,6 +15,19 @@ class ReceiptAnalysisPipeline
       price_tax_inclusion_uncertain
     ].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
+    ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
+      item_total_mismatch
+      tax_amount_mismatch
+      tax_detail_mismatch
+      item_tax_rate_group_uncertain
+    ].freeze
+    RESOLVABLE_PAYMENT_ADJUSTMENT_PATTERN = /キャッシュレス|還元|cashless|reward|payment\s*discount/i.freeze
+    NON_RESOLVABLE_PAYMENT_ADJUSTMENT_KINDS = %w[
+      point_usage
+      coupon
+      return_refund
+    ].freeze
     RESOLVABLE_SURCHARGE_ADJUSTMENT_KINDS = %w[
       service_charge
       late_night_charge
@@ -141,6 +154,7 @@ class ReceiptAnalysisPipeline
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
       record_build_params_snapshot(params)
       validate_structural_limits!(params)
+      apply_deterministic_review_state!(params)
 
       # === AmountService integration ===
       amount_result = ReceiptAmountService.call(
@@ -153,9 +167,11 @@ class ReceiptAnalysisPipeline
       )
       amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
       amount_result = resolve_clear_surcharge_adjustment_uncertainty(params, amount_result)
+      amount_result = resolve_clear_payment_adjustment_uncertainty(params, amount_result)
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
+      params[:receipt_items_attributes] = clear_resolved_item_review_flags(params[:receipt_items_attributes])
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
       ocr_review_reasons = ocr_review_reasons_for(ocr_result)
@@ -883,14 +899,161 @@ class ReceiptAnalysisPipeline
       [ ITEM_TOTAL_DRIFT_ABSOLUTE_THRESHOLD, relative_threshold ].max
     end
 
+    def apply_deterministic_review_state!(params)
+      adjustments = Array(params[:receipt_adjustments_attributes])
+      review_reason_added = false
+      params[:receipt_adjustments_attributes] = adjustments.map do |adjustment|
+        normalized = normalized_hash(adjustment)
+        if deterministic_return_refund_review?(normalized) ||
+            deterministic_duplicated_surcharge_review?(params, normalized)
+          review_reason_added = true
+          adjustment_with_review_reason(normalized, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+        else
+          adjustment
+        end
+      end
+      return unless review_reason_added
+
+      params[:review_reasons] = (normalize_review_reasons(params[:review_reasons]) + [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]).uniq
+    end
+
+    def deterministic_return_refund_review?(adjustment)
+      ReceiptAdjustment.normalize_kind(adjustment[:kind]) == "return_refund"
+    end
+
+    def deterministic_duplicated_surcharge_review?(params, adjustment)
+      clear_surcharge_adjustment?(adjustment) &&
+        adjustment_duplicated_in_items?(params, [ adjustment ])
+    end
+
+    def adjustment_with_review_reason(adjustment, reason)
+      normalized = normalized_hash(adjustment)
+      review_reasons = (normalize_review_reasons(normalized[:review_reasons]) + [ reason ]).uniq
+
+      normalized.to_h.symbolize_keys.merge(
+        needs_review: true,
+        review_reasons: review_reasons
+      )
+    end
+
+    def clear_resolved_item_review_flags(items_attributes)
+      Array(items_attributes).map do |item|
+        normalized = normalized_hash(item)
+        next item unless normalized[:needs_review] == true
+        next item if normalize_review_reasons(normalized[:review_reasons]).any?
+        next item if item_requires_review_from_final_values?(normalized)
+
+        normalized.to_h.symbolize_keys.merge(needs_review: false)
+      end
+    end
+
+    def item_requires_review_from_final_values?(item)
+      confidence = normalize_confidence(item[:confidence])
+
+      item[:raw_text].blank? ||
+        item[:category].blank? ||
+        item[:line_total].blank? ||
+        (confidence.present? && confidence < REVIEW_NEEDED_CONFIDENCE_THRESHOLD)
+    end
+
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
+      review_reasons = remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
       return review_reasons unless review_reasons.include?("payment_method_uncertain")
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
       review_reasons - [ "payment_method_uncertain" ]
+    end
+
+    def remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      return review_reasons unless review_reasons.include?("store_phone_number_missing")
+      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+
+      review_reasons - [ "store_phone_number_missing" ]
+    end
+
+    def remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
+      return review_reasons unless review_reasons.include?("item_category_uncertain")
+      return review_reasons unless item_categories_resolved?(params)
+
+      review_reasons - [ "item_category_uncertain" ]
+    end
+
+    def remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
+      return review_reasons unless review_reasons.include?(ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON)
+      return review_reasons unless item_tax_rates_resolved?(params, amount_result)
+
+      review_reasons - [ ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON ]
+    end
+
+    def item_categories_resolved?(params)
+      items = Array(params[:receipt_items_attributes])
+      return false if items.blank?
+
+      items.none? do |item|
+        normalized = normalized_hash(item)
+        normalize_review_reasons(normalized[:review_reasons]).include?("item_category_uncertain") ||
+          item_needs_review?(normalized)
+      end
+    end
+
+    def item_tax_rates_resolved?(params, amount_result)
+      return false if item_tax_rate_resolution_blocked?(amount_result)
+
+      tax_detail_rates = resolved_tax_detail_rates(params, amount_result)
+      return false if tax_detail_rates.blank?
+
+      item_rates = resolved_item_tax_rates(params)
+      return false if item_rates.blank?
+
+      (item_rates - tax_detail_rates).empty?
+    end
+
+    def item_tax_rate_resolution_blocked?(amount_result)
+      reasons = [
+        amount_review_reasons(amount_result),
+        normalized_hash(amount_result[:amount_engine]).dig(:selected_candidate, :hard_reject_reasons)
+      ].flatten.compact.map(&:to_s)
+
+      reasons.intersect?(ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS)
+    end
+
+    def resolved_tax_detail_rates(params, amount_result)
+      tax_details = Array(amount_result[:tax_details]).presence || Array(params[:receipt_tax_details_attributes])
+      tax_details.filter_map do |tax_detail|
+        rate = normalize_tax_rate(normalized_hash(tax_detail)[:rate])
+        rate&.positive? ? rate : nil
+      end.uniq
+    end
+
+    def resolved_item_tax_rates(params)
+      Array(params[:receipt_items_attributes]).filter_map do |item|
+        normalized = normalized_hash(item)
+        return [] if normalize_review_reasons(normalized[:review_reasons]).include?(ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON)
+
+        rate = normalize_tax_rate(normalized[:tax_rate])
+        rate&.positive? ? rate : nil
+      end.uniq
+    end
+
+    def receipt_core_fields_resolved?(params, amount_result, ocr_result)
+      receipt_attributes = normalized_hash(params[:receipt_attributes])
+      return false if receipt_attributes[:store_name].blank?
+      return false unless store_address_resolved_or_optional?(receipt_attributes, ocr_result)
+      return false if receipt_attributes[:purchased_at].blank?
+      return false if normalize_amount(receipt_attributes[:total_amount]).blank?
+
+      payment_method_resolved_after_build?(params, amount_result)
+    end
+
+    def store_address_resolved_or_optional?(receipt_attributes, ocr_result)
+      return true if receipt_attributes[:store_address].present?
+
+      ocr_candidates(ocr_result)[:store_address].blank?
     end
 
     def remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
@@ -1031,6 +1194,33 @@ class ReceiptAnalysisPipeline
       amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
     end
 
+    def resolve_clear_payment_adjustment_uncertainty(params, amount_result)
+      return amount_result unless clear_payment_adjustment_uncertainty_resolved?(params, amount_result)
+
+      params[:adjustment_uncertainty_resolved] = true
+      params[:review_reasons] = normalize_review_reasons(params[:review_reasons]) - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+      params[:receipt_adjustments_attributes] = Array(params[:receipt_adjustments_attributes]).map do |adjustment|
+        clear_payment_adjustment?(adjustment) ? adjustment_without_review_reason(adjustment, ADJUSTMENT_UNCERTAIN_REVIEW_REASON) : adjustment
+      end
+
+      amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+    end
+
+    def clear_payment_adjustment_uncertainty_resolved?(params, amount_result)
+      adjustments = Array(params[:receipt_adjustments_attributes])
+      uncertain_adjustments = adjustments.select do |adjustment|
+        normalized = normalized_hash(adjustment)
+        normalize_review_reasons(normalized[:review_reasons]).include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON) ||
+          normalized[:needs_review] == true
+      end
+      return false if uncertain_adjustments.blank?
+      return false unless uncertain_adjustments.all? { |adjustment| clear_payment_adjustment?(adjustment) }
+      return false unless payment_method_resolved_after_build?(params, amount_result)
+      return false if adjustment_duplicated_in_items?(params, uncertain_adjustments)
+
+      true
+    end
+
     def clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
       result = normalized_hash(amount_result)
       blocking_reasons = normalize_review_reasons(result[:blocking_inconsistencies])
@@ -1061,6 +1251,20 @@ class ReceiptAnalysisPipeline
         normalized[:sign].to_s == "surcharge" &&
         amount&.positive? &&
         (normalized[:label].present? || normalized[:source_text].present?)
+    end
+
+    def clear_payment_adjustment?(adjustment)
+      normalized = normalized_hash(adjustment)
+      kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
+      return false if NON_RESOLVABLE_PAYMENT_ADJUSTMENT_KINDS.include?(kind)
+
+      amount = normalize_amount(normalized[:amount])
+      text = [ normalized[:label], normalized[:source_text] ].compact.join(" ")
+
+      Amounts::AdjustmentClassifier.call(normalized)[:effect] == :payment_adjustment &&
+        normalized[:sign].to_s == "discount" &&
+        amount&.positive? &&
+        text.match?(RESOLVABLE_PAYMENT_ADJUSTMENT_PATTERN)
     end
 
     def payment_total_matches_resolved_total?(params, amount_result)

@@ -78,6 +78,7 @@ module Analysis
         receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
           receipt_attributes[:payment_method],
           receipt_payments_attributes,
+          adjustments: receipt_adjustments_attributes,
           lines:,
           receipt_total: receipt_attributes[:total_amount]
         )
@@ -713,6 +714,9 @@ module Analysis
           next unless amount.positive?
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          source_text = adjustment_source_text_for(normalized, source_line_index, lines)
+          next if adjustment_source_noise_line?(source_text, amount)
+
           next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
           next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
@@ -726,6 +730,14 @@ module Analysis
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
           sign_value = normalized[:sign].presence || normalized[:sign_hint]
           sign = ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind)
+          if kind == "other"
+            inferred_kind = infer_ocr_adjustment_kind([ source_text, normalized[:label] ].compact.join(" "), sign)
+            if inferred_kind != "other"
+              kind = inferred_kind
+              sign = default_adjustment_sign(kind) if sign_value.blank?
+            end
+          end
+          label = adjustment_label_for(kind, normalized[:label], source_text)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
           needs_review = source == "ocr" || normalized[:needs_review] == true
           if kind == "other" || normalized[:kind].blank? || sign_value.blank?
@@ -735,12 +747,12 @@ module Analysis
 
           {
             kind: kind,
-            label: normalized[:label].to_s.strip.presence,
+            label: label,
             amount: amount,
             sign: sign,
             tax_rate: normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]),
             source: source,
-            source_text: normalized[:source_text].to_s.strip.presence || lines[source_line_index],
+            source_text: source_text,
             source_line_index: source_line_index,
             confidence: normalize_confidence(normalized[:confidence]),
             needs_review: needs_review,
@@ -1071,7 +1083,9 @@ module Analysis
         return false if text.match?(POINT_DISPLAY_LINE_PATTERN)
         return false unless text.match?(POINT_PAYMENT_LINE_PATTERN)
 
-        text.match?(POINT_PAYMENT_STRONG_LINE_PATTERN) || payment_block_context?(lines, index)
+        text.match?(POINT_PAYMENT_STRONG_LINE_PATTERN) ||
+          explicit_money_amount_from_text(text).present? ||
+          payment_block_context?(lines, index)
       end
 
       def payment_block_context?(lines, index)
@@ -2361,6 +2375,40 @@ module Analysis
         %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(ReceiptAdjustment.normalize_kind(kind)) ? "surcharge" : "discount"
       end
 
+      def adjustment_label_for(kind, label, source_text)
+        normalized_label = label.to_s.strip.presence
+        return normalized_label unless kind.to_s == "return_refund"
+
+        source_label = adjustment_source_label_without_amount(source_text)
+        return normalized_label if source_label.blank?
+        return source_label if normalized_label.blank?
+        return source_label if source_label.include?(normalized_label) && source_label.length > normalized_label.length
+
+        normalized_label
+      end
+
+      def adjustment_source_text_for(adjustment, source_line_index, lines)
+        explicit_source = adjustment[:source_text].to_s.strip.presence
+        line_source = lines[source_line_index].to_s.strip.presence
+        if generic_return_refund_label?(explicit_source) && line_source.present? && line_source.length > explicit_source.length
+          return line_source
+        end
+
+        explicit_source || line_source
+      end
+
+      def generic_return_refund_label?(text)
+        text.to_s.unicode_normalize(:nfkc).strip.match?(/\A(?:返品|返金|返却|refund|return)\z/i)
+      end
+
+      def adjustment_source_label_without_amount(source_text)
+        source_text.to_s
+          .unicode_normalize(:nfkc)
+          .sub(/\s*[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?\s*\z/, "")
+          .strip
+          .presence
+      end
+
       def infer_ocr_adjustment_kind(source_text, sign)
         text = source_text.to_s
         return "return_refund" if text.match?(/返品|返金|返却|refund|return/i)
@@ -2556,12 +2604,22 @@ module Analysis
         compact_text = text.gsub(/\s+/, "").delete(":：")
 
         return true if compact_text.match?(FALLBACK_NON_ITEM_KEYWORD_PATTERN)
+        return true if compact_text.match?(/対象計|対象額|税率対象|内税|内消費税/)
+        return true if text.match?(POINT_PAYMENT_LINE_PATTERN) || text.match?(POINT_DISPLAY_LINE_PATTERN)
         return true if compact_text.match?(/\A(?:税込み?|税抜き?)(?:金額|価格)?[¥￥]?\d[\d,，]*円?\z/)
         return true if text.match?(FALLBACK_REFERENCE_LINE_PATTERN)
         return true if text.match?(/\bT\d{13}\b/i)
         return true if text.match?(FALLBACK_DATE_TIME_LINE_PATTERN)
         return true if text.match?(FALLBACK_URL_OR_EMAIL_PATTERN)
         return true if text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
+
+        false
+      end
+
+      def adjustment_source_noise_line?(line, _amount)
+        text = line.to_s.unicode_normalize(:nfkc).strip
+        return false if text.blank?
+        return true if fallback_payment_amount_noise_line?(text)
 
         false
       end
@@ -2596,7 +2654,7 @@ module Analysis
         detect_payment_method_from_payments(candidates[:payments])
       end
 
-      def reconcile_payment_method_with_payments(current_method, payments, lines: [], receipt_total: nil)
+      def reconcile_payment_method_with_payments(current_method, payments, adjustments: [], lines: [], receipt_total: nil)
         current = normalize_detected_payment_method(current_method)
         voucher_payment_present = Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
         detected_from_payments = detect_payment_method_from_payments(payments)
@@ -2607,10 +2665,25 @@ module Analysis
           return "other"
         end
 
-        return current unless payment_sum_matches_total?(payments, receipt_total)
+        return current unless payment_sum_matches_total?(payments, receipt_total) ||
+          payment_sum_matches_final_payment_total?(payments, receipt_total, adjustments)
         return current unless payment_method_should_follow_payments?(current, detected_from_payments)
 
         detected_from_payments
+      end
+
+      def payment_sum_matches_final_payment_total?(payments, receipt_total, adjustments)
+        total = normalize_amount(receipt_total)&.to_i
+        return false unless total&.positive?
+
+        payment_adjustment_total = Array(adjustments).sum do |adjustment|
+          classification = Amounts::AdjustmentClassifier.call(adjustment)
+          classification[:effect] == :payment_adjustment ? classification[:signed_amount].to_i : 0
+        end
+        return false if payment_adjustment_total.zero?
+
+        Array(payments).present? &&
+          Array(payments).sum { |payment| payment[:amount].to_i } == total + payment_adjustment_total
       end
 
       def payment_method_should_follow_payments?(current, detected_from_payments)

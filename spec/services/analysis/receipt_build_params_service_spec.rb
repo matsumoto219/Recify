@@ -476,6 +476,44 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AI payment_methodが電子マネーに揺れても支払調整後のPayPay支払から代表値を補正する' do
+        ocr_result[:candidates][:payment_method_text] = 'paypay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 255
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'キャッシュレス還元額 -¥5',
+            amount: 5,
+            sign_hint: 'discount',
+            source_line_index: 3,
+            confidence: 0.95
+          }
+        ]
+        ocr_result[:lines] = [
+          'サンプルマート',
+          'サンプル町5丁目店',
+          'sivendidolo ros',
+          'キャッシュレス還元額 -¥5',
+          '合計 ¥255',
+          'PayPay支払 ¥250',
+          '処理番号 200-205-217-3365'
+        ]
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'e_money'
+          }
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'PayPay支払', amount: 250)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
+        end
+      end
+
       it 'total一致だけでは弱いfallback method由来のpaymentを保存しない' do
         ocr_result[:candidates][:payment_method_text] = 'sivendidolo ros'
         ocr_result[:candidates][:payments] = []
@@ -1034,6 +1072,54 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             include(method: 'クレジットカード', amount: 271)
           )
           expect(params[:receipt_payments_attributes]).not_to include(include(method: 'cash'))
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+        end
+      end
+
+      it '同一行に円金額があるポイント利用とクレジットをreceipt_paymentsとして保存する' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:items] = []
+        ocr_result[:candidates][:total_amount] = 571
+        ocr_result[:lines] = [
+          'サンプルポイント 西テスト店',
+          'サンプル県サンプル市西6-6-6',
+          'サンプルポイント対象A ¥571',
+          '小計 ¥520',
+          '消費税 ¥51',
+          '合計 ¥571',
+          '10%対象計 ¥571',
+          '(内税額 ¥51)',
+          'ポイント利用 ¥300',
+          'クレジット ¥271'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'point_usage',
+              label: 'ポイント利用',
+              amount: 300,
+              sign: 'discount',
+              source_text: 'ポイント利用 ¥300',
+              source_line_index: 8,
+              confidence: 0.98,
+              needs_review: false,
+              review_reasons: []
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'ポイント利用', amount: 300),
+            include(method: 'クレジット', amount: 271)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_items_attributes].map { |item| item[:raw_text] }).to contain_exactly(
+            'サンプルポイント対象A ¥571'
+          )
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
         end
       end
@@ -3595,6 +3681,81 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             needs_review: true,
             review_reasons: include('adjustment_uncertain')
           )
+        )
+      end
+
+      it '住所や店舗情報の数字から返品adjustmentをfallback生成しない' do
+        ocr_result[:candidates][:items] = []
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'サンプル県サンプル市返品8-8-8',
+            source_line_index: 1,
+            amount: 8,
+            sign_hint: 'discount',
+            confidence: BigDecimal('0.86'),
+            candidate_reason: 'label_same_line_amount',
+            needs_review: true
+          },
+          {
+            source_text: '返品 サンプル返品対象A -¥980',
+            source_line_index: 5,
+            amount: 980,
+            sign_hint: 'discount',
+            confidence: BigDecimal('0.91'),
+            candidate_reason: 'label_same_line_amount',
+            needs_review: true
+          }
+        ]
+        ocr_result[:lines] = [
+          'サンプル返品 返金テスト店',
+          'サンプル県サンプル市返品8-8-8',
+          '2026-01-22 16:45',
+          'サンプル返品対象A ¥1,280',
+          'サンプル購入品B ¥300',
+          '返品 サンプル返品対象A -¥980',
+          '合計 ¥660'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'return_refund', label: '返品 サンプル返品対象A -¥980', amount: 980, sign: 'discount')
+          )
+          expect(params[:receipt_adjustments_attributes]).not_to include(
+            include(label: 'サンプル県サンプル市返品8-8-8', amount: 8)
+          )
+        end
+      end
+
+      it 'AI返品adjustmentがgeneric labelでもOCR行からkindと詳細labelを補う' do
+        ocr_result[:lines] = [
+          'サンプル返品 返金テスト店',
+          'サンプル県サンプル市返品8-8-8',
+          'サンプル購入品B ¥300',
+          '返品 サンプル返品対象A -¥980',
+          '合計 ¥660'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'other',
+              label: '返品',
+              amount: 980,
+              sign: 'discount',
+              source_text: '返品',
+              source_line_index: 3,
+              confidence: 0.98,
+              needs_review: false,
+              review_reasons: []
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'return_refund', label: '返品 サンプル返品対象A', amount: 980, sign: 'discount')
         )
       end
 
