@@ -12,9 +12,17 @@ RSpec.describe 'AI provider adapter contract' do
       final_provider
       model
       provider
+      provider_error_code
+      provider_error_type
+      provider_message
       provider_status
+      quota_exceeded
       rate_limited
+      request_id
+      retry_after
       response_id
+      auth_error
+      phase
       retry_after_used
       retry_count
       token_usage

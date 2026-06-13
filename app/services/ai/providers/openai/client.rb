@@ -74,31 +74,63 @@ module Ai
           request.body = JSON.generate(body)
 
           response = http.request(request)
+          error_detail = provider_error_detail(response, request_body: body)
+
+          if quota_exceeded_response?(response, error_detail)
+            raise Ai::Errors::ProviderError.new(
+              message: "OpenAI API quota exceeded: #{response.code}",
+              error_code: "ai_quota_exceeded",
+              provider: PROVIDER_NAME,
+              category: :billing_quota,
+              retryable: false,
+              fallbackable: true,
+              retry_after: retry_after_from_response(response),
+              provider_status: response.code,
+              **provider_error_attributes(error_detail),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail)
+            )
+          end
 
           if auth_error_response?(response)
             raise Ai::Errors::AuthError.new(
               message: "OpenAI API auth error: #{response.code}",
-              error_code: "ai_api_error",
+              error_code: "ai_auth_error",
               provider: PROVIDER_NAME,
               category: :auth,
               retryable: false,
               fallbackable: false,
               provider_status: response.code,
-              metrics: error_metrics(provider_status: response.code, request_body: body)
+              **provider_error_attributes(error_detail.merge(auth_error: true)),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail.merge(auth_error: true))
             )
           end
 
           if rate_limit_response?(response)
             raise Ai::Errors::RateLimitError.new(
               message: "OpenAI API rate limit error: #{response.code}",
-              error_code: "ai_api_error",
+              error_code: "ai_rate_limited",
               provider: PROVIDER_NAME,
               category: :rate_limit,
               retryable: true,
               fallbackable: true,
               retry_after: retry_after_from_response(response),
               provider_status: response.code,
-              metrics: error_metrics(provider_status: response.code, request_body: body, rate_limited: true)
+              **provider_error_attributes(error_detail.merge(rate_limited: true)),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail.merge(rate_limited: true))
+            )
+          end
+
+          if invalid_request_response?(response)
+            raise Ai::Errors::ProviderError.new(
+              message: "OpenAI API invalid request: #{response.code}",
+              error_code: "ai_invalid_request",
+              provider: PROVIDER_NAME,
+              category: :invalid_request,
+              retryable: false,
+              fallbackable: false,
+              provider_status: response.code,
+              **provider_error_attributes(error_detail),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail)
             )
           end
 
@@ -112,7 +144,8 @@ module Ai
               fallbackable: true,
               retry_after: retry_after_from_response(response),
               provider_status: response.code,
-              metrics: error_metrics(provider_status: response.code, request_body: body)
+              **provider_error_attributes(error_detail),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail)
             )
           end
 
@@ -125,7 +158,8 @@ module Ai
               retryable: true,
               fallbackable: true,
               provider_status: response.code,
-              metrics: error_metrics(provider_status: response.code, request_body: body)
+              **provider_error_attributes(error_detail),
+              metrics: error_metrics(provider_status: response.code, request_body: body, error_detail: error_detail)
             )
           end
 
@@ -138,6 +172,14 @@ module Ai
 
         def rate_limit_response?(response)
           response.code.to_i == 429
+        end
+
+        def quota_exceeded_response?(response, error_detail)
+          response.code.to_i == 429 && error_detail[:quota_exceeded] == true
+        end
+
+        def invalid_request_response?(response)
+          response.code.to_i == 400 || response.code.to_i == 422
         end
 
         def server_error_response?(response)
@@ -233,12 +275,48 @@ module Ai
           )
         end
 
-        def error_metrics(provider_status:, request_body: nil, rate_limited: false)
-          Ai::ProviderMetrics.build(
+        def provider_error_detail(response, request_body:)
+          ExternalServices.error_detail(
+            service: :ai,
             provider: PROVIDER_NAME,
-            model: request_model(request_body),
-            provider_status: provider_status,
-            rate_limited: rate_limited
+            phase: :ai_request,
+            http_status: response.code,
+            body: response.body,
+            headers: response_headers(response),
+            retry_after: retry_after_from_response(response),
+            model: request_model(request_body)
+          )
+        end
+
+        def response_headers(response)
+          headers = {}
+          response.each_header { |key, value| headers[key] = value } if response.respond_to?(:each_header)
+          headers
+        end
+
+        def provider_error_attributes(error_detail)
+          {
+            provider_error_code: error_detail[:provider_error_code],
+            provider_error_type: error_detail[:provider_error_type],
+            provider_message: error_detail[:provider_message_safe],
+            request_id: error_detail[:request_id],
+            quota_exceeded: error_detail[:quota_exceeded],
+            rate_limited: error_detail[:rate_limited],
+            auth_error: error_detail[:auth_error],
+            phase: error_detail[:phase]
+          }.compact
+        end
+
+        def error_metrics(provider_status:, request_body: nil, rate_limited: false, error_detail: nil)
+          detail = error_detail || {}
+          detail_metrics = provider_error_attributes(detail).merge(retry_after: detail[:retry_after]).compact
+          Ai::ProviderMetrics.build(
+            {
+              provider: PROVIDER_NAME,
+              model: request_model(request_body),
+              provider_status: provider_status,
+              rate_limited: rate_limited
+            }.merge(detail_metrics)
           )
         end
 

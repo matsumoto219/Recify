@@ -13,6 +13,20 @@ module Ai
     # - エラー箇所の詳細情報の付与
     # - プロバイダー固有のレスポンス差異の吸収
     class InvalidResponseError < ProviderError
+      def initialize(message: nil, error_code: "ai_invalid_response", provider: nil, category: :invalid_response, retryable: false, fallbackable: false, cause: nil, retry_after: nil, provider_status: nil, **attributes)
+        super(
+          message: message,
+          error_code: error_code,
+          provider: provider,
+          category: category,
+          retryable: retryable,
+          fallbackable: fallbackable,
+          cause: cause,
+          retry_after: retry_after,
+          provider_status: provider_status,
+          **attributes
+        )
+      end
     end
   end
 end

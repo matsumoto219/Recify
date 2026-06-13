@@ -139,42 +139,26 @@ RSpec.describe Ai::Client do
         }
       end
 
-      it 'AuthError 時は fallback を試し、成功すれば fallback 結果を返す' do
-        fallback_result = {
-          success: true,
-          receipt_attributes: { store_name: 'Fallback Store' },
-          receipt_items_attributes: []
-        }
+      it 'AuthError 時は fallback で隠さずそのまま送出する' do
+        allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::AuthError.new(message: 'auth failed', error_code: 'ai_auth_error'))
+        allow(fallback_client).to receive(:call)
 
-        allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::AuthError.new(message: 'auth failed'))
-        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
+        expect do
+          client.call(input)
+        end.to raise_error(Ai::Errors::AuthError, 'auth failed')
 
-        result = client.call(input)
-
-        aggregate_failures do
-          expect(result[:success]).to eq(true)
-          expect(result.dig(:meta, :fallback_used)).to eq(true)
-          expect(fallback_client).to have_received(:call).with(input)
-        end
+        expect(fallback_client).not_to have_received(:call)
       end
 
-      it 'InvalidResponseError 時は fallback を試し、成功すれば fallback 結果を返す' do
-        fallback_result = {
-          success: true,
-          receipt_attributes: { store_name: 'Fallback Store' },
-          receipt_items_attributes: []
-        }
-
+      it 'InvalidResponseError 時は fallback で隠さずそのまま送出する' do
         allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::InvalidResponseError.new(message: 'invalid response'))
-        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
+        allow(fallback_client).to receive(:call)
 
-        result = client.call(input)
+        expect do
+          client.call(input)
+        end.to raise_error(Ai::Errors::InvalidResponseError, 'invalid response')
 
-        aggregate_failures do
-          expect(result[:success]).to eq(true)
-          expect(result.dig(:meta, :fallback_used)).to eq(true)
-          expect(fallback_client).to have_received(:call).with(input)
-        end
+        expect(fallback_client).not_to have_received(:call)
       end
     end
 

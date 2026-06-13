@@ -71,6 +71,7 @@ module Ai
           cause: error.cause,
           retry_after: error.retry_after,
           provider_status: error.provider_status,
+          **provider_error_attributes(error),
           metrics: metrics
         )
       end
@@ -85,8 +86,22 @@ module Ai
         cause: error.cause,
         retry_after: error.retry_after,
         provider_status: error.provider_status,
+        **provider_error_attributes(error),
         metrics: metrics
       )
+    end
+
+    def provider_error_attributes(error)
+      {
+        provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : nil,
+        provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : nil,
+        provider_message: error.respond_to?(:provider_message) ? error.provider_message : nil,
+        request_id: error.respond_to?(:request_id) ? error.request_id : nil,
+        quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : nil,
+        rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : nil,
+        auth_error: error.respond_to?(:auth_error) ? error.auth_error : nil,
+        phase: error.respond_to?(:phase) ? error.phase : nil
+      }
     end
 
     def retry?(error, attempts)

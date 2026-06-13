@@ -250,6 +250,7 @@ RSpec.describe Ai::Providers::Openai::Client do
     let(:response) { instance_double(Net::HTTPSuccess, code: code, body: body) }
     let(:code) { '200' }
     let(:body) { '{"id":"resp_123"}' }
+    let(:headers) { {} }
 
     before do
       allow(URI).to receive(:parse).and_return(uri)
@@ -265,6 +266,9 @@ RSpec.describe Ai::Providers::Openai::Client do
         klass == Net::HTTPSuccess && code.start_with?('2')
       end
       allow(response).to receive(:[]).with('Retry-After').and_return(nil)
+      allow(response).to receive(:each_header) do |&block|
+        headers.each { |key, value| block.call(key, value) } if block
+      end
     end
 
     it '200系なら parse_response_body の結果を返す' do
@@ -306,40 +310,93 @@ RSpec.describe Ai::Providers::Openai::Client do
 
     it '401 は AuthError を送出する' do
       allow(response).to receive(:code).and_return('401')
-      allow(response).to receive(:body).and_return('{"error":"auth"}')
+      allow(response).to receive(:body).and_return({ error: { type: 'invalid_api_key', code: 'invalid_api_key', message: 'Invalid API key' } }.to_json)
 
       expect do
         client.send(:post_request, request_body)
       end.to raise_error(Ai::Errors::AuthError) { |error|
-        expect(error.message).to include('OpenAI API auth error: 401')
+        aggregate_failures do
+          expect(error.message).to include('OpenAI API auth error: 401')
+          expect(error.error_code).to eq('ai_auth_error')
+          expect(error.category).to eq(:auth)
+          expect(error.auth_error).to eq(true)
+          expect(error.provider_error_code).to eq('invalid_api_key')
+          expect(error.provider_error_type).to eq('invalid_api_key')
+          expect(error.provider_message).to eq('Invalid API key')
+        end
       }
     end
 
     it '403 は AuthError を送出する' do
       allow(response).to receive(:code).and_return('403')
-      allow(response).to receive(:body).and_return('{"error":"forbidden"}')
+      allow(response).to receive(:body).and_return({ error: { type: 'permission_error', code: 'permission_denied', message: 'Permission denied' } }.to_json)
 
       expect do
         client.send(:post_request, request_body)
       end.to raise_error(Ai::Errors::AuthError) { |error|
-        expect(error.message).to include('OpenAI API auth error: 403')
+        expect(error.error_code).to eq('ai_auth_error')
       }
     end
 
     it '429 は RateLimitError を送出する' do
       allow(response).to receive(:code).and_return('429')
-      allow(response).to receive(:body).and_return('{"error":"rate limited"}')
+      allow(response).to receive(:body).and_return({ error: { type: 'rate_limit_error', code: 'rate_limit_exceeded', message: 'Rate limit exceeded' } }.to_json)
 
       expect do
         client.send(:post_request, request_body)
       end.to raise_error(Ai::Errors::RateLimitError) { |error|
-        expect(error.message).to include('OpenAI API rate limit error: 429')
+        aggregate_failures do
+          expect(error.message).to include('OpenAI API rate limit error: 429')
+          expect(error.error_code).to eq('ai_rate_limited')
+          expect(error.category).to eq(:rate_limit)
+          expect(error).to be_retryable
+          expect(error).to be_fallbackable
+          expect(error.rate_limited).to eq(true)
+          expect(error.provider_error_code).to eq('rate_limit_exceeded')
+        end
+      }
+    end
+
+    it '429 quota exceeded は ai_quota_exceeded としてretryせずfallback候補にする' do
+      allow(response).to receive(:code).and_return('429')
+      allow(response).to receive(:body).and_return(
+        {
+          error: {
+            type: 'insufficient_quota',
+            code: 'insufficient_quota',
+            message: 'You exceeded your current quota.'
+          }
+        }.to_json
+      )
+      allow(response).to receive(:[]).with('Retry-After').and_return('5')
+
+      expect do
+        client.send(:post_request, request_body)
+      end.to raise_error(Ai::Errors::ProviderError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_quota_exceeded')
+          expect(error.category).to eq(:billing_quota)
+          expect(error).not_to be_retryable
+          expect(error).to be_fallbackable
+          expect(error.quota_exceeded).to eq(true)
+          expect(error.retry_after).to eq(5.0)
+          expect(error.provider_error_code).to eq('insufficient_quota')
+          expect(error.provider_message).to eq('You exceeded your current quota.')
+          expect(error.metrics).to include(
+            provider_error_code: 'insufficient_quota',
+            provider_error_type: 'insufficient_quota',
+            provider_message: 'You exceeded your current quota.',
+            retry_after: 5.0,
+            quota_exceeded: true,
+            phase: 'ai_request'
+          )
+        end
       }
     end
 
     it '429 の Retry-After を RateLimitError に保持する' do
       allow(response).to receive(:code).and_return('429')
-      allow(response).to receive(:body).and_return('{"error":"rate limited"}')
+      allow(response).to receive(:body).and_return({ error: { type: 'rate_limit_error', code: 'rate_limit_exceeded', message: 'Rate limit exceeded' } }.to_json)
       allow(response).to receive(:[]).with('Retry-After').and_return('4')
 
       expect do
@@ -362,13 +419,19 @@ RSpec.describe Ai::Providers::Openai::Client do
 
     it 'その他の非成功レスポンスは ProviderError を送出する' do
       allow(response).to receive(:code).and_return('422')
-      allow(response).to receive(:body).and_return('{"error":"unprocessable"}')
+      allow(response).to receive(:body).and_return({ error: { type: 'invalid_request_error', code: 'invalid_request', message: 'Bad request' } }.to_json)
       allow(response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
 
       expect do
         client.send(:post_request, request_body)
       end.to raise_error(Ai::Errors::ProviderError) { |error|
-        expect(error.message).to include('OpenAI API error: 422')
+        aggregate_failures do
+          expect(error.message).to include('OpenAI API invalid request: 422')
+          expect(error.error_code).to eq('ai_invalid_request')
+          expect(error.category).to eq(:invalid_request)
+          expect(error).not_to be_retryable
+          expect(error).not_to be_fallbackable
+        end
       }
     end
 

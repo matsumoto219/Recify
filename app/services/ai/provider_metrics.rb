@@ -31,6 +31,14 @@ module Ai
           total_retry_sleep_ms: safe_numeric(metrics[:total_retry_sleep_ms]),
           rate_limited: safe_boolean(metrics, :rate_limited),
           provider_status: safe_string(metrics[:provider_status]),
+          provider_error_code: safe_string(metrics[:provider_error_code]),
+          provider_error_type: safe_string(metrics[:provider_error_type]),
+          provider_message: safe_message(metrics[:provider_message]),
+          request_id: safe_string(metrics[:request_id]),
+          retry_after: safe_numeric(metrics[:retry_after]),
+          quota_exceeded: safe_boolean(metrics, :quota_exceeded),
+          auth_error: safe_boolean(metrics, :auth_error),
+          phase: safe_string(metrics[:phase]),
           token_usage: token_usage(metrics[:token_usage]).presence,
           response_id: safe_string(metrics[:response_id]),
           fallback_used: safe_boolean(metrics, :fallback_used),
@@ -58,6 +66,15 @@ module Ai
 
       def safe_string(value)
         value.to_s.presence if value.present?
+      end
+
+      def safe_message(value)
+        message = safe_string(value)
+        return if message.blank?
+
+        message
+          .gsub(/Bearer\s+[A-Za-z0-9._\-]+/i, "[FILTERED]")
+          .gsub(/\bsk-[A-Za-z0-9_\-]{10,}\b/i, "[FILTERED]")
       end
 
       def safe_numeric(value)

@@ -21,6 +21,7 @@ module ExternalServices
       phase
       http_status
       provider_error_code
+      provider_error_type
       provider_message_safe
       request_id
       region
@@ -51,6 +52,7 @@ module ExternalServices
       phase: nil,
       http_status: nil,
       provider_error_code: nil,
+      provider_error_type: nil,
       provider_message: nil,
       provider_message_safe: nil,
       request_id: nil,
@@ -71,6 +73,7 @@ module ExternalServices
         phase: safe_string(phase),
         http_status: safe_integer(http_status),
         provider_error_code: safe_string(provider_error_code),
+        provider_error_type: safe_string(provider_error_type),
         provider_message_safe: safe_message(provider_message_safe || provider_message),
         request_id: safe_string(request_id),
         region: safe_string(region),
@@ -90,6 +93,7 @@ module ExternalServices
       body_data = body_error_data
       detail = @attributes.merge(
         provider_error_code: @attributes[:provider_error_code] || body_data[:provider_error_code],
+        provider_error_type: @attributes[:provider_error_type] || body_data[:provider_error_type],
         provider_message_safe: @attributes[:provider_message_safe] || body_data[:provider_message_safe],
         request_id: @attributes[:request_id] || header_value(REQUEST_ID_HEADERS) || body_data[:request_id],
         region: @attributes[:region] || header_value(REGION_HEADERS),
@@ -112,10 +116,12 @@ module ExternalServices
       source = error.presence || normalized_hash(parsed)
 
       code = source[:code] || source["code"] || source[:status] || source["status"] || source[:type] || source["type"]
+      type = source[:type] || source["type"] || source[:status] || source["status"]
       message = source[:message] || source["message"] || (source if source.is_a?(String))
 
       {
         provider_error_code: safe_string(code),
+        provider_error_type: safe_string(type),
         provider_message_safe: safe_message(message),
         request_id: safe_string(parsed[:request_id] || parsed["request_id"])
       }.compact
@@ -151,7 +157,7 @@ module ExternalServices
 
     def quota_exceeded?(data)
       text = classification_text(data)
-      text.match?(/quota|insufficient_quota|call volume|resource_exhausted|exceeded/i)
+      text.match?(/quota|insufficient_quota|call volume|resource_exhausted/i)
     end
 
     def rate_limited?(data)

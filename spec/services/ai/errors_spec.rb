@@ -12,6 +12,14 @@ RSpec.describe Ai::Errors::ProviderError do
       fallbackable: true,
       retry_after: 2.5,
       provider_status: 429,
+      provider_error_code: 'rate_limit_exceeded',
+      provider_error_type: 'rate_limit_error',
+      provider_message: 'Rate limit exceeded',
+      request_id: 'req_123',
+      quota_exceeded: false,
+      rate_limited: true,
+      auth_error: false,
+      phase: 'ai_request',
       cause: cause,
       metrics: {
         retry_count: 2,
@@ -34,7 +42,16 @@ RSpec.describe Ai::Errors::ProviderError do
         provider: 'openai',
         retry_count: 2,
         retry_after_used: true,
-        provider_status: '429'
+        provider_status: '429',
+        provider_error_code: 'rate_limit_exceeded',
+        provider_error_type: 'rate_limit_error',
+        provider_message: 'Rate limit exceeded',
+        request_id: 'req_123',
+        retry_after: 2.5,
+        rate_limited: true,
+        quota_exceeded: false,
+        auth_error: false,
+        phase: 'ai_request'
       )
       expect(error.metrics).not_to have_key(:headers)
     end
