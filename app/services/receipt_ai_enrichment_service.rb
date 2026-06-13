@@ -52,8 +52,7 @@ class ReceiptAiEnrichmentService
     )
     capture_input!(input)
 
-    before_provider_call&.call
-    result = client.call(input)
+    result = call_ai_client(input)
 
     if ai_service_healthy_result?(result)
       ExternalServices.mark_success!(:ai)
@@ -117,6 +116,12 @@ class ReceiptAiEnrichmentService
     else
       ExternalServices.mark_failure!(:ai, error_code: error_code)
     end
+  end
+
+  def call_ai_client(input)
+    return client.call(input, before_provider_call: before_provider_call) if before_provider_call
+
+    client.call(input)
   end
 
   def validate_ocr_result!

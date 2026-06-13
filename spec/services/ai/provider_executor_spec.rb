@@ -62,6 +62,27 @@ RSpec.describe Ai::ProviderExecutor do
       end
     end
 
+    it 'before_provider_callをprovider adapterへ渡す' do
+      callback = instance_double(Proc)
+      callback_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        before_provider_call: callback
+      )
+      allow(callback).to receive(:call)
+      allow(provider_client).to receive(:call)
+        .with(input, before_provider_call: callback)
+        .and_return(provider_result)
+
+      result = callback_executor.call(input)
+
+      aggregate_failures do
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(provider_client).to have_received(:call).with(input, before_provider_call: callback)
+      end
+    end
+
     it 'retry可能なProviderErrorの後に再試行して成功する' do
       call_count = 0
       allow(provider_client).to receive(:call).with(input) do

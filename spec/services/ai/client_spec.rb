@@ -150,6 +150,26 @@ RSpec.describe Ai::Client do
         expect(fallback_client).not_to have_received(:call)
       end
 
+      it 'before_provider_callは呼び出したprovider分だけ実行しfallback未到達分は実行しない' do
+        callback_calls = 0
+        allow(primary_client).to receive(:call)
+          .with(input, before_provider_call: kind_of(Proc)) do |_input, before_provider_call:|
+            before_provider_call.call
+            raise Ai::Errors::AuthError.new(message: 'auth failed', error_code: 'ai_auth_error')
+          end
+        allow(fallback_client).to receive(:call)
+
+        expect do
+          client.call(input, before_provider_call: -> { callback_calls += 1 })
+        end.to raise_error(Ai::Errors::AuthError)
+
+        aggregate_failures do
+          expect(callback_calls).to eq(1)
+          expect(primary_client).to have_received(:call).with(input, before_provider_call: kind_of(Proc)).once
+          expect(fallback_client).not_to have_received(:call)
+        end
+      end
+
       it 'InvalidResponseError 時は fallback で隠さずそのまま送出する' do
         allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::InvalidResponseError.new(message: 'invalid response'))
         allow(fallback_client).to receive(:call)

@@ -8,9 +8,9 @@ module Ai
       @fallback_provider = fallback_provider
     end
 
-    def call(input)
+    def call(input, before_provider_call: nil)
       decorate_success_result(
-        run_primary(input),
+        run_primary(input, before_provider_call: before_provider_call),
         fallback_used: false,
         fallback_provider: fallback_provider,
         fallback_reason: nil,
@@ -22,15 +22,15 @@ module Ai
 
       raise primary_error unless fallback_decision.fallback?
 
-      run_fallback(input, primary_error, fallback_decision)
+      run_fallback(input, primary_error, fallback_decision, before_provider_call: before_provider_call)
     end
 
     private
 
     attr_reader :primary_provider, :fallback_provider
 
-    def run_primary(input)
-      provider_executor(primary_provider).call(input)
+    def run_primary(input, before_provider_call:)
+      provider_executor(primary_provider, before_provider_call: before_provider_call).call(input)
     rescue Ai::Errors::TimeoutError => error
       Rails.logger.error("[AI] primary timeout: #{error.message}")
       raise Ai::Errors::ProviderError.new(
@@ -53,10 +53,10 @@ module Ai
       )
     end
 
-    def run_fallback(input, primary_error, fallback_decision)
+    def run_fallback(input, primary_error, fallback_decision, before_provider_call:)
       Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
 
-      result = provider_executor(fallback_provider).call(input)
+      result = provider_executor(fallback_provider, before_provider_call: before_provider_call).call(input)
 
       decorate_success_result(
         result,
@@ -78,10 +78,11 @@ module Ai
       ProviderRegistry.fetch(provider_name)
     end
 
-    def provider_executor(provider_name)
+    def provider_executor(provider_name, before_provider_call:)
       Ai::ProviderExecutor.new(
         provider_client: provider_client(provider_name),
-        provider_name: provider_name
+        provider_name: provider_name,
+        before_provider_call: before_provider_call
       )
     end
 

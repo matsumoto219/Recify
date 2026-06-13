@@ -5,10 +5,11 @@ module Ai
       backoff_policy: Ai::BackoffPolicy.new(base_delay: 0.0, max_delay: 0.0, jitter: -> { 0.0 })
     )
 
-    def initialize(provider_client:, provider_name: nil, retry_policy: nil)
+    def initialize(provider_client:, provider_name: nil, retry_policy: nil, before_provider_call: nil)
       @provider_client = provider_client
       @provider_name = provider_name
       @retry_policy = retry_policy
+      @before_provider_call = before_provider_call
     end
 
     def call(input)
@@ -17,7 +18,7 @@ module Ai
 
       begin
         attempts += 1
-        result = ensure_provider_result!(provider_client.call(input))
+        result = ensure_provider_result!(call_provider(input))
         build_result(result)
       rescue Ai::Errors::ProviderError => error
         enriched_error = build_error(error)
@@ -34,7 +35,13 @@ module Ai
 
     private
 
-    attr_reader :provider_client, :provider_name, :retry_policy
+    attr_reader :provider_client, :provider_name, :retry_policy, :before_provider_call
+
+    def call_provider(input)
+      return provider_client.call(input, before_provider_call: before_provider_call) if before_provider_call
+
+      provider_client.call(input)
+    end
 
     def build_result(result)
       metrics = Ai::ProviderMetrics.merge(current_metrics, result.metrics)

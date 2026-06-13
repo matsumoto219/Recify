@@ -198,6 +198,78 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     end
   end
 
+  it 'OpenAI key未設定ではAI API未到達としてAI counterを消費しない' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+
+    with_env(
+      'OPENAI_API_KEY' => nil,
+      'OPENAI_AI_MODEL' => 'gpt-test',
+      'AI_FALLBACK_PROVIDER' => nil
+    ) do
+      result = ReceiptAnalysisPipeline.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
+        expect(run.reload.ai_normalized_result_snapshot).to include('success' => false)
+      end
+    end
+  end
+
+  it 'OpenAI model未設定ではAI API未到達としてAI counterを消費しない' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+
+    with_env(
+      'OPENAI_API_KEY' => 'test-openai-key',
+      'OPENAI_AI_MODEL' => nil,
+      'AI_FALLBACK_PROVIDER' => nil
+    ) do
+      result = ReceiptAnalysisPipeline.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
+        expect(run.reload.ai_normalized_result_snapshot).to include('success' => false)
+      end
+    end
+  end
+
+  it 'AI provider HTTP到達時はAI counterを消費する' do
+    receipt = create(:receipt, :processing, :with_image, user: user)
+    run = create(:receipt_analysis_run, receipt: receipt)
+    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    provider_client = double('ProviderClient')
+    allow(Ai::ProviderRegistry).to receive(:fetch).with('openai').and_return(provider_client)
+    allow(provider_client).to receive(:call) do |_input, before_provider_call:|
+      before_provider_call.call
+      raise Ai::Errors::ProviderError.new(
+        message: 'quota',
+        error_code: 'ai_quota_exceeded',
+        provider: 'openai',
+        category: :billing_quota,
+        fallbackable: false
+      )
+    end
+
+    with_env(
+      'OPENAI_API_KEY' => 'test-openai-key',
+      'OPENAI_AI_MODEL' => 'gpt-test',
+      'AI_FALLBACK_PROVIDER' => nil
+    ) do
+      result = ReceiptAnalysisPipeline.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(provider_client).to have_received(:call).once
+        expect(UsageCounter.find_by!(user: user, key: 'ai_jobs_per_day').used_count).to eq(1)
+      end
+    end
+  end
+
   it 'OCR provider quota exceededはAPI submit到達済みとしてcounterを消費しsafe detailを保存する' do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)

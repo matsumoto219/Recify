@@ -19,9 +19,14 @@ module Ai
         BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
         MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
 
-        def call(input)
+        def call(input, before_provider_call: nil)
           body = RequestBuilder.build(input)
-          response = post_request(body)
+          response =
+            if before_provider_call
+              post_request(body, before_provider_call: before_provider_call)
+            else
+              post_request(body)
+            end
 
           payload = ResponseParser.parse(attach_response_metrics(response, request_body: body))
           Ai::ProviderResult.new(
@@ -40,6 +45,8 @@ module Ai
           )
         rescue Ai::Errors::ProviderError => e
           raise e
+        rescue Usage::LimitExceeded
+          raise
         rescue StandardError => e
           raise Ai::Errors::ProviderError.new(
             message: e.message,
@@ -63,7 +70,7 @@ module Ai
 
         private
 
-        def post_request(body)
+        def post_request(body, before_provider_call: nil)
           uri = URI.parse(ENDPOINT)
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = true
@@ -72,6 +79,7 @@ module Ai
 
           request = Net::HTTP::Post.new(uri.request_uri, headers)
           request.body = JSON.generate(body)
+          before_provider_call&.call
 
           response = http.request(request)
           error_detail = provider_error_detail(response, request_body: body)

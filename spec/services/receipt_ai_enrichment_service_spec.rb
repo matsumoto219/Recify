@@ -68,7 +68,8 @@ RSpec.describe ReceiptAiEnrichmentService do
         events = []
         before_provider_call = -> { events << :before_provider_call }
         allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
-        allow(client).to receive(:call).with({ filtered_content: 'test' }) do
+        allow(client).to receive(:call).with({ filtered_content: 'test' }, before_provider_call: before_provider_call) do |_input, before_provider_call:|
+          before_provider_call.call
           events << :client_call
           successful_ai_result
         end

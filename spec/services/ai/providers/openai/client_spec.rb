@@ -105,6 +105,23 @@ RSpec.describe Ai::Providers::Openai::Client do
       end
     end
 
+    it 'before_provider_callをpost_requestへ渡す' do
+      callback = instance_double(Proc)
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      allow(client).to receive(:post_request)
+        .with(request_body, before_provider_call: callback)
+        .and_return({ 'id' => 'resp_123' })
+      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
+        .and_return(parsed_response)
+
+      result = client.call(input, before_provider_call: callback)
+
+      aggregate_failures do
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(client).to have_received(:post_request).with(request_body, before_provider_call: callback)
+      end
+    end
+
     it '成功時のmetricsをmetaへ渡す' do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body).and_return(
@@ -285,6 +302,37 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(Net::HTTP::Post).to have_received(:new)
         expect(request).to have_received(:body=).with(request_body.to_json)
         expect(result).to eq({ 'id' => 'resp_123' })
+      end
+    end
+
+    it 'OPENAI_API_KEY未設定ではprovider callbackを呼ばずHTTPへ到達しない' do
+      callback = instance_double(Proc)
+      allow(callback).to receive(:call)
+      allow(http).to receive(:request)
+
+      with_env('OPENAI_API_KEY' => nil) do
+        expect do
+          client.send(:post_request, request_body, before_provider_call: callback)
+        end.to raise_error(Ai::Errors::AuthError)
+      end
+
+      aggregate_failures do
+        expect(callback).not_to have_received(:call)
+        expect(http).not_to have_received(:request)
+      end
+    end
+
+    it 'provider HTTP直前にprovider callbackを呼ぶ' do
+      callback = instance_double(Proc)
+      allow(callback).to receive(:call)
+
+      with_env('OPENAI_API_KEY' => 'test-openai-key') do
+        client.send(:post_request, request_body, before_provider_call: callback)
+      end
+
+      aggregate_failures do
+        expect(callback).to have_received(:call).once
+        expect(http).to have_received(:request).with(request).once
       end
     end
 
