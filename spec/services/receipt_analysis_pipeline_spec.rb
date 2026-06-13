@@ -598,6 +598,11 @@ RSpec.describe ReceiptAnalysisPipeline do
             'success' => false,
             'error_code' => 'ocr_disabled'
           )
+          expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+            'disabled' => true,
+            'source' => 'env',
+            'reason' => 'RECEIPT_OCR_ENABLED'
+          )
         end
       end
     end
@@ -621,6 +626,11 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.ocr_result_snapshot).to include(
           'success' => false,
           'error_code' => 'ocr_disabled'
+        )
+        expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to include(
+          'disabled' => true,
+          'source' => 'system_setting',
+          'reason' => 'operations.ocr_enabled'
         )
       end
     end

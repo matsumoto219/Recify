@@ -145,6 +145,25 @@ RSpec.describe ExternalServices do
     end
   end
 
+  describe '.unavailable_detail' do
+    it '停止中のsource/reasonをsafe detailとして返す' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: described_class_setting(false))
+
+      expect(described_class.unavailable_detail(:ocr, provider: 'azure_document_intelligence', phase: 'preflight')).to include(
+        service: 'ocr',
+        provider: 'azure_document_intelligence',
+        phase: 'preflight',
+        disabled: true,
+        source: 'system_setting',
+        reason: 'operations.ocr_enabled'
+      )
+    end
+
+    it '利用可能ならnilを返す' do
+      expect(described_class.unavailable_detail(:ocr)).to be_nil
+    end
+  end
+
   describe '.status_snapshot' do
     it 'StatusSnapshotへ委譲する' do
       payload = { upload: { allowed: true } }

@@ -32,6 +32,9 @@ module ExternalServices
       rate_limited
       quota_exceeded
       auth_error
+      disabled
+      source
+      reason
     ].freeze
     SECRET_PATTERNS = [
       /Bearer\s+[A-Za-z0-9._\-]+/i,
@@ -64,6 +67,9 @@ module ExternalServices
       rate_limited: nil,
       quota_exceeded: nil,
       auth_error: nil,
+      disabled: nil,
+      source: nil,
+      reason: nil,
       body: nil,
       headers: nil
     )
@@ -83,7 +89,10 @@ module ExternalServices
         model: safe_string(model),
         rate_limited: safe_boolean(rate_limited),
         quota_exceeded: safe_boolean(quota_exceeded),
-        auth_error: safe_boolean(auth_error)
+        auth_error: safe_boolean(auth_error),
+        disabled: safe_boolean(disabled),
+        source: safe_string(source),
+        reason: safe_string(reason)
       }
       @body = body
       @headers = normalized_headers(headers)

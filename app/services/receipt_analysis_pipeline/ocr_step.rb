@@ -11,13 +11,18 @@ class ReceiptAnalysisPipeline
 
     def call
       ocr_result =
-        if ocr_enabled?
-          ReceiptOcrService.call(receipt.image)
-        else
+        if ocr_unavailable?
           ReceiptOcrService.error_result(
             error_code: "ocr_disabled",
-            provider: "azure_document_intelligence"
+            provider: "azure_document_intelligence",
+            provider_error_detail: ExternalServices.unavailable_detail(
+              :ocr,
+              provider: "azure_document_intelligence",
+              phase: "preflight"
+            )
           )
+        else
+          ReceiptOcrService.call(receipt.image)
         end
 
       ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
@@ -30,10 +35,8 @@ class ReceiptAnalysisPipeline
 
     attr_reader :run, :receipt
 
-    def ocr_enabled?
-      ActiveModel::Type::Boolean.new.cast(
-        ENV.fetch(Config::OCR_ENABLED_ENV_KEY, "true")
-      )
+    def ocr_unavailable?
+      ExternalServices.down?(:ocr)
     end
   end
 end

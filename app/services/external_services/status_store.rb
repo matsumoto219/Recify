@@ -216,7 +216,10 @@ module ExternalServices
           model: normalized[:model],
           rate_limited: normalized[:rate_limited],
           quota_exceeded: normalized[:quota_exceeded],
-          auth_error: normalized[:auth_error]
+          auth_error: normalized[:auth_error],
+          disabled: normalized[:disabled],
+          source: normalized[:source],
+          reason: normalized[:reason]
         ).presence
       end
 

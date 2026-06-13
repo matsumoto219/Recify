@@ -634,7 +634,10 @@ module ReceiptAnalysisRuns
         model: detail[:model],
         rate_limited: detail[:rate_limited],
         quota_exceeded: detail[:quota_exceeded],
-        auth_error: detail[:auth_error]
+        auth_error: detail[:auth_error],
+        disabled: detail[:disabled],
+        source: detail[:source],
+        reason: detail[:reason]
       )
     end
 

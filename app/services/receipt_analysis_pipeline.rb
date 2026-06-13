@@ -46,7 +46,9 @@ class ReceiptAnalysisPipeline
   def run_ocr
     return skipped_result(:terminal_run) if terminal_run?
     return cancel_and_skip(:not_processing) unless receipt.processing?
-    return ocr_service_disabled_result if ExternalServices.down?(:ocr)
+    if (disabled_snapshot = ocr_unavailable_snapshot)
+      return ocr_service_disabled_result(disabled_snapshot)
+    end
     return usage_limit_blocked_result("ocr") unless ocr_provider_call_allowed?
 
     with_run_failure do
@@ -315,14 +317,15 @@ class ReceiptAnalysisPipeline
     Result.new(next_step: :skipped, skip_reason: :terminal_run)
   end
 
-  def ocr_service_disabled_result
+  def ocr_service_disabled_result(disabled_snapshot = ExternalServices.snapshot(:ocr))
     with_run_failure do
       mark_processing!
       ReceiptAnalysisRuns.start_stage(run, "ocr")
 
       ocr_result = ReceiptOcrService.error_result(
         error_code: "ocr_disabled",
-        provider: "azure_document_intelligence"
+        provider: "azure_document_intelligence",
+        provider_error_detail: ocr_unavailable_detail(disabled_snapshot)
       )
       log_ocr_result(ocr_result)
       ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
@@ -344,6 +347,19 @@ class ReceiptAnalysisPipeline
     true
   rescue Usage::LimitExceeded
     false
+  end
+
+  def ocr_unavailable_snapshot
+    snapshot = ExternalServices.snapshot(:ocr)
+    snapshot[:state].to_s == "down" ? snapshot : nil
+  end
+
+  def ocr_unavailable_detail(_disabled_snapshot = nil)
+    ExternalServices.unavailable_detail(
+      :ocr,
+      provider: "azure_document_intelligence",
+      phase: "preflight"
+    )
   end
 
   def ai_provider_call_allowed?

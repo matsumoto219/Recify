@@ -80,6 +80,35 @@ module ExternalServices
       StatusStore.external_error?(error_code)
     end
 
+    def unavailable_detail(service, provider: nil, phase: nil, model: nil)
+      normalized = snapshot(service).with_indifferent_access
+      return nil unless normalized[:state].to_s == "down"
+
+      detail = normalized[:last_error_detail].respond_to?(:with_indifferent_access) ? normalized[:last_error_detail].with_indifferent_access : {}
+
+      error_detail(
+        service: service,
+        provider: provider || detail[:provider],
+        phase: phase || detail[:phase],
+        http_status: detail[:http_status],
+        provider_error_code: detail[:provider_error_code] || normalized[:last_error_code],
+        provider_error_type: detail[:provider_error_type],
+        provider_message_safe: detail[:provider_message_safe],
+        request_id: detail[:request_id],
+        region: detail[:region],
+        retry_after: detail[:retry_after],
+        latency_ms: detail[:latency_ms],
+        poll_count: detail[:poll_count],
+        model: model || detail[:model],
+        rate_limited: detail[:rate_limited],
+        quota_exceeded: detail[:quota_exceeded],
+        auth_error: detail[:auth_error],
+        disabled: normalized[:disabled],
+        source: normalized[:source],
+        reason: normalized[:reason]
+      )
+    end
+
     def status_snapshot(...)
       StatusSnapshot.call(...)
     end
