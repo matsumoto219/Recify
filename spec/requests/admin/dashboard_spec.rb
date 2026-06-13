@@ -441,6 +441,8 @@ RSpec.describe 'Admin dashboard', type: :request do
         ocr: {
           state: 'down',
           text: I18n.t('shared.service_status.down'),
+          disabled: true,
+          source: 'system_setting',
           monitoring: true,
           checked_at: '2026-05-26T12:00:00+09:00',
           next_check_at: '2026-05-26T12:05:00+09:00'
@@ -467,6 +469,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(html).to include('OCRサービス')
         expect(html).to include('AIサービス')
         expect(html).to include('停止中')
+        expect(html).to include('運用停止')
         expect(html).to include('OCR停止中のため停止')
         expect(html).to include('data-action="service-status-polling#pollNow"')
         expect(document.at_css('section.surface-card-blur.h-full.flex.flex-col')).to be_present

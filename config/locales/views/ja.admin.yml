@@ -64,6 +64,8 @@ ja:
         description: OCR / AI の状態とアップロード可否を表示します。
         refresh: 更新
         monitoring: 復旧監視中
+        disabled_by_setting: 運用停止
+        disabled_by_config: 設定停止
         checked_at: 最終確認
         next_check_at: 次回確認
         upload: レシート画像アップロード

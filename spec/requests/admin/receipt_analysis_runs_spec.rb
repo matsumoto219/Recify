@@ -719,6 +719,34 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(reason_textarea['class']).to include('leading-6')
       end
     end
+
+    it 'AI停止中はai_retryをdisabled表示し実行フォームを出さない' do
+      admin = create(:user, :admin)
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: create(:receipt, :completed, :with_image),
+        ocr_result_snapshot: {
+          'success' => true,
+          'lines' => [ 'テストストア', '合計 1000' ],
+          'candidates' => { 'store_name' => 'テストストア', 'total_amount' => 1000 },
+          'meta' => {}
+        }
+      )
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('ai_retry')
+        expect(response.body).to include('ai_unavailable')
+        expect(response.body).not_to include('value="ai_retry"')
+        expect(response.body).to include('value="full_reanalyze"')
+      end
+    end
   end
 
   describe 'POST /admin/receipt_analysis_runs/:run_key/retry' do

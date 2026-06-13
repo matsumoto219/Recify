@@ -61,7 +61,11 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("settings.index.services.#{row[:service]}") %></dt>
         <dd class="mt-1 flex flex-wrap items-center gap-2">
           <span class="font-semibold <%= row[:state_class] %>"><%= row[:state_text] %></span>
-          <% if payload[:monitoring] == true %>
+          <% if payload[:disabled] == true %>
+            <span class="rounded-lg border token-border-soft px-2 py-0.5 text-xs font-semibold token-text-muted">
+              <%= payload[:source].to_s == "system_setting" ? t("admin.dashboard.external_services.disabled_by_setting") : t("admin.dashboard.external_services.disabled_by_config") %>
+            </span>
+          <% elsif payload[:monitoring] == true %>
             <span class="rounded-lg border token-border-soft px-2 py-0.5 text-xs font-semibold token-text-muted">
               <%= t("admin.dashboard.external_services.monitoring") %>
             </span>

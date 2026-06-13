@@ -1249,6 +1249,37 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('[data-service-disabled="ocr"]')).to be_nil
       end
     end
+
+    it 'SystemSettingsでOCR停止中は画像アップロード導線をdisabled表示する' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+
+      get select_input_method_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(document.at_css('[data-service-disabled="ocr"]')).to be_present
+        expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+        expect(document.at_css('a[href="' + new_upload_receipts_path + '"]')).to be_nil
+      end
+    end
+
+    it 'SystemSettingsでAI停止中は画像アップロード導線を維持して注意を表示する' do
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+
+      get select_input_method_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.select_input_method.ai_down'))
+        expect(document.at_css('a[href="' + new_upload_receipts_path + '"]')).to be_present
+        expect(document.at_css('[data-service-disabled="ocr"]')).to be_nil
+      end
+    end
   end
 
   describe 'GET /receipts/new_upload' do
@@ -1357,6 +1388,23 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.css('button[disabled]').map(&:text).join).to include('ファイルを選択')
         expect(document.css('button[disabled]').map(&:text).join).to include('アップロードして登録')
         expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+      end
+    end
+
+    it 'SystemSettingsでAI停止中はアップロード操作を維持してAI停止noticeを表示する' do
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.new_upload.ai_down'))
+        expect(document.at_css('[data-service-notice-key="ai_down"]')['class']).not_to include('hidden')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="true"]')).to be_present
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('カメラを起動')
+        expect(document.css('button[disabled]').map(&:text).join).not_to include('ファイルを選択')
       end
     end
 
