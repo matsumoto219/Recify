@@ -261,6 +261,57 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'SystemSettingsの再認証windowを超過した再解析を拒否する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(1))
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'expired retry reauth',
+          confirmation: retry_confirmation,
+          reauthentication: reauthentication_context.merge(reauthenticated_at: 2.minutes.ago)
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('reauthentication_required')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'reauthentication_required'
+        )
+      end
+    end
+
+    it 'SystemSettingsの再認証window内なら再解析を許可する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(15))
+
+      result = described_class.call(
+        receipt: receipt,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reason: 'fresh retry reauth',
+        request: request_context,
+        confirmation: retry_confirmation,
+        reauthentication: reauthentication_context.merge(reauthenticated_at: 10.minutes.ago)
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.enqueued_job).to eq(ReceiptOcrJob)
+        expect(ReceiptOcrJob).to have_been_enqueued.with(run_id: result.run.id)
+        expect(AuditLog.last.metadata).to include('reauthenticated' => true)
+      end
+    end
+
     it 'reason blankを拒否し、enqueueしない' do
       expect do
         result = described_class.call(

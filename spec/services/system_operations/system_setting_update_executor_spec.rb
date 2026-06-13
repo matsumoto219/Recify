@@ -215,6 +215,46 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it 'SystemSettingsの再認証windowを超過したHIGH設定更新を拒否する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(1))
+
+      result = described_class.call(
+        key: 'retention.orphan_blobs_hours',
+        value: '72',
+        actor: actor,
+        reason: 'expired high risk update',
+        request: request,
+        reauthentication: reauthentication.merge(reauthenticated_at: 2.minutes.ago),
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('reauthentication_required')
+        expect(SystemSettings.limit_for('retention.orphan_blobs_hours')).to eq(48)
+      end
+    end
+
+    it 'SystemSettingsの再認証window内ならHIGH設定更新を許可する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(15))
+
+      result = described_class.call(
+        key: 'retention.orphan_blobs_hours',
+        value: '72',
+        actor: actor,
+        reason: 'fresh high risk update',
+        request: request,
+        reauthentication: reauthentication.merge(reauthenticated_at: 10.minutes.ago),
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.limit_for('retention.orphan_blobs_hours')).to eq(72)
+        expect(AuditLog.last.metadata).to include('reauthenticated' => true)
+      end
+    end
+
     it 'integer min/max違反を拒否する' do
       result = described_class.call(
         key: 'limits.receipt_upload_soft_limit',
