@@ -75,14 +75,17 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
 
     snapshot = ExternalServices.status_snapshot
+    admin_snapshot = ExternalServices.status_snapshot(include_details: true)
 
     aggregate_failures do
       expect(snapshot.dig(:ocr, :state)).to eq('down')
       expect(snapshot.dig(:ocr, :disabled)).to eq(true)
-      expect(snapshot.dig(:ocr, :source)).to eq('system_setting')
+      expect(snapshot.dig(:ocr, :source)).to be_nil
       expect(snapshot.dig(:ai, :state)).to eq('down')
       expect(snapshot.dig(:ai, :disabled)).to eq(true)
-      expect(snapshot.dig(:ai, :source)).to eq('system_setting')
+      expect(snapshot.dig(:ai, :source)).to be_nil
+      expect(admin_snapshot.dig(:ocr, :source)).to eq('system_setting')
+      expect(admin_snapshot.dig(:ai, :source)).to eq('system_setting')
       expect(snapshot.dig(:upload, :allowed)).to eq(false)
       expect(snapshot.dig(:notices, :ocr_down)).to eq(true)
       expect(snapshot.dig(:notices, :ai_down)).to eq(true)

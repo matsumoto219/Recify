@@ -25,7 +25,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:ocr, :message)).to be_nil
         expect(payload.dig(:ocr, :badge_html)).to be_nil
         expect(payload.dig(:ocr, :disabled)).to eq(false)
-        expect(payload.dig(:ocr, :source)).to eq('status_store')
+        expect(payload.dig(:ocr, :source)).to be_nil
         expect(payload.dig(:ai, :state)).to eq('ok')
         expect(payload.dig(:upload, :allowed)).to eq(true)
         expect(payload.dig(:upload, :ocr_available)).to eq(true)
@@ -38,7 +38,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
       end
     end
 
-    it 'SystemSettingsでOCR停止中ならupload不可とsourceを返す' do
+    it 'SystemSettingsでOCR停止中ならpublic向けには内部sourceを隠してupload不可を返す' do
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
 
       payload = described_class.call
@@ -46,23 +46,25 @@ RSpec.describe ExternalServices::StatusSnapshot do
       aggregate_failures do
         expect(payload.dig(:ocr, :state)).to eq('down')
         expect(payload.dig(:ocr, :disabled)).to eq(true)
-        expect(payload.dig(:ocr, :source)).to eq('system_setting')
-        expect(payload.dig(:ocr, :reason)).to eq('operations.ocr_enabled')
+        expect(payload.dig(:ocr, :source)).to be_nil
+        expect(payload.dig(:ocr, :reason)).to be_nil
+        expect(payload.dig(:ocr, :setting_key)).to be_nil
         expect(payload.dig(:upload, :allowed)).to eq(false)
         expect(payload.dig(:upload, :ocr_available)).to eq(false)
         expect(payload.dig(:notices, :ocr_down)).to eq(true)
       end
     end
 
-    it 'ENVでAI停止中ならOCR-only fallback noticeとsourceを返す' do
+    it 'ENVでAI停止中なら内部env情報を隠してOCR-only fallback noticeを返す' do
       with_env('RECEIPT_AI_ENABLED' => 'false') do
         payload = described_class.call
 
         aggregate_failures do
           expect(payload.dig(:ai, :state)).to eq('down')
           expect(payload.dig(:ai, :disabled)).to eq(true)
-          expect(payload.dig(:ai, :source)).to eq('env')
-          expect(payload.dig(:ai, :reason)).to eq('RECEIPT_AI_ENABLED')
+          expect(payload.dig(:ai, :source)).to be_nil
+          expect(payload.dig(:ai, :reason)).to be_nil
+          expect(payload.dig(:ai, :env_key)).to be_nil
           expect(payload.dig(:upload, :allowed)).to eq(true)
           expect(payload.dig(:upload, :ocr_available)).to eq(true)
           expect(payload.dig(:notices, :ai_down)).to eq(true)
@@ -144,6 +146,8 @@ RSpec.describe ExternalServices::StatusSnapshot do
       aggregate_failures do
         expect(payload.dig(:ocr, :last_error_code)).to eq('external_service_quota_exceeded')
         expect(payload.dig(:ocr, :last_error_reason)).to eq('quota_exceeded')
+        expect(payload.dig(:ocr, :source)).to eq('status_store')
+        expect(payload.dig(:ocr, :reason)).to eq('quota_exceeded')
         expect(payload.dig(:ocr, :last_error_detail)).to include(
           service: 'ocr',
           provider: 'azure_document_intelligence',

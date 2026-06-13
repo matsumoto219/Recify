@@ -77,7 +77,7 @@ RSpec.describe 'External services status', type: :request do
       end
     end
 
-    it 'SystemSettings停止をdisabled/source付きのpayloadとして返す' do
+    it 'SystemSettings停止をdisabled付きで返しpublic payloadでは内部sourceを隠す' do
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
 
@@ -89,12 +89,14 @@ RSpec.describe 'External services status', type: :request do
         expect(response).to have_http_status(:success)
         expect(json.dig('ocr', 'state')).to eq('down')
         expect(json.dig('ocr', 'disabled')).to eq(true)
-        expect(json.dig('ocr', 'source')).to eq('system_setting')
-        expect(json.dig('ocr', 'reason')).to eq('operations.ocr_enabled')
+        expect(json.dig('ocr', 'source')).to be_nil
+        expect(json.dig('ocr', 'reason')).to be_nil
+        expect(json.dig('ocr', 'setting_key')).to be_nil
         expect(json.dig('ai', 'state')).to eq('down')
         expect(json.dig('ai', 'disabled')).to eq(true)
-        expect(json.dig('ai', 'source')).to eq('system_setting')
-        expect(json.dig('ai', 'reason')).to eq('operations.ai_enabled')
+        expect(json.dig('ai', 'source')).to be_nil
+        expect(json.dig('ai', 'reason')).to be_nil
+        expect(json.dig('ai', 'setting_key')).to be_nil
         expect(json.dig('upload', 'allowed')).to eq(false)
         expect(json.dig('notices', 'ocr_down')).to eq(true)
         expect(json.dig('notices', 'ai_down')).to eq(true)

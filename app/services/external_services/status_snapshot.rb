@@ -56,10 +56,6 @@ module ExternalServices
         consecutive_failures: normalized[:consecutive_failures],
         consecutive_successes: normalized[:consecutive_successes],
         disabled: normalized[:disabled] == true,
-        source: normalized[:source],
-        reason: normalized[:reason],
-        setting_key: normalized[:setting_key],
-        env_key: normalized[:env_key],
         text: service_status_text(state),
         message: service_status_message(service, state),
         badge_html: service_status_badge_html(service, state)
@@ -70,6 +66,10 @@ module ExternalServices
 
     def detail_payload(normalized, detail)
       {
+        source: normalized[:source],
+        reason: normalized[:reason],
+        setting_key: normalized[:setting_key],
+        env_key: normalized[:env_key],
         last_error_code: normalized[:last_error_code],
         last_error_reason: normalized[:last_error_reason],
         last_error_detail: detail.presence,
