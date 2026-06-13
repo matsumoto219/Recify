@@ -14,7 +14,6 @@ module SystemOperations
     }.freeze
 
     SAMPLE_RUN_KEY_LIMIT = 20
-    REAUTHENTICATION_WINDOW = 5.minutes
 
     class << self
       def call(operation:, actor:, reason:, cutoff:, limit:, request:, reauthentication:)
@@ -165,14 +164,7 @@ module SystemOperations
     end
 
     def fresh_passkey_reauthentication?
-      reauthenticated_at = reauthentication[:reauthenticated_at]
-      reauthenticated_at = Time.zone.parse(reauthenticated_at.to_s) unless reauthenticated_at.respond_to?(:>=)
-
-      reauthentication[:method] == "passkey" &&
-        reauthenticated_at.present? &&
-        reauthenticated_at >= REAUTHENTICATION_WINDOW.ago
-    rescue ArgumentError, TypeError
-      false
+      Admin.passkey_reauth_fresh?(reauthentication)
     end
 
     def operation_config

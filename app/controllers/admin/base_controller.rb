@@ -1,7 +1,4 @@
 class Admin::BaseController < ApplicationController
-  DEFAULT_ADMIN_PASSKEY_REAUTHENTICATION_WINDOW = 5.minutes
-  ADMIN_PASSKEY_REAUTHENTICATION_WINDOW = DEFAULT_ADMIN_PASSKEY_REAUTHENTICATION_WINDOW
-  ADMIN_PASSKEY_REAUTHENTICATION_WINDOW_SETTING_KEY = "security.admin_passkey_reauth_window_minutes"
   ADMIN_PASSKEY_REAUTHENTICATED_AT_SESSION_KEY = :admin_passkey_reauthenticated_at
   ADMIN_PASSKEY_REAUTHENTICATION_METHOD_SESSION_KEY = :admin_passkey_reauthentication_method
 
@@ -30,10 +27,7 @@ class Admin::BaseController < ApplicationController
   end
 
   def admin_passkey_reauthenticated?
-    context = admin_reauthentication_context
-    context[:method] == "passkey" &&
-      context[:reauthenticated_at].present? &&
-      context[:reauthenticated_at] >= admin_passkey_reauthentication_window.ago
+    Admin.passkey_reauth_fresh?(admin_reauthentication_context)
   end
 
   def admin_reauthentication_context
@@ -59,12 +53,6 @@ class Admin::BaseController < ApplicationController
   def clear_admin_passkey_reauthentication!
     session.delete(ADMIN_PASSKEY_REAUTHENTICATED_AT_SESSION_KEY)
     session.delete(ADMIN_PASSKEY_REAUTHENTICATION_METHOD_SESSION_KEY)
-  end
-
-  def admin_passkey_reauthentication_window
-    SystemSettings.limit_for(ADMIN_PASSKEY_REAUTHENTICATION_WINDOW_SETTING_KEY).minutes
-  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
-    DEFAULT_ADMIN_PASSKEY_REAUTHENTICATION_WINDOW
   end
 
   def parse_admin_reauthenticated_at

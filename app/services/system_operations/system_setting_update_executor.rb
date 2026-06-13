@@ -1,7 +1,6 @@
 module SystemOperations
   class SystemSettingUpdateExecutor
     ACTION = "system_settings.update"
-    REAUTHENTICATION_WINDOW = 5.minutes
 
     class << self
       def call(key:, value:, actor:, reason:, request:, reauthentication:, confirmation: nil)
@@ -185,18 +184,11 @@ module SystemOperations
     end
 
     def fresh_passkey_reauthentication?
-      reauthentication[:method] == "passkey" &&
-        reauthenticated_at.present? &&
-        reauthenticated_at >= REAUTHENTICATION_WINDOW.ago
-    rescue ArgumentError, TypeError
-      false
+      Admin.passkey_reauth_fresh?(reauthentication)
     end
 
     def reauthenticated_at
-      value = reauthentication[:reauthenticated_at]
-      value.respond_to?(:>=) ? value : Time.zone.parse(value.to_s)
-    rescue ArgumentError, TypeError
-      nil
+      Admin.passkey_reauthenticated_at(reauthentication)
     end
 
     def error_code_for(error)

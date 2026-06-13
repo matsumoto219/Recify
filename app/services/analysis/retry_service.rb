@@ -2,7 +2,6 @@ module Analysis
   class RetryService
     SOURCE = "admin_retry".freeze
     CONFIRMATION_TEXT = "RETRY ANALYSIS".freeze
-    REAUTHENTICATION_WINDOW = 5.minutes
     RETRY_TYPES = %w[
       full_reanalyze
       ocr_retry
@@ -163,18 +162,11 @@ module Analysis
     attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication, :confirmation
 
     def fresh_passkey_reauthentication?
-      reauthentication[:method] == "passkey" &&
-        reauthenticated_at.present? &&
-        reauthenticated_at >= REAUTHENTICATION_WINDOW.ago
-    rescue ArgumentError, TypeError
-      false
+      Admin.passkey_reauth_fresh?(reauthentication)
     end
 
     def reauthenticated_at
-      value = reauthentication[:reauthenticated_at]
-      value.respond_to?(:>=) ? value : Time.zone.parse(value.to_s)
-    rescue ArgumentError, TypeError
-      nil
+      Admin.passkey_reauthenticated_at(reauthentication)
     end
 
     def confirmation_valid?

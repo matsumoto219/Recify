@@ -2,7 +2,6 @@ module SystemOperations
   class UserLimitUpdateExecutor
     ACTION = "admin.users.limit_update".freeze
     CONFIRMATION_TEXT = "UPDATE USER LIMIT".freeze
-    REAUTHENTICATION_WINDOW = 5.minutes
 
     class << self
       def call(user:, key:, value:, enabled:, expires_at:, actor:, reason:, request:, reauthentication:, confirmation:)
@@ -212,18 +211,11 @@ module SystemOperations
     end
 
     def fresh_passkey_reauthentication?
-      reauthentication[:method] == "passkey" &&
-        reauthenticated_at.present? &&
-        reauthenticated_at >= REAUTHENTICATION_WINDOW.ago
-    rescue ArgumentError, TypeError
-      false
+      Admin.passkey_reauth_fresh?(reauthentication)
     end
 
     def reauthenticated_at
-      value = reauthentication[:reauthenticated_at]
-      value.respond_to?(:>=) ? value : Time.zone.parse(value.to_s)
-    rescue ArgumentError, TypeError
-      nil
+      Admin.passkey_reauthenticated_at(reauthentication)
     end
 
     def target_uid

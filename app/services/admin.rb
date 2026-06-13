@@ -61,6 +61,18 @@ module Admin
       DatabaseStatusSnapshot.call
     end
 
+    def passkey_reauth_window_duration
+      PasskeyReauthWindow.duration
+    end
+
+    def passkey_reauth_fresh?(reauthentication)
+      PasskeyReauthWindow.fresh?(reauthentication)
+    end
+
+    def passkey_reauthenticated_at(reauthentication)
+      PasskeyReauthWindow.reauthenticated_at(reauthentication)
+    end
+
     def system_settings(**filters)
       SystemSettingsQuery.call(**filters)
     end
