@@ -1,10 +1,12 @@
 module Ai
   class AvailabilityChecker
-    HEALTH_CHECK_INPUT = {
-      filtered_content: "AI service health check",
-      candidates: {},
-      items: [],
-      meta: { availability_check: true }
+    OPERATION_SETTING_KEY = "operations.ai_enabled".freeze
+    OPERATION_ENV_KEY = ReceiptAnalysisPipeline::Config::AI_ENABLED_ENV_KEY
+    PROVIDER_CONFIG = {
+      "openai" => {
+        api_key_env: "OPENAI_API_KEY",
+        model_env: "OPENAI_AI_MODEL"
+      }
     }.freeze
 
     class << self
@@ -13,13 +15,19 @@ module Ai
       end
     end
 
-    def initialize(client: Ai::Client.new)
-      @client = client
+    def initialize(
+      primary_provider: Ai::ProviderSelector.primary,
+      fallback_provider: Ai::ProviderSelector.fallback
+    )
+      @primary_provider = primary_provider
+      @fallback_provider = fallback_provider
     end
 
     def call
-      result = client.call(HEALTH_CHECK_INPUT)
-      result.respond_to?(:[]) && result[:success] == true
+      operation_enabled? &&
+        env_enabled? &&
+        provider_configured?(primary_provider) &&
+        fallback_provider_configured?
     rescue StandardError => e
       Rails.logger.warn(
         "[AI::AvailabilityChecker] unavailable class=#{e.class} message=#{e.message}"
@@ -29,6 +37,43 @@ module Ai
 
     private
 
-    attr_reader :client
+    attr_reader :primary_provider, :fallback_provider
+
+    def operation_enabled?
+      SystemSettings.enabled?(OPERATION_SETTING_KEY)
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      true
+    end
+
+    def env_enabled?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch(OPERATION_ENV_KEY, "true"))
+    end
+
+    def fallback_provider_configured?
+      return true if fallback_provider.blank?
+
+      provider_configured?(fallback_provider)
+    end
+
+    def provider_configured?(provider)
+      normalized_provider = provider.to_s.strip.downcase.presence
+      config = PROVIDER_CONFIG[normalized_provider]
+      return false if config.blank?
+
+      required_env_present?(config[:api_key_env]) &&
+        required_env_present?(config[:model_env]) &&
+        provider_implemented?(normalized_provider)
+    end
+
+    def required_env_present?(key)
+      ENV[key].to_s.strip.present?
+    end
+
+    def provider_implemented?(provider)
+      Ai::ProviderRegistry.fetch(provider)
+      true
+    rescue ArgumentError, NotImplementedError
+      false
+    end
   end
 end

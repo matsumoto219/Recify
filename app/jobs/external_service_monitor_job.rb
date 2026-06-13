@@ -5,7 +5,7 @@ class ExternalServiceMonitorJob < ApplicationJob
     ocr: "external_service_unavailable",
     ai: "ai_api_error"
   }.freeze
-  STATIC_AVAILABILITY_SERVICES = %i[ocr].freeze
+  STATIC_AVAILABILITY_SERVICES = %i[ocr ai].freeze
 
   def perform
     ExternalServices.services_due_for_check.each do |service|
