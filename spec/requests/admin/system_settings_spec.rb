@@ -137,6 +137,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('システム設定')
         expect(response.body).to include('管理対象設定')
         expect(response.body).to include('feature.receipt_logo_display_enabled')
+        expect(response.body).to include('operations.ocr_enabled')
+        expect(response.body).to include('operations.ai_enabled')
         expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
         expect(response.body).to include('amount_engine.max_candidate_snapshot_count')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
@@ -280,6 +282,26 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('5')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it 'OCR/AI運用停止設定をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('operations.ocr_enabled')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('operations.ocr_enabled')
+        expect(response.body).to include('operation')
+        expect(response.body).to include('high')
+        expect(response.body).to include('true')
+        expect(note.text).to include('画像解析を開始できません')
+        expect(note.text).to include('AI補完を行わずOCR結果のみで保存')
       end
     end
 
@@ -914,6 +936,43 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(audit_log.after_state).to eq('value' => false, 'source' => 'db')
         expect(audit_log.metadata).to include(
           'category' => 'amount_engine',
+          'risk_level' => 'high',
+          'reauthenticated' => true
+        )
+      end
+    end
+
+    it 'OCR運用停止設定を実SystemOperations経由で更新し、AuditLogを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('operations.ocr_enabled'),
+              params: {
+                value: 'false',
+                reason: 'OCR provider maintenance',
+                confirm: '1'
+              },
+              headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+      }.to change(AuditLog, :count).by(1)
+
+      setting = SystemSetting.find_by!(key: 'operations.ocr_enabled')
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('operations.ocr_enabled'))
+        expect(setting.value).to eq('value' => false)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'operations.ocr_enabled',
+          reason: 'OCR provider maintenance'
+        )
+        expect(audit_log.before_state).to eq('value' => true, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => false, 'source' => 'db')
+        expect(audit_log.metadata).to include(
+          'category' => 'operation',
           'risk_level' => 'high',
           'reauthenticated' => true
         )

@@ -8,6 +8,8 @@ RSpec.describe SystemSettings do
         'feature.receipt_logo_display_enabled',
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
+        'operations.ocr_enabled',
+        'operations.ai_enabled',
         'amount_engine.tax_excluded_price_conversion_enabled',
         'amount_engine.max_candidate_snapshot_count',
         'ui.maintenance_notice_enabled',
@@ -91,6 +93,13 @@ RSpec.describe SystemSettings do
 
     it '税抜単価の税込補正defaultはtrueを返す' do
       expect(described_class.value_for('amount_engine.tax_excluded_price_conversion_enabled')).to eq(true)
+    end
+
+    it 'OCR/AI運用停止設定defaultはtrueを返す' do
+      aggregate_failures do
+        expect(described_class.value_for('operations.ocr_enabled')).to eq(true)
+        expect(described_class.value_for('operations.ai_enabled')).to eq(true)
+      end
     end
 
     it 'Amount Engine候補snapshot保存件数defaultは3を返す' do
@@ -361,6 +370,8 @@ RSpec.describe SystemSettings do
     it 'booleanをcastする' do
       expect(described_class.cast_update_value('feature.receipt_logo_display_enabled', '1')).to eq(true)
       expect(described_class.stored_value_for_update('feature.receipt_logo_display_enabled', 'false')).to eq('value' => false)
+      expect(described_class.cast_update_value('operations.ocr_enabled', 'false')).to eq(false)
+      expect(described_class.stored_value_for_update('operations.ai_enabled', '0')).to eq('value' => false)
     end
 
     it 'integerのmin/maxを検証する' do

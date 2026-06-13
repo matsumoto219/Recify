@@ -42,6 +42,22 @@ module SystemSettings
         risk_level: "low"
       ),
       Definition.new(
+        key: "operations.ocr_enabled",
+        category: "operation",
+        value_type: "boolean",
+        default: true,
+        editable: true,
+        risk_level: "high"
+      ),
+      Definition.new(
+        key: "operations.ai_enabled",
+        category: "operation",
+        value_type: "boolean",
+        default: true,
+        editable: true,
+        risk_level: "high"
+      ),
+      Definition.new(
         key: "amount_engine.tax_excluded_price_conversion_enabled",
         category: "amount_engine",
         value_type: "boolean",
