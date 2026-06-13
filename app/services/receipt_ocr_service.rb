@@ -53,7 +53,7 @@ class ReceiptOcrService
       parsed
     else
       Rails.logger.warn("[OCR] failed code=#{parsed[:error_code]}")
-      ExternalServices.mark_failure!(:ocr, error_code: parsed[:error_code])
+      mark_external_failure(parsed[:error_code], detail: parsed.dig(:meta, :provider_error_detail))
       parsed
     end
   rescue Ocr::OcrTimeoutError => e
@@ -86,14 +86,23 @@ class ReceiptOcrService
 
   def handle_ocr_error(error)
     error_code = normalized_ocr_error_code(error)
+    provider_error_detail = provider_error_detail_for(error)
 
     Rails.logger.error("[OCR] ocr_error code=#{error_code} class=#{error.class}")
-    ExternalServices.mark_failure!(:ocr, error_code: error_code)
+    mark_external_failure(error_code, detail: provider_error_detail)
     build_error_result(
       error_code,
       polling_metrics: polling_metrics_for(error),
-      provider_error_detail: provider_error_detail_for(error)
+      provider_error_detail: provider_error_detail
     )
+  end
+
+  def mark_external_failure(error_code, detail: nil)
+    if detail.present?
+      ExternalServices.mark_failure!(:ocr, error_code: error_code, detail: detail)
+    else
+      ExternalServices.mark_failure!(:ocr, error_code: error_code)
+    end
   end
 
   def normalized_ocr_error_code(error)

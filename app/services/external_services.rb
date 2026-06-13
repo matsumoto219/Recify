@@ -46,12 +46,22 @@ module ExternalServices
       StatusStore.mark_success!(service)
     end
 
-    def mark_failure!(service, error_code:, reason: nil)
-      StatusStore.mark_failure!(service, error_code: error_code)
+    def mark_failure!(service, error_code:, reason: nil, detail: nil, error_detail: nil)
+      StatusStore.mark_failure!(
+        service,
+        error_code: error_code,
+        reason: reason,
+        detail: detail || error_detail
+      )
     end
 
-    def mark_monitor_failure!(service, error_code:, reason: nil)
-      StatusStore.mark_monitor_failure!(service, error_code: error_code)
+    def mark_monitor_failure!(service, error_code:, reason: nil, detail: nil, error_detail: nil)
+      StatusStore.mark_monitor_failure!(
+        service,
+        error_code: error_code,
+        reason: reason,
+        detail: detail || error_detail
+      )
     end
 
     def error_detail(...)
@@ -108,6 +118,8 @@ module ExternalServices
           disabled: true,
           source: operation[:source],
           reason: operation[:reason],
+          last_error_reason: operation[:reason],
+          last_error_detail: nil,
           setting_key: operation[:setting_key],
           env_key: operation[:env_key]
         ).deep_symbolize_keys
@@ -115,7 +127,7 @@ module ExternalServices
         snapshot.merge(
           disabled: false,
           source: "status_store",
-          reason: snapshot[:last_error_code]
+          reason: snapshot[:last_error_reason] || snapshot[:last_error_code]
         ).deep_symbolize_keys
       end
     end

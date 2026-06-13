@@ -93,8 +93,53 @@ RSpec.describe ExternalServices::StatusStore do
           expect(snapshot[:consecutive_failures]).to eq(1)
           expect(snapshot[:consecutive_successes]).to eq(0)
           expect(snapshot[:last_error_code]).to eq('external_service_unavailable')
+          expect(snapshot[:last_error_reason]).to eq('external_service_unavailable')
           expect(snapshot[:first_failed_at]).to be_present
           expect(snapshot[:last_checked_at]).to be_present
+        end
+      end
+    end
+
+    it 'provider detailをsafeに保存する' do
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(
+          :ocr,
+          error_code: 'external_service_quota_exceeded',
+          reason: 'quota_exceeded',
+          detail: {
+            service: 'ocr',
+            provider: 'azure_document_intelligence',
+            phase: 'submit',
+            http_status: 403,
+            provider_error_code: 'QuotaExceeded',
+            provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+            request_id: 'azure-request-id',
+            region: 'japaneast',
+            retry_after: 60,
+            quota_exceeded: true,
+            raw_body: 'RAW BODY MUST NOT BE STORED'
+          }
+        )
+
+        snapshot = described_class.snapshot(:ocr)
+
+        aggregate_failures do
+          expect(snapshot[:last_error_code]).to eq('external_service_quota_exceeded')
+          expect(snapshot[:last_error_reason]).to eq('quota_exceeded')
+          expect(snapshot[:last_error_detail]).to include(
+            service: 'ocr',
+            provider: 'azure_document_intelligence',
+            phase: 'submit',
+            http_status: 403,
+            provider_error_code: 'QuotaExceeded',
+            provider_message_safe: 'F0 quota exceeded for [FILTERED]',
+            request_id: 'azure-request-id',
+            region: 'japaneast',
+            retry_after: 60,
+            quota_exceeded: true
+          )
+          expect(snapshot.to_s).not_to include('sk-secret-token')
+          expect(snapshot.to_s).not_to include('RAW BODY MUST NOT BE STORED')
         end
       end
     end
@@ -260,6 +305,8 @@ RSpec.describe ExternalServices::StatusStore do
           expect(snapshot[:consecutive_failures]).to eq(0)
           expect(snapshot[:consecutive_successes]).to eq(1)
           expect(snapshot[:last_error_code]).to be_nil
+          expect(snapshot[:last_error_reason]).to be_nil
+          expect(snapshot[:last_error_detail]).to be_nil
           expect(snapshot[:first_failed_at]).to be_nil
           expect(snapshot[:next_check_at]).to be_nil
         end
@@ -351,7 +398,12 @@ RSpec.describe ExternalServices::StatusStore do
   describe '.external_error?' do
     it '外部サービス系エラーでは true を返す' do
       expect(described_class.external_error?('external_service_unavailable')).to eq(true)
+      expect(described_class.external_error?('external_service_quota_exceeded')).to eq(true)
+      expect(described_class.external_error?('external_service_rate_limited')).to eq(true)
       expect(described_class.external_error?('ocr_timeout')).to eq(true)
+      expect(described_class.external_error?('ai_auth_error')).to eq(true)
+      expect(described_class.external_error?('ai_quota_exceeded')).to eq(true)
+      expect(described_class.external_error?('ai_rate_limited')).to eq(true)
       expect(described_class.external_error?('ai_timeout')).to eq(true)
     end
 

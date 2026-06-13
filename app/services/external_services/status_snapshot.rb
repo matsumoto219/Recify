@@ -40,6 +40,7 @@ module ExternalServices
 
     def service_payload(service, snapshot, state)
       normalized = snapshot.with_indifferent_access
+      detail = normalized_hash(normalized[:last_error_detail])
 
       {
         state: state,
@@ -48,6 +49,16 @@ module ExternalServices
         last_checked_at: normalized[:last_checked_at],
         next_check_at: normalized[:next_check_at],
         last_error_code: normalized[:last_error_code],
+        last_error_reason: normalized[:last_error_reason],
+        last_error_detail: detail.presence,
+        retry_after: detail[:retry_after],
+        request_id: detail[:request_id],
+        provider_error_code: detail[:provider_error_code],
+        provider_error_type: detail[:provider_error_type],
+        provider_message_safe: detail[:provider_message_safe],
+        quota_exceeded: detail[:quota_exceeded],
+        rate_limited: detail[:rate_limited],
+        auth_error: detail[:auth_error],
         consecutive_failures: normalized[:consecutive_failures],
         consecutive_successes: normalized[:consecutive_successes],
         disabled: normalized[:disabled] == true,
@@ -63,6 +74,12 @@ module ExternalServices
 
     def service_state(snapshot)
       snapshot.with_indifferent_access[:state].presence || "ok"
+    end
+
+    def normalized_hash(value)
+      return value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
+
+      {}
     end
 
     def service_status_text(state)

@@ -101,6 +101,51 @@ RSpec.describe 'External services status', type: :request do
       end
     end
 
+    it 'provider error detailをsafeなJSONとして返す' do
+      allow(Rails).to receive(:cache).and_return(cache_store)
+      Rails.cache.clear
+
+      3.times do
+        ExternalServices.mark_failure!(
+          :ai,
+          error_code: 'ai_rate_limited',
+          reason: 'rate_limited',
+          detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_message_safe: 'rate limit for sk-secret-token-1234567890',
+            request_id: 'req_ai',
+            retry_after: 15,
+            rate_limited: true,
+            raw_body: 'RAW BODY MUST NOT BE RETURNED'
+          }
+        )
+      end
+
+      get external_services_status_path, as: :json
+
+      json = response.parsed_body
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(json.dig('ai', 'state')).to eq('down')
+        expect(json.dig('ai', 'last_error_code')).to eq('ai_rate_limited')
+        expect(json.dig('ai', 'last_error_reason')).to eq('rate_limited')
+        expect(json.dig('ai', 'retry_after')).to eq(15)
+        expect(json.dig('ai', 'request_id')).to eq('req_ai')
+        expect(json.dig('ai', 'provider_error_code')).to eq('rate_limit_exceeded')
+        expect(json.dig('ai', 'provider_message_safe')).to eq('rate limit for [FILTERED]')
+        expect(json.dig('ai', 'rate_limited')).to eq(true)
+        expect(response.body).not_to include('sk-secret-token')
+        expect(response.body).not_to include('RAW BODY MUST NOT BE RETURNED')
+      end
+    ensure
+      Rails.cache.clear
+    end
+
     it '未ログインではログイン画面へリダイレクトする' do
       sign_out user
 

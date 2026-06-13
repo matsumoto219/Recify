@@ -6,8 +6,13 @@ module ExternalServices
     EXTERNAL_ERROR_CODES = %w[
       external_service_unavailable
       external_service_auth_error
+      external_service_quota_exceeded
+      external_service_rate_limited
       ocr_timeout
       ocr_api_error
+      ai_auth_error
+      ai_quota_exceeded
+      ai_rate_limited
       ai_timeout
       ai_api_error
       ai_primary_failed
@@ -28,6 +33,8 @@ module ExternalServices
         data["consecutive_failures"] = 0
         data["first_failed_at"] = nil
         data["last_error_code"] = nil
+        data["last_error_reason"] = nil
+        data["last_error_detail"] = nil
         data["last_checked_at"] = current_time.iso8601
 
         if data["state"] == "down" && data["consecutive_successes"] >= RECOVERY_SUCCESS_THRESHOLD
@@ -43,12 +50,13 @@ module ExternalServices
         write(service, data)
       end
 
-      def mark_failure!(service_name, error_code:)
+      def mark_failure!(service_name, error_code:, reason: nil, detail: nil)
         return unless external_error?(error_code)
 
         service = normalize_service_name(service_name)
         data = read(service)
         now = current_time
+        assign_error_data!(data, service:, error_code:, reason:, detail:, checked_at: now)
 
         reset_failure_window!(data, now)
 
@@ -56,15 +64,11 @@ module ExternalServices
 
         if data["state"] == "down"
           data["consecutive_failures"] = DOWN_THRESHOLD
-          data["last_error_code"] = error_code
-          data["last_checked_at"] = now.iso8601
           return write(service, data)
         end
 
         data["consecutive_failures"] = [ data["consecutive_failures"] + 1, DOWN_THRESHOLD ].min
         data["first_failed_at"] ||= now.iso8601
-        data["last_error_code"] = error_code
-        data["last_checked_at"] = now.iso8601
 
         if data["consecutive_failures"] >= DOWN_THRESHOLD
           data["state"] = "down"
@@ -79,7 +83,7 @@ module ExternalServices
         write(service, data)
       end
 
-      def mark_monitor_failure!(service_name, error_code: "external_service_unavailable")
+      def mark_monitor_failure!(service_name, error_code: "external_service_unavailable", reason: nil, detail: nil)
         return unless external_error?(error_code)
 
         service = normalize_service_name(service_name)
@@ -87,8 +91,7 @@ module ExternalServices
         now = current_time
 
         data["consecutive_successes"] = 0
-        data["last_error_code"] = error_code
-        data["last_checked_at"] = now.iso8601
+        assign_error_data!(data, service:, error_code:, reason:, detail:, checked_at: now)
 
         return write(service, data) unless data["monitoring"] == true
 
@@ -177,9 +180,48 @@ module ExternalServices
           "consecutive_successes" => 0,
           "first_failed_at" => nil,
           "last_error_code" => nil,
+          "last_error_reason" => nil,
+          "last_error_detail" => nil,
           "last_checked_at" => nil,
           "next_check_at" => nil
         }
+      end
+
+      def assign_error_data!(data, service:, error_code:, reason:, detail:, checked_at:)
+        data["last_error_code"] = error_code
+        data["last_error_reason"] = safe_reason(reason || error_code)
+        data["last_error_detail"] = safe_error_detail(service, detail)
+        data["last_checked_at"] = checked_at.iso8601
+      end
+
+      def safe_error_detail(service, detail)
+        return nil unless detail.respond_to?(:to_h)
+
+        normalized = detail.to_h.with_indifferent_access
+        return nil if normalized.blank?
+
+        ExternalServices.error_detail(
+          service: normalized[:service] || service,
+          provider: normalized[:provider],
+          phase: normalized[:phase],
+          http_status: normalized[:http_status],
+          provider_error_code: normalized[:provider_error_code],
+          provider_error_type: normalized[:provider_error_type],
+          provider_message_safe: normalized[:provider_message_safe],
+          request_id: normalized[:request_id],
+          region: normalized[:region],
+          retry_after: normalized[:retry_after],
+          latency_ms: normalized[:latency_ms],
+          poll_count: normalized[:poll_count],
+          model: normalized[:model],
+          rate_limited: normalized[:rate_limited],
+          quota_exceeded: normalized[:quota_exceeded],
+          auth_error: normalized[:auth_error]
+        ).presence
+      end
+
+      def safe_reason(value)
+        value.to_s.presence&.truncate(100)
       end
 
       def reset_failure_window!(data, now)

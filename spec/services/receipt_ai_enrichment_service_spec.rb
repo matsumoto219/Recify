@@ -119,6 +119,39 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'AI失敗結果のsafe provider detailをfailureへ渡す' do
+        detail = {
+          service: 'ai',
+          provider: 'openai',
+          phase: 'ai_request',
+          http_status: 429,
+          provider_error_code: 'rate_limit_exceeded',
+          retry_after: 15,
+          rate_limited: true
+        }
+        failed_result = {
+          success: false,
+          error_code: 'ai_rate_limited',
+          needs_review: true,
+          receipt_attributes: {},
+          receipt_items_attributes: [],
+          meta: {
+            final_error_detail: detail
+          }
+        }
+
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(failed_result)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result).to eq(failed_result)
+          expect(ExternalServices).not_to have_received(:mark_success!)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_rate_limited', detail: detail)
+        end
+      end
+
       it 'AIがnot receiptと正常判定した場合はfailureを記録しない' do
         not_receipt_result = {
           success: false,

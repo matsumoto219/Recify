@@ -166,7 +166,7 @@ RSpec.describe ReceiptOcrService do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('external_service_rate_limited')
           expect(result.dig(:meta, :provider_error_detail)).to eq(detail)
-          expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_rate_limited').once
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_rate_limited', detail: detail).once
         end
       end
 

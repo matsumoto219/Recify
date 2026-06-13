@@ -55,7 +55,7 @@ class ReceiptAiEnrichmentService
     if ai_service_healthy_result?(result)
       ExternalServices.mark_success!(:ai)
     else
-      ExternalServices.mark_failure!(:ai, error_code: result[:error_code])
+      mark_external_failure(result[:error_code], detail: ai_provider_error_detail_for(result))
     end
 
     log_result(result)
@@ -97,6 +97,21 @@ class ReceiptAiEnrichmentService
 
   def ai_service_healthy_result?(result)
     result[:success] || result[:error_code].to_s == "ai_not_receipt"
+  end
+
+  def ai_provider_error_detail_for(result)
+    meta = result[:meta] if result.is_a?(Hash)
+    return unless meta.respond_to?(:to_h)
+
+    meta.to_h.with_indifferent_access[:final_error_detail].presence
+  end
+
+  def mark_external_failure(error_code, detail: nil)
+    if detail.present?
+      ExternalServices.mark_failure!(:ai, error_code: error_code, detail: detail)
+    else
+      ExternalServices.mark_failure!(:ai, error_code: error_code)
+    end
   end
 
   def validate_ocr_result!

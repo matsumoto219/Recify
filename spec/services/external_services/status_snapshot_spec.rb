@@ -72,7 +72,24 @@ RSpec.describe ExternalServices::StatusSnapshot do
 
     it 'OCR down時はupload不可とOCR停止noticeを返す' do
       travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
-        3.times { ExternalServices::StatusStore.mark_failure!(:ocr, error_code: 'external_service_unavailable') }
+        3.times do
+          ExternalServices::StatusStore.mark_failure!(
+            :ocr,
+            error_code: 'external_service_quota_exceeded',
+            reason: 'quota_exceeded',
+            detail: {
+              service: 'ocr',
+              provider: 'azure_document_intelligence',
+              phase: 'submit',
+              http_status: 403,
+              provider_error_code: 'QuotaExceeded',
+              provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+              request_id: 'azure-request-id',
+              retry_after: 60,
+              quota_exceeded: true
+            }
+          )
+        end
       end
 
       payload = described_class.call
@@ -83,12 +100,30 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:ocr, :checked_at)).to be_present
         expect(payload.dig(:ocr, :last_checked_at)).to eq(payload.dig(:ocr, :checked_at))
         expect(payload.dig(:ocr, :next_check_at)).to be_present
-        expect(payload.dig(:ocr, :last_error_code)).to eq('external_service_unavailable')
+        expect(payload.dig(:ocr, :last_error_code)).to eq('external_service_quota_exceeded')
+        expect(payload.dig(:ocr, :last_error_reason)).to eq('quota_exceeded')
+        expect(payload.dig(:ocr, :last_error_detail)).to include(
+          service: 'ocr',
+          provider: 'azure_document_intelligence',
+          phase: 'submit',
+          http_status: 403,
+          provider_error_code: 'QuotaExceeded',
+          provider_message_safe: 'F0 quota exceeded for [FILTERED]',
+          request_id: 'azure-request-id',
+          retry_after: 60,
+          quota_exceeded: true
+        )
+        expect(payload.dig(:ocr, :retry_after)).to eq(60)
+        expect(payload.dig(:ocr, :request_id)).to eq('azure-request-id')
+        expect(payload.dig(:ocr, :provider_error_code)).to eq('QuotaExceeded')
+        expect(payload.dig(:ocr, :provider_message_safe)).to eq('F0 quota exceeded for [FILTERED]')
+        expect(payload.dig(:ocr, :quota_exceeded)).to eq(true)
         expect(payload.dig(:ocr, :consecutive_failures)).to eq(3)
         expect(payload.dig(:ocr, :message)).to eq(I18n.t('flash.receipts.ocr_unavailable'))
         expect(payload.dig(:upload, :allowed)).to eq(false)
         expect(payload.dig(:upload, :ocr_available)).to eq(false)
         expect(payload.dig(:notices, :ocr_down)).to eq(true)
+        expect(payload.to_s).not_to include('sk-secret-token')
       end
     end
 
