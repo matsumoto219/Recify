@@ -1,0 +1,36 @@
+{
+  "case_id": "g004_payment_tendered_change_cash",
+  "category": "payment",
+  "intent": "Cash tendered and change should restore actual payment amount.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルキャッシュ 北テスト店",
+    "store_address": "サンプル県サンプル市北4-4-4",
+    "purchased_at": "2026-01-18T11:05:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル定食A", "unit_price": 660, "quantity": 1, "line_total": 660, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 600, "tax": 60, "gross": 660, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 600,
+    "tax": 60,
+    "total": 660,
+    "payments": [
+      { "method": "cash", "label": "現金", "amount": 660 }
+    ],
+    "payment_sum": 660,
+    "payment_method": "cash",
+    "settlement": { "tendered": 1000, "change": 340, "payment_label": "現金" },
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

@@ -1,0 +1,39 @@
+{
+  "case_id": "g010_ocr_noise_payment_context",
+  "category": "ocr_anomaly",
+  "intent": "OCR noise containing internal id and address numbers must not create a fake payment.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルノイズ 田柄5丁目テスト店",
+    "store_address": "サンプル県サンプル市田柄5丁目26-1",
+    "purchased_at": "2026-01-24T18:49:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル軽減商品A", "unit_price": 108, "quantity": 1, "line_total": 108, "tax_rate": 0.08, "discount_amount": 0 },
+      { "name": "サンプル標準商品B", "unit_price": 147, "quantity": 1, "line_total": 147, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [
+      { "kind": "receipt_discount", "label": "キャッシュレス還元額", "sign": "discount", "amount": 5, "effect": "payment", "review_reasons": [] }
+    ],
+    "tax_details": [
+      { "rate": 0.08, "net": 100, "tax": 8, "gross": 108, "basis": "gross", "label": "8%対象計" },
+      { "rate": 0.1, "net": 134, "tax": 13, "gross": 147, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 234,
+    "tax": 21,
+    "total": 255,
+    "payments": [
+      { "method": "qr_payment", "label": "PayPay支払", "amount": 250 }
+    ],
+    "payment_sum": 250,
+    "payment_method": "qr_payment",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": ["sivendidolo ros", "処理番号 200-205-217-3365"] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "receipt_adjustments"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

@@ -1,0 +1,36 @@
+{
+  "case_id": "g009_tax_printed_detail_over_ai_rate",
+  "category": "tax_rounding",
+  "intent": "Printed 10% tax detail should dominate an intentionally wrong simulated AI item tax rate.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル税検算 補正テスト店",
+    "store_address": "サンプル県サンプル市補正9-9-9",
+    "purchased_at": "2026-01-23T13:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル店内商品A", "unit_price": 1100, "quantity": 1, "line_total": 1100, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル店内商品B", "unit_price": 330, "quantity": 1, "line_total": 330, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1300, "tax": 130, "gross": 1430, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 1300,
+    "tax": 130,
+    "total": 1430,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 1430 }
+    ],
+    "payment_sum": 1430,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false, "simulated_ai_item_tax_rate": 0.08, "expected_item_tax_rate_after_save": 0.1 }
+}

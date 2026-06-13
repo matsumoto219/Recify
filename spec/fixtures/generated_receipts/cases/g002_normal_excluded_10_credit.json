@@ -1,0 +1,36 @@
+{
+  "case_id": "g002_normal_excluded_10_credit",
+  "category": "normal",
+  "intent": "Single 10% tax-excluded receipt paid by credit card.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルストア 南テスト店",
+    "store_address": "サンプル県サンプル市南2-2-2",
+    "purchased_at": "2026-01-16T09:15:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル部品A", "unit_price": 1200, "quantity": 1, "line_total": 1200, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル作業料B", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1500, "tax": 150, "gross": 1650, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 1500,
+    "tax": 150,
+    "total": 1650,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 1650 }
+    ],
+    "payment_sum": 1650,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

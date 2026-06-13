@@ -1,0 +1,38 @@
+{
+  "case_id": "g008_adjustment_return_refund_review",
+  "category": "discount_adjustment",
+  "intent": "Return refund is preserved as a review-needed purchase adjustment.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル返品 返金テスト店",
+    "store_address": "サンプル県サンプル市返品8-8-8",
+    "purchased_at": "2026-01-22T16:45:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル返品対象A", "unit_price": 1280, "quantity": 1, "line_total": 1280, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル購入品B", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [
+      { "kind": "return_refund", "label": "返品 サンプル返品対象A", "sign": "discount", "amount": 980, "effect": "purchase", "tax_rate": 0.1, "tax_inclusion": "net", "review_reasons": ["adjustment_uncertain"] }
+    ],
+    "tax_details": [
+      { "rate": 0.1, "net": 600, "tax": 60, "gross": 660, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 600,
+    "tax": 60,
+    "total": 660,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 660 }
+    ],
+    "payment_sum": 660,
+    "payment_method": "credit_card",
+    "status": "review_needed",
+    "review_reasons": ["adjustment_uncertain"]
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "receipt_adjustments"], "allow_review_reasons": ["adjustment_uncertain"], "allow_item_name_minor_diff": false }
+}

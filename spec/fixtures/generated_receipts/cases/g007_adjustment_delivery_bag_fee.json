@@ -1,0 +1,39 @@
+{
+  "case_id": "g007_adjustment_delivery_bag_fee",
+  "category": "discount_adjustment",
+  "intent": "Delivery fee and bag fee are clear purchase surcharges.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルデリバリー 配送テスト店",
+    "store_address": "サンプル県サンプル市配送7-7-7",
+    "purchased_at": "2026-01-21T19:25:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル配送商品A", "unit_price": 680, "quantity": 1, "line_total": 680, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル配送商品B", "unit_price": 400, "quantity": 1, "line_total": 400, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [
+      { "kind": "bag_fee", "label": "レジ袋代", "sign": "surcharge", "amount": 10, "effect": "purchase", "tax_rate": 0.1, "tax_inclusion": "net", "review_reasons": [] },
+      { "kind": "delivery_fee", "label": "配送料", "sign": "surcharge", "amount": 550, "effect": "purchase", "tax_rate": 0.1, "tax_inclusion": "net", "review_reasons": [] }
+    ],
+    "tax_details": [
+      { "rate": 0.1, "net": 1640, "tax": 164, "gross": 1804, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 1640,
+    "tax": 164,
+    "total": 1804,
+    "payments": [
+      { "method": "qr_payment", "label": "PayPay支払", "amount": 1804 }
+    ],
+    "payment_sum": 1804,
+    "payment_method": "qr_payment",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "receipt_adjustments"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

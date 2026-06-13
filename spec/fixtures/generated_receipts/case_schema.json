@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Generated Receipt Case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "category", "intent", "receipt_kind", "expected", "render", "degradation", "assertions"],
+  "properties": {
+    "case_id": { "type": "string" },
+    "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly"] },
+    "intent": { "type": "string" },
+    "receipt_kind": { "enum": ["receipt", "non_receipt"] },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "store_name",
+        "store_address",
+        "purchased_at",
+        "currency",
+        "amount_basis",
+        "tax_rate",
+        "rounding",
+        "items",
+        "receipt_adjustments",
+        "tax_details",
+        "subtotal",
+        "tax",
+        "total",
+        "payments",
+        "payment_sum",
+        "payment_method",
+        "status",
+        "review_reasons"
+      ],
+      "properties": {
+        "store_name": { "type": "string" },
+        "store_address": { "type": "string" },
+        "purchased_at": { "type": "string" },
+        "currency": { "type": "string" },
+        "amount_basis": { "enum": ["tax_included", "tax_excluded"] },
+        "tax_rate": { "type": ["number", "null"] },
+        "rounding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tax", "discount", "scope"],
+          "properties": {
+            "tax": { "enum": ["floor", "round", "ceil"] },
+            "discount": { "enum": ["floor", "round", "ceil"] },
+            "scope": { "type": "string" }
+          }
+        },
+        "items": { "type": "array" },
+        "receipt_adjustments": { "type": "array" },
+        "tax_details": { "type": "array" },
+        "subtotal": { "type": "integer" },
+        "tax": { "type": "integer" },
+        "total": { "type": "integer" },
+        "payments": { "type": "array" },
+        "payment_sum": { "type": "integer" },
+        "payment_method": { "type": "string" },
+        "settlement": { "type": "object" },
+        "status": { "type": "string" },
+        "review_reasons": { "type": "array" }
+      }
+    },
+    "render": { "type": "object" },
+    "degradation": { "type": "object" },
+    "assertions": { "type": "object" }
+  }
+}
