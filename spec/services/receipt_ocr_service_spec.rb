@@ -7,7 +7,8 @@ RSpec.describe ReceiptOcrService do
         error_code: 'ocr_disabled',
         provider: 'azure_document_intelligence',
         model_id: nil,
-        polling_metrics: { 'poll_count' => 0, 'final_status' => 'ocr_disabled' }
+        polling_metrics: { 'poll_count' => 0, 'final_status' => 'ocr_disabled' },
+        provider_error_detail: { service: 'ocr', phase: 'submit', http_status: 403 }
       )
 
       aggregate_failures do
@@ -17,6 +18,7 @@ RSpec.describe ReceiptOcrService do
         expect(result[:lines]).to eq([])
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
         expect(result.dig(:meta, :polling_metrics)).to eq('poll_count' => 0, 'final_status' => 'ocr_disabled')
+        expect(result.dig(:meta, :provider_error_detail)).to eq(service: 'ocr', phase: 'submit', http_status: 403)
       end
     end
   end
@@ -147,15 +149,24 @@ RSpec.describe ReceiptOcrService do
     end
 
     context 'Ocr::Client の例外が発生した場合' do
-      it '429などの外部サービス利用不可を external_service_unavailable として返す' do
-        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('external_service_unavailable'))
+      it '429などのrate limitを external_service_rate_limited として返す' do
+        detail = {
+          service: 'ocr',
+          provider: provider,
+          phase: 'submit',
+          http_status: 429,
+          rate_limited: true,
+          retry_after: 30.0
+        }
+        allow(client).to receive(:call).and_raise(Ocr::OcrError.new('external_service_rate_limited', provider_error_detail: detail))
 
         result = described_class.call(image, provider: provider)
 
         aggregate_failures do
           expect(result[:success]).to eq(false)
-          expect(result[:error_code]).to eq('external_service_unavailable')
-          expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_unavailable').once
+          expect(result[:error_code]).to eq('external_service_rate_limited')
+          expect(result.dig(:meta, :provider_error_detail)).to eq(detail)
+          expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'external_service_rate_limited').once
         end
       end
 

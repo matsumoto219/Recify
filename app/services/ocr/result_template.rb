@@ -2,7 +2,7 @@ module Ocr
   module ResultTemplate
     module_function
 
-    def error_result(error_code:, provider:, model_id: nil, polling_metrics: nil)
+    def error_result(error_code:, provider:, model_id: nil, polling_metrics: nil, provider_error_detail: nil)
       {
         success: false,
         raw_text: "",
@@ -13,6 +13,7 @@ module Ocr
           provider: provider,
           model_id: model_id,
           polling_metrics: polling_metrics.presence,
+          provider_error_detail: provider_error_detail.presence,
           raw_response_included: false
         }.compact
       }

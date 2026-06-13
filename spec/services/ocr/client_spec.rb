@@ -444,7 +444,7 @@ RSpec.describe Ocr::Client do
 
         expect do
           client.send(:submit_request)
-        end.to raise_error(Ocr::OcrError, 'external_service_unavailable')
+        end.to raise_error(Ocr::OcrError, 'external_service_rate_limited')
 
         aggregate_failures do
           expect(connection).to have_received(:post).once
@@ -711,9 +711,11 @@ RSpec.describe Ocr::Client do
   end
 
   describe '#handle_response_status!' do
-    let(:response) { instance_double(Faraday::Response, status: status, headers: {}) }
+    let(:headers) { {} }
+    let(:body) { '{}' }
+    let(:response) { instance_double(Faraday::Response, status: status, headers: headers, body: body) }
 
-    subject(:handle_status) { client.send(:handle_response_status!, response) }
+    subject(:handle_status) { client.send(:handle_response_status!, response, phase: 'submit') }
 
     context '401 の場合' do
       let(:status) { 401 }
@@ -728,6 +730,41 @@ RSpec.describe Ocr::Client do
 
       it 'external_service_auth_error を投げる' do
         expect { handle_status }.to raise_error(Ocr::OcrError, 'external_service_auth_error')
+      end
+
+      context 'Azure quota exceeded bodyの場合' do
+        let(:headers) do
+          {
+            'retry-after' => '1748518',
+            'apim-request-id' => 'b70a8dd4-8e95-459c-b6bc-6610f1ee52b7',
+            'x-ms-region' => 'Japan East'
+          }
+        end
+        let(:body) do
+          {
+            error: {
+              code: '403',
+              message: 'Out of call volume quota for FormRecognizer F0 pricing tier. Please retry after 21 days.'
+            }
+          }.to_json
+        end
+
+        it 'external_service_quota_exceeded に分類しsafe metadataを保持する' do
+          expect { handle_status }.to raise_error(Ocr::OcrError, 'external_service_quota_exceeded') { |error|
+            expect(error.provider_error_detail).to include(
+              service: 'ocr',
+              provider: provider,
+              phase: 'submit',
+              http_status: 403,
+              provider_error_code: '403',
+              request_id: 'b70a8dd4-8e95-459c-b6bc-6610f1ee52b7',
+              region: 'Japan East',
+              retry_after: 1_748_518.0,
+              quota_exceeded: true
+            )
+            expect(error.provider_error_detail[:provider_message_safe]).to include('Out of call volume quota')
+          }
+        end
       end
     end
 
@@ -750,8 +787,16 @@ RSpec.describe Ocr::Client do
     context '429 の場合' do
       let(:status) { 429 }
 
-      it 'external_service_unavailable を投げる' do
-        expect { handle_status }.to raise_error(Ocr::OcrError, 'external_service_unavailable')
+      it 'external_service_rate_limited を投げる' do
+        expect { handle_status }.to raise_error(Ocr::OcrError, 'external_service_rate_limited')
+      end
+    end
+
+    context '415 の場合' do
+      let(:status) { 415 }
+
+      it 'input_invalid を投げる' do
+        expect { handle_status }.to raise_error(Ocr::OcrError, 'input_invalid')
       end
     end
 

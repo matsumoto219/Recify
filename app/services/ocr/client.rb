@@ -90,7 +90,7 @@ module Ocr
           req.headers["Content-Type"] = "application/octet-stream"
           req.body = request_body
         end.tap do |response|
-          handle_response_status!(response)
+          handle_response_status!(response, phase: "submit")
         end
       end
 
@@ -119,7 +119,7 @@ module Ocr
           Faraday.get(op_location) do |req|
             req.headers["Ocp-Apim-Subscription-Key"] = api_key
           end.tap do |response|
-            handle_response_status!(response)
+            handle_response_status!(response, phase: "poll")
           end
         end
         next_poll_retry_after = retry_after_from_headers(res.headers)
@@ -189,7 +189,7 @@ module Ocr
       when OcrTimeoutError
         error.message == "ocr_timeout"
       when OcrError
-        error.message == "external_service_unavailable"
+        %w[external_service_unavailable external_service_rate_limited].include?(error.message)
       else
         false
       end
@@ -283,7 +283,8 @@ module Ocr
       enriched = error.class.new(
         error.message,
         retry_after: error.respond_to?(:retry_after) ? error.retry_after : nil,
-        polling_metrics: polling_metrics(final_status: error_code_for(error))
+        polling_metrics: polling_metrics(final_status: error_code_for(error)),
+        provider_error_detail: error.respond_to?(:provider_error_detail) ? error.provider_error_detail : nil
       )
       enriched.set_backtrace(error.backtrace)
       enriched
@@ -317,7 +318,7 @@ module Ocr
         req.headers["Ocp-Apim-Subscription-Key"] = api_key
       end
 
-      handle_response_status!(res)
+      handle_response_status!(res, phase: "availability")
     rescue Faraday::TimeoutError
       raise OcrTimeoutError, "ocr_timeout"
     rescue Faraday::ConnectionFailed
@@ -328,20 +329,23 @@ module Ocr
     # ok / degraded / down の状態遷移を判定する想定。
     # input_invalid や ocr_unreadable のような入力起因エラーは
     # 外部サービス障害カウントに含めない。
-    def handle_response_status!(res)
+    def handle_response_status!(res, phase:)
       return if res.status.between?(200, 299)
 
+      error_detail = provider_error_detail_for(res, phase:)
       error_code = case res.status
       when 401
         "external_service_auth_error"
       when 403
-        "external_service_auth_error"
+        error_detail[:quota_exceeded] ? "external_service_quota_exceeded" : "external_service_auth_error"
       when 404
         "input_invalid"
       when 408
         "ocr_timeout"
+      when 415
+        "input_invalid"
       when 429
-        "external_service_unavailable"
+        "external_service_rate_limited"
       when 500..599
         "external_service_unavailable"
       else
@@ -354,11 +358,24 @@ module Ocr
 
       retry_after = retryable_response_status?(res.status) ? retry_after_from_headers(res.headers) : nil
       error_class = error_code == "ocr_timeout" ? OcrTimeoutError : OcrError
-      raise error_class.new(error_code, retry_after:)
+      raise error_class.new(error_code, retry_after:, provider_error_detail: error_detail)
     end
 
     def retryable_response_status?(status)
       status == 408 || status == 429 || status.between?(500, 599)
+    end
+
+    def provider_error_detail_for(response, phase:)
+      ExternalServices.error_detail(
+        service: :ocr,
+        provider: provider,
+        phase: phase,
+        http_status: response.status,
+        body: response.body,
+        headers: response.headers,
+        retry_after: retry_after_from_headers(response.headers),
+        poll_count: @poll_count
+      )
     end
 
     def retry_after_from_headers(headers)
@@ -443,22 +460,24 @@ module Ocr
   end
 
   class OcrError < StandardError
-    attr_reader :retry_after, :polling_metrics
+    attr_reader :retry_after, :polling_metrics, :provider_error_detail
 
-    def initialize(message = nil, retry_after: nil, polling_metrics: nil)
+    def initialize(message = nil, retry_after: nil, polling_metrics: nil, provider_error_detail: nil)
       super(message)
       @retry_after = retry_after
       @polling_metrics = polling_metrics || {}
+      @provider_error_detail = provider_error_detail || {}
     end
   end
 
   class OcrTimeoutError < StandardError
-    attr_reader :retry_after, :polling_metrics
+    attr_reader :retry_after, :polling_metrics, :provider_error_detail
 
-    def initialize(message = nil, retry_after: nil, polling_metrics: nil)
+    def initialize(message = nil, retry_after: nil, polling_metrics: nil, provider_error_detail: nil)
       super(message)
       @retry_after = retry_after
       @polling_metrics = polling_metrics || {}
+      @provider_error_detail = provider_error_detail || {}
     end
   end
 end
