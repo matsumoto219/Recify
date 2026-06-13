@@ -420,6 +420,58 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'OCR provider quota detailをsafeにsnapshotへ残してFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      provider_detail = ExternalServices.error_detail(
+        service: :ocr,
+        provider: 'azure_document_intelligence',
+        phase: 'submit',
+        http_status: 403,
+        provider_error_code: 'QuotaExceeded',
+        provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+        request_id: 'azure-request-id',
+        retry_after: 60,
+        quota_exceeded: true
+      )
+      ocr_result = {
+        success: false,
+        error_code: 'external_service_quota_exceeded',
+        lines: [],
+        candidates: {},
+        meta: {
+          provider: 'azure_document_intelligence',
+          model_id: 'prebuilt-receipt',
+          provider_error_detail: provider_detail,
+          raw_response: 'RAW OCR BODY MUST NOT BE STORED'
+        }
+      }
+
+      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+
+      result = described_class.run_ocr(run)
+      run.reload
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
+        expect(result.finalize_decision.error_code).to eq('external_service_quota_exceeded')
+        expect(run.ocr_summary.dig('provider_error_detail')).to include(
+          'service' => 'ocr',
+          'provider' => 'azure_document_intelligence',
+          'phase' => 'submit',
+          'http_status' => 403,
+          'provider_error_code' => 'QuotaExceeded',
+          'provider_message_safe' => 'F0 quota exceeded for [FILTERED]',
+          'request_id' => 'azure-request-id',
+          'retry_after' => 60,
+          'quota_exceeded' => true
+        )
+        expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail', 'provider_error_code')).to eq('QuotaExceeded')
+        expect(run.ocr_result_snapshot.to_json).not_to include('sk-secret-token', 'RAW OCR BODY MUST NOT BE STORED')
+      end
+    end
+
     it 'OCR validation失敗なら理由別のfinalize decisionを保存する' do
       cases = {
         unsupported_country: [
@@ -775,6 +827,63 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(not_receipt_result.finalize_decision.finalize_strategy).to eq('fail_receipt')
         expect(not_receipt_result.finalize_decision.error_code).to eq('ai_not_receipt')
         expect(not_receipt_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_not_receipt')
+      end
+    end
+
+    it 'AI provider rate limit detailをsafeにsnapshotへ残してOCR fallbackへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      provider_detail = ExternalServices.error_detail(
+        service: :ai,
+        provider: 'openai',
+        phase: 'ai_request',
+        http_status: 429,
+        provider_error_code: 'rate_limit_exceeded',
+        provider_message_safe: 'rate limit for sk-secret-token-1234567890',
+        request_id: 'req_ai',
+        retry_after: 15,
+        model: 'gpt-test',
+        rate_limited: true
+      )
+      ai_result = {
+        success: false,
+        error_code: 'ai_rate_limited',
+        needs_review: true,
+        receipt_attributes: {},
+        receipt_items_attributes: [],
+        meta: {
+          provider: 'openai',
+          model: 'gpt-test',
+          final_provider: 'openai',
+          final_error_detail: provider_detail,
+          response_body: 'RAW AI BODY MUST NOT BE STORED'
+        }
+      }
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_result)
+
+      result = described_class.run_ai(run)
+      run.reload
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(result.finalize_decision.error_code).to eq('ai_rate_limited')
+        expect(run.ai_result_summary.dig('final_error_detail')).to include(
+          'service' => 'ai',
+          'provider' => 'openai',
+          'phase' => 'ai_request',
+          'http_status' => 429,
+          'provider_error_code' => 'rate_limit_exceeded',
+          'provider_message_safe' => 'rate limit for [FILTERED]',
+          'request_id' => 'req_ai',
+          'retry_after' => 15,
+          'model' => 'gpt-test',
+          'rate_limited' => true
+        )
+        expect(run.ai_normalized_result_snapshot.dig('meta', 'final_error_detail', 'provider_error_code')).to eq('rate_limit_exceeded')
+        expect(run.ai_normalized_result_snapshot.to_json).not_to include('sk-secret-token', 'RAW AI BODY MUST NOT BE STORED')
       end
     end
 
