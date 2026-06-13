@@ -197,6 +197,7 @@ module Analysis
       when "ai_retry"
         return "parent_run_missing" if parent_run.blank?
         return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
+        return "ai_unavailable" if ExternalServices.down?(:ai)
       when "finalize_retry"
         return "parent_run_missing" if parent_run.blank?
         return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
@@ -230,6 +231,8 @@ module Analysis
         "receipt image is required"
       when "ocr_unavailable"
         "OCR service is unavailable"
+      when "ai_unavailable"
+        "AI service is unavailable"
       when "parent_run_missing"
         "parent_run is required"
       when "ocr_snapshot_missing"

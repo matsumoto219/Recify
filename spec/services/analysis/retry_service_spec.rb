@@ -374,6 +374,46 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'AI停止中はai_retryをrun作成やcounter消費前に拒否する' do
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: parent_ocr_snapshot
+      )
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          parent_run: parent_run,
+          actor: actor,
+          retry_type: :ai_retry,
+          reason: 'AI停止中の再解析',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('ai_unavailable')
+          expect(result.error_message).to eq('AI service is unavailable')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_completed
+        expect(ReceiptAnalysisRun.where(receipt: receipt).where.not(id: parent_run.id)).to be_empty
+        expect(UsageCounter.where(user: actor, key: 'retry_operations_per_day')).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.ai_retry',
+          outcome: 'failed',
+          error_code: 'ai_unavailable'
+        )
+      end
+    end
+
     it 'finalize_retryでOCR/AI snapshotとfinalize_decisionをコピーし、ReceiptFinalizeJobをenqueueする' do
       parent_run = create(
         :receipt_analysis_run,
@@ -767,6 +807,19 @@ RSpec.describe Analysis::RetryService do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'ocr_unavailable')
         expect(options['ocr_retry']).to include(possible: false, disabled_reason: 'ocr_unavailable')
         expect(options['ai_retry']).to include(possible: true, disabled_reason: nil)
+      end
+    end
+
+    it 'AI停止中はai_retryだけを不可にしfull_reanalyzeは許可する' do
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
+
+      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+
+      aggregate_failures do
+        expect(options['full_reanalyze']).to include(possible: true, disabled_reason: nil)
+        expect(options['ocr_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options['ai_retry']).to include(possible: false, disabled_reason: 'ai_unavailable')
       end
     end
 

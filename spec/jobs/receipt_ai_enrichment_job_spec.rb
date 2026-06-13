@@ -130,6 +130,32 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
         expect(UsageCounter.find_by!(user: guest, key: 'ai_jobs_per_day').used_count).to eq(5)
       end
     end
+
+    it 'AI停止中の既存runはAI APIとcounterを使わずfinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(
+        :receipt_analysis_run,
+        receipt: receipt,
+        stage: 'ai',
+        ocr_result_snapshot: {
+          'success' => true,
+          'lines' => [ 'テストストア', '合計 1000' ],
+          'candidates' => { 'store_name' => 'テストストア', 'total_amount' => 1000 },
+          'meta' => {}
+        }
+      )
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
+        expect(UsageCounter.where(user: receipt.user, key: 'ai_jobs_per_day')).to be_empty
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
   end
 
   private

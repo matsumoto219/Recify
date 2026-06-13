@@ -511,6 +511,24 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'SystemSettingsでAI停止中ならOCR後にAI counterを使わずFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+      allow(Usage).to receive(:consume_ai_job!)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(result.finalize_decision.error_code).to eq('ai_unavailable')
+        expect(Usage).not_to have_received(:consume_ai_job!)
+        expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
+      end
+    end
+
     it 'OCR disabledならocr_disabled decisionを保存してFinalizeへ進める' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -675,6 +693,28 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.next_step).to eq(:finalize)
         expect(result.finalize_decision.finalize_strategy).to eq('ai_success')
         expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
+      end
+    end
+
+    it 'SystemSettingsでAI停止中ならAI APIとcounterを使わずOCR結果でFinalizeへ進める' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+      allow(Usage).to receive(:consume_ai_job!)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:finalize)
+        expect(result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+        expect(result.finalize_decision.error_code).to eq('ai_unavailable')
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(Usage).not_to have_received(:consume_ai_job!)
+        expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
+        expect(run.ai_result_summary).to be_blank
+        expect(run.ai_normalized_result_snapshot).to be_blank
       end
     end
 
