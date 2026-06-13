@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require "securerandom"
+
+options = {
+  runs: 1,
+  execute: false,
+  keep: false
+}
+
+OptionParser.new do |parser|
+  parser.banner = "Usage: bin/generated_receipts_compare [options]"
+  parser.on("--case CASE_ID", "Run one generated receipt case") { |value| options[:case_id] = value }
+  parser.on("--runs N", Integer, "Number of executions per case") { |value| options[:runs] = value }
+  parser.on("--execute", "Execute Recify OCR/AI/finalize pipeline") { options[:execute] = true }
+  parser.on("--keep", "Keep generated receipt records") { options[:keep] = true }
+end.parse!(ARGV)
+
+abort "--execute is required to run Recify comparison" unless options[:execute]
+
+require_relative "../config/environment"
+require_relative "../tools/generated_receipts"
+
+case_paths = Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort
+case_paths.select! { |path| File.basename(path, ".json") == options[:case_id] } if options[:case_id]
+abort "No generated receipt cases matched" if case_paths.empty?
+
+user = User.new(
+  email: "generated-receipts-#{SecureRandom.hex(4)}@example.com",
+  password: "password",
+  password_confirmation: "password"
+)
+user.skip_confirmation! if user.respond_to?(:skip_confirmation!)
+user.save!
+
+begin
+  results = case_paths.map do |path|
+    case_data = GeneratedReceipts::Validator.load_file(path)
+    validation = GeneratedReceipts::Validator.call(case_data)
+    unless validation.valid?
+      puts "FAIL #{case_data['case_id']} validation"
+      validation.errors.each { |error| puts "  - #{error}" }
+      next
+    end
+
+    image_path = File.join(GeneratedReceipts::IMAGES_DIR, "#{case_data.fetch('case_id')}.png")
+    abort "Missing generated PNG: #{image_path}" unless File.exist?(image_path)
+
+    result = GeneratedReceipts::ComparisonRunner.new(
+      case_data,
+      image_path: image_path,
+      user: user,
+      runs: options[:runs],
+      keep: options[:keep]
+    ).call
+
+    puts "#{result.status} #{result.case_id} #{result.stable? ? 'STABLE' : 'UNSTABLE'}"
+    result.run_results.each do |run|
+      puts "  Run #{run[:run]} #{run[:status]}"
+      run[:diffs].each do |diff|
+        puts "    - [#{diff[:severity]}] #{diff[:path]} expected=#{diff[:expected].inspect} actual=#{diff[:actual].inspect}"
+      end
+    end
+    result
+  end.compact
+
+  exit(results.any? { |result| result.status == "FAIL" } ? 1 : 0)
+ensure
+  user.destroy! unless options[:keep]
+end
