@@ -456,6 +456,7 @@ RSpec.describe Ocr::ResponseParser do
         'mobile payment' => 'mobilepayment',
         'Apple Pay' => 'applepay',
         'Google Pay' => 'googlepay',
+        'QR決済' => 'qr決済',
         'Union Pay' => 'unionpay',
         'Master Card' => 'mastercard',
         'Debit Card' => 'debit'

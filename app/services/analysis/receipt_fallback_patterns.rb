@@ -26,6 +26,7 @@ module Analysis
         /union\s*pay/i
       ],
       "qr_payment" => [
+        /qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?/i,
         /paypay/i,
         /楽天(?:ペイ|pay)/i,
         /rakuten\s*pay/i,

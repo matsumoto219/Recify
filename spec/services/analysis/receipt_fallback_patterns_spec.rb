@@ -33,6 +33,8 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         'mobile payment' => 'e_money',
         'Apple Pay' => 'e_money',
         'Google Pay' => 'e_money',
+        'QR決済' => 'qr_payment',
+        'QRコード支払' => 'qr_payment',
         'PayPay' => 'qr_payment',
         '楽天ペイ' => 'qr_payment',
         'Rakuten Pay' => 'qr_payment',

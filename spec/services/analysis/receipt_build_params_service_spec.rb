@@ -681,6 +681,64 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '支払ブロック内の支払行をAIがadjustment化しても保存adjustmentから除外する' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 3_300
+        ocr_result[:lines] = [
+          '合計',
+          '¥3,300',
+          'お支払い方法',
+          'サンプル商品券',
+          '¥1,000',
+          'クレジット',
+          '¥500',
+          '現金',
+          '¥1,800'
+        ]
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'credit_card'
+          },
+          receipt_adjustments_attributes: [
+            {
+              kind: 'other',
+              label: 'クレジット',
+              amount: 500,
+              sign: 'discount',
+              source_text: 'クレジット',
+              source_line_index: 5,
+              confidence: 0.8,
+              needs_review: true,
+              review_reasons: [ 'adjustment_uncertain' ]
+            },
+            {
+              kind: 'other',
+              label: '現金',
+              amount: 1_800,
+              sign: 'discount',
+              source_text: '現金',
+              source_line_index: 7,
+              confidence: 0.8,
+              needs_review: true,
+              review_reasons: [ 'adjustment_uncertain' ]
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'サンプル商品券', amount: 1_000),
+            include(method: 'クレジット', amount: 500),
+            include(method: '現金', amount: 1_800)
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
+        end
+      end
+
       it '現計の直前にあるreceipt totalをcash paymentとして補完し直後の税額を拾わない' do
         ocr_result[:candidates][:payment_method_text] = '現金'
         ocr_result[:candidates][:payments] = []
