@@ -1,0 +1,36 @@
+{
+  "case_id": "g018_normal_decimal_quantity",
+  "category": "normal",
+  "intent": "Decimal quantities on a tax-excluded receipt should compute item totals and tax.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル数量 小数テスト店",
+    "store_address": "サンプル県サンプル市小数18-8-8",
+    "purchased_at": "2026-02-08T18:18:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル小数商品A x2.5", "unit_price": 120, "quantity": 2.5, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル小数商品B x1.5", "unit_price": 200, "quantity": 1.5, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 600, "tax": 60, "gross": 660, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 600,
+    "tax": 60,
+    "total": 660,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 660 }
+    ],
+    "payment_sum": 660,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

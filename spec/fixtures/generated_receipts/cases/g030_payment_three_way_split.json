@@ -1,0 +1,38 @@
+{
+  "case_id": "g030_payment_three_way_split",
+  "category": "payment",
+  "intent": "Three-way split payment with gift certificate, credit card, and cash.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル三分割 併用テスト店",
+    "store_address": "サンプル県サンプル市三分割30-10-10",
+    "purchased_at": "2026-02-20T18:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル三分割商品A", "unit_price": 2200, "quantity": 1, "line_total": 2200, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル三分割商品B", "unit_price": 1100, "quantity": 1, "line_total": 1100, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 3000, "tax": 300, "gross": 3300, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 3000,
+    "tax": 300,
+    "total": 3300,
+    "payments": [
+      { "method": "gift_card", "label": "サンプル商品券", "amount": 1000 },
+      { "method": "credit_card", "label": "クレジット", "amount": 500 },
+      { "method": "cash", "label": "現金", "amount": 1800 }
+    ],
+    "payment_sum": 3300,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "include_payment_heading": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

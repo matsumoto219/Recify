@@ -1,0 +1,36 @@
+{
+  "case_id": "g015_normal_excluded_subtotal_only",
+  "category": "normal",
+  "intent": "Tax-excluded subtotal with external 10% tax should resolve to gross total.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル税抜 表示テスト店",
+    "store_address": "サンプル県サンプル市税抜15-5-5",
+    "purchased_at": "2026-02-05T15:15:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル税抜商品A", "unit_price": 700, "quantity": 1, "line_total": 700, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル税抜商品B", "unit_price": 800, "quantity": 1, "line_total": 800, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1500, "tax": 150, "gross": 1650, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 1500,
+    "tax": 150,
+    "total": 1650,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 1650 }
+    ],
+    "payment_sum": 1650,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

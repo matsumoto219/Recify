@@ -1,0 +1,35 @@
+{
+  "case_id": "g027_payment_quicpay",
+  "category": "payment",
+  "intent": "QUICPay payment should be stored as e_money.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル波払 東町テスト店",
+    "store_address": "サンプル県サンプル市東町27-7-7",
+    "purchased_at": "2026-02-17T15:27:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル波払商品A", "unit_price": 1430, "quantity": 1, "line_total": 1430, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1300, "tax": 130, "gross": 1430, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 1300,
+    "tax": 130,
+    "total": 1430,
+    "payments": [
+      { "method": "e_money", "label": "QUICPay支払", "amount": 1430 }
+    ],
+    "payment_sum": 1430,
+    "payment_method": "e_money",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

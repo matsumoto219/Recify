@@ -1,0 +1,36 @@
+{
+  "case_id": "g017_normal_weighted_kg",
+  "category": "normal",
+  "intent": "Weighted kilogram items with decimal quantities should validate line totals.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル量売 量目テスト店",
+    "store_address": "サンプル県サンプル市量目17-7-7",
+    "purchased_at": "2026-02-07T17:17:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル量売A 1.25kg", "unit_price": 400, "quantity": 1.25, "line_total": 500, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル量売B 2.5kg", "unit_price": 120, "quantity": 2.5, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 728, "tax": 72, "gross": 800, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 728,
+    "tax": 72,
+    "total": 800,
+    "payments": [
+      { "method": "cash", "label": "現金", "amount": 800 }
+    ],
+    "payment_sum": 800,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

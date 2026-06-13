@@ -52,12 +52,13 @@ module GeneratedReceipts
     end
 
     def total_lines
-      [
+      lines = [
         separator,
-        "小計 #{money(expected['subtotal'])}",
         "消費税 #{money(expected['tax'])}",
         "合計 #{money(expected['total'])}"
       ]
+      lines.insert(1, "小計 #{money(expected['subtotal'])}") unless render["omit_subtotal_line"]
+      lines
     end
 
     def tax_detail_lines
@@ -90,9 +91,11 @@ module GeneratedReceipts
     end
 
     def payment_lines
-      expected.fetch("payments").map do |payment|
+      lines = expected.fetch("payments").map do |payment|
         "#{payment['label']} #{money(payment['amount'])}"
       end
+      lines.unshift("お支払い方法") if render["include_payment_heading"] && lines.any?
+      lines
     end
 
     def noise_lines

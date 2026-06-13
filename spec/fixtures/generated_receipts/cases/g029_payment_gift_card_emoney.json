@@ -1,0 +1,36 @@
+{
+  "case_id": "g029_payment_gift_card_emoney",
+  "category": "payment",
+  "intent": "Gift certificate plus e-money split payment should keep both payment rows.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル併用 西端テスト店",
+    "store_address": "サンプル県サンプル市併用29-9-9",
+    "purchased_at": "2026-02-19T17:29:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル併用商品A", "unit_price": 1870, "quantity": 1, "line_total": 1870, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1700, "tax": 170, "gross": 1870, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 1700,
+    "tax": 170,
+    "total": 1870,
+    "payments": [
+      { "method": "gift_card", "label": "サンプル商品券", "amount": 1000 },
+      { "method": "e_money", "label": "QUICPay支払", "amount": 870 }
+    ],
+    "payment_sum": 1870,
+    "payment_method": "e_money",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

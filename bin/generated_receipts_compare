@@ -27,16 +27,16 @@ case_paths = Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort
 case_paths.select! { |path| File.basename(path, ".json") == options[:case_id] } if options[:case_id]
 abort "No generated receipt cases matched" if case_paths.empty?
 
-user = User.new(
-  email: "generated-receipts-#{SecureRandom.hex(4)}@example.com",
-  password: "password",
-  password_confirmation: "password"
-)
-user.skip_confirmation! if user.respond_to?(:skip_confirmation!)
-user.save!
+results = case_paths.map do |path|
+  user = User.new(
+    email: "generated-receipts-#{SecureRandom.hex(4)}@example.com",
+    password: "password",
+    password_confirmation: "password"
+  )
+  user.skip_confirmation! if user.respond_to?(:skip_confirmation!)
+  user.save!
 
-begin
-  results = case_paths.map do |path|
+  begin
     case_data = GeneratedReceipts::Validator.load_file(path)
     validation = GeneratedReceipts::Validator.call(case_data)
     unless validation.valid?
@@ -64,9 +64,9 @@ begin
       end
     end
     result
-  end.compact
+  ensure
+    user.destroy! unless options[:keep]
+  end
+end.compact
 
-  exit(results.any? { |result| result.status == "FAIL" } ? 1 : 0)
-ensure
-  user.destroy! unless options[:keep]
-end
+exit(results.any? { |result| result.status == "FAIL" } ? 1 : 0)

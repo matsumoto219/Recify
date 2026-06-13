@@ -1,0 +1,34 @@
+{
+  "case_id": "g013_normal_zero_tax",
+  "category": "normal",
+  "intent": "Non-taxable zero-tax receipt should preserve total and payment without a taxable rate.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル非課税 緑丘テスト店",
+    "store_address": "サンプル県サンプル市緑丘13-3-3",
+    "purchased_at": "2026-02-03T13:13:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル非課税品A", "unit_price": 1200, "quantity": 1, "line_total": 1200, "tax_rate": 0, "discount_amount": 0 },
+      { "name": "サンプル非課税品B", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [],
+    "subtotal": 1500,
+    "tax": 0,
+    "total": 1500,
+    "payments": [
+      { "method": "cash", "label": "現金", "amount": 1500 }
+    ],
+    "payment_sum": 1500,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

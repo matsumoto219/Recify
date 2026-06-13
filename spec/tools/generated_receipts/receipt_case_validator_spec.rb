@@ -14,11 +14,11 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
 
-  it "validates the first ten generated receipt cases" do
+  it "validates generated receipt cases through g030" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
 
     aggregate_failures do
-      expect(results.size).to eq(10)
+      expect(results.size).to eq(30)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end

@@ -1,0 +1,36 @@
+{
+  "case_id": "g023_payment_debit_card",
+  "category": "payment",
+  "intent": "Debit card text should be categorized separately from credit card.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルデビット 西町テスト店",
+    "store_address": "サンプル県サンプル市西町23-3-3",
+    "purchased_at": "2026-02-13T11:23:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプルデビット商品A", "unit_price": 1000, "quantity": 1, "line_total": 1000, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプルデビット商品B", "unit_price": 250, "quantity": 1, "line_total": 250, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1250, "tax": 125, "gross": 1375, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 1250,
+    "tax": 125,
+    "total": 1375,
+    "payments": [
+      { "method": "debit_card", "label": "デビットカード", "amount": 1375 }
+    ],
+    "payment_sum": 1375,
+    "payment_method": "debit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

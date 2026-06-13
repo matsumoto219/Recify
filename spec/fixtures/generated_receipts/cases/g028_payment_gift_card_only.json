@@ -1,0 +1,35 @@
+{
+  "case_id": "g028_payment_gift_card_only",
+  "category": "payment",
+  "intent": "Gift certificate only payment should preserve the payment record and use a non-cash representative method.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル青空 単独テスト店",
+    "store_address": "サンプル県サンプル市青空28-8-8",
+    "purchased_at": "2026-02-18T16:28:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル青空商品A", "unit_price": 1100, "quantity": 1, "line_total": 1100, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 1000, "tax": 100, "gross": 1100, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 1000,
+    "tax": 100,
+    "total": 1100,
+    "payments": [
+      { "method": "gift_card", "label": "サンプル商品券支払", "amount": 1100 }
+    ],
+    "payment_sum": 1100,
+    "payment_method": "other",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}

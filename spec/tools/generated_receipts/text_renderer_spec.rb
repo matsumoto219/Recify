@@ -38,4 +38,25 @@ RSpec.describe GeneratedReceipts::TextRenderer do
       expect(text).not_to include("sivendidolo ros ¥5")
     end
   end
+
+  it "can omit the printed subtotal line while keeping tax detail source of truth" do
+    text = described_class.call(load_case("g014_normal_missing_subtotal_tax_detail"))
+
+    aggregate_failures do
+      expect(text).not_to include("小計 ¥1,000")
+      expect(text).to include("10%対象計 ¥1,100")
+      expect(text).to include("合計 ¥1,100")
+    end
+  end
+
+  it "can render an explicit payment block heading for split payments" do
+    text = described_class.call(load_case("g030_payment_three_way_split"))
+
+    aggregate_failures do
+      expect(text).to include("お支払い方法")
+      expect(text).to include("サンプル商品券 ¥1,000")
+      expect(text).to include("クレジット ¥500")
+      expect(text).to include("現金 ¥1,800")
+    end
+  end
 end

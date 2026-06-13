@@ -86,7 +86,15 @@ module GeneratedReceipts
     PAYMENT_KEYS = %w[method label amount].freeze
     PAYMENT_REQUIRED_KEYS = PAYMENT_KEYS.freeze
     SETTLEMENT_KEYS = %w[tendered change payment_label].freeze
-    RENDER_KEYS = %w[locale paper_width font include_tax_detail_lines noise_lines].freeze
+    RENDER_KEYS = %w[
+      locale
+      paper_width
+      font
+      include_tax_detail_lines
+      omit_subtotal_line
+      include_payment_heading
+      noise_lines
+    ].freeze
     DEGRADATION_KEYS = %w[enabled profile].freeze
     ASSERTION_KEYS = %w[
       critical_exact
@@ -191,6 +199,11 @@ module GeneratedReceipts
     end
 
     def validate_tax_details
+      if expected["tax_details"].empty?
+        validate_zero_tax_without_tax_details
+        return
+      end
+
       expected["tax_details"].each_with_index do |detail, index|
         net = amount(detail["net"])
         tax = amount(detail["tax"])
@@ -226,6 +239,11 @@ module GeneratedReceipts
     end
 
     def validate_receipt_totals
+      if expected["tax_details"].empty?
+        validate_zero_tax_receipt_totals if zero_tax_without_tax_details?
+        return
+      end
+
       net_sum = expected["tax_details"].sum { |detail| amount(detail["net"]) }
       tax_sum = expected["tax_details"].sum { |detail| amount(detail["tax"]) }
       gross_sum = expected["tax_details"].sum { |detail| amount(detail["gross"]) }
@@ -302,6 +320,34 @@ module GeneratedReceipts
 
     def receipt_case?
       case_data["receipt_kind"] == "receipt"
+    end
+
+    def validate_zero_tax_without_tax_details
+      return if zero_tax_without_tax_details?
+
+      add_error("expected.tax_details", "may be empty only when every purchase line is zero-tax and expected.tax is 0")
+    end
+
+    def validate_zero_tax_receipt_totals
+      total = zero_tax_purchase_total
+
+      add_error("expected.subtotal", "must equal zero-tax purchase total #{total}") unless amount(expected["subtotal"]) == total
+      add_error("expected.tax", "must equal 0 for zero-tax receipts without tax details") unless amount(expected["tax"]).zero?
+      add_error("expected.total", "must equal zero-tax purchase total #{total}") unless amount(expected["total"]) == total
+    end
+
+    def zero_tax_without_tax_details?
+      expected["tax_details"].empty? &&
+        amount(expected["tax"]).zero? &&
+        expected["items"].all? { |item| decimal(item["tax_rate"]).zero? } &&
+        expected["receipt_adjustments"].select { |adjustment| adjustment["effect"] == "purchase" }.all? { |adjustment| decimal(adjustment["tax_rate"]).zero? }
+    end
+
+    def zero_tax_purchase_total
+      item_total = expected["items"].sum { |item| amount(item["line_total"]) }
+      purchase_adjustment_total = expected["receipt_adjustments"].select { |adjustment| adjustment["effect"] == "purchase" }.sum { |adjustment| signed_amount(adjustment) }
+
+      item_total + purchase_adjustment_total
     end
 
     def expected

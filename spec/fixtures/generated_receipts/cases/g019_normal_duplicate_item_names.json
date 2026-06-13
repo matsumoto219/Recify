@@ -1,0 +1,36 @@
+{
+  "case_id": "g019_normal_duplicate_item_names",
+  "category": "normal",
+  "intent": "Duplicate item names on separate lines should preserve receipt totals.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル重複 同名テスト店",
+    "store_address": "サンプル県サンプル市同名19-9-9",
+    "purchased_at": "2026-02-09T19:19:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル同名商品A", "unit_price": 110, "quantity": 1, "line_total": 110, "tax_rate": 0.1, "discount_amount": 0 },
+      { "name": "サンプル同名商品A", "unit_price": 220, "quantity": 1, "line_total": 220, "tax_rate": 0.1, "discount_amount": 0 }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.1, "net": 300, "tax": 30, "gross": 330, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 300,
+    "tax": 30,
+    "total": 330,
+    "payments": [
+      { "method": "cash", "label": "現金", "amount": 330 }
+    ],
+    "payment_sum": 330,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": { "locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": [] },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": false }
+}
