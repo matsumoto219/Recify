@@ -1,0 +1,40 @@
+{
+  "editor.detectIndentation": false,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.trimFinalNewlines": true,
+
+  "[ruby]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "Shopify.ruby-lsp"
+  },
+
+  "[erb]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": "manuelpuyol.erb-linter"
+  },
+
+  "[css]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "stylelint.vscode-stylelint"
+  },
+
+  "[javascript]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "standard.vscode-standard"
+  },
+
+  "[json]": {
+    "editor.formatOnSave": false
+  },
+
+  "css.validate": false,
+  "scss.validate": false,
+  "less.validate": false,
+  "js/ts.format.enabled": false,
+  "stylelint.validate": ["css", "scss", "postcss"],
+  "standard.autoFixOnSave": false,
+  "standard.run": "onSave"
+}

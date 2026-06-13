@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "Shopify.ruby-lsp",
+    "manuelpuyol.erb-linter",
+    "stylelint.vscode-stylelint",
+    "standard.vscode-standard",
+    "EditorConfig.EditorConfig",
+    "oderwat.indent-rainbow"
+  ]
+}
