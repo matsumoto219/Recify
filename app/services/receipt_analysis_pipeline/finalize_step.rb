@@ -14,6 +14,14 @@ class ReceiptAnalysisPipeline
       discount_data_incomplete
       price_tax_inclusion_uncertain
     ].freeze
+    ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    RESOLVABLE_SURCHARGE_ADJUSTMENT_KINDS = %w[
+      service_charge
+      late_night_charge
+      delivery_fee
+      bag_fee
+      handling_fee
+    ].freeze
 
     def self.call(receipt:, decision:, run: nil)
       new(receipt: receipt, decision: decision, run: run).call
@@ -144,6 +152,7 @@ class ReceiptAnalysisPipeline
         context: :analysis
       )
       amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
+      amount_result = resolve_clear_surcharge_adjustment_uncertainty(params, amount_result)
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
@@ -877,6 +886,7 @@ class ReceiptAnalysisPipeline
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
       return review_reasons unless review_reasons.include?("payment_method_uncertain")
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
@@ -1007,6 +1017,149 @@ class ReceiptAnalysisPipeline
       result = amount_result.respond_to?(:with_indifferent_access) ? amount_result.with_indifferent_access : {}
       selected_candidate = result.dig(:amount_engine, :selected_candidate) || {}
       selected_candidate[:final_payment_total] || result.dig(:resolved, :total)
+    end
+
+    def resolve_clear_surcharge_adjustment_uncertainty(params, amount_result)
+      return amount_result unless clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
+
+      params[:adjustment_uncertainty_resolved] = true
+      params[:review_reasons] = normalize_review_reasons(params[:review_reasons]) - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+      params[:receipt_adjustments_attributes] = Array(params[:receipt_adjustments_attributes]).map do |adjustment|
+        clear_surcharge_adjustment?(adjustment) ? adjustment_without_review_reason(adjustment, ADJUSTMENT_UNCERTAIN_REVIEW_REASON) : adjustment
+      end
+
+      amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+    end
+
+    def clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
+      result = normalized_hash(amount_result)
+      blocking_reasons = normalize_review_reasons(result[:blocking_inconsistencies])
+      return false unless blocking_reasons.include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+      return false if (blocking_reasons - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]).any?
+
+      adjustments = Array(params[:receipt_adjustments_attributes])
+      uncertain_adjustments = adjustments.select do |adjustment|
+        normalized = normalized_hash(adjustment)
+        normalize_review_reasons(normalized[:review_reasons]).include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON) ||
+          normalized[:needs_review] == true
+      end
+      return false if uncertain_adjustments.blank?
+      return false unless uncertain_adjustments.all? { |adjustment| clear_surcharge_adjustment?(adjustment) }
+      return false unless payment_total_matches_resolved_total?(params, amount_result)
+      return false unless adjusted_item_total_matches_resolved_subtotal?(amount_result)
+      return false if adjustment_duplicated_in_items?(params, uncertain_adjustments)
+
+      true
+    end
+
+    def clear_surcharge_adjustment?(adjustment)
+      normalized = normalized_hash(adjustment)
+      kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
+      amount = normalize_amount(normalized[:amount])
+
+      RESOLVABLE_SURCHARGE_ADJUSTMENT_KINDS.include?(kind) &&
+        normalized[:sign].to_s == "surcharge" &&
+        amount&.positive? &&
+        (normalized[:label].present? || normalized[:source_text].present?)
+    end
+
+    def payment_total_matches_resolved_total?(params, amount_result)
+      payments = Array(params[:receipt_payments_attributes])
+      return false if payments.blank?
+
+      payment_sum = payments.sum { |payment| normalize_amount(normalized_hash(payment)[:amount]).to_i }
+      return false unless payment_sum.positive?
+
+      resolved_total = normalize_amount(normalized_hash(amount_result[:resolved])[:total])
+      final_payment_total = normalize_amount(final_payment_total_from_amount_result(amount_result))
+      [ resolved_total, final_payment_total ].compact.any? { |total| total == payment_sum }
+    end
+
+    def adjusted_item_total_matches_resolved_subtotal?(amount_result)
+      computed = normalized_hash(amount_result[:computed])
+      adjusted_item_total = normalize_amount(computed[:adjusted_item_total])
+      resolved_subtotal = normalize_amount(normalized_hash(amount_result[:resolved])[:subtotal])
+
+      adjusted_item_total.present? && resolved_subtotal.present? && adjusted_item_total == resolved_subtotal
+    end
+
+    def adjustment_duplicated_in_items?(params, adjustments)
+      items = Array(params[:receipt_items_attributes])
+      return false if items.blank?
+
+      adjustments.any? do |adjustment|
+        adjustment_amount = normalize_amount(normalized_hash(adjustment)[:amount])
+        next false unless adjustment_amount&.positive?
+
+        items.any? do |item|
+          normalized_item = normalized_hash(item)
+          item_amounts = [
+            normalize_amount(normalized_item[:line_total]),
+            normalize_amount(normalized_item[:price])
+          ].compact
+          item_amounts.include?(adjustment_amount) &&
+            item_text_matches_adjustment?(normalized_item, adjustment)
+        end
+      end
+    end
+
+    def item_text_matches_adjustment?(item, adjustment)
+      text = [
+        item[:raw_text],
+        item[:suggested_name],
+        item[:confirmed_name]
+      ].compact.join(" ")
+      return false if text.blank?
+
+      normalized_adjustment = normalized_hash(adjustment)
+      label = normalized_adjustment[:label].to_s.strip
+      source_text = normalized_adjustment[:source_text].to_s.strip
+      return true if label.present? && text.include?(label)
+      return true if source_text.present? && text.include?(source_text)
+
+      case ReceiptAdjustment.normalize_kind(normalized_adjustment[:kind])
+      when "delivery_fee"
+        text.match?(/配送料|送料|delivery|shipping/i)
+      when "bag_fee"
+        text.match?(/レジ袋|袋代|bag/i)
+      when "service_charge"
+        text.match?(/サービス料|service\s*charge/i)
+      when "late_night_charge"
+        text.match?(/深夜|late.?night|midnight|after.?hours/i)
+      when "handling_fee"
+        text.match?(/手数料|handling|fee/i)
+      else
+        false
+      end
+    end
+
+    def adjustment_without_review_reason(adjustment, reason)
+      normalized = normalized_hash(adjustment)
+      remaining_reasons = normalize_review_reasons(normalized[:review_reasons]) - [ reason ]
+
+      normalized.to_h.symbolize_keys.merge(
+        needs_review: remaining_reasons.any?,
+        review_reasons: remaining_reasons
+      )
+    end
+
+    def amount_result_without_review_reason(amount_result, reason)
+      result = amount_result.deep_dup
+      reason_code = Amounts::MismatchCodes.code(reason.to_sym)
+
+      %i[inconsistencies blocking_inconsistencies review_reasons warning_reasons].each do |key|
+        result[key] = normalize_review_reasons(result[key]) - [ reason ]
+      end
+      %i[mismatch_codes blocking_mismatch_codes warning_mismatch_codes].each do |key|
+        result[key] = Array(result[key]) - [ reason_code ]
+      end
+
+      selected_candidate = result.dig(:amount_engine, :selected_candidate)
+      if selected_candidate.present?
+        selected_candidate[:warnings] = normalize_review_reasons(selected_candidate[:warnings]) - [ reason ]
+      end
+      result[:needs_review] = Array(result[:blocking_inconsistencies]).any?
+      result
     end
 
     def ocr_review_reasons_for(ocr_result)

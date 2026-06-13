@@ -2294,6 +2294,97 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '明確なsurcharge adjustmentはfinal保存値でadjustment_uncertainを解除する' do
+      ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
+      ai_result = ai_success_result_for(
+        ocr_result,
+        review_reasons: [ 'adjustment_uncertain' ],
+        needs_review: true
+      ).merge(
+        receipt_attributes: {
+          payment_method: 'qr_payment'
+        },
+        receipt_adjustments_attributes: [
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋代',
+            amount: 10,
+            sign: 'surcharge',
+            source_text: 'レジ袋代',
+            source_line_index: 17,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          },
+          {
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 550,
+            sign: 'surcharge',
+            source_text: '配送料',
+            source_line_index: 19,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          }
+        ]
+      )
+
+      receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.subtotal_amount).to eq(1640)
+        expect(receipt.tax_amount).to eq(164)
+        expect(receipt.total_amount).to eq(1804)
+        expect(receipt.receipt_payments.sum(:amount)).to eq(1804)
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'bag_fee', 10, 'surcharge' ],
+          [ 'delivery_fee', 550, 'surcharge' ]
+        )
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
+      end
+    end
+
+    it '返品・返金系adjustmentのadjustment_uncertainは解除しない' do
+      ocr_result = ocr_fixture('return_receipt')
+      ai_result = ai_success_result_for(
+        ocr_result,
+        review_reasons: [ 'adjustment_uncertain' ],
+        needs_review: true
+      ).merge(
+        receipt_attributes: {
+          payment_method: 'credit_card'
+        },
+        receipt_adjustments_attributes: [
+          {
+            kind: 'return_refund',
+            label: '返品(液体洗剤)',
+            amount: 980,
+            sign: 'discount',
+            source_text: '返品(液体洗剤)',
+            source_line_index: 12,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          }
+        ]
+      )
+
+      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to include([ 'return_refund', 980, 'discount' ])
+        expect(receipt.receipt_adjustments.first).to have_attributes(
+          needs_review: true,
+          review_reasons: include('adjustment_uncertain')
+        )
+      end
+    end
+
     it 'service_and_late_night_receiptのサービス料と深夜料金をadjustmentとして保存する' do
       ocr_result = ocr_fixture('service_and_late_night_receipt')
       ai_result = ai_success_result_for(ocr_result).merge(
