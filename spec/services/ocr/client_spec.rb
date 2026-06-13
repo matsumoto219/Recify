@@ -697,6 +697,55 @@ RSpec.describe Ocr::Client do
       expect(client.available?).to eq(true)
     end
 
+    it 'analyze endpointへGETせず静的な設定確認だけでtrueを返す' do
+      with_env(
+        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+        'AZURE_OCR_API_KEY' => 'test-key'
+      ) do
+        expect(Faraday).not_to receive(:get)
+
+        expect(client.available?).to eq(true)
+      end
+    end
+
+    it 'endpoint未設定ならprovider detail付きでfalseを返す' do
+      with_env('AZURE_OCR_ENDPOINT' => nil, 'AZURE_OCR_API_KEY' => 'test-key') do
+        expect(client.available?).to eq(false)
+      end
+    end
+
+    it 'api key未設定ならprovider detail付きのauth errorを投げる' do
+      with_env(
+        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+        'AZURE_OCR_API_KEY' => nil
+      ) do
+        expect { client.send(:check_availability) }
+          .to raise_error(Ocr::OcrError, 'external_service_auth_error') { |error|
+            expect(error.provider_error_detail).to include(
+              service: 'ocr',
+              provider: provider,
+              phase: 'availability',
+              provider_error_code: 'api_key_missing',
+              auth_error: true
+            )
+          }
+      end
+    end
+
+    it 'endpoint形式が不正ならexternal_service_unavailableを投げる' do
+      with_env('AZURE_OCR_ENDPOINT' => 'not a url', 'AZURE_OCR_API_KEY' => 'test-key') do
+        expect { client.send(:check_availability) }
+          .to raise_error(Ocr::OcrError, 'external_service_unavailable') { |error|
+            expect(error.provider_error_detail).to include(
+              service: 'ocr',
+              provider: provider,
+              phase: 'availability',
+              provider_error_code: 'endpoint_invalid'
+            )
+          }
+      end
+    end
+
     it 'OcrError の場合は false を返す' do
       allow(client).to receive(:check_availability).and_raise(Ocr::OcrError.new('ocr_api_error'))
 

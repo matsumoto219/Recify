@@ -21,6 +21,8 @@ module Ocr
     DEFAULT_MAX_POLL_INTERVAL = 3.0
     DEFAULT_BASE_RETRY_DELAY = 0.5
     DEFAULT_MAX_RETRY_DELAY = 10.0
+    ENDPOINT_ENV_KEY = "AZURE_OCR_ENDPOINT"
+    API_KEY_ENV_KEY = "AZURE_OCR_API_KEY"
 
     POLL_INTERVAL = DEFAULT_POLL_INTERVAL
     MAX_POLL = DEFAULT_MAX_POLL
@@ -313,16 +315,9 @@ module Ocr
 
     # provider依存の疎通確認実装。通常処理フローからは直接使わない。
     def check_availability
-      res = connection.get do |req|
-        req.url analyze_path
-        req.headers["Ocp-Apim-Subscription-Key"] = api_key
-      end
-
-      handle_response_status!(res, phase: "availability")
-    rescue Faraday::TimeoutError
-      raise OcrTimeoutError, "ocr_timeout"
-    rescue Faraday::ConnectionFailed
-      raise OcrError, "external_service_unavailable"
+      validate_endpoint_configuration!
+      validate_api_key_configuration!
+      true
     end
 
     # 外部サービス状態管理では、このメソッドで寄せた error_code を利用して
@@ -409,7 +404,7 @@ module Ocr
     end
 
     def endpoint
-      ENV.fetch("AZURE_OCR_ENDPOINT")
+      ENV.fetch(ENDPOINT_ENV_KEY)
     end
 
     def analyze_path
@@ -423,7 +418,56 @@ module Ocr
     end
 
     def api_key
-      ENV.fetch("AZURE_OCR_API_KEY")
+      ENV.fetch(API_KEY_ENV_KEY)
+    end
+
+    def validate_endpoint_configuration!
+      raw_endpoint = ENV[ENDPOINT_ENV_KEY].to_s.strip
+      raise_static_configuration_error(
+        "external_service_unavailable",
+        provider_error_code: "endpoint_missing",
+        provider_message_safe: "Azure OCR endpoint is missing"
+      ) if raw_endpoint.blank?
+
+      uri = URI.parse(raw_endpoint)
+      return if uri.is_a?(URI::HTTP) && uri.host.present? && %w[http https].include?(uri.scheme)
+
+      raise_static_configuration_error(
+        "external_service_unavailable",
+        provider_error_code: "endpoint_invalid",
+        provider_message_safe: "Azure OCR endpoint is invalid"
+      )
+    rescue URI::InvalidURIError
+      raise_static_configuration_error(
+        "external_service_unavailable",
+        provider_error_code: "endpoint_invalid",
+        provider_message_safe: "Azure OCR endpoint is invalid"
+      )
+    end
+
+    def validate_api_key_configuration!
+      return if ENV[API_KEY_ENV_KEY].to_s.strip.present?
+
+      raise_static_configuration_error(
+        "external_service_auth_error",
+        provider_error_code: "api_key_missing",
+        provider_message_safe: "Azure OCR API key is missing",
+        auth_error: true
+      )
+    end
+
+    def raise_static_configuration_error(error_code, provider_error_code:, provider_message_safe:, auth_error: false)
+      raise OcrError.new(
+        error_code,
+        provider_error_detail: ExternalServices.error_detail(
+          service: :ocr,
+          provider: provider,
+          phase: "availability",
+          provider_error_code: provider_error_code,
+          provider_message_safe: provider_message_safe,
+          auth_error: auth_error
+        )
+      )
     end
 
     def timeout

@@ -43,12 +43,12 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     end
   end
 
-  it 'degraded service は checker 成功1回で ok に戻る' do
-    make_degraded(:ocr)
+  it 'degraded AI service は checker 成功1回で ok に戻る' do
+    make_degraded(:ai)
 
     travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
       described_class.perform_now
-      snapshot = ExternalServices.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ai)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('ok')
@@ -58,12 +58,12 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     end
   end
 
-  it 'down service は checker 成功1回目では monitoring を継続する' do
-    make_down(:ocr)
+  it 'down AI service は checker 成功1回目では monitoring を継続する' do
+    make_down(:ai)
 
     travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
       described_class.perform_now
-      snapshot = ExternalServices.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ai)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('down')
@@ -73,18 +73,38 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     end
   end
 
-  it 'down service は checker 成功2回目で ok に戻る' do
-    make_down(:ocr)
+  it 'down AI service は checker 成功2回目で ok に戻る' do
+    make_down(:ai)
 
     travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
       described_class.perform_now
       described_class.perform_now
-      snapshot = ExternalServices.snapshot(:ocr)
+      snapshot = ExternalServices.snapshot(:ai)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('ok')
         expect(snapshot[:monitoring]).to eq(false)
         expect(snapshot[:next_check_at]).to be_nil
+      end
+    end
+  end
+
+  it 'OCR service は静的availability成功だけでは復旧扱いにしない' do
+    make_degraded(:ocr)
+
+    travel_to(Time.zone.parse('2026-04-15 10:04:00')) do
+      before_check = ExternalServices.snapshot(:ocr)
+
+      described_class.perform_now
+      snapshot = ExternalServices.snapshot(:ocr)
+
+      aggregate_failures do
+        expect(ExternalServices).to have_received(:check_available?).with(:ocr).once
+        expect(snapshot[:state]).to eq('degraded')
+        expect(snapshot[:monitoring]).to eq(true)
+        expect(snapshot[:consecutive_successes]).to eq(0)
+        expect(snapshot[:last_error_code]).to eq('external_service_unavailable')
+        expect(Time.zone.parse(snapshot[:next_check_at])).to be > Time.zone.parse(before_check[:next_check_at])
       end
     end
   end

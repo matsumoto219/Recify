@@ -93,7 +93,7 @@ RSpec.describe ExternalServices do
   describe '.mark_failure!' do
     it 'StatusStoreへ委譲する' do
       allow(ExternalServices::StatusStore).to receive(:mark_failure!)
-        .with(:ocr, error_code: 'ocr_timeout')
+        .with(:ocr, error_code: 'ocr_timeout', reason: nil, detail: nil)
         .and_return(true)
 
       expect(described_class.mark_failure!(:ocr, error_code: 'ocr_timeout')).to eq(true)
@@ -103,7 +103,7 @@ RSpec.describe ExternalServices do
   describe '.mark_monitor_failure!' do
     it 'StatusStoreへ委譲する' do
       allow(ExternalServices::StatusStore).to receive(:mark_monitor_failure!)
-        .with(:ocr, error_code: 'external_service_unavailable')
+        .with(:ocr, error_code: 'external_service_unavailable', reason: nil, detail: nil)
         .and_return(true)
 
       expect(described_class.mark_monitor_failure!(:ocr, error_code: 'external_service_unavailable')).to eq(true)
