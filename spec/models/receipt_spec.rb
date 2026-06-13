@@ -960,6 +960,42 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it 'OCR外部サービスの細分エラーはprovider詳細を出さず一般文言へ丸める' do
+      %w[
+        external_service_quota_exceeded
+        external_service_rate_limited
+        external_service_auth_error
+        external_service_unavailable
+      ].each do |error_code|
+        message = build_stubbed(:receipt, :failed, processing_error_code: error_code).processing_error_user_message
+
+        aggregate_failures(error_code) do
+          expect(message).to eq('OCRサービスを現在利用できません。時間をおいて再試行するか、手動入力で続行してください。')
+          expect(message).not_to include(error_code, 'Azure', 'request_id', 'policy-id')
+        end
+      end
+    end
+
+    it 'AI外部サービスの細分エラーはprovider詳細を出さず一般文言へ丸める' do
+      %w[
+        ai_quota_exceeded
+        ai_rate_limited
+        ai_auth_error
+        ai_config_error
+        ai_timeout
+        ai_invalid_request
+        ai_invalid_response
+        ai_api_error
+      ].each do |error_code|
+        message = build_stubbed(:receipt, :failed, processing_error_code: error_code).processing_error_user_message
+
+        aggregate_failures(error_code) do
+          expect(message).to eq('AI補完を現在利用できません。OCR結果を確認・修正してください。')
+          expect(message).not_to include(error_code, 'OpenAI', 'request_id', 'provider')
+        end
+      end
+    end
+
     it '文字読み取り不可とレシート認識不可を別文言にする' do
       no_text_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'no_text_detected')
       not_detected_receipt = build_stubbed(:receipt, :failed, processing_error_code: 'receipt_not_detected')

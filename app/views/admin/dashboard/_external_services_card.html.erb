@@ -39,11 +39,19 @@
   service_detail_rows = lambda do |payload|
     [
       [ t("admin.dashboard.external_services.last_error_code"), payload[:last_error_code] ],
+      [ t("admin.dashboard.external_services.http_status"), payload[:http_status] ],
       [ t("admin.dashboard.external_services.provider_error_code"), payload[:provider_error_code] ],
+      [ t("admin.dashboard.external_services.provider_error_type"), payload[:provider_error_type] ],
+      [ t("admin.dashboard.external_services.policy_id"), payload[:policy_id] ],
+      [ t("admin.dashboard.external_services.region"), payload[:region] ],
       [ t("admin.dashboard.external_services.retry_after"), payload[:retry_after].present? ? "#{payload[:retry_after]}s" : nil ],
+      [ t("admin.dashboard.external_services.retry_after_at"), payload[:retry_after_at].present? ? format_status_time.call(payload[:retry_after_at]) : nil ],
       [ t("admin.dashboard.external_services.request_id"), payload[:request_id] ],
+      [ t("admin.dashboard.external_services.quota_exceeded"), payload.key?(:quota_exceeded) ? payload[:quota_exceeded] : nil ],
+      [ t("admin.dashboard.external_services.rate_limited"), payload.key?(:rate_limited) ? payload[:rate_limited] : nil ],
+      [ t("admin.dashboard.external_services.auth_error"), payload.key?(:auth_error) ? payload[:auth_error] : nil ],
       [ t("admin.dashboard.external_services.provider_message"), payload[:provider_message_safe] ]
-    ].select { |_label, value| value.present? }
+    ].select { |_label, value| !value.nil? && !(value.respond_to?(:empty?) && value.empty?) }
   end
 %>
 

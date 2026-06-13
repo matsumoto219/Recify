@@ -105,11 +105,18 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:ocr, :last_error_code)).to be_nil
         expect(payload.dig(:ocr, :last_error_reason)).to be_nil
         expect(payload.dig(:ocr, :last_error_detail)).to be_nil
+        expect(payload.dig(:ocr, :http_status)).to be_nil
         expect(payload.dig(:ocr, :retry_after)).to be_nil
+        expect(payload.dig(:ocr, :retry_after_at)).to be_nil
         expect(payload.dig(:ocr, :request_id)).to be_nil
+        expect(payload.dig(:ocr, :region)).to be_nil
+        expect(payload.dig(:ocr, :policy_id)).to be_nil
         expect(payload.dig(:ocr, :provider_error_code)).to be_nil
+        expect(payload.dig(:ocr, :provider_error_type)).to be_nil
         expect(payload.dig(:ocr, :provider_message_safe)).to be_nil
         expect(payload.dig(:ocr, :quota_exceeded)).to be_nil
+        expect(payload.dig(:ocr, :rate_limited)).to be_nil
+        expect(payload.dig(:ocr, :auth_error)).to be_nil
         expect(payload.dig(:ocr, :consecutive_failures)).to eq(3)
         expect(payload.dig(:ocr, :message)).to eq(I18n.t('flash.receipts.ocr_unavailable'))
         expect(payload.dig(:upload, :allowed)).to eq(false)
@@ -132,8 +139,11 @@ RSpec.describe ExternalServices::StatusSnapshot do
               phase: 'submit',
               http_status: 403,
               provider_error_code: 'QuotaExceeded',
+              provider_error_type: 'quota',
               provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
               request_id: 'azure-request-id',
+              region: 'Japan East',
+              policy_id: 'formrec_freetier_quota_id',
               retry_after: 60,
               quota_exceeded: true
             }
@@ -154,14 +164,23 @@ RSpec.describe ExternalServices::StatusSnapshot do
           phase: 'submit',
           http_status: 403,
           provider_error_code: 'QuotaExceeded',
+          provider_error_type: 'quota',
           provider_message_safe: 'F0 quota exceeded for [FILTERED]',
           request_id: 'azure-request-id',
+          region: 'Japan East',
+          policy_id: 'formrec_freetier_quota_id',
           retry_after: 60,
+          retry_after_at: '2026-05-23T10:01:00+09:00',
           quota_exceeded: true
         )
+        expect(payload.dig(:ocr, :http_status)).to eq(403)
         expect(payload.dig(:ocr, :retry_after)).to eq(60)
+        expect(payload.dig(:ocr, :retry_after_at)).to eq('2026-05-23T10:01:00+09:00')
         expect(payload.dig(:ocr, :request_id)).to eq('azure-request-id')
+        expect(payload.dig(:ocr, :region)).to eq('Japan East')
+        expect(payload.dig(:ocr, :policy_id)).to eq('formrec_freetier_quota_id')
         expect(payload.dig(:ocr, :provider_error_code)).to eq('QuotaExceeded')
+        expect(payload.dig(:ocr, :provider_error_type)).to eq('quota')
         expect(payload.dig(:ocr, :provider_message_safe)).to eq('F0 quota exceeded for [FILTERED]')
         expect(payload.dig(:ocr, :quota_exceeded)).to eq(true)
         expect(payload.to_s).not_to include('sk-secret-token')

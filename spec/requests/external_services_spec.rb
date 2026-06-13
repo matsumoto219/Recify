@@ -118,9 +118,13 @@ RSpec.describe 'External services status', type: :request do
             phase: 'ai_request',
             http_status: 429,
             provider_error_code: 'rate_limit_exceeded',
+            provider_error_type: 'rate_limit',
             provider_message_safe: 'rate limit for sk-secret-token-1234567890',
             request_id: 'req_ai',
+            region: 'Japan East',
+            policy_id: 'provider_policy',
             retry_after: 15,
+            retry_after_at: '2026-05-23T10:00:15+09:00',
             rate_limited: true,
             raw_body: 'RAW BODY MUST NOT BE RETURNED'
           }
@@ -137,14 +141,22 @@ RSpec.describe 'External services status', type: :request do
         expect(json.dig('ai', 'message')).to eq(I18n.t('receipts.new_upload.ai_down'))
         expect(json.dig('ai', 'last_error_code')).to be_nil
         expect(json.dig('ai', 'last_error_reason')).to be_nil
+        expect(json.dig('ai', 'http_status')).to be_nil
         expect(json.dig('ai', 'retry_after')).to be_nil
+        expect(json.dig('ai', 'retry_after_at')).to be_nil
         expect(json.dig('ai', 'request_id')).to be_nil
+        expect(json.dig('ai', 'region')).to be_nil
+        expect(json.dig('ai', 'policy_id')).to be_nil
         expect(json.dig('ai', 'provider_error_code')).to be_nil
+        expect(json.dig('ai', 'provider_error_type')).to be_nil
         expect(json.dig('ai', 'provider_message_safe')).to be_nil
         expect(json.dig('ai', 'rate_limited')).to be_nil
+        expect(json.dig('ai', 'quota_exceeded')).to be_nil
+        expect(json.dig('ai', 'auth_error')).to be_nil
         expect(response.body).not_to include('sk-secret-token')
         expect(response.body).not_to include('RAW BODY MUST NOT BE RETURNED')
         expect(response.body).not_to include('req_ai')
+        expect(response.body).not_to include('provider_policy')
         expect(response.body).not_to include('rate_limit_exceeded')
       end
     ensure

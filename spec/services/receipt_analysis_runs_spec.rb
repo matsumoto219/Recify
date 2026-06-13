@@ -799,6 +799,7 @@ RSpec.describe ReceiptAnalysisRuns do
             'provider_message_safe' => 'quota exceeded for [FILTERED]',
             'request_id' => 'req_primary',
             'retry_after' => 30,
+            'retry_after_at' => '2026-05-23T10:00:30+09:00',
             'rate_limited' => true,
             'quota_exceeded' => true
           },
@@ -811,6 +812,7 @@ RSpec.describe ReceiptAnalysisRuns do
             'provider_message_safe' => 'rate limit',
             'request_id' => 'req_fallback',
             'retry_after' => 15,
+            'retry_after_at' => '2026-05-23T10:00:15+09:00',
             'rate_limited' => true
           },
           'final_error_detail' => {
@@ -822,6 +824,7 @@ RSpec.describe ReceiptAnalysisRuns do
             'provider_message_safe' => 'rate limit',
             'request_id' => 'req_fallback',
             'retry_after' => 15,
+            'retry_after_at' => '2026-05-23T10:00:15+09:00',
             'rate_limited' => true
           },
           'item_count' => 1,

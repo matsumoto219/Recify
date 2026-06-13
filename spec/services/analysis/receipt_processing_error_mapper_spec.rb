@@ -33,6 +33,41 @@ RSpec.describe Analysis::ReceiptProcessingErrorMapper do
       end
     end
 
+    it 'OCR外部サービスの細分エラーをOCRエラーへ変換する' do
+      %w[
+        external_service_quota_exceeded
+        external_service_rate_limited
+        external_service_auth_error
+        external_service_unavailable
+        ocr_timeout
+        ocr_api_error
+      ].each do |error_code|
+        expect(described_class.map(error_code)).to eq(
+          error_code: error_code,
+          error_category: "ocr_error"
+        )
+      end
+    end
+
+    it 'AI外部サービスの細分エラーをAIエラーへ変換する' do
+      %w[
+        ai_quota_exceeded
+        ai_rate_limited
+        ai_auth_error
+        ai_config_error
+        ai_timeout
+        ai_invalid_request
+        ai_invalid_response
+        ai_api_error
+        ai_fallback_failed
+      ].each do |error_code|
+        expect(described_class.map(error_code)).to eq(
+          error_code: error_code,
+          error_category: "ai_error"
+        )
+      end
+    end
+
     it 'AIのnot receipt判定は画像エラーとして変換する' do
       result = described_class.map("ai_not_receipt")
 

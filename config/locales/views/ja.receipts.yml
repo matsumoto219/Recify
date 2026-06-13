@@ -258,6 +258,18 @@ ja:
       ai_not_receipt: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。
       ai_not_receipt_uncertain: レシート判定に迷いがあります。OCR結果を確認してください。
       ai_unavailable: AI補完は一時停止中です。OCR結果を確認・修正してください。
+      external_service_quota_exceeded: OCRサービスを現在利用できません。時間をおいて再試行するか、手動入力で続行してください。
+      external_service_rate_limited: OCRサービスを現在利用できません。時間をおいて再試行するか、手動入力で続行してください。
+      external_service_auth_error: OCRサービスを現在利用できません。時間をおいて再試行するか、手動入力で続行してください。
+      external_service_unavailable: OCRサービスを現在利用できません。時間をおいて再試行するか、手動入力で続行してください。
+      ai_quota_exceeded: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_rate_limited: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_auth_error: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_config_error: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_timeout: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_invalid_request: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_invalid_response: AI補完を現在利用できません。OCR結果を確認・修正してください。
+      ai_api_error: AI補完を現在利用できません。OCR結果を確認・修正してください。
       usage_limit_exceeded: 本日の解析上限に達しました。時間をおいてから、もう一度お試しください。
     processing_error_card:
       failed_title: 処理失敗

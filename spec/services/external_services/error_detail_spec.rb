@@ -1,26 +1,32 @@
 require 'rails_helper'
 
 RSpec.describe ExternalServices::ErrorDetail do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe '.build' do
     it 'provider error body/headerから保存可能な詳細だけを抽出する' do
-      detail = described_class.build(
-        service: :ocr,
-        provider: 'azure_document_intelligence',
-        phase: :submit,
-        http_status: 403,
-        body: {
-          error: {
-            code: '403',
-            message: 'Out of call volume quota for FormRecognizer F0 pricing tier. Bearer sk-secret-value'
+      detail = nil
+      travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
+        detail = described_class.build(
+          service: :ocr,
+          provider: 'azure_document_intelligence',
+          phase: :submit,
+          http_status: 403,
+          body: {
+            error: {
+              code: '403',
+              message: 'Out of call volume quota for FormRecognizer F0 pricing tier. Bearer sk-secret-value'
+            }
+          },
+          headers: {
+            'retry-after' => '120',
+            'apim-request-id' => 'request-123',
+            'x-ms-region' => 'Japan East',
+            'policy-id' => 'formrec_freetier_quota_id',
+            'Ocp-Apim-Subscription-Key' => 'secret-key'
           }
-        },
-        headers: {
-          'retry-after' => '120',
-          'apim-request-id' => 'request-123',
-          'x-ms-region' => 'Japan East',
-          'Ocp-Apim-Subscription-Key' => 'secret-key'
-        }
-      )
+        )
+      end
 
       aggregate_failures do
         expect(detail).to include(
@@ -31,7 +37,9 @@ RSpec.describe ExternalServices::ErrorDetail do
           provider_error_code: '403',
           request_id: 'request-123',
           region: 'Japan East',
+          policy_id: 'formrec_freetier_quota_id',
           retry_after: 120.0,
+          retry_after_at: '2026-05-23T10:02:00+09:00',
           quota_exceeded: true
         )
         expect(detail[:provider_message_safe]).to include('Out of call volume quota')

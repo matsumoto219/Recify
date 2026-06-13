@@ -212,11 +212,18 @@ RSpec.describe 'Admin dashboard', type: :request do
           checked_at: '2026-05-26T12:00:00+09:00',
           next_check_at: '2026-05-26T12:05:00+09:00',
           last_error_code: 'external_service_quota_exceeded',
+          http_status: 403,
           provider_error_code: 'QuotaExceeded',
+          provider_error_type: 'quota',
+          policy_id: 'formrec_freetier_quota_id',
+          region: 'Japan East',
           retry_after: 60,
+          retry_after_at: '2026-05-26T12:01:00+09:00',
           request_id: 'azure-request-id',
           provider_message_safe: 'F0 quota exceeded for [FILTERED]',
           quota_exceeded: true,
+          rate_limited: false,
+          auth_error: false,
           message: 'https://status.example.test/providers/ocr/service-status?incident=very-long-provider-message'
         },
         ai: {
@@ -270,8 +277,16 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('AIサービス')
         expect(response.body).to include('停止中')
         expect(response.body).to include('external_service_quota_exceeded')
+        expect(response.body).to include('403')
         expect(response.body).to include('QuotaExceeded')
+        expect(response.body).to include('quota')
+        expect(response.body).to include('formrec_freetier_quota_id')
+        expect(response.body).to include('Japan East')
+        expect(response.body).to include('05/26 12:01')
         expect(response.body).to include('azure-request-id')
+        expect(response.body).to include('quota exceeded')
+        expect(response.body).to include('rate limited')
+        expect(response.body).to include('auth error')
         expect(response.body).to include('F0 quota exceeded for [FILTERED]')
         expect(response.body).to include('OCR停止中のため停止')
         expect(response.body).to include('data-controller="service-status-polling"')

@@ -12,6 +12,10 @@ module ExternalServices
     REGION_HEADERS = %w[
       x-ms-region
     ].freeze
+    POLICY_ID_HEADERS = %w[
+      policy-id
+      x-ms-policy-id
+    ].freeze
     RETRY_AFTER_HEADERS = %w[
       retry-after
     ].freeze
@@ -25,7 +29,9 @@ module ExternalServices
       provider_message_safe
       request_id
       region
+      policy_id
       retry_after
+      retry_after_at
       latency_ms
       poll_count
       model
@@ -60,7 +66,9 @@ module ExternalServices
       provider_message_safe: nil,
       request_id: nil,
       region: nil,
+      policy_id: nil,
       retry_after: nil,
+      retry_after_at: nil,
       latency_ms: nil,
       poll_count: nil,
       model: nil,
@@ -83,7 +91,9 @@ module ExternalServices
         provider_message_safe: safe_message(provider_message_safe || provider_message),
         request_id: safe_string(request_id),
         region: safe_string(region),
+        policy_id: safe_identifier(policy_id),
         retry_after: safe_retry_after(retry_after),
+        retry_after_at: safe_time(retry_after_at),
         latency_ms: safe_numeric(latency_ms),
         poll_count: safe_integer(poll_count),
         model: safe_string(model),
@@ -100,13 +110,16 @@ module ExternalServices
 
     def to_h
       body_data = body_error_data
+      retry_after = @attributes[:retry_after] || safe_retry_after(header_value(RETRY_AFTER_HEADERS))
       detail = @attributes.merge(
         provider_error_code: @attributes[:provider_error_code] || body_data[:provider_error_code],
         provider_error_type: @attributes[:provider_error_type] || body_data[:provider_error_type],
         provider_message_safe: @attributes[:provider_message_safe] || body_data[:provider_message_safe],
         request_id: @attributes[:request_id] || header_value(REQUEST_ID_HEADERS) || body_data[:request_id],
         region: @attributes[:region] || header_value(REGION_HEADERS),
-        retry_after: @attributes[:retry_after] || safe_retry_after(header_value(RETRY_AFTER_HEADERS)),
+        policy_id: @attributes[:policy_id] || safe_identifier(header_value(POLICY_ID_HEADERS)),
+        retry_after: retry_after,
+        retry_after_at: @attributes[:retry_after_at] || retry_after_at_for(retry_after),
         quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(body_data)),
         rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(body_data)),
         auth_error: boolean_or(@attributes[:auth_error], auth_error?(body_data))
@@ -213,6 +226,13 @@ module ExternalServices
       value.to_s.presence if value.present?
     end
 
+    def safe_identifier(value)
+      identifier = safe_string(value)
+      return if identifier.blank?
+
+      truncate_bytes(identifier, MAX_MESSAGE_BYTES)
+    end
+
     def safe_integer(value)
       return value if value.is_a?(Integer)
       return value.to_i if value.to_s.match?(/\A-?\d+\z/)
@@ -234,6 +254,22 @@ module ExternalServices
 
       delay = Time.httpdate(value.to_s) - Time.current
       delay.negative? ? nil : delay
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def retry_after_at_for(retry_after)
+      seconds = safe_numeric(retry_after)
+      return if seconds.nil? || seconds.negative?
+
+      (Time.current + seconds).iso8601
+    end
+
+    def safe_time(value)
+      return if value.blank?
+      return value.iso8601 if value.respond_to?(:iso8601)
+
+      Time.zone.parse(value.to_s)&.iso8601
     rescue ArgumentError, TypeError
       nil
     end

@@ -29,10 +29,14 @@ module Analysis
       # AI系
       "ai_timeout" => "ai_error",
       "ai_unavailable" => "ai_error",
+      "ai_quota_exceeded" => "ai_error",
+      "ai_rate_limited" => "ai_error",
+      "ai_auth_error" => "ai_error",
+      "ai_invalid_request" => "ai_error",
       "ai_not_receipt" => "image_error",
       "ai_not_receipt_uncertain" => "image_error",
       "ai_invalid_response" => "ai_error",
-      "ai_config_error" => "system_error",
+      "ai_config_error" => "ai_error",
       "analysis_missing_keys" => "ai_error",
       "ai_primary_failed" => "ai_error",
       "ai_fallback_failed" => "ai_error",
@@ -42,8 +46,10 @@ module Analysis
       "analysis_value_invalid" => "ai_error",
 
       # 外部サービス系
-      "external_service_unavailable" => "system_error",
-      "external_service_auth_error" => "system_error",
+      "external_service_unavailable" => "ocr_error",
+      "external_service_auth_error" => "ocr_error",
+      "external_service_quota_exceeded" => "ocr_error",
+      "external_service_rate_limited" => "ocr_error",
 
       # その他
       "unexpected_error" => "system_error"

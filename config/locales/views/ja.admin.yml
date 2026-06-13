@@ -69,9 +69,17 @@ ja:
         checked_at: 最終確認
         next_check_at: 次回確認
         last_error_code: 最終error
+        http_status: HTTP status
         provider_error_code: provider code
+        provider_error_type: provider type
+        policy_id: policy id
+        region: region
         retry_after: Retry-After
+        retry_after_at: retry after at
         request_id: request id
+        quota_exceeded: quota exceeded
+        rate_limited: rate limited
+        auth_error: auth error
         provider_message: provider message
         upload: レシート画像アップロード
         upload_allowed: 受付可
