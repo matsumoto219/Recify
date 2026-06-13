@@ -220,6 +220,84 @@ RSpec.describe Ai::Client do
           expect(result.dig(:meta, :fallback_used)).to eq(true)
         end
       end
+
+      it 'provider error detailをsafeな共通形式で返す' do
+        primary_error = Ai::Errors::ProviderError.new(
+          message: 'primary quota failed with prompt=store secrets',
+          error_code: 'ai_quota_exceeded',
+          provider: primary_provider,
+          category: :billing_quota,
+          fallbackable: true,
+          provider_status: 429,
+          provider_error_code: 'insufficient_quota',
+          provider_error_type: 'insufficient_quota',
+          provider_message: 'Quota exceeded for sk-secret-token-1234567890',
+          request_id: 'req_primary',
+          retry_after: 30,
+          quota_exceeded: true,
+          phase: 'ai_request',
+          metrics: {
+            model: 'gpt-test',
+            prompt: 'PROMPT MUST NOT BE STORED',
+            raw_body: '{"error":"RAW BODY"}'
+          }
+        )
+        fallback_error = Ai::Errors::ProviderError.new(
+          message: 'fallback failed',
+          error_code: 'ai_fallback_failed',
+          provider: fallback_provider,
+          category: :server_error,
+          provider_status: 500,
+          provider_error_code: 'server_error',
+          provider_error_type: 'server_error',
+          provider_message: 'temporary provider error',
+          request_id: 'req_fallback',
+          phase: 'fallback',
+          metrics: {
+            model: 'fallback-model',
+            headers: { authorization: 'Bearer secret' }
+          }
+        )
+
+        allow(primary_client).to receive(:call).with(input).and_raise(primary_error)
+        allow(fallback_client).to receive(:call).with(input).and_raise(fallback_error)
+
+        result = client.call(input)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ai_fallback_failed')
+          expect(result.dig(:meta, :final_provider)).to eq('fallback_ai')
+          expect(result.dig(:meta, :primary_error_message)).to eq('Quota exceeded for [FILTERED]')
+          expect(result.dig(:meta, :primary_error_detail)).to include(
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'insufficient_quota',
+            provider_error_type: 'insufficient_quota',
+            provider_message_safe: 'Quota exceeded for [FILTERED]',
+            request_id: 'req_primary',
+            retry_after: 30,
+            model: 'gpt-test',
+            quota_exceeded: true
+          )
+          expect(result.dig(:meta, :fallback_error_detail)).to include(
+            service: 'ai',
+            provider: 'fallback_ai',
+            phase: 'fallback',
+            http_status: 500,
+            provider_error_code: 'server_error',
+            request_id: 'req_fallback',
+            model: 'fallback-model'
+          )
+          expect(result.dig(:meta, :final_error_detail)).to eq(result.dig(:meta, :fallback_error_detail))
+          expect(result.to_s).not_to include('sk-secret-token')
+          expect(result.to_s).not_to include('PROMPT MUST NOT BE STORED')
+          expect(result.to_s).not_to include('RAW BODY')
+          expect(result.to_s).not_to include('authorization')
+        end
+      end
     end
 
     context 'ProviderError に error_code が無い場合' do
@@ -251,7 +329,16 @@ RSpec.describe Ai::Client do
       end
 
       it 'primary_error_code に ai_primary_failed を入れて error result を返す' do
-        allow(primary_client).to receive(:call).with(input).and_raise(Ai::Errors::TimeoutError.new(message: 'timeout'))
+        allow(primary_client).to receive(:call).with(input).and_raise(
+          Ai::Errors::TimeoutError.new(
+            message: 'timeout with prompt=secret',
+            provider: primary_provider,
+            provider_error_code: 'timeout',
+            provider_message: 'execution expired',
+            request_id: 'req_timeout',
+            phase: 'ai_request'
+          )
+        )
 
         result = client.call(input)
 
@@ -259,7 +346,17 @@ RSpec.describe Ai::Client do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('ai_primary_failed')
           expect(result.dig(:meta, :primary_error_code)).to eq('ai_primary_failed')
+          expect(result.dig(:meta, :primary_error_message)).to eq('execution expired')
+          expect(result.dig(:meta, :primary_error_detail)).to include(
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            provider_error_code: 'timeout',
+            provider_message_safe: 'execution expired',
+            request_id: 'req_timeout'
+          )
           expect(result.dig(:meta, :fallback_used)).to eq(false)
+          expect(result.to_s).not_to include('prompt=secret')
         end
       end
     end

@@ -38,7 +38,7 @@ module Ai
         error_code: "ai_primary_failed",
         provider: primary_provider,
         cause: error,
-        metrics: error.metrics
+        **provider_error_attributes(error)
       )
     rescue Ai::Errors::ProviderError => error
       Rails.logger.error("[AI] primary provider error: #{error.message}")
@@ -49,7 +49,7 @@ module Ai
         error_code: "ai_primary_failed",
         provider: primary_provider,
         cause: error,
-        metrics: error.metrics
+        **provider_error_attributes(error)
       )
     end
 
@@ -99,11 +99,13 @@ module Ai
         error_code: "ai_fallback_failed",
         provider: fallback_provider,
         cause: error,
-        metrics: error.respond_to?(:metrics) ? error.metrics : nil
+        **provider_error_attributes(error)
       )
     end
 
     def failure_result(primary_error, fallback_error)
+      final_error = final_error(primary_error, fallback_error)
+
       ResultTemplate.error(
         error_code: final_error_code(primary_error, fallback_error),
         meta: {
@@ -111,12 +113,24 @@ module Ai
           fallback_provider: fallback_provider,
           fallback_used: fallback_error.present?,
           primary_error_code: primary_error&.error_code,
-          primary_error_message: primary_error&.message,
+          primary_error_message: safe_error_message(primary_error),
+          primary_error_detail: provider_error_detail(primary_error, fallback_phase: false),
           fallback_error_code: fallback_error&.error_code,
-          fallback_error_message: fallback_error&.message,
+          fallback_error_message: safe_error_message(fallback_error),
+          fallback_error_detail: provider_error_detail(fallback_error, fallback_phase: true),
+          final_provider: provider_name(final_error&.provider || fallback_error&.provider || primary_error&.provider || primary_provider),
+          final_error_detail: provider_error_detail(final_error, fallback_phase: fallback_error.present?),
           metrics: failure_metrics(primary_error, fallback_error)
         }.compact
       )
+    end
+
+    def final_error(primary_error, fallback_error)
+      fallback_error || primary_error
+    end
+
+    def provider_name(value)
+      value.to_s.presence if value.present?
     end
 
     def final_error_code(primary_error, fallback_error)
@@ -155,6 +169,58 @@ module Ai
         fallback_reason: primary_error&.error_code,
         final_provider: fallback_error&.provider || primary_error&.provider || primary_provider
       )
+    end
+
+    def provider_error_attributes(error)
+      return { metrics: nil } unless error.respond_to?(:metrics)
+
+      {
+        retry_after: error.respond_to?(:retry_after) ? error.retry_after : nil,
+        provider_status: error.respond_to?(:provider_status) ? error.provider_status : nil,
+        provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : nil,
+        provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : nil,
+        provider_message: error.respond_to?(:provider_message) ? error.provider_message : nil,
+        request_id: error.respond_to?(:request_id) ? error.request_id : nil,
+        quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : nil,
+        rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : nil,
+        auth_error: error.respond_to?(:auth_error) ? error.auth_error : nil,
+        phase: error.respond_to?(:phase) ? error.phase : nil,
+        metrics: error.metrics
+      }.compact
+    end
+
+    def provider_error_detail(error, fallback_phase:)
+      return unless error.respond_to?(:metrics)
+
+      metrics = error.metrics || {}
+      ExternalServices.error_detail(
+        service: :ai,
+        provider: error.provider || metrics[:provider] || (fallback_phase ? fallback_provider : primary_provider),
+        phase: error.phase || metrics[:phase] || (fallback_phase ? :fallback : :ai_request),
+        http_status: error.provider_status || metrics[:provider_status],
+        provider_error_code: error.provider_error_code || metrics[:provider_error_code],
+        provider_error_type: error.provider_error_type || metrics[:provider_error_type],
+        provider_message: error.provider_message || metrics[:provider_message],
+        request_id: error.request_id || metrics[:request_id],
+        retry_after: error.retry_after || metrics[:retry_after],
+        model: metrics[:model],
+        rate_limited: error.rate_limited || metrics[:rate_limited],
+        quota_exceeded: error.quota_exceeded || metrics[:quota_exceeded],
+        auth_error: error.auth_error || metrics[:auth_error]
+      ).presence
+    end
+
+    def safe_error_message(error)
+      return unless error
+
+      detail = provider_error_detail(error, fallback_phase: false)
+      return detail[:provider_message_safe] if detail&.dig(:provider_message_safe).present?
+      return "timeout" if error.is_a?(Ai::Errors::TimeoutError) || error.error_code.to_s.match?(/timeout/)
+      return "rate limit" if error.respond_to?(:rate_limited) && error.rate_limited == true
+      return "quota exceeded" if error.respond_to?(:quota_exceeded) && error.quota_exceeded == true
+      return "auth error" if error.respond_to?(:auth_error) && error.auth_error == true
+
+      error.error_code.presence || error.class.name
     end
 
     def ensure_provider_result!(result)
