@@ -8,11 +8,8 @@ RSpec.describe ExternalServices do
   end
 
   describe '.state and predicates' do
-    it 'StatusStoreの状態参照を親入口から公開する' do
-      allow(ExternalServices::StatusStore).to receive(:state).with(:ocr).and_return('ok')
-      allow(ExternalServices::StatusStore).to receive(:ok?).with(:ocr).and_return(true)
-      allow(ExternalServices::StatusStore).to receive(:degraded?).with(:ocr).and_return(false)
-      allow(ExternalServices::StatusStore).to receive(:down?).with(:ocr).and_return(false)
+    it '合成後の状態参照を親入口から公開する' do
+      allow(ExternalServices::StatusStore).to receive(:snapshot).with(:ocr).and_return(state: 'ok')
       allow(ExternalServices::StatusStore).to receive(:monitoring?).with(:ocr).and_return(false)
       allow(ExternalServices::StatusStore).to receive(:due_for_check?).with(:ocr).and_return(false)
 
@@ -25,10 +22,29 @@ RSpec.describe ExternalServices do
         expect(described_class.due_for_check?(:ocr)).to eq(false)
       end
     end
+
+    it 'SystemSettings停止中はdown扱いにする' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: described_class_setting(false))
+
+      aggregate_failures do
+        expect(described_class.state(:ocr)).to eq('down')
+        expect(described_class.ok?(:ocr)).to eq(false)
+        expect(described_class.down?(:ocr)).to eq(true)
+      end
+    end
+
+    it 'ENV停止中はdown扱いにする' do
+      with_env('RECEIPT_AI_ENABLED' => 'false') do
+        aggregate_failures do
+          expect(described_class.state(:ai)).to eq('down')
+          expect(described_class.down?(:ai)).to eq(true)
+        end
+      end
+    end
   end
 
   describe '.snapshot and .snapshots' do
-    it 'StatusStoreのsnapshotを親入口から公開する' do
+    it '合成済みsnapshotを親入口から公開する' do
       ocr_snapshot = { state: 'ok' }
       ai_snapshot = { state: 'down' }
 
@@ -36,9 +52,25 @@ RSpec.describe ExternalServices do
       allow(ExternalServices::StatusStore).to receive(:snapshot).with(:ai).and_return(ai_snapshot)
 
       aggregate_failures do
-        expect(described_class.snapshot(:ocr)).to eq(ocr_snapshot)
-        expect(described_class.snapshots).to eq(ocr: ocr_snapshot, ai: ai_snapshot)
+        expect(described_class.snapshot(:ocr)).to include(state: 'ok', disabled: false, source: 'status_store')
+        expect(described_class.snapshots).to include(
+          ocr: include(state: 'ok', disabled: false),
+          ai: include(state: 'down', disabled: false)
+        )
       end
+    end
+
+    it 'SystemSettings停止中のsource/reasonをsnapshotに含める' do
+      create(:system_setting, key: 'operations.ai_enabled', value: described_class_setting(false))
+
+      expect(described_class.snapshot(:ai)).to include(
+        state: 'down',
+        disabled: true,
+        source: 'system_setting',
+        reason: 'operations.ai_enabled',
+        setting_key: 'operations.ai_enabled',
+        env_key: 'RECEIPT_AI_ENABLED'
+      )
     end
   end
 
@@ -168,9 +200,31 @@ RSpec.describe ExternalServices do
       expect(ReceiptAiEnrichmentService).to have_received(:available?)
     end
 
+    it '停止中はcheckerを呼ばずfalseを返す' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: described_class_setting(false))
+      allow(ReceiptOcrService).to receive(:available?)
+
+      aggregate_failures do
+        expect(described_class.check_available?(:ocr)).to eq(false)
+        expect(ReceiptOcrService).not_to have_received(:available?)
+      end
+    end
+
     it '未知serviceを明示的に弾く' do
       expect { described_class.check_available?(:storage) }
         .to raise_error(ArgumentError, 'Unsupported service: storage')
     end
+  end
+
+  def described_class_setting(value)
+    SystemSettings.stored_value(value)
+  end
+
+  def with_env(overrides)
+    original = overrides.keys.to_h { |key| [ key, ENV[key] ] }
+    overrides.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+    yield
+  ensure
+    original.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
   end
 end

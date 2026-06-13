@@ -24,6 +24,8 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:ocr, :text)).to eq(I18n.t('shared.service_status.ok'))
         expect(payload.dig(:ocr, :message)).to be_nil
         expect(payload.dig(:ocr, :badge_html)).to be_nil
+        expect(payload.dig(:ocr, :disabled)).to eq(false)
+        expect(payload.dig(:ocr, :source)).to eq('status_store')
         expect(payload.dig(:ai, :state)).to eq('ok')
         expect(payload.dig(:upload, :allowed)).to eq(true)
         expect(payload.dig(:upload, :ocr_available)).to eq(true)
@@ -33,6 +35,38 @@ RSpec.describe ExternalServices::StatusSnapshot do
           ai_down: false,
           ai_degraded: false
         )
+      end
+    end
+
+    it 'SystemSettingsでOCR停止中ならupload不可とsourceを返す' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+
+      payload = described_class.call
+
+      aggregate_failures do
+        expect(payload.dig(:ocr, :state)).to eq('down')
+        expect(payload.dig(:ocr, :disabled)).to eq(true)
+        expect(payload.dig(:ocr, :source)).to eq('system_setting')
+        expect(payload.dig(:ocr, :reason)).to eq('operations.ocr_enabled')
+        expect(payload.dig(:upload, :allowed)).to eq(false)
+        expect(payload.dig(:upload, :ocr_available)).to eq(false)
+        expect(payload.dig(:notices, :ocr_down)).to eq(true)
+      end
+    end
+
+    it 'ENVでAI停止中ならOCR-only fallback noticeとsourceを返す' do
+      with_env('RECEIPT_AI_ENABLED' => 'false') do
+        payload = described_class.call
+
+        aggregate_failures do
+          expect(payload.dig(:ai, :state)).to eq('down')
+          expect(payload.dig(:ai, :disabled)).to eq(true)
+          expect(payload.dig(:ai, :source)).to eq('env')
+          expect(payload.dig(:ai, :reason)).to eq('RECEIPT_AI_ENABLED')
+          expect(payload.dig(:upload, :allowed)).to eq(true)
+          expect(payload.dig(:upload, :ocr_available)).to eq(true)
+          expect(payload.dig(:notices, :ai_down)).to eq(true)
+        end
       end
     end
 
@@ -73,5 +107,13 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:notices, :ai_down)).to eq(true)
       end
     end
+  end
+
+  def with_env(overrides)
+    original = overrides.keys.to_h { |key| [ key, ENV[key] ] }
+    overrides.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+    yield
+  ensure
+    original.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
   end
 end

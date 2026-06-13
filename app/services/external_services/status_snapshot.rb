@@ -13,7 +13,7 @@ module ExternalServices
     end
 
     def call
-      snapshots = SERVICES.index_with { |service| StatusStore.snapshot(service) }
+      snapshots = ExternalServices.snapshots
       states = snapshots.transform_values { |snapshot| service_state(snapshot) }
       ocr_state = states.fetch(:ocr)
       ai_state = states.fetch(:ai)
@@ -50,6 +50,11 @@ module ExternalServices
         last_error_code: normalized[:last_error_code],
         consecutive_failures: normalized[:consecutive_failures],
         consecutive_successes: normalized[:consecutive_successes],
+        disabled: normalized[:disabled] == true,
+        source: normalized[:source],
+        reason: normalized[:reason],
+        setting_key: normalized[:setting_key],
+        env_key: normalized[:env_key],
         text: service_status_text(state),
         message: service_status_message(service, state),
         badge_html: service_status_badge_html(service, state)

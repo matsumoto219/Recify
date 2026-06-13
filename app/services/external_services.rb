@@ -7,11 +7,11 @@ module ExternalServices
     end
 
     def state(service)
-      StatusStore.state(service)
+      snapshot(service)[:state]
     end
 
     def snapshot(service)
-      StatusStore.snapshot(service)
+      build_snapshot(normalize_service(service))
     end
 
     def snapshots
@@ -19,15 +19,15 @@ module ExternalServices
     end
 
     def ok?(service)
-      StatusStore.ok?(service)
+      state(service) == "ok"
     end
 
     def degraded?(service)
-      StatusStore.degraded?(service)
+      state(service) == "degraded"
     end
 
     def down?(service)
-      StatusStore.down?(service)
+      state(service) == "down"
     end
 
     def monitoring?(service)
@@ -81,7 +81,10 @@ module ExternalServices
     end
 
     def check_available?(service)
-      case normalize_service(service)
+      normalized = normalize_service(service)
+      return false unless enabled?(normalized)
+
+      case normalized
       when :ocr
         ReceiptOcrService.available?
       when :ai
@@ -90,6 +93,80 @@ module ExternalServices
     end
 
     private
+
+    def build_snapshot(service)
+      snapshot = StatusStore.snapshot(service).with_indifferent_access
+      operation = operation_status(service)
+
+      if operation[:disabled]
+        snapshot.merge(
+          state: "down",
+          disabled: true,
+          source: operation[:source],
+          reason: operation[:reason],
+          setting_key: operation[:setting_key],
+          env_key: operation[:env_key]
+        ).deep_symbolize_keys
+      else
+        snapshot.merge(
+          disabled: false,
+          source: "status_store",
+          reason: snapshot[:last_error_code]
+        ).deep_symbolize_keys
+      end
+    end
+
+    def enabled?(service)
+      !operation_status(service)[:disabled]
+    end
+
+    def operation_status(service)
+      setting_key = operation_setting_key(service)
+      env_key = operation_env_key(service)
+
+      return disabled_status(source: "system_setting", reason: setting_key, setting_key: setting_key, env_key: env_key) unless setting_enabled?(setting_key)
+      return disabled_status(source: "env", reason: env_key, setting_key: setting_key, env_key: env_key) unless env_enabled?(env_key)
+
+      { disabled: false, source: "status_store", reason: nil, setting_key: setting_key, env_key: env_key }
+    end
+
+    def disabled_status(source:, reason:, setting_key:, env_key:)
+      {
+        disabled: true,
+        source: source,
+        reason: reason,
+        setting_key: setting_key,
+        env_key: env_key
+      }
+    end
+
+    def operation_setting_key(service)
+      case service
+      when :ocr
+        "operations.ocr_enabled"
+      when :ai
+        "operations.ai_enabled"
+      end
+    end
+
+    def operation_env_key(service)
+      case service
+      when :ocr
+        ReceiptAnalysisPipeline::Config::OCR_ENABLED_ENV_KEY
+      when :ai
+        ReceiptAnalysisPipeline::Config::AI_ENABLED_ENV_KEY
+      end
+    end
+
+    def setting_enabled?(key)
+      SystemSettings.enabled?(key)
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      true
+    end
+
+    def env_enabled?(key)
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch(key, "true"))
+    end
 
     def normalize_service(service)
       normalized = service.to_s.strip.to_sym
