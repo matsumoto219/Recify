@@ -104,23 +104,9 @@ class ReceiptBatchUploadService
       Rails.logger.info(
         "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
       )
-      unless consume_ocr_job_limit_for!(result.run)
-        Rails.logger.info(
-          "[ReceiptAnalysis] blocked_enqueue_usage_limit receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id}"
-        )
-        next
-      end
 
       ReceiptOcrJob.perform_later(run_id: result.run.id)
     end
-  end
-
-  def consume_ocr_job_limit_for!(run)
-    Usage.consume_ocr_job!(user: user)
-    true
-  rescue Usage::LimitExceeded
-    Usage.mark_analysis_run_blocked!(run: run, stage: "ocr")
-    false
   end
 
   def success(created_receipts)

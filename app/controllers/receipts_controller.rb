@@ -344,12 +344,6 @@ class ReceiptsController < ApplicationController
     Rails.logger.info(
       "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
     )
-    unless consume_ocr_job_limit_for!(result.run, requested_by_user)
-      Rails.logger.info(
-        "[ReceiptAnalysis] blocked_enqueue_usage_limit receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id}"
-      )
-      return
-    end
 
     ReceiptOcrJob.perform_later(run_id: result.run.id)
   end
@@ -473,14 +467,6 @@ class ReceiptsController < ApplicationController
     prepare_receipt_form_presenter
     flash.now[:alert] = @receipt.errors.full_messages
     render template, status: :unprocessable_content, formats: :html
-  end
-
-  def consume_ocr_job_limit_for!(run, user)
-    Usage.consume_ocr_job!(user: user)
-    true
-  rescue Usage::LimitExceeded
-    Usage.mark_analysis_run_blocked!(run: run, stage: "ocr")
-    false
   end
 
   def receipt_params

@@ -102,7 +102,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
-  it 'OCR job上限到達時はrunをfailedにし、OCR jobをenqueueしない' do
+  it 'OCR job上限到達時も受付時にはrunを作成し、OCR jobをenqueueする' do
     create(:usage_counter, user: user, key: 'ocr_jobs_per_day', used_count: 50)
     files = [ uploaded_receipt_fixture ]
 
@@ -111,10 +111,10 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
 
     aggregate_failures do
       expect(result).to be_success
-      expect(run.status).to eq('failed')
-      expect(run.error_stage).to eq('ocr')
-      expect(run.error_code).to eq('usage_limit_exceeded')
-      expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      expect(run.status).to eq('queued')
+      expect(run.error_stage).to be_nil
+      expect(run.error_code).to be_nil
+      expect(ReceiptOcrJob).to have_received(:perform_later).with(run_id: run.id)
       expect(UsageCounter.find_by!(user: user, key: 'ocr_jobs_per_day').used_count).to eq(50)
     end
   end
@@ -287,7 +287,7 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
       expect(first_result).to be_success
       expect(first_result.count).to eq(20)
       expect(UsageCounter.find_by!(user: user, key: 'batch_files_per_day').used_count).to eq(40)
-      expect(UsageCounter.find_by!(user: user, key: 'ocr_jobs_per_day').used_count).to eq(20)
+      expect(UsageCounter.where(user: user, key: 'ocr_jobs_per_day')).to be_empty
       expect(UsageCounter.where(user: user, key: 'receipt_uploads_per_day')).to be_empty
       expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
       expect(blocked_result).not_to be_success

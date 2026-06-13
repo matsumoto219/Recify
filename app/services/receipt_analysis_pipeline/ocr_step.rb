@@ -1,12 +1,13 @@
 class ReceiptAnalysisPipeline
   class OcrStep
-    def self.call(run)
-      new(run).call
+    def self.call(run, before_provider_call: nil)
+      new(run, before_provider_call: before_provider_call).call
     end
 
-    def initialize(run)
+    def initialize(run, before_provider_call: nil)
       @run = run
       @receipt = run.receipt
+      @before_provider_call = before_provider_call
     end
 
     def call
@@ -22,6 +23,7 @@ class ReceiptAnalysisPipeline
             )
           )
         else
+          before_provider_call&.call
           ReceiptOcrService.call(receipt.image)
         end
 
@@ -33,7 +35,7 @@ class ReceiptAnalysisPipeline
 
     private
 
-    attr_reader :run, :receipt
+    attr_reader :run, :receipt, :before_provider_call
 
     def ocr_unavailable?
       ExternalServices.down?(:ocr)

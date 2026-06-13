@@ -49,12 +49,14 @@ class ReceiptAnalysisPipeline
     if (disabled_snapshot = ocr_unavailable_snapshot)
       return ocr_service_disabled_result(disabled_snapshot)
     end
-    return usage_limit_blocked_result("ocr") unless ocr_provider_call_allowed?
 
     with_run_failure do
       mark_processing!
       ReceiptAnalysisRuns.start_stage(run, "ocr")
-      ocr_result = OcrStep.call(run).ocr_result
+      ocr_step_result = run_ocr_step
+      return usage_limit_blocked_result("ocr") if ocr_step_result == :usage_limit_blocked
+
+      ocr_result = ocr_step_result.ocr_result
       log_ocr_result(ocr_result)
 
       decision = ocr_finalize_decision(ocr_result)
@@ -342,11 +344,14 @@ class ReceiptAnalysisPipeline
     end
   end
 
-  def ocr_provider_call_allowed?
-    Usage.ensure_ocr_job_within_limit!(user: receipt.user)
-    true
+  def run_ocr_step
+    OcrStep.call(run, before_provider_call: -> { consume_ocr_provider_call! })
   rescue Usage::LimitExceeded
-    false
+    :usage_limit_blocked
+  end
+
+  def consume_ocr_provider_call!
+    Usage.consume_ocr_job!(user: receipt.user)
   end
 
   def ocr_unavailable_snapshot

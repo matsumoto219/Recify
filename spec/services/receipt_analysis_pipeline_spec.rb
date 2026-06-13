@@ -383,6 +383,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.finalize_decision).to be_nil
         expect(run.reload.stage).to eq('ocr_validation')
         expect(run.metadata['finalize_decision']).to be_blank
+        expect(UsageCounter.find_by!(user: receipt.user, key: 'ocr_jobs_per_day').used_count).to eq(1)
       end
     end
 
@@ -468,6 +469,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           'quota_exceeded' => true
         )
         expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail', 'provider_error_code')).to eq('QuotaExceeded')
+        expect(UsageCounter.find_by!(user: receipt.user, key: 'ocr_jobs_per_day').used_count).to eq(1)
         expect(run.ocr_result_snapshot.to_json).not_to include('sk-secret-token', 'RAW OCR BODY MUST NOT BE STORED')
       end
     end
@@ -612,7 +614,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       run = create(:receipt_analysis_run, receipt:)
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
       allow(ReceiptOcrService).to receive(:call)
-      allow(Usage).to receive(:ensure_ocr_job_within_limit!)
+      allow(Usage).to receive(:consume_ocr_job!)
 
       result = described_class.run_ocr(run)
 
@@ -621,7 +623,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.finalize_decision.finalize_strategy).to eq('fail_receipt')
         expect(result.finalize_decision.error_code).to eq('ocr_disabled')
         expect(ReceiptOcrService).not_to have_received(:call)
-        expect(Usage).not_to have_received(:ensure_ocr_job_within_limit!)
+        expect(Usage).not_to have_received(:consume_ocr_job!)
         expect(run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ocr_disabled')
         expect(run.ocr_result_snapshot).to include(
           'success' => false,
