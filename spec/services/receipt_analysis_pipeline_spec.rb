@@ -371,7 +371,10 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+        before_provider_call&.call
+        successful_ocr_result
+      end
       allow(ExternalServices).to receive(:down?).and_return(false)
       allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
 
@@ -406,7 +409,10 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+        before_provider_call&.call
+        ocr_result
+      end
 
       result = described_class.run_ocr(run)
 
@@ -448,7 +454,10 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call).and_return(ocr_result)
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+        before_provider_call&.call
+        ocr_result
+      end
 
       result = described_class.run_ocr(run)
       run.reload
