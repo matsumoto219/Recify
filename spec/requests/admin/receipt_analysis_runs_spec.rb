@@ -4,6 +4,8 @@ require 'webauthn/fake_client'
 RSpec.describe 'Admin receipt analysis runs', type: :request do
   include ActiveJob::TestHelper
 
+  let(:cache_store) { ActiveSupport::Cache::MemoryStore.new }
+
   around do |example|
     original_show_exceptions = Rails.application.env_config['action_dispatch.show_exceptions']
     original_show_detailed_exceptions = Rails.application.env_config['action_dispatch.show_detailed_exceptions']
@@ -20,6 +22,15 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
     ActiveJob::Base.queue_adapter = original_adapter
     Rails.application.env_config['action_dispatch.show_exceptions'] = original_show_exceptions
     Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = original_show_detailed_exceptions
+  end
+
+  before do
+    allow(Rails).to receive(:cache).and_return(cache_store)
+    ExternalServices.reset!
+  end
+
+  after do
+    ExternalServices.reset!
   end
 
   def comparable_headers
@@ -775,6 +786,40 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         }
       )
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('ai_retry')
+        expect(response.body).to include('ai_unavailable')
+        expect(response.body).not_to include('value="ai_retry"')
+        expect(response.body).to include('value="full_reanalyze"')
+      end
+    end
+
+    it 'StatusStoreでAI down時もai_retryをdisabled表示し実行フォームを出さない' do
+      admin = create(:user, :admin)
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: create(:receipt, :completed, :with_image),
+        ocr_result_snapshot: {
+          'success' => true,
+          'lines' => [ 'テストストア', '合計 1000' ],
+          'candidates' => { 'store_name' => 'テストストア', 'total_amount' => 1000 },
+          'meta' => {}
+        }
+      )
+      3.times do
+        ExternalServices.mark_failure!(
+          :ai,
+          error_code: 'ai_rate_limited',
+          reason: 'rate_limited'
+        )
+      end
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
 

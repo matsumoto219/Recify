@@ -3,6 +3,7 @@ require 'rails_helper'
 RSpec.describe Analysis::RetryService do
   include ActiveJob::TestHelper
 
+  let(:cache_store) { ActiveSupport::Cache::MemoryStore.new }
   let(:actor) { create(:user) }
   let(:receipt) do
     create(
@@ -26,6 +27,15 @@ RSpec.describe Analysis::RetryService do
     clear_enqueued_jobs
     clear_performed_jobs
     ActiveJob::Base.queue_adapter = original_adapter
+  end
+
+  before do
+    allow(Rails).to receive(:cache).and_return(cache_store)
+    ExternalServices.reset!
+  end
+
+  after do
+    ExternalServices.reset!
   end
 
   describe '.call' do
@@ -174,6 +184,39 @@ RSpec.describe Analysis::RetryService do
           actor: actor,
           retry_type: :full_reanalyze,
           reason: 'OCR停止中の再解析',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('ocr_unavailable')
+          expect(result.error_message).to eq('OCR service is unavailable')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_completed
+        expect(ReceiptAnalysisRun.where(receipt: receipt)).to be_empty
+        expect(UsageCounter.where(user: actor, key: 'retry_operations_per_day')).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'ocr_unavailable'
+        )
+      end
+    end
+
+    it 'StatusStoreでOCR down時もfull_reanalyzeをrun作成やcounter消費前に拒否する' do
+      mark_service_down(:ocr, error_code: 'external_service_quota_exceeded')
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'OCR down中の再解析',
           reauthentication: reauthentication_context,
           confirmation: retry_confirmation
         )
@@ -441,6 +484,46 @@ RSpec.describe Analysis::RetryService do
           actor: actor,
           retry_type: :ai_retry,
           reason: 'AI停止中の再解析',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('ai_unavailable')
+          expect(result.error_message).to eq('AI service is unavailable')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_completed
+        expect(ReceiptAnalysisRun.where(receipt: receipt).where.not(id: parent_run.id)).to be_empty
+        expect(UsageCounter.where(user: actor, key: 'retry_operations_per_day')).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.ai_retry',
+          outcome: 'failed',
+          error_code: 'ai_unavailable'
+        )
+      end
+    end
+
+    it 'StatusStoreでAI down時もai_retryをrun作成やcounter消費前に拒否する' do
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: parent_ocr_snapshot
+      )
+      mark_service_down(:ai, error_code: 'ai_rate_limited')
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          parent_run: parent_run,
+          actor: actor,
+          retry_type: :ai_retry,
+          reason: 'AI down中の再解析',
           reauthentication: reauthentication_context,
           confirmation: retry_confirmation
         )
@@ -861,8 +944,34 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'StatusStoreでOCR down時もfull_reanalyze / ocr_retryを不可にする' do
+      mark_service_down(:ocr, error_code: 'external_service_quota_exceeded')
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
+
+      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+
+      aggregate_failures do
+        expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'ocr_unavailable')
+        expect(options['ocr_retry']).to include(possible: false, disabled_reason: 'ocr_unavailable')
+        expect(options['ai_retry']).to include(possible: true, disabled_reason: nil)
+      end
+    end
+
     it 'AI停止中はai_retryだけを不可にしfull_reanalyzeは許可する' do
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
+
+      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+
+      aggregate_failures do
+        expect(options['full_reanalyze']).to include(possible: true, disabled_reason: nil)
+        expect(options['ocr_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options['ai_retry']).to include(possible: false, disabled_reason: 'ai_unavailable')
+      end
+    end
+
+    it 'StatusStoreでAI down時もai_retryだけを不可にしfull_reanalyzeは許可する' do
+      mark_service_down(:ai, error_code: 'ai_rate_limited')
       parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
       options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
@@ -1041,6 +1150,16 @@ RSpec.describe Analysis::RetryService do
     expect(ReceiptOcrJob).not_to have_been_enqueued
     expect(ReceiptAiEnrichmentJob).not_to have_been_enqueued
     expect(ReceiptFinalizeJob).not_to have_been_enqueued
+  end
+
+  def mark_service_down(service, error_code:)
+    3.times do
+      ExternalServices.mark_failure!(
+        service,
+        error_code: error_code,
+        reason: error_code
+      )
+    end
   end
 
   def options_by_type(result)
