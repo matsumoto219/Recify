@@ -69,4 +69,10 @@ results = case_paths.map do |path|
   end
 end.compact
 
-exit(results.any? { |result| result.status == "FAIL" } ? 1 : 0)
+if results.any? { |result| result.status == "FAIL" }
+  exit 1
+elsif results.any? { |result| result.status == "ENV_BLOCKED" }
+  exit 2
+else
+  exit 0
+end

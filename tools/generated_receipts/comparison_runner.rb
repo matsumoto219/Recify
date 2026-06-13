@@ -11,8 +11,9 @@ module GeneratedReceipts
       end
 
       def status
-        statuses = run_results.map { |run| run[:comparison].status }
+        statuses = run_results.map { |run| run[:status] || run[:comparison].status }
         return "FAIL" if statuses.include?("FAIL")
+        return "ENV_BLOCKED" if statuses.include?("ENV_BLOCKED")
         return "WARN" if statuses.include?("WARN")
 
         "PASS"
@@ -38,7 +39,8 @@ module GeneratedReceipts
           "payment_method" => expected["payment_method"],
           "payments" => expected["payments"].map { |payment| { "method" => payment["label"], "amount" => payment["amount"] } },
           "status" => expected["status"],
-          "review_reasons" => expected["review_reasons"]
+          "review_reasons" => expected["review_reasons"],
+          "processing_error_code" => nil
         }
       end
     end
@@ -55,14 +57,15 @@ module GeneratedReceipts
       run_results = runs.times.map do |index|
         execution = PipelineRunner.call(case_data, image_path: image_path, user: user, keep: keep)
         comparison = Comparator.call(case_data, execution[:actual])
+        status = env_blocked?(execution[:actual]) ? "ENV_BLOCKED" : comparison.status
         {
           run: index.zero? ? "A" : "B",
           comparison: comparison,
           actual: execution[:actual],
           receipt_id: execution[:receipt].id,
           run_id: execution[:run].id,
-          status: comparison.status,
-          diffs: comparison.diffs
+          status: status,
+          diffs: status == "ENV_BLOCKED" ? env_blocked_diffs(execution[:actual]) : comparison.diffs
         }
       end
 
@@ -72,5 +75,20 @@ module GeneratedReceipts
     private
 
     attr_reader :case_data, :image_path, :user, :runs, :keep
+
+    def env_blocked?(actual)
+      GeneratedReceipts.env_blocked_processing_error_code?(actual["processing_error_code"])
+    end
+
+    def env_blocked_diffs(actual)
+      [
+        {
+          path: "processing_error_code",
+          expected: nil,
+          actual: actual["processing_error_code"],
+          severity: "ENV_BLOCKED"
+        }
+      ]
+    end
   end
 end

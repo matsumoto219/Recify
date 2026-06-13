@@ -66,7 +66,8 @@ module GeneratedReceipts
             }
           end,
           "status" => receipt.status,
-          "review_reasons" => Array(receipt.review_reasons).sort
+          "review_reasons" => Array(receipt.review_reasons).sort,
+          "processing_error_code" => receipt.processing_error_code
         }
       end
     end

@@ -86,6 +86,8 @@ module GeneratedReceipts
       return false unless case_data["receipt_kind"] == "receipt"
 
       actual = execution[:actual]
+      return false if GeneratedReceipts.env_blocked_processing_error_code?(actual["processing_error_code"])
+
       actual["status"] == "failed" &&
         actual["store_name"] == "Generated Receipt Probe" &&
         actual["total"] == 1 &&

@@ -33,4 +33,22 @@ RSpec.describe GeneratedReceipts::PipelineRunner do
 
     expect(ReceiptAnalysisPipeline).to have_received(:run_finalize)
   end
+
+  it "does not retry generated probe failures caused by external service environment errors" do
+    allow(ReceiptAnalysisPipeline).to receive(:run_ocr) do |run|
+      run.receipt.update!(
+        status: "failed",
+        processing_error_code: "external_service_quota_exceeded"
+      )
+      ReceiptAnalysisPipeline::Result.new(
+        ocr_result: { success: false, error_code: "external_service_quota_exceeded" },
+        finalize_decision: nil,
+        next_step: nil
+      )
+    end
+
+    described_class.call(case_data, image_path: image_path, user: user)
+
+    expect(ReceiptAnalysisPipeline).to have_received(:run_ocr).once
+  end
 end

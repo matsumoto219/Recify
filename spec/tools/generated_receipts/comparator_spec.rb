@@ -76,4 +76,69 @@ RSpec.describe GeneratedReceipts::Comparator do
 
     expect(result.status).to eq("WARN")
   end
+
+  it "summarizes external service failures as ENV_BLOCKED without hiding real failures" do
+    aggregate_failures do
+      expect(
+        GeneratedReceipts::ComparisonRunner::Result.new(
+          case_id: "sample",
+          run_results: [
+            { status: "ENV_BLOCKED", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) }
+          ]
+        ).status
+      ).to eq("ENV_BLOCKED")
+
+      expect(
+        GeneratedReceipts::ComparisonRunner::Result.new(
+          case_id: "sample",
+          run_results: [
+            { status: "ENV_BLOCKED", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) },
+            { status: "FAIL", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) }
+          ]
+        ).status
+      ).to eq("FAIL")
+    end
+  end
+
+  it "classifies external processing errors as ENV_BLOCKED runs" do
+    case_data = load_case("g001_normal_included_10_cash")
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)).merge(
+      "store_name" => "Generated Receipt Probe",
+      "subtotal" => nil,
+      "tax" => nil,
+      "total" => 1,
+      "tax_details" => [],
+      "items" => [],
+      "payments" => [],
+      "status" => "failed",
+      "processing_error_code" => "external_service_quota_exceeded"
+    )
+    receipt = instance_double("Receipt", id: 1)
+    run = instance_double("ReceiptAnalysisRun", id: 2)
+
+    allow(GeneratedReceipts::PipelineRunner).to receive(:call).and_return(
+      receipt: receipt,
+      run: run,
+      actual: actual
+    )
+
+    result = GeneratedReceipts::ComparisonRunner.new(
+      case_data,
+      image_path: "/tmp/generated.png",
+      user: instance_double("User"),
+      runs: 1
+    ).call
+
+    aggregate_failures do
+      expect(result.status).to eq("ENV_BLOCKED")
+      expect(result.run_results.first[:status]).to eq("ENV_BLOCKED")
+      expect(result.run_results.first[:diffs]).to include(
+        hash_including(
+          path: "processing_error_code",
+          actual: "external_service_quota_exceeded",
+          severity: "ENV_BLOCKED"
+        )
+      )
+    end
+  end
 end
