@@ -192,7 +192,8 @@ module ReceiptAnalysisRuns
             items: Array(candidates[:items]).present?
           },
           confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary]),
-          polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence
+          polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence,
+          provider_error_detail: provider_error_detail_snapshot(meta[:provider_error_detail]).presence
         }.compact
       )
     end
@@ -297,6 +298,10 @@ module ReceiptAnalysisRuns
           model: safe_string(meta[:model]),
           fallback_provider: safe_string(meta[:fallback_provider]),
           fallback_used: meta[:fallback_used] == true,
+          final_provider: safe_string(meta[:final_provider]),
+          primary_error_detail: provider_error_detail_snapshot(meta[:primary_error_detail]).presence,
+          fallback_error_detail: provider_error_detail_snapshot(meta[:fallback_error_detail]).presence,
+          final_error_detail: provider_error_detail_snapshot(meta[:final_error_detail]).presence,
           metrics: sanitized_ai_metrics(meta[:metrics]).presence,
           document_type: safe_string(meta[:document_type]),
           rejection_reason: safe_string(meta[:rejection_reason]),
@@ -448,7 +453,8 @@ module ReceiptAnalysisRuns
         model_id: safe_string(meta[:model_id]),
         model: safe_string(meta[:model]),
         doc_type: safe_string(meta[:doc_type]),
-        polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence
+        polling_metrics: sanitized_polling_metrics(meta[:polling_metrics]).presence,
+        provider_error_detail: provider_error_detail_snapshot(meta[:provider_error_detail]).presence
       }.compact
     end
 
@@ -597,11 +603,39 @@ module ReceiptAnalysisRuns
         fallback_used: meta[:fallback_used] == true,
         primary_error_code: safe_string(meta[:primary_error_code]),
         fallback_error_code: safe_string(meta[:fallback_error_code]),
+        final_provider: safe_string(meta[:final_provider]),
+        primary_error_detail: provider_error_detail_snapshot(meta[:primary_error_detail]).presence,
+        fallback_error_detail: provider_error_detail_snapshot(meta[:fallback_error_detail]).presence,
+        final_error_detail: provider_error_detail_snapshot(meta[:final_error_detail]).presence,
         metrics: sanitized_ai_metrics(meta[:metrics]).presence,
         document_type: safe_string(meta[:document_type]),
         rejection_reason: safe_string(meta[:rejection_reason]),
         is_receipt_confidence: safe_value(meta[:is_receipt_confidence])
       }.compact
+    end
+
+    def provider_error_detail_snapshot(value)
+      detail = normalized_hash(value)
+      return {} if detail.blank?
+
+      ExternalServices.error_detail(
+        service: detail[:service],
+        provider: detail[:provider],
+        phase: detail[:phase],
+        http_status: detail[:http_status],
+        provider_error_code: detail[:provider_error_code],
+        provider_error_type: detail[:provider_error_type],
+        provider_message_safe: detail[:provider_message_safe],
+        request_id: detail[:request_id],
+        region: detail[:region],
+        retry_after: detail[:retry_after],
+        latency_ms: detail[:latency_ms],
+        poll_count: detail[:poll_count],
+        model: detail[:model],
+        rate_limited: detail[:rate_limited],
+        quota_exceeded: detail[:quota_exceeded],
+        auth_error: detail[:auth_error]
+      )
     end
 
     def ocr_items_snapshot_limit

@@ -452,8 +452,33 @@ module ReceiptAnalysisRuns
         "actual_value" => safe_error_metadata_integer(metadata[:actual_value]),
         "actual_count" => safe_error_metadata_integer(metadata[:actual_count]),
         "snapshot_count" => safe_error_metadata_integer(metadata[:snapshot_count]),
-        "index" => safe_error_metadata_integer(metadata[:index])
+        "index" => safe_error_metadata_integer(metadata[:index]),
+        "provider_detail" => safe_provider_error_detail(metadata[:provider_detail] || metadata[:provider_error_detail])
       }.compact
+    end
+
+    def safe_provider_error_detail(value)
+      detail = value.to_h.with_indifferent_access if value.respond_to?(:to_h)
+      return nil if detail.blank?
+
+      ExternalServices.error_detail(
+        service: detail[:service],
+        provider: detail[:provider],
+        phase: detail[:phase],
+        http_status: detail[:http_status],
+        provider_error_code: detail[:provider_error_code],
+        provider_error_type: detail[:provider_error_type],
+        provider_message_safe: detail[:provider_message_safe],
+        request_id: detail[:request_id],
+        region: detail[:region],
+        retry_after: detail[:retry_after],
+        latency_ms: detail[:latency_ms],
+        poll_count: detail[:poll_count],
+        model: detail[:model],
+        rate_limited: detail[:rate_limited],
+        quota_exceeded: detail[:quota_exceeded],
+        auth_error: detail[:auth_error]
+      ).presence
     end
 
     def safe_error_metadata_text(value)

@@ -184,6 +184,19 @@ RSpec.describe ReceiptAnalysisRuns do
             retry_after_used: true,
             retry_count: 1
           },
+          provider_error_detail: {
+            service: 'ocr',
+            provider: 'azure_document_intelligence',
+            phase: 'submit',
+            http_status: 403,
+            provider_error_code: 'QuotaExceeded',
+            provider_message_safe: 'F0 quota exceeded for sk-secret-token-1234567890',
+            request_id: 'azure-request-id',
+            region: 'japaneast',
+            retry_after: 60,
+            quota_exceeded: true,
+            raw_body: 'RAW PROVIDER BODY MUST NOT BE STORED'
+          },
           raw_response: { secret: 'do-not-store' }
         }
       }
@@ -224,8 +237,23 @@ RSpec.describe ReceiptAnalysisRuns do
           'total_poll_sleep_ms' => 5500,
           'retry_after_used' => true
         )
+        expect(run.ocr_summary['provider_error_detail']).to include(
+          'service' => 'ocr',
+          'provider' => 'azure_document_intelligence',
+          'phase' => 'submit',
+          'http_status' => 403,
+          'provider_error_code' => 'QuotaExceeded',
+          'provider_message_safe' => 'F0 quota exceeded for [FILTERED]',
+          'request_id' => 'azure-request-id',
+          'region' => 'japaneast',
+          'retry_after' => 60,
+          'quota_exceeded' => true
+        )
+        expect(run.ocr_result_snapshot.dig('meta', 'provider_error_detail')).to eq(run.ocr_summary['provider_error_detail'])
         expect(deep_json(run.ocr_summary)).not_to include('RAW OCR TEXT')
         expect(deep_json(run.ocr_summary)).not_to include('do-not-store')
+        expect(deep_json(run.ocr_summary)).not_to include('sk-secret-token')
+        expect(deep_json(run.ocr_result_snapshot)).not_to include('RAW PROVIDER BODY MUST NOT BE STORED')
       end
     end
 
@@ -566,6 +594,19 @@ RSpec.describe ReceiptAnalysisRuns do
             final_provider: 'openai',
             raw_response: 'RAW METRICS MUST NOT BE STORED'
           },
+          primary_error_detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_message_safe: 'rate limit for sk-secret-token-1234567890',
+            request_id: 'req_normalized',
+            retry_after: 10,
+            rate_limited: true,
+            raw_body: 'RAW NORMALIZED ERROR MUST NOT BE STORED'
+          },
+          final_provider: 'openai',
           response_body: 'RAW AI RESPONSE MUST NOT BE STORED',
           api_key: 'SECRET API KEY MUST NOT BE STORED',
           primary_error_message: 'provider raw message should not be stored'
@@ -608,12 +649,26 @@ RSpec.describe ReceiptAnalysisRuns do
           'output_tokens' => 45,
           'total_tokens' => 168
         )
+        expect(snapshot.dig('meta', 'primary_error_detail')).to include(
+          'service' => 'ai',
+          'provider' => 'openai',
+          'phase' => 'ai_request',
+          'http_status' => 429,
+          'provider_error_code' => 'rate_limit_exceeded',
+          'provider_message_safe' => 'rate limit for [FILTERED]',
+          'request_id' => 'req_normalized',
+          'retry_after' => 10,
+          'rate_limited' => true
+        )
+        expect(snapshot.dig('meta', 'final_provider')).to eq('openai')
         expect { json_roundtrip(snapshot) }.not_to raise_error
         expect(snapshot_json).not_to include('FULL PROMPT MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW MESSAGES MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW AI RESPONSE MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW TOKEN USAGE MUST NOT BE STORED')
         expect(snapshot_json).not_to include('RAW METRICS MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('RAW NORMALIZED ERROR MUST NOT BE STORED')
+        expect(snapshot_json).not_to include('sk-secret-token')
         expect(snapshot_json).not_to include('SECRET API KEY MUST NOT BE STORED')
         expect(snapshot_json).not_to include('provider raw message should not be stored')
       end
@@ -661,6 +716,41 @@ RSpec.describe ReceiptAnalysisRuns do
           model: 'gpt-test',
           fallback_provider: 'backup-provider',
           fallback_used: true,
+          final_provider: 'backup-provider',
+          primary_error_detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'insufficient_quota',
+            provider_message_safe: 'quota exceeded for sk-secret-token-1234567890',
+            request_id: 'req_primary',
+            retry_after: 30,
+            quota_exceeded: true,
+            raw_body: 'RAW PRIMARY ERROR MUST NOT BE STORED'
+          },
+          fallback_error_detail: {
+            service: 'ai',
+            provider: 'backup-provider',
+            phase: 'fallback',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_message_safe: 'rate limit',
+            request_id: 'req_fallback',
+            retry_after: 15,
+            rate_limited: true
+          },
+          final_error_detail: {
+            service: 'ai',
+            provider: 'backup-provider',
+            phase: 'fallback',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_message_safe: 'rate limit',
+            request_id: 'req_fallback',
+            retry_after: 15,
+            rate_limited: true
+          },
           metrics: {
             provider: 'openai',
             model: 'gpt-test',
@@ -699,6 +789,41 @@ RSpec.describe ReceiptAnalysisRuns do
           'schema_version' => 'receipt_analysis_run_ai_result_v1',
           'success' => false,
           'error_code' => 'ai_primary_failed',
+          'final_provider' => 'backup-provider',
+          'primary_error_detail' => {
+            'service' => 'ai',
+            'provider' => 'openai',
+            'phase' => 'ai_request',
+            'http_status' => 429,
+            'provider_error_code' => 'insufficient_quota',
+            'provider_message_safe' => 'quota exceeded for [FILTERED]',
+            'request_id' => 'req_primary',
+            'retry_after' => 30,
+            'rate_limited' => true,
+            'quota_exceeded' => true
+          },
+          'fallback_error_detail' => {
+            'service' => 'ai',
+            'provider' => 'backup-provider',
+            'phase' => 'fallback',
+            'http_status' => 429,
+            'provider_error_code' => 'rate_limit_exceeded',
+            'provider_message_safe' => 'rate limit',
+            'request_id' => 'req_fallback',
+            'retry_after' => 15,
+            'rate_limited' => true
+          },
+          'final_error_detail' => {
+            'service' => 'ai',
+            'provider' => 'backup-provider',
+            'phase' => 'fallback',
+            'http_status' => 429,
+            'provider_error_code' => 'rate_limit_exceeded',
+            'provider_message_safe' => 'rate limit',
+            'request_id' => 'req_fallback',
+            'retry_after' => 15,
+            'rate_limited' => true
+          },
           'item_count' => 1,
           'metrics' => {
             'provider' => 'openai',
@@ -722,6 +847,8 @@ RSpec.describe ReceiptAnalysisRuns do
           }
         )
         expect(deep_json(run.ai_result_summary)).not_to include('do-not-store')
+        expect(deep_json(run.ai_result_summary)).not_to include('sk-secret-token')
+        expect(deep_json(run.ai_result_summary)).not_to include('RAW PRIMARY ERROR MUST NOT BE STORED')
       end
     end
 
@@ -974,7 +1101,26 @@ RSpec.describe ReceiptAnalysisRuns do
       superseded_run = described_class.start(receipt: create(:receipt), source: 'upload').run
       canceled_run = described_class.start(receipt: create(:receipt), source: 'upload').run
 
-      described_class.fail(failed_run, error_stage: 'ai', error_code: 'ai_api_error', error_message: 'x' * 600)
+      described_class.fail(
+        failed_run,
+        error_stage: 'ai',
+        error_code: 'ai_api_error',
+        error_message: 'x' * 600,
+        error_metadata: {
+          provider_detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'insufficient_quota',
+            provider_message_safe: 'quota exceeded for sk-secret-token-1234567890',
+            request_id: 'req_failed',
+            retry_after: 30,
+            quota_exceeded: true,
+            raw_body: 'RAW ERROR MUST NOT BE STORED'
+          }
+        }
+      )
       described_class.supersede(superseded_run)
       described_class.cancel(canceled_run)
 
@@ -983,6 +1129,19 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(failed_run.error_stage).to eq('ai')
         expect(failed_run.error_code).to eq('ai_api_error')
         expect(failed_run.error_message.bytesize).to be <= 500
+        expect(failed_run.metadata.dig('error_metadata', 'provider_detail')).to include(
+          'service' => 'ai',
+          'provider' => 'openai',
+          'phase' => 'ai_request',
+          'http_status' => 429,
+          'provider_error_code' => 'insufficient_quota',
+          'provider_message_safe' => 'quota exceeded for [FILTERED]',
+          'request_id' => 'req_failed',
+          'retry_after' => 30,
+          'quota_exceeded' => true
+        )
+        expect(deep_json(failed_run.metadata)).not_to include('sk-secret-token')
+        expect(deep_json(failed_run.metadata)).not_to include('RAW ERROR MUST NOT BE STORED')
         expect(superseded_run.reload.status).to eq('superseded')
         expect(canceled_run.reload.status).to eq('canceled')
       end
