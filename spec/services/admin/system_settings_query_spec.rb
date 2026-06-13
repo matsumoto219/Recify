@@ -36,6 +36,73 @@ RSpec.describe Admin::SystemSettingsQuery do
       expect(result.records.map { |record| record[:key] }).to eq([ 'limits.receipt_upload_soft_limit' ])
     end
 
+    it 'カテゴリ順に並べ、同カテゴリ内はkey順にする' do
+      result = described_class.call
+      ordered_categories = result.records
+                                 .map { |record| record[:category] }
+                                 .chunk_while { |previous, current| previous == current }
+                                 .map(&:first)
+      expected_categories = described_class::CATEGORY_ORDER.select do |category|
+        SystemSettings.definitions.values.any? { |definition| definition.category == category }
+      end
+
+      aggregate_failures do
+        expect(ordered_categories).to eq(expected_categories)
+        expect(result.records.select { |record| record[:category] == 'usage_limit' }.map { |record| record[:key] })
+          .to eq(result.records.select { |record| record[:category] == 'usage_limit' }.map { |record| record[:key] }.sort)
+      end
+    end
+
+    it '未知カテゴリは既知カテゴリの後ろに並べる' do
+      definitions = [
+        SystemSettings::Definition.new(
+          key: 'zzz.unknown_setting',
+          category: 'unknown_category',
+          value_type: 'boolean',
+          default: false,
+          editable: true,
+          risk_level: 'low'
+        ),
+        SystemSettings::Definition.new(
+          key: 'security.sample_setting',
+          category: 'security',
+          value_type: 'boolean',
+          default: true,
+          editable: true,
+          risk_level: 'high'
+        ),
+        SystemSettings::Definition.new(
+          key: 'operations.sample_setting',
+          category: 'operation',
+          value_type: 'boolean',
+          default: true,
+          editable: true,
+          risk_level: 'high'
+        )
+      ].index_by(&:key)
+
+      allow(SystemSettings).to receive(:definitions).and_return(definitions)
+      allow(SystemSettings).to receive(:fetch) do |key|
+        definition = definitions.fetch(key)
+        SystemSettings::Entry.new(
+          definition: definition,
+          current_value: definition.default,
+          default_value: definition.default,
+          source: 'default'
+        )
+      end
+
+      result = described_class.call
+
+      expect(result.records.map { |record| record[:key] }).to eq(
+        [
+          'operations.sample_setting',
+          'security.sample_setting',
+          'zzz.unknown_setting'
+        ]
+      )
+    end
+
     it 'usage limit filterを適用できる' do
       result = described_class.call(category: 'usage_limit')
 
@@ -101,6 +168,15 @@ RSpec.describe Admin::SystemSettingsQuery do
         'retention.orphan_blobs_hours',
         'retention.receipt_images_days'
       )
+    end
+
+    it 'risk filterを適用できる' do
+      result = described_class.call(risk_level: 'high')
+
+      aggregate_failures do
+        expect(result.records).not_to be_empty
+        expect(result.records).to all(include(risk_level: 'high'))
+      end
     end
 
     it 'unknown keyは空結果にする' do

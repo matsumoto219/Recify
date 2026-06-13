@@ -1,6 +1,22 @@
 module Admin
   class SystemSettingsQuery
     Result = Struct.new(:records, :total_count, keyword_init: true)
+    CATEGORY_ORDER = %w[
+      operation
+      security
+      maintenance
+      usage_limit
+      usage_limit_safety
+      amount_limit
+      snapshot_limit
+      retention
+      storage_policy
+      amount_engine
+      ui_toggle
+      ui_notice
+      feature_flag
+      soft_limit
+    ].freeze
 
     class << self
       def call(**filters)
@@ -34,7 +50,11 @@ module Admin
     attr_reader :key, :category, :editable, :risk_level
 
     def definitions
-      SystemSettings.definitions.values.sort_by(&:key)
+      SystemSettings.definitions.values.sort_by { |definition| [ category_order(definition.category), definition.key ] }
+    end
+
+    def category_order(category)
+      CATEGORY_ORDER.index(category) || CATEGORY_ORDER.length
     end
 
     def include_definition?(definition)
