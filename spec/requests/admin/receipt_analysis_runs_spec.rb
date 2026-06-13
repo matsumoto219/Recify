@@ -281,6 +281,18 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             reached_max_poll: false,
             retry_after_used: true,
             retry_count: 1
+          },
+          provider_error_detail: {
+            service: 'ocr',
+            provider: 'azure_document_intelligence',
+            phase: 'submit',
+            http_status: 403,
+            provider_error_code: 'QuotaExceeded',
+            provider_message_safe: 'F0 quota exceeded for [FILTERED]',
+            request_id: 'azure-request-id',
+            region: 'japaneast',
+            retry_after: 60,
+            quota_exceeded: true
           }
         },
         ocr_result_snapshot: {
@@ -343,6 +355,29 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             fallback_provider: 'backup-provider',
             fallback_reason: 'ai_api_error',
             final_provider: 'backup-provider'
+          },
+          primary_error_detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_error_type: 'rate_limit_error',
+            provider_message_safe: 'rate limit',
+            request_id: 'req_admin_ai',
+            retry_after: 15,
+            rate_limited: true
+          },
+          final_error_detail: {
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            http_status: 429,
+            provider_error_code: 'rate_limit_exceeded',
+            provider_message_safe: 'rate limit',
+            request_id: 'req_admin_ai',
+            retry_after: 15,
+            rate_limited: true
           }
         },
         ai_normalized_result_snapshot: {
@@ -425,6 +460,10 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('poll backoff factor')
         expect(response.body).to include('1.5')
         expect(response.body).to include('Retry-After使用')
+        expect(response.body).to include('Provider error details')
+        expect(response.body).to include('QuotaExceeded')
+        expect(response.body).to include('F0 quota exceeded for [FILTERED]')
+        expect(response.body).to include('azure-request-id')
         expect(response.body).to include('AI metrics')
         expect(response.body).to include('AI処理時間')
         expect(response.body).to include('1200ms')
@@ -437,6 +476,8 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('ai_api_error')
         expect(response.body).to include('response id')
         expect(response.body).to include('resp_admin_metrics')
+        expect(response.body).to include('rate_limit_exceeded')
+        expect(response.body).to include('req_admin_ai')
         expect(response.body).to include('input: 100 / output: 20 / total: 120')
         expect(response.body).to include('AI input snapshot')
         expect(response.body).to include('AI result summary')

@@ -35,6 +35,16 @@
       state_class: service_state_class.call(state)
     }
   end
+
+  service_detail_rows = lambda do |payload|
+    [
+      [ t("admin.dashboard.external_services.last_error_code"), payload[:last_error_code] ],
+      [ t("admin.dashboard.external_services.provider_error_code"), payload[:provider_error_code] ],
+      [ t("admin.dashboard.external_services.retry_after"), payload[:retry_after].present? ? "#{payload[:retry_after]}s" : nil ],
+      [ t("admin.dashboard.external_services.request_id"), payload[:request_id] ],
+      [ t("admin.dashboard.external_services.provider_message"), payload[:provider_message_safe] ]
+    ].select { |_label, value| value.present? }
+  end
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
@@ -82,6 +92,18 @@
             <dd class="shrink-0 whitespace-nowrap font-mono token-text-base"><%= format_status_time.call(payload[:next_check_at]) %></dd>
           </div>
         </dl>
+
+        <% detail_rows = service_detail_rows.call(payload) %>
+        <% if detail_rows.any? %>
+          <dl class="mt-3 grid min-w-0 max-w-full gap-2 border-t token-border-soft pt-3 text-xs">
+            <% detail_rows.each do |label, value| %>
+              <div class="min-w-0">
+                <dt class="font-semibold token-text-muted"><%= label %></dt>
+                <dd class="mt-0.5 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
+              </div>
+            <% end %>
+          </dl>
+        <% end %>
 
         <% if payload[:message].present? %>
           <p class="mt-3 break-words text-xs leading-relaxed token-text-muted [overflow-wrap:anywhere]"><%= payload[:message] %></p>

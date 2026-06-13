@@ -5,6 +5,25 @@
   admin_control_class = "rounded-lg text-sm"
   admin_textarea_class = "#{admin_control_class} py-2 leading-6"
   admin_mono_control_class = "rounded-lg font-mono text-sm"
+  provider_error_detail_rows = lambda do |detail|
+    detail = (detail || {}).with_indifferent_access
+    [
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.service"), detail[:service] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider"), detail[:provider] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.phase"), detail[:phase] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.http_status"), detail[:http_status] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider_error_code"), detail[:provider_error_code] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider_error_type"), detail[:provider_error_type] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.retry_after"), detail[:retry_after].present? ? "#{detail[:retry_after]}s" : nil ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.request_id"), detail[:request_id] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.region"), detail[:region] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.model"), detail[:model] ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.quota_exceeded"), detail.key?(:quota_exceeded) ? t("admin.receipt_analysis_runs.show.boolean.#{detail[:quota_exceeded]}") : nil ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.rate_limited"), detail.key?(:rate_limited) ? t("admin.receipt_analysis_runs.show.boolean.#{detail[:rate_limited]}") : nil ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.auth_error"), detail.key?(:auth_error) ? t("admin.receipt_analysis_runs.show.boolean.#{detail[:auth_error]}") : nil ],
+      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider_message"), detail[:provider_message_safe] ]
+    ].select { |_label, value| value.present? }
+  end
 %>
 
 <section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
@@ -269,6 +288,54 @@
           <% end %>
         </dl>
       </div>
+
+      <%
+        provider_error_sections = [
+          [
+            t("admin.receipt_analysis_runs.show.provider_error_details.labels.ocr"),
+            @record.dig(:summaries, :ocr, "provider_error_detail") ||
+              @record.dig(:detailed_snapshots, :ocr_result_snapshot, "meta", "provider_error_detail")
+          ],
+          [
+            t("admin.receipt_analysis_runs.show.provider_error_details.labels.ai_primary"),
+            @record.dig(:summaries, :ai_result, "primary_error_detail") ||
+              @record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, "meta", "primary_error_detail")
+          ],
+          [
+            t("admin.receipt_analysis_runs.show.provider_error_details.labels.ai_fallback"),
+            @record.dig(:summaries, :ai_result, "fallback_error_detail") ||
+              @record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, "meta", "fallback_error_detail")
+          ],
+          [
+            t("admin.receipt_analysis_runs.show.provider_error_details.labels.ai_final"),
+            @record.dig(:summaries, :ai_result, "final_error_detail") ||
+              @record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, "meta", "final_error_detail")
+          ]
+        ].filter_map do |label, detail|
+          rows = provider_error_detail_rows.call(detail)
+          rows.any? ? [ label, rows ] : nil
+        end
+      %>
+      <% if provider_error_sections.any? %>
+        <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.provider_error_details.title") %></h3>
+          <div class="mt-3 grid min-w-0 max-w-full gap-3">
+            <% provider_error_sections.each do |label, rows| %>
+              <section class="min-w-0 max-w-full rounded-lg border token-border-soft p-3">
+                <h4 class="text-xs font-semibold token-text-muted"><%= label %></h4>
+                <dl class="mt-2 grid min-w-0 max-w-full gap-2 text-sm md:grid-cols-2">
+                  <% rows.each do |field_label, value| %>
+                    <div class="min-w-0">
+                      <dt class="text-xs font-semibold token-text-muted"><%= field_label %></dt>
+                      <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
+                    </div>
+                  <% end %>
+                </dl>
+              </section>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
 
       <div class="mt-4 min-w-0 max-w-full space-y-2">
         <% @record[:provider].each do |name, provider| %>

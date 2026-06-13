@@ -211,6 +211,12 @@ RSpec.describe 'Admin dashboard', type: :request do
           monitoring: true,
           checked_at: '2026-05-26T12:00:00+09:00',
           next_check_at: '2026-05-26T12:05:00+09:00',
+          last_error_code: 'external_service_quota_exceeded',
+          provider_error_code: 'QuotaExceeded',
+          retry_after: 60,
+          request_id: 'azure-request-id',
+          provider_message_safe: 'F0 quota exceeded for [FILTERED]',
+          quota_exceeded: true,
           message: 'https://status.example.test/providers/ocr/service-status?incident=very-long-provider-message'
         },
         ai: {
@@ -263,6 +269,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('OCRサービス')
         expect(response.body).to include('AIサービス')
         expect(response.body).to include('停止中')
+        expect(response.body).to include('external_service_quota_exceeded')
+        expect(response.body).to include('QuotaExceeded')
+        expect(response.body).to include('azure-request-id')
+        expect(response.body).to include('F0 quota exceeded for [FILTERED]')
         expect(response.body).to include('OCR停止中のため停止')
         expect(response.body).to include('data-controller="service-status-polling"')
         expect(response.body).to include(%(data-service-status-polling-status-url-value="#{admin_external_services_status_path}"))
@@ -445,7 +455,11 @@ RSpec.describe 'Admin dashboard', type: :request do
           source: 'system_setting',
           monitoring: true,
           checked_at: '2026-05-26T12:00:00+09:00',
-          next_check_at: '2026-05-26T12:05:00+09:00'
+          next_check_at: '2026-05-26T12:05:00+09:00',
+          last_error_code: 'external_service_auth_error',
+          provider_error_code: 'Unauthorized',
+          request_id: 'azure-request-id',
+          provider_message_safe: 'invalid key'
         },
         ai: {
           state: 'ok',
@@ -470,6 +484,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(html).to include('AIサービス')
         expect(html).to include('停止中')
         expect(html).to include('運用停止')
+        expect(html).to include('external_service_auth_error')
+        expect(html).to include('Unauthorized')
+        expect(html).to include('azure-request-id')
+        expect(html).to include('invalid key')
         expect(html).to include('OCR停止中のため停止')
         expect(html).to include('data-action="service-status-polling#pollNow"')
         expect(document.at_css('section.surface-card-blur.h-full.flex.flex-col')).to be_present

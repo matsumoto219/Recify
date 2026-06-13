@@ -68,6 +68,11 @@ ja:
         disabled_by_config: 設定停止
         checked_at: 最終確認
         next_check_at: 次回確認
+        last_error_code: 最終error
+        provider_error_code: provider code
+        retry_after: Retry-After
+        request_id: request id
+        provider_message: provider message
         upload: レシート画像アップロード
         upload_allowed: 受付可
         upload_blocked: OCR停止中のため停止
@@ -245,6 +250,28 @@ ja:
           response_id: response id
           token_usage: token usage
           token_usage_value: "input: %{input} / output: %{output} / total: %{total}"
+        provider_error_details:
+          title: Provider error details
+          labels:
+            ocr: OCR
+            ai_primary: AI primary
+            ai_fallback: AI fallback
+            ai_final: AI final
+          fields:
+            service: service
+            provider: provider
+            phase: phase
+            http_status: HTTP status
+            provider_error_code: provider code
+            provider_error_type: provider type
+            provider_message: provider message
+            request_id: request id
+            region: region
+            retry_after: Retry-After
+            model: model
+            quota_exceeded: quota exceeded
+            rate_limited: rate limited
+            auth_error: auth error
         correction_summary:
           title: Correction summary
           empty: "-"
