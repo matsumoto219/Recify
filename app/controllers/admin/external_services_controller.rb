@@ -1,6 +1,6 @@
 class Admin::ExternalServicesController < Admin::BaseController
   def status
-    external_services = ExternalServices.status_snapshot
+    external_services = ExternalServices.status_snapshot(include_details: true)
     html = render_to_string(
       partial: "admin/dashboard/external_services_card",
       formats: [ :html ],

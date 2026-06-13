@@ -3,13 +3,14 @@ module ExternalServices
     SERVICES = StatusStore::SERVICES.freeze
 
     class << self
-      def call(renderer: nil)
-        new(renderer: renderer).call
+      def call(renderer: nil, include_details: false)
+        new(renderer: renderer, include_details: include_details).call
       end
     end
 
-    def initialize(renderer: nil)
+    def initialize(renderer: nil, include_details: false)
       @renderer = renderer
+      @include_details = include_details == true
     end
 
     def call
@@ -38,27 +39,20 @@ module ExternalServices
 
     attr_reader :renderer
 
+    def include_details?
+      @include_details
+    end
+
     def service_payload(service, snapshot, state)
       normalized = snapshot.with_indifferent_access
       detail = normalized_hash(normalized[:last_error_detail])
 
-      {
+      payload = {
         state: state,
         monitoring: normalized[:monitoring] == true,
         checked_at: normalized[:last_checked_at],
         last_checked_at: normalized[:last_checked_at],
         next_check_at: normalized[:next_check_at],
-        last_error_code: normalized[:last_error_code],
-        last_error_reason: normalized[:last_error_reason],
-        last_error_detail: detail.presence,
-        retry_after: detail[:retry_after],
-        request_id: detail[:request_id],
-        provider_error_code: detail[:provider_error_code],
-        provider_error_type: detail[:provider_error_type],
-        provider_message_safe: detail[:provider_message_safe],
-        quota_exceeded: detail[:quota_exceeded],
-        rate_limited: detail[:rate_limited],
-        auth_error: detail[:auth_error],
         consecutive_failures: normalized[:consecutive_failures],
         consecutive_successes: normalized[:consecutive_successes],
         disabled: normalized[:disabled] == true,
@@ -69,6 +63,24 @@ module ExternalServices
         text: service_status_text(state),
         message: service_status_message(service, state),
         badge_html: service_status_badge_html(service, state)
+      }
+
+      include_details? ? payload.merge(detail_payload(normalized, detail)) : payload
+    end
+
+    def detail_payload(normalized, detail)
+      {
+        last_error_code: normalized[:last_error_code],
+        last_error_reason: normalized[:last_error_reason],
+        last_error_detail: detail.presence,
+        retry_after: detail[:retry_after],
+        request_id: detail[:request_id],
+        provider_error_code: detail[:provider_error_code],
+        provider_error_type: detail[:provider_error_type],
+        provider_message_safe: detail[:provider_message_safe],
+        quota_exceeded: detail[:quota_exceeded],
+        rate_limited: detail[:rate_limited],
+        auth_error: detail[:auth_error]
       }
     end
 

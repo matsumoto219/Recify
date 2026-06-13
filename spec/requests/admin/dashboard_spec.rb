@@ -204,7 +204,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
       allow(Analysis).to receive(:retry_receipt_analysis)
-      allow(ExternalServices).to receive(:status_snapshot).and_return(
+      allow(ExternalServices).to receive(:status_snapshot).with(include_details: true).and_return(
         ocr: {
           state: 'down',
           text: I18n.t('shared.service_status.down'),

@@ -1234,6 +1234,30 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'OCR provider詳細は登録方法選択画面に表示しない' do
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return(
+        state: 'down',
+        last_error_code: 'external_service_quota_exceeded',
+        last_error_detail: {
+          provider_error_code: 'QuotaExceeded',
+          provider_message_safe: 'F0 quota exceeded for [FILTERED]',
+          request_id: 'azure-request-id'
+        }
+      )
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      get select_input_method_receipts_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(response.body).not_to include('external_service_quota_exceeded')
+        expect(response.body).not_to include('QuotaExceeded')
+        expect(response.body).not_to include('F0 quota exceeded')
+        expect(response.body).not_to include('azure-request-id')
+      end
+    end
+
     it 'AI down時は画像アップロード導線をdisabledにせず注意を表示する' do
       allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
@@ -1388,6 +1412,30 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.css('button[disabled]').map(&:text).join).to include('ファイルを選択')
         expect(document.css('button[disabled]').map(&:text).join).to include('アップロードして登録')
         expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+      end
+    end
+
+    it 'AI provider詳細はアップロード画面に表示せずOCR-only説明に丸める' do
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return(
+        state: 'down',
+        last_error_code: 'ai_rate_limited',
+        last_error_detail: {
+          provider_error_code: 'rate_limit_exceeded',
+          provider_message_safe: 'rate limit for [FILTERED]',
+          request_id: 'req_ai'
+        }
+      )
+
+      get new_upload_receipts_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.new_upload.ai_down'))
+        expect(response.body).not_to include('ai_rate_limited')
+        expect(response.body).not_to include('rate_limit_exceeded')
+        expect(response.body).not_to include('rate limit for')
+        expect(response.body).not_to include('req_ai')
       end
     end
 

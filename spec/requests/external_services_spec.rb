@@ -101,7 +101,7 @@ RSpec.describe 'External services status', type: :request do
       end
     end
 
-    it 'provider error detailをsafeなJSONとして返す' do
+    it 'provider error detailをpublic JSONには返さない' do
       allow(Rails).to receive(:cache).and_return(cache_store)
       Rails.cache.clear
 
@@ -132,15 +132,18 @@ RSpec.describe 'External services status', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(json.dig('ai', 'state')).to eq('down')
-        expect(json.dig('ai', 'last_error_code')).to eq('ai_rate_limited')
-        expect(json.dig('ai', 'last_error_reason')).to eq('rate_limited')
-        expect(json.dig('ai', 'retry_after')).to eq(15)
-        expect(json.dig('ai', 'request_id')).to eq('req_ai')
-        expect(json.dig('ai', 'provider_error_code')).to eq('rate_limit_exceeded')
-        expect(json.dig('ai', 'provider_message_safe')).to eq('rate limit for [FILTERED]')
-        expect(json.dig('ai', 'rate_limited')).to eq(true)
+        expect(json.dig('ai', 'message')).to eq(I18n.t('receipts.new_upload.ai_down'))
+        expect(json.dig('ai', 'last_error_code')).to be_nil
+        expect(json.dig('ai', 'last_error_reason')).to be_nil
+        expect(json.dig('ai', 'retry_after')).to be_nil
+        expect(json.dig('ai', 'request_id')).to be_nil
+        expect(json.dig('ai', 'provider_error_code')).to be_nil
+        expect(json.dig('ai', 'provider_message_safe')).to be_nil
+        expect(json.dig('ai', 'rate_limited')).to be_nil
         expect(response.body).not_to include('sk-secret-token')
         expect(response.body).not_to include('RAW BODY MUST NOT BE RETURNED')
+        expect(response.body).not_to include('req_ai')
+        expect(response.body).not_to include('rate_limit_exceeded')
       end
     ensure
       Rails.cache.clear

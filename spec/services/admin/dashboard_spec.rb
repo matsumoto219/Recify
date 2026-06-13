@@ -32,7 +32,9 @@ RSpec.describe Admin::Dashboard do
         migration: "current",
         database_time: Time.zone.parse("2026-05-26 12:00:00")
       }
-      allow(ExternalServices).to receive(:status_snapshot).and_return(external_services_snapshot)
+      allow(ExternalServices).to receive(:status_snapshot)
+        .with(include_details: true)
+        .and_return(external_services_snapshot)
       allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
       allow(Admin).to receive(:database_status_snapshot).and_return(database_status_snapshot)
       create(:passkey, user: admin)

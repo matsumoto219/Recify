@@ -48,7 +48,7 @@ module Admin
         audit: audit_summary,
         contact_requests: contact_requests_summary,
         security: security_summary,
-        external_services: ExternalServices.status_snapshot,
+        external_services: ExternalServices.status_snapshot(include_details: true),
         storage: Storage.system_usage_snapshot,
         database_status: Admin.database_status_snapshot,
         system_operations: system_operations_summary(system_dashboard),

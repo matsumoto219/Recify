@@ -2,6 +2,6 @@ class ExternalServicesController < ApplicationController
   before_action :authenticate_user!
 
   def status
-    render json: ExternalServices.status_snapshot(renderer: self)
+    render json: ExternalServices.status_snapshot(renderer: self, include_details: false)
   end
 end
