@@ -99,6 +99,14 @@ RSpec.describe Usage do
     end
   end
 
+  describe '.ensure_ai_job_within_limit!' do
+    it 'Usage::Limitsへ委譲する' do
+      allow(Usage::Limits).to receive(:ensure_ai_job_within_limit!).with(user: user).and_return(:ok)
+
+      expect(described_class.ensure_ai_job_within_limit!(user: user)).to eq(:ok)
+    end
+  end
+
   describe '.mark_analysis_run_blocked!' do
     it 'Usage::Limitsへ委譲する' do
       run = instance_double(ReceiptAnalysisRun)

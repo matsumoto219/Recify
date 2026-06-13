@@ -70,6 +70,10 @@ module Usage
       Usage::Limits.consume_ai_job!(user: user)
     end
 
+    def ensure_ai_job_within_limit!(user:)
+      Usage::Limits.ensure_ai_job_within_limit!(user: user)
+    end
+
     def mark_analysis_run_blocked!(run:, stage:)
       Usage::Limits.mark_analysis_run_blocked!(run: run, stage: stage)
     end

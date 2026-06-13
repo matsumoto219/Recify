@@ -26,13 +26,14 @@ RSpec.describe Usage::Limits do
       allow(UserLimits).to receive(:effective_limit)
         .with(user: user, key: 'ocr_jobs_per_day')
         .and_return(50)
-      allow(Usage::Counters).to receive(:ensure_within_limit!).and_return(true)
+      allow(Usage::Counters).to receive(:check!).and_return(true)
 
       described_class.ensure_ocr_job_within_limit!(user: user)
 
-      expect(Usage::Counters).to have_received(:ensure_within_limit!).with(
+      expect(Usage::Counters).to have_received(:check!).with(
         user: user,
         key: 'ocr_jobs_per_day',
+        amount: 1,
         limit: 50
       )
     end
@@ -48,6 +49,24 @@ RSpec.describe Usage::Limits do
       described_class.consume_ai_job!(user: user)
 
       expect(Usage::Counters).to have_received(:check_and_increment!).with(
+        user: user,
+        key: 'ai_jobs_per_day',
+        amount: 1,
+        limit: 50
+      )
+    end
+  end
+
+  describe '.ensure_ai_job_within_limit!' do
+    it 'AI job counterをlimit内か検証する' do
+      allow(UserLimits).to receive(:effective_limit)
+        .with(user: user, key: 'ai_jobs_per_day')
+        .and_return(50)
+      allow(Usage::Counters).to receive(:check!).and_return(true)
+
+      described_class.ensure_ai_job_within_limit!(user: user)
+
+      expect(Usage::Counters).to have_received(:check!).with(
         user: user,
         key: 'ai_jobs_per_day',
         amount: 1,

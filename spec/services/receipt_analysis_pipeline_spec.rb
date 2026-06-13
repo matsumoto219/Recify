@@ -542,19 +542,25 @@ RSpec.describe ReceiptAnalysisPipeline do
       ai_down_run = create(:receipt_analysis_run, receipt: ai_down_receipt)
 
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
-      allow(ExternalServices).to receive(:down?).and_return(false)
 
       with_env('RECEIPT_AI_ENABLED', 'false') do
         disabled_result = described_class.run_ocr(ai_disabled_run)
 
         aggregate_failures('disabled') do
           expect(disabled_result.next_step).to eq(:finalize)
-          expect(disabled_result.finalize_decision.finalize_strategy).to eq('ocr_only')
-          expect(ai_disabled_run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ocr_only')
+          expect(disabled_result.finalize_decision.finalize_strategy).to eq('ai_fallback')
+          expect(disabled_result.finalize_decision.error_code).to eq('ai_unavailable')
+          expect(ai_disabled_run.reload.metadata.dig('finalize_decision', 'error_code')).to eq('ai_unavailable')
         end
       end
 
-      allow(ExternalServices).to receive(:down?).with(:ai).and_return(true)
+      allow(ExternalServices).to receive(:snapshot).and_call_original
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return(
+        state: 'down',
+        disabled: false,
+        source: 'status_store',
+        reason: 'external_service_unavailable'
+      )
       down_result = described_class.run_ocr(ai_down_run)
 
       aggregate_failures('down') do
@@ -691,8 +697,9 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, capture_input:|
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, capture_input:, before_provider_call:|
         expect(ai_name_completion_enabled).to eq(true)
+        before_provider_call.call
         capture_input.call(ai_input)
         ai_result
       end
@@ -740,6 +747,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           '保存しないAI raw response',
           '保存しないapi key'
         )
+        expect(UsageCounter.find_by!(user: receipt.user, key: 'ai_jobs_per_day').used_count).to eq(1)
       end
     end
 

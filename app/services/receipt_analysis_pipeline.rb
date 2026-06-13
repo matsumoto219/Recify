@@ -98,11 +98,13 @@ class ReceiptAnalysisPipeline
 
       return usage_limit_blocked_result("ai") unless ai_provider_call_allowed?
 
-      raw_ai_result = AiStep.call(
-        run: run,
+      ai_step_result = run_ai_step(
         ocr_result: ocr_result,
         ai_name_completion_enabled: ai_name_completion_enabled.nil? ? ai_name_completion_enabled? : ai_name_completion_enabled
-      ).ai_result
+      )
+      return usage_limit_blocked_result("ai") if ai_step_result == :usage_limit_blocked
+
+      raw_ai_result = ai_step_result.ai_result
       ai_result = normalize_ai_result(raw_ai_result)
       log_ai_result(ai_result)
 
@@ -242,12 +244,7 @@ class ReceiptAnalysisPipeline
   end
 
   def ai_gate_finalize_decision(ocr_result)
-    unless ai_enabled?
-      Rails.logger.info("[ReceiptAnalysis] ai_disabled_ocr_only receipt_id=#{receipt.id}")
-      return finalize_decision(:ocr_only, ocr_result: ocr_result)
-    end
-
-    unless ai_available?
+    if ai_unavailable_snapshot
       Rails.logger.info("[ReceiptAnalysis] ai_down_ocr_only receipt_id=#{receipt.id}")
       return finalize_decision(:ai_fallback, ocr_result: ocr_result, error_code: "ai_unavailable")
     end
@@ -367,8 +364,23 @@ class ReceiptAnalysisPipeline
     )
   end
 
-  def ai_provider_call_allowed?
+  def run_ai_step(ocr_result:, ai_name_completion_enabled:)
+    AiStep.call(
+      run: run,
+      ocr_result: ocr_result,
+      ai_name_completion_enabled: ai_name_completion_enabled,
+      before_provider_call: -> { consume_ai_provider_call! }
+    )
+  rescue Usage::LimitExceeded
+    :usage_limit_blocked
+  end
+
+  def consume_ai_provider_call!
     Usage.consume_ai_job!(user: receipt.user)
+  end
+
+  def ai_provider_call_allowed?
+    Usage.ensure_ai_job_within_limit!(user: receipt.user)
     true
   rescue Usage::LimitExceeded
     false
@@ -383,14 +395,9 @@ class ReceiptAnalysisPipeline
     receipt.user&.product_name_ai_completion_enabled == true
   end
 
-  def ai_enabled?
-    ActiveModel::Type::Boolean.new.cast(
-      ENV.fetch(Config::AI_ENABLED_ENV_KEY, "true")
-    )
-  end
-
-  def ai_available?
-    !ExternalServices.down?(:ai)
+  def ai_unavailable_snapshot
+    snapshot = ExternalServices.snapshot(:ai)
+    snapshot[:state].to_s == "down" ? snapshot : nil
   end
 
   def normalize_ai_result(result)

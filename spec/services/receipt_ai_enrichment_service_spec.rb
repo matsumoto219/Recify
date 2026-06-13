@@ -64,6 +64,23 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'before_provider_callをAI client呼び出し直前に実行する' do
+        events = []
+        before_provider_call = -> { events << :before_provider_call }
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }) do
+          events << :client_call
+          successful_ai_result
+        end
+
+        result = described_class.call(valid_ocr_result, before_provider_call: before_provider_call)
+
+        aggregate_failures do
+          expect(result).to eq(successful_ai_result)
+          expect(events).to eq(%i[before_provider_call client_call])
+        end
+      end
+
       it 'capture_inputにPromptBuilder結果を渡し戻り値互換を維持する' do
         input = { filtered_content: 'test', meta: { item_count: 1 } }
         capture_input = instance_double(Proc)
@@ -180,7 +197,10 @@ RSpec.describe ReceiptAiEnrichmentService do
 
     context '入力検証エラー' do
       it 'ocr_result が nil の場合は analysis_missing_keys を返す' do
-        result = described_class.call(nil)
+        before_provider_call = instance_double(Proc)
+        allow(before_provider_call).to receive(:call)
+
+        result = described_class.call(nil, before_provider_call: before_provider_call)
 
         aggregate_failures do
           expect(result[:success]).to eq(false)
@@ -188,6 +208,7 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
+          expect(before_provider_call).not_to have_received(:call)
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end

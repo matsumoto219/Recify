@@ -9,11 +9,12 @@ class ReceiptAiEnrichmentService
   end
 
   class << self
-    def call(ocr_result, ai_name_completion_enabled: false, capture_input: nil)
+    def call(ocr_result, ai_name_completion_enabled: false, capture_input: nil, before_provider_call: nil)
       new(
         ocr_result,
         ai_name_completion_enabled: ai_name_completion_enabled,
-        capture_input: capture_input
+        capture_input: capture_input,
+        before_provider_call: before_provider_call
       ).call
     end
 
@@ -32,10 +33,11 @@ class ReceiptAiEnrichmentService
     end
   end
 
-  def initialize(ocr_result, ai_name_completion_enabled: false, capture_input: nil, client: Ai::Client.new)
+  def initialize(ocr_result, ai_name_completion_enabled: false, capture_input: nil, before_provider_call: nil, client: Ai::Client.new)
     @ocr_result = ocr_result || {}
     @ai_name_completion_enabled = ai_name_completion_enabled == true
     @capture_input = capture_input
+    @before_provider_call = before_provider_call
     @client = client
   end
 
@@ -50,6 +52,7 @@ class ReceiptAiEnrichmentService
     )
     capture_input!(input)
 
+    before_provider_call&.call
     result = client.call(input)
 
     if ai_service_healthy_result?(result)
@@ -61,6 +64,8 @@ class ReceiptAiEnrichmentService
     log_result(result)
     result
   rescue InputCaptureError
+    raise
+  rescue Usage::LimitExceeded
     raise
   rescue AiEnrichmentError => e
     Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
@@ -85,7 +90,7 @@ class ReceiptAiEnrichmentService
 
   private
 
-  attr_reader :ocr_result, :ai_name_completion_enabled, :capture_input, :client
+  attr_reader :ocr_result, :ai_name_completion_enabled, :capture_input, :before_provider_call, :client
 
   def capture_input!(input)
     return unless capture_input
