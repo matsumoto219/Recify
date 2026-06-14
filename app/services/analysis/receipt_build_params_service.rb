@@ -262,15 +262,15 @@ module Analysis
         latin_logo_extension = latin_logo_local_store_name_extension(store_name, lines)
         return latin_logo_extension if latin_logo_extension.present?
 
+        printed_extension = printed_store_name_extension(store_name, lines)
+        return printed_extension if printed_extension.present?
+
         if ai_store_name && complete_customer_facing_ai_store_name?(store_name, lines)
           return Analysis::StoreNameCandidateClassifier.normalize_name(store_name)
         end
 
         legal_entity_extension = legal_entity_brand_store_name_extension(store_name, lines)
         return legal_entity_extension if legal_entity_extension.present?
-
-        printed_extension = printed_store_name_extension(store_name, lines)
-        return printed_extension if printed_extension.present?
 
         store_name
       end

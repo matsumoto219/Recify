@@ -2110,6 +2110,34 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('サンプル食堂 サンプル通り')
       end
 
+      it 'AIが印字店舗名の一部だけを返した場合はOCRの完全な印字行へ寄せる' do
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サンプル省略 南町テスト店',
+            store_address: 'サンプル県サンプル市南町14-4-4',
+            total_amount: 1100,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'サンプル省略 南町テスト店',
+            'サンプル県サンプル市南町14-4-4',
+            '2026-02-04T14:14:00+09:00',
+            '領収書'
+          ]
+        )
+        branch_ai_result = {
+          receipt_attributes: {
+            store_name: '南町テスト店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('サンプル省略 南町テスト店')
+      end
+
       it '店舗名表記ポリシーとして顧客向けブランドと支店・場所名だけを保存店舗名にする' do
         branch_ocr_result = ocr_result.deep_merge(
           candidates: {

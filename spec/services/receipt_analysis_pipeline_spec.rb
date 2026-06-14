@@ -4510,6 +4510,52 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '最終保存住所がOCR根拠と一致すればAIのstore_address_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "AIテストストア\nサンプル県サンプル市三分割30-10-10\nコーヒー 180\n合計 180\n現金 180",
+        lines: [
+          'AIテストストア',
+          'サンプル県サンプル市三分割30-10-10',
+          'コーヒー 180',
+          '合計 180',
+          '現金 180'
+        ],
+        candidates: {
+          store_name: 'AIテストストア',
+          store_address: 'サンプル県サンプル市三分割30-10-10',
+          payments: [
+            { method: 'Cash', amount: 180 }
+          ]
+        }
+      )
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: [ 'store_address_uncertain' ],
+        receipt_attributes: {
+          store_name: 'AIテストストア',
+          store_address: 'サンプル県サンプル市三分割30-10-10',
+          payment_method: 'cash'
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.store_address).to eq('サンプル県サンプル市三分割30-10-10')
+        expect(receipt.review_reasons).not_to include('store_address_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it '保存itemにcategory reviewが残らなければAIのitem_category_uncertainをreceipt-levelから落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
@@ -4540,6 +4586,71 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('completed')
         expect(receipt.review_reasons).not_to include('item_category_uncertain')
         expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it '保存item名がfinal値で揃っていればAIのitem_name_uncertainとitems_missingをreceipt-levelから落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain', 'items_missing' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: false
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.review_reasons).not_to include('item_name_uncertain')
+        expect(receipt.review_reasons).not_to include('items_missing')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it 'item-level item_name_uncertainが残る場合はreceipt-levelのitem_name_uncertainを落とさない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: true,
+            review_reasons: [ 'item_name_uncertain' ]
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('item_name_uncertain')
       end
     end
 

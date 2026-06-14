@@ -15,6 +15,8 @@ class ReceiptAnalysisPipeline
       price_tax_inclusion_uncertain
     ].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
+    ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
       item_total_mismatch
@@ -959,7 +961,9 @@ class ReceiptAnalysisPipeline
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      review_reasons = remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
       review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
       review_reasons = remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
@@ -974,6 +978,22 @@ class ReceiptAnalysisPipeline
       return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
 
       review_reasons - [ "store_phone_number_missing" ]
+    end
+
+    def remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
+      return review_reasons unless review_reasons.include?("store_address_uncertain")
+      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+      return review_reasons unless resolved_store_address_supported_by_ocr?(params, ocr_result)
+
+      review_reasons - [ "store_address_uncertain" ]
+    end
+
+    def remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
+      target_reasons = [ ITEM_NAME_UNCERTAIN_REVIEW_REASON, ITEMS_MISSING_REVIEW_REASON ]
+      return review_reasons unless review_reasons.intersect?(target_reasons)
+      return review_reasons unless item_names_resolved?(params, amount_result)
+
+      review_reasons - target_reasons
     end
 
     def remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
@@ -999,6 +1019,30 @@ class ReceiptAnalysisPipeline
         normalize_review_reasons(normalized[:review_reasons]).include?("item_category_uncertain") ||
           item_needs_review?(normalized)
       end
+    end
+
+    def item_names_resolved?(params, amount_result)
+      return false if amount_review_reasons(amount_result).include?(ITEM_TOTAL_DRIFT_REVIEW_REASON)
+
+      items = Array(params[:receipt_items_attributes])
+      return false if items.blank?
+
+      items.none? do |item|
+        normalized = normalized_hash(item)
+        item_name_review_reasons?(normalized) ||
+          item_needs_review?(normalized) ||
+          item_display_name(normalized).blank?
+      end
+    end
+
+    def item_name_review_reasons?(item)
+      normalize_review_reasons(item[:review_reasons]).intersect?(
+        [ ITEM_NAME_UNCERTAIN_REVIEW_REASON, ITEMS_MISSING_REVIEW_REASON ]
+      )
+    end
+
+    def item_display_name(item)
+      item[:confirmed_name].presence || item[:suggested_name].presence || item[:raw_text].presence
     end
 
     def item_tax_rates_resolved?(params, amount_result)
@@ -1061,6 +1105,35 @@ class ReceiptAnalysisPipeline
       return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
 
       review_reasons - [ "store_name_uncertain" ]
+    end
+
+    def resolved_store_address_supported_by_ocr?(params, ocr_result)
+      store_address = normalized_hash(params[:receipt_attributes])[:store_address].to_s
+      compact_address = compact_address_for_review(store_address)
+      return false if compact_address.blank?
+
+      ocr_address_candidates(ocr_result).any? do |candidate|
+        compact_candidate = compact_address_for_review(candidate)
+        next false if compact_candidate.blank?
+
+        compact_candidate == compact_address ||
+          compact_candidate.include?(compact_address) ||
+          compact_address.include?(compact_candidate)
+      end
+    end
+
+    def ocr_address_candidates(ocr_result)
+      [
+        ocr_candidates(ocr_result)[:store_address],
+        *Array(ocr_result[:lines]).first(8)
+      ].compact
+    end
+
+    def compact_address_for_review(value)
+      value.to_s
+        .unicode_normalize(:nfkc)
+        .downcase
+        .gsub(/[[:space:]\-−ー‐‑‒–—―・,，、。:：]/, "")
     end
 
     def resolved_store_name_supported_by_ocr?(params, ocr_result)
