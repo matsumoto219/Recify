@@ -4617,6 +4617,19 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '画像プレビューはlg以上を初期open、lg未満を初期closedとして未操作時だけresize追従する' do
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_image_card_controller.js').read
+
+      aggregate_failures do
+        expect(controller_source).to include("const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'")
+        expect(controller_source).to include('defaultOpenStateForCurrentBreakpoint')
+        expect(controller_source).to include('handleBreakpointChange')
+        expect(controller_source).to include('this.userHasToggled')
+        expect(controller_source).to include("addEventListener('change', this.handleBreakpointChange)")
+        expect(controller_source).to include("this.toggleButtonTarget.setAttribute('aria-expanded', String(this.isOpen))")
+      end
+    end
+
     it 'エラーなし詳細ではエラー領域を描画しない' do
       get receipt_path(receipt)
 
@@ -5210,6 +5223,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(image_card).to be_present
         expect(image_card['data-receipt-image-card-unselected-label-value']).to eq(I18n.t('shared.receipt_image_card.js.unselected'))
+        expect(image_card['data-receipt-image-card-initially-open-value']).to eq('false')
+        expect(image_card['data-receipt-image-card-collapse-on-mobile-value']).to eq('false')
         expect(image_card['data-receipt-image-card-empty-file-label-value']).to eq(I18n.t('shared.receipt_image_card.js.empty_file'))
         expect(image_card['data-receipt-image-card-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
         expect(image_card['data-receipt-image-card-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)

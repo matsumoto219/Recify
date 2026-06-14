@@ -20,7 +20,7 @@ const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
   '.heic'
 ]
 
-const MOBILE_MEDIA_QUERY = '(max-width: 767px)'
+const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'
 
 function isAllowedReceiptImageFile (file) {
   if (!file) return false
@@ -47,7 +47,9 @@ export default class extends Controller {
   }
 
   connect () {
-    this.isOpen = this.initiallyOpenValue && !this.shouldCollapseInitiallyForMobile()
+    this.userHasToggled = false
+    this.previewBreakpointMediaQuery = this.buildPreviewBreakpointMediaQuery()
+    this.isOpen = this.defaultOpenStateForCurrentBreakpoint()
     this.objectUrl = null
     this.dragDepth = 0
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
@@ -55,6 +57,7 @@ export default class extends Controller {
     this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
+    this.handleBreakpointChange = this.handleBreakpointChange.bind(this)
     this.sync()
 
     this.initializeFileName()
@@ -64,10 +67,12 @@ export default class extends Controller {
     this.handleModalPanelClick = this.handleModalPanelClick.bind(this)
     document.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+    this.addBreakpointListener()
     this.addModalEventListeners()
   }
 
   disconnect () {
+    this.removeBreakpointListener()
     this.removeModalEventListeners()
     this.restoreModal()
     this.unlockBodyScroll()
@@ -76,8 +81,48 @@ export default class extends Controller {
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
   }
 
-  shouldCollapseInitiallyForMobile () {
-    return this.collapseOnMobileValue && window.matchMedia && window.matchMedia(MOBILE_MEDIA_QUERY).matches
+  buildPreviewBreakpointMediaQuery () {
+    if (!window.matchMedia) return null
+
+    return window.matchMedia(DESKTOP_PREVIEW_MEDIA_QUERY)
+  }
+
+  defaultOpenStateForCurrentBreakpoint () {
+    if (!this.initiallyOpenValue) return false
+    if (!this.collapseOnMobileValue) return true
+
+    return this.matchesDesktopPreviewBreakpoint()
+  }
+
+  matchesDesktopPreviewBreakpoint () {
+    return !this.previewBreakpointMediaQuery || this.previewBreakpointMediaQuery.matches
+  }
+
+  addBreakpointListener () {
+    if (!this.collapseOnMobileValue || !this.previewBreakpointMediaQuery) return
+
+    if (this.previewBreakpointMediaQuery.addEventListener) {
+      this.previewBreakpointMediaQuery.addEventListener('change', this.handleBreakpointChange)
+    } else {
+      this.previewBreakpointMediaQuery.addListener(this.handleBreakpointChange)
+    }
+  }
+
+  removeBreakpointListener () {
+    if (!this.collapseOnMobileValue || !this.previewBreakpointMediaQuery) return
+
+    if (this.previewBreakpointMediaQuery.removeEventListener) {
+      this.previewBreakpointMediaQuery.removeEventListener('change', this.handleBreakpointChange)
+    } else {
+      this.previewBreakpointMediaQuery.removeListener(this.handleBreakpointChange)
+    }
+  }
+
+  handleBreakpointChange () {
+    if (this.userHasToggled) return
+
+    this.isOpen = this.defaultOpenStateForCurrentBreakpoint()
+    this.sync()
   }
 
   previewSelectedImage (event) {
@@ -264,6 +309,7 @@ export default class extends Controller {
   }
 
   toggle () {
+    this.userHasToggled = true
     this.isOpen = !this.isOpen
     this.sync()
   }
