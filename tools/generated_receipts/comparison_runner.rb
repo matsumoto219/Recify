@@ -6,8 +6,7 @@ module GeneratedReceipts
   class ComparisonRunner
     Result = Struct.new(:case_id, :run_results, keyword_init: true) do
       def stable?
-        snapshots = run_results.map { |run| run[:actual] }
-        snapshots.uniq.size <= 1
+        run_results.map { |run| stable_signature(run) }.uniq.size <= 1
       end
 
       def status
@@ -17,6 +16,19 @@ module GeneratedReceipts
         return "WARN" if statuses.include?("WARN")
 
         "PASS"
+      end
+
+      private
+
+      def stable_signature(run)
+        {
+          status: run[:status] || run[:comparison].status,
+          diffs: Array(run[:diffs] || run[:comparison].diffs).map { |diff| normalize_diff(diff) }
+        }
+      end
+
+      def normalize_diff(diff)
+        diff.to_h.transform_keys(&:to_s).sort.to_h
       end
     end
 

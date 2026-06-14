@@ -4,7 +4,7 @@
   "intent": "Printed subtotal is missing, but total and printed gross tax detail determine the amounts.",
   "receipt_kind": "receipt",
   "expected": {
-    "store_name": "サンプル小計省略 南町テスト店",
+    "store_name": "サンプル省略 南町テスト店",
     "store_address": "サンプル県サンプル市南町14-4-4",
     "purchased_at": "2026-02-04T14:14:00+09:00",
     "currency": "JPY",

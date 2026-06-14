@@ -77,6 +77,48 @@ RSpec.describe GeneratedReceipts::Comparator do
     expect(result.status).to eq("WARN")
   end
 
+  it "treats runs with the same normalized comparison result as stable" do
+    result = GeneratedReceipts::ComparisonRunner::Result.new(
+      case_id: "sample",
+      run_results: [
+        {
+          actual: { "tax_rate" => "0.10" },
+          comparison: described_class::Result.new(case_id: "sample", status: "PASS", diffs: [])
+        },
+        {
+          actual: { "tax_rate" => "0.1" },
+          comparison: described_class::Result.new(case_id: "sample", status: "PASS", diffs: [])
+        }
+      ]
+    )
+
+    expect(result).to be_stable
+  end
+
+  it "keeps runs unstable when normalized comparison diffs differ" do
+    result = GeneratedReceipts::ComparisonRunner::Result.new(
+      case_id: "sample",
+      run_results: [
+        {
+          comparison: described_class::Result.new(
+            case_id: "sample",
+            status: "WARN",
+            diffs: [ { path: "store_name", expected: "A", actual: "B", severity: "WARN" } ]
+          )
+        },
+        {
+          comparison: described_class::Result.new(
+            case_id: "sample",
+            status: "WARN",
+            diffs: [ { path: "store_name", expected: "A", actual: "C", severity: "WARN" } ]
+          )
+        }
+      ]
+    )
+
+    expect(result).not_to be_stable
+  end
+
   it "summarizes external service failures as ENV_BLOCKED without hiding real failures" do
     aggregate_failures do
       expect(
