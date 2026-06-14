@@ -1,5 +1,9 @@
 ja:
   shared:
+    clipboard:
+      copy_label: "%{label}をコピー"
+      copied: コピーしました。
+      failed: コピーできませんでした。
     avatar:
       default_alt: プロフィール画像
     noscript:

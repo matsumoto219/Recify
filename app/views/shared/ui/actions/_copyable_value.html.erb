@@ -1,0 +1,49 @@
+<%#
+  Small inline copy affordance for investigation IDs and other safe values.
+
+  Required:
+  - value: copied value
+  - label: human-readable value name for aria/title
+
+  Optional:
+  - display: displayed value. Defaults to value
+  - wrapper_class: root wrapper class
+  - value_class: displayed value class
+%>
+
+<%
+  value_text = local_assigns.fetch(:value).to_s
+  display_text = local_assigns.fetch(:display, value_text)
+  label = local_assigns.fetch(:label)
+  copyable = value_text.present? && value_text != "-"
+  wrapper_class = local_assigns.fetch(:wrapper_class, "relative inline-flex min-w-0 max-w-full items-center gap-1 align-middle")
+  value_class = local_assigns.fetch(:value_class, "min-w-0 break-words [overflow-wrap:anywhere]")
+  copy_label = t("shared.clipboard.copy_label", label: label)
+%>
+
+<% if copyable %>
+  <span
+    class="<%= wrapper_class %>"
+    data-controller="clipboard"
+    data-clipboard-success-message-value="<%= t("shared.clipboard.copied") %>"
+    data-clipboard-failure-message-value="<%= t("shared.clipboard.failed") %>">
+    <span class="hidden" data-clipboard-target="source"><%= value_text %></span>
+    <span class="<%= value_class %>"><%= display_text %></span>
+    <button
+      type="button"
+      class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md token-text-muted transition-colors token-hover-bg-card-subtle token-hover-text-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+      data-action="click->clipboard#copy"
+      aria-label="<%= copy_label %>"
+      title="<%= copy_label %>">
+      <span class="material-symbols-outlined text-[16px]" aria-hidden="true">content_copy</span>
+    </button>
+    <span
+      class="pointer-events-none fixed z-50 hidden max-w-[calc(100vw-1rem)] whitespace-nowrap rounded-md border token-border-soft token-bg-floating px-2 py-1 text-[11px] font-medium token-text-success shadow-lg"
+      data-clipboard-target="status"
+      data-clipboard-floating-status="true"
+      aria-live="polite"
+      role="status"></span>
+  </span>
+<% else %>
+  <span class="<%= value_class %>"><%= display_text.presence || "-" %></span>
+<% end %>
