@@ -1,0 +1,4 @@
+サンプル株式会社
+山田 太郎
+TEL 000-0000-0000
+sample@example.invalid

@@ -25,6 +25,8 @@ module GeneratedReceipts
   end
 end
 
+require_relative "generated_receipts/degradation_profiles"
+require_relative "generated_receipts/degrader"
 require_relative "generated_receipts/validator"
 require_relative "generated_receipts/text_renderer"
 require_relative "generated_receipts/html_renderer"
@@ -32,4 +34,3 @@ require_relative "generated_receipts/png_renderer"
 require_relative "generated_receipts/comparator"
 require_relative "generated_receipts/pipeline_runner"
 require_relative "generated_receipts/comparison_runner"
-require_relative "generated_receipts/degradation_profiles"

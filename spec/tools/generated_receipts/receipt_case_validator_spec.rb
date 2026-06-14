@@ -14,11 +14,11 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
 
-  it "validates generated receipt cases through g060" do
+  it "validates generated receipt cases through g100" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
 
     aggregate_failures do
-      expect(results.size).to eq(60)
+      expect(results.size).to eq(100)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
@@ -33,7 +33,21 @@ RSpec.describe GeneratedReceipts::Validator do
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:4[6-9]|5[0-9]|60)_t/) }).to eq(15)
       expect(cases.count { |case_data| case_data["category"] == "discount_adjustment" }).to be >= 15
       expect(cases.count { |case_data| case_data["category"] == "tax_rounding" }).to be >= 15
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:6[1-9]|7[0-9]|80)_/) }).to eq(20)
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag08[1-9]_|\Ag090_/) }).to eq(10)
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag09[1-9]_|\Ag100_/) }).to eq(10)
+      expect(cases.count { |case_data| case_data["category"] == "ocr_anomaly" }).to be >= 20
+      expect(cases.count { |case_data| case_data["category"] == "non_receipt" }).to eq(10)
+      expect(cases.count { |case_data| case_data["category"] == "conflict" }).to eq(10)
     end
+  end
+
+  it "allows non-receipt cases to define only failure expectations" do
+    data = load_case("g081_non_receipt_memo")
+
+    result = described_class.call(data)
+
+    expect(result.errors).to eq([])
   end
 
   it "rejects unexpected keys" do

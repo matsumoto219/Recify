@@ -45,14 +45,14 @@ module GeneratedReceipts
           "tax" => expected["tax"],
           "total" => expected["total"],
           "tax_rate" => expected["tax_rate"],
-          "tax_details" => expected["tax_details"],
-          "items" => expected["items"],
-          "receipt_adjustments" => expected["receipt_adjustments"],
+          "tax_details" => Array(expected["tax_details"]),
+          "items" => Array(expected["items"]),
+          "receipt_adjustments" => Array(expected["receipt_adjustments"]),
           "payment_method" => expected["payment_method"],
-          "payments" => expected["payments"].map { |payment| { "method" => payment["label"], "amount" => payment["amount"] } },
+          "payments" => Array(expected["payments"]).map { |payment| { "method" => payment["label"], "amount" => payment["amount"] } },
           "status" => expected["status"],
           "review_reasons" => expected["review_reasons"],
-          "processing_error_code" => nil
+          "processing_error_code" => expected["processing_error_code"]
         }
       end
     end

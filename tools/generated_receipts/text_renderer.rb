@@ -13,6 +13,8 @@ module GeneratedReceipts
     end
 
     def call
+      return custom_lines_text if custom_lines?
+
       [
         header_lines,
         item_lines,
@@ -28,6 +30,14 @@ module GeneratedReceipts
     private
 
     attr_reader :case_data, :expected, :render
+
+    def custom_lines?
+      Array(render["custom_lines"]).any?
+    end
+
+    def custom_lines_text
+      (Array(render["custom_lines"]) + noise_lines).join("\n") + "\n"
+    end
 
     def header_lines
       [

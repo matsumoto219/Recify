@@ -18,6 +18,7 @@ module GeneratedReceipts
       receipt_adjustments
       payment_method
       payments
+      processing_error_code
     ].freeze
 
     class << self
@@ -80,6 +81,13 @@ module GeneratedReceipts
     end
 
     def call
+      if non_receipt_case?
+        compare_scalar("status", expected["status"], actual["status"])
+        compare_array("review_reasons", Array(expected["review_reasons"]).sort, Array(actual["review_reasons"]).sort)
+        compare_scalar("processing_error_code", expected["processing_error_code"], actual["processing_error_code"])
+        return Result.new(case_id: case_data.fetch("case_id"), status: comparison_status, diffs: diffs)
+      end
+
       compare_scalar("store_name", expected["store_name"], actual["store_name"])
       compare_scalar("subtotal", expected["subtotal"], actual["subtotal"])
       compare_scalar("tax", expected["tax"], actual["tax"])
@@ -92,6 +100,7 @@ module GeneratedReceipts
       compare_payments
       compare_scalar("status", expected["status"], actual["status"])
       compare_array("review_reasons", Array(expected["review_reasons"]).sort, Array(actual["review_reasons"]).sort)
+      compare_scalar("processing_error_code", expected.fetch("processing_error_code", nil), actual["processing_error_code"])
 
       Result.new(case_id: case_data.fetch("case_id"), status: comparison_status, diffs: diffs)
     end
@@ -99,6 +108,10 @@ module GeneratedReceipts
     private
 
     attr_reader :case_data, :expected, :actual, :diffs
+
+    def non_receipt_case?
+      case_data["receipt_kind"] == "non_receipt"
+    end
 
     def compare_tax_details
       expected_details = expected["tax_details"].map { |detail| normalize_tax_detail(detail) }.sort_by { |detail| detail["rate"].to_s }
@@ -219,8 +232,14 @@ module GeneratedReceipts
         path: path,
         expected: expected_value,
         actual: actual_value,
-        severity: FAIL_PATHS.include?(path) ? "FAIL" : "WARN"
+        severity: fail_path?(path) ? "FAIL" : "WARN"
       }
+    end
+
+    def fail_path?(path)
+      return true if non_receipt_case? && %w[status processing_error_code].include?(path)
+
+      FAIL_PATHS.include?(path)
     end
   end
 end

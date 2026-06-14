@@ -78,8 +78,19 @@ module GeneratedReceipts
           filename: File.basename(image_path),
           content_type: "image/png"
         )
-        receipt.update!(status: "processing")
+        receipt.update!(processing_attributes)
       end
+    end
+
+    def processing_attributes
+      attributes = { status: "processing" }
+      return attributes unless case_data["receipt_kind"] == "non_receipt"
+
+      attributes.merge(
+        store_name: nil,
+        total_amount: nil,
+        payment_method: nil
+      )
     end
 
     def retryable_unprocessed_failure?(execution)

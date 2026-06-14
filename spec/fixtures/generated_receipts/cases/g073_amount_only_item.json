@@ -1,0 +1,101 @@
+{
+  "case_id": "g073_amount_only_item",
+  "category": "ocr_anomaly",
+  "intent": "Amount-only item line should be reconciled with neighboring item name.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル異常 テスト店",
+    "store_address": "サンプル県サンプル市異常町1-2-3",
+    "purchased_at": "2026-03-13T12:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル結合商品",
+        "unit_price": 330,
+        "quantity": 1,
+        "line_total": 330,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル通常商品",
+        "unit_price": 550,
+        "quantity": 1,
+        "line_total": 550,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 800,
+        "tax": 80,
+        "gross": 880,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 800,
+    "tax": 80,
+    "total": 880,
+    "payments": [
+      {
+        "method": "cash",
+        "label": "現金",
+        "amount": 880
+      }
+    ],
+    "payment_sum": 880,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": true,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプル異常 テスト店",
+      "サンプル県サンプル市異常町1-2-3",
+      "2026-03-13T12:00:00+09:00",
+      "領収書",
+      "--------------------------------",
+      "サンプル結合商品",
+      "¥330",
+      "サンプル通常商品 ¥550",
+      "--------------------------------",
+      "小計 ¥800",
+      "消費税 ¥80",
+      "合計 ¥880",
+      "10%対象計 ¥880",
+      "(内税額 ¥80)",
+      "現金 ¥880"
+    ]
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "subtotal",
+      "tax",
+      "total",
+      "payments",
+      "tax_details"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

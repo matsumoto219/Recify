@@ -1,0 +1,35 @@
+{
+  "case_id": "g085_non_receipt_product_list",
+  "category": "non_receipt",
+  "intent": "Non-receipt sample should fail without creating receipt accounting values.",
+  "receipt_kind": "non_receipt",
+  "expected": {
+    "status": "failed",
+    "review_reasons": [],
+    "processing_error_code": "ai_not_receipt"
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "monospace",
+    "custom_lines": [
+      "商品カタログ",
+      "サンプル用品A 300円",
+      "サンプル用品B 500円",
+      "販売期間 4月から6月"
+    ],
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "status",
+      "processing_error_code"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}

@@ -55,6 +55,26 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
+  it "compares non-receipt failures by status and processing error code" do
+    case_data = load_case("g081_non_receipt_memo")
+    actual = {
+      "status" => "completed",
+      "review_reasons" => [],
+      "processing_error_code" => nil,
+      "store_name" => "Generated Receipt Probe",
+      "total" => 1
+    }
+
+    result = described_class.call(case_data, actual)
+
+    aggregate_failures do
+      expect(result.status).to eq("FAIL")
+      expect(result.diffs).to include(hash_including(path: "status", severity: "FAIL"))
+      expect(result.diffs).to include(hash_including(path: "processing_error_code", severity: "FAIL"))
+      expect(result.diffs.map { |diff| diff[:path] }).not_to include("store_name", "total")
+    end
+  end
+
   it "compares payment labels and amounts" do
     case_data = load_case("g006_payment_point_credit")
     actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))

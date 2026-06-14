@@ -1,0 +1,34 @@
+{
+  "case_id": "g086_non_receipt_blank",
+  "category": "non_receipt",
+  "intent": "Non-receipt sample should fail without creating receipt accounting values.",
+  "receipt_kind": "non_receipt",
+  "expected": {
+    "status": "failed",
+    "review_reasons": [],
+    "processing_error_code": "ocr_api_error"
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "monospace",
+    "custom_lines": [
+      " ",
+      "   ",
+      ""
+    ],
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "status",
+      "processing_error_code"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}

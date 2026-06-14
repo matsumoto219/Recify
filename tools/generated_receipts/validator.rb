@@ -42,10 +42,16 @@ module GeneratedReceipts
       settlement
       status
       review_reasons
+      processing_error_code
     ].freeze
     EXPECTED_REQUIRED_KEYS = (
-      EXPECTED_KEYS - %w[settlement]
+      EXPECTED_KEYS - %w[settlement processing_error_code]
     ).freeze
+    NON_RECEIPT_EXPECTED_REQUIRED_KEYS = %w[
+      status
+      review_reasons
+      processing_error_code
+    ].freeze
     ROUNDING_KEYS = %w[tax discount scope].freeze
     ITEM_KEYS = %w[
       name
@@ -94,6 +100,7 @@ module GeneratedReceipts
       omit_subtotal_line
       include_payment_heading
       noise_lines
+      custom_lines
     ].freeze
     DEGRADATION_KEYS = %w[enabled profile].freeze
     ASSERTION_KEYS = %w[
@@ -103,7 +110,7 @@ module GeneratedReceipts
       simulated_ai_item_tax_rate
       expected_item_tax_rate_after_save
     ].freeze
-    CATEGORIES = %w[normal payment discount_adjustment tax_rounding ocr_anomaly].freeze
+    CATEGORIES = %w[normal payment discount_adjustment tax_rounding ocr_anomaly non_receipt conflict].freeze
     RECEIPT_KINDS = %w[receipt non_receipt].freeze
     AMOUNT_BASES = %w[tax_included tax_excluded].freeze
     TAX_INCLUSIONS = %w[gross net].freeze
@@ -143,12 +150,16 @@ module GeneratedReceipts
 
       validate_inclusion("category", case_data["category"], CATEGORIES)
       validate_inclusion("receipt_kind", case_data["receipt_kind"], RECEIPT_KINDS)
-      validate_hash("expected", expected, required: EXPECTED_REQUIRED_KEYS, allowed: EXPECTED_KEYS)
-      validate_hash("expected.rounding", expected["rounding"], required: ROUNDING_KEYS, allowed: ROUNDING_KEYS)
-      validate_optional_hash("expected.settlement", expected["settlement"], allowed: SETTLEMENT_KEYS)
+      validate_hash("expected", expected, required: expected_required_keys, allowed: EXPECTED_KEYS)
       validate_hash("render", case_data["render"], required: [], allowed: RENDER_KEYS)
       validate_hash("degradation", case_data["degradation"], required: DEGRADATION_KEYS, allowed: DEGRADATION_KEYS)
       validate_hash("assertions", case_data["assertions"], required: [], allowed: ASSERTION_KEYS)
+      validate_degradation
+      validate_non_receipt_schema unless receipt_case?
+      return unless receipt_case?
+
+      validate_hash("expected.rounding", expected["rounding"], required: ROUNDING_KEYS, allowed: ROUNDING_KEYS)
+      validate_optional_hash("expected.settlement", expected["settlement"], allowed: SETTLEMENT_KEYS)
       validate_inclusion("expected.amount_basis", expected["amount_basis"], AMOUNT_BASES)
       validate_inclusion("expected.rounding.tax", expected.dig("rounding", "tax"), ROUNDING_MODES)
       validate_array("expected.items", expected["items"]) do |item, index|
@@ -168,6 +179,18 @@ module GeneratedReceipts
       validate_array("expected.payments", expected["payments"]) do |payment, index|
         validate_hash("expected.payments[#{index}]", payment, required: PAYMENT_REQUIRED_KEYS, allowed: PAYMENT_KEYS)
       end
+    end
+
+    def validate_non_receipt_schema
+      validate_array("expected.review_reasons", expected["review_reasons"])
+    end
+
+    def validate_degradation
+      degradation = case_data["degradation"]
+      return unless degradation.is_a?(Hash)
+      return if degradation["profile"].nil?
+
+      validate_inclusion("degradation.profile", degradation["profile"], DegradationProfiles.names)
     end
 
     def validate_amounts
@@ -322,6 +345,10 @@ module GeneratedReceipts
       case_data["receipt_kind"] == "receipt"
     end
 
+    def expected_required_keys
+      receipt_case? ? EXPECTED_REQUIRED_KEYS : NON_RECEIPT_EXPECTED_REQUIRED_KEYS
+    end
+
     def validate_zero_tax_without_tax_details
       return if zero_tax_without_tax_details?
 
@@ -401,6 +428,8 @@ module GeneratedReceipts
         add_error(path, "must be an array")
         return
       end
+
+      return unless block_given?
 
       value.each_with_index { |entry, index| yield entry, index }
     end

@@ -1,0 +1,105 @@
+{
+  "case_id": "g099_impossible_rounding",
+  "category": "conflict",
+  "intent": "Impossible rounding note should remain reviewable.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル矛盾 テスト店",
+    "store_address": "サンプル県サンプル市矛盾町9-9-9",
+    "purchased_at": "2026-04-09T18:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル矛盾商品A",
+        "unit_price": 550,
+        "quantity": 1,
+        "line_total": 550,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル矛盾商品B",
+        "unit_price": 330,
+        "quantity": 1,
+        "line_total": 330,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 800,
+        "tax": 80,
+        "gross": 880,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 800,
+    "tax": 80,
+    "total": 880,
+    "payments": [
+      {
+        "method": "qr_payment",
+        "label": "QR支払",
+        "amount": 880
+      }
+    ],
+    "payment_sum": 880,
+    "payment_method": "qr_payment",
+    "status": "review_needed",
+    "review_reasons": [
+      "tax_amount_mismatch"
+    ]
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": true,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプル矛盾 テスト店",
+      "サンプル県サンプル市矛盾町9-9-9",
+      "2026-04-09T18:00:00+09:00",
+      "領収書",
+      "--------------------------------",
+      "サンプル矛盾商品A ¥550",
+      "サンプル矛盾商品B ¥330",
+      "--------------------------------",
+      "小計 ¥800",
+      "消費税 ¥80",
+      "合計 ¥880",
+      "10%対象計 ¥880",
+      "(内税額 ¥80)",
+      "QR支払 ¥880",
+      "丸め調整不能 税額表示が不一致"
+    ]
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "subtotal",
+      "tax",
+      "total",
+      "payments",
+      "tax_details"
+    ],
+    "allow_review_reasons": [
+      "tax_amount_mismatch"
+    ],
+    "allow_item_name_minor_diff": false
+  }
+}

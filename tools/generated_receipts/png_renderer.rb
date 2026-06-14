@@ -42,6 +42,7 @@ module GeneratedReceipts
       wait_for_ready(driver)
       receipt = driver.find_element(css: "#receipt")
       File.binwrite(output_path, receipt.screenshot_as(:png))
+      Degrader.call(case_data, image_path: output_path)
       output_path
     ensure
       driver&.quit

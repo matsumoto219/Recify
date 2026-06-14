@@ -6,7 +6,7 @@
   "required": ["case_id", "category", "intent", "receipt_kind", "expected", "render", "degradation", "assertions"],
   "properties": {
     "case_id": { "type": "string" },
-    "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly"] },
+    "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly", "non_receipt", "conflict"] },
     "intent": { "type": "string" },
     "receipt_kind": { "enum": ["receipt", "non_receipt"] },
     "expected": {
@@ -60,7 +60,8 @@
         "payment_method": { "type": "string" },
         "settlement": { "type": "object" },
         "status": { "type": "string" },
-        "review_reasons": { "type": "array" }
+        "review_reasons": { "type": "array" },
+        "processing_error_code": { "type": ["string", "null"] }
       }
     },
     "render": { "type": "object" },

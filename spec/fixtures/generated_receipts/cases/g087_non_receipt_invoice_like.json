@@ -1,0 +1,35 @@
+{
+  "case_id": "g087_non_receipt_invoice_like",
+  "category": "non_receipt",
+  "intent": "Non-receipt sample should fail without creating receipt accounting values.",
+  "receipt_kind": "non_receipt",
+  "expected": {
+    "status": "failed",
+    "review_reasons": [],
+    "processing_error_code": "ai_not_receipt"
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "monospace",
+    "custom_lines": [
+      "請求書サンプル",
+      "請求番号 INV-0001",
+      "お支払期限 2026-04-30",
+      "請求額 10,000円"
+    ],
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "status",
+      "processing_error_code"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}

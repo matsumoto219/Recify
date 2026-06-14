@@ -1,0 +1,35 @@
+{
+  "case_id": "g090_non_receipt_business_card",
+  "category": "non_receipt",
+  "intent": "Non-receipt sample should fail without creating receipt accounting values.",
+  "receipt_kind": "non_receipt",
+  "expected": {
+    "status": "failed",
+    "review_reasons": [],
+    "processing_error_code": "receipt_not_detected"
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル株式会社",
+      "山田 太郎",
+      "TEL 000-0000-0000",
+      "sample@example.invalid"
+    ],
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "status",
+      "processing_error_code"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}

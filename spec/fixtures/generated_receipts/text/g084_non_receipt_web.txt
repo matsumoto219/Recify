@@ -1,0 +1,4 @@
+Sample Web Page
+https://example.invalid/news
+ホーム お知らせ アクセス
+Copyright 2026 Sample

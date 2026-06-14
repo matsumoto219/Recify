@@ -59,4 +59,14 @@ RSpec.describe GeneratedReceipts::TextRenderer do
       expect(text).to include("現金 ¥1,800")
     end
   end
+
+  it "uses custom lines when a case needs non-standard source text" do
+    text = described_class.call(load_case("g081_non_receipt_memo"))
+
+    aggregate_failures do
+      expect(text).to include("買い物メモ")
+      expect(text).not_to include("領収書")
+      expect(text).not_to include("合計")
+    end
+  end
 end

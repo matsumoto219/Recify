@@ -1,0 +1,88 @@
+{
+  "case_id": "g078_torn_receipt",
+  "category": "ocr_anomaly",
+  "intent": "Torn receipt style crop remains deterministic.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル異常 テスト店",
+    "store_address": "サンプル県サンプル市異常町1-2-3",
+    "purchased_at": "2026-03-18T12:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル商品A",
+        "unit_price": 550,
+        "quantity": 1,
+        "line_total": 550,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル商品B",
+        "unit_price": 330,
+        "quantity": 1,
+        "line_total": 330,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 800,
+        "tax": 80,
+        "gross": 880,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 800,
+    "tax": 80,
+    "total": 880,
+    "payments": [
+      {
+        "method": "cash",
+        "label": "現金",
+        "amount": 880
+      }
+    ],
+    "payment_sum": 880,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": [
+      "ocr_low_confidence"
+    ]
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": true,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": true,
+    "profile": "severe"
+  },
+  "assertions": {
+    "critical_exact": [
+      "subtotal",
+      "tax",
+      "total",
+      "payments",
+      "tax_details"
+    ],
+    "allow_review_reasons": [
+      "ocr_low_confidence"
+    ],
+    "allow_item_name_minor_diff": true
+  }
+}

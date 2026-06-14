@@ -1,0 +1,35 @@
+{
+  "case_id": "g084_non_receipt_web",
+  "category": "non_receipt",
+  "intent": "Non-receipt sample should fail without creating receipt accounting values.",
+  "receipt_kind": "non_receipt",
+  "expected": {
+    "status": "failed",
+    "review_reasons": [],
+    "processing_error_code": "receipt_not_detected"
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "monospace",
+    "custom_lines": [
+      "Sample Web Page",
+      "https://example.invalid/news",
+      "ホーム お知らせ アクセス",
+      "Copyright 2026 Sample"
+    ],
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": [
+      "status",
+      "processing_error_code"
+    ],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}
