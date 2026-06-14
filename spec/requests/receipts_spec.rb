@@ -4277,9 +4277,15 @@ RSpec.describe 'Receipts', type: :request do
     it '詳細画面はdisplay_idを表示し、receiptの内部IDをURLやDOMに出さない' do
       get receipt_path(receipt)
 
+      document = Nokogiri::HTML(response.body)
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include("ID: #{receipt.display_id}")
+        expect(copy_sources).to eq([ receipt.display_id, receipt.display_id ])
+        expect(copy_labels).to all(eq(I18n.t('shared.clipboard.copy_label', label: 'ID')))
         expect(response.body).not_to include("#RCP-#{receipt.id.to_s.rjust(6, '0')}")
         expect(response.body).not_to include("/receipts/#{receipt.id}")
         expect(response.body).not_to include("receipt_#{receipt.id}")
@@ -4312,14 +4318,16 @@ RSpec.describe 'Receipts', type: :request do
           node['class'].to_s.include?('md:block') &&
           node.text.include?(receipt.status_label)
       end
-      id_nodes = main.css('p').select { |node| node.text.strip == "ID: #{receipt.display_id}" }
+      id_nodes = main.css('p').select { |node| node['title'] == "ID: #{receipt.display_id}" }
       mobile_id = text_column.css('p').find do |node|
-        node['class'].to_s.include?('md:hidden') && node.text.strip == "ID: #{receipt.display_id}"
+        node['class'].to_s.include?('md:hidden') && node['title'] == "ID: #{receipt.display_id}"
       end
-      desktop_id = desktop_badge_area.css('p').find { |node| node.text.strip == "ID: #{receipt.display_id}" }
+      desktop_id = desktop_badge_area.css('p').find { |node| node['title'] == "ID: #{receipt.display_id}" }
       floating_id_rows = id_nodes.map(&:parent).select { |node| node['class'].to_s.include?('justify-end') }
       mobile_status_badge = mobile_eyebrow_row.css('span').find { |node| node.text.strip == receipt.status_label }
       desktop_status_badge = desktop_badge_area.css('span').find { |node| node.text.strip == receipt.status_label }
+      copy_sources = main.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = main.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -4343,6 +4351,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(id_nodes.size).to eq(2)
         expect(mobile_id['class']).to include('md:hidden')
         expect(desktop_id['class']).to include('mt-2')
+        expect(copy_sources).to eq([ receipt.display_id, receipt.display_id ])
+        expect(copy_labels).to all(eq(I18n.t('shared.clipboard.copy_label', label: 'ID')))
         expect(floating_id_rows).to be_empty
         expect(mobile_status_badge['class']).to include('shrink-0')
         expect(desktop_status_badge['class']).to include('shrink-0')

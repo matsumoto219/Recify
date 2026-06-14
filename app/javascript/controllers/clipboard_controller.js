@@ -30,10 +30,44 @@ export default class extends Controller {
     }
 
     try {
-      await navigator.clipboard.writeText(text)
+      await this.writeToClipboard(text)
       this.showStatus(this.successMessageValue, trigger)
     } catch (_error) {
       this.showStatus(this.failureMessageValue, trigger)
+    }
+  }
+
+  async writeToClipboard (text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return
+      } catch (_error) {
+        // Fall back for browsers that expose Clipboard API but deny it in this context.
+      }
+    }
+
+    if (this.writeWithTemporaryTextarea(text)) return
+
+    throw new Error('clipboard write failed')
+  }
+
+  writeWithTemporaryTextarea (text) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '-9999px'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+
+    try {
+      return document.execCommand('copy')
+    } finally {
+      textarea.remove()
     }
   }
 

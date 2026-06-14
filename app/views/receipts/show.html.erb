@@ -80,7 +80,13 @@
               <p class="mb-1 hidden text-xs font-bold token-text-brand uppercase tracking-widest md:block"><%= t("receipts.show.store_information") %></p>
               <h2 class="text-xl md:text-2xl font-bold token-text-base truncate" title="<%= @receipt.store_name.presence || t("receipts.show.store_name_missing") %>"><%= @receipt.store_name.presence || t("receipts.show.store_name_missing") %></h2>
               <p class="truncate text-sm token-text-muted mt-1" title="<%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %>"><%= @receipt.store_address.presence || t("receipts.show.store_address_missing") %></p>
-              <p class="mt-1 truncate text-xs token-text-muted md:hidden" title="ID: <%= @receipt.display_id %>">ID: <%= @receipt.display_id %></p>
+              <p class="mt-1 min-w-0 truncate text-xs token-text-muted md:hidden" title="ID: <%= @receipt.display_id %>">
+                <%= render "shared/ui/actions/copyable_value",
+                      value: @receipt.display_id,
+                      display: "ID: #{@receipt.display_id}",
+                      label: "ID",
+                      value_class: "min-w-0 truncate token-text-muted" %>
+              </p>
             </div>
           </div>
 
@@ -90,7 +96,14 @@
                   label: @receipt.status_label,
                   size: :md,
                   class: "shrink-0" %>
-            <p class="truncate text-sm token-text-muted mt-2" title="ID: <%= @receipt.display_id %>">ID: <%= @receipt.display_id %></p>
+            <p class="mt-2 min-w-0 truncate text-sm token-text-muted" title="ID: <%= @receipt.display_id %>">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @receipt.display_id,
+                    display: "ID: #{@receipt.display_id}",
+                    label: "ID",
+                    wrapper_class: "relative inline-flex min-w-0 max-w-full items-center justify-end gap-1 align-middle",
+                    value_class: "min-w-0 truncate token-text-muted" %>
+            </p>
           </div>
         </div>
 
