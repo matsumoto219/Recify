@@ -71,6 +71,10 @@ module Analysis
           receipt_adjustments_attributes,
           receipt_payments_attributes
         )
+        receipt_items_attributes = remove_surcharge_adjustment_items(
+          receipt_items_attributes,
+          receipt_adjustments_attributes
+        )
         receipt_payments_attributes = add_cash_difference_payment(
           receipt_payments_attributes,
           lines,
@@ -768,6 +772,71 @@ module Analysis
             review_reasons: review_reasons.uniq,
             position_index: normalized[:position_index] || index + 1
           }.compact
+        end
+      end
+
+      def remove_surcharge_adjustment_items(items, adjustments)
+        surcharge_adjustments = Array(adjustments).select { |adjustment| clear_surcharge_adjustment_candidate?(adjustment) }
+        return items if surcharge_adjustments.blank?
+
+        Array(items).reject do |item|
+          surcharge_adjustments.any? { |adjustment| item_matches_surcharge_adjustment?(item, adjustment) }
+        end
+      end
+
+      def clear_surcharge_adjustment_candidate?(adjustment)
+        normalized = adjustment.with_indifferent_access
+        kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
+        amount = normalize_amount(normalized[:amount])
+
+        %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind) &&
+          normalized[:sign].to_s == "surcharge" &&
+          amount&.positive? &&
+          (normalized[:label].present? || normalized[:source_text].present?)
+      end
+
+      def item_matches_surcharge_adjustment?(item, adjustment)
+        normalized_item = item.with_indifferent_access
+        normalized_adjustment = adjustment.with_indifferent_access
+        adjustment_amount = normalize_amount(normalized_adjustment[:amount])
+        return false unless adjustment_amount&.positive?
+        return false unless item_surcharge_amounts(normalized_item).include?(adjustment_amount.to_i)
+
+        item_text_matches_surcharge_adjustment?(normalized_item, normalized_adjustment)
+      end
+
+      def item_surcharge_amounts(item)
+        %i[line_total price original_line_total].filter_map do |key|
+          normalize_amount(item[key])&.to_i
+        end.select(&:positive?)
+      end
+
+      def item_text_matches_surcharge_adjustment?(item, adjustment)
+        item_text = [
+          item[:raw_text],
+          item[:suggested_name],
+          item[:confirmed_name]
+        ].compact.join(" ")
+        return false if item_text.blank?
+
+        label = adjustment[:label].to_s.strip
+        source_label = adjustment_source_label_without_amount(adjustment[:source_text]).to_s
+        return true if label.present? && item_text.include?(label)
+        return true if source_label.present? && item_text.include?(source_label)
+
+        case ReceiptAdjustment.normalize_kind(adjustment[:kind])
+        when "delivery_fee"
+          item_text.match?(/配送料|送料|delivery|shipping/i)
+        when "bag_fee"
+          item_text.match?(/レジ袋|袋代|bag/i)
+        when "service_charge"
+          item_text.match?(/サービス料|service\s*charge/i)
+        when "late_night_charge"
+          item_text.match?(/深夜料金|late.?night|midnight|after.?hours/i)
+        when "handling_fee"
+          item_text.match?(/手数料|handling\s*fee/i)
+        else
+          false
         end
       end
 

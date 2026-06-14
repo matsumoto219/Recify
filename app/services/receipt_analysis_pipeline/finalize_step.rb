@@ -15,6 +15,8 @@ class ReceiptAnalysisPipeline
       price_tax_inclusion_uncertain
     ].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON = "price_tax_inclusion_uncertain"
+    PURCHASED_AT_CONFLICTED_REVIEW_REASON = "purchased_at_conflicted"
     ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
     ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
@@ -29,6 +31,10 @@ class ReceiptAnalysisPipeline
       point_usage
       coupon
       return_refund
+    ].freeze
+    RESOLVABLE_PURCHASE_DISCOUNT_ADJUSTMENT_KINDS = %w[
+      receipt_discount
+      coupon
     ].freeze
     RESOLVABLE_SURCHARGE_ADJUSTMENT_KINDS = %w[
       service_charge
@@ -169,7 +175,9 @@ class ReceiptAnalysisPipeline
       )
       amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
       amount_result = resolve_clear_surcharge_adjustment_uncertainty(params, amount_result)
+      amount_result = resolve_clear_purchase_discount_adjustment_uncertainty(params, amount_result)
       amount_result = resolve_clear_payment_adjustment_uncertainty(params, amount_result)
+      amount_result = resolve_clear_price_tax_inclusion_uncertainty(params, amount_result)
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
@@ -963,10 +971,12 @@ class ReceiptAnalysisPipeline
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      review_reasons = remove_resolved_purchased_at_conflicted_review_reason(review_reasons, params, ocr_result)
       review_reasons = remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
       review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
       review_reasons = remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
+      review_reasons = remove_resolved_price_tax_inclusion_uncertain_review_reason(review_reasons, params, amount_result)
       return review_reasons unless review_reasons.include?("payment_method_uncertain")
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
@@ -986,6 +996,13 @@ class ReceiptAnalysisPipeline
       return review_reasons unless resolved_store_address_supported_by_ocr?(params, ocr_result)
 
       review_reasons - [ "store_address_uncertain" ]
+    end
+
+    def remove_resolved_purchased_at_conflicted_review_reason(review_reasons, params, ocr_result)
+      return review_reasons unless review_reasons.include?(PURCHASED_AT_CONFLICTED_REVIEW_REASON)
+      return review_reasons unless purchased_at_supported_by_ocr?(params, ocr_result)
+
+      review_reasons - [ PURCHASED_AT_CONFLICTED_REVIEW_REASON ]
     end
 
     def remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
@@ -1016,6 +1033,13 @@ class ReceiptAnalysisPipeline
       return review_reasons unless item_tax_rates_resolved?(params, amount_result)
 
       review_reasons - [ ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON ]
+    end
+
+    def remove_resolved_price_tax_inclusion_uncertain_review_reason(review_reasons, params, amount_result)
+      return review_reasons unless review_reasons.include?(PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON)
+      return review_reasons unless price_tax_inclusion_resolved_by_clear_surcharge_adjustment?(params, amount_result)
+
+      review_reasons - [ PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON ]
     end
 
     def item_categories_resolved?(params)
@@ -1154,6 +1178,40 @@ class ReceiptAnalysisPipeline
         .gsub(/[[:space:]\-−ー‐‑‒–—―・,，、。:：]/, "")
     end
 
+    def purchased_at_supported_by_ocr?(params, ocr_result)
+      purchased_at = parse_time_value(normalized_hash(params[:receipt_attributes])[:purchased_at])
+      return false unless purchased_at.respond_to?(:strftime)
+
+      text = ocr_datetime_support_text(ocr_result)
+      return false if text.blank?
+
+      date_variants = [
+        purchased_at.strftime("%Y-%m-%d"),
+        purchased_at.strftime("%Y/%m/%d"),
+        purchased_at.strftime("%Y%m%d"),
+        "#{purchased_at.year}年#{purchased_at.month}月#{purchased_at.day}日",
+        purchased_at.strftime("%Y年%m月%d日")
+      ].uniq
+      time_variants = [
+        purchased_at.strftime("%H:%M"),
+        "#{purchased_at.hour}:#{purchased_at.min.to_s.rjust(2, '0')}",
+        "#{purchased_at.hour}時#{purchased_at.min.to_s.rjust(2, '0')}分"
+      ].uniq
+
+      date_variants.any? { |date| text.include?(date) } &&
+        (purchased_at.hour.zero? && purchased_at.min.zero? || time_variants.any? { |time| text.include?(time) })
+    end
+
+    def ocr_datetime_support_text(ocr_result)
+      candidates = normalized_hash(ocr_result[:candidates])
+      [
+        ocr_result[:raw_text],
+        ocr_result[:lines],
+        candidates[:purchased_at_text],
+        candidates[:purchased_at_candidates]
+      ].flatten.compact.join("\n")
+    end
+
     def resolved_store_name_supported_by_ocr?(params, ocr_result)
       store_name = Analysis::StoreNameCandidateClassifier.normalize_name(
         params.dig(:receipt_attributes, :store_name)
@@ -1277,12 +1335,13 @@ class ReceiptAnalysisPipeline
       return amount_result unless clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
 
       params[:adjustment_uncertainty_resolved] = true
-      params[:review_reasons] = normalize_review_reasons(params[:review_reasons]) - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+      resolved_reasons = clear_surcharge_adjustment_resolved_reasons(amount_result)
+      params[:review_reasons] = normalize_review_reasons(params[:review_reasons]) - resolved_reasons
       params[:receipt_adjustments_attributes] = Array(params[:receipt_adjustments_attributes]).map do |adjustment|
-        clear_surcharge_adjustment?(adjustment) ? adjustment_without_review_reason(adjustment, ADJUSTMENT_UNCERTAIN_REVIEW_REASON) : adjustment
+        clear_purchase_amount_adjustment?(adjustment) ? adjustment_without_review_reason(adjustment, ADJUSTMENT_UNCERTAIN_REVIEW_REASON) : adjustment
       end
 
-      amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+      amount_result_without_review_reasons(amount_result, resolved_reasons)
     end
 
     def resolve_clear_payment_adjustment_uncertainty(params, amount_result)
@@ -1295,6 +1354,24 @@ class ReceiptAnalysisPipeline
       end
 
       amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+    end
+
+    def resolve_clear_purchase_discount_adjustment_uncertainty(params, amount_result)
+      return amount_result unless clear_purchase_discount_adjustment_uncertainty_resolved?(params, amount_result)
+
+      params[:adjustment_uncertainty_resolved] = true
+      params[:review_reasons] = normalize_review_reasons(params[:review_reasons]) - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+      params[:receipt_adjustments_attributes] = Array(params[:receipt_adjustments_attributes]).map do |adjustment|
+        clear_purchase_discount_adjustment?(adjustment) ? adjustment_without_review_reason(adjustment, ADJUSTMENT_UNCERTAIN_REVIEW_REASON) : adjustment
+      end
+
+      amount_result_without_review_reason(amount_result, ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+    end
+
+    def resolve_clear_price_tax_inclusion_uncertainty(params, amount_result)
+      return amount_result unless price_tax_inclusion_resolved_by_clear_surcharge_adjustment?(params, amount_result)
+
+      amount_result_without_review_reason(amount_result, PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON)
     end
 
     def clear_payment_adjustment_uncertainty_resolved?(params, amount_result)
@@ -1312,7 +1389,7 @@ class ReceiptAnalysisPipeline
       true
     end
 
-    def clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
+    def clear_purchase_discount_adjustment_uncertainty_resolved?(params, amount_result)
       result = normalized_hash(amount_result)
       blocking_reasons = normalize_review_reasons(result[:blocking_inconsistencies])
       return false unless blocking_reasons.include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
@@ -1325,10 +1402,66 @@ class ReceiptAnalysisPipeline
           normalized[:needs_review] == true
       end
       return false if uncertain_adjustments.blank?
-      return false unless uncertain_adjustments.all? { |adjustment| clear_surcharge_adjustment?(adjustment) }
+      return false unless uncertain_adjustments.one?
+      return false unless uncertain_adjustments.all? { |adjustment| clear_purchase_discount_adjustment?(adjustment) }
       return false unless payment_total_matches_resolved_total?(params, amount_result)
-      return false unless adjusted_item_total_matches_resolved_subtotal?(amount_result)
+      return false unless adjusted_item_total_matches_resolved_purchase_amount?(amount_result)
       return false if adjustment_duplicated_in_items?(params, uncertain_adjustments)
+
+      true
+    end
+
+    def clear_surcharge_adjustment_uncertainty_resolved?(params, amount_result)
+      result = normalized_hash(amount_result)
+      blocking_reasons = normalize_review_reasons(result[:blocking_inconsistencies])
+      return false if (blocking_reasons - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]).any?
+
+      adjustments = Array(params[:receipt_adjustments_attributes])
+      uncertain_adjustments = adjustments.select do |adjustment|
+        normalized = normalized_hash(adjustment)
+        normalize_review_reasons(normalized[:review_reasons]).include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON) ||
+          normalized[:needs_review] == true
+      end
+      return false if uncertain_adjustments.blank?
+      return false unless uncertain_adjustments.any? { |adjustment| clear_surcharge_adjustment?(adjustment) }
+      return false unless uncertain_adjustments.all? { |adjustment| clear_purchase_amount_adjustment?(adjustment) }
+      return false unless payment_total_matches_resolved_total?(params, amount_result)
+      return false unless adjusted_item_total_matches_resolved_purchase_amount?(amount_result)
+      return false if adjustment_duplicated_in_items?(params, uncertain_adjustments)
+
+      true
+    end
+
+    def clear_surcharge_adjustment_resolved_reasons(amount_result)
+      resolved_reasons = [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+      resolved_reasons << PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON if clear_surcharge_price_tax_inclusion_uncertainty?(amount_result)
+      resolved_reasons
+    end
+
+    def clear_surcharge_price_tax_inclusion_uncertainty?(amount_result)
+      result = normalized_hash(amount_result)
+      price_reason = PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON
+      warning_reasons = normalize_review_reasons(
+        [
+          result[:warning_inconsistencies],
+          result[:warning_reasons],
+          normalized_hash(result.dig(:amount_engine, :selected_candidate))[:warnings]
+        ].flatten
+      )
+      return true if warning_reasons.blank?
+      return false unless warning_reasons.include?(price_reason)
+
+      (warning_reasons - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON, price_reason ]).empty?
+    end
+
+    def price_tax_inclusion_resolved_by_clear_surcharge_adjustment?(params, amount_result)
+      amount_reasons = normalize_review_reasons(amount_review_reasons(amount_result))
+      return false if (amount_reasons - [ PRICE_TAX_INCLUSION_UNCERTAIN_REVIEW_REASON ]).any?
+      return false unless clear_surcharge_price_tax_inclusion_uncertainty?(amount_result)
+      return false unless Array(params[:receipt_adjustments_attributes]).any? { |adjustment| clear_surcharge_adjustment?(adjustment) }
+      return false unless payment_total_matches_resolved_total?(params, amount_result)
+      return false unless adjusted_item_total_matches_resolved_purchase_amount?(amount_result)
+      return false if adjustment_duplicated_in_items?(params, params[:receipt_adjustments_attributes])
 
       true
     end
@@ -1342,6 +1475,10 @@ class ReceiptAnalysisPipeline
         normalized[:sign].to_s == "surcharge" &&
         amount&.positive? &&
         (normalized[:label].present? || normalized[:source_text].present?)
+    end
+
+    def clear_purchase_amount_adjustment?(adjustment)
+      clear_surcharge_adjustment?(adjustment) || clear_purchase_discount_adjustment?(adjustment)
     end
 
     def clear_payment_adjustment?(adjustment)
@@ -1358,6 +1495,17 @@ class ReceiptAnalysisPipeline
         text.match?(RESOLVABLE_PAYMENT_ADJUSTMENT_PATTERN)
     end
 
+    def clear_purchase_discount_adjustment?(adjustment)
+      normalized = normalized_hash(adjustment)
+      kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
+      amount = normalize_amount(normalized[:amount])
+
+      RESOLVABLE_PURCHASE_DISCOUNT_ADJUSTMENT_KINDS.include?(kind) &&
+        normalized[:sign].to_s == "discount" &&
+        amount&.positive? &&
+        (normalized[:label].present? || normalized[:source_text].present?)
+    end
+
     def payment_total_matches_resolved_total?(params, amount_result)
       payments = Array(params[:receipt_payments_attributes])
       return false if payments.blank?
@@ -1370,12 +1518,14 @@ class ReceiptAnalysisPipeline
       [ resolved_total, final_payment_total ].compact.any? { |total| total == payment_sum }
     end
 
-    def adjusted_item_total_matches_resolved_subtotal?(amount_result)
+    def adjusted_item_total_matches_resolved_purchase_amount?(amount_result)
       computed = normalized_hash(amount_result[:computed])
       adjusted_item_total = normalize_amount(computed[:adjusted_item_total])
       resolved_subtotal = normalize_amount(normalized_hash(amount_result[:resolved])[:subtotal])
+      resolved_total = normalize_amount(normalized_hash(amount_result[:resolved])[:total])
 
-      adjusted_item_total.present? && resolved_subtotal.present? && adjusted_item_total == resolved_subtotal
+      adjusted_item_total.present? &&
+        [ resolved_subtotal, resolved_total ].compact.any? { |amount| adjusted_item_total == amount }
     end
 
     def adjustment_duplicated_in_items?(params, adjustments)
@@ -1439,19 +1589,24 @@ class ReceiptAnalysisPipeline
     end
 
     def amount_result_without_review_reason(amount_result, reason)
+      amount_result_without_review_reasons(amount_result, [ reason ])
+    end
+
+    def amount_result_without_review_reasons(amount_result, reasons)
       result = amount_result.deep_dup
-      reason_code = Amounts::MismatchCodes.code(reason.to_sym)
+      reason_list = normalize_review_reasons(reasons)
+      reason_codes = reason_list.filter_map { |reason| Amounts::MismatchCodes.code(reason.to_sym) }
 
       %i[inconsistencies blocking_inconsistencies review_reasons warning_reasons].each do |key|
-        result[key] = normalize_review_reasons(result[key]) - [ reason ]
+        result[key] = normalize_review_reasons(result[key]) - reason_list
       end
       %i[mismatch_codes blocking_mismatch_codes warning_mismatch_codes].each do |key|
-        result[key] = Array(result[key]) - [ reason_code ]
+        result[key] = Array(result[key]) - reason_codes
       end
 
       selected_candidate = result.dig(:amount_engine, :selected_candidate)
       if selected_candidate.present?
-        selected_candidate[:warnings] = normalize_review_reasons(selected_candidate[:warnings]) - [ reason ]
+        selected_candidate[:warnings] = normalize_review_reasons(selected_candidate[:warnings]) - reason_list
       end
       result[:needs_review] = Array(result[:blocking_inconsistencies]).any?
       result

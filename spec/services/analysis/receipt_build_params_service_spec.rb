@@ -3450,6 +3450,69 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '明確なsurcharge adjustmentと同額同ラベルのitemを二重保存しない' do
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代',
+              source_line_index: 2,
+              confidence: BigDecimal('0.9')
+            },
+            {
+              kind: 'delivery_fee',
+              label: '配送料',
+              amount: 550,
+              sign: 'surcharge',
+              source_text: '配送料',
+              source_line_index: 4,
+              confidence: BigDecimal('0.9')
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total)).to eq([
+            [ '商品小計', 1080 ]
+          ])
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'bag_fee', label: 'レジ袋代', amount: 10, sign: 'surcharge'),
+            include(kind: 'delivery_fee', label: '配送料', amount: 550, sign: 'surcharge')
+          )
+        end
+      end
+
+      it '商品名に袋が含まれても同額の明確なsurcharge adjustmentでなければitemから除外しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '袋入りサンプル品', line_total: 300 },
+          { raw_text: 'レジ袋代', line_total: 10 }
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代',
+              source_line_index: 2,
+              confidence: BigDecimal('0.9')
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total)).to eq([
+          [ '袋入りサンプル品', 300 ]
+        ])
+      end
+
       it 'ポイント数だけのAI adjustmentは保存向けattributesへ通さない' do
         ocr_result[:lines] = [
           '合計',

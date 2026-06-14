@@ -2551,7 +2551,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it 'surcharge adjustmentがitemにも二重保存されている場合はreview状態を安定して残す' do
+    it '明確なsurcharge adjustmentがitemにも二重保存されている場合はitem側を除外してcompletedにする' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = {
         success: true,
@@ -2640,11 +2640,215 @@ RSpec.describe ReceiptAnalysisPipeline do
       )
 
       aggregate_failures do
-        expect(receipt.reload.status).to eq('review_needed')
-        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.receipt_items.order(:position_index).pluck(:suggested_name, :line_total)).to eq([
+          [ 'サンプル配送商品A', 680 ],
+          [ 'サンプル配送商品B', 400 ]
+        ])
         expect(receipt.receipt_adjustments).to all(
-          have_attributes(needs_review: true, review_reasons: include('adjustment_uncertain'))
+          have_attributes(needs_review: false, review_reasons: [])
         )
+      end
+    end
+
+    it '明確なcoupon adjustmentはfinal保存値でadjustment_uncertainを解除する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "サンプル割引 東テスト店\nサンプル品A ¥2,000\nクーポン値引 -¥200\n配送料 ¥300\nレジ袋代 ¥10\n10%対象額 ¥2,110\n外税 ¥211\n合計 ¥2,321\nクレジット ¥2,321",
+        lines: [
+          'サンプル割引 東テスト店',
+          'サンプル品A ¥2,000',
+          'クーポン値引 -¥200',
+          '配送料 ¥300',
+          'レジ袋代 ¥10',
+          '10%対象額 ¥2,110',
+          '外税 ¥211',
+          '合計 ¥2,321',
+          'クレジット ¥2,321'
+        ],
+        candidates: {
+          store_name: 'サンプル割引 東テスト店',
+          subtotal_amount: 2_110,
+          tax_amount: 211,
+          total_amount: 2_321,
+          country_region: 'JPN',
+          payment_method_text: 'クレジット',
+          items: [
+            { raw_text: 'サンプル品A', price: 2_000, quantity: 1, line_total: 2_000, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'クレジット', amount: 2_321 }
+          ],
+          tax_details: [
+            { description: '10%対象額', amount: 211, rate: 10, net_amount: 2_110 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ],
+        receipt_attributes: {
+          store_name: 'サンプル割引 東テスト店',
+          payment_method: 'credit_card'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'サンプル品A', category: 'other', line_total: 2_000, tax_rate: 0.1, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'coupon',
+            label: 'クーポン値引',
+            amount: 200,
+            sign: 'discount',
+            tax_rate: 0.1,
+            source_text: 'クーポン値引 -¥200',
+            source_line_index: 2,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          },
+          {
+            kind: 'delivery_fee',
+            label: '配送料',
+            amount: 300,
+            sign: 'surcharge',
+            tax_rate: 0.1,
+            source_text: '配送料 ¥300',
+            source_line_index: 3,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          },
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋代',
+            amount: 10,
+            sign: 'surcharge',
+            tax_rate: 0.1,
+            source_text: 'レジ袋代 ¥10',
+            source_line_index: 4,
+            confidence: BigDecimal('0.9'),
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.subtotal_amount).to eq(2_110)
+        expect(receipt.tax_amount).to eq(211)
+        expect(receipt.total_amount).to eq(2_321)
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.receipt_payments.sum(:amount)).to eq(2_321)
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to contain_exactly(
+          [ 'coupon', 200, 'discount' ],
+          [ 'delivery_fee', 300, 'surcharge' ],
+          [ 'bag_fee', 10, 'surcharge' ]
+        )
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
+      end
+    end
+
+    it '明確なsurcharge adjustmentで会計が整合する場合はprice_tax_inclusion_uncertainをreceipt-levelから落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "サンプル袋 東テスト店\nサンプル品A ¥990\n袋代 ¥10\n10%対象 ¥1,000\n内税額 ¥90\n合計 ¥1,000\nクレジット ¥1,000",
+        lines: [
+          'サンプル袋 東テスト店',
+          'サンプル品A ¥990',
+          '袋代 ¥10',
+          '10%対象 ¥1,000',
+          '内税額 ¥90',
+          '合計 ¥1,000',
+          'クレジット ¥1,000'
+        ],
+        candidates: {
+          store_name: 'サンプル袋 東テスト店',
+          subtotal_amount: 910,
+          tax_amount: 90,
+          total_amount: 1_000,
+          country_region: 'JPN',
+          payment_method_text: 'クレジット',
+          items: [
+            { raw_text: 'サンプル品A', price: 990, quantity: 1, line_total: 990, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'クレジット', amount: 1_000 }
+          ],
+          tax_details: [
+            { description: '10%対象', amount: 90, rate: 10, net_amount: 910 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'price_tax_inclusion_uncertain' ],
+        receipt_attributes: {
+          store_name: 'サンプル袋 東テスト店',
+          payment_method: 'credit_card'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'サンプル品A', category: 'other', line_total: 990, tax_rate: 0.1, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'bag_fee',
+            label: '袋代',
+            amount: 10,
+            sign: 'surcharge',
+            tax_rate: 0.1,
+            source_text: '袋代 ¥10',
+            source_line_index: 2,
+            confidence: BigDecimal('0.9'),
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.subtotal_amount).to eq(910)
+        expect(receipt.tax_amount).to eq(90)
+        expect(receipt.total_amount).to eq(1_000)
+        expect(receipt.review_reasons).to eq([])
+        expect(receipt.receipt_payments.sum(:amount)).to eq(1_000)
       end
     end
 
@@ -4506,6 +4710,52 @@ RSpec.describe ReceiptAnalysisPipeline do
       aggregate_failures do
         expect(receipt.reload.status).to eq('completed')
         expect(receipt.review_reasons).not_to include('store_phone_number_missing')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it '最終保存購入日時がOCR行に支持されていればAIのpurchased_at_conflictedを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        raw_text: "AIテストストア\n2026-05-23 10:00\nコーヒー 180\n合計 180\n現金 180",
+        lines: [
+          'AIテストストア',
+          '2026-05-23 10:00',
+          'コーヒー 180',
+          '合計 180',
+          '現金 180'
+        ],
+        candidates: {
+          store_name: 'AIテストストア',
+          purchased_at_text: '2026-05-23 10:00',
+          payments: [
+            { method: 'Cash', amount: 180 }
+          ]
+        }
+      )
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: [ 'purchased_at_conflicted' ],
+        receipt_attributes: {
+          store_name: 'AIテストストア',
+          purchased_at: Time.zone.parse('2026-05-23 10:00:00'),
+          payment_method: 'cash'
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.purchased_at).to eq(Time.zone.parse('2026-05-23 10:00:00'))
+        expect(receipt.review_reasons).not_to include('purchased_at_conflicted')
         expect(receipt.review_reasons).to be_blank
       end
     end
