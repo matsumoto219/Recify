@@ -15,7 +15,11 @@
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider_error_code"), detail[:provider_error_code] ],
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.provider_error_type"), detail[:provider_error_type] ],
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.retry_after"), detail[:retry_after].present? ? "#{detail[:retry_after]}s" : nil ],
-      [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.request_id"), detail[:request_id] ],
+      [
+        t("admin.receipt_analysis_runs.show.provider_error_details.fields.request_id"),
+        detail[:request_id],
+        t("admin.receipt_analysis_runs.show.provider_error_details.fields.request_id")
+      ],
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.region"), detail[:region] ],
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.model"), detail[:model] ],
       [ t("admin.receipt_analysis_runs.show.provider_error_details.fields.quota_exceeded"), detail.key?(:quota_exceeded) ? t("admin.receipt_analysis_runs.show.boolean.#{detail[:quota_exceeded]}") : nil ],
@@ -63,7 +67,12 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.run_key") %></dt>
-            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:run_key] %></dd>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record[:run_key],
+                    label: t("admin.receipt_analysis_runs.show.labels.run_key"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.stage_status") %></dt>
@@ -86,8 +95,18 @@
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.display_public_id") %></dt>
             <dd class="token-text-base">
-              <%= @record.dig(:receipt_info, :display_id) %>
-              <span class="block min-w-0 break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= @record.dig(:receipt_info, :public_id) %></span>
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record.dig(:receipt_info, :display_id),
+                    label: t("admin.receipt_analysis_runs.show.labels.display_public_id"),
+                    wrapper_class: "inline-flex min-w-0 max-w-full items-center gap-1 align-middle",
+                    value_class: "min-w-0 break-words token-text-base [overflow-wrap:anywhere]" %>
+              <span class="mt-1 block min-w-0 max-w-full">
+                <%= render "shared/ui/actions/copyable_value",
+                      value: @record.dig(:receipt_info, :public_id),
+                      label: t("admin.receipt_analysis_runs.index.filters.labels.receipt_public_id"),
+                      wrapper_class: "inline-flex min-w-0 max-w-full items-center gap-1 align-middle",
+                      value_class: "block min-w-0 break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]" %>
+              </span>
             </dd>
           </div>
           <div>
@@ -324,10 +343,19 @@
               <section class="min-w-0 max-w-full rounded-lg border token-border-soft p-3">
                 <h4 class="text-xs font-semibold token-text-muted"><%= label %></h4>
                 <dl class="mt-2 grid min-w-0 max-w-full gap-2 text-sm md:grid-cols-2">
-                  <% rows.each do |field_label, value| %>
+                  <% rows.each do |field_label, value, copy_label| %>
                     <div class="min-w-0">
                       <dt class="text-xs font-semibold token-text-muted"><%= field_label %></dt>
-                      <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
+                      <dd class="min-w-0 max-w-full">
+                        <% if copy_label.present? %>
+                          <%= render "shared/ui/actions/copyable_value",
+                                value: value,
+                                label: copy_label,
+                                value_class: "min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]" %>
+                        <% else %>
+                          <span class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></span>
+                        <% end %>
+                      </dd>
                     </div>
                   <% end %>
                 </dl>

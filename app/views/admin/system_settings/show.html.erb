@@ -9,6 +9,13 @@
   setting_value_class = "min-w-0 max-w-full break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere] md:text-lg"
   setting_meta_value_class = "min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"
   setting_mono_meta_value_class = "#{setting_meta_value_class} font-mono"
+  setting_key_copy_action = render(
+    "shared/ui/actions/copyable_value",
+    value: @record[:key],
+    label: t("admin.system_settings.index.table.key"),
+    wrapper_class: "inline-flex items-center gap-1 align-middle",
+    value_class: "sr-only"
+  )
   snapshot_limit_keys = %w[limits.snapshot_ocr_items_max limits.snapshot_ai_normalized_items_max]
   amount_limit_keys = SystemSettings::AMOUNT_LIMIT_KEYS
   analysis_run_retention_keys = %w[
@@ -64,6 +71,8 @@
 
   <%= render "shared/ui/layout/section_header",
         title: @record[:key],
+        title_suffix: setting_key_copy_action,
+        title_suffix_wrapper_class: "inline-flex items-center",
         subtitle: t("admin.system_settings.show.subtitle"),
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm md:text-base" %>

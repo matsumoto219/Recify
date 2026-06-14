@@ -61,7 +61,12 @@
     <dl class="grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_uid") %></dt>
-        <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:request_uid] %></dd>
+        <dd class="min-w-0 max-w-full">
+          <%= render "shared/ui/actions/copyable_value",
+                value: @record[:request_uid],
+                label: t("admin.contact_requests.show.labels.request_uid"),
+                value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+        </dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.status") %></dt>
@@ -95,7 +100,12 @@
       </div>
       <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_digest") %></dt>
-        <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= @record[:email_digest] %></dd>
+        <dd class="min-w-0 max-w-full">
+          <%= render "shared/ui/actions/copyable_value",
+                value: @record[:email_digest],
+                label: t("admin.contact_requests.show.labels.email_digest"),
+                value_class: "min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]" %>
+        </dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.created_at") %></dt>
@@ -111,7 +121,12 @@
       </div>
       <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_id") %></dt>
-        <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= @record[:request_id].presence || "-" %></dd>
+        <dd class="min-w-0 max-w-full">
+          <%= render "shared/ui/actions/copyable_value",
+                value: @record[:request_id].presence || "-",
+                label: t("admin.contact_requests.show.labels.request_id"),
+                value_class: "min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]" %>
+        </dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.ip_address") %></dt>

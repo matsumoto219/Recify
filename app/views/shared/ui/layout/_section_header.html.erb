@@ -18,6 +18,7 @@
   - class: 外側ラッパーに追加するCSSクラス
   - icon_class: アイコンに追加するCSSクラス
   - title_suffix_class: title_suffix に追加するCSSクラス
+  - title_suffix_wrapper_class: title_suffix ラッパーのCSSクラス。未指定時はバッジ表示
   - subtitle_class: 補足テキストに追加するCSSクラス
   - title_size: 見出しサイズのCSSクラス。未指定時は text-lg
   - subtitle_size: 補足テキストサイズのCSSクラス。未指定時は text-sm
@@ -39,6 +40,7 @@
   wrapper_class = local_assigns[:class]
   icon_class = local_assigns[:icon_class]
   title_suffix_class = local_assigns[:title_suffix_class]
+  title_suffix_wrapper_class = local_assigns[:title_suffix_wrapper_class]
   subtitle_extra_class = local_assigns[:subtitle_class]
   title_size = local_assigns.fetch(:title_size, "text-lg")
   subtitle_size = local_assigns.fetch(:subtitle_size, "text-sm")
@@ -109,7 +111,7 @@
     "leading-tight",
     tone[:title]
   ].join(" ")
-  resolved_title_suffix_class = [
+  resolved_title_suffix_class = title_suffix_wrapper_class || [
     "inline-flex items-center rounded-full section-header-title-suffix px-2.5 py-1 text-xs font-bold",
     title_suffix_class
   ].compact.join(" ")

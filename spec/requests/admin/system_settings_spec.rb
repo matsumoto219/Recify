@@ -640,6 +640,8 @@ RSpec.describe 'Admin system settings', type: :request do
 
       document = Nokogiri::HTML(response.body)
       current_value = document.at_css('dd')
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -657,6 +659,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(current_value['class']).to include('[overflow-wrap:anywhere]')
         expect(current_value['class']).to include('text-base')
         expect(current_value['class']).to include('md:text-lg')
+        expect(copy_sources).to include('limits.receipt_upload_soft_limit')
+        expect(copy_labels).to include('設定キーをコピー')
         expect_no_side_effects
       end
     end

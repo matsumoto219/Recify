@@ -100,10 +100,21 @@ RSpec.describe 'Admin contact requests', type: :request do
     it 'adminが詳細を閲覧できる' do
       admin = create(:user, :admin)
       user = create(:user)
-      contact_request = create(:contact_request, user: user, email: 'sender@example.com', sender_name: '送信 太郎', body: '問い合わせ本文')
+      contact_request = create(
+        :contact_request,
+        user: user,
+        email: 'sender@example.com',
+        sender_name: '送信 太郎',
+        body: '問い合わせ本文',
+        request_id: 'req-contact-show'
+      )
       sign_in admin
 
       get admin_contact_request_path(contact_request)
+
+      document = Nokogiri::HTML(response.body)
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -117,6 +128,10 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include('min-w-0 max-w-full md:col-span-2 lg:col-span-3')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
+        expect(copy_sources).to include(contact_request.request_uid)
+        expect(copy_sources).to include(contact_request.email_digest)
+        expect(copy_sources).to include('req-contact-show')
+        expect(copy_labels).to all(include('コピー'))
       end
     end
 

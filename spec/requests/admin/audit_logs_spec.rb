@@ -171,6 +171,7 @@ RSpec.describe 'Admin audit logs', type: :request do
         :audit_log,
         action: 'receipt_analysis.finalize_retry',
         target_uid: 'rcpt_show',
+        request_id: 'req-audit-show',
         metadata: {
           parent_run_key: 'parent-run',
           new_run_key: 'new-run',
@@ -180,6 +181,10 @@ RSpec.describe 'Admin audit logs', type: :request do
       sign_in admin
 
       get admin_audit_log_path(log)
+
+      document = Nokogiri::HTML(response.body)
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -193,6 +198,9 @@ RSpec.describe 'Admin audit logs', type: :request do
         expect(response.body).to include('break-words font-mono token-text-base [overflow-wrap:anywhere]')
         expect(response.body).to include('min-w-0 max-w-full')
         expect(response.body).to include('max-w-full whitespace-pre rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base overflow-x-auto')
+        expect(copy_sources).to include('rcpt_show')
+        expect(copy_sources).to include('req-audit-show')
+        expect(copy_labels).to all(include('コピー'))
       end
     end
 

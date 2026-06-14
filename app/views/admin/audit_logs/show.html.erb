@@ -54,7 +54,12 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.target_uid") %></dt>
-            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:target_uid].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record[:target_uid].presence || "-",
+                    label: t("admin.audit_logs.show.labels.target_uid"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
           </div>
         </dl>
       </section>
@@ -64,7 +69,12 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.request_id") %></dt>
-            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:request_id].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record[:request_id].presence || "-",
+                    label: t("admin.audit_logs.show.labels.request_id"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.ip_address") %></dt>
