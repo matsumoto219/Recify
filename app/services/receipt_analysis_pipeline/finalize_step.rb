@@ -969,6 +969,7 @@ class ReceiptAnalysisPipeline
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_purchased_at_conflicted_review_reason(review_reasons, params, ocr_result)
@@ -978,10 +979,11 @@ class ReceiptAnalysisPipeline
       review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
       review_reasons = remove_resolved_empty_adjustment_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons = remove_resolved_price_tax_inclusion_uncertain_review_reason(review_reasons, params, amount_result)
-      return review_reasons unless review_reasons.include?("payment_method_uncertain")
+      payment_method_reasons = %w[payment_method_missing payment_method_uncertain]
+      return review_reasons unless review_reasons.intersect?(payment_method_reasons)
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
-      review_reasons - [ "payment_method_uncertain" ]
+      review_reasons - payment_method_reasons
     end
 
     def remove_resolved_empty_adjustment_uncertain_review_reason(review_reasons, params, amount_result)
@@ -998,6 +1000,13 @@ class ReceiptAnalysisPipeline
       return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
 
       review_reasons - [ "store_phone_number_missing" ]
+    end
+
+    def remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      return review_reasons unless review_reasons.include?("store_address_missing")
+      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+
+      review_reasons - [ "store_address_missing" ]
     end
 
     def remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
@@ -1107,6 +1116,7 @@ class ReceiptAnalysisPipeline
 
     def item_tax_rates_resolved?(params, amount_result)
       return false if item_tax_rate_resolution_blocked?(amount_result)
+      return true if non_taxable_item_tax_rates_resolved?(params, amount_result)
 
       tax_detail_rates = resolved_tax_detail_rates(params, amount_result)
       return false if tax_detail_rates.blank?
@@ -1115,6 +1125,43 @@ class ReceiptAnalysisPipeline
       return false if item_rates.blank?
 
       (item_rates - tax_detail_rates).empty?
+    end
+
+    def non_taxable_item_tax_rates_resolved?(params, amount_result)
+      return false unless resolved_tax_zero?(params, amount_result)
+      return false unless tax_details_non_taxable_or_blank?(params, amount_result)
+
+      items = Array(params[:receipt_items_attributes])
+      return false if items.blank?
+
+      items.all? do |item|
+        normalized = normalized_hash(item)
+        return false if normalize_review_reasons(normalized[:review_reasons]).include?(ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON)
+
+        rate = normalize_tax_rate(normalized[:tax_rate])
+        rate.nil? || rate.zero?
+      end
+    end
+
+    def resolved_tax_zero?(params, amount_result)
+      receipt_attributes = normalized_hash(params[:receipt_attributes])
+      tax_amount = normalize_amount(normalized_hash(amount_result[:resolved])[:tax])
+      tax_amount ||= normalize_amount(receipt_attributes[:tax_amount])
+
+      tax_amount&.zero?
+    end
+
+    def tax_details_non_taxable_or_blank?(params, amount_result)
+      tax_details = Array(amount_result[:tax_details]).presence || Array(params[:receipt_tax_details_attributes])
+      return true if tax_details.blank?
+
+      tax_details.all? do |tax_detail|
+        normalized = normalized_hash(tax_detail)
+        amount = normalize_amount(normalized[:amount])
+        rate = normalize_tax_rate(normalized[:rate])
+
+        (amount.nil? || amount.zero?) && (rate.nil? || rate.zero?)
+      end
     end
 
     def item_tax_rate_resolution_blocked?(amount_result)
@@ -1637,11 +1684,49 @@ class ReceiptAnalysisPipeline
 
     def amount_calculation_profile_snapshot(amount_result, tax_rate_correction: nil)
       snapshot = ReceiptAmountService.calculation_profile_snapshot(amount_result)
+      snapshot = remove_resolved_tax_detail_rate_mismatch_warning(snapshot, amount_result)
       return snapshot if tax_rate_correction.blank?
 
       snapshot[:profile] ||= {}
       snapshot[:profile][:tax_rate_correction] = tax_rate_correction
       snapshot
+    end
+
+    def remove_resolved_tax_detail_rate_mismatch_warning(snapshot, amount_result)
+      return snapshot unless tax_detail_rate_mismatch_warning_present?(snapshot)
+      return snapshot unless resolved_tax_details_match_amounts?(amount_result)
+
+      snapshot.deep_dup.tap do |copy|
+        copy[:warnings] = Array(copy[:warnings]) - [ "tax_detail_rate_mismatch" ]
+        copy[:mismatch_codes] = Array(copy[:mismatch_codes]) - [ "TAX_DETAIL_RATE_MISMATCH" ]
+        copy[:warning_mismatch_codes] = Array(copy[:warning_mismatch_codes]) - [ "TAX_DETAIL_RATE_MISMATCH" ]
+      end
+    end
+
+    def tax_detail_rate_mismatch_warning_present?(snapshot)
+      Array(snapshot[:warnings]).include?("tax_detail_rate_mismatch") ||
+        Array(snapshot[:mismatch_codes]).include?("TAX_DETAIL_RATE_MISMATCH") ||
+        Array(snapshot[:warning_mismatch_codes]).include?("TAX_DETAIL_RATE_MISMATCH")
+    end
+
+    def resolved_tax_details_match_amounts?(amount_result)
+      return false if amount_review_reasons(amount_result).map(&:to_s).intersect?(%w[tax_amount_mismatch tax_detail_mismatch])
+
+      tax_details = Array(amount_result[:tax_details])
+      return false if tax_details.blank?
+
+      resolved = normalized_hash(amount_result[:resolved])
+      subtotal = normalize_amount(resolved[:subtotal])
+      tax = normalize_amount(resolved[:tax])
+      total = normalize_amount(resolved[:total])
+      return false if subtotal.nil? || tax.nil? || total.nil?
+
+      net_sum = tax_details.sum { |tax_detail| normalize_amount(normalized_hash(tax_detail)[:net_amount]).to_i }
+      tax_sum = tax_details.sum { |tax_detail| normalize_amount(normalized_hash(tax_detail)[:amount]).to_i }
+
+      net_sum == subtotal.to_i &&
+        tax_sum == tax.to_i &&
+        net_sum + tax_sum == total.to_i
     end
 
     def record_build_params_snapshot(params)

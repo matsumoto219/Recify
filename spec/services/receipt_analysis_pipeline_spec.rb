@@ -4714,6 +4714,30 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'OCRにも住所候補がなくfinal保存値が揃っていればAIのstore_address_missingを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'store_address_missing' ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.store_address).to be_blank
+        expect(receipt.review_reasons).not_to include('store_address_missing')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it 'final保存値にadjustmentがなく支払が整合すればAIのadjustment_uncertainを落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(
@@ -4734,6 +4758,31 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('completed')
         expect(receipt.receipt_adjustments).to be_empty
         expect(receipt.review_reasons).not_to include('adjustment_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
+    it 'final保存値のpayment_methodと支払額が整合すればAIのpayment_method_missingを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'payment_method_missing' ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.payment_method).to eq('cash')
+        expect(receipt.receipt_payments.sum(:amount).to_i).to eq(180)
+        expect(receipt.review_reasons).not_to include('payment_method_missing')
         expect(receipt.review_reasons).to be_blank
       end
     end
@@ -5096,6 +5145,73 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'final税額が0で非課税として整合していればAIのitem_tax_rate_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "サンプル免税ストア テスト店\nサンプル非課税券 ¥3,000\n非課税対象 ¥3,000\n合計 ¥3,000\n現金 ¥3,000",
+        lines: [
+          'サンプル免税ストア テスト店',
+          'サンプル非課税券 ¥3,000',
+          '非課税対象 ¥3,000',
+          '合計 ¥3,000',
+          '現金 ¥3,000'
+        ],
+        candidates: {
+          store_name: 'サンプル免税ストア テスト店',
+          total_amount: 3_000,
+          subtotal_amount: 3_000,
+          tax_amount: 0,
+          tax_rate: 0,
+          country_region: 'JPN',
+          payment_method_text: '現金',
+          items: [
+            { raw_text: 'サンプル非課税券', price: 3_000, quantity: 1, line_total: 3_000, confidence: 0.95 }
+          ],
+          payments: [
+            { method: '現金', amount: 3_000 }
+          ],
+          tax_details: [
+            { description: '非課税対象', amount: 0, rate: 0, net_amount: 3_000 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: true,
+        review_reasons: [ 'item_tax_rate_uncertain' ],
+        receipt_attributes: {
+          store_name: 'サンプル免税ストア テスト店',
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'サンプル非課税券', category: 'other', tax_rate: nil, needs_review: false }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.tax_amount).to eq(0)
+        expect(receipt.review_reasons).not_to include('item_tax_rate_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it 'tax detail mismatchがある場合はAIのitem_tax_rate_uncertainを落とさない' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(
@@ -5136,6 +5252,45 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(receipt.reload.status).to eq('review_needed')
         expect(receipt.review_reasons).to include('item_tax_rate_uncertain')
         expect(receipt.review_reasons).to include('tax_detail_mismatch')
+      end
+    end
+
+    it 'final tax detailがamountと整合していればtax_detail_rate_mismatch warningを保存snapshotから落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      resolved_amount = amount_result(
+        inconsistencies: [ :tax_detail_rate_mismatch ],
+        blocking_inconsistencies: [],
+        warning_inconsistencies: [ :tax_detail_rate_mismatch ]
+      ).merge(
+        resolved: { total: 180, subtotal: 164, tax: 16, tax_rate: BigDecimal('0.1') },
+        tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 164, amount: 16 }
+        ],
+        amount_engine: {
+          selected_candidate: {
+            candidate_id: 'items_as_tax_included/floor/per_item',
+            final_payment_total: 180
+          }
+        }
+      )
+      allow(ReceiptAmountService).to receive(:call).and_return(resolved_amount)
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: successful_ai_result
+        )
+      )
+
+      amount = receipt.reload.amount_calculation_profile
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(amount['warnings']).not_to include('tax_detail_rate_mismatch')
+        expect(amount['mismatch_codes']).not_to include('TAX_DETAIL_RATE_MISMATCH')
+        expect(amount['warning_mismatch_codes']).not_to include('TAX_DETAIL_RATE_MISMATCH')
       end
     end
 

@@ -1104,6 +1104,28 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AI payment_methodがcredit_cardでも明確なiD支払recordがあればe_moneyに補正する' do
+        ocr_result[:candidates][:payment_method_text] = 'クレジット'
+        ocr_result[:candidates][:payments] = [
+          { method: 'iD', amount: 250 }
+        ]
+        ocr_result[:candidates][:total_amount] = 250
+        ai_result = {
+          receipt_attributes: {
+            payment_method: 'credit_card'
+          }
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: 'iD', amount: 250)
+          )
+          expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+        end
+      end
+
       it '支払ブロックのポイント利用とクレジットをreceipt_paymentsとして保存しcashにまとめない' do
         ocr_result[:candidates][:payment_method_text] = 'クレジット'
         ocr_result[:candidates][:payments] = []
@@ -2509,6 +2531,35 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 東京中央店')
       end
 
+      it 'ブランド種別行と電話番号つき支店行から自然な店舗名へ補完する' do
+        branch_with_phone_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'サンプルコスモ',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            '365日毎日安い!',
+            'ドラッグストア',
+            'サンプルコスモ',
+            '南駅店 TEL03-0000-0000',
+            '営業時間10:00~21:00',
+            '領収証'
+          ]
+        )
+        branch_with_phone_ai_result = {
+          receipt_attributes: {
+            store_name: 'サンプルコスモ'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_with_phone_ocr_result, ai_result: branch_with_phone_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('ドラッグストア サンプルコスモ 南駅店')
+      end
+
       it '1文字の英字ブランドは支店名と組み合わせる' do
         one_letter_brand_ocr_result = ocr_result.deep_merge(
           candidates: {
@@ -3800,6 +3851,81 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             include(kind: 'coupon', label: 'クーポン値引', amount: 100, sign: 'discount')
           )
         end
+      end
+
+      it '支払後の広告クーポン案内にある値引き文言はreceipt adjustmentにしない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'サンプル商品A', price: 1_510, quantity: 1, line_total: 1_510 }
+        ]
+        ocr_result[:lines] = [
+          'サンプル食堂 中央テスト店',
+          'サンプル商品A',
+          '¥1,510',
+          '合計',
+          '¥1,510',
+          'クレジット',
+          '¥1,510',
+          'クレジットカード売上票',
+          'お客様控え',
+          'レシートno:1000-2000',
+          'アンケート回答でクーポンプレゼント',
+          'アンケートはこちら',
+          '30円引き',
+          'クーポンをget'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: '30円引き',
+              amount: 30,
+              sign: 'discount',
+              source_text: '30円引き',
+              source_line_index: 12,
+              confidence: 0.86
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to eq([])
+      end
+
+      it '会計本体内のクーポン値引きはreceipt adjustmentとして残す' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: 'サンプル商品A', price: 1_000, quantity: 1, line_total: 1_000 }
+        ]
+        ocr_result[:lines] = [
+          'サンプル食堂 中央テスト店',
+          'サンプル商品A',
+          '¥1,000',
+          'クーポン値引',
+          '-100',
+          '合計',
+          '¥900',
+          'クレジット',
+          '¥900'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: 'クーポン値引',
+              amount: 100,
+              sign: 'discount',
+              source_text: 'クーポン値引',
+              source_line_index: 3,
+              confidence: 0.95
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'coupon', label: 'クーポン値引', amount: 100, sign: 'discount')
+        )
       end
 
       it 'AI adjustmentがない場合だけ高信頼OCR candidateをsource ocrとしてfallback採用する' do

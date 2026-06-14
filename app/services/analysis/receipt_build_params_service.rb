@@ -29,6 +29,9 @@ module Analysis
     ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
     POINT_ONLY_TEXT_PATTERN = /ポイント|point|(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i
     POINT_MONEY_CONTEXT_PATTERN = /[¥￥円]|[▲△\-−]|利用額|支払額|決済額|金額|amount|payment|paid/i
+    POST_SETTLEMENT_PROMO_ADJUSTMENT_PATTERN = /円引き|値引|割引|クーポン|coupon|discount|off|キャンペーン|アプリ|次回|特典|プレゼント|get/i
+    POST_SETTLEMENT_PROMO_CONTEXT_PATTERN = /アンケート|広告|キャンペーン|アプリ|次回|特典|プレゼント|get|回答期限|coupon|survey|promotion|campaign/i
+    POST_SETTLEMENT_BOUNDARY_PATTERN = /合計|総合計|お支払|支払|決済|現金|現\s*計|クレジット|カード売上票|お客様控|レシート\s*no|receipt\s*no|payment|paid|total|カード番号|承認番号|取引番号/i
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
@@ -314,7 +317,7 @@ module Analysis
         return false if store_index.nil?
 
         header_lines[(store_index + 1)..(store_index + 3)]&.any? do |line|
-          customer_facing_branch_line?(line)
+          customer_facing_branch_candidate(line).present?
         end
       end
 
@@ -355,9 +358,7 @@ module Analysis
 
         descriptor_line, descriptor_relative_index = descriptor_entry
         descriptor_index = logo_index + 1 + descriptor_relative_index
-        branch_line = header_lines[(descriptor_index + 1)..(descriptor_index + 3)]&.find do |line|
-          customer_facing_branch_line?(line)
-        end
+        branch_line = following_customer_facing_branch_line(header_lines, descriptor_index)
         return nil if branch_line.blank?
 
         printed_branch = Analysis::StoreNameCandidateClassifier.normalize_name(branch_line)
@@ -388,17 +389,19 @@ module Analysis
         store_index = header_lines.find_index { |line| compact_store_name(line) == normalized_store_name }
         return nil if store_index.nil?
 
+        branch_line = following_customer_facing_branch_line(header_lines, store_index)
+
         if store_name_needs_preceding_brand?(store_name)
           brand_entry = header_lines[0...store_index]&.each_with_index&.to_a&.reverse&.find do |line, index|
             customer_facing_brand_line?(line, header_lines:, line_index: index)
           end
           brand_line = brand_entry&.first
-          return "#{brand_line} #{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)}" if brand_line.present?
+          if brand_line.present?
+            base_name = "#{brand_line} #{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)}"
+            return [ base_name, branch_line ].compact.join(" ")
+          end
         end
 
-        branch_line = header_lines[(store_index + 1)..(store_index + 3)]&.find do |line|
-          customer_facing_branch_line?(line)
-        end
         return nil if branch_line.blank?
 
         "#{Analysis::StoreNameCandidateClassifier.normalize_name(store_name)} #{branch_line}"
@@ -435,9 +438,7 @@ module Analysis
           brand = Analysis::StoreNameCandidateClassifier.brand_candidate_from_legal_entity(line)
           next if brand.blank?
 
-          branch = Array(header_lines)[(index + 1)..(index + 3)]&.find do |candidate|
-            customer_facing_branch_line?(candidate)
-          end
+          branch = following_customer_facing_branch_line(header_lines, index)
           next if branch.blank?
 
           { brand: brand, branch: branch }
@@ -464,6 +465,26 @@ module Analysis
         return false if normalized.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
 
         normalized.length <= 30
+      end
+
+      def following_customer_facing_branch_line(header_lines, base_index)
+        Array(header_lines)[(base_index + 1)..(base_index + 3)]&.filter_map do |line|
+          customer_facing_branch_candidate(line)
+        end&.first
+      end
+
+      def customer_facing_branch_candidate(line)
+        candidate = store_branch_candidate_line(line)
+        return nil if candidate.blank?
+        return nil unless store_name_has_location_marker?(candidate)
+
+        customer_facing_branch_line?(candidate) ? candidate : nil
+      end
+
+      def store_branch_candidate_line(line)
+        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
+        normalized = normalized.sub(/\s*(?:tel|電話|phone)\s*[:：]?\s*[+\d][\d+\-ー−()（）\s]*.*\z/i, "")
+        normalized.strip.presence
       end
 
       def store_name_needs_preceding_brand?(store_name)
@@ -721,6 +742,7 @@ module Analysis
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
           next if adjustment_source_noise_line?(source_text, amount)
+          next if post_settlement_promo_adjustment?(source_text, source_line_index, lines)
           next if payment_row_adjustment?(
             normalized,
             amount: amount,
@@ -837,6 +859,21 @@ module Analysis
           item_text.match?(/手数料|handling\s*fee/i)
         else
           false
+        end
+      end
+
+      def post_settlement_promo_adjustment?(source_text, source_line_index, lines)
+        return false if source_line_index.nil?
+        return false unless source_text.to_s.match?(POST_SETTLEMENT_PROMO_ADJUSTMENT_PATTERN)
+        return false unless post_settlement_boundary_before?(lines, source_line_index)
+
+        context = lines_around(lines, source_line_index, before: 4, after: 4).join(" ")
+        context.match?(POST_SETTLEMENT_PROMO_CONTEXT_PATTERN)
+      end
+
+      def post_settlement_boundary_before?(lines, source_line_index)
+        Array(lines)[0...source_line_index].to_a.reverse.take(20).any? do |line|
+          line.to_s.match?(POST_SETTLEMENT_BOUNDARY_PATTERN)
         end
       end
 
@@ -2778,6 +2815,7 @@ module Analysis
         return false if detected_from_payments.blank?
         return true if current.blank?
         return true if current == "cash" && detected_from_payments != "cash"
+        return true if current == "credit_card" && detected_from_payments == "e_money"
 
         current == "e_money" && detected_from_payments == "qr_payment"
       end
