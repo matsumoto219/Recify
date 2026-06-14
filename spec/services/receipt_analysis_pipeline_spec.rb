@@ -4622,6 +4622,39 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '保存itemが存在してitem合計ズレがなければAIのitems_missingだけをreceipt-levelから落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'items_missing', 'ocr_low_confidence' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: true,
+            review_reasons: [ 'item_category_uncertain' ]
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).not_to include('items_missing')
+        expect(receipt.review_reasons).to include('ocr_low_confidence')
+      end
+    end
+
     it 'item-level item_name_uncertainが残る場合はreceipt-levelのitem_name_uncertainを落とさない' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(

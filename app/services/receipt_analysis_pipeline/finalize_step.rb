@@ -989,11 +989,19 @@ class ReceiptAnalysisPipeline
     end
 
     def remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
-      target_reasons = [ ITEM_NAME_UNCERTAIN_REVIEW_REASON, ITEMS_MISSING_REVIEW_REASON ]
+      review_reasons = remove_resolved_items_missing_review_reason(review_reasons, params, amount_result)
+      target_reasons = [ ITEM_NAME_UNCERTAIN_REVIEW_REASON ]
       return review_reasons unless review_reasons.intersect?(target_reasons)
       return review_reasons unless item_names_resolved?(params, amount_result)
 
       review_reasons - target_reasons
+    end
+
+    def remove_resolved_items_missing_review_reason(review_reasons, params, amount_result)
+      return review_reasons unless review_reasons.include?(ITEMS_MISSING_REVIEW_REASON)
+      return review_reasons unless items_present_without_total_mismatch?(params, amount_result)
+
+      review_reasons - [ ITEMS_MISSING_REVIEW_REASON ]
     end
 
     def remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
@@ -1018,6 +1026,16 @@ class ReceiptAnalysisPipeline
         normalized = normalized_hash(item)
         normalize_review_reasons(normalized[:review_reasons]).include?("item_category_uncertain") ||
           item_needs_review?(normalized)
+      end
+    end
+
+    def items_present_without_total_mismatch?(params, amount_result)
+      return false if amount_review_reasons(amount_result).include?(ITEM_TOTAL_DRIFT_REVIEW_REASON)
+
+      Array(params[:receipt_items_attributes]).any? do |item|
+        normalized = normalized_hash(item)
+        item_display_name(normalized).present? &&
+          normalize_amount(normalized[:line_total]).present?
       end
     end
 
