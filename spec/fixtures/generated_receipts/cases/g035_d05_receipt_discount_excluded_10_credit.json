@@ -1,0 +1,90 @@
+{
+  "case_id": "g035_d05_receipt_discount_excluded_10_credit",
+  "category": "discount_adjustment",
+  "intent": "税抜小計からのレシート値引きを外税で検算するケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-05T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 1000,
+        "quantity": 1,
+        "line_total": 1000,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル品い",
+        "unit_price": 500,
+        "quantity": 1,
+        "line_total": 500,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [
+      {
+        "kind": "receipt_discount",
+        "label": "レシート値引",
+        "sign": "discount",
+        "amount": 150,
+        "effect": "purchase",
+        "tax_rate": 0.1,
+        "tax_inclusion": "net"
+      }
+    ],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 1350,
+        "tax": 135,
+        "gross": 1485,
+        "basis": "net",
+        "label": "10%対象額"
+      }
+    ],
+    "subtotal": 1350,
+    "tax": 135,
+    "total": 1485,
+    "payments": [
+      {
+        "method": "credit_card",
+        "label": "クレジット",
+        "amount": 1485
+      }
+    ],
+    "payment_sum": 1485,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

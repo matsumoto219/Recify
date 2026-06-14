@@ -1,0 +1,72 @@
+{
+  "case_id": "g049_t04_excluded_10_floor_debit",
+  "category": "tax_rounding",
+  "intent": "単一10%外税の基本税詳細ケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-19T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 1000,
+        "quantity": 1,
+        "line_total": 1000,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 1000,
+        "tax": 100,
+        "gross": 1100,
+        "basis": "net",
+        "label": "10%対象額"
+      }
+    ],
+    "subtotal": 1000,
+    "tax": 100,
+    "total": 1100,
+    "payments": [
+      {
+        "method": "debit_card",
+        "label": "デビット",
+        "amount": 1100
+      }
+    ],
+    "payment_sum": 1100,
+    "payment_method": "debit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

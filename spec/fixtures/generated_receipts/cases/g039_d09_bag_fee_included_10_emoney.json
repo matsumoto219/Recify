@@ -1,0 +1,82 @@
+{
+  "case_id": "g039_d09_bag_fee_included_10_emoney",
+  "category": "discount_adjustment",
+  "intent": "袋代を購入額への内税surchargeとして扱うケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-09T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 990,
+        "quantity": 1,
+        "line_total": 990,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [
+      {
+        "kind": "bag_fee",
+        "label": "袋代",
+        "sign": "surcharge",
+        "amount": 10,
+        "effect": "purchase",
+        "tax_rate": 0.1,
+        "tax_inclusion": "gross"
+      }
+    ],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 910,
+        "tax": 90,
+        "gross": 1000,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 910,
+    "tax": 90,
+    "total": 1000,
+    "payments": [
+      {
+        "method": "e_money",
+        "label": "電子マネー支払",
+        "amount": 1000
+      }
+    ],
+    "payment_sum": 1000,
+    "payment_method": "e_money",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

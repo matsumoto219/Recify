@@ -1,0 +1,97 @@
+{
+  "case_id": "g043_d13_return_refund_review",
+  "category": "discount_adjustment",
+  "intent": "返品/返金系adjustmentはreview_neededとして保持するケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-13T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 1600,
+        "quantity": 1,
+        "line_total": 1600,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル品い",
+        "unit_price": 500,
+        "quantity": 1,
+        "line_total": 500,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [
+      {
+        "kind": "return_refund",
+        "label": "返品 サンプル返品対象A",
+        "sign": "discount",
+        "amount": 600,
+        "effect": "purchase",
+        "tax_rate": 0.1,
+        "tax_inclusion": "net",
+        "review_reasons": [
+          "adjustment_uncertain"
+        ]
+      }
+    ],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 1500,
+        "tax": 150,
+        "gross": 1650,
+        "basis": "net",
+        "label": "10%対象額"
+      }
+    ],
+    "subtotal": 1500,
+    "tax": 150,
+    "total": 1650,
+    "payments": [
+      {
+        "method": "credit_card",
+        "label": "クレジット",
+        "amount": 1650
+      }
+    ],
+    "payment_sum": 1650,
+    "payment_method": "credit_card",
+    "status": "review_needed",
+    "review_reasons": [
+      "adjustment_uncertain"
+    ]
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [
+      "adjustment_uncertain"
+    ],
+    "allow_item_name_minor_diff": true
+  }
+}

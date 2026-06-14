@@ -14,14 +14,25 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
 
-  it "validates generated receipt cases through g030" do
+  it "validates generated receipt cases through g060" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
 
     aggregate_failures do
-      expect(results.size).to eq(30)
+      expect(results.size).to eq(60)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
+    end
+  end
+
+  it "covers the generated discount/adjustment and tax/rounding expansion cases" do
+    cases = case_paths.map { |path| described_class.load_file(path) }
+
+    aggregate_failures do
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:3[1-9]|4[0-5])_d/) }).to eq(15)
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:4[6-9]|5[0-9]|60)_t/) }).to eq(15)
+      expect(cases.count { |case_data| case_data["category"] == "discount_adjustment" }).to be >= 15
+      expect(cases.count { |case_data| case_data["category"] == "tax_rounding" }).to be >= 15
     end
   end
 

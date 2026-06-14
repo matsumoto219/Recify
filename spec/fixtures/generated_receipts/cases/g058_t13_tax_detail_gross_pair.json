@@ -1,0 +1,80 @@
+{
+  "case_id": "g058_t13_tax_detail_gross_pair",
+  "category": "tax_rounding",
+  "intent": "複数商品の印字10%gross税詳細を検算するケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-28T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 880,
+        "quantity": 1,
+        "line_total": 880,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル品い",
+        "unit_price": 660,
+        "quantity": 1,
+        "line_total": 660,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 1400,
+        "tax": 140,
+        "gross": 1540,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 1400,
+    "tax": 140,
+    "total": 1540,
+    "payments": [
+      {
+        "method": "cash",
+        "label": "現金",
+        "amount": 1540
+      }
+    ],
+    "payment_sum": 1540,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

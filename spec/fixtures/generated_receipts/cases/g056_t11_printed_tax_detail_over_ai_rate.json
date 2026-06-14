@@ -1,0 +1,82 @@
+{
+  "case_id": "g056_t11_printed_tax_detail_over_ai_rate",
+  "category": "tax_rounding",
+  "intent": "AI税率が8%に揺れても印字10%税詳細で補正するケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-26T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 1650,
+        "quantity": 1,
+        "line_total": 1650,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル品い",
+        "unit_price": 1480,
+        "quantity": 1,
+        "line_total": 1480,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 2846,
+        "tax": 284,
+        "gross": 3130,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 2846,
+    "tax": 284,
+    "total": 3130,
+    "payments": [
+      {
+        "method": "credit_card",
+        "label": "クレジット",
+        "amount": 3130
+      }
+    ],
+    "payment_sum": 3130,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true,
+    "simulated_ai_item_tax_rate": 0.08,
+    "expected_item_tax_rate_after_save": 0.1
+  }
+}

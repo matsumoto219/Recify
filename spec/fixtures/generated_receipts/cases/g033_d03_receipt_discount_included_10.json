@@ -1,0 +1,90 @@
+{
+  "case_id": "g033_d03_receipt_discount_included_10",
+  "category": "discount_adjustment",
+  "intent": "レシート全体値引きが購入額に反映される単一10%内税ケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-03T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 1200,
+        "quantity": 1,
+        "line_total": 1200,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      },
+      {
+        "name": "サンプル品い",
+        "unit_price": 800,
+        "quantity": 1,
+        "line_total": 800,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [
+      {
+        "kind": "receipt_discount",
+        "label": "レシート値引",
+        "sign": "discount",
+        "amount": 200,
+        "effect": "purchase",
+        "tax_rate": 0.1,
+        "tax_inclusion": "gross"
+      }
+    ],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 1637,
+        "tax": 163,
+        "gross": 1800,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 1637,
+    "tax": 163,
+    "total": 1800,
+    "payments": [
+      {
+        "method": "cash",
+        "label": "現金",
+        "amount": 1800
+      }
+    ],
+    "payment_sum": 1800,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": false,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

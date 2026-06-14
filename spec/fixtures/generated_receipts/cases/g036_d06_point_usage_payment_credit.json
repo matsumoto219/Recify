@@ -1,0 +1,77 @@
+{
+  "case_id": "g036_d06_point_usage_payment_credit",
+  "category": "discount_adjustment",
+  "intent": "ポイント利用を値引きではなく支払として扱うケース",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル生成 テスト店",
+    "store_address": "住所: サンプル県サンプル市生成町一丁目",
+    "purchased_at": "2026-03-06T12:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {
+      "tax": "floor",
+      "discount": "round",
+      "scope": "per_tax_rate_group"
+    },
+    "items": [
+      {
+        "name": "サンプル品あ",
+        "unit_price": 880,
+        "quantity": 1,
+        "line_total": 880,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {
+        "rate": 0.1,
+        "net": 800,
+        "tax": 80,
+        "gross": 880,
+        "basis": "gross",
+        "label": "10%対象計"
+      }
+    ],
+    "subtotal": 800,
+    "tax": 80,
+    "total": 880,
+    "payments": [
+      {
+        "method": "point",
+        "label": "ポイント利用",
+        "amount": 300
+      },
+      {
+        "method": "credit_card",
+        "label": "クレジット",
+        "amount": 580
+      }
+    ],
+    "payment_sum": 880,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "80mm",
+    "font": "system",
+    "include_tax_detail_lines": true,
+    "omit_subtotal_line": false,
+    "include_payment_heading": true,
+    "noise_lines": []
+  },
+  "degradation": {
+    "enabled": false,
+    "profile": null
+  },
+  "assertions": {
+    "critical_exact": true,
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}
