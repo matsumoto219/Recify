@@ -31,6 +31,12 @@ class User < ApplicationRecord
 
   THEME_PREFERENCES = %w[system light dark].freeze
   ROUNDING_MODES = %w[floor round ceil].freeze
+  ALLOWED_AVATAR_CONTENT_TYPES = %w[
+    image/png
+    image/jpeg
+    image/webp
+  ].freeze
+  MAX_AVATAR_FILE_SIZE = 5.megabytes
   DEFAULT_GUEST_CLEANUP_RETENTION_DAYS = 7
   GUEST_CLEANUP_RETENTION_PERIOD = DEFAULT_GUEST_CLEANUP_RETENTION_DAYS.days
   LEGAL_TERMS_VERSION = "2026-05-23"
@@ -204,7 +210,12 @@ class User < ApplicationRecord
   def avatar_type
     return unless avatar.attached?
 
-    unless avatar.content_type.in?([ "image/png", "image/jpeg", "image/webp" ])
+    unless avatar.blob.content_type.in?(ALLOWED_AVATAR_CONTENT_TYPES)
+      errors.add(:avatar, :invalid_content_type)
+      return
+    end
+
+    unless Storage.extract_image_dimensions(blob: avatar.blob, attached_change: attachment_changes["avatar"])
       errors.add(:avatar, :invalid_content_type)
     end
   end
@@ -212,7 +223,7 @@ class User < ApplicationRecord
   def avatar_size
     return unless avatar.attached?
 
-    if avatar.blob.byte_size > 5.megabytes
+    if avatar.blob.byte_size > MAX_AVATAR_FILE_SIZE
       errors.add(:avatar, :file_too_large)
     end
   end

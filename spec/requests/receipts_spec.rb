@@ -40,6 +40,15 @@ RSpec.describe 'Receipts', type: :request do
     Rack::Test::UploadedFile.new(tempfile.path, 'image/png')
   end
 
+  def uploaded_bytes(prefix:, extension:, content_type:, bytes:)
+    tempfile = extension.present? ? Tempfile.new([ prefix, extension ]) : Tempfile.new(prefix)
+    tempfile.binmode
+    tempfile.write(bytes)
+    tempfile.rewind
+
+    Rack::Test::UploadedFile.new(tempfile.path, content_type)
+  end
+
   def rendered_receipt_item_rows(document)
     document.css('[data-receipt-form-target="itemsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="itemRow"]')
   end
@@ -1671,6 +1680,141 @@ RSpec.describe 'Receipts', type: :request do
       expect do
         post upload_receipts_path, params: { receipt: { images: files } }
       end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '単一uploadでテキスト/HTML/JSをJPEGに偽装してもreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      disguised_files = {
+        text: uploaded_bytes(prefix: 'fake-text-receipt', extension: '.jpg', content_type: 'image/jpeg', bytes: 'plain text receipt'),
+        html: uploaded_bytes(prefix: 'fake-html-receipt', extension: '.jpg', content_type: 'image/jpeg', bytes: '<html><body>not an image</body></html>'),
+        javascript: uploaded_bytes(prefix: 'fake-js-receipt', extension: '.jpg', content_type: 'image/jpeg', bytes: 'alert("not an image")')
+      }
+
+      disguised_files.each do |label, file|
+        aggregate_failures label do
+          expect do
+            post upload_receipts_path, params: { receipt: { image: file } }
+          end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+          expect(ReceiptOcrJob).not_to have_received(:perform_later)
+        end
+      end
+    end
+
+    it '単一uploadでPDFをJPEGに偽装してもreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      file = uploaded_bytes(
+        prefix: 'fake-pdf-receipt',
+        extension: '.jpg',
+        content_type: 'image/jpeg',
+        bytes: "%PDF-1.7\nnot a receipt image"
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: file } }
+      end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '単一uploadでSVGをPNGに偽装してもreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      file = uploaded_bytes(
+        prefix: 'fake-svg-receipt',
+        extension: '.png',
+        content_type: 'image/png',
+        bytes: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: file } }
+      end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.invalid_content_type'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
+    it '単一uploadで拡張子なしでも実体が正常PNGならreceiptを作成し解析jobをenqueueする' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      file = uploaded_bytes(
+        prefix: 'receipt-no-extension',
+        extension: nil,
+        content_type: 'application/octet-stream',
+        bytes: png_bytes(width: 120, height: 120)
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: file } }
+      end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(Receipt.order(:id).last.image.blob.content_type).to eq('image/png')
+        expect(ReceiptOcrJob).to have_received(:perform_later)
+      end
+    end
+
+    it '単一uploadでcontent_typeがtext/plainでも実体が正常PNGならreceiptを作成し解析jobをenqueueする' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      file = uploaded_bytes(
+        prefix: 'receipt-real-png',
+        extension: '.txt',
+        content_type: 'text/plain',
+        bytes: png_bytes(width: 120, height: 120)
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: file } }
+      end.to change(Receipt, :count).by(1)
+        .and change(ReceiptAnalysisRun, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(Receipt.order(:id).last.image.blob.content_type).to eq('image/png')
+        expect(ReceiptOcrJob).to have_received(:perform_later)
+      end
+    end
+
+    it '単一uploadで拡張子なしの非画像はreceiptを作成せず解析jobもenqueueしない' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      file = uploaded_bytes(
+        prefix: 'receipt-no-extension-invalid',
+        extension: nil,
+        content_type: 'application/octet-stream',
+        bytes: 'not an image'
+      )
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: file } }
+      end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)

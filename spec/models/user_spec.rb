@@ -379,12 +379,37 @@ RSpec.describe User, type: :model do
   end
 
   describe 'avatar validation' do
+    it 'valid image content is accepted' do
+      user = build(:user)
+      user.avatar.attach(
+        io: StringIO.new(File.binread(Rails.root.join('spec/fixtures/files/receipt_sample.jpg'))),
+        filename: 'avatar.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      expect(user).to be_valid
+    end
+
     it 'invalid content type uses locale-backed error message' do
       user = build(:user)
       user.avatar.attach(
         io: StringIO.new('not an image'),
         filename: 'avatar.txt',
         content_type: 'text/plain'
+      )
+
+      expect(user).not_to be_valid
+
+      expected_message = "#{I18n.t('activerecord.attributes.user.avatar')}#{I18n.t('activerecord.errors.models.user.attributes.avatar.invalid_content_type')}"
+      expect(user.errors.full_messages_for(:avatar)).to include(expected_message)
+    end
+
+    it 'image content type with non-image body uses locale-backed error message' do
+      user = build(:user)
+      user.avatar.attach(
+        io: StringIO.new('not an image'),
+        filename: 'avatar.jpg',
+        content_type: 'image/jpeg'
       )
 
       expect(user).not_to be_valid

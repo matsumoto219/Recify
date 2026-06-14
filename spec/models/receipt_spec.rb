@@ -4,7 +4,7 @@ require 'zlib'
 RSpec.describe Receipt, type: :model do
   include ActiveSupport::Testing::TimeHelpers
 
-  def png_bytes(width:, height:)
+  def png_bytes(width:, height:, minimum_byte_size: nil)
     chunk = lambda do |type, data|
       [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
     end
@@ -12,17 +12,20 @@ RSpec.describe Receipt, type: :model do
     row = "\x00".b + ("\xFF\xFF\xFF".b * width)
     compressed = Zlib::Deflate.deflate(row * height)
 
-    "\x89PNG\r\n\x1A\n".b +
+    png = "\x89PNG\r\n\x1A\n".b +
       chunk.call('IHDR'.b, header) +
       chunk.call('IDAT'.b, compressed) +
       chunk.call('IEND'.b, ''.b)
+    return png if minimum_byte_size.blank? || png.bytesize >= minimum_byte_size
+
+    png + ("\0".b * (minimum_byte_size - png.bytesize))
   end
 
-  def attach_png(receipt, width:, height:)
+  def attach_png(receipt, width:, height:, filename: "receipt-#{width}x#{height}.png", content_type: 'image/png', minimum_byte_size: nil)
     receipt.image.attach(
-      io: StringIO.new(png_bytes(width: width, height: height)),
-      filename: "receipt-#{width}x#{height}.png",
-      content_type: 'image/png'
+      io: StringIO.new(png_bytes(width: width, height: height, minimum_byte_size: minimum_byte_size)),
+      filename: filename,
+      content_type: content_type
     )
   end
 
@@ -514,6 +517,78 @@ RSpec.describe Receipt, type: :model do
       expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
     end
 
+    it 'テキスト/HTML/JSをJPEGに偽装しても実体検査で拒否する' do
+      disguised_files = {
+        text: 'plain text receipt',
+        html: '<html><body>not an image</body></html>',
+        javascript: 'alert("not an image")'
+      }
+
+      disguised_files.each do |label, body|
+        receipt = build(:receipt, status: 'processing')
+        receipt.image.attach(
+          io: StringIO.new(body),
+          filename: "#{label}.jpg",
+          content_type: 'image/jpeg'
+        )
+
+        aggregate_failures label do
+          expect(receipt).not_to be_valid
+          expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+        end
+      end
+    end
+
+    it 'PDFをJPEGに偽装しても拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      receipt.image.attach(
+        io: StringIO.new("%PDF-1.7\nnot a receipt image"),
+        filename: 'receipt.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it 'SVGをPNGに偽装しても拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      receipt.image.attach(
+        io: StringIO.new('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+        filename: 'receipt.png',
+        content_type: 'image/png'
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it '拡張子なしでも実体が正常PNGなら許可する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: 120, height: 120, filename: 'receipt', content_type: nil)
+
+      expect(receipt).to be_valid
+    end
+
+    it 'content_typeがtext/plainでも実体が正常PNGなら許可する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: 120, height: 120, filename: 'receipt.txt', content_type: 'text/plain')
+
+      expect(receipt).to be_valid
+    end
+
+    it '拡張子なしの非画像は拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      receipt.image.attach(
+        io: StringIO.new('not image'),
+        filename: 'receipt',
+        content_type: nil
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
     it 'metadataにwidth/heightがなくても実画像から小さすぎるPNGを拒否する' do
       receipt = build(:receipt, status: 'processing')
       attach_png(receipt, width: 1, height: 1)
@@ -543,6 +618,27 @@ RSpec.describe Receipt, type: :model do
 
       expect(receipt).not_to be_valid
       expect(receipt.errors.of_kind?(:image, :image_too_large)).to be(true)
+    end
+
+    it '実画像のdimensionが大きすぎる場合も拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(receipt, width: Receipt::MAX_IMAGE_DIMENSION + 1, height: 120)
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :image_too_large)).to be(true)
+    end
+
+    it '20MBを超える画像は拒否する' do
+      receipt = build(:receipt, status: 'processing')
+      attach_png(
+        receipt,
+        width: 120,
+        height: 120,
+        minimum_byte_size: Receipt::MAX_FILE_SIZE + 1
+      )
+
+      expect(receipt).not_to be_valid
+      expect(receipt.errors.of_kind?(:image, :file_too_large)).to be(true)
     end
 
     it '壊れた画像は安全側で拒否する' do

@@ -796,6 +796,30 @@ RSpec.describe 'Settings', type: :request do
       invalid_file&.unlink
     end
 
+    it 'image content type with non-image body is rejected and not attached' do
+      invalid_file = Tempfile.new([ 'fake-avatar', '.jpg' ])
+      invalid_file.write('not an image')
+      invalid_file.rewind
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: user.name,
+                avatar: Rack::Test::UploadedFile.new(invalid_file.path, 'image/jpeg')
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.avatar).not_to be_attached
+        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.avatar.invalid_content_type'))
+      end
+    ensure
+      invalid_file&.close
+      invalid_file&.unlink
+    end
+
     it 'files larger than 5MB are rejected and not attached' do
       large_file = Tempfile.new([ 'large-avatar', '.jpg' ])
       large_file.binmode
