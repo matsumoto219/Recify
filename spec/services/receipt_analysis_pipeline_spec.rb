@@ -4714,6 +4714,30 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'final保存値にadjustmentがなく支払が整合すればAIのadjustment_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
+        expect(receipt.review_reasons).to be_blank
+      end
+    end
+
     it '最終保存購入日時がOCR行に支持されていればAIのpurchased_at_conflictedを落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
@@ -4933,6 +4957,39 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('item_name_uncertain')
+      end
+    end
+
+    it 'item-level category reviewがなければitem_name_uncertainが残ってもreceipt-level item_category_uncertainを落とす' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_category_uncertain', 'item_name_uncertain' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'ン',
+            category: nil,
+            line_total: 180,
+            needs_review: true,
+            review_reasons: [ 'item_name_uncertain' ]
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('review_needed')
+        expect(receipt.review_reasons).not_to include('item_category_uncertain')
         expect(receipt.review_reasons).to include('item_name_uncertain')
       end
     end

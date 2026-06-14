@@ -976,11 +976,21 @@ class ReceiptAnalysisPipeline
       review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
       review_reasons = remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ] if params[:adjustment_uncertainty_resolved]
+      review_reasons = remove_resolved_empty_adjustment_uncertain_review_reason(review_reasons, params, amount_result)
       review_reasons = remove_resolved_price_tax_inclusion_uncertain_review_reason(review_reasons, params, amount_result)
       return review_reasons unless review_reasons.include?("payment_method_uncertain")
       return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
 
       review_reasons - [ "payment_method_uncertain" ]
+    end
+
+    def remove_resolved_empty_adjustment_uncertain_review_reason(review_reasons, params, amount_result)
+      return review_reasons unless review_reasons.include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+      return review_reasons if Array(params[:receipt_adjustments_attributes]).any?
+      return review_reasons if amount_review_reasons(amount_result).include?(ADJUSTMENT_UNCERTAIN_REVIEW_REASON)
+      return review_reasons unless payment_method_resolved_after_build?(params, amount_result)
+
+      review_reasons - [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
     end
 
     def remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
@@ -1048,9 +1058,17 @@ class ReceiptAnalysisPipeline
 
       items.none? do |item|
         normalized = normalized_hash(item)
-        normalize_review_reasons(normalized[:review_reasons]).include?("item_category_uncertain") ||
-          item_needs_review?(normalized)
+        item_category_review_unresolved?(normalized)
       end
+    end
+
+    def item_category_review_unresolved?(item)
+      review_reasons = normalize_review_reasons(item[:review_reasons])
+      return true if review_reasons.include?("item_category_uncertain")
+      return false if item[:category].present?
+      return false if item_name_review_reasons?(item)
+
+      item_needs_review?(item)
     end
 
     def items_present_without_total_mismatch?(params, amount_result)
