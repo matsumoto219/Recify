@@ -50,7 +50,13 @@
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.user_id") %></dt>
-          <dd class="font-mono token-text-base">#<%= record[:id] %></dd>
+          <dd class="min-w-0 max-w-full">
+            <%= render "shared/ui/actions/copyable_value",
+                  value: record[:id],
+                  display: "##{record[:id]}",
+                  label: t("admin.users.show.basic.user_id"),
+                  value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+          </dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.email") %></dt>

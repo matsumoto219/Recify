@@ -412,6 +412,7 @@ ja:
           before_state: Before state
           after_state: After state
         labels:
+          id: id
           action: action
           outcome: outcome
           error_code: error_code

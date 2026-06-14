@@ -221,6 +221,8 @@ RSpec.describe 'Admin users', type: :request do
 
       get admin_user_path(user)
       document = Nokogiri::HTML(response.body)
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
+      copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -251,6 +253,8 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).not_to include('Old Version Browser')
         expect(response.body).to include(admin_receipt_analysis_runs_path(user_id: user.id))
         expect(response.body).to include(admin_audit_logs_path(actor_user_id: user.id))
+        expect(copy_sources).to include(user.id.to_s)
+        expect(copy_labels).to include(a_string_including(I18n.t('admin.users.show.basic.user_id')))
         expect(response.body).to include('min-w-[56rem] text-left text-sm')
         expect(response.body).to include('min-w-[16rem] break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]')
         expect(response.body).not_to include('hidden-credential-id')

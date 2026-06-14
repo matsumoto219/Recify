@@ -137,7 +137,13 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.user_id") %></dt>
-            <dd class="font-mono token-text-base">#<%= @record.dig(:user_info, :id) %></dd>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record.dig(:user_info, :id),
+                    display: "##{@record.dig(:user_info, :id)}",
+                    label: t("admin.receipt_analysis_runs.show.labels.user_id"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.kind") %></dt>
@@ -292,17 +298,26 @@
           [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_used"), ai_metrics.key?(:fallback_used) ? t("admin.receipt_analysis_runs.show.boolean.#{ai_metrics[:fallback_used]}") : "-" ],
           [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_provider"), ai_metrics[:fallback_provider].presence || "-" ],
           [ t("admin.receipt_analysis_runs.show.ai_metrics.fallback_reason"), ai_metrics[:fallback_reason].presence || "-" ],
-          [ t("admin.receipt_analysis_runs.show.ai_metrics.response_id"), ai_metrics[:response_id].presence || "-" ],
+          [ t("admin.receipt_analysis_runs.show.ai_metrics.response_id"), ai_metrics[:response_id].presence || "-", t("admin.receipt_analysis_runs.show.ai_metrics.response_id") ],
           [ t("admin.receipt_analysis_runs.show.ai_metrics.token_usage"), token_usage_label ]
         ]
       %>
       <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <h3 class="text-sm font-semibold token-text-base"><%= t("admin.receipt_analysis_runs.show.ai_metrics.title") %></h3>
         <dl class="mt-3 grid min-w-0 max-w-full gap-3 text-sm md:grid-cols-2">
-          <% ai_metric_rows.each do |label, value| %>
+          <% ai_metric_rows.each do |label, value, copy_label| %>
             <div class="min-w-0">
               <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
-              <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
+              <dd class="min-w-0 max-w-full">
+                <% if copy_label.present? %>
+                  <%= render "shared/ui/actions/copyable_value",
+                        value: value,
+                        label: copy_label,
+                        value_class: "min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]" %>
+                <% else %>
+                  <span class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= value %></span>
+                <% end %>
+              </dd>
             </div>
           <% end %>
         </dl>

@@ -82,12 +82,19 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user") %></dt>
-        <dd class="font-mono token-text-base">
-          <% if @record[:user_id].present? %>
-            <%= link_to "##{@record[:user_id]}", admin_user_path(@record[:user_id]), class: "token-text-brand hover:underline" %>
-          <% else %>
-            -
-          <% end %>
+        <dd class="min-w-0 max-w-full">
+          <%
+            user_id_display = if @record[:user_id].present?
+                                link_to "##{@record[:user_id]}", admin_user_path(@record[:user_id]), class: "token-text-brand hover:underline"
+                              else
+                                "-"
+                              end
+          %>
+          <%= render "shared/ui/actions/copyable_value",
+                value: @record[:user_id].presence || "-",
+                display: user_id_display,
+                label: t("admin.contact_requests.show.labels.user"),
+                value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
         </dd>
       </div>
       <div>
@@ -113,7 +120,13 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_by") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:handled_by_user_id].present? ? "##{@record[:handled_by_user_id]}" : "-" %></dd>
+        <dd class="min-w-0 max-w-full">
+          <%= render "shared/ui/actions/copyable_value",
+                value: @record[:handled_by_user_id].presence || "-",
+                display: @record[:handled_by_user_id].present? ? "##{@record[:handled_by_user_id]}" : "-",
+                label: t("admin.contact_requests.show.labels.handled_by"),
+                value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+        </dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_at") %></dt>

@@ -198,6 +198,7 @@ RSpec.describe 'Admin audit logs', type: :request do
         expect(response.body).to include('break-words font-mono token-text-base [overflow-wrap:anywhere]')
         expect(response.body).to include('min-w-0 max-w-full')
         expect(response.body).to include('max-w-full whitespace-pre rounded-lg token-bg-input token-border-soft border p-4 text-xs token-text-base overflow-x-auto')
+        expect(copy_sources).to include(log.id.to_s)
         expect(copy_sources).to include('rcpt_show')
         expect(copy_sources).to include('req-audit-show')
         expect(copy_labels).to all(include('コピー'))

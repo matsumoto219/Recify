@@ -103,6 +103,7 @@ RSpec.describe 'Admin contact requests', type: :request do
       contact_request = create(
         :contact_request,
         user: user,
+        handled_by_user: admin,
         email: 'sender@example.com',
         sender_name: '送信 太郎',
         body: '問い合わせ本文',
@@ -128,6 +129,8 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include('min-w-0 max-w-full md:col-span-2 lg:col-span-3')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
+        expect(copy_sources).to include(user.id.to_s)
+        expect(copy_sources).to include(admin.id.to_s)
         expect(copy_sources).to include(contact_request.request_uid)
         expect(copy_sources).to include(contact_request.email_digest)
         expect(copy_sources).to include('req-contact-show')
@@ -150,6 +153,8 @@ RSpec.describe 'Admin contact requests', type: :request do
       sign_in admin
 
       get admin_contact_request_path(contact_request)
+      document = Nokogiri::HTML(response.body)
+      copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -162,6 +167,7 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).not_to include('送信 太郎')
         expect(response.body).not_to include('sender@example.com')
         expect(response.body).not_to include('問い合わせ本文')
+        expect(copy_sources).not_to include('-')
       end
     end
   end

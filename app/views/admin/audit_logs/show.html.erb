@@ -17,6 +17,16 @@
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.audit_logs.show.sections.action") %></h2>
         <dl class="space-y-3 text-sm">
           <div class="min-w-0 max-w-full">
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.id") %></dt>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record[:id],
+                    display: "##{@record[:id]}",
+                    label: t("admin.audit_logs.show.labels.id"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
+          </div>
+          <div class="min-w-0 max-w-full">
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.action") %></dt>
             <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:action] %></dd>
           </div>
