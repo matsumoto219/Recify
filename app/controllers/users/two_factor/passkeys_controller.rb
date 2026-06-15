@@ -116,8 +116,16 @@ class Users::TwoFactor::PasskeysController < ApplicationController
 
     render json: {
       ok: false,
-      error: t("auth.two_factor.passkey.messages.failure"),
+      error: t(passkey_failure_message_key),
       redirect_url: users_two_factor_passkey_path
     }, status: :unprocessable_content
+  end
+
+  def passkey_failure_message_key
+    if pending_second_factor_fallback_methods_for("passkey").any?
+      "auth.two_factor.passkey.messages.failure_with_fallback"
+    else
+      "auth.two_factor.passkey.messages.failure"
+    end
   end
 end

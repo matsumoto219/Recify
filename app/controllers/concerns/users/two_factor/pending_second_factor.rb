@@ -4,7 +4,7 @@ module Users::TwoFactor::PendingSecondFactor
   extend ActiveSupport::Concern
 
   included do
-    helper_method :pending_second_factor_allowed_methods
+    helper_method :pending_second_factor_allowed_methods, :pending_second_factor_fallback_methods_for
   end
 
   private
@@ -50,6 +50,10 @@ module Users::TwoFactor::PendingSecondFactor
 
   def pending_second_factor_allowed_methods
     pending_second_factor_session["allowed_methods"].to_a
+  end
+
+  def pending_second_factor_fallback_methods_for(method)
+    pending_second_factor_allowed_methods - [ method.to_s ]
   end
 
   def rate_limit_pending_second_factor_user_ip_key

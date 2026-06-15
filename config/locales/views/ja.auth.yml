@@ -52,7 +52,8 @@ ja:
         messages:
           unsupported: このブラウザはパスキーでの認証に対応していません。
           canceled: パスキー認証がキャンセルされました。
-          failure: パスキー認証に失敗しました。別の方法でも認証できます。
+          failure: パスキー認証に失敗しました。もう一度お試しください。利用できない場合はログインに戻ってください。
+          failure_with_fallback: パスキー認証に失敗しました。下の別の方法も利用できます。
           request_failed: リクエストに失敗しました。
       totp:
         title: 追加認証

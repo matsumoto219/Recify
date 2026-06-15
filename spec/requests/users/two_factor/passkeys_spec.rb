@@ -62,6 +62,9 @@ RSpec.describe 'User passkey step-up', type: :request do
         expect(response.body).to include(I18n.t('auth.two_factor.passkey.button'))
         expect(response.body).to include('data-controller="passkey-session"')
         expect(response.body).to include('data-passkey-session-conditional-value="false"')
+        expect(response.body).to include(I18n.t('auth.two_factor.passkey.messages.failure'))
+        expect(response.body).not_to include(I18n.t('auth.two_factor.links.heading'))
+        expect(response.body).not_to include('別の方法')
         expect(response.body).not_to include(passkey.credential_id)
         expect(response.body).not_to include(passkey.public_key)
         expect(response.body).not_to include('challenge')
@@ -203,6 +206,7 @@ RSpec.describe 'User passkey step-up', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.passkey.messages.failure'))
+        expect(response.parsed_body.fetch('error')).not_to include('別の方法')
         expect(response.parsed_body.fetch('redirect_url')).to eq(users_two_factor_passkey_path)
         expect(session[:pending_second_factor]).to be_present
         expect(session[:passkey_step_up_challenge]).to be_blank
@@ -227,16 +231,16 @@ RSpec.describe 'User passkey step-up', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.passkey.messages.failure'))
+        expect(response.parsed_body.fetch('error')).not_to include('別の方法')
         expect(session[:pending_second_factor]).to be_present
         expect(session[:passkey_step_up_challenge]).to be_blank
       end
     end
 
-    it 'TOTPとrecovery code fallback linkを表示する' do
+    it 'TOTP fallbackがある場合は代替手段ありの文言とlinkを表示する' do
       user = create(:user)
       create_passkey_with_fake_client(user)
       create(:totp_credential, user: user, confirmed_at: Time.current)
-      TwoFactor.generate_recovery_codes_for(user: user)
       start_pending_step_up(user)
 
       get users_two_factor_passkey_path
@@ -244,7 +248,42 @@ RSpec.describe 'User passkey step-up', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(users_two_factor_totp_path)
+        expect(response.body).to include(I18n.t('auth.two_factor.links.heading'))
+        expect(response.body).to include(I18n.t('auth.two_factor.passkey.messages.failure_with_fallback'))
+      end
+    end
+
+    it 'recovery code fallbackがある場合は代替手段ありの文言とlinkを表示する' do
+      user = create(:user)
+      create_passkey_with_fake_client(user)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      start_pending_step_up(user)
+
+      get users_two_factor_passkey_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
         expect(response.body).to include(users_two_factor_recovery_code_path)
+        expect(response.body).to include(I18n.t('auth.two_factor.links.heading'))
+        expect(response.body).to include(I18n.t('auth.two_factor.passkey.messages.failure_with_fallback'))
+      end
+    end
+
+    it 'fallbackがある場合はstep-up失敗JSONも代替手段あり文言にする' do
+      user = create(:user)
+      create_passkey_with_fake_client(user)
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      start_pending_step_up(user)
+      step_up_options_payload
+
+      post users_two_factor_passkey_create_path,
+           params: { credential: { id: 'invalid-credential' } },
+           as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('auth.two_factor.passkey.messages.failure_with_fallback'))
+        expect(response.parsed_body.fetch('error')).to include('別の方法')
       end
     end
 

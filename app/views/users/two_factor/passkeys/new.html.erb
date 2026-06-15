@@ -15,6 +15,8 @@
     </section>
 
     <%= render "shared/ui/layout/surface_card", title_id: "two-factor-passkey-card-title" do %>
+      <% fallback_methods = pending_second_factor_fallback_methods_for("passkey") %>
+      <% passkey_failure_message_key = fallback_methods.any? ? "auth.two_factor.passkey.messages.failure_with_fallback" : "auth.two_factor.passkey.messages.failure" %>
       <div
         class="px-6 md:px-10 pt-6 md:pt-10 pb-6 md:pb-10 space-y-6"
         data-controller="passkey-session"
@@ -22,7 +24,7 @@
         data-passkey-session-create-url-value="<%= users_two_factor_passkey_create_path %>"
         data-passkey-session-unsupported-message-value="<%= t("auth.two_factor.passkey.messages.unsupported") %>"
         data-passkey-session-canceled-message-value="<%= t("auth.two_factor.passkey.messages.canceled") %>"
-        data-passkey-session-failure-message-value="<%= t("auth.two_factor.passkey.messages.failure") %>"
+        data-passkey-session-failure-message-value="<%= t(passkey_failure_message_key) %>"
         data-passkey-session-request-failed-message-value="<%= t("auth.two_factor.passkey.messages.request_failed") %>"
         data-passkey-session-conditional-value="false">
         <h2 id="two-factor-passkey-card-title" class="sr-only"><%= t("auth.two_factor.passkey.card_title") %></h2>
@@ -47,10 +49,10 @@
               } %>
 
         <% fallback_links = [] %>
-        <% if pending_second_factor_allowed_methods.include?("totp") %>
+        <% if fallback_methods.include?("totp") %>
           <% fallback_links << link_to(t("auth.two_factor.links.totp"), users_two_factor_totp_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
         <% end %>
-        <% if pending_second_factor_allowed_methods.include?("recovery_code") %>
+        <% if fallback_methods.include?("recovery_code") %>
           <% fallback_links << link_to(t("auth.two_factor.links.recovery_code"), users_two_factor_recovery_code_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
         <% end %>
         <% if fallback_links.any? %>
