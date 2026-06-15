@@ -7,6 +7,7 @@ module UserSessions
   TOUCH_INTERVAL = 5.minutes
   DEFAULT_RETENTION_DAYS = 90
   RETENTION_PERIOD = DEFAULT_RETENTION_DAYS.days
+  DEFAULT_RETENTION_CLEANUP_LIMIT = 1000
 
   Summary = Struct.new(
     :active_sessions_count,
@@ -19,7 +20,7 @@ module UserSessions
   )
 
   class << self
-    def cleanup_retention(dry_run: true, cutoff: nil, limit: 1000)
+    def cleanup_retention(dry_run: true, cutoff: nil, limit: DEFAULT_RETENTION_CLEANUP_LIMIT)
       RetentionCleanup.call(
         dry_run: dry_run,
         cutoff: cutoff,

@@ -1,6 +1,7 @@
 module AuditLogs
   MAX_STRING_BYTES = 2_000
   MAX_ARRAY_ITEMS = 50
+  DEFAULT_RETENTION_CLEANUP_LIMIT = 1000
 
   BLOCKED_KEYS = %w[
     api_key
@@ -137,7 +138,7 @@ module AuditLogs
       )
     end
 
-    def cleanup_retention(dry_run: true, categories: nil, now: Time.current, limit: 1000)
+    def cleanup_retention(dry_run: true, categories: nil, now: Time.current, limit: DEFAULT_RETENTION_CLEANUP_LIMIT)
       RetentionCleanup.call(
         dry_run: dry_run,
         categories: categories,

@@ -16,6 +16,7 @@ module ReceiptAnalysisRuns
     superseded
   ].freeze
   STUCK_PROCESSING_RECEIPT_MESSAGE_KEY = "receipts.processing_errors.unexpected_failure".freeze
+  DEFAULT_RETENTION_CLEANUP_LIMIT = 1000
 
   class << self
     def start(receipt:, source:, requested_by_user: nil, request_reason: nil, parent_run: nil)
@@ -188,9 +189,9 @@ module ReceiptAnalysisRuns
       result
     end
 
-    def cleanup_expired(cutoff: Time.current, limit: 1000, dry_run: true)
+    def cleanup_expired(cutoff: Time.current, limit: DEFAULT_RETENTION_CLEANUP_LIMIT, dry_run: true)
       cutoff ||= Time.current
-      limit = normalize_positive_integer(limit, 1000)
+      limit = normalize_positive_integer(limit, DEFAULT_RETENTION_CLEANUP_LIMIT)
       dry_run = normalize_boolean(dry_run)
       runs = expired_terminal_runs(cutoff:, limit:)
       records = runs.map { |run| expired_run_record(run) }

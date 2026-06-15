@@ -1,5 +1,6 @@
 module ContactRequests
   MAX_URL_COUNT = 5
+  DEFAULT_RETENTION_CLEANUP_LIMIT = 1000
   URL_PATTERN = %r{https?://|www\.}i
 
   Error = Class.new(StandardError)
@@ -65,7 +66,7 @@ module ContactRequests
       Anonymizer.anonymized?(contact_request)
     end
 
-    def cleanup_retention(dry_run: true, now: Time.current, limit: 1000)
+    def cleanup_retention(dry_run: true, now: Time.current, limit: DEFAULT_RETENTION_CLEANUP_LIMIT)
       RetentionCleanup.call(
         dry_run: dry_run,
         now: now,
