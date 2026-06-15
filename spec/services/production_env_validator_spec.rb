@@ -10,6 +10,16 @@ RSpec.describe ProductionEnvValidator do
       config.active_record.encryption.primary_key = "primary"
       config.active_record.encryption.deterministic_key = "deterministic"
       config.active_record.encryption.key_derivation_salt = "salt"
+      config.action_mailer = ActiveSupport::OrderedOptions.new
+      config.action_mailer.perform_deliveries = true
+      config.action_mailer.default_url_options = { host: "recify-app.com" }
+      config.action_mailer.delivery_method = :smtp
+      config.action_mailer.smtp_settings = {
+        address: "smtp.example.test",
+        port: 587,
+        user_name: "smtp-user",
+        password: "smtp-password"
+      }
     end
   end
 
@@ -19,12 +29,23 @@ RSpec.describe ProductionEnvValidator do
       "RECIFY_DATABASE_PASSWORD" => "database",
       "WEBAUTHN_RP_ID" => "recify-app.com",
       "WEBAUTHN_ALLOWED_ORIGINS" => "https://recify-app.com",
-      "SUPPORT_NOTIFICATION_EMAIL" => "support@example.test"
+      "SUPPORT_NOTIFICATION_EMAIL" => "support@example.test",
+      "AZURE_OCR_ENDPOINT" => "https://example.cognitiveservices.azure.com",
+      "AZURE_OCR_API_KEY" => "azure-key",
+      "OPENAI_API_KEY" => "openai-key",
+      "OPENAI_AI_MODEL" => "gpt-test"
+    }
+  end
+
+  let(:validator_options) do
+    {
+      application_mailer_from: "noreply@example.test",
+      devise_mailer_sender: "noreply@example.test"
     }
   end
 
   it "production strict mode passes when required values are present" do
-    result = described_class.call(env: required_env, rails_config: rails_config, strict: true)
+    result = described_class.call(env: required_env, rails_config: rails_config, strict: true, **validator_options)
 
     expect(result).to be_success
     expect(result.missing_keys).to be_empty
@@ -35,7 +56,7 @@ RSpec.describe ProductionEnvValidator do
     rails_config.active_record.encryption.primary_key = nil
 
     expect do
-      described_class.validate!(env: env, rails_config: rails_config, strict: true)
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
     end.to raise_error(described_class::ValidationError) { |error|
       expect(error.message).to include("RAILS_MASTER_KEY")
       expect(error.message).to include("RECIFY_DATABASE_PASSWORD")
@@ -48,7 +69,7 @@ RSpec.describe ProductionEnvValidator do
     env.delete("WEBAUTHN_RP_ID")
 
     expect do
-      described_class.validate!(env: env, rails_config: rails_config, strict: true)
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
     end.to raise_error(described_class::ValidationError) { |error|
       expect(error.message).to include("WEBAUTHN_RP_ID")
       expect(error.message).not_to include("super-secret-value")
@@ -59,10 +80,105 @@ RSpec.describe ProductionEnvValidator do
     result = nil
 
     expect do
-      result = described_class.validate!(env: {}, rails_config: rails_config, strict: false)
+      result = described_class.validate!(env: {}, rails_config: rails_config, strict: false, **validator_options)
     end.not_to raise_error
 
     expect(result).to be_success
     expect(result.missing_keys).to be_empty
+  end
+
+  it "requires Azure OCR keys when OCR is not disabled by ENV" do
+    env = required_env.except("AZURE_OCR_ENDPOINT", "AZURE_OCR_API_KEY")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("AZURE_OCR_ENDPOINT")
+      expect(error.message).to include("AZURE_OCR_API_KEY")
+    }
+  end
+
+  it "does not require Azure OCR keys when OCR is disabled by ENV" do
+    env = required_env.except("AZURE_OCR_ENDPOINT", "AZURE_OCR_API_KEY")
+    env["RECEIPT_OCR_ENABLED"] = "false"
+
+    result = described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)
+
+    expect(result).to be_success
+  end
+
+  it "requires OpenAI keys when AI is not disabled by ENV" do
+    env = required_env.except("OPENAI_API_KEY", "OPENAI_AI_MODEL")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("OPENAI_API_KEY")
+      expect(error.message).to include("OPENAI_AI_MODEL")
+    }
+  end
+
+  it "does not require OpenAI keys when AI is disabled by ENV" do
+    env = required_env.except("OPENAI_API_KEY", "OPENAI_AI_MODEL")
+    env["RECEIPT_AI_ENABLED"] = "false"
+
+    result = described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)
+
+    expect(result).to be_success
+  end
+
+  it "requires Turnstile keys only when Turnstile is enabled" do
+    env = required_env.merge("TURNSTILE_ENABLED" => "true")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("TURNSTILE_SITE_KEY")
+      expect(error.message).to include("TURNSTILE_SECRET_KEY")
+    }
+  end
+
+  it "does not require Turnstile keys when Turnstile is disabled" do
+    env = required_env.merge("TURNSTILE_ENABLED" => "false")
+
+    result = described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)
+
+    expect(result).to be_success
+  end
+
+  it "reports production mail placeholders when delivery is enabled" do
+    rails_config.action_mailer.default_url_options = { host: "example.com" }
+    rails_config.action_mailer.smtp_settings = nil
+
+    expect do
+      described_class.validate!(
+        env: required_env,
+        rails_config: rails_config,
+        application_mailer_from: "from@example.com",
+        devise_mailer_sender: "please-change-me-at-config-initializers-devise@example.com",
+        strict: true
+      )
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("action_mailer.default_url_options.host")
+      expect(error.message).to include("application_mailer.default_from")
+      expect(error.message).to include("devise.mailer_sender")
+      expect(error.message).to include("action_mailer.smtp_settings")
+    }
+  end
+
+  it "does not require SMTP settings when mail delivery is disabled" do
+    rails_config.action_mailer.perform_deliveries = false
+    rails_config.action_mailer.default_url_options = { host: "example.com" }
+    rails_config.action_mailer.smtp_settings = nil
+
+    result = described_class.call(
+      env: required_env,
+      rails_config: rails_config,
+      application_mailer_from: "from@example.com",
+      devise_mailer_sender: "please-change-me-at-config-initializers-devise@example.com",
+      strict: true
+    )
+
+    expect(result).to be_success
   end
 end
