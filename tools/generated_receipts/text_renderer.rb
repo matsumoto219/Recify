@@ -36,7 +36,10 @@ module GeneratedReceipts
     end
 
     def custom_lines_text
-      (Array(render["custom_lines"]) + noise_lines).join("\n") + "\n"
+      text = (Array(render["custom_lines"]) + noise_lines).join("\n")
+      return "" if text.strip.empty?
+
+      text + "\n"
     end
 
     def header_lines
