@@ -30,6 +30,18 @@ RSpec.describe 'SecurityEvents hooks' do
     expect(event.metadata).to include('retry_after' => 60)
   end
 
+  it 'CSRF failureをtoken値なしで記録する' do
+    SecurityEvents.record_csrf_failure!(request: request)
+
+    event = SecurityEvent.find_by!(event_type: 'csrf_failure')
+
+    expect(event).to have_attributes(
+      severity: 'high',
+      matched_rule: 'invalid_authenticity_token'
+    )
+    expect(event.metadata.to_s).not_to include('csrf-token')
+  end
+
   it '外部サービス連続失敗をsecurity eventに記録する' do
     detail = ExternalServices.error_detail(
       service: :ocr,
