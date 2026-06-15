@@ -125,4 +125,26 @@ RSpec.describe SecurityEvents::Detector do
 
     expect(detections.size).to eq(3)
   end
+
+  it '主要な入力系攻撃markerを分類する' do
+    cases = {
+      sql_injection_attempt: { q: "' OR 1=1 --" },
+      xss_attempt: { comment: '<img src=x onerror=alert(1)>' },
+      html_injection_attempt: { body: '<svg><animate /></svg>' },
+      template_injection_attempt: { template: '<%= 7 * 7 %>' },
+      command_injection_attempt: { name: 'ok; curl http://example.invalid' },
+      path_traversal_attempt: { file: '../../config/master.key' },
+      crlf_injection_attempt: { header: "ok\r\nSet-Cookie: injected=1" },
+      log_injection_attempt: { memo: "normal\n[ERROR] forged line" },
+      redos_attempt: { pattern: '(a+)*' },
+      open_redirect_attempt: { return_to: 'https://evil.example/path' },
+      ssrf_attempt: { callback_url: 'http://169.254.169.254/latest/meta-data' }
+    }
+
+    results = cases.transform_values { |params| described_class.call(params: params).map(&:event_type) }
+
+    cases.each_key do |event_type|
+      expect(results.fetch(event_type)).to include(event_type.to_s)
+    end
+  end
 end

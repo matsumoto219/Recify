@@ -28,6 +28,42 @@ RSpec.describe 'Security events', type: :request do
     )
   end
 
+  it '複数の入力系攻撃markerをHTTP経由でsafeに記録する' do
+    expect {
+      get receipts_path,
+          params: {
+            q: "' OR 1=1 --",
+            comment: '<img src=x onerror=alert(1)>',
+            template: '{{ 7 * 7 }}',
+            command: 'ok; curl http://example.invalid',
+            return_to: 'https://evil.example/path'
+          }
+    }.to change(SecurityEvent, :count).by(5)
+
+    expect(SecurityEvent.order(:created_at).last(5).map(&:event_type)).to contain_exactly(
+      'sql_injection_attempt',
+      'xss_attempt',
+      'template_injection_attempt',
+      'command_injection_attempt',
+      'open_redirect_attempt'
+    )
+  end
+
+  it 'payload内のsecret風値をredactして記録する' do
+    expect {
+      get receipts_path,
+          params: {
+            q: '<script>alert(1)</script> api_key=abcdefghijklmnopqrstuvwxyz0123456789TOKEN password=super-secret'
+          }
+    }.to change(SecurityEvent, :count).by(1)
+
+    event = SecurityEvent.last
+    expect(event.payload_excerpt).to include('<script>alert(1)</script>')
+    expect(event.payload_excerpt).to include('api_key=[FILTERED]')
+    expect(event.payload_excerpt).to include('password=[FILTERED]')
+    expect(event.payload_excerpt).not_to include('abcdefghijklmnopqrstuvwxyz0123456789TOKEN', 'super-secret')
+  end
+
   it 'path traversalやSSRF URLもrequest hookで記録する' do
     expect {
       get receipts_path, params: { file: '../../config/master.key' }
