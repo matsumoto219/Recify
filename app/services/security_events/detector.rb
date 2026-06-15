@@ -7,6 +7,31 @@ module SecurityEvents
     MAX_DEPTH = 4
     MAX_ARRAY_ITEMS = 20
     URL_FIELD_PATTERN = /\b(?:redirect|return_to|next|callback|url|uri|target|continue)\b/i
+    PROTECTED_RECEIPT_FIELDS = %w[
+      id
+      user_id
+      receipt_id
+      public_id
+      display_id
+      status
+      processing_error_code
+      processing_error_message
+      keep_image
+      image_purged_at
+      image_purged_reason
+    ].freeze
+    PROTECTED_USER_FIELDS = %w[
+      id
+      admin
+      role
+      guest
+      confirmed_at
+      locked_at
+      failed_attempts
+      session_version
+      user_limit
+      storage_bytes_used
+    ].freeze
     SENSITIVE_KEY_PATTERN = /
       password|token|authorization|cookie|secret|api[_-]?key|access[_-]?token|
       refresh[_-]?token|totp|otp|recovery[_-]?code|backup[_-]?code|csrf|
@@ -140,6 +165,8 @@ module SecurityEvents
 
       open_redirect = detect_open_redirect(field_name, text)
       matches << open_redirect if open_redirect
+      parameter_tampering = detect_parameter_tampering(field_name, text)
+      matches << parameter_tampering if parameter_tampering
       matches
     end
 
@@ -152,6 +179,26 @@ module SecurityEvents
         event_type: "open_redirect_attempt",
         severity: "medium",
         matched_rule: "external_redirect_url",
+        field_name: field_name,
+        payload_excerpt: text
+      )
+    end
+
+    def detect_parameter_tampering(field_name, text)
+      segments = field_name.to_s.split(".")
+      matched_rule =
+        if segments.first == "receipt" && (segments & PROTECTED_RECEIPT_FIELDS).any?
+          "protected_receipt_attribute"
+        elsif segments.first == "user" && (segments & PROTECTED_USER_FIELDS).any?
+          "protected_user_attribute"
+        end
+
+      return unless matched_rule
+
+      Detection.new(
+        event_type: "parameter_tampering_attempt",
+        severity: "medium",
+        matched_rule: matched_rule,
         field_name: field_name,
         payload_excerpt: text
       )

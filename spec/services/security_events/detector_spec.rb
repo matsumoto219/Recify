@@ -83,6 +83,49 @@ RSpec.describe SecurityEvents::Detector do
     expect(detections.map(&:event_type)).to include('ocr_text_injection_attempt')
   end
 
+  it '保護されたreceipt/user属性のparameter tamperingを検知する' do
+    detections = described_class.call(
+      params: {
+        receipt: {
+          user_id: '999',
+          status: 'failed',
+          receipt_items_attributes: {
+            '0' => {
+              receipt_id: '999'
+            }
+          }
+        },
+        user: {
+          admin: '1'
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(detections.map(&:event_type)).to all(eq('parameter_tampering_attempt'))
+      expect(detections.map(&:matched_rule)).to include('protected_receipt_attribute', 'protected_user_attribute')
+      expect(detections.map(&:field_name)).to include(
+        'receipt.user_id',
+        'receipt.status',
+        'receipt.receipt_items_attributes.0.receipt_id',
+        'user.admin'
+      )
+    end
+  end
+
+  it 'admin filterなどの通常パラメータではparameter tampering扱いしない' do
+    detections = described_class.call(
+      params: {
+        admin: 'true',
+        risk_level: 'high',
+        category: 'security',
+        actor_user_id: '1'
+      }
+    )
+
+    expect(detections).to be_empty
+  end
+
   it '通常の日本語テキストやレシート文言では検知しない' do
     detections = described_class.call(
       params: {

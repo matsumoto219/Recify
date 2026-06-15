@@ -847,7 +847,11 @@ RSpec.describe 'Admin system settings', type: :request do
             params: {
               value: 'true',
               reason: 'enable logo',
-              confirm: '1'
+              confirm: '1',
+              key: 'maintenance.mode',
+              risk_level: 'low',
+              category: 'maintenance',
+              updated_by_user_id: create(:user).id
             },
             headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
 

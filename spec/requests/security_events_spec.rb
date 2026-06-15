@@ -220,4 +220,49 @@ RSpec.describe 'Security events', type: :request do
   ensure
     ActionController::Base.allow_forgery_protection = original_allow_forgery_protection
   end
+
+  it 'receiptの保護属性を差し込んでも保存せずparameter tamperingとして記録する' do
+    other_user = create(:user, email: 'tamper-other@example.com')
+    receipt = create(
+      :receipt,
+      user: user,
+      store_name: 'Before Tamper',
+      total_amount: 1000,
+      payment_method: 'cash',
+      status: 'completed'
+    )
+    original_public_id = receipt.public_id
+
+    expect {
+      patch receipt_path(receipt),
+            params: {
+              receipt: {
+                store_name: 'Allowed Update',
+                user_id: other_user.id,
+                public_id: 'forged-public-id',
+                status: 'failed',
+                processing_error_code: 'forged_error'
+              }
+            }
+    }.to change(SecurityEvent.where(event_type: 'parameter_tampering_attempt'), :count).by(4)
+
+    receipt.reload
+    events = SecurityEvent.where(event_type: 'parameter_tampering_attempt').order(:created_at).last(4)
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.store_name).to eq('Allowed Update')
+      expect(receipt.user).to eq(user)
+      expect(receipt.public_id).to eq(original_public_id)
+      expect(receipt.status).to eq('completed')
+      expect(receipt.processing_error_code).to be_nil
+      expect(events.map(&:field_name)).to contain_exactly(
+        'receipt.user_id',
+        'receipt.public_id',
+        'receipt.status',
+        'receipt.processing_error_code'
+      )
+      expect(events.map(&:matched_rule)).to all(eq('protected_receipt_attribute'))
+    end
+  end
 end
