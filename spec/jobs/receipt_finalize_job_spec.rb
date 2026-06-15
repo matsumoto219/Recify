@@ -33,6 +33,17 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
       expect { described_class.perform_now(run.id) }.to raise_error(ArgumentError)
     end
 
+    it 'terminal runのreplayではreceiptを変更しない' do
+      receipt = create(:receipt, store_name: 'Replay Safe', total_amount: 1000, status: 'completed')
+      run = create(:receipt_analysis_run, :succeeded, receipt: receipt)
+
+      expect do
+        described_class.perform_now(run_id: run.id)
+      end.not_to change { receipt.reload.attributes.slice('status', 'store_name', 'total_amount', 'updated_at') }
+
+      expect(run.reload.status).to eq('succeeded')
+    end
+
     it 'finalize中に負値itemが混じっても通常明細として保存せず失敗にしない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
