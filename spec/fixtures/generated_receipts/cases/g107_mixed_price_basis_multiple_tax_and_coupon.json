@@ -1,0 +1,70 @@
+{
+  "case_id": "g107_mixed_price_basis_multiple_tax_and_coupon",
+  "category": "tax_rounding",
+  "intent": "Mixed price basis with a purchase coupon should not double-save or double-apply the discount.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルミックス クーポン店",
+    "store_address": "サンプル県サンプル市券町7-7",
+    "purchased_at": "2026-04-07T14:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "mixed",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル軽減税抜A", "unit_price": 130, "quantity": 1, "line_total": 130, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル軽減税抜B", "unit_price": 140, "quantity": 1, "line_total": 140, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル標準税抜C", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル標準税込D", "unit_price": 490, "quantity": 1, "line_total": 490, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル非課税E", "unit_price": 50, "quantity": 1, "line_total": 50, "tax_rate": 0, "discount_amount": 0, "tax_inclusion": "gross" }
+    ],
+    "receipt_adjustments": [
+      { "kind": "coupon", "label": "サンプルクーポン値引10%", "sign": "discount", "amount": 110, "effect": "purchase", "tax_rate": 0.1, "tax_inclusion": "gross", "review_reasons": [] }
+    ],
+    "tax_details": [
+      { "rate": 0.08, "net": 270, "tax": 21, "gross": 291, "basis": "gross", "label": "税率8%対象" },
+      { "rate": 0.1, "net": 646, "tax": 64, "gross": 710, "basis": "gross", "label": "税率10%対象" }
+    ],
+    "subtotal": 966,
+    "tax": 85,
+    "total": 1051,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 1051 }
+    ],
+    "payment_sum": 1051,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプルミックス クーポン店",
+      "サンプル県サンプル市券町7-7",
+      "2026年04月07日(火) 14:00",
+      "領収書",
+      "*サンプル軽減税抜A          *130",
+      "*サンプル軽減税抜B          *140",
+      "サンプル標準税抜C            300",
+      "サンプル標準税込D            490込",
+      "サンプル非課税E               50非",
+      "サンプルクーポン値引10%      -110",
+      "小計（税抜 8%）             ¥270",
+      "小計（税抜10%）             ¥300",
+      "小計（税込10%）             ¥490",
+      "小計（非課税）               ¥50",
+      "合計                       ¥1,051",
+      "8%対象計 ¥291",
+      "内税額8% ¥21",
+      "10%対象計 ¥710",
+      "内税額10% ¥64",
+      "クレジット                 ¥1,051"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "receipt_adjustments"], "allow_review_reasons": [], "allow_item_name_minor_diff": true }
+}

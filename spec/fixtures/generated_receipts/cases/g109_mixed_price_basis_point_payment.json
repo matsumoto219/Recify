@@ -1,0 +1,67 @@
+{
+  "case_id": "g109_mixed_price_basis_point_payment",
+  "category": "tax_rounding",
+  "intent": "Mixed price basis with point redemption and credit payment should keep point as payment, not discount.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルミックス ポイント店",
+    "store_address": "サンプル県サンプル市ポイント町9-9",
+    "purchased_at": "2026-04-09T16:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "mixed",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル軽減税抜A", "unit_price": 130, "quantity": 1, "line_total": 130, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル軽減税抜B", "unit_price": 140, "quantity": 1, "line_total": 140, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル標準税抜C", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル標準税込D", "unit_price": 490, "quantity": 1, "line_total": 490, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル非課税E", "unit_price": 50, "quantity": 1, "line_total": 50, "tax_rate": 0, "discount_amount": 0, "tax_inclusion": "gross" }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.08, "net": 270, "tax": 21, "gross": 291, "basis": "gross", "label": "税率8%対象" },
+      { "rate": 0.1, "net": 746, "tax": 74, "gross": 820, "basis": "gross", "label": "税率10%対象" }
+    ],
+    "subtotal": 1066,
+    "tax": 95,
+    "total": 1161,
+    "payments": [
+      { "method": "point", "label": "ポイント利用", "amount": 300 },
+      { "method": "credit_card", "label": "クレジット", "amount": 861 }
+    ],
+    "payment_sum": 1161,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "include_payment_heading": true,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプルミックス ポイント店",
+      "サンプル県サンプル市ポイント町9-9",
+      "2026年04月09日(木) 16:00",
+      "領収書",
+      "*サンプル軽減税抜A          *130",
+      "*サンプル軽減税抜B          *140",
+      "サンプル標準税抜C            300",
+      "サンプル標準税込D            490込",
+      "サンプル非課税E               50非",
+      "合計                       ¥1,161",
+      "税率 8%対象                 ¥291",
+      "税率10%対象                 ¥820",
+      "内消費税等8%                 ¥21",
+      "内消費税等10%                ¥74",
+      "お支払い方法",
+      "ポイント利用 300P           ¥300",
+      "クレジット                  ¥861"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": true }
+}

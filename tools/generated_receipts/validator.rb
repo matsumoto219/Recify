@@ -112,7 +112,7 @@ module GeneratedReceipts
     ].freeze
     CATEGORIES = %w[normal payment discount_adjustment tax_rounding ocr_anomaly non_receipt conflict].freeze
     RECEIPT_KINDS = %w[receipt non_receipt].freeze
-    AMOUNT_BASES = %w[tax_included tax_excluded].freeze
+    AMOUNT_BASES = %w[tax_included tax_excluded mixed].freeze
     TAX_INCLUSIONS = %w[gross net].freeze
     ADJUSTMENT_EFFECTS = %w[purchase payment].freeze
     ADJUSTMENT_SIGNS = %w[surcharge discount].freeze
@@ -165,12 +165,14 @@ module GeneratedReceipts
       validate_array("expected.items", expected["items"]) do |item, index|
         validate_hash("expected.items[#{index}]", item, required: ITEM_REQUIRED_KEYS, allowed: ITEM_KEYS)
         validate_optional_inclusion("expected.items[#{index}].tax_inclusion", item["tax_inclusion"], TAX_INCLUSIONS)
+        validate_mixed_tax_inclusion("expected.items[#{index}].tax_inclusion", item["tax_inclusion"])
       end
       validate_array("expected.receipt_adjustments", expected["receipt_adjustments"]) do |adjustment, index|
         validate_hash("expected.receipt_adjustments[#{index}]", adjustment, required: ADJUSTMENT_REQUIRED_KEYS, allowed: ADJUSTMENT_KEYS)
         validate_inclusion("expected.receipt_adjustments[#{index}].effect", adjustment["effect"], ADJUSTMENT_EFFECTS)
         validate_inclusion("expected.receipt_adjustments[#{index}].sign", adjustment["sign"], ADJUSTMENT_SIGNS)
         validate_optional_inclusion("expected.receipt_adjustments[#{index}].tax_inclusion", adjustment["tax_inclusion"], TAX_INCLUSIONS)
+        validate_mixed_tax_inclusion("expected.receipt_adjustments[#{index}].tax_inclusion", adjustment["tax_inclusion"]) if adjustment["effect"] == "purchase"
       end
       validate_array("expected.tax_details", expected["tax_details"]) do |tax_detail, index|
         validate_hash("expected.tax_details[#{index}]", tax_detail, required: TAX_DETAIL_REQUIRED_KEYS, allowed: TAX_DETAIL_KEYS)
@@ -243,6 +245,7 @@ module GeneratedReceipts
       end
 
       expected_groups = expected_tax_groups
+      expected_groups.delete(rate_key(0)) if zero_tax_detail_omitted?
       actual_groups = expected["tax_details"].each_with_object({}) do |detail, groups|
         rate_key = rate_key(detail["rate"])
         groups[rate_key] ||= { "net" => 0, "tax" => 0, "gross" => 0 }
@@ -267,9 +270,10 @@ module GeneratedReceipts
         return
       end
 
-      net_sum = expected["tax_details"].sum { |detail| amount(detail["net"]) }
+      omitted_zero_tax_total = zero_tax_detail_omitted? ? zero_tax_purchase_total : 0
+      net_sum = expected["tax_details"].sum { |detail| amount(detail["net"]) } + omitted_zero_tax_total
       tax_sum = expected["tax_details"].sum { |detail| amount(detail["tax"]) }
-      gross_sum = expected["tax_details"].sum { |detail| amount(detail["gross"]) }
+      gross_sum = expected["tax_details"].sum { |detail| amount(detail["gross"]) } + omitted_zero_tax_total
 
       add_error("expected.subtotal", "must equal tax_detail net sum #{net_sum}") unless amount(expected["subtotal"]) == net_sum
       add_error("expected.tax", "must equal tax_detail tax sum #{tax_sum}") unless amount(expected["tax"]) == tax_sum
@@ -326,18 +330,13 @@ module GeneratedReceipts
         net_base = base["net_base"]
         rate = decimal_from_rate_key(rate_key)
 
-        if gross_base.positive? && net_base.positive?
-          add_error("expected.items", "must not mix gross and net bases within rate #{rate_key}")
-          next
-        end
-
-        groups[rate_key] = if gross_base.positive?
-          tax = round_tax(decimal(gross_base) * rate / (BigDecimal("1") + rate))
-          { "gross" => gross_base, "tax" => tax, "net" => gross_base - tax }
-        else
-          tax = round_tax(decimal(net_base) * rate)
-          { "net" => net_base, "tax" => tax, "gross" => net_base + tax }
-        end
+        gross_tax = round_tax(decimal(gross_base) * rate / (BigDecimal("1") + rate))
+        net_tax = round_tax(decimal(net_base) * rate)
+        groups[rate_key] = {
+          "net" => (gross_base - gross_tax) + net_base,
+          "tax" => gross_tax + net_tax,
+          "gross" => gross_base + net_base + net_tax
+        }
       end
     end
 
@@ -371,10 +370,17 @@ module GeneratedReceipts
     end
 
     def zero_tax_purchase_total
-      item_total = expected["items"].sum { |item| amount(item["line_total"]) }
-      purchase_adjustment_total = expected["receipt_adjustments"].select { |adjustment| adjustment["effect"] == "purchase" }.sum { |adjustment| signed_amount(adjustment) }
+      item_total = expected["items"].select { |item| decimal(item["tax_rate"]).zero? }.sum { |item| amount(item["line_total"]) }
+      purchase_adjustment_total = expected["receipt_adjustments"].select do |adjustment|
+        adjustment["effect"] == "purchase" && decimal(adjustment["tax_rate"]).zero?
+      end.sum { |adjustment| signed_amount(adjustment) }
 
       item_total + purchase_adjustment_total
+    end
+
+    def zero_tax_detail_omitted?
+      zero_tax_purchase_total.positive? &&
+        expected["tax_details"].none? { |detail| decimal(detail["rate"]).zero? }
     end
 
     def expected
@@ -383,6 +389,13 @@ module GeneratedReceipts
 
     def default_tax_inclusion
       expected["amount_basis"] == "tax_excluded" ? "net" : "gross"
+    end
+
+    def validate_mixed_tax_inclusion(path, value)
+      return unless expected["amount_basis"] == "mixed"
+      return if TAX_INCLUSIONS.include?(value)
+
+      add_error(path, "is required when expected.amount_basis is mixed")
     end
 
     def payment_adjustment_total

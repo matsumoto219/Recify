@@ -14,11 +14,11 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
 
-  it "validates generated receipt cases through g100" do
+  it "validates generated receipt cases through g110" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
 
     aggregate_failures do
-      expect(results.size).to eq(100)
+      expect(results.size).to eq(110)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
@@ -36,9 +36,11 @@ RSpec.describe GeneratedReceipts::Validator do
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:6[1-9]|7[0-9]|80)_/) }).to eq(20)
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag08[1-9]_|\Ag090_/) }).to eq(10)
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag09[1-9]_|\Ag100_/) }).to eq(10)
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag10[1-9]_|\Ag110_/) }).to eq(10)
       expect(cases.count { |case_data| case_data["category"] == "ocr_anomaly" }).to be >= 20
       expect(cases.count { |case_data| case_data["category"] == "non_receipt" }).to eq(10)
       expect(cases.count { |case_data| case_data["category"] == "conflict" }).to eq(10)
+      expect(cases.count { |case_data| case_data.dig("expected", "amount_basis") == "mixed" }).to be >= 8
     end
   end
 
@@ -76,6 +78,23 @@ RSpec.describe GeneratedReceipts::Validator do
 
     expect(result.errors).to include("expected.tax_details[0].gross: must equal net + tax")
       .or include("expected.tax_details[0].tax: must equal 24 for gross basis")
+  end
+
+  it "validates mixed price basis lines within the same tax rate" do
+    data = load_case("g101_mixed_price_basis_convenience_standard")
+
+    result = described_class.call(data)
+
+    expect(result.errors).to eq([])
+  end
+
+  it "requires explicit tax inclusion for mixed price basis items" do
+    data = deep_dup(load_case("g101_mixed_price_basis_convenience_standard"))
+    data["expected"]["items"][0].delete("tax_inclusion")
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include("expected.items[0].tax_inclusion: is required when expected.amount_basis is mixed")
   end
 
   it "validates payment adjustments against payment_sum" do

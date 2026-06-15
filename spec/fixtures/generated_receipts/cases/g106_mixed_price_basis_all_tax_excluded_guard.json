@@ -1,0 +1,61 @@
+{
+  "case_id": "g106_mixed_price_basis_all_tax_excluded_guard",
+  "category": "tax_rounding",
+  "intent": "All tax-excluded prices should be converted to gross totals when printed tax details support it.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルミックス 税抜守り店",
+    "store_address": "サンプル県サンプル市税抜町6-6",
+    "purchased_at": "2026-04-06T13:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_excluded",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル税抜軽減A", "unit_price": 100, "quantity": 1, "line_total": 100, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル税抜軽減B", "unit_price": 200, "quantity": 1, "line_total": 200, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル税抜標準C", "unit_price": 300, "quantity": 1, "line_total": 300, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" },
+      { "name": "サンプル税抜標準D", "unit_price": 400, "quantity": 1, "line_total": 400, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.08, "net": 300, "tax": 24, "gross": 324, "basis": "net", "label": "8%対象額" },
+      { "rate": 0.1, "net": 700, "tax": 70, "gross": 770, "basis": "net", "label": "10%対象額" }
+    ],
+    "subtotal": 1000,
+    "tax": 94,
+    "total": 1094,
+    "payments": [
+      { "method": "cash", "label": "現金", "amount": 1094 }
+    ],
+    "payment_sum": 1094,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプルミックス 税抜守り店",
+      "サンプル県サンプル市税抜町6-6",
+      "2026年04月06日(月) 13:00",
+      "領収書",
+      "*サンプル税抜軽減A          *100",
+      "*サンプル税抜軽減B          *200",
+      "サンプル税抜標準C            300",
+      "サンプル税抜標準D            400",
+      "小計（税抜 8%）             ¥300",
+      "消費税等（ 8%）              ¥24",
+      "小計（税抜10%）             ¥700",
+      "消費税等（10%）              ¥70",
+      "合計                       ¥1,094",
+      "現金                       ¥1,094"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": true }
+}

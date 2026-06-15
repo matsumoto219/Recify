@@ -1,0 +1,62 @@
+{
+  "case_id": "g105_mixed_price_basis_all_tax_included_guard",
+  "category": "tax_rounding",
+  "intent": "All tax-included prices must not be converted again as tax-excluded prices.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルミックス 税込守り店",
+    "store_address": "サンプル県サンプル市税込町5-5",
+    "purchased_at": "2026-04-05T12:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル税込軽減A", "unit_price": 108, "quantity": 1, "line_total": 108, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル税込軽減B", "unit_price": 216, "quantity": 1, "line_total": 216, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル税込標準C", "unit_price": 550, "quantity": 1, "line_total": 550, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル税込標準D", "unit_price": 110, "quantity": 1, "line_total": 110, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "gross" }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.08, "net": 300, "tax": 24, "gross": 324, "basis": "gross", "label": "8%対象計" },
+      { "rate": 0.1, "net": 600, "tax": 60, "gross": 660, "basis": "gross", "label": "10%対象計" }
+    ],
+    "subtotal": 900,
+    "tax": 84,
+    "total": 984,
+    "payments": [
+      { "method": "credit_card", "label": "クレジット", "amount": 984 }
+    ],
+    "payment_sum": 984,
+    "payment_method": "credit_card",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプルミックス 税込守り店",
+      "サンプル県サンプル市税込町5-5",
+      "2026年04月05日(日) 12:00",
+      "領収書",
+      "*サンプル税込軽減A          *108込",
+      "*サンプル税込軽減B          *216込",
+      "サンプル税込標準C            550込",
+      "サンプル税込標準D            110込",
+      "小計                       ¥984",
+      "合計                       ¥984",
+      "8%対象計                   ¥324",
+      "(内税額                    ¥24)",
+      "10%対象計                  ¥660",
+      "(内税額                    ¥60)",
+      "クレジット                  ¥984"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": { "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"], "allow_review_reasons": [], "allow_item_name_minor_diff": true }
+}
