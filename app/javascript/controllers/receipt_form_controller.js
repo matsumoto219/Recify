@@ -1,5 +1,9 @@
 import { Controller } from '@hotwired/stimulus'
 
+const DEFAULT_AMOUNT_MAX = 999999999
+const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
+const CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS = 150
+
 export default class extends Controller {
   static targets = [
     'template',
@@ -72,17 +76,17 @@ export default class extends Controller {
     decimalQuantityUnits: { type: String, default: 'kg,g,mg,L,ml,cc' },
     integerQuantityStep: { type: String, default: '1' },
     decimalQuantityStep: { type: String, default: '0.001' },
-    receiptTotalAmountMax: { type: Number, default: 999999999 },
-    receiptItemPriceMax: { type: Number, default: 999999999 },
-    receiptItemLineTotalMax: { type: Number, default: 999999999 },
-    receiptTaxAmountMax: { type: Number, default: 999999999 },
-    receiptAdjustmentAmountMax: { type: Number, default: 999999999 },
-    receiptPaymentAmountMax: { type: Number, default: 999999999 }
+    receiptTotalAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    receiptItemPriceMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    receiptItemLineTotalMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    receiptTaxAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    receiptAdjustmentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    receiptPaymentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX }
   }
 
   connect () {
-    this.lineTotalTooltipDelay = 500
-    this.continuousAmountUpdateThreshold = 150
+    this.lineTotalTooltipDelay = LINE_TOTAL_TOOLTIP_DELAY_MS
+    this.continuousAmountUpdateThreshold = CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     this.syncItemDetailsPanels()
