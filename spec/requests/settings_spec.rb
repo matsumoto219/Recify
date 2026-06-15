@@ -503,6 +503,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.security.email.submit'))
         expect(response.body).to include(I18n.t('settings.security.password.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.two_factor.title'))
+        expect(response.body).to include('認証アプリ (TOTP)')
+        expect(response.body).not_to include('2要素認証 (2FA)')
         expect(response.body).to include(I18n.t('settings.security.auth.passkey.title'))
         expect(update_context_values).to include('email', 'security')
         expect(email_change_control_row['class']).to include('space-y-6')

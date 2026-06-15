@@ -149,8 +149,8 @@ ja:
           copied: コピーしました。
           failed: コピーできませんでした。
         two_factor:
-          title: 2要素認証 (2FA)
-          subtitle: 2要素認証で、アカウントのセキュリティを強化できます。
+          title: 認証アプリ (TOTP)
+          subtitle: 認証アプリの確認コードで、ログイン時の追加認証を行います。
           action: 有効化する
           empty: 認証アプリはまだ設定されていません。
           enabled_at: "有効化: %{datetime}"
