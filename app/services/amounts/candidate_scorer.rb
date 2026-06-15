@@ -50,6 +50,7 @@ module Amounts
 
     def amount_delta(computed_value, receipt_key, candidate:)
       return 0 if stale_receipt_amounts_ignored?(candidate)
+      return 0 if inconsistent_subtotal_or_tax_ignored?(receipt_key, candidate)
 
       printed = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, receipt_key))
       return 0 if printed.nil?
@@ -249,6 +250,19 @@ module Amounts
       total = receipt_amount(:total_amount)
 
       !subtotal.nil? && !tax.nil? && !total.nil? && subtotal + tax == total
+    end
+
+    def inconsistent_subtotal_or_tax_ignored?(receipt_key, candidate)
+      return false unless context == :analysis
+      return false unless %i[subtotal_amount tax_amount].include?(receipt_key)
+
+      subtotal = receipt_amount(:subtotal_amount)
+      tax = receipt_amount(:tax_amount)
+      total = receipt_amount(:total_amount)
+      return false if subtotal.nil? || tax.nil? || total.nil?
+      return false unless candidate.purchase_total.to_i == total
+
+      subtotal + tax != total
     end
 
     def receipt_amount(key)

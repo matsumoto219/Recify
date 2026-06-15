@@ -575,6 +575,7 @@ module Amounts
       mixed_basis_used = false
       evidence = final_detected_tax_details.map { |detail| detail[:evidence] }
       profile_assignments = []
+      purchase_adjustment_groups = purchase_adjustment_groups_by_rate(rounding_mode)
 
       indexed_items_by_rate.each do |rate, indexed_items|
         if rate.zero?
@@ -592,6 +593,7 @@ module Amounts
         end
 
         target = targets[rate]
+        adjustment_group = purchase_adjustment_groups[rate]
         unless target
           exact = false
           warnings << :item_tax_rate_group_uncertain
@@ -599,7 +601,8 @@ module Amounts
           next
         end
 
-        assignment = item_level_assignment_for(indexed_items, target, rate, rounding_mode)
+        assignment_target = target_before_purchase_adjustments(target, adjustment_group)
+        assignment = item_level_assignment_for(indexed_items, assignment_target, rate, rounding_mode)
         unless assignment[:status] == :exact
           exact = false
           warnings << :price_tax_inclusion_uncertain
@@ -610,9 +613,9 @@ module Amounts
 
         groups[rate] = {
           rate: rate,
-          gross: assignment[:gross],
-          net: assignment[:net],
-          tax: assignment[:tax]
+          gross: target[:gross],
+          net: target[:net],
+          tax: target[:tax]
         }
         assignment[:assignments].each do |entry|
           computed_items[entry[:index]] = item_with_line_total(
@@ -638,7 +641,8 @@ module Amounts
         groups[rate] = target.slice(:rate, :gross, :net, :tax)
       end
 
-      purchase_total = groups.values.sum { |group| group[:gross] } + purchase_adjustment_total
+      purchase_total = groups.values.sum { |group| group[:gross] } +
+        unapplied_purchase_adjustment_total(purchase_adjustment_groups, groups.keys)
       tax = groups.values.sum { |group| group[:tax] }
       warnings << :price_tax_inclusion_uncertain if mixed_basis_used && !receipt_amounts_match_candidate?(purchase_total, tax)
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
@@ -665,6 +669,40 @@ module Amounts
         calculation_profile: mixed_calculation_profile(profile_assignments),
         source: :amount_engine
       )
+    end
+
+    def purchase_adjustment_groups_by_rate(rounding_mode)
+      classified_adjustments.each_with_object({}) do |entry, groups|
+        classification = entry[:classification]
+        next if classification[:effect] == :payment_adjustment
+
+        rate = classification[:tax_rate]
+        signed_amount = classification[:signed_amount].to_i
+        next if signed_amount.zero?
+
+        tax = rate.positive? ? signed_tax_from_gross(signed_amount, rate, rounding_mode) : 0
+        groups[rate] ||= { rate: rate, gross: 0, net: 0, tax: 0 }
+        groups[rate][:gross] += signed_amount
+        groups[rate][:net] += signed_amount - tax
+        groups[rate][:tax] += tax
+      end
+    end
+
+    def target_before_purchase_adjustments(target, adjustment_group)
+      return target unless adjustment_group
+
+      {
+        rate: target[:rate],
+        gross: target[:gross] - adjustment_group[:gross],
+        net: target[:net] - adjustment_group[:net],
+        tax: target[:tax] - adjustment_group[:tax]
+      }
+    end
+
+    def unapplied_purchase_adjustment_total(purchase_adjustment_groups, applied_rates)
+      purchase_adjustment_groups.sum do |rate, group|
+        applied_rates.include?(rate) ? 0 : group[:gross]
+      end
     end
 
     def item_level_assignment_for(indexed_items, target, rate, rounding_mode)
@@ -1225,10 +1263,25 @@ module Amounts
     end
 
     def item_tax_rate(item)
-      rate = normalize_rate(indifferent_hash(item)[:tax_rate])
+      normalized = indifferent_hash(item)
+      return BigDecimal("0") if non_taxable_item_text?(normalized)
+
+      rate = normalize_rate(normalized[:tax_rate])
       return rate if rate.positive?
+      return BigDecimal("0") if value_present?(normalized[:tax_rate]) && rate.zero?
 
       fallback_tax_rate
+    end
+
+    def non_taxable_item_text?(item)
+      text = [
+        item[:raw_text],
+        item[:suggested_name],
+        item[:confirmed_name],
+        item[:name]
+      ].compact.join(" ").unicode_normalize(:nfkc)
+
+      text.match?(/非課税|非課稅|non.?tax|tax.?free/i)
     end
 
     def fallback_tax_rate

@@ -968,6 +968,7 @@ class ReceiptAnalysisPipeline
 
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
+      review_reasons = remove_resolved_store_name_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
       review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
@@ -1212,6 +1213,14 @@ class ReceiptAnalysisPipeline
       return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
 
       review_reasons - [ "store_name_uncertain" ]
+    end
+
+    def remove_resolved_store_name_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      return review_reasons unless review_reasons.include?("store_name_missing")
+      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+      return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
+
+      review_reasons - [ "store_name_missing" ]
     end
 
     def resolved_store_address_supported_by_ocr?(params, ocr_result)

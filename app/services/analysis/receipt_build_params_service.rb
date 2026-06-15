@@ -663,6 +663,7 @@ module Analysis
           )
           price = normalize_amount(normalized_item[:price]) || infer_unit_price(original_line_total:, line_total:, quantity:)
           tax_rate = normalize_rate(normalized_item[:tax_rate])
+          tax_rate = BigDecimal("0") if tax_rate.nil? && non_taxable_item_text?(raw_text, normalized_item)
           if negative_item_amount?(price:, original_line_total:, line_total:)
             amount = [ price, original_line_total, line_total ].compact.map(&:to_i).find(&:negative?)&.abs
             skipped_negative_items << {
@@ -762,11 +763,16 @@ module Analysis
             receipt_items: receipt_items
           )
 
+          adjustment_text = [ source_text, normalized[:label] ].compact.join(" ")
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
           sign_value = normalized[:sign].presence || normalized[:sign_hint]
           sign = ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind)
+          if cashless_reward_adjustment_text?(adjustment_text)
+            kind = "receipt_discount"
+            sign = "discount"
+          end
           if kind == "other"
-            inferred_kind = infer_ocr_adjustment_kind([ source_text, normalized[:label] ].compact.join(" "), sign)
+            inferred_kind = infer_ocr_adjustment_kind(adjustment_text, sign)
             if inferred_kind != "other"
               kind = inferred_kind
               sign = default_adjustment_sign(kind) if sign_value.blank?
@@ -779,13 +785,15 @@ module Analysis
             needs_review = true
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
+          tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]) ||
+            infer_tax_rate_from_text(adjustment_text)
 
           {
             kind: kind,
             label: label,
             amount: amount,
             sign: sign,
-            tax_rate: normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]),
+            tax_rate: tax_rate,
             source: source,
             source_text: source_text,
             source_line_index: source_line_index,
@@ -2528,6 +2536,7 @@ module Analysis
         text = source_text.to_s
         return "return_refund" if text.match?(/返品|返金|返却|refund|return/i)
         return "coupon" if text.match?(/クーポン|coupon/i)
+        return "receipt_discount" if cashless_reward_adjustment_text?(text)
         return "point_usage" if text.match?(/ポイント利用|point\s*use|points?\s*redeemed/i)
         return "receipt_discount" if text.match?(/値引|割引|ディスカウント|discount|off/i)
         return "late_night_charge" if text.match?(/深夜|late.?night|midnight|after.?hours/i)
@@ -2537,6 +2546,28 @@ module Analysis
         return "handling_fee" if text.match?(/手数料|handling|fee|charge/i) && sign == "surcharge"
 
         "other"
+      end
+
+      def cashless_reward_adjustment_text?(text)
+        text.to_s.match?(/キャッシュレス|cashless|payment\s*discount/i)
+      end
+
+      def infer_tax_rate_from_text(text)
+        match = text.to_s.unicode_normalize(:nfkc).match(/(?:税率|対象|税込|税抜|軽)?\s*(8|10)\s*%/)
+        return nil unless match
+
+        BigDecimal(match[1]) / 100
+      end
+
+      def non_taxable_item_text?(raw_text, item)
+        text = [
+          raw_text,
+          item[:suggested_name],
+          item[:confirmed_name],
+          item[:name]
+        ].compact.join(" ").unicode_normalize(:nfkc)
+
+        text.match?(/非課税|非課稅|non.?tax|tax.?free/i)
       end
 
       def normalize_non_negative_integer(value)
