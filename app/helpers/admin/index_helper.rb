@@ -55,6 +55,15 @@ module Admin
       }
     end
 
+    def admin_security_event_filter_options(values)
+      {
+        event_types: admin_value_options(values[:event_types]),
+        severities: admin_value_options(values[:severities]),
+        states: admin_localized_value_options(values[:states], "admin.security_events.states"),
+        limits: admin_limit_options("admin.security_events.index.filters.limit_unit")
+      }
+    end
+
     def admin_contact_request_filter_options(values)
       {
         statuses: admin_localized_value_options(values[:statuses], "admin.contact_requests.statuses"),

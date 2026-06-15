@@ -20,6 +20,27 @@ module Admin
       AuditLogsQuery.filter_options
     end
 
+    def security_events(**filters)
+      SecurityEventsQuery.call(**filters)
+    end
+
+    def security_event_filter_options
+      SecurityEventsQuery.filter_options
+    end
+
+    def security_event(id:)
+      SecurityEventsQuery.find(id: id)
+    end
+
+    def update_security_event_status(security_event:, status:, actor:, request:)
+      SecurityEventStatusUpdater.call(
+        security_event: security_event,
+        status: status,
+        actor: actor,
+        request: request
+      )
+    end
+
     def contact_requests(**filters)
       ContactRequestsQuery.call(**filters)
     end

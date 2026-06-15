@@ -1,0 +1,229 @@
+<% content_for :title, t("admin.security_events.index.title") %>
+
+<%
+  filters = @filters || {}
+  pagination = admin_index_pagination(@result, filters: filters)
+  filter_options = admin_security_event_filter_options(@filter_options || {})
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.security_events.index.title"),
+        subtitle: t("admin.security_events.index.description"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.index.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.security_events.index.filters.description") %></p>
+      </div>
+
+      <%= link_to t("admin.security_events.index.filters.reset"), admin_security_events_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= form_with url: admin_security_events_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :actor_user_id,
+            label: t("admin.security_events.index.filters.labels.actor_user_id"),
+            value: filters[:actor_user_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :event_type,
+            label: t("admin.security_events.index.filters.labels.event_type"),
+            options: [[ t("admin.security_events.index.filters.all"), "" ]] + filter_options[:event_types],
+            selected: filters[:event_type],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :severity,
+            label: t("admin.security_events.index.filters.labels.severity"),
+            options: [[ t("admin.security_events.index.filters.all"), "" ]] + filter_options[:severities],
+            selected: filters[:severity],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :state,
+            label: t("admin.security_events.index.filters.labels.state"),
+            options: [[ t("admin.security_events.index.filters.all"), "" ]] + filter_options[:states],
+            selected: filters[:state],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :ip_address,
+            label: t("admin.security_events.index.filters.labels.ip_address"),
+            value: filters[:ip_address],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :request_id,
+            label: t("admin.security_events.index.filters.labels.request_id"),
+            value: filters[:request_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :path,
+            label: t("admin.security_events.index.filters.labels.path"),
+            value: filters[:path],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :matched_rule,
+            label: t("admin.security_events.index.filters.labels.matched_rule"),
+            value: filters[:matched_rule],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_from,
+            id: :created_from,
+            type: "datetime-local",
+            label: t("admin.security_events.index.filters.labels.created_from"),
+            value: filters[:created_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_to,
+            id: :created_to,
+            type: "datetime-local",
+            label: t("admin.security_events.index.filters.labels.created_to"),
+            value: filters[:created_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.security_events.index.filters.labels.limit"),
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <div class="flex items-end gap-3 md:col-span-2">
+        <%= render "shared/ui/actions/button",
+              label: t("admin.security_events.index.filters.submit"),
+              type: "submit",
+              size: :compact,
+              icon: "filter_alt" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_security_events_path,
+              label: t("admin.security_events.index.filters.clear"),
+              variant: :secondary,
+              size: :compact,
+              icon: "restart_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.index.results.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.security_events.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
+      </div>
+
+      <%= render "admin/shared/index_pagination",
+            pagination: pagination,
+            path_method: :admin_security_events_path,
+            previous_label: t("admin.security_events.index.results.previous"),
+            next_label: t("admin.security_events.index.results.next") %>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :xxl do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.security_events.index.table.last_seen") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.index.table.severity") %></th>
+          <th class="px-3 py-2 font-semibold min-w-[16rem] max-w-xs"><%= t("admin.security_events.index.table.event_type") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.security_events.index.table.actor") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.security_events.index.table.ip") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.index.table.method") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.security_events.index.table.path") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.index.table.rule") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.index.table.count") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.index.table.state") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.security_events.index.table.detail") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @result.records.each do |record| %>
+          <tr class="border-b token-border-soft">
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:last_seen_at], format: :short) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:severity] %></td>
+            <td class="min-w-[16rem] max-w-xs break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]"><%= record[:event_type] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:actor_user_id].present? ? "##{record[:actor_user_id]}" : "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:ip_address].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:method].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= record[:path].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:matched_rule].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:count] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.security_events.states.#{record[:state]}") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.security_events.index.table.detail_link"), admin_security_event_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+          </tr>
+        <% end %>
+
+        <% if @result.records.empty? %>
+          <tr>
+            <td colspan="11" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.security_events.index.results.empty") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
+</section>

@@ -271,7 +271,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('Cleanup / retention')
         expect(response.body).to include('監査ログ')
         expect(response.body).to include('問い合わせ')
-        expect(response.body).to include('セキュリティ / 再認証')
+        expect(response.body).to include('セキュリティ')
+        expect(response.body).to include('セキュリティイベント')
+        expect(response.body).to include('未対応イベント')
+        expect(response.body).to include('high / critical')
         expect(response.body).to include('外部サービス状態')
         expect(response.body).to include('OCRサービス')
         expect(response.body).to include('AIサービス')
@@ -295,10 +298,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(document.at_css('[data-controller="service-status-polling"].h-full')).to be_present
         expect(document.at_css('[data-service-status-polling-target="serviceStatusCard"].h-full')).to be_present
         expect(admin_navigation).to be_present
-        expect(admin_navigation_links.size).to eq(9)
+        expect(admin_navigation_links.size).to eq(10)
         expect(admin_navigation_links.all? { |link| link['aria-label'].present? }).to be(true)
         expect(admin_navigation_links.none? { |link| link['class'].include?('hover:underline') }).to be(true)
-        expect(admin_navigation_labels.size).to eq(9)
+        expect(admin_navigation_labels.size).to eq(10)
         expect(current_admin_navigation_link['href']).to eq(admin_root_path)
         expect(current_admin_navigation_link['class']).to include('admin-navigation-current')
         expect(current_admin_navigation_link['class']).to include('token-text-brand')

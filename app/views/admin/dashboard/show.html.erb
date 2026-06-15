@@ -182,13 +182,21 @@
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.security.title") %></h2>
           <p class="text-sm token-text-muted"><%= t("admin.dashboard.security.description") %></p>
         </div>
-        <%= link_to t("admin.dashboard.security.link"), new_admin_passkey_reauthentication_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+        <%= link_to t("admin.dashboard.security.link"), admin_security_events_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.admin_passkeys") %></dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:admin_passkey_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.open_security_events") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:open_security_events_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.high_security_events") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:high_security_events_count] %></dd>
         </div>
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.reauthentication_status") %></dt>

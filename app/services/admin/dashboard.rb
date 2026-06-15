@@ -100,7 +100,10 @@ module Admin
 
     def security_summary
       {
-        admin_passkey_count: admin_user.passkeys.count
+        admin_passkey_count: admin_user.passkeys.count,
+        open_security_events_count: SecurityEvent.unresolved.count,
+        high_security_events_count: SecurityEvent.unresolved.where(severity: %w[high critical]).count,
+        recent_security_events_count: SecurityEvent.where(last_seen_at: RECENT_WINDOW.ago..).count
       }
     end
 

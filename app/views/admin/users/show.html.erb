@@ -699,6 +699,49 @@
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.security_events.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.users.show.security_events.description") %></p>
+      </div>
+      <%= link_to t("admin.users.show.security_events.link"), admin_security_events_path(actor_user_id: record[:id]), class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <div class="max-w-full overflow-x-auto">
+      <table class="min-w-[64rem] text-left text-sm">
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.last_seen") %></th>
+            <th class="min-w-[7rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.severity") %></th>
+            <th class="min-w-[16rem] px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.event_type") %></th>
+            <th class="min-w-[14rem] px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.path") %></th>
+            <th class="min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.count") %></th>
+            <th class="min-w-[7rem] whitespace-nowrap px-3 py-2 font-semibold"><%= t("admin.users.show.security_events.detail") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @security_events_result.records.each do |security_record| %>
+            <tr class="border-b token-border-soft">
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(security_record[:last_seen_at]) %></td>
+              <td class="min-w-[7rem] whitespace-nowrap px-3 py-3"><%= security_record[:severity] %></td>
+              <td class="min-w-[16rem] break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]"><%= security_record[:event_type] %></td>
+              <td class="min-w-[14rem] break-words px-3 py-3 [overflow-wrap:anywhere]"><%= security_record[:path].presence || "-" %></td>
+              <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= security_record[:count] %></td>
+              <td class="min-w-[7rem] whitespace-nowrap px-3 py-3"><%= link_to t("admin.users.show.security_events.detail_link"), admin_security_event_path(security_record[:id]), class: "token-text-brand hover:underline" %></td>
+            </tr>
+          <% end %>
+
+          <% if @security_events_result.records.empty? %>
+            <tr>
+              <td colspan="6" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.users.show.security_events.empty") %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.audit_logs.title") %></h2>
         <p class="text-sm token-text-muted"><%= t("admin.users.show.audit_logs.description") %></p>
       </div>

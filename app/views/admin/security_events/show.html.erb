@@ -1,0 +1,139 @@
+<% content_for :title, t("admin.security_events.show.title") %>
+
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.security_events.show.title"),
+        subtitle: "##{@record[:id]}",
+        breadcrumb_label: t("admin.security_events.index.title"),
+        breadcrumb_path: admin_security_events_path,
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.event") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.id") %></dt>
+            <dd class="font-mono token-text-base">#<%= @record[:id] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.event_type") %></dt>
+            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:event_type] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.severity") %></dt>
+            <dd class="token-text-base"><%= @record[:severity] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.state") %></dt>
+            <dd class="token-text-base"><%= t("admin.security_events.states.#{@record[:state]}") %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.count") %></dt>
+            <dd class="font-mono token-text-base"><%= @record[:count] %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.request") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.actor_user_id") %></dt>
+            <dd class="font-mono token-text-base"><%= @record[:actor_user_id].present? ? "##{@record[:actor_user_id]}" : "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.ip_address") %></dt>
+            <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.request_id") %></dt>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/actions/copyable_value",
+                    value: @record[:request_id].presence || "-",
+                    label: t("admin.security_events.show.labels.request_id"),
+                    value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.user_agent") %></dt>
+            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:user_agent].presence || "-" %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.route") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.method") %></dt>
+            <dd class="font-mono token-text-base"><%= @record[:method].presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.path") %></dt>
+            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:path].presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.field_name") %></dt>
+            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:field_name].presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.matched_rule") %></dt>
+            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:matched_rule].presence || "-" %></dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+
+    <div class="mt-6 border-t token-border-soft pt-4">
+      <h2 class="text-sm font-semibold token-text-muted"><%= t("admin.security_events.show.labels.payload_excerpt") %></h2>
+      <pre class="mt-2 max-w-full whitespace-pre-wrap break-words rounded-lg border token-border-soft token-bg-input p-4 text-xs token-text-base [overflow-wrap:anywhere]"><%= @record[:payload_excerpt].presence || "-" %></pre>
+    </div>
+
+    <div class="mt-6 flex flex-wrap gap-3">
+      <%= button_to t("admin.security_events.show.actions.resolve"),
+            resolve_admin_security_event_path(@record[:id]),
+            method: :patch,
+            class: "btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
+      <%= button_to t("admin.security_events.show.actions.ignore"),
+            ignore_admin_security_event_path(@record[:id]),
+            method: :patch,
+            class: "btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
+    </div>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.timeline") %></h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.first_seen_at") %></dt>
+          <dd class="token-text-base"><%= l(@record[:first_seen_at], format: :short) %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.last_seen_at") %></dt>
+          <dd class="token-text-base"><%= l(@record[:last_seen_at], format: :short) %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.resolved_at") %></dt>
+          <dd class="token-text-base"><%= @record[:resolved_at].present? ? l(@record[:resolved_at], format: :short) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.ignored_at") %></dt>
+          <dd class="token-text-base"><%= @record[:ignored_at].present? ? l(@record[:ignored_at], format: :short) : "-" %></dd>
+        </div>
+      </dl>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.metadata") %></h2>
+      <div class="<%= admin_json_container_classes %>">
+        <pre class="<%= admin_json_pre_classes %>"><%= admin_pretty_json(@record[:metadata]) %></pre>
+      </div>
+    <% end %>
+  </div>
+</section>

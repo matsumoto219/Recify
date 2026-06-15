@@ -14,6 +14,10 @@ Rails.application.routes.draw do
           to: "system_settings#update",
           constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
+    resources :security_events, only: %i[index show] do
+      patch :resolve, on: :member
+      patch :ignore, on: :member
+    end
     resources :contact_requests, only: %i[index show update]
     resources :users, only: %i[index show] do
       post "operations/lock", to: "user_operations#lock", as: :lock_operation, on: :member
