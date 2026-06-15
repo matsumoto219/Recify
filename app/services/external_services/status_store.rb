@@ -65,6 +65,7 @@ module ExternalServices
 
         if data["state"] == "down"
           data["consecutive_failures"] = DOWN_THRESHOLD
+          record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
           return write(service, data)
         end
 
@@ -81,6 +82,7 @@ module ExternalServices
           data["next_check_at"] = next_check_at_for(0, now).iso8601
         end
 
+        record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
         write(service, data)
       end
 
@@ -100,6 +102,7 @@ module ExternalServices
         data["monitoring"] = true
         data["next_check_at"] = next_check_at_for(monitor_recovery_attempt_for(data), now).iso8601
 
+        record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
         write(service, data)
       end
 
@@ -228,6 +231,15 @@ module ExternalServices
 
       def safe_reason(value)
         value.to_s.presence&.truncate(100)
+      end
+
+      def record_security_event(service:, error_code:, detail:, consecutive_failures:)
+        SecurityEvents.record_external_service_failure!(
+          service: service,
+          error_code: error_code,
+          detail: detail,
+          consecutive_failures: consecutive_failures
+        )
       end
 
       def reset_failure_window!(data, now)

@@ -35,7 +35,10 @@ class ApplicationController < ActionController::Base
 
   before_action :enforce_user_session_version!, unless: :skip_user_session_version_enforcement?
   before_action :enforce_maintenance_existing_session!
+  before_action :record_security_event_request_detections
   before_action :prepare_notifications_dropdown, if: :prepare_notifications_dropdown?
+
+  rescue_from ActionController::InvalidAuthenticityToken, with: :record_csrf_failure_and_raise
 
   class << self
     def rate_limit_cache_store=(store)
@@ -206,6 +209,15 @@ class ApplicationController < ActionController::Base
   end
 
   def rate_limit_exceeded
+    SecurityEvents.record_rate_limit!(
+      request: request,
+      matched_rule: "rails_rate_limit",
+      metadata: {
+        controller: params[:controller],
+        action: params[:action]
+      }
+    )
+
     message = t("flash.rate_limit.too_many_requests")
 
     respond_to do |format|
@@ -236,6 +248,30 @@ class ApplicationController < ActionController::Base
     return if guest_fake_email?(email)
 
     email
+  end
+
+  def record_security_event_request_detections
+    SecurityEvents.record_request_detections!(
+      request: request,
+      actor_user: current_user,
+      params: security_event_detection_params
+    )
+  end
+
+  def security_event_detection_params
+    params.except(
+      :controller,
+      :action,
+      :authenticity_token,
+      :commit,
+      "cf-turnstile-response",
+      "g-recaptcha-response"
+    )
+  end
+
+  def record_csrf_failure_and_raise(exception)
+    SecurityEvents.record_csrf_failure!(request: request, actor_user: current_user)
+    raise exception
   end
 
   def guest_fake_email?(email)

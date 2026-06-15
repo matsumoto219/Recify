@@ -180,6 +180,12 @@ class Rack::Attack
 
   self.throttled_responder = lambda do |request|
     retry_after = Rack::Attack.retry_after_for(request)
+    SecurityEvents.record_rate_limit!(
+      request: request,
+      matched_rule: request.env["rack.attack.matched"],
+      retry_after: retry_after,
+      metadata: request.env.fetch("rack.attack.match_data", {})
+    )
     response_headers = { "Retry-After" => retry_after.to_s }
     response_headers["Turbo-Visit-Control"] = "reload" unless Rack::Attack.json_request?(request)
 
@@ -193,6 +199,10 @@ class Rack::Attack
   end
 
   self.blocklisted_responder = lambda do |request|
+    SecurityEvents.record_rate_limit!(
+      request: request,
+      matched_rule: request.env["rack.attack.matched"].presence || "rack_attack_blocklist"
+    )
     response_headers = {}
     response_headers["Turbo-Visit-Control"] = "reload" unless Rack::Attack.json_request?(request)
 

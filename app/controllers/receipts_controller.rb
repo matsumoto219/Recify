@@ -100,6 +100,7 @@ class ReceiptsController < ApplicationController
 
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
     else
+      record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors)
       Rails.logger.warn(
         "[ReceiptUpload] failed user_id=#{current_user.id} errors=#{@receipt.errors.full_messages.join(', ')}"
       )
@@ -262,6 +263,7 @@ class ReceiptsController < ApplicationController
       purge_receipt_image_if_requested!
       redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
     else
+      record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors) if uploaded_receipt_image.present?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
@@ -409,6 +411,7 @@ class ReceiptsController < ApplicationController
 
       redirect_to receipts_path, **temporary_notice_options(notice_message)
     else
+      record_invalid_batch_upload_security_events(uploaded_receipt_images, result.errors)
       Rails.logger.warn(
         "[ReceiptBatchUpload] failed user_id=#{current_user.id} errors=#{result.errors.join(', ')}"
       )
@@ -424,6 +427,48 @@ class ReceiptsController < ApplicationController
   def storage_quota_exceeded_for?(uploaded_file, excluding_blob: nil)
     uploaded_file.present? &&
       !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+  end
+
+  def record_invalid_receipt_upload_security_event(file, errors)
+    return unless file.present?
+    return unless receipt_image_security_event_reason(errors)
+
+    SecurityEvents.record_invalid_upload!(
+      request: request,
+      actor_user: current_user,
+      file: file,
+      reason: receipt_image_security_event_reason(errors)
+    )
+  end
+
+  def record_invalid_batch_upload_security_events(files, errors)
+    reason = batch_upload_security_event_reason(errors)
+    return if reason.blank?
+
+    files.first(5).each do |file|
+      SecurityEvents.record_invalid_upload!(
+        request: request,
+        actor_user: current_user,
+        file: file,
+        reason: reason,
+        metadata: { batch_upload: true }
+      )
+    end
+  end
+
+  def receipt_image_security_event_reason(errors)
+    return "invalid_content_type" if errors.of_kind?(:image, :invalid_content_type)
+    return "file_too_large" if errors.of_kind?(:image, :file_too_large)
+    return "image_too_small" if errors.of_kind?(:image, :image_too_small)
+    return "image_too_large" if errors.of_kind?(:image, :image_too_large)
+  end
+
+  def batch_upload_security_event_reason(errors)
+    messages = Array(errors).join(" ")
+    return "invalid_content_type" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.invalid_content_type"))
+    return "file_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.file_too_large"))
+    return "image_too_small" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_small"))
+    return "image_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_large"))
   end
 
   def consume_single_upload_limit!

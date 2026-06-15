@@ -61,6 +61,12 @@ class ErrorsController < ApplicationController
   end
 
   def log_error_page(status:, level:)
+    SecurityEvents.record_suspicious_error!(
+      request: request,
+      actor_user: current_user,
+      status: status
+    )
+
     exception = request.env["action_dispatch.exception"]
     fields = {
       status: status,

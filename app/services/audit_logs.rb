@@ -171,7 +171,7 @@ module AuditLogs
     private
 
     def record!(actor_user:, actor_kind:, action:, target:, target_uid:, reason:, outcome:, error_code:, metadata:, before_state:, after_state:, request:)
-      AuditLog.create!(
+      audit_log = AuditLog.create!(
         actor_user: actor_user,
         actor_kind: actor_kind,
         action: action,
@@ -188,6 +188,8 @@ module AuditLogs
         ip_address: request&.remote_ip,
         user_agent: request&.user_agent
       )
+      SecurityEvents.record_admin_audit_burst!(audit_log)
+      audit_log
     end
 
     def target_type(target)
