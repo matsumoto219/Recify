@@ -58,6 +58,7 @@ class ReceiptAnalysisPipeline
 
       ocr_result = ocr_step_result.ocr_result
       log_ocr_result(ocr_result)
+      record_ocr_text_security_events(ocr_result)
 
       decision = ocr_finalize_decision(ocr_result)
       decision ||= ai_gate_finalize_decision(ocr_result)
@@ -198,6 +199,49 @@ class ReceiptAnalysisPipeline
     Rails.logger.info(
       "[ReceiptAnalysis] ai_result receipt_id=#{receipt.id} success=#{ai_result[:success]} error_code=#{ai_result[:error_code]}"
     )
+  end
+
+  def record_ocr_text_security_events(ocr_result)
+    return unless ocr_result[:success]
+
+    SecurityEvents.detect(params: ocr_security_event_scan_params(ocr_result), max_detections: 3).each do |detection|
+      SecurityEvents.record!(
+        event_type: detection.event_type,
+        severity: detection.severity,
+        actor_user: receipt.user,
+        path: "receipt_analysis_run:#{run.run_key}",
+        method: "JOB",
+        field_name: detection.field_name,
+        matched_rule: detection.matched_rule,
+        payload_excerpt: detection.payload_excerpt,
+        metadata: {
+          source: "ocr_result",
+          run_key: run.run_key,
+          receipt_public_id: receipt.public_id
+        }
+      )
+    end
+  rescue StandardError => e
+    Rails.logger.warn("[SecurityEvents] ocr_text_detection_failed class=#{e.class.name}")
+  end
+
+  def ocr_security_event_scan_params(ocr_result)
+    {
+      ocr_text: ocr_security_excerpt(ocr_result[:raw_text]),
+      ocr_lines: Array(ocr_result[:lines]).first(5).map { |line| ocr_security_excerpt(line) },
+      ocr_items: Array(ocr_result.dig(:candidates, :items)).first(10).filter_map do |item|
+        next unless item.respond_to?(:[])
+
+        ocr_security_excerpt(item[:raw_text] || item["raw_text"])
+      end
+    }.compact
+  end
+
+  def ocr_security_excerpt(value)
+    text = value.to_s
+    return if text.blank?
+
+    text.byteslice(0, 300).scrub
   end
 
   def ocr_finalize_decision(ocr_result)
