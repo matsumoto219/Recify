@@ -12,6 +12,10 @@ module SecurityEvents
       Recorder.call(...)
     end
 
+    def cleanup_retention(...)
+      RetentionCleanup.call(...)
+    end
+
     def record_request_detections!(request:, params:, actor_user: nil)
       detect(params: params).each do |detection|
         record!(
