@@ -37,6 +37,8 @@ RSpec.describe 'User recovery codes', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.title'))
         expect(response.body).to include(I18n.t('auth.two_factor.recovery_code.button'))
+        expect(response.body).to include('リカバリーコード')
+        expect(response.body).not_to include('回復コード')
         expect(code_input['placeholder']).to eq(I18n.t('auth.two_factor.recovery_code.code_placeholder'))
         codes.each { |code| expect(response.body).not_to include(code) }
       end

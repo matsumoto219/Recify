@@ -578,6 +578,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.ok.title'))
         expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.ok.body', count: 10))
+        expect(response.body).to include('リカバリーコード')
+        expect(response.body).not_to include('回復コード')
         expect(response.body).to include(settings_security_recovery_codes_regenerate_path)
         codes.each { |code| expect(response.body).not_to include(code) }
         expect(response.body).not_to include(user.recovery_codes.first.code_digest)

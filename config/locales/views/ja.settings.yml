@@ -156,10 +156,10 @@ ja:
           enabled_at: "有効化: %{datetime}"
           last_used_at: "最終使用: %{datetime}"
           unused: 未使用
-          recovery_codes_remaining: "未使用の回復コード: %{count}件"
-          regenerate_recovery_codes: 回復コードを再生成
+          recovery_codes_remaining: "未使用のリカバリーコード: %{count}件"
+          regenerate_recovery_codes: リカバリーコードを再生成
           disable: 無効化する
-          disable_confirm: 認証アプリと回復コードを無効化しますか？
+          disable_confirm: 認証アプリとリカバリーコードを無効化しますか？
           setup:
             title: 認証アプリを設定
             subtitle: 認証アプリでQRコードを読み取り、表示された6桁のコードを入力してください。
@@ -178,27 +178,27 @@ ja:
             setup_expired: 認証アプリ設定の有効期限が切れました。もう一度お試しください。
             setup_failed: 確認コードが一致しませんでした。もう一度入力してください。
             not_enabled: 認証アプリを先に有効化してください。
-            disabled: 認証アプリと回復コードを無効化しました。
+            disabled: 認証アプリとリカバリーコードを無効化しました。
         recovery_codes:
-          title: 回復コード
+          title: リカバリーコード
           subtitle: 認証アプリが使えない時のために、コードは安全な場所に保管してください。
           notice_title: この画面でのみ表示されます
-          notice_body: 回復コードはあとから再表示できません。保存後は安全な場所に保管してください。
+          notice_body: リカバリーコードはあとから再表示できません。保存後は安全な場所に保管してください。
           done: 保存しました
-          regenerate_confirm: 現在の回復コードを無効にして、新しいコードを発行しますか？
+          regenerate_confirm: 現在のリカバリーコードを無効にして、新しいコードを発行しますか？
           status:
             ok:
-              title: 回復コードは利用できます
-              body: "未使用の回復コードは%{count}件あります。"
+              title: リカバリーコードは利用できます
+              body: "未使用のリカバリーコードは%{count}件あります。"
             low:
-              title: 回復コードが少なくなっています
-              body: "未使用の回復コードは残り%{count}件です。再生成することをお勧めします。"
+              title: リカバリーコードが少なくなっています
+              body: "未使用のリカバリーコードは残り%{count}件です。再生成することをお勧めします。"
             empty:
-              title: 回復コードがありません
-              body: 回復コードを再生成してください。
+              title: リカバリーコードがありません
+              body: リカバリーコードを再生成してください。
             missing:
-              title: 回復コードを発行してください
-              body: 回復コードがまだ発行されていません。認証アプリが使えない時に備えて発行してください。
+              title: リカバリーコードを発行してください
+              body: リカバリーコードがまだ発行されていません。認証アプリが使えない時に備えて発行してください。
         passkey:
           title: パスキー
           subtitle: パスワードマネージャーや対応端末を使って、安全にログインできます。

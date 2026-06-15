@@ -71,7 +71,7 @@ RSpec.describe 'Contact requests', type: :request do
         expect(safety_text).to include('個人情報')
         expect(safety_text).to include('パスワード')
         expect(safety_text).to include('認証コード')
-        expect(safety_text).to include('復旧用コード')
+        expect(safety_text).to include('リカバリーコード')
         expect(safety_text).to include('クレジットカード番号')
         expect(safety_text).to include('レシート内容など個人情報を含む場合は、必要な範囲に絞って記載してください。')
         expect(safety_text).not_to include('recovery code', 'TOTP secret', 'cookie', 'session')

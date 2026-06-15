@@ -41,7 +41,7 @@ ja:
         heading: 他の方法で認証できます
         passkey: パスキーで認証
         totp: 認証アプリのコードを使う
-        recovery_code: 回復コードを使う
+        recovery_code: リカバリーコードを使う
       passkey:
         title: 追加認証
         subtitle: パスキーでログインを完了してください
@@ -70,17 +70,17 @@ ja:
           failure: コードが一致しませんでした。もう一度入力してください。
       recovery_code:
         title: 追加認証
-        subtitle: 保存した回復コードでログインを完了してください
-        card_title: 回復コード追加認証
-        description: 認証アプリを使えない場合は、保存済みの回復コードを入力してください。
-        code_label: 回復コード
+        subtitle: 保存したリカバリーコードでログインを完了してください
+        card_title: リカバリーコード追加認証
+        description: 保存済みのリカバリーコードを入力してください。
+        code_label: リカバリーコード
         code_placeholder: "ABCD-EFGH-IJKL-MNOP-QRST"
         button: 認証する
         submitting: 確認中...
         back_to_login: ログインに戻る
         messages:
           success: ログインしました。
-          failure: 回復コードが一致しませんでした。もう一度入力してください。
+          failure: リカバリーコードが一致しませんでした。もう一度入力してください。
     registrations:
       new:
         title: 新規登録
