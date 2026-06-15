@@ -34,5 +34,5 @@ ja:
       title: 予期しないエラーが発生しました
       description: システムで問題が発生しました。時間を置いて再度お試しいただくか、レシート一覧へ戻ってください。
       secondary_cta: 再読み込み
-      support_message: 問い合わせ時はこのIDをお知らせください。
+      support_message: お問い合わせの際はこのIDをお知らせください。
       support_id_label: ID
