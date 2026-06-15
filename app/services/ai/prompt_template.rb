@@ -7,11 +7,12 @@ module Ai
     end
 
     def initialize(input)
-      @input = if input.respond_to?(:with_indifferent_access)
-        input.with_indifferent_access
-      else
-        {}.with_indifferent_access
-      end
+      @input =
+        if input.respond_to?(:with_indifferent_access)
+          input.with_indifferent_access
+        else
+          {}.with_indifferent_access
+        end
     end
 
     def build

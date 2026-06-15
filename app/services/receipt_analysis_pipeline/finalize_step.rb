@@ -699,11 +699,12 @@ class ReceiptAnalysisPipeline
     end
 
     def amount_review_reasons(amount_result)
-      amount_reasons = if amount_result.key?(:blocking_inconsistencies)
-        Array(amount_result[:blocking_inconsistencies])
-      else
-        Array(amount_result[:inconsistencies])
-      end
+      amount_reasons =
+        if amount_result.key?(:blocking_inconsistencies)
+          Array(amount_result[:blocking_inconsistencies])
+        else
+          Array(amount_result[:inconsistencies])
+        end
 
       (amount_reasons + Array(amount_result[:review_reasons])).uniq
     end
@@ -1757,13 +1758,14 @@ class ReceiptAnalysisPipeline
 
     def normalize_items_attributes(items)
       Array(items).filter_map.with_index do |item, index|
-        symbolized = if item.respond_to?(:with_indifferent_access)
-          item.with_indifferent_access
-        elsif item.respond_to?(:symbolize_keys)
-          item.symbolize_keys.with_indifferent_access
-        else
-          {}.with_indifferent_access
-        end
+        symbolized =
+          if item.respond_to?(:with_indifferent_access)
+            item.with_indifferent_access
+          elsif item.respond_to?(:symbolize_keys)
+            item.symbolize_keys.with_indifferent_access
+          else
+            {}.with_indifferent_access
+          end
 
         price = normalize_amount(symbolized[:price])
         original_line_total = normalize_amount(symbolized[:original_line_total])
@@ -1796,13 +1798,14 @@ class ReceiptAnalysisPipeline
 
     def normalize_adjustments_attributes(adjustments)
       Array(adjustments).filter_map.with_index do |adjustment, index|
-        symbolized = if adjustment.respond_to?(:with_indifferent_access)
-          adjustment.with_indifferent_access
-        elsif adjustment.respond_to?(:symbolize_keys)
-          adjustment.symbolize_keys.with_indifferent_access
-        else
-          {}.with_indifferent_access
-        end
+        symbolized =
+          if adjustment.respond_to?(:with_indifferent_access)
+            adjustment.with_indifferent_access
+          elsif adjustment.respond_to?(:symbolize_keys)
+            adjustment.symbolize_keys.with_indifferent_access
+          else
+            {}.with_indifferent_access
+          end
 
         amount = normalize_amount(symbolized[:amount])
         next unless amount&.positive?
@@ -1882,13 +1885,14 @@ class ReceiptAnalysisPipeline
       resolved_tax_rate = amount_result.dig(:resolved, :tax_rate)
 
       Array(items_attributes).map do |item_attributes|
-        normalized_item = if item_attributes.respond_to?(:with_indifferent_access)
-          item_attributes.with_indifferent_access
-        elsif item_attributes.respond_to?(:symbolize_keys)
-          item_attributes.symbolize_keys.with_indifferent_access
-        else
-          {}.with_indifferent_access
-        end
+        normalized_item =
+          if item_attributes.respond_to?(:with_indifferent_access)
+            item_attributes.with_indifferent_access
+          elsif item_attributes.respond_to?(:symbolize_keys)
+            item_attributes.symbolize_keys.with_indifferent_access
+          else
+            {}.with_indifferent_access
+          end
 
         # AIを使えないルートでは、複数税率の明細別割り当ては行わない。
         # 単一税率のみ、OCR値またはAmountService推定値を全明細へ反映する。

@@ -959,16 +959,17 @@ class Receipt < ApplicationRecord
   def broadcast_processing_flash
     return unless user&.push_notification_enabled?
 
-    flash_type, message = case status
-    when "completed"
-      [ :notice, I18n.t("flash.receipts.analysis_completed") ]
-    when "review_needed"
-      [ :caution, I18n.t("flash.receipts.analysis_review_needed") ]
-    when "failed"
-      [ :alert, processing_flash_message || I18n.t("flash.receipts.analysis_failed") ]
-    else
-      return
-    end
+    flash_type, message =
+      case status
+      when "completed"
+        [ :notice, I18n.t("flash.receipts.analysis_completed") ]
+      when "review_needed"
+        [ :caution, I18n.t("flash.receipts.analysis_review_needed") ]
+      when "failed"
+        [ :alert, processing_flash_message || I18n.t("flash.receipts.analysis_failed") ]
+      else
+        return
+      end
 
     broadcast_append_later_to(
       [ user, :receipts ],

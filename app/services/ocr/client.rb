@@ -336,24 +336,25 @@ module Ocr
       return if res.status.between?(200, 299)
 
       error_detail = provider_error_detail_for(res, phase:)
-      error_code = case res.status
-      when 401
-        "external_service_auth_error"
-      when 403
-        error_detail[:quota_exceeded] ? "external_service_quota_exceeded" : "external_service_auth_error"
-      when 404
-        "input_invalid"
-      when 408
-        "ocr_timeout"
-      when 415
-        "input_invalid"
-      when 429
-        "external_service_rate_limited"
-      when 500..599
-        "external_service_unavailable"
-      else
-        "ocr_api_error"
-      end
+      error_code =
+        case res.status
+        when 401
+          "external_service_auth_error"
+        when 403
+          error_detail[:quota_exceeded] ? "external_service_quota_exceeded" : "external_service_auth_error"
+        when 404
+          "input_invalid"
+        when 408
+          "ocr_timeout"
+        when 415
+          "input_invalid"
+        when 429
+          "external_service_rate_limited"
+        when 500..599
+          "external_service_unavailable"
+        else
+          "ocr_api_error"
+        end
 
       Rails.logger.error(
         "[OCR::Client] bad response status=#{res.status} error_code=#{error_code}"

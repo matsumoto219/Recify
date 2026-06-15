@@ -160,13 +160,14 @@ module Amounts
     end
 
     def normalize_tax_detail(value, index)
-      normalized = if value.respond_to?(:attributes)
-        value.attributes.symbolize_keys
-      elsif value.respond_to?(:to_h)
-        value.to_h.symbolize_keys
-      else
-        {}
-      end
+      normalized =
+        if value.respond_to?(:attributes)
+          value.attributes.symbolize_keys
+        elsif value.respond_to?(:to_h)
+          value.to_h.symbolize_keys
+        else
+          {}
+        end
 
       {
         index: index,

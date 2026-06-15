@@ -618,33 +618,35 @@ module Analysis
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
 
-        source_items = if candidate_items.present?
-          if normalized_ai_items.present?
-            merge_items(candidate_items, normalized_ai_items)
+        source_items =
+          if candidate_items.present?
+            if normalized_ai_items.present?
+              merge_items(candidate_items, normalized_ai_items)
+            else
+              candidate_items
+            end
           else
-            candidate_items
-          end
-        else
-          fallback_items = build_items_from_lines(lines)
+            fallback_items = build_items_from_lines(lines)
 
-          if normalized_ai_items.present?
-            merge_items(fallback_items, normalized_ai_items)
-          else
-            fallback_items
+            if normalized_ai_items.present?
+              merge_items(fallback_items, normalized_ai_items)
+            else
+              fallback_items
+            end
           end
-        end
         source_items = repair_amount_only_split_items(source_items, lines)
 
         ai_items_present = normalized_ai_items.present?
         # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit は編集/表示で利用する。
         source_items.each_with_index.filter_map do |item, index|
-          normalized_item = if item.respond_to?(:with_indifferent_access)
-            item.with_indifferent_access
-          elsif item.respond_to?(:deep_symbolize_keys)
-            item.deep_symbolize_keys.with_indifferent_access
-          else
-            {}.with_indifferent_access
-          end
+          normalized_item =
+            if item.respond_to?(:with_indifferent_access)
+              item.with_indifferent_access
+            elsif item.respond_to?(:deep_symbolize_keys)
+              item.deep_symbolize_keys.with_indifferent_access
+            else
+              {}.with_indifferent_access
+            end
 
           raw_text = normalized_item[:raw_text].to_s
           quantity = normalize_quantity(normalized_item[:quantity])
@@ -724,14 +726,15 @@ module Analysis
 
       def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [], skipped_negative_items = [], receipt_payments = [])
         source = Array(ai_adjustments).present? ? "ai" : "ocr"
-        adjustments = if source == "ai"
-          Array(ai_adjustments)
-        else
-          fallback_ocr_adjustments(
-            Array(ocr_adjustment_candidates) +
-              skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
-          )
-        end
+        adjustments =
+          if source == "ai"
+            Array(ai_adjustments)
+          else
+            fallback_ocr_adjustments(
+              Array(ocr_adjustment_candidates) +
+                skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
+            )
+          end
 
         Array(adjustments).filter_map.with_index do |adjustment, index|
           next unless adjustment.is_a?(Hash) || adjustment.respond_to?(:to_h)
@@ -1418,25 +1421,27 @@ module Analysis
       def select_fallback_payments(payments, receipt_total:)
         candidates = Array(payments)
         total = normalize_amount(receipt_total)&.to_i
-        exact_matches = if total&.positive?
-          candidates.select do |payment|
-            payment[:amount].to_i == total && reliable_total_match_payment_candidate?(payment)
+        exact_matches =
+          if total&.positive?
+            candidates.select do |payment|
+              payment[:amount].to_i == total && reliable_total_match_payment_candidate?(payment)
+            end
+          else
+            []
           end
-        else
-          []
-        end
 
-        selected = if exact_matches.present?
-          [ exact_matches.min_by { |payment| payment[:source_index].to_i } ]
-        elsif total&.positive? &&
-              candidates.sum { |payment| payment[:amount].to_i } == total &&
-              candidates.all? { |payment| reliable_total_match_payment_candidate?(payment) }
-          candidates
-        elsif total&.positive?
-          candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
-        else
-          candidates
-        end
+        selected =
+          if exact_matches.present?
+            [ exact_matches.min_by { |payment| payment[:source_index].to_i } ]
+          elsif total&.positive? &&
+                candidates.sum { |payment| payment[:amount].to_i } == total &&
+                candidates.all? { |payment| reliable_total_match_payment_candidate?(payment) }
+            candidates
+          elsif total&.positive?
+            candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
+          else
+            candidates
+          end
         selected.map { |payment| payment.except(:source_index, :transaction_context, :amount_source) }
       end
 

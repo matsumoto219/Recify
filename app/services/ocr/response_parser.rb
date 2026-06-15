@@ -875,13 +875,14 @@ class Ocr::ResponseParser
     return nil if sign_hint == "discount" && reason != "label_same_line_amount" && !neighbor_signed
     return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
 
-    confidence = if known_label
-      sign_hint.present? ? 0.86 : 0.78
-    elsif signed_same_line
-      0.78
-    else
-      0.55
-    end
+    confidence =
+      if known_label
+        sign_hint.present? ? 0.86 : 0.78
+      elsif signed_same_line
+        0.78
+      else
+        0.55
+      end
 
     build_adjustment_candidate(
       lines: lines,
@@ -1447,11 +1448,12 @@ class Ocr::ResponseParser
 
       discount_amount = discount_details_by_index.dig(index, :amount).to_i
       original_line_total = discount_details_by_index.dig(index, :original_line_total).presence || total_price
-      line_total = if discount_amount.positive?
-        [ normalize_amount_for_discount(original_line_total) - discount_amount, 0 ].max
-      else
-        original_line_total
-      end
+      line_total =
+        if discount_amount.positive?
+          [ normalize_amount_for_discount(original_line_total) - discount_amount, 0 ].max
+        else
+          original_line_total
+        end
 
       {
         raw_text: raw_text,

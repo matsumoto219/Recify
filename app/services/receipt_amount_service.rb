@@ -519,13 +519,14 @@ class ReceiptAmountService
   end
 
   def normalize_adjustment(adjustment)
-    normalized = if adjustment.respond_to?(:attributes)
-      adjustment.attributes.symbolize_keys
-    elsif adjustment.respond_to?(:to_h)
-      adjustment.to_h.symbolize_keys
-    else
-      {}
-    end
+    normalized =
+      if adjustment.respond_to?(:attributes)
+        adjustment.attributes.symbolize_keys
+      elsif adjustment.respond_to?(:to_h)
+        adjustment.to_h.symbolize_keys
+      else
+        {}
+      end
     kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
     sign = normalized[:sign].to_s
     amount = to_i_or_nil(normalized[:amount])
@@ -544,13 +545,14 @@ class ReceiptAmountService
   end
 
   def normalize_payment(payment)
-    normalized = if payment.respond_to?(:attributes)
-      payment.attributes.symbolize_keys
-    elsif payment.respond_to?(:to_h)
-      payment.to_h.symbolize_keys
-    else
-      {}
-    end
+    normalized =
+      if payment.respond_to?(:attributes)
+        payment.attributes.symbolize_keys
+      elsif payment.respond_to?(:to_h)
+        payment.to_h.symbolize_keys
+      else
+        {}
+      end
 
     {
       method: normalized[:method],

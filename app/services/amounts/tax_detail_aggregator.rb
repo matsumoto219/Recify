@@ -133,13 +133,14 @@ module Amounts
     end
 
     def normalize_adjustment(adjustment)
-      normalized = if adjustment.respond_to?(:attributes)
-        adjustment.attributes.symbolize_keys
-      elsif adjustment.respond_to?(:to_h)
-        adjustment.to_h.symbolize_keys
-      else
-        {}
-      end
+      normalized =
+        if adjustment.respond_to?(:attributes)
+          adjustment.attributes.symbolize_keys
+        elsif adjustment.respond_to?(:to_h)
+          adjustment.to_h.symbolize_keys
+        else
+          {}
+        end
 
       kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s

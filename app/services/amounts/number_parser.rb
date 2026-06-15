@@ -44,11 +44,12 @@ module Amounts
       text = normalize_numeric_text(value)
       comma_count = text.count(",")
 
-      text = if !text.include?(".") && comma_count == 1
-        text.sub(",", ".")
-      else
-        text.delete(",")
-      end
+      text =
+        if !text.include?(".") && comma_count == 1
+          text.sub(",", ".")
+        else
+          text.delete(",")
+        end
 
       text
         .gsub(/[^0-9.-]/, "")

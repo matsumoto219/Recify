@@ -257,11 +257,12 @@ module ExternalServices
       end
 
       def next_check_at_for(recovery_attempt, now)
-        minutes = case recovery_attempt
-        when 0 then 3
-        when 1 then 5
-        else 10
-        end
+        minutes =
+          case recovery_attempt
+          when 0 then 3
+          when 1 then 5
+          else 10
+          end
 
         now + minutes.minutes
       end
