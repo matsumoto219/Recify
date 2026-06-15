@@ -6,7 +6,7 @@ module SecurityEvents
     MAX_SCAN_VALUE_BYTES = 2_000
     MAX_DEPTH = 4
     MAX_ARRAY_ITEMS = 20
-    URL_FIELD_PATTERN = /\b(?:redirect|return_to|next|callback|url|uri|target|continue)\b/i
+    URL_FIELD_PATTERN = /\b(?:redirect(?:_to)?|return_to|next|callback|url|uri|target|continue)\b/i
     PROTECTED_RECEIPT_FIELDS = %w[
       id
       user_id

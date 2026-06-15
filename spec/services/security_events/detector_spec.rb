@@ -36,9 +36,16 @@ RSpec.describe SecurityEvents::Detector do
   end
 
   it 'redirect系fieldの外部URLをopen redirect候補として検知する' do
-    detections = described_class.call(params: { return_to: 'https://evil.example/path' })
+    detections = described_class.call(
+      params: {
+        return_to: 'https://evil.example/path',
+        redirect_to: 'https://evil.example/phishing'
+      }
+    )
 
-    expect(detections.map(&:event_type)).to include('open_redirect_attempt')
+    open_redirect_detections = detections.select { |detection| detection.event_type == 'open_redirect_attempt' }
+
+    expect(open_redirect_detections.map(&:field_name)).to contain_exactly('return_to', 'redirect_to')
   end
 
   it 'CRLF/header injectionを検知する' do
