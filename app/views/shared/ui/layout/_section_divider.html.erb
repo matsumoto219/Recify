@@ -20,12 +20,13 @@
     extra_class
   ].compact.join(" ")
 
-  line_class = case variant
-               when :gradient
-                 "section-divider-line-gradient h-px flex-1"
-               else
-                 "section-divider-line h-px flex-1 border-t"
-               end
+  line_class =
+    case variant
+    when :gradient
+      "section-divider-line-gradient h-px flex-1"
+    else
+      "section-divider-line h-px flex-1 border-t"
+    end
   label_class = "section-divider-label text-[0.6875rem] tracking-[0.5em] uppercase font-bold whitespace-nowrap"
 %>
 

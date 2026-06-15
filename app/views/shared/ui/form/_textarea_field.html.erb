@@ -46,17 +46,19 @@
   base_wrapper_class = "space-y-2"
   base_label_class = "text-xs font-bold uppercase tracking-wider token-text-muted"
   base_textarea_class = "w-full rounded-xl input-field text-base outline-none transition-all resize-none"
-  highlight_classes = if has_error || highlight_variant == :error
-                        "input-field-error"
-                      else
-                        nil
-                      end
-  textarea_spacing_class = case size
-                           when :tall
-                             with_icon ? "h-32 pl-11 pr-4 py-2" : "h-32 px-3 py-2"
-                           else
-                             with_icon ? "pl-11 pr-4" : "px-4"
-                           end
+  highlight_classes =
+    if has_error || highlight_variant == :error
+      "input-field-error"
+    else
+      nil
+    end
+  textarea_spacing_class =
+    case size
+    when :tall
+      with_icon ? "h-32 pl-11 pr-4 py-2" : "h-32 px-3 py-2"
+    else
+      with_icon ? "pl-11 pr-4" : "px-4"
+    end
   merged_wrapper_class = [base_wrapper_class, textarea_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_textarea_class = [base_textarea_class, highlight_classes, textarea_spacing_class, textarea_class].compact.join(" ")

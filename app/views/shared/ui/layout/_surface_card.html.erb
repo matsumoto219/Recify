@@ -40,110 +40,121 @@
   extra_class_tokens = extra_classes.to_s.split
   custom_background = extra_class_tokens.any? { |class_name| class_name.start_with?("bg-", "from-", "to-") }
 
-  shadow_classes = case shadow_variant
-                   when :indigo
-                     "surface-card-shadow-indigo"
-                   when :danger
-                     "surface-card-shadow-danger"
-                   when :warning
-                     "surface-card-shadow-warning"
-                   else
-                     "surface-card-shadow"
-                   end
+  shadow_classes =
+    case shadow_variant
+    when :indigo
+      "surface-card-shadow-indigo"
+    when :danger
+      "surface-card-shadow-danger"
+    when :warning
+      "surface-card-shadow-warning"
+    else
+      "surface-card-shadow"
+    end
 
   base_classes = [
     "relative w-full rounded-xl overflow-hidden surface-card-blur transition-all",
     shadow_classes
   ].join(" ")
 
-  surface_variant_class = case surface_variant
-                          when :bg_card
-                            "surface-card-bg-card"
-                          when :bg_elevated
-                            "token-bg-elevated"
-                          when :bg_card_subtle
-                            "surface-card-bg-card-subtle"
-                          when :bg_input
-                            "token-bg-input"
-                          when :bg_floating
-                            "token-bg-floating"
-                          end
+  surface_variant_class =
+    case surface_variant
+    when :bg_card
+      "surface-card-bg-card"
+    when :bg_elevated
+      "token-bg-elevated"
+    when :bg_card_subtle
+      "surface-card-bg-card-subtle"
+    when :bg_input
+      "token-bg-input"
+    when :bg_floating
+      "token-bg-floating"
+    end
 
-  accent_color = case accent
-                 when :error
-                   "var(--text-error)"
-                 when :warning
-                   "var(--text-warning)"
-                 else
-                   "var(--brand-primary)"
-                 end
+  accent_color =
+    case accent
+    when :error
+      "var(--text-error)"
+    when :warning
+      "var(--text-warning)"
+    else
+      "var(--brand-primary)"
+    end
 
-  variant_classes = case variant
-                    when :danger
-                      "surface-card-danger border"
-                    when :warning
-                      "surface-card-warning border"
-                    else
-                      custom_background ? nil : (surface_variant_class || "surface-card-bg-card")
-                    end
+  variant_classes =
+    case variant
+    when :danger
+      "surface-card-danger border"
+    when :warning
+      "surface-card-warning border"
+    else
+      custom_background ? nil : (surface_variant_class || "surface-card-bg-card")
+    end
 
-  hover_classes = if hoverable
-                    case variant
-                    when :danger
-                      "surface-card-danger-hover"
-                    when :warning
-                      "surface-card-warning-hover"
-                    else
-                      "surface-card-hover"
-                    end
-                  end
+  hover_classes =
+    if hoverable
+      case variant
+      when :danger
+        "surface-card-danger-hover"
+      when :warning
+        "surface-card-warning-hover"
+      else
+        "surface-card-hover"
+      end
+    end
 
-  padding_classes = case padding
-                    when :sm
-                      "p-4"
-                    when :md
-                      "p-6"
-                    when :lg
-                      "p-8"
-                    when :responsive
-                      "p-6 lg:p-8"
-                    when :card
-                      "p-5"
-                    end
+  padding_classes =
+    case padding
+    when :sm
+      "p-4"
+    when :md
+      "p-6"
+    when :lg
+      "p-8"
+    when :responsive
+      "p-6 lg:p-8"
+    when :card
+      "p-5"
+    end
 
-  accent_segments = if accent_color.present? && accent_sides.any?
-                      accent_sides.map do |side|
-                        case side
-                        when :top
-                          {
-                            class: "pointer-events-none absolute inset-x-0 top-0 rounded-t-xl",
-                            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-top: #{accent_width} solid #{accent_color};"
-                          }
-                        when :right
-                          {
-                            class: "pointer-events-none absolute inset-y-0 right-0 rounded-r-xl",
-                            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-right: #{accent_width} solid #{accent_color};"
-                          }
-                        when :bottom
-                          {
-                            class: "pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl",
-                            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-bottom: #{accent_width} solid #{accent_color};"
-                          }
-                        when :left
-                          {
-                            class: "pointer-events-none absolute inset-y-0 left-0 rounded-l-xl",
-                            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-left: #{accent_width} solid #{accent_color};"
-                          }
-                        end
-                      end.compact
-                    end
+  accent_segments =
+    if accent_color.present? && accent_sides.any?
+      accent_sides.map do |side|
+        case side
+        when :top
+          {
+            class: "pointer-events-none absolute inset-x-0 top-0 rounded-t-xl",
+            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-top: #{accent_width} solid #{accent_color};"
+          }
+        when :right
+          {
+            class: "pointer-events-none absolute inset-y-0 right-0 rounded-r-xl",
+            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-right: #{accent_width} solid #{accent_color};"
+          }
+        when :bottom
+          {
+            class: "pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl",
+            style: "height: calc(#{accent_corner_radius} + #{accent_width}); border-bottom: #{accent_width} solid #{accent_color};"
+          }
+        when :left
+          {
+            class: "pointer-events-none absolute inset-y-0 left-0 rounded-l-xl",
+            style: "width: calc(#{accent_corner_radius} + #{accent_width}); border-left: #{accent_width} solid #{accent_color};"
+          }
+        end
+      end.compact
+    end
 
   surface_style = [style].flatten.compact.join(" ")
 
   surface_classes = [base_classes, variant_classes, hover_classes, padding_classes, extra_classes].compact.join(" ")
+  surface_attributes = { class: surface_classes }
+  surface_attributes[:id] = id if id.present?
+  surface_attributes[:style] = surface_style if surface_style.present?
+  surface_attributes[:aria] = { labelledby: title_id } if title_id.present?
 %>
 
-<section <%= id.present? ? " id=\"#{id}\"".html_safe : "" %> class="<%= surface_classes %>"<%= surface_style.present? ? " style=\"#{surface_style}\"".html_safe : "" %><%= title_id.present? ? " aria-labelledby=\"#{title_id}\"".html_safe : "" %>>
+<section <%= tag.attributes(surface_attributes) %>>
   <% if accent_segments.present? %>
     <% accent_segments.each do |accent_segment| %>
       <span

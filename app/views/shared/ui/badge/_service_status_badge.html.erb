@@ -16,36 +16,37 @@
   text = local_assigns[:text]
   wrapper_class = local_assigns[:class]
 
-  state_config = case state
-                 when :ok
-                   {
-                     dot: "receipt-status-dot-completed",
-                     text_color: "receipt-status-text-completed",
-                     border: "receipt-status-border-completed",
-                     bg: "token-state-success-soft"
-                   }
-                 when :degraded
-                   {
-                     dot: "receipt-status-dot-review-needed",
-                     text_color: "receipt-status-text-review-needed",
-                     border: "receipt-status-border-review-needed",
-                     bg: "token-state-warning-soft"
-                   }
-                 when :down
-                   {
-                     dot: "receipt-status-dot-failed",
-                     text_color: "receipt-status-text-failed",
-                     border: "receipt-status-border-failed",
-                     bg: "token-state-error-soft"
-                   }
-                 else
-                   {
-                     dot: "receipt-status-dot-default",
-                     text_color: "receipt-status-text-default",
-                     border: "token-border-glass",
-                     bg: "receipt-status-default"
-                   }
-                 end
+  state_config =
+    case state
+    when :ok
+      {
+        dot: "receipt-status-dot-completed",
+        text_color: "receipt-status-text-completed",
+        border: "receipt-status-border-completed",
+        bg: "token-state-success-soft"
+      }
+    when :degraded
+      {
+        dot: "receipt-status-dot-review-needed",
+        text_color: "receipt-status-text-review-needed",
+        border: "receipt-status-border-review-needed",
+        bg: "token-state-warning-soft"
+      }
+    when :down
+      {
+        dot: "receipt-status-dot-failed",
+        text_color: "receipt-status-text-failed",
+        border: "receipt-status-border-failed",
+        bg: "token-state-error-soft"
+      }
+    else
+      {
+        dot: "receipt-status-dot-default",
+        text_color: "receipt-status-text-default",
+        border: "token-border-glass",
+        bg: "receipt-status-default"
+      }
+    end
 
   container_classes = [
     "flex items-center justify-between rounded-lg px-4 py-3 border",
@@ -53,6 +54,18 @@
     state_config[:border],
     wrapper_class
   ].compact.join(" ")
+
+  state_text =
+    case state
+    when :ok
+      t("shared.service_status.ok")
+    when :degraded
+      t("shared.service_status.degraded")
+    when :down
+      t("shared.service_status.down")
+    else
+      t("shared.service_status.unknown")
+    end
 %>
 
 <div class="<%= container_classes %>">
@@ -65,12 +78,7 @@
     <span class="text-sm font-medium field-text"><%= text %></span>
   <% else %>
     <span class="text-sm font-medium <%= state_config[:text_color] %>">
-      <%= case state
-          when :ok then t("shared.service_status.ok")
-          when :degraded then t("shared.service_status.degraded")
-          when :down then t("shared.service_status.down")
-          else t("shared.service_status.unknown")
-          end %>
+      <%= state_text %>
     </span>
   <% end %>
 </div>

@@ -24,11 +24,12 @@
 %>
 
 <%
-  selected = if local_assigns.key?(:selected)
-               local_assigns[:selected]
-             else
-               f.object&.public_send(attribute)
-             end
+  selected =
+    if local_assigns.key?(:selected)
+      local_assigns[:selected]
+    else
+      f.object&.public_send(attribute)
+    end
   include_blank = local_assigns.fetch(:include_blank, nil)
   required = local_assigns.fetch(:required, false)
   show_label = local_assigns.fetch(:show_label, true)
@@ -48,19 +49,21 @@
   base_wrapper_class = "space-y-2"
   base_label_class = "text-xs font-bold uppercase tracking-wider token-text-muted"
   base_select_class = "w-full rounded-lg input-field text-base appearance-none outline-none transition-all"
-  highlight_classes = if has_error || highlight_variant == :error
-                        "input-field-error"
-                      else
-                        nil
-                      end
-  select_spacing_class = case size
-                         when :regular
-                           with_icon ? "h-11 pl-11 pr-10 py-2.5" : "h-11 px-3 py-2.5 pr-10"
-                         when :dense
-                           with_icon ? "h-10 pl-11 pr-10 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
-                         else
-                           with_icon ? "pl-11 pr-10" : "px-4 pr-10"
-                         end
+  highlight_classes =
+    if has_error || highlight_variant == :error
+      "input-field-error"
+    else
+      nil
+    end
+  select_spacing_class =
+    case size
+    when :regular
+      with_icon ? "h-11 pl-11 pr-10 py-2.5" : "h-11 px-3 py-2.5 pr-10"
+    when :dense
+      with_icon ? "h-10 pl-11 pr-10 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+    else
+      with_icon ? "pl-11 pr-10" : "px-4 pr-10"
+    end
   merged_wrapper_class = [base_wrapper_class, select_wrapper_class].compact.join(" ")
   merged_label_class = [base_label_class, label_class].compact.join(" ")
   merged_select_class = [base_select_class, highlight_classes, select_spacing_class, select_class].compact.join(" ")

@@ -53,11 +53,12 @@
 
   size_styles = variant == :text ? text_size_styles : pill_size_styles
 
-  base_classes = if variant == :text
-    "inline-flex items-center leading-none whitespace-nowrap"
-  else
-    "inline-flex items-center rounded font-bold uppercase leading-none whitespace-nowrap"
-  end
+  base_classes =
+    if variant == :text
+      "inline-flex items-center leading-none whitespace-nowrap"
+    else
+      "inline-flex items-center rounded font-bold uppercase leading-none whitespace-nowrap"
+    end
 
   fallback_style = variant == :text ? "setting-status-text-default" : "setting-status-default border"
 

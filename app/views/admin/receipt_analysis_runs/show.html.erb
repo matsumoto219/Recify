@@ -41,15 +41,16 @@
     receipt_image_metadata = receipt_image_blob&.metadata.to_h
     receipt_image_width = receipt_image_metadata["width"] || receipt_image_metadata[:width]
     receipt_image_height = receipt_image_metadata["height"] || receipt_image_metadata[:height]
-    receipt_image_dimensions = if receipt_image_width.present? && receipt_image_height.present?
-                                 t(
-                                   "admin.receipt_analysis_runs.show.image_metadata.dimensions_value",
-                                   width: receipt_image_width,
-                                   height: receipt_image_height
-                                 )
-                               else
-                                 "-"
-                               end
+    receipt_image_dimensions =
+      if receipt_image_width.present? && receipt_image_height.present?
+        t(
+          "admin.receipt_analysis_runs.show.image_metadata.dimensions_value",
+          width: receipt_image_width,
+          height: receipt_image_height
+        )
+      else
+        "-"
+      end
   %>
 
   <%= render "shared/ui/layout/section_header",
@@ -244,11 +245,12 @@
         polling_metrics = (@record[:polling_metrics] || {}).with_indifferent_access
         poll_count = polling_metrics[:poll_count]
         max_poll_count = polling_metrics[:max_poll_count]
-        poll_count_label = if poll_count.present? || max_poll_count.present?
-                             "#{poll_count.presence || "-"} / #{max_poll_count.presence || "-"}"
-                           else
-                             "-"
-                           end
+        poll_count_label =
+          if poll_count.present? || max_poll_count.present?
+            "#{poll_count.presence || "-"} / #{max_poll_count.presence || "-"}"
+          else
+            "-"
+          end
         polling_metric_rows = [
           [ t("admin.receipt_analysis_runs.show.polling_metrics.elapsed_ms"), polling_metrics[:elapsed_ms].present? ? "#{polling_metrics[:elapsed_ms]}ms" : "-" ],
           [ t("admin.receipt_analysis_runs.show.polling_metrics.poll_count"), poll_count_label ],
@@ -277,16 +279,17 @@
       <%
         ai_metrics = (@record[:ai_metrics] || {}).with_indifferent_access
         token_usage = (ai_metrics[:token_usage] || {}).with_indifferent_access
-        token_usage_label = if token_usage.present?
-                              t(
-                                "admin.receipt_analysis_runs.show.ai_metrics.token_usage_value",
-                                input: token_usage[:input_tokens].presence || "-",
-                                output: token_usage[:output_tokens].presence || "-",
-                                total: token_usage[:total_tokens].presence || "-"
-                              )
-                            else
-                              "-"
-                            end
+        token_usage_label =
+          if token_usage.present?
+            t(
+              "admin.receipt_analysis_runs.show.ai_metrics.token_usage_value",
+              input: token_usage[:input_tokens].presence || "-",
+              output: token_usage[:output_tokens].presence || "-",
+              total: token_usage[:total_tokens].presence || "-"
+            )
+          else
+            "-"
+          end
         ai_metric_rows = [
           [ t("admin.receipt_analysis_runs.show.ai_metrics.elapsed_ms"), ai_metrics[:elapsed_ms].present? ? "#{ai_metrics[:elapsed_ms]}ms" : "-" ],
           [ t("admin.receipt_analysis_runs.show.ai_metrics.retry_count"), ai_metrics[:retry_count].presence || "-" ],

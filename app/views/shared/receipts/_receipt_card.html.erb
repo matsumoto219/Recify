@@ -12,11 +12,12 @@
   receipt = local_assigns.fetch(:receipt)
   status_label = local_assigns[:status_label] || (receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status)
   processing = receipt.status.to_s == "processing"
-  display_store_name = if processing
-                         receipt.store_name.presence || t("receipt_cards.fallback.processing_store_name")
-                       else
-                         receipt.store_name.presence || t("receipt_cards.fallback.store_name")
-                       end
+  display_store_name =
+    if processing
+      receipt.store_name.presence || t("receipt_cards.fallback.processing_store_name")
+    else
+      receipt.store_name.presence || t("receipt_cards.fallback.store_name")
+    end
 
   card_classes = [
     "group",

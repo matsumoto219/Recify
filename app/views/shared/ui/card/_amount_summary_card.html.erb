@@ -50,6 +50,13 @@
   payment_adjustment_total_target = local_assigns[:payment_adjustment_total_target]
   final_payment_row_target = local_assigns[:final_payment_row_target]
   final_payment_total_target = local_assigns[:final_payment_total_target]
+  subtotal_target_attributes = tag.attributes(data: { receipt_form_target: subtotal_target }) if subtotal_target.present?
+  tax_amount_target_attributes = tag.attributes(data: { receipt_form_target: tax_amount_target }) if tax_amount_target.present?
+  tax_rate_target_attributes = tag.attributes(data: { receipt_form_target: tax_rate_target }) if tax_rate_target.present?
+  payment_adjustment_row_target_attributes = tag.attributes(data: { receipt_form_target: payment_adjustment_row_target }) if payment_adjustment_row_target.present?
+  payment_adjustment_total_target_attributes = tag.attributes(data: { receipt_form_target: payment_adjustment_total_target }) if payment_adjustment_total_target.present?
+  final_payment_row_target_attributes = tag.attributes(data: { receipt_form_target: final_payment_row_target }) if final_payment_row_target.present?
+  final_payment_total_target_attributes = tag.attributes(data: { receipt_form_target: final_payment_total_target }) if final_payment_total_target.present?
   tax_details = Array(local_assigns[:tax_details])
   tax_detail_rows = receipt_amount_summary_tax_detail_rows(tax_details, currency_prefix: currency_prefix)
   show_payment_adjustment = payment_adjustment_total.to_i.nonzero? && !final_payment_total.nil?
@@ -75,28 +82,28 @@
   <div class="space-y-3">
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal_display %>" <%= %(data-receipt-form-target="#{subtotal_target}").html_safe if subtotal_target.present? %>><%= subtotal_display %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal_display %>" <%= subtotal_target_attributes %>><%= subtotal_display %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_amount") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount_display %>" <%= %(data-receipt-form-target="#{tax_amount_target}").html_safe if tax_amount_target.present? %>><%= tax_amount_display %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount_display %>" <%= tax_amount_target_attributes %>><%= tax_amount_display %></span>
     </div>
     <div class="flex min-w-0 justify-between text-sm gap-4">
       <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_rate") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_rate_display %>" <%= %(data-receipt-form-target="#{tax_rate_target}").html_safe if tax_rate_target.present? %>><%= tax_rate_display %></span>
+      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_rate_display %>" <%= tax_rate_target_attributes %>><%= tax_rate_display %></span>
     </div>
 
     <% if show_payment_adjustment %>
       <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
       <div class="flex min-w-0 justify-between text-sm gap-4"
-           <%= %(data-receipt-form-target="#{payment_adjustment_row_target}").html_safe if payment_adjustment_row_target.present? %>>
+           <%= payment_adjustment_row_target_attributes %>>
         <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.payment_adjustment") %></span>
-        <span class="min-w-0 truncate font-medium text-right" title="<%= payment_adjustment_display %>" <%= %(data-receipt-form-target="#{payment_adjustment_total_target}").html_safe if payment_adjustment_total_target.present? %>><%= payment_adjustment_display %></span>
+        <span class="min-w-0 truncate font-medium text-right" title="<%= payment_adjustment_display %>" <%= payment_adjustment_total_target_attributes %>><%= payment_adjustment_display %></span>
       </div>
       <div class="flex min-w-0 justify-between text-sm gap-4"
-           <%= %(data-receipt-form-target="#{final_payment_row_target}").html_safe if final_payment_row_target.present? %>>
+           <%= final_payment_row_target_attributes %>>
         <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.final_payment_total") %></span>
-        <span class="min-w-0 truncate font-bold text-right" title="<%= final_payment_total_display %>" <%= %(data-receipt-form-target="#{final_payment_total_target}").html_safe if final_payment_total_target.present? %>><%= final_payment_total_display %></span>
+        <span class="min-w-0 truncate font-bold text-right" title="<%= final_payment_total_display %>" <%= final_payment_total_target_attributes %>><%= final_payment_total_display %></span>
       </div>
     <% end %>
 

@@ -52,28 +52,31 @@
   size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
 
-  attribute_errors = if show_error_state && f.present? && attribute.present?
-                       Array(f.object&.errors&.[](attribute))
-                     else
-                       []
-                     end
+  attribute_errors =
+    if show_error_state && f.present? && attribute.present?
+      Array(f.object&.errors&.[](attribute))
+    else
+      []
+    end
   has_error = attribute_errors.any?
-  attribute_full_messages = if f.present? && attribute.present?
-                              Array(f.object&.errors&.full_messages_for(attribute))
-                            else
-                              []
-                            end
+  attribute_full_messages =
+    if f.present? && attribute.present?
+      Array(f.object&.errors&.full_messages_for(attribute))
+    else
+      []
+    end
 
   base_input_class = "input-field w-full text-base"
 
-  highlight_classes = case highlight_variant
-                      when :none
-                        "border border-transparent focus:ring-0"
-                      when :error
-                        "input-field-error"
-                      else
-                        has_error ? "input-field-error" : nil
-                      end
+  highlight_classes =
+    case highlight_variant
+    when :none
+      "border border-transparent focus:ring-0"
+    when :error
+      "input-field-error"
+    else
+      has_error ? "input-field-error" : nil
+    end
 
   error_active = has_error || highlight_variant == :error
 
@@ -85,18 +88,19 @@
   ].compact.join(" ")
   error_classes = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")
 
-  input_spacing_class = case size
-                        when :comfortable
-                          with_icon ? "px-4 py-3 pl-12" : "px-4 py-3"
-                        when :prominent
-                          with_icon ? "py-3.5 pl-12 pr-4" : "px-4 py-3.5"
-                        when :regular
-                          with_icon ? "h-11 pl-11 pr-4" : "h-11 px-4"
-                        when :dense
-                          with_icon ? "h-10 pl-11 pr-4 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
-                        else
-                          with_icon ? "pl-11 pr-4" : "px-4"
-                        end
+  input_spacing_class =
+    case size
+    when :comfortable
+      with_icon ? "px-4 py-3 pl-12" : "px-4 py-3"
+    when :prominent
+      with_icon ? "py-3.5 pl-12 pr-4" : "px-4 py-3.5"
+    when :regular
+      with_icon ? "h-11 pl-11 pr-4" : "h-11 px-4"
+    when :dense
+      with_icon ? "h-10 pl-11 pr-4 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+    else
+      with_icon ? "pl-11 pr-4" : "px-4"
+    end
   merged_input_class = [base_input_class, highlight_classes, input_spacing_class, input_class].compact.join(" ")
   field_options = {
     placeholder: placeholder,
@@ -124,14 +128,19 @@
       <%= f.public_send(field_type, attribute, **field_options) %>
     <% else %>
       <%
-        standalone_type = local_assigns[:type] || case field_type.to_sym
-                                                  when :email_field
-                                                    "email"
-                                                  when :password_field
-                                                    "password"
-                                                  else
-                                                    "text"
-                                                  end
+        standalone_type =
+          if local_assigns[:type]
+            local_assigns[:type]
+          else
+            case field_type.to_sym
+            when :email_field
+              "email"
+            when :password_field
+              "password"
+            else
+              "text"
+            end
+          end
         standalone_options = field_options.merge(type: standalone_type, name: name, id: input_id).compact
       %>
       <%= tag.input(**standalone_options) %>

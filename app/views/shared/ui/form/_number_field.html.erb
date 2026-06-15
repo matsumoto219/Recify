@@ -69,23 +69,25 @@
 
   base_input_class = show_stepper_buttons ? "w-full field-stepper-input text-base transition-all outline-none" : "w-full input-field text-base transition-all outline-none"
 
-  highlight_classes = case highlight_variant
-                      when :none
-                        "border border-transparent focus:ring-0"
-                      when :error
-                        "input-field-error"
-                      else
-                        has_error ? "input-field-error" : nil
-                      end
+  highlight_classes =
+    case highlight_variant
+    when :none
+      "border border-transparent focus:ring-0"
+    when :error
+      "input-field-error"
+    else
+      has_error ? "input-field-error" : nil
+    end
 
-  text_align_class = case text_align
-                     when :left
-                       "text-left"
-                     when :center
-                       "text-center"
-                     else
-                       "text-right"
-                     end
+  text_align_class =
+    case text_align
+    when :left
+      "text-left"
+    when :center
+      "text-center"
+    else
+      "text-right"
+    end
 
   balanced_affix_spacing = text_align == :center && (prefix.present? || suffix.present?)
   prefix_spacing_class = (balanced_affix_spacing || prefix.present?) ? "pl-8" : "pl-4"

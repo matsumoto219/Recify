@@ -39,23 +39,29 @@
 <% data_attributes[:segmented_control_url_value] = url if url.present? %>
 <% active_index = options.index { |option| option.fetch(:value).to_s == value.to_s } || 0 %>
 
-<% size_classes = case size
-   when :sm
-     "text-xs"
-   when :lg
-     "text-base"
-   else
-     "text-sm"
-   end %>
+<%
+  size_classes =
+    case size
+    when :sm
+      "text-xs"
+    when :lg
+      "text-base"
+    else
+      "text-sm"
+    end
+%>
 
-<% item_size_classes = case size
-   when :sm
-     "min-w-[4.75rem] px-3 py-1.5"
-   when :lg
-     "min-w-[6.25rem] px-5 py-3"
-   else
-     "min-w-[5.5rem] px-4 py-2"
-   end %>
+<%
+  item_size_classes =
+    case size
+    when :sm
+      "min-w-[4.75rem] px-3 py-1.5"
+    when :lg
+      "min-w-[6.25rem] px-5 py-3"
+    else
+      "min-w-[5.5rem] px-4 py-2"
+    end
+%>
 
 <% wrapper_classes = [
      "relative isolate inline-grid min-w-max overflow-hidden rounded-lg border token-border-soft token-bg-floating p-1 shadow-inner",

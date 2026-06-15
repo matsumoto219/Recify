@@ -46,12 +46,13 @@
   highlight_classes = has_error ? "input-field-error" : nil
 
   base_field_class = "w-full rounded-lg input-field input-field-datetime text-base outline-none transition-all #{highlight_classes}"
-  field_size_class = case size
-                     when :regular
-                       "input-field-datetime-regular"
-                     when :dense
-                       "input-field-datetime-dense"
-                     end
+  field_size_class =
+    case size
+    when :regular
+      "input-field-datetime-regular"
+    when :dense
+      "input-field-datetime-dense"
+    end
   field_spacing_class = with_icon ? "pl-10 pr-4" : "px-4"
 
   merged_wrapper_class = [base_wrapper_class, field_wrapper_class].compact.join(" ")

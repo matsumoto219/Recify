@@ -52,49 +52,53 @@
   unstyled = local_assigns.fetch(:unstyled, false)
 
   # テーマトークンに基づくボタン種別
-  variant_classes = case variant
-                    # 面を持つ補助ボタン
-                    when :secondary
-                      "btn-secondary border"
-                    # 透明背景のボタン
-                    when :ghost
-                      "btn-ghost border"
-                    # 危険操作用ボタン
-                    when :danger
-                      "btn-danger border border-transparent"
-                    # 主操作ボタン
-                    else
-                      "btn-primary border-none overflow-hidden"
-                    end
+  variant_classes =
+    case variant
+    # 面を持つ補助ボタン
+    when :secondary
+      "btn-secondary border"
+    # 透明背景のボタン
+    when :ghost
+      "btn-ghost border"
+    # 危険操作用ボタン
+    when :danger
+      "btn-danger border border-transparent"
+    # 主操作ボタン
+    else
+      "btn-primary border-none overflow-hidden"
+    end
 
-  size_classes = case size
-                 when :sm
-                   "px-4 py-2 text-sm rounded-lg"
-                 when :compact
-                   "px-6 py-2.5 text-sm rounded-lg"
-                 when :lg
-                   "px-6 py-4 text-base rounded-xl"
-                 else
-                   "px-6 py-3 text-sm rounded-lg"
-                 end
-  radius_classes = case radius
-                   when :lg
-                     "rounded-lg"
-                   when :xl
-                     "rounded-xl"
-                   else
-                     nil
-                   end
+  size_classes =
+    case size
+    when :sm
+      "px-4 py-2 text-sm rounded-lg"
+    when :compact
+      "px-6 py-2.5 text-sm rounded-lg"
+    when :lg
+      "px-6 py-4 text-base rounded-xl"
+    else
+      "px-6 py-3 text-sm rounded-lg"
+    end
+  radius_classes =
+    case radius
+    when :lg
+      "rounded-lg"
+    when :xl
+      "rounded-xl"
+    else
+      nil
+    end
 
   justify_classes = trailing_icon.present? ? "justify-between" : "justify-center"
   width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
   weight_classes = weight == :bold ? "font-bold" : "font-medium"
   state_classes = "group items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-  button_classes = if unstyled
-                     extra_classes.to_s
-                   else
-                     [width_classes, state_classes, weight_classes, variant_classes, size_classes, radius_classes, extra_classes].compact.join(" ")
-                   end
+  button_classes =
+    if unstyled
+      extra_classes.to_s
+    else
+      [width_classes, state_classes, weight_classes, variant_classes, size_classes, radius_classes, extra_classes].compact.join(" ")
+    end
 
   current_label = loading ? (disable_with.presence || label) : label
   trailing_icon_class = [

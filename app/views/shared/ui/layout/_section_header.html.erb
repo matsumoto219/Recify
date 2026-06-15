@@ -55,52 +55,57 @@
   breadcrumb_current_class = "min-w-0 token-text-brand font-medium break-words [overflow-wrap:anywhere]"
   breadcrumb_separator_class = "text-xs token-text-muted"
 
-  align_class = case align
-                when :center
-                  "text-center"
-                else
-                  nil
-                end
+  align_class =
+    case align
+    when :center
+      "text-center"
+    else
+      nil
+    end
 
-  responsive_align_class = case responsive_align
-                           when :center
-                             "md:text-center"
-                           when :left
-                             "md:text-left"
-                           else
-                             nil
-                           end
+  responsive_align_class =
+    case responsive_align
+    when :center
+      "md:text-center"
+    when :left
+      "md:text-left"
+    else
+      nil
+    end
 
-  title_row_align_class = case align
-                          when :center
-                            "justify-center"
-                          else
-                            nil
-                          end
+  title_row_align_class =
+    case align
+    when :center
+      "justify-center"
+    else
+      nil
+    end
 
-  responsive_title_row_align_class = case responsive_align
-                                     when :center
-                                       "md:justify-center"
-                                     when :left
-                                       "md:justify-start"
-                                     else
-                                       nil
-                                     end
+  responsive_title_row_align_class =
+    case responsive_align
+    when :center
+      "md:justify-center"
+    when :left
+      "md:justify-start"
+    else
+      nil
+    end
 
-  tone = case variant
-         when :danger
-           {
-             title: "token-text-error",
-             subtitle: "section-header-danger-subtitle",
-             icon: "token-text-error"
-           }
-         else
-           {
-             title: "section-header-title",
-             subtitle: "token-text-muted",
-             icon: "token-text-brand"
-           }
-         end
+  tone =
+    case variant
+    when :danger
+      {
+        title: "token-text-error",
+        subtitle: "section-header-danger-subtitle",
+        icon: "token-text-error"
+      }
+    else
+      {
+        title: "section-header-title",
+        subtitle: "token-text-muted",
+        icon: "token-text-brand"
+      }
+    end
 
   resolved_icon_class = [tone[:icon], icon_class].compact.join(" ")
   title_class = [

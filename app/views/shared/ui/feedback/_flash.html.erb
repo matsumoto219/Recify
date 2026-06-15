@@ -23,8 +23,9 @@
   <%# トーストコンテナ %>
   <div class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm">
     <% grouped_messages.each_with_index do |(type, messages), i| %>
-      <% body_content = if messages.many? %>
-        <% capture do %>
+      <% body_content = nil %>
+      <% if messages.many? %>
+        <% body_content = capture do %>
           <ul class="token-text-muted min-w-0 max-w-full space-y-2 text-xs leading-relaxed break-words">
             <% messages.each do |message| %>
               <li class="flex min-w-0 max-w-full items-start gap-2 break-words">

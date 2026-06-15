@@ -61,9 +61,24 @@
     end
   wrapper_class = local_assigns[:wrapper_class]
   card_class = local_assigns[:card_class]
+  wrapper_attributes = {}
+  wrapper_attributes[:class] = wrapper_class if wrapper_class.present?
+  if enable_controller
+    wrapper_attributes[:data] = {
+      controller: "receipt-image-card",
+      receipt_image_card_initially_open_value: initially_open,
+      receipt_image_card_collapse_on_mobile_value: collapse_on_mobile,
+      receipt_image_card_unselected_label_value: t("shared.receipt_image_card.js.unselected"),
+      receipt_image_card_empty_file_label_value: t("shared.receipt_image_card.js.empty_file"),
+      receipt_image_card_storage_used_bytes_value: storage_used_bytes,
+      receipt_image_card_storage_limit_bytes_value: storage_limit_bytes,
+      receipt_image_card_storage_excluding_blob_bytes_value: storage_excluding_blob_bytes,
+      receipt_image_card_quota_exceeded_message_value: quota_exceeded_message
+    }
+  end
 %>
 
-<div <%= wrapper_class.present? ? %( class="#{wrapper_class}").html_safe : "" %> <%= enable_controller ? %(data-controller="receipt-image-card" data-receipt-image-card-initially-open-value="#{initially_open}" data-receipt-image-card-collapse-on-mobile-value="#{collapse_on_mobile}" data-receipt-image-card-unselected-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.unselected"))}" data-receipt-image-card-empty-file-label-value="#{ERB::Util.html_escape(t("shared.receipt_image_card.js.empty_file"))}" data-receipt-image-card-storage-used-bytes-value="#{storage_used_bytes}" data-receipt-image-card-storage-limit-bytes-value="#{storage_limit_bytes}" data-receipt-image-card-storage-excluding-blob-bytes-value="#{storage_excluding_blob_bytes}" data-receipt-image-card-quota-exceeded-message-value="#{ERB::Util.html_escape(quota_exceeded_message)}").html_safe : "" %>>
+<div <%= tag.attributes(wrapper_attributes) %>>
   <%= render "shared/ui/layout/surface_card", padding: :sm, class: card_class do %>
     <p class="text-xs font-bold token-text-muted uppercase tracking-widest mb-3 px-2">
       <%= title %>
@@ -89,7 +104,7 @@
         </button>
       <% end %>
 
-      <div class="<%= show_toggle ? 'collapsible-grid' : '' %>" <%= show_toggle ? 'data-receipt-image-card-target="content"'.html_safe : "" %>>
+      <div class="<%= show_toggle ? 'collapsible-grid' : '' %>" <%= tag.attributes(data: { receipt_image_card_target: "content" }) if show_toggle %>>
         <div class="<%= show_toggle ? 'collapsible-grid-inner' : '' %>">
           <div class="mt-4 w-full flex justify-center">
             <% preview_tag = show_modal ? :button : :div %>

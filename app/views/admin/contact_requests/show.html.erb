@@ -84,11 +84,12 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user") %></dt>
         <dd class="min-w-0 max-w-full">
           <%
-            user_id_display = if @record[:user_id].present?
-                                link_to "##{@record[:user_id]}", admin_user_path(@record[:user_id]), class: "token-text-brand hover:underline"
-                              else
-                                "-"
-                              end
+            user_id_display =
+              if @record[:user_id].present?
+                link_to "##{@record[:user_id]}", admin_user_path(@record[:user_id]), class: "token-text-brand hover:underline"
+              else
+                "-"
+              end
           %>
           <%= render "shared/ui/actions/copyable_value",
                 value: @record[:user_id].presence || "-",
