@@ -124,7 +124,8 @@ RSpec.describe 'Admin security events', type: :request do
         event_type: 'xss_attempt',
         matched_rule: 'script_tag',
         payload_excerpt: '<script>alert(1)</script>',
-        metadata: { 'field' => 'q' }
+        request_id: 'req-security-event-xss',
+        metadata: { 'field' => 'q', 'sample' => '<img src=x onerror=alert(1)>' }
       )
       sign_in admin
 
@@ -135,7 +136,11 @@ RSpec.describe 'Admin security events', type: :request do
         expect(response.body).to include('セキュリティイベント詳細')
         expect(response.body).to include('&lt;script&gt;alert(1)&lt;/script&gt;')
         expect(response.body).not_to include('<script>alert(1)</script>')
+        expect(response.body).to include('&lt;img src=x onerror=alert(1)&gt;')
+        expect(response.body).not_to include('<img src=x onerror=alert(1)>')
         expect(response.body).to include('script_tag')
+        expect(response.body).to include('data-controller="clipboard"')
+        expect(response.body).to include('req-security-event-xss')
       end
     end
   end
