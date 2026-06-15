@@ -253,7 +253,7 @@ class ApplicationController < ActionController::Base
   def record_security_event_request_detections
     SecurityEvents.record_request_detections!(
       request: request,
-      actor_user: current_user,
+      actor_user: security_event_actor_user,
       params: security_event_detection_params
     )
   end
@@ -270,8 +270,14 @@ class ApplicationController < ActionController::Base
   end
 
   def record_csrf_failure_and_raise(exception)
-    SecurityEvents.record_csrf_failure!(request: request, actor_user: current_user)
+    SecurityEvents.record_csrf_failure!(request: request, actor_user: security_event_actor_user)
     raise exception
+  end
+
+  def security_event_actor_user
+    request.env["warden"]&.user(scope: :user, run_callbacks: false)
+  rescue StandardError
+    nil
   end
 
   def guest_fake_email?(email)

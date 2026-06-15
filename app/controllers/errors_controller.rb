@@ -63,7 +63,7 @@ class ErrorsController < ApplicationController
   def log_error_page(status:, level:)
     SecurityEvents.record_suspicious_error!(
       request: request,
-      actor_user: current_user,
+      actor_user: security_event_actor_user,
       status: status
     )
 
@@ -72,7 +72,7 @@ class ErrorsController < ApplicationController
       status: status,
       path: error_log_path,
       request_id: request.request_id,
-      user_id: current_user&.id,
+      user_id: security_event_actor_user&.id,
       exception_class: exception&.class&.name
     }
     fields[:exception_message] = truncated_exception_message(exception) if status == 500 && exception

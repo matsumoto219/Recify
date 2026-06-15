@@ -117,7 +117,7 @@ module SecurityEvents
       return actor_user if actor_user.present?
       return unless request.respond_to?(:env)
 
-      request.env["warden"]&.user
+      request.env["warden"]&.user(scope: :user, run_callbacks: false)
     rescue StandardError
       nil
     end
