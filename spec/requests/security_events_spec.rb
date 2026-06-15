@@ -125,6 +125,47 @@ RSpec.describe 'Security events', type: :request do
     invalid_file&.unlink
   end
 
+  it 'suspicious filenameのinvalid uploadもfile bodyなしでsanitizeして記録する' do
+    invalid_file = Tempfile.new([ 'fake-receipt', '.jpg' ])
+    invalid_file.write('not an image body marker')
+    invalid_file.rewind
+    uploaded_file = Rack::Test::UploadedFile.new(
+      invalid_file.path,
+      'image/jpeg',
+      original_filename: "<img src=x onerror=alert(1)>\r\nreceipt.jpg"
+    )
+
+    expect {
+      post upload_receipts_path,
+           params: {
+             receipt: {
+               image: uploaded_file
+             }
+           }
+    }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
+
+    event = SecurityEvent.last
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(event).to have_attributes(
+        actor_user: user,
+        matched_rule: 'invalid_content_type'
+      )
+      expect(event.payload_excerpt).to include('<img src=x onerror=alert(1)>\\r\\nreceipt.jpg')
+      expect(event.metadata).to include(
+        'filename' => '<img src=x onerror=alert(1)>\\r\\nreceipt.jpg',
+        'content_type' => 'image/jpeg',
+        'extension' => '.jpg',
+        'reason' => 'invalid_content_type'
+      )
+      expect(event.attributes.to_json).not_to include('not an image body marker')
+    end
+  ensure
+    invalid_file&.close
+    invalid_file&.unlink
+  end
+
   it '403をIDOR候補として記録する' do
     expect {
       get '/403'
