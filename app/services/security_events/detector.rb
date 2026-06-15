@@ -211,7 +211,7 @@ module SecurityEvents
 
       case value
       when ActionDispatch::Http::UploadedFile
-        return
+        nil
       when Hash, ActionController::Parameters
         child_values = value.respond_to?(:to_unsafe_h) ? value.to_unsafe_h : value
         child_values.each do |key, child|

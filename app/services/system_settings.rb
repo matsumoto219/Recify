@@ -339,24 +339,27 @@ module SystemSettings
     end
 
     def cast_user_allowlist(value)
-      values = case value
-               when Array
-                 value
-               else
-                 value.to_s.split(/[\s,]+/)
-               end
+      values =
+        case value
+        when Array
+          value
+        else
+          value.to_s.split(/[\s,]+/)
+        end
 
       values.map { |entry| entry.to_s.strip }.reject(&:blank?).uniq
     end
 
     def cast_duration(definition, value)
-      seconds = if value.is_a?(Hash)
-                  duration_value = value["value"] || value[:value]
-                  unit = (value["unit"] || value[:unit] || "seconds").to_s
-                  Integer(duration_value) * duration_unit_multiplier(unit)
-                else
-                  Integer(value)
-                end
+      seconds =
+        if value.is_a?(Hash)
+          duration_value = value["value"] || value[:value]
+          unit = (value["unit"] || value[:unit] || "seconds").to_s
+
+          Integer(duration_value) * duration_unit_multiplier(unit)
+        else
+          Integer(value)
+        end
       raise ValidationError, "below_min" if definition.min && seconds < definition.min
       raise ValidationError, "above_max" if definition.max && seconds > definition.max
 

@@ -119,11 +119,12 @@ class ContactRequestsController < ApplicationController
   end
 
   def rate_limit_contact_email_digest
-    email = if user_signed_in? && !current_user.guest?
-              nil
-            else
-              params.dig(:contact_request, :email).to_s.strip.downcase
-            end
+    email =
+      if user_signed_in? && !current_user.guest?
+        nil
+      else
+        params.dig(:contact_request, :email).to_s.strip.downcase
+      end
 
     return if email.blank?
     return if guest_fake_email?(email)

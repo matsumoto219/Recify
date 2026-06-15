@@ -460,7 +460,7 @@ class ReceiptsController < ApplicationController
     return "invalid_content_type" if errors.of_kind?(:image, :invalid_content_type)
     return "file_too_large" if errors.of_kind?(:image, :file_too_large)
     return "image_too_small" if errors.of_kind?(:image, :image_too_small)
-    return "image_too_large" if errors.of_kind?(:image, :image_too_large)
+    "image_too_large" if errors.of_kind?(:image, :image_too_large)
   end
 
   def batch_upload_security_event_reason(errors)
@@ -468,7 +468,7 @@ class ReceiptsController < ApplicationController
     return "invalid_content_type" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.invalid_content_type"))
     return "file_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.file_too_large"))
     return "image_too_small" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_small"))
-    return "image_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_large"))
+    "image_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_large"))
   end
 
   def consume_single_upload_limit!

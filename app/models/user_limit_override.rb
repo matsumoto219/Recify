@@ -31,11 +31,12 @@ class UserLimitOverride < ApplicationRecord
   end
 
   def normalize_value
-    raw_value = if value.is_a?(Hash)
-                  value["value"] || value[:value]
-                else
-                  value
-                end
+    raw_value =
+      if value.is_a?(Hash)
+        value["value"] || value[:value]
+      else
+        value
+      end
 
     self.value = { "value" => raw_value } if raw_value.present?
   end

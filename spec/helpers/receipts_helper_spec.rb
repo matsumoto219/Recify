@@ -64,7 +64,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
     end
 
     it 'keeps unavailable display when tax amount or net amount is missing' do
-      row = helper.receipt_amount_summary_tax_detail_rows([{ rate: nil, net_amount: nil, amount: 80 }]).first
+      row = helper.receipt_amount_summary_tax_detail_rows([ { rate: nil, net_amount: nil, amount: 80 } ]).first
 
       aggregate_failures do
         expect(row.rate_label).to eq(I18n.t('receipts.common.not_available'))

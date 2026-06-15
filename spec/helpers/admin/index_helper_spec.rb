@@ -38,7 +38,7 @@ RSpec.describe Admin::IndexHelper, type: :helper do
           [ I18n.t('admin.contact_requests.statuses.open'), 'open' ],
           [ I18n.t('admin.contact_requests.statuses.resolved'), 'resolved' ]
         )
-        expect(options[:categories]).to eq([[ I18n.t('admin.contact_requests.categories.bug'), 'bug' ]])
+        expect(options[:categories]).to eq([ [ I18n.t('admin.contact_requests.categories.bug'), 'bug' ] ])
         expect(options[:limits].map(&:last)).to eq(%w[25 50 100])
       end
     end

@@ -39,7 +39,7 @@ RSpec.describe Settings::SecurityPresenter do
 
       presenter = described_class.new(user: user)
 
-      expect(presenter.passkeys).to eq([newer, older])
+      expect(presenter.passkeys).to eq([ newer, older ])
       expect(presenter).to be_passkeys
     end
   end
