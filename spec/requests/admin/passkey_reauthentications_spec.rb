@@ -109,11 +109,27 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('パスキーで再認証')
+        expect(response.body).to include('再認証は5分間有効です。')
         expect(response.body).to include('data-controller="passkey-session"')
         expect(response.body).to include('data-passkey-session-conditional-value="false"')
         expect(response.body).not_to include(passkey.credential_id)
         expect(response.body).not_to include(passkey.public_key)
         expect(response.body).not_to include('challenge')
+      end
+    end
+
+    it '再認証windowの表示はSystemSettingsの値に連動する' do
+      create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(10))
+      admin = create(:user, :admin)
+      create(:passkey, user: admin)
+      sign_in admin
+
+      get new_admin_passkey_reauthentication_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('再認証は10分間有効です。')
+        expect(Admin.passkey_reauth_window_duration).to eq(10.minutes)
       end
     end
 

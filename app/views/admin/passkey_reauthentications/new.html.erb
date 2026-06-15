@@ -44,7 +44,7 @@
         <div class="space-y-2">
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.passkey_reauthentications.new.form_title") %></h2>
           <p class="text-sm token-text-muted leading-relaxed">
-            <%= t("admin.passkey_reauthentications.new.form_description") %>
+            <%= t("admin.passkey_reauthentications.new.form_description", count: @admin_passkey_reauth_window_minutes) %>
           </p>
         </div>
 

@@ -20,7 +20,7 @@ ja:
         no_passkeys_description: 管理者の重要操作にはパスキー再認証が必要です。パスキー設定から登録してください。
         register_passkey: パスキー登録へ
         form_title: パスキーで再認証
-        form_description: 再認証は5分間有効です。認証に使う秘密情報は画面に表示しません。
+        form_description: "再認証は%{count}分間有効です。認証に使う秘密情報は画面に表示しません。"
         submit: パスキーで再認証
       messages:
         succeeded: パスキー再認証済みです。

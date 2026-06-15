@@ -24,6 +24,7 @@ class Admin::PasskeyReauthenticationsController < Admin::BaseController
   def new
     session[RETURN_TO_SESSION_KEY] = safe_return_to(params[:return_to]) if params[:return_to].present?
     @admin_passkey_registered = current_user.passkeys.exists?
+    @admin_passkey_reauth_window_minutes = Admin.passkey_reauth_window_duration.to_i / 1.minute.to_i
   end
 
   def options
