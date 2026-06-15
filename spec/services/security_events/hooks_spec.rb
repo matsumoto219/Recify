@@ -90,4 +90,57 @@ RSpec.describe 'SecurityEvents hooks' do
       'count' => SecurityEvents::ADMIN_BURST_THRESHOLD
     )
   end
+
+  it 'UserLimits overrideの短時間集中をsecurity eventに記録しreason payloadを混ぜない' do
+    admin = create(:user, :admin)
+
+    SecurityEvents::ADMIN_BURST_THRESHOLD.times do
+      AuditLogs.record_admin_action!(
+        actor: admin,
+        action: 'admin.users.limit_update',
+        outcome: 'succeeded',
+        reason: '<script>alert(1)</script> token=secret-value',
+        request: request
+      )
+    end
+
+    event = SecurityEvent.find_by!(event_type: 'user_limits_override_burst')
+
+    aggregate_failures do
+      expect(event).to have_attributes(
+        actor_user: admin,
+        severity: 'medium',
+        matched_rule: "admin_action_count_gte_#{SecurityEvents::ADMIN_BURST_THRESHOLD}",
+        payload_excerpt: 'admin.users.limit_update'
+      )
+      expect(event.metadata).to include(
+        'action' => 'admin.users.limit_update',
+        'count' => SecurityEvents::ADMIN_BURST_THRESHOLD
+      )
+      expect(event.attributes.to_json).not_to include('<script>alert(1)</script>', 'secret-value')
+    end
+  end
+
+  it 'HIGH risk admin操作の短時間集中をsecurity eventに記録する' do
+    admin = create(:user, :admin)
+
+    SecurityEvents::ADMIN_BURST_THRESHOLD.times do
+      AuditLogs.record_admin_action!(
+        actor: admin,
+        action: 'admin.users.lock',
+        outcome: 'succeeded',
+        reason: 'support lock request',
+        request: request
+      )
+    end
+
+    event = SecurityEvent.find_by!(event_type: 'admin_high_risk_burst')
+
+    expect(event).to have_attributes(
+      actor_user: admin,
+      severity: 'high',
+      matched_rule: "admin_action_count_gte_#{SecurityEvents::ADMIN_BURST_THRESHOLD}",
+      payload_excerpt: 'admin.users.lock'
+    )
+  end
 end
