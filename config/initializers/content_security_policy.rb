@@ -1,5 +1,7 @@
 # Be sure to restart your server when you modify this file.
 
+require Rails.root.join("lib/recify_content_security_policy")
+
 # Define an application-wide content security policy.
 # See the Securing Rails Applications Guide for more information:
 # https://guides.rubyonrails.org/security.html#content-security-policy-header
@@ -27,3 +29,7 @@
 #   # Report violations without enforcing the policy.
 #   # config.content_security_policy_report_only = true
 # end
+
+Rails.application.configure do
+  RecifyContentSecurityPolicy.configure(config, report_only: true) if Rails.env.production?
+end
