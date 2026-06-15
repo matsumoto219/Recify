@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_16_091500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -301,6 +301,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
     t.index ["user_id"], name: "index_recovery_codes_on_user_id"
   end
 
+  create_table "security_events", force: :cascade do |t|
+    t.bigint "actor_user_id"
+    t.integer "count", default: 1, null: false
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.string "field_name"
+    t.datetime "first_seen_at", null: false
+    t.datetime "ignored_at"
+    t.inet "ip_address"
+    t.datetime "last_seen_at", null: false
+    t.string "matched_rule"
+    t.jsonb "metadata", default: {}, null: false
+    t.string "method", limit: 16
+    t.string "path", limit: 2048
+    t.text "payload_excerpt"
+    t.string "payload_sha256", limit: 64
+    t.string "request_id"
+    t.datetime "resolved_at"
+    t.string "severity", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_agent", limit: 1000
+    t.index ["actor_user_id"], name: "index_security_events_on_actor_user_id"
+    t.index ["event_type", "ip_address", "path", "payload_sha256"], name: "index_security_events_on_aggregation_key"
+    t.index ["event_type"], name: "index_security_events_on_event_type"
+    t.index ["ignored_at"], name: "index_security_events_on_ignored_at", where: "(ignored_at IS NULL)"
+    t.index ["ip_address"], name: "index_security_events_on_ip_address"
+    t.index ["last_seen_at"], name: "index_security_events_on_last_seen_at"
+    t.index ["payload_sha256"], name: "index_security_events_on_payload_sha256"
+    t.index ["request_id"], name: "index_security_events_on_request_id"
+    t.index ["resolved_at"], name: "index_security_events_on_resolved_at", where: "(resolved_at IS NULL)"
+    t.index ["severity"], name: "index_security_events_on_severity"
+  end
+
   create_table "system_settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -441,6 +474,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_125631) do
   add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "users"
   add_foreign_key "recovery_codes", "users"
+  add_foreign_key "security_events", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
   add_foreign_key "totp_credentials", "users"
   add_foreign_key "usage_counters", "users"
