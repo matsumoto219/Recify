@@ -122,6 +122,34 @@ RSpec.describe 'Rack::Attack', type: :request do
     expect_throttled_html_response
   end
 
+  it 'records throttled sign in attempts without credential payload' do
+    ip = '203.0.113.30'
+
+    20.times do
+      post user_session_path, params: invalid_sign_in_params, headers: remote_addr(ip)
+      expect(response).not_to have_http_status(:too_many_requests)
+    end
+
+    expect {
+      post user_session_path, params: invalid_sign_in_params, headers: remote_addr(ip)
+    }.to change(SecurityEvent.where(event_type: 'rate_limit_triggered'), :count).by(1)
+
+    event = SecurityEvent.last
+
+    aggregate_failures do
+      expect_throttled_html_response
+      expect(event).to have_attributes(
+        severity: 'medium',
+        path: user_session_path,
+        method: 'POST',
+        matched_rule: 'auth/sign_in/ip'
+      )
+      expect(event.ip_address.to_s).to eq(ip)
+      expect(event.payload_excerpt).to be_blank
+      expect(event.metadata.to_json).not_to include('wrong-password', 'missing@example.com')
+    end
+  end
+
   it 'asks Turbo form submissions to reload the throttled HTML page' do
     ip = '203.0.113.18'
 

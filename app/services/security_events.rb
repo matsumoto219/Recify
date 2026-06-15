@@ -192,6 +192,9 @@ module SecurityEvents
     end
 
     def request_path(request)
+      original_path = original_request_path(request)
+      return original_path if original_path.present?
+
       request.respond_to?(:path) ? request.path : request.try(:path)
     end
 
@@ -216,6 +219,16 @@ module SecurityEvents
       return if filename.blank?
 
       File.extname(filename).presence
+    end
+
+    def original_request_path(request)
+      return unless request.respond_to?(:env)
+
+      raw_path =
+        request.env["action_dispatch.original_path"].presence ||
+        request.env["action_dispatch.original_fullpath"].presence
+
+      raw_path.to_s.split("?").first.presence
     end
 
     def suspicious_error_path?(path, status)

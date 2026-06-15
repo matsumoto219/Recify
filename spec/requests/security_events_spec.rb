@@ -3,6 +3,19 @@ require 'rails_helper'
 RSpec.describe 'Security events', type: :request do
   let(:user) { create(:user) }
 
+  around do |example|
+    original_show_exceptions = Rails.application.env_config['action_dispatch.show_exceptions']
+    original_show_detailed_exceptions = Rails.application.env_config['action_dispatch.show_detailed_exceptions']
+
+    Rails.application.env_config['action_dispatch.show_exceptions'] = :all
+    Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = false
+
+    example.run
+  ensure
+    Rails.application.env_config['action_dispatch.show_exceptions'] = original_show_exceptions
+    Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = original_show_detailed_exceptions
+  end
+
   before do
     sign_in user
   end
@@ -121,5 +134,90 @@ RSpec.describe 'Security events', type: :request do
       severity: 'high',
       matched_rule: 'suspicious_403'
     )
+  end
+
+  it '他ユーザーのreceipt参照は404にしつつIDOR候補として記録する' do
+    other_user = create(:user, email: 'security-event-other@example.com')
+    other_receipt = create(
+      :receipt,
+      user: other_user,
+      store_name: 'Other Receipt',
+      total_amount: 999,
+      payment_method: 'cash',
+      status: 'completed'
+    )
+
+    expect {
+      get receipt_path(other_receipt)
+    }.to change(SecurityEvent.where(event_type: 'idor_attempt'), :count).by(1)
+
+    event = SecurityEvent.last
+
+    aggregate_failures do
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).not_to include('Other Receipt')
+      expect(event).to have_attributes(
+        actor_user: user,
+        severity: 'medium',
+        matched_rule: 'suspicious_404'
+      )
+      expect(event.metadata).to include('status' => 404, 'source' => 'error_page')
+    end
+  end
+
+  it '一般ユーザーのadminアクセスは404にしつつIDOR候補として記録する' do
+    expect {
+      get admin_security_events_path
+    }.to change(SecurityEvent.where(event_type: 'idor_attempt'), :count).by(1)
+
+    event = SecurityEvent.last
+
+    aggregate_failures do
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).not_to include('セキュリティイベント')
+      expect(event).to have_attributes(
+        actor_user: user,
+        severity: 'medium',
+        matched_rule: 'suspicious_404'
+      )
+      expect(event.metadata).to include('status' => 404, 'source' => 'error_page')
+    end
+  end
+
+  it 'CSRF failureをtoken値なしで記録し更新しない' do
+    receipt = create(
+      :receipt,
+      user: user,
+      store_name: 'Before CSRF',
+      total_amount: 1000,
+      payment_method: 'cash',
+      status: 'completed'
+    )
+    original_allow_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
+    expect {
+      patch receipt_path(receipt),
+            params: {
+              authenticity_token: 'raw-csrf-token-should-not-be-saved',
+              receipt: { store_name: 'After CSRF' }
+            }
+    }.to change(SecurityEvent.where(event_type: 'csrf_failure'), :count).by(1)
+
+    event = SecurityEvent.last
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(receipt.reload.store_name).to eq('Before CSRF')
+      expect(event).to have_attributes(
+        actor_user: user,
+        severity: 'high',
+        matched_rule: 'invalid_authenticity_token'
+      )
+      expect(event.metadata).to include('source' => 'rails_csrf')
+      expect(event.attributes.to_json).not_to include('raw-csrf-token-should-not-be-saved')
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = original_allow_forgery_protection
   end
 end
