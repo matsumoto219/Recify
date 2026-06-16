@@ -3,6 +3,11 @@
 require "openssl"
 
 class ApplicationController < ActionController::Base
+  PUBLIC_LAYOUT_ACTIONS = {
+    "home" => %w[index],
+    "legal" => %w[terms privacy]
+  }.freeze
+
   USER_SESSION_VERSION_SESSION_KEY = :user_session_version
 
   class RateLimitStore
@@ -47,7 +52,8 @@ class ApplicationController < ActionController::Base
   end
 
   helper_method :maintenance_notice_enabled?, :maintenance_notice_title, :maintenance_notice_body,
-                :maintenance_mode_login_restricted?, :maintenance_mode_title, :maintenance_mode_body
+                :maintenance_mode_login_restricted?, :maintenance_mode_title, :maintenance_mode_body,
+                :public_layout_page?
 
   private
 
@@ -59,6 +65,10 @@ class ApplicationController < ActionController::Base
 
   def clear_user_session_version
     session.delete(USER_SESSION_VERSION_SESSION_KEY)
+  end
+
+  def public_layout_page?
+    PUBLIC_LAYOUT_ACTIONS.fetch(controller_path, []).include?(action_name)
   end
 
   def enforce_user_session_version!

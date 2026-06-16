@@ -30,7 +30,7 @@
   </head>
 
   <body data-theme-preference="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
-    <% show_dashboard_shell = user_signed_in? && !(controller_name == "home" && action_name == "index") %>
+    <% show_dashboard_shell = user_signed_in? && !public_layout_page? %>
 
     <div id="flash">
       <%= render "shared/ui/feedback/flash" %>

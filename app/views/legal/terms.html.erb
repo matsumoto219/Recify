@@ -1,0 +1,30 @@
+<% content_for :title, t("legal.terms.title") %>
+
+<section class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
+  <%= render "shared/ui/layout/section_header",
+        title: t("legal.terms.title"),
+        subtitle: t("legal.terms.lead"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base",
+        align: :center %>
+
+  <p class="text-center text-xs font-semibold uppercase tracking-wider token-text-muted">
+    <%= t("legal.common.last_updated", date: t("legal.terms.last_updated_on")) %>
+  </p>
+
+  <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-base">
+    <p class="font-semibold token-text-warning"><%= t("legal.common.placeholder_title") %></p>
+    <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("legal.common.placeholder_body") %></p>
+  </div>
+
+  <div class="space-y-4">
+    <% t("legal.terms.sections").each do |section| %>
+      <%= render "shared/ui/layout/surface_card", padding: :md do %>
+        <section class="space-y-2">
+          <h2 class="text-lg font-bold token-text-base"><%= section.fetch(:title) %></h2>
+          <p class="text-sm leading-7 token-text-muted"><%= section.fetch(:body) %></p>
+        </section>
+      <% end %>
+    <% end %>
+  </div>
+</section>
