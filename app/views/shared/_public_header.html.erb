@@ -1,3 +1,35 @@
-<%# TODO: home/index 用の public_header を実装予定
-    dashboard_header とは責務を分離し、
-    未ログイン時専用のヘッダーを配置する %>
+<header id="public-header" class="public-header-shell">
+  <div class="mx-auto flex min-h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
+    <%= render "shared/brand/logo",
+          href: root_path,
+          variant: :full,
+          size: :md,
+          class_name: "shrink-0" %>
+
+    <nav class="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="<%= t("shared.public_header.navigation_aria") %>">
+      <% if user_signed_in? %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: receipts_path,
+              label: t("shared.public_header.receipts"),
+              variant: :secondary,
+              size: :sm,
+              radius: :xl %>
+      <% else %>
+        <%= link_to t("shared.public_header.login"),
+              new_user_session_path,
+              class: "rounded-xl px-3 py-2 text-sm font-semibold token-text-base public-header-text-link transition-colors sm:px-4" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_user_registration_path,
+              label: t("shared.public_header.sign_up"),
+              variant: :primary,
+              size: :sm,
+              weight: :bold,
+              radius: :xl,
+              class: "shadow-sm" %>
+      <% end %>
+    </nav>
+  </div>
+</header>

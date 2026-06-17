@@ -257,6 +257,36 @@ body {
   box-shadow: var(--neutral-glass-shadow);
 }
 
+/* ===== Public Layout ===== */
+.public-header-shell {
+  --public-header-gradient-start: var(--browser-chrome-bg);
+  --public-header-gradient-end: transparent;
+
+  background-color: var(--bg-page);
+  background-image: linear-gradient(
+    to bottom,
+    var(--public-header-gradient-start) 0%,
+    var(--public-header-gradient-end) 100%
+  );
+}
+
+.public-footer-shell {
+  --public-footer-gradient-start: transparent;
+  --public-footer-gradient-end: var(--browser-chrome-bg);
+
+  background-color: var(--bg-page);
+  background-image: linear-gradient(
+    to bottom,
+    var(--public-footer-gradient-start) 0%,
+    var(--public-footer-gradient-end) 100%
+  );
+}
+
+.public-header-text-link:hover,
+.public-footer-link:hover {
+  color: var(--brand-primary);
+}
+
 .token-border-brand-soft {
   border-color: color-mix(
     in srgb,

@@ -9,9 +9,19 @@ ja:
     noscript:
       title: JavaScriptを有効にしてください
       body: Recifyは画像アップロード、金額計算、検索、通知などにJavaScriptを使用します。ブラウザ設定でJavaScriptを有効にしてから再読み込みしてください。
+    public_header:
+      navigation_aria: 公開ページナビゲーション
+      login: ログイン
+      sign_up: 新規登録
+      receipts: レシート一覧へ
+      receipts_short: 一覧へ
     footer:
+      navigation_aria: フッターナビゲーション
+      tagline: レシート整理を、もっと簡単に。
+      contact: お問い合わせ
       terms: 利用規約
       privacy: プライバシーポリシー
+      copyright: "© %{year} Recify"
     notifications:
       unread_aria: 未読
     section_header:

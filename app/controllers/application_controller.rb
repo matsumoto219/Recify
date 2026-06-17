@@ -7,6 +7,7 @@ class ApplicationController < ActionController::Base
     "home" => %w[index],
     "legal" => %w[terms privacy]
   }.freeze
+  PUBLIC_HEADER_ACTIONS = PUBLIC_LAYOUT_ACTIONS
 
   USER_SESSION_VERSION_SESSION_KEY = :user_session_version
 
@@ -53,7 +54,7 @@ class ApplicationController < ActionController::Base
 
   helper_method :maintenance_notice_enabled?, :maintenance_notice_title, :maintenance_notice_body,
                 :maintenance_mode_login_restricted?, :maintenance_mode_title, :maintenance_mode_body,
-                :public_layout_page?
+                :public_layout_page?, :public_header_page?
 
   private
 
@@ -69,6 +70,10 @@ class ApplicationController < ActionController::Base
 
   def public_layout_page?
     PUBLIC_LAYOUT_ACTIONS.fetch(controller_path, []).include?(action_name)
+  end
+
+  def public_header_page?
+    PUBLIC_HEADER_ACTIONS.fetch(controller_path, []).include?(action_name)
   end
 
   def enforce_user_session_version!

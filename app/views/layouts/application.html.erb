@@ -45,6 +45,8 @@
         <%= yield %>
       <% end %>
     <% else %>
+      <%= render "shared/public_header" if public_header_page? %>
+
       <main class="token-bg-page min-h-screen">
         <%= yield %>
       </main>
