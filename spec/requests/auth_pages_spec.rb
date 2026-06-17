@@ -100,11 +100,14 @@ RSpec.describe 'Auth pages', type: :request do
       passkey_controller = document.at_css('[data-controller~="passkey-session"]')
       passkey_button = document.at_css('[data-action="click->passkey-session#login"]')
       noscript_banner = document.at_css('noscript')
+      auth_logo = document.at_css('.auth-icon-surface .brand-logo-icon')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(auth_logo['aria-label']).to eq('Recify')
+        expect(auth_logo.at_css('.brand-logo-text')).to be_nil
         expect(response.body).to include(I18n.t('auth.sessions.title'))
         expect(noscript_banner).to be_present
         expect(noscript_banner.text).to include(I18n.t('shared.noscript.title'))

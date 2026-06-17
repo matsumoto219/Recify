@@ -150,17 +150,20 @@ body {
 }
 
 /* ===== Brand Logo ===== */
-.brand-logo {
+:where(.brand-logo) {
   --brand-logo-mark-size: 1.75rem;
   --brand-logo-font-size: 1.25rem;
   --brand-logo-gap: 0.5rem;
-  --brand-logo-gradient: linear-gradient(
-    135deg,
-    var(--brand-gradient-start) 0%,
-    var(--brand-gradient-end) 58%,
-    var(--brand-primary-strong) 100%
+  --brand-logo-mark-gradient: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
   );
-  --brand-logo-gradient-size: 220% 220%;
+  --brand-logo-text-gradient: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
 
   display: inline-flex;
   align-items: center;
@@ -212,17 +215,15 @@ body {
 .brand-logo-text {
   min-width: 0;
   font-size: var(--brand-logo-font-size);
-  font-weight: 800;
-  line-height: 1;
+  font-weight: 700;
+  line-height: 1.4;
   letter-spacing: 0;
   color: var(--brand-primary);
 }
 
 @supports ((mask-image: url("")) or (-webkit-mask-image: url(""))) {
   .brand-logo-mark {
-    background-image: var(--brand-logo-gradient);
-    background-size: var(--brand-logo-gradient-size);
-    background-position: left top;
+    background-image: var(--brand-logo-mark-gradient);
     mask-image: var(--brand-icon-url);
     mask-repeat: no-repeat;
     mask-position: center;
@@ -239,9 +240,7 @@ body {
 
 @supports ((background-clip: text) or (-webkit-background-clip: text)) {
   .brand-logo-text {
-    background-image: var(--brand-logo-gradient);
-    background-size: var(--brand-logo-gradient-size);
-    background-position: right bottom;
+    background-image: var(--brand-logo-text-gradient);
     background-clip: text;
 
     /* stylelint-disable-next-line property-no-vendor-prefix -- Safari still requires prefixed background clipping for text. */
@@ -1351,6 +1350,20 @@ body {
     var(--brand-primary) 20%,
     transparent
   );
+}
+
+.auth-icon-surface .brand-logo {
+  --brand-logo-mark-gradient: linear-gradient(
+    to bottom right,
+    var(--btn-primary-text),
+    color-mix(
+      in srgb,
+      var(--btn-primary-text) 84%,
+      var(--brand-gradient-start)
+    )
+  );
+
+  color: var(--btn-primary-text);
 }
 
 .auth-icon-symbol {

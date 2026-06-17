@@ -386,10 +386,29 @@ RSpec.describe 'Receipts', type: :request do
       mobile_nav_labels = document.css('#mobile-bottom-nav .mobile-bottom-nav-label')
       search_prefixes = header.css('#desktop-search-help [data-search-prefix-param]').map { |node| node['data-search-prefix-param'] }
       tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
+      sidebar_full_slot = document.at_css('#desktop-sidebar [data-brand-logo-slot="sidebar-full"]')
+      sidebar_narrow_slot = document.at_css('#desktop-sidebar [data-brand-logo-slot="sidebar-narrow"]')
+      header_logo_slot = document.at_css('#dashboard-header [data-brand-logo-slot="mobile-header"]')
+      sidebar_full_logo = document.at_css('#desktop-sidebar .brand-logo-full')
+      sidebar_icon_logo = document.at_css('#desktop-sidebar .brand-logo-icon')
+      header_icon_logo = document.at_css('#dashboard-header .brand-logo-icon')
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('dashboard.index.default_subtitle'))
+        expect(sidebar_full_slot['class']).to include('hidden')
+        expect(sidebar_full_slot['class']).to include('xl:block')
+        expect(sidebar_narrow_slot['class']).to include('xl:hidden')
+        expect(header_logo_slot['class']).to include('md:hidden')
+        expect(header_logo_slot['class']).to include('shrink-0')
+        expect(sidebar_full_logo['aria-label']).to eq('Recify')
+        expect(sidebar_full_logo.at_css('.brand-logo-text').text).to eq('Recify')
+        expect(sidebar_icon_logo['aria-label']).to eq('Recify')
+        expect(sidebar_icon_logo['class']).to include('brand-logo-lg')
+        expect(sidebar_icon_logo.at_css('.brand-logo-text')).to be_nil
+        expect(header_icon_logo['href']).to eq(receipts_path)
+        expect(header_icon_logo['class']).to include('brand-logo-lg')
+        expect(header_icon_logo.at_css('.brand-logo-text')).to be_nil
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.receipts'))
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
         expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))

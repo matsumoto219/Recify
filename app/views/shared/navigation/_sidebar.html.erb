@@ -1,10 +1,19 @@
 <aside id="desktop-sidebar" data-component="sidebar" class="hidden md:flex flex-col md:w-20 xl:w-64 fixed left-0 top-0 bottom-0 sidebar-surface py-6 z-50">
-  <div class="px-6 mb-10">
-    <%= link_to root_path, class: "inline-block" do %>
-      <%# TODO: ロゴは仮。タブレット用（md表示時）の簡易ロゴやアイコンロゴを別途用意する可能性あり %>
-      <h1 class="hidden xl:block text-xl font-bold token-brand-gradient bg-clip-text text-transparent">Recify</h1>
-      <p class="hidden xl:block text-[0.6875rem] token-text-muted tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
-    <% end %>
+  <div class="px-0 xl:px-6 mb-10 flex justify-center xl:block">
+    <div class="xl:hidden" data-brand-logo-slot="sidebar-narrow">
+      <%= render "shared/brand/logo",
+            href: root_path,
+            variant: :icon,
+            size: :lg %>
+    </div>
+
+    <div class="hidden xl:block" data-brand-logo-slot="sidebar-full">
+      <%= render "shared/brand/logo",
+            href: root_path,
+            variant: :full,
+            size: :md %>
+      <p class="text-[0.6875rem] token-text-muted tracking-widest font-semibold uppercase mt-1">Receipt Management</p>
+    </div>
   </div>
 
   <nav class="flex-1 space-y-1 px-0">
