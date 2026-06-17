@@ -41,7 +41,8 @@ RSpec.describe 'User registrations', type: :request do
 
       sign_in user
 
-      delete user_registration_path
+      delete user_registration_path,
+             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml' }
 
       aggregate_failures do
         expect(response).to redirect_to(root_path)
@@ -58,6 +59,31 @@ RSpec.describe 'User registrations', type: :request do
         expect(ActiveStorage::Attachment.where(id: avatar_attachment_id)).not_to exist
         expect(ActiveStorage::Attachment.where(id: receipt_image_attachment_id)).not_to exist
         expect(response.body).not_to include(encrypted_password, passkey.credential_id, passkey.public_key, user_session.session_uid_digest)
+      end
+    end
+
+    it '退会後のHomeに完了flashをtoastとして表示する' do
+      user = create(:user)
+      sign_in user
+
+      delete user_registration_path,
+             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml' }
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      flash = document.at_css('#flash')
+      notice_surface = flash&.at_css('[data-controller~="notice-surface"]')
+      home_stylesheet = document.at_css("link[rel='stylesheet'][href='/home_lp.css']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(request.path).to eq(root_path)
+        expect(flash).to be_present
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('devise.registrations.destroyed'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
+        expect(home_stylesheet).to be_present
+        expect(home_stylesheet['data-turbo-track']).to be_nil
       end
     end
 

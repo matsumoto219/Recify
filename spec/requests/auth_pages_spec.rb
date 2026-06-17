@@ -108,6 +108,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
         expect(public_header).to be_nil
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
         expect(auth_logo['aria-label']).to eq('Recify')
         expect(auth_logo.at_css('.brand-logo-text')).to be_nil
         expect(response.body).to include(I18n.t('auth.sessions.title'))

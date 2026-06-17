@@ -25,6 +25,8 @@ RSpec.describe 'Legal pages', type: :request do
         expect(public_footer.at_css("a[href='#{contact_path}']")).to be_present
         expect(public_footer.at_css("a[href='#{terms_path}']")).to be_present
         expect(public_footer.at_css("a[href='#{privacy_path}']")).to be_present
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('href="#"')
         expect(response.body).not_to include('translation missing')
       end
@@ -47,6 +49,8 @@ RSpec.describe 'Legal pages', type: :request do
         expect(receipts_link['class']).to include('btn-secondary')
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_nil
         expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_nil
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('id="desktop-sidebar"')
         expect(response.body).not_to include('translation missing')
       end
@@ -77,6 +81,8 @@ RSpec.describe 'Legal pages', type: :request do
         expect(public_footer.at_css("a[href='#{contact_path}']")).to be_present
         expect(public_footer.at_css("a[href='#{terms_path}']")).to be_present
         expect(public_footer.at_css("a[href='#{privacy_path}']")).to be_present
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('href="#"')
         expect(response.body).not_to include('translation missing')
       end
@@ -99,6 +105,8 @@ RSpec.describe 'Legal pages', type: :request do
         expect(receipts_link['class']).to include('btn-secondary')
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_nil
         expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_nil
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('id="desktop-sidebar"')
         expect(response.body).not_to include('translation missing')
       end
