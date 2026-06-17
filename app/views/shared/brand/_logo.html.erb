@@ -1,0 +1,47 @@
+<%
+  allowed_variants = %i[full compact icon]
+  allowed_sizes = %i[sm md lg]
+
+  variant = local_assigns.fetch(:variant, :full).to_sym
+  variant = :full unless allowed_variants.include?(variant)
+
+  size = local_assigns.fetch(:size, :md).to_sym
+  size = :md unless allowed_sizes.include?(size)
+
+  label = local_assigns.fetch(:label, t("common.app_name", default: "Recify"))
+  href = local_assigns.key?(:href) ? local_assigns[:href] : root_path
+  class_name = local_assigns[:class_name]
+
+  wrapper_classes = [
+    "brand-logo",
+    "brand-logo-#{variant}",
+    "brand-logo-#{size}",
+    class_name
+  ].compact.join(" ")
+
+  wrapper_attributes = {
+    class: wrapper_classes,
+    style: "--brand-icon-url: url('#{asset_path("brand/recify-icon.svg")}');",
+    aria: { label: label }
+  }
+
+  wrapper_attributes[:role] = "img" if href.blank?
+%>
+
+<% logo_content = capture do %>
+  <span class="brand-logo-mark" aria-hidden="true"></span>
+
+  <% unless variant == :icon %>
+    <span class="brand-logo-text"><%= label %></span>
+  <% end %>
+<% end %>
+
+<% if href.present? %>
+  <%= link_to href, wrapper_attributes do %>
+    <%= logo_content %>
+  <% end %>
+<% else %>
+  <%= tag.span(**wrapper_attributes) do %>
+    <%= logo_content %>
+  <% end %>
+<% end %>
