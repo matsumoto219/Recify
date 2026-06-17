@@ -1,3 +1,5 @@
-<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="256" cy="256" r="256" fill="red"/>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Recify icon</title>
+  <desc id="desc">A stylized letter R formed from a receipt shape.</desc>
+  <path fill-rule="evenodd" clip-rule="evenodd" fill="#4B4DD8" d="M210 115H640C774 115 870 211 870 348V466L708 575L870 720V895L804 835L739 895L674 835L609 895L544 835L479 895L414 835L349 895L284 835L210 895V115ZM347 310H697A29 29 0 0 1 726 339V339A29 29 0 0 1 697 368H347A29 29 0 0 1 318 339V339A29 29 0 0 1 347 310ZM347 445H697A29 29 0 0 1 726 474V474A29 29 0 0 1 697 503H347A29 29 0 0 1 318 474V474A29 29 0 0 1 347 445ZM347 580H577A29 29 0 0 1 606 609V609A29 29 0 0 1 577 638H347A29 29 0 0 1 318 609V609A29 29 0 0 1 347 580Z"/>
 </svg>
