@@ -7,7 +7,14 @@ class ApplicationController < ActionController::Base
     "home" => %w[index],
     "legal" => %w[terms privacy]
   }.freeze
-  PUBLIC_HEADER_ACTIONS = PUBLIC_LAYOUT_ACTIONS
+  AUTH_HEADER_ACTIONS = {
+    "users/sessions" => %w[new create],
+    "users/registrations" => %w[new create],
+    "users/passwords" => %w[new create edit update],
+    "users/confirmations" => %w[new create],
+    "users/unlocks" => %w[new create]
+  }.freeze
+  PUBLIC_HEADER_ACTIONS = PUBLIC_LAYOUT_ACTIONS.merge(AUTH_HEADER_ACTIONS).freeze
 
   USER_SESSION_VERSION_SESSION_KEY = :user_session_version
 

@@ -65,6 +65,17 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
+  def expect_public_header(document)
+    public_header = document.at_css('#public-header')
+
+    aggregate_failures do
+      expect(public_header).to be_present
+      expect(public_header.at_css('.brand-logo-full[aria-label="Recify"]')).to be_present
+    end
+
+    public_header
+  end
+
   def enable_login_restricted_maintenance(title: '臨時メンテナンス', body: "1行目\n2行目")
     create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
     create(:system_setting, key: 'maintenance.title', value: SystemSettings.stored_value(title))
@@ -107,7 +118,10 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
-        expect(public_header).to be_nil
+        expect(public_header).to be_present
+        expect(public_header.at_css('.brand-logo-full[aria-label="Recify"]')).to be_present
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_nil
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).not_to include('/home_lp.css')
         expect(response.body).not_to include('data-controller="home-reveal"')
         expect(auth_logo['aria-label']).to eq('Recify')
@@ -345,6 +359,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_registration_path
 
       document = Nokogiri::HTML(response.body)
+      public_header = document.at_css('#public-header')
       login_link = document.at_css("a[href='#{new_user_session_path}']")
       terms_link = document.at_css("a[href='#{terms_path}']")
       privacy_link = document.at_css("a[href='#{privacy_path}']")
@@ -364,6 +379,10 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(public_header).to be_present
+        expect(public_header.at_css('.brand-logo-full[aria-label="Recify"]')).to be_present
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_nil
         expect(response.body).to include(I18n.t('auth.registrations.new.title'))
         expect(response.body).to include(I18n.t('auth.registrations.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.terms'))
@@ -895,6 +914,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_password_path
 
       document = Nokogiri::HTML(response.body)
+      public_header = expect_public_header(document)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
       email_input = document.at_css('input[name="user[email]"]')
 
@@ -902,6 +922,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.passwords.new.title'))
         expect(response.body).to include(I18n.t('auth.passwords.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.passwords.new.buttons.submit'))
@@ -942,6 +964,7 @@ RSpec.describe 'Auth pages', type: :request do
       get edit_user_password_path(reset_password_token: reset_password_token)
 
       document = Nokogiri::HTML(response.body)
+      public_header = expect_public_header(document)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
       password_input = document.at_css("input[type='password'][name='user[password]']")
       password_confirmation_input = document.at_css("input[type='password'][name='user[password_confirmation]']")
@@ -950,6 +973,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.passwords.edit.title'))
         expect(response.body).to include(I18n.t('auth.passwords.edit.fields.password'))
         expect(response.body).to include(I18n.t('auth.passwords.edit.fields.password_confirmation'))
@@ -973,6 +998,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_confirmation_path
 
       document = Nokogiri::HTML(response.body)
+      public_header = expect_public_header(document)
       email_input = document.at_css("input[type='email'][name='user[email]']")
 
       aggregate_failures do
@@ -980,6 +1006,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
         expect(document.css('.ambient-background').size).to eq(1)
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.confirmations.new.buttons.submit'))
@@ -1253,6 +1281,7 @@ RSpec.describe 'Auth pages', type: :request do
       get new_user_unlock_path
 
       document = Nokogiri::HTML(response.body)
+      public_header = expect_public_header(document)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
       email_input = document.at_css("input[type='email'][name='user[email]']")
 
@@ -1260,6 +1289,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
+        expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.unlocks.new.title'))
         expect(response.body).to include(I18n.t('auth.unlocks.new.fields.email'))
         expect(response.body).to include(I18n.t('auth.unlocks.new.buttons.submit'))
