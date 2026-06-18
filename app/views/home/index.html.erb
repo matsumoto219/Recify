@@ -18,38 +18,12 @@
   how_it_works_steps = t("home.how_it_works.steps")
   trust_items = t("home.trust.items")
   before_after = t("home.before_after")
-  section_nav_items = [
-    { id: "home-hero", label: t("home.section_nav.hero") },
-    { id: "home-problem", label: t("home.section_nav.problem") },
-    { id: "home-before-after", label: t("home.section_nav.before_after") },
-    { id: "home-features", label: t("home.section_nav.features") },
-    { id: "home-how", label: t("home.section_nav.how_it_works") },
-    { id: "home-trust", label: t("home.section_nav.trust") },
-    { id: "home-final-cta", label: t("home.section_nav.final_cta") }
-  ]
 %>
 
 <div class="home-lp overflow-hidden" data-controller="home-reveal">
-  <nav class="home-section-nav" aria-label="<%= t("home.section_nav.label") %>">
-    <% section_nav_items.each_with_index do |item, index| %>
-      <%= link_to "##{item.fetch(:id)}",
-            class: ["home-section-nav-dot", ("is-active" if index.zero?)].compact.join(" "),
-            title: item.fetch(:label),
-            data: {
-              home_reveal_target: "navItem",
-              home_section_id: item.fetch(:id),
-              action: "click->home-reveal#navigate"
-            },
-            aria: {
-              label: item.fetch(:label),
-              current: index.zero? ? "true" : nil
-            } do %>
-        <span class="sr-only"><%= item.fetch(:label) %></span>
-      <% end %>
-    <% end %>
-  </nav>
+  <nav class="home-section-nav" aria-label="<%= t("home.section_nav.label") %>"></nav>
 
-  <section id="home-hero" class="home-hero-section mx-auto grid w-full max-w-7xl items-center gap-12 px-4 pb-18 pt-14 sm:px-6 md:pt-20 lg:px-8 lg:pb-24 xl:grid-cols-2 xl:gap-14" data-home-reveal-target="section">
+  <section id="home-hero" class="home-hero-section mx-auto grid w-full max-w-7xl items-center gap-12 px-4 pb-18 pt-14 sm:px-6 md:pt-20 lg:px-8 lg:pb-24 xl:grid-cols-2 xl:gap-14" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.hero") %>">
     <div class="min-w-0 max-w-3xl">
       <p class="inline-flex rounded-lg token-brand-soft-bg px-3 py-1.5 text-xs font-bold token-text-brand sm:text-sm">
         <%= t("home.hero.badge") %>
@@ -117,7 +91,7 @@
     <%= render "home/hero_mock" %>
   </section>
 
-  <section id="home-problem" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-problem-title" data-home-reveal-target="section">
+  <section id="home-problem" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-problem-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.problem") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-problem-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= t("home.problem.title") %></span>
@@ -143,7 +117,7 @@
     </div>
   </section>
 
-  <section id="home-before-after" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-before-after-title" data-home-reveal-target="section">
+  <section id="home-before-after" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-before-after-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.before_after") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-before-after-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= before_after.fetch(:title) %></span>
@@ -197,7 +171,7 @@
     </div>
   </section>
 
-  <section id="home-features" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-features-title" data-home-reveal-target="section">
+  <section id="home-features" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-features-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.features") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-features-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= t("home.features.title") %></span>
@@ -228,7 +202,7 @@
     </div>
   </section>
 
-  <section id="home-how" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-how-title" data-home-reveal-target="section">
+  <section id="home-how" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-how-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.how_it_works") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-how-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <%= t("home.how_it_works.title") %>
@@ -238,7 +212,7 @@
 
     <ol class="mt-9 grid gap-5 lg:grid-cols-3">
       <% how_it_works_steps.each_with_index do |step, index| %>
-        <li class="home-lp-card relative rounded-2xl border token-border-soft token-bg-card p-6 surface-card-shadow" data-home-reveal-target="item">
+        <li class="home-lp-card home-step-card relative rounded-2xl border token-border-soft token-bg-card p-6 surface-card-shadow" data-home-reveal-target="item">
           <div class="flex items-center gap-4">
             <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full token-bg-brand-strong text-sm font-black token-text-on-brand">
               <%= index + 1 %>
@@ -246,12 +220,84 @@
             <h3 class="text-lg font-bold token-text-base"><%= step.fetch(:title) %></h3>
           </div>
 
-          <div class="mt-6 flex min-h-24 items-center justify-center rounded-xl token-bg-card-subtle p-5">
-            <div class="grid w-full gap-3">
-              <div class="h-3 w-2/3 rounded-full token-brand-soft-bg"></div>
-              <div class="h-3 w-full rounded-full token-bg-card"></div>
-              <div class="h-3 w-5/6 rounded-full token-bg-card"></div>
-            </div>
+          <div class="home-step-visual mt-6" aria-hidden="true">
+            <% case index %>
+            <% when 0 %>
+              <div class="home-step-upload-mock">
+                <div class="home-step-phone-frame">
+                  <div class="home-step-phone-camera"></div>
+                  <div class="home-step-capture-preview">
+                    <span class="home-step-capture-title">RECEIPT</span>
+                    <span class="home-step-capture-line"></span>
+                    <span class="home-step-capture-line"></span>
+                    <span class="home-step-capture-line"></span>
+                  </div>
+                </div>
+                <div class="home-step-image-sheet">
+                  <span class="home-step-image-sheet-title">レシート画像</span>
+                  <span class="home-step-image-sheet-line"></span>
+                  <span class="home-step-image-sheet-line"></span>
+                  <span class="home-step-image-sheet-line"></span>
+                </div>
+                <div class="home-step-upload-chip">
+                  <span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span>
+                </div>
+              </div>
+            <% when 1 %>
+              <div class="home-step-scan-mock">
+                <div class="home-step-scan-frame">
+                  <span class="home-step-scan-corner home-step-scan-corner-top-left"></span>
+                  <span class="home-step-scan-corner home-step-scan-corner-top-right"></span>
+                  <span class="home-step-scan-corner home-step-scan-corner-bottom-left"></span>
+                  <span class="home-step-scan-corner home-step-scan-corner-bottom-right"></span>
+                  <span class="home-step-scan-line"></span>
+                  <div class="home-step-scan-document">
+                    <span class="home-step-ocr-badge">OCR</span>
+                    <span class="home-step-receipt-line w-3/4"></span>
+                    <span class="home-step-receipt-line w-full"></span>
+                    <span class="home-step-receipt-line w-5/6"></span>
+                  </div>
+                </div>
+                <div class="home-step-result-card">
+                  <span class="home-step-result-row">
+                    <span class="home-step-result-check" aria-hidden="true"></span>
+                    <span class="home-step-result-label">店舗名</span>
+                  </span>
+                  <span class="home-step-result-row">
+                    <span class="home-step-result-check" aria-hidden="true"></span>
+                    <span class="home-step-result-label">合計金額</span>
+                  </span>
+                  <span class="home-step-result-row">
+                    <span class="home-step-result-check" aria-hidden="true"></span>
+                    <span class="home-step-result-label">明細</span>
+                  </span>
+                </div>
+              </div>
+            <% else %>
+              <div class="home-step-save-mock">
+                <div class="home-step-review-card">
+                  <span class="home-step-review-row">
+                    <span class="home-step-review-icon material-symbols-outlined" aria-hidden="true">fact_check</span>
+                    <span class="home-step-review-line"></span>
+                  </span>
+                  <span class="home-step-review-row">
+                    <span class="home-step-review-icon material-symbols-outlined" aria-hidden="true">edit_square</span>
+                    <span class="home-step-review-line"></span>
+                  </span>
+                  <span class="home-step-review-row">
+                    <span class="home-step-review-icon material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                    <span class="home-step-review-line"></span>
+                  </span>
+                </div>
+                <div class="home-step-complete-badge">
+                  <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                </div>
+                <div class="home-step-save-pill">
+                  <span class="material-symbols-outlined" aria-hidden="true">save</span>
+                  <span><%= t("home.how_it_works.save_label") %></span>
+                </div>
+              </div>
+            <% end %>
           </div>
 
           <p class="mt-5 text-sm leading-7 token-text-muted"><%= step.fetch(:body) %></p>
@@ -260,7 +306,7 @@
     </ol>
   </section>
 
-  <section id="home-trust" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-trust-title" data-home-reveal-target="section">
+  <section id="home-trust" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-trust-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.trust") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-trust-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <%= t("home.trust.title") %>
@@ -287,7 +333,7 @@
     </div>
   </section>
 
-  <section id="home-final-cta" class="mx-auto w-full max-w-7xl px-4 pb-20 pt-8 sm:px-6 lg:px-8" aria-labelledby="home-final-cta-title" data-home-final-cta data-home-reveal-target="section">
+  <section id="home-final-cta" class="mx-auto w-full max-w-7xl px-4 pb-28 pt-14 sm:px-6 lg:px-8 lg:pb-32 lg:pt-20" aria-labelledby="home-final-cta-title" data-home-final-cta data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.final_cta") %>">
     <div class="home-lp-final-cta-card grid items-center gap-8 rounded-3xl border token-border-soft token-bg-card p-6 surface-card-shadow sm:p-8 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:p-10" data-home-reveal-target="item">
       <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-full token-brand-soft-bg lg:mx-0">
         <%= render "shared/brand/logo",

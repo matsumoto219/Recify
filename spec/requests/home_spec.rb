@@ -15,6 +15,7 @@ RSpec.describe 'Home', type: :request do
       final_cta = document.at_css('[data-home-final-cta]')
       detail_items = I18n.t('home.hero_mock.detail.items')
       feature_items = I18n.t('home.features.items')
+      how_it_works_steps = I18n.t('home.how_it_works.steps')
       trust_items = I18n.t('home.trust.items')
       section_ids = %w[
         home-hero
@@ -45,9 +46,12 @@ RSpec.describe 'Home', type: :request do
         expect(home_lp.css('[data-home-reveal-target="section"]').map { |node| node['id'] }).to include(*section_ids)
         expect(section_nav).to be_present
         expect(section_nav['aria-label']).to eq(I18n.t('home.section_nav.label'))
-        expect(section_nav.css('[data-home-reveal-target="navItem"]').size).to eq(section_ids.size)
+        expect(section_nav.css('[data-home-reveal-target="navItem"]')).to be_empty
         section_ids.each do |section_id|
-          expect(section_nav.at_css("a[href='##{section_id}']")).to be_present
+          section = home_lp.at_css("section##{section_id}")
+
+          expect(section).to be_present
+          expect(section['data-home-section-label']).to be_present
         end
         expect(home_lp.at_css('.home-hero-heading .sr-only').text.strip).to eq(I18n.t('home.hero.heading_lines').join(' '))
         expect(home_lp.at_css('.home-hero-heading-visual[aria-hidden="true"]')).to be_present
@@ -70,6 +74,13 @@ RSpec.describe 'Home', type: :request do
         expect(home_lp.css('.home-lp-snap-track').size).to eq(2)
         expect(home_lp.css('#home-features .home-lp-snap-hint span').size).to eq(feature_items.size)
         expect(home_lp.css('#home-trust .home-lp-snap-hint span').size).to eq(trust_items.size)
+        expect(home_lp.css('#home-how .home-step-card').size).to eq(how_it_works_steps.size)
+        expect(home_lp.css('#home-how .home-step-visual').size).to eq(how_it_works_steps.size)
+        expect(home_lp.at_css('#home-how .home-step-upload-mock')).to be_present
+        expect(home_lp.at_css('#home-how .home-step-scan-mock')).to be_present
+        expect(home_lp.css('#home-how .home-step-result-check').size).to eq(3)
+        expect(home_lp.css('#home-how .home-step-result-check.material-symbols-outlined')).to be_empty
+        expect(home_lp.at_css('#home-how .home-step-save-mock')).to be_present
         expect(home_lp.at_css('.home-lp-final-cta-card')).to be_present
         expect(response.body).not_to include(I18n.t('home.notice'))
         expect(public_header).to be_present

@@ -137,6 +137,7 @@ ja:
           body: 整理された記録を一覧で確認・検索できます。
     how_it_works:
       title: 使い方はシンプル。
+      save_label: 保存する
       steps:
         - title: 撮る・アップロードする
           body: レシートを撮影するか、画像を選んでアップロード。

@@ -31,6 +31,10 @@ export default class extends Controller {
       cleanup?.()
     })
     this.snapHandlers = []
+    this.navHandlers?.forEach(({ link, handler }) => {
+      link.removeEventListener('click', handler)
+    })
+    this.navHandlers = []
     this.conditionalBreakObserver?.disconnect()
     this.conditionalBreakObserver = null
     if (this.handleConditionalBreakResize) {
@@ -237,6 +241,8 @@ export default class extends Controller {
   }
 
   setupSectionNavigation () {
+    this.buildSectionNavigation()
+
     if (!this.hasSectionTarget || !this.hasNavItemTarget) return
 
     this.activateSection(this.sectionTargets[0].id)
@@ -255,6 +261,45 @@ export default class extends Controller {
     this.sectionTargets.forEach((section) => this.sectionObserver.observe(section))
     this.handleScroll = () => this.activateLastSectionAtPageEnd()
     window.addEventListener('scroll', this.handleScroll, { passive: true })
+  }
+
+  buildSectionNavigation () {
+    const nav = this.element.querySelector('.home-section-nav')
+    if (!nav) return
+
+    this.navHandlers?.forEach(({ link, handler }) => {
+      link.removeEventListener('click', handler)
+    })
+    this.navHandlers = []
+    nav.replaceChildren()
+
+    this.sectionTargets
+      .filter((section) => section.id && section.dataset.homeSectionLabel)
+      .forEach((section, index) => {
+        const label = section.dataset.homeSectionLabel
+        const link = document.createElement('a')
+        const labelElement = document.createElement('span')
+        const handler = (event) => this.navigate(event)
+
+        link.href = `#${section.id}`
+        link.title = label
+        link.className = 'home-section-nav-dot'
+        link.dataset.homeRevealTarget = 'navItem'
+        link.dataset.homeSectionId = section.id
+        link.setAttribute('aria-label', label)
+
+        if (index === 0) {
+          link.classList.add('is-active')
+          link.setAttribute('aria-current', 'true')
+        }
+
+        labelElement.className = 'sr-only'
+        labelElement.textContent = label
+        link.append(labelElement)
+        link.addEventListener('click', handler)
+        this.navHandlers.push({ link, handler })
+        nav.append(link)
+      })
   }
 
   setupSnapIndicators () {
