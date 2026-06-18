@@ -1,0 +1,73 @@
+<% content_for :title, @announcement.title %>
+
+<article class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
+  <nav aria-label="<%= t("announcements.show.breadcrumb_aria") %>">
+    <%= link_to root_path, class: "inline-flex items-center gap-2 text-sm font-semibold token-text-brand transition-opacity hover:opacity-80" do %>
+      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
+      <span><%= t("announcements.show.back_to_home") %></span>
+    <% end %>
+  </nav>
+
+  <header class="space-y-5 text-center">
+    <div class="flex flex-wrap items-center justify-center gap-3">
+      <span class="inline-flex items-center rounded-full border token-border-brand-soft token-bg-brand-soft px-3 py-1 text-xs font-bold token-text-brand">
+        <%= t("announcements.kinds.#{@announcement.kind}") %>
+      </span>
+
+      <% if @announcement.pinned? %>
+        <span class="inline-flex items-center rounded-full border token-border-soft token-bg-card-subtle px-3 py-1 text-xs font-semibold token-text-muted">
+          <span class="material-symbols-outlined mr-1 text-[16px]" aria-hidden="true">keep</span>
+          <%= t("announcements.show.pinned") %>
+        </span>
+      <% end %>
+    </div>
+
+    <%= render "shared/ui/layout/section_header",
+          title: @announcement.title,
+          subtitle: t("announcements.show.subtitle"),
+          title_size: "text-2xl md:text-3xl",
+          subtitle_size: "text-sm md:text-base",
+          align: :center %>
+
+    <% if @announcement.published_at.present? %>
+      <p class="text-xs font-semibold uppercase tracking-wider token-text-muted">
+        <%= t("announcements.show.published_at", datetime: l(@announcement.published_at, format: :long)) %>
+      </p>
+    <% end %>
+  </header>
+
+  <%= render "shared/ui/layout/surface_card", padding: :lg do %>
+    <div class="space-y-6">
+      <div class="whitespace-pre-line text-sm leading-8 token-text-base"><%= @announcement.body %></div>
+
+      <% if @announcement_links.any? %>
+        <section class="border-t token-border-soft pt-5" aria-labelledby="announcement-links-title">
+          <h2 id="announcement-links-title" class="text-sm font-bold token-text-base">
+            <%= t("announcements.show.links_title") %>
+          </h2>
+
+          <ul class="mt-3 space-y-3">
+            <% @announcement_links.each do |announcement_link| %>
+              <li>
+                <% link_options = {
+                  class: "inline-flex max-w-full items-center gap-2 rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3 text-sm font-semibold token-text-brand transition-opacity hover:opacity-80"
+                } %>
+                <% if announcement_link.external? %>
+                  <% link_options[:target] = "_blank" %>
+                  <% link_options[:rel] = "noopener noreferrer" %>
+                <% end %>
+
+                <%= link_to announcement_link.url, **link_options do %>
+                  <span class="min-w-0 truncate"><%= announcement_link.label %></span>
+                  <span class="material-symbols-outlined shrink-0 text-[18px]" aria-hidden="true">
+                    <%= announcement_link.external? ? "open_in_new" : "arrow_forward" %>
+                  </span>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+        </section>
+      <% end %>
+    </div>
+  <% end %>
+</article>

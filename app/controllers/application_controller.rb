@@ -4,6 +4,7 @@ require "openssl"
 
 class ApplicationController < ActionController::Base
   PUBLIC_LAYOUT_ACTIONS = {
+    "announcements" => %w[show],
     "home" => %w[index],
     "legal" => %w[terms privacy]
   }.freeze
