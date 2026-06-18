@@ -1489,6 +1489,7 @@ RSpec.describe 'Receipts', type: :request do
       preview_next_button = document.at_css('[data-receipt-upload-target="previewNextButton"]')
       preview_counter = document.at_css('[data-receipt-upload-target="previewCounter"]')
       preview_current_file_name = document.at_css('[data-receipt-upload-target="previewCurrentFileName"]')
+      mobile_footer = document.css('footer').find { |node| node.text.include?(I18n.t('receipts.new_upload.queued_hint')) }
       expected_accept = %w[
         image/jpeg image/png image/bmp image/tiff image/heif image/heic
         .jpg .jpeg .png .bmp .tif .tiff .heif .heic
@@ -1515,6 +1516,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(guidance_panel.text).not_to include('45 / 100')
         expect(guidance_panel.text).not_to include('10MB')
         expect(storage_meter).to be_present
+        expect(mobile_footer).to be_present
+        expect(mobile_footer['class']).to include('md:hidden')
+        expect(mobile_footer.text).to include(I18n.t('receipts.new_upload.back'))
         expect(upload_root['data-receipt-upload-invalid-image-message-value']).to eq(I18n.t('receipts.new_upload.js.invalid_image'))
         expect(upload_root['data-receipt-upload-empty-file-message-value']).to eq(I18n.t('receipts.new_upload.js.empty_file'))
         expect(upload_root['data-receipt-upload-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
