@@ -670,6 +670,15 @@ body {
   background: var(--brand-primary);
 }
 
+.mobile-bottom-surface {
+  background: var(--header-glass-bg);
+  border: 0;
+  box-shadow: none;
+
+  /* Match the dashboard header surface without drawing an outer rule. */
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}
+
 /* ===== Sidebar Utilities ===== */
 .sidebar-surface {
   background: var(--sidebar-bg);
