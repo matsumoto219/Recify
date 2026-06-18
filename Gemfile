@@ -88,6 +88,8 @@ group :development do
   gem "letter_opener_web"
 
   # HTML lint
+  # Ruby 4.0対応版の parser / better_html / erb_lint が出たら更新予定
+  # parser/current の互換性warningを解消する。
   gem "erb_lint", require: false
 
   # i18n unused/missing key checker
