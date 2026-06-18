@@ -10,24 +10,41 @@
 
 <%
   receipt = local_assigns.fetch(:receipt)
-  status_label = local_assigns[:status_label] || (receipt.respond_to?(:status_label) ? receipt.status_label : receipt.status)
+  phase_presenter = Receipts::ProcessingPhasePresenter.new(
+    receipt: receipt,
+    analysis_run: local_assigns[:analysis_run]
+  )
   processing = receipt.status.to_s == "processing"
+  default_status_label =
+    if processing
+      phase_presenter.label
+    elsif receipt.respond_to?(:status_label)
+      receipt.status_label
+    else
+      receipt.status
+    end
+  status_label = local_assigns[:status_label] || default_status_label
   display_store_name =
     if processing
       receipt.store_name.presence || t("receipt_cards.fallback.processing_store_name")
     else
       receipt.store_name.presence || t("receipt_cards.fallback.store_name")
     end
+  processing_popover_id = "receipt-processing-popover-#{receipt.public_id}" if processing
+  processing_popover_title_id = "#{processing_popover_id}-title" if processing
 
   card_classes = [
     "group",
+    "flex",
+    "flex-col",
     "receipt-card-surface",
-    processing ? "animate-pulse" : nil
+    processing ? "receipt-processing-card" : nil,
+    processing ? phase_presenter.css_class : nil
   ].compact.join(" ")
 
   icon_box_class = [
     "w-10 h-10 rounded-lg receipt-card-icon-box flex items-center justify-center shrink-0",
-    processing ? "opacity-90" : nil
+    processing ? "receipt-processing-icon-box" : nil
   ].compact.join(" ")
 %>
 
@@ -41,7 +58,7 @@
     <div class="flex flex-1 items-start gap-3 min-w-0">
       <div class="<%= icon_box_class %>">
         <% if processing %>
-          <span class="material-symbols-outlined animate-spin">autorenew</span>
+          <span class="material-symbols-outlined receipt-processing-card-icon"><%= phase_presenter.icon %></span>
         <% else %>
           <span class="material-symbols-outlined">receipt_long</span>
         <% end %>
@@ -68,7 +85,7 @@
       class: "shrink-0" %>
   </div>
 
-  <div class="flex justify-between items-end mt-2 gap-4">
+  <div class="flex justify-between items-end mt-auto pt-2 gap-4">
     <div class="min-w-0 flex-1">
       <p class="text-[0.6875rem] token-text-muted mb-1"><%= t("receipt_cards.labels.total_amount") %></p>
       <% if processing %>
@@ -91,4 +108,76 @@
       <% end %>
     </div>
   </div>
+
+  <% if processing %>
+    <div
+      class="receipt-processing-popover"
+      data-controller="receipt-processing-popover"
+      data-receipt-processing-popover-storage-key-value="receipt-processing-popover:<%= receipt.public_id %>"
+      data-receipt-processing-phase="<%= phase_presenter.key %>">
+      <button
+        type="button"
+        class="receipt-processing-trigger"
+        data-receipt-processing-popover-target="trigger"
+        data-action="click->receipt-processing-popover#toggle"
+        aria-expanded="false"
+        aria-controls="<%= processing_popover_id %>">
+        <span class="receipt-processing-trigger-content">
+          <span class="material-symbols-outlined receipt-processing-trigger-icon" aria-hidden="true"><%= phase_presenter.icon %></span>
+          <span class="receipt-processing-trigger-copy">
+            <span class="block text-sm font-bold token-text-base"><%= phase_presenter.label %></span>
+            <span class="receipt-processing-trigger-hint">
+              <span class="hidden sm:inline"><%= t("receipt_cards.processing_phase.click_hint") %></span>
+              <span class="sm:hidden"><%= t("receipt_cards.processing_phase.tap_hint") %></span>
+            </span>
+          </span>
+
+          <% if phase_presenter.ai? %>
+            <span class="receipt-processing-ai-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          <% end %>
+        </span>
+      </button>
+
+      <div
+        id="<%= processing_popover_id %>"
+        class="receipt-processing-popover-panel"
+        data-receipt-processing-popover-target="panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="<%= processing_popover_title_id %>"
+        tabindex="-1"
+        hidden>
+        <div class="receipt-processing-popover-header">
+          <div class="min-w-0">
+            <p class="receipt-processing-popover-eyebrow"><%= t("receipt_cards.processing_phase.current") %></p>
+            <h3 id="<%= processing_popover_title_id %>" class="truncate text-sm font-bold token-text-base"><%= phase_presenter.label %></h3>
+          </div>
+          <button
+            type="button"
+            class="receipt-processing-popover-close"
+            data-receipt-processing-popover-close
+            aria-label="<%= t("receipt_cards.processing_phase.close") %>">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </div>
+
+        <div class="receipt-processing-popover-content">
+          <p class="text-xs token-text-muted"><%= phase_presenter.description %></p>
+
+          <ol class="receipt-processing-steps mt-4" aria-label="<%= t("receipt_cards.processing_steps.label") %>">
+            <% phase_presenter.steps.each do |step| %>
+              <li class="receipt-processing-step receipt-processing-step-<%= step.state %>">
+                <span class="receipt-processing-step-dot" aria-hidden="true"></span>
+                <span class="receipt-processing-step-label"><%= step.label %></span>
+              </li>
+            <% end %>
+          </ol>
+        </div>
+      </div>
+    </div>
+  <% end %>
 <% end %>

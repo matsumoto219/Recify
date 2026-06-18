@@ -7,6 +7,53 @@ ja:
       purchased_at: 日時未設定
     labels:
       total_amount: 合計金額
+    processing_phase:
+      click_hint: クリックして進行状況を表示
+      tap_hint: タップして進行状況を表示
+      close: 進行状況を閉じる
+      current: 現在の処理
+      queued:
+        label: 解析待ち
+        description: アップロードされたレシートを順番に解析します。
+        icon: schedule
+      processing:
+        label: 解析中
+        description: レシート画像を解析しています。
+        icon: autorenew
+      ocr:
+        label: OCR処理中
+        description: レシート画像から文字情報を読み取っています。
+        icon: document_scanner
+      organizing:
+        label: 読み取り結果を整理中
+        description: 読み取った内容を保存しやすい形に整えています。
+        icon: fact_check
+      ai:
+        label: AI処理中
+        description: 読み取り結果をもとに、カテゴリなどの補完を行っています。
+        icon: auto_awesome
+      finalize:
+        label: 保存準備中
+        description: 解析結果を確認できる状態に整えています。
+        icon: save
+      review_needed:
+        label: 要確認
+        description: 一部の項目に確認が必要です。
+        icon: warning
+      completed:
+        label: 完了
+        description: レシートの解析が完了しました。
+        icon: check_circle
+      failed:
+        label: 失敗
+        description: 解析に失敗しました。詳細を確認してください。
+        icon: error
+    processing_steps:
+      label: 解析の進行状況
+      uploaded: アップロード
+      ocr: OCR
+      ai: AI処理
+      review: 確認
     actions:
       show: 詳細
       edit: 編集

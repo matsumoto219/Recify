@@ -30,6 +30,7 @@ class ReceiptsController < ApplicationController
     @pagy, @receipts = pagy(:offset, receipts_scope, limit: @per_page)
     return if redirect_to_canonical_receipts_page_if_needed
 
+    preload_receipt_index_associations
     assign_receipts_index_summary(receipts_scope)
     assign_receipt_index_count_summary
   end
@@ -316,6 +317,15 @@ class ReceiptsController < ApplicationController
       start: total_count.zero? ? 0 : offset + 1,
       finish: [ offset + @receipts.size, total_count ].min
     }
+  end
+
+  def preload_receipt_index_associations
+    return if @receipts.blank?
+
+    ActiveRecord::Associations::Preloader.new(
+      records: @receipts,
+      associations: :receipt_analysis_runs
+    ).call
   end
 
   def block_processing_receipt

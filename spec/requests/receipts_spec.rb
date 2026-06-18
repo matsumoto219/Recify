@@ -274,6 +274,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(results).to be_present
         expect(results.at_css('#receipts-list')).to be_present
         expect(results.at_css('#receipts-list-grid')).to be_present
+        expect(results.at_css('#receipts-list-grid')['class'].split).to include('items-start')
         expect(results.at_css('#receipts-empty-state')).to be_nil
       end
     end
@@ -551,6 +552,130 @@ RSpec.describe 'Receipts', type: :request do
         expect(completed_card.text).to include(I18n.t('receipt_cards.actions.edit'))
         expect(processing_card.text).to include(I18n.t('receipt_cards.fallback.processing_store_name'))
         expect(processing_card.text).to include(I18n.t('receipt_cards.fallback.processing_description'))
+      end
+    end
+
+    it 'processing receipt cardに解析段階を表示する' do
+      queued_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'キュー')
+      ocr_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'OCR')
+      ai_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'AI')
+      finalize_receipt = create(:receipt, :processing, :with_image, user:, store_name: '保存')
+      fallback_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'Fallback')
+      completed_receipt = create(:receipt, :completed, :with_image, user:, store_name: '完了')
+
+      create(:receipt_analysis_run, receipt: queued_receipt, status: 'queued', stage: 'queued')
+      create(
+        :receipt_analysis_run,
+        receipt: ocr_receipt,
+        status: 'running',
+        stage: 'ocr',
+        ocr_started_at: Time.current
+      )
+      create(
+        :receipt_analysis_run,
+        receipt: ai_receipt,
+        status: 'running',
+        stage: 'ai',
+        ocr_finished_at: 2.seconds.ago,
+        ai_started_at: Time.current
+      )
+      create(
+        :receipt_analysis_run,
+        receipt: finalize_receipt,
+        status: 'running',
+        stage: 'finalize',
+        ocr_finished_at: 4.seconds.ago,
+        ai_started_at: 3.seconds.ago,
+        ai_finished_at: 1.second.ago
+      )
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(document.at_css("#receipt_#{queued_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.queued.label'))
+        expect(document.at_css("#receipt_#{ocr_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.ocr.label'))
+        expect(document.at_css("#receipt_#{ai_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.ai.label'))
+        expect(document.at_css("#receipt_#{finalize_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.finalize.label'))
+        expect(document.at_css("#receipt_#{fallback_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.processing.label'))
+        expect(document.css('.receipt-processing-steps').size).to be >= 5
+        expect(document.css('.receipt-processing-popover').size).to be >= 5
+        expect(document.css('details.receipt-processing-panel')).to be_empty
+        expect(document.css('summary.receipt-processing-summary')).to be_empty
+        ocr_trigger = document.at_css("#receipt_#{ocr_receipt.public_id} .receipt-processing-trigger")
+        ocr_panel = document.at_css("#receipt_#{ocr_receipt.public_id} .receipt-processing-popover-panel")
+        expect(ocr_trigger['data-receipt-processing-popover-target']).to eq('trigger')
+        expect(ocr_trigger['aria-expanded']).to eq('false')
+        expect(ocr_trigger['aria-controls']).to eq(ocr_panel['id'])
+        expect(ocr_trigger.at_css('.receipt-processing-trigger-content')).to be_present
+        expect(ocr_trigger.text).to include(I18n.t('receipt_cards.processing_phase.click_hint'))
+        expect(ocr_trigger.text).to include(I18n.t('receipt_cards.processing_phase.tap_hint'))
+        expect(ocr_panel['data-receipt-processing-popover-target']).to eq('panel')
+        expect(ocr_panel['role']).to eq('dialog')
+        expect(ocr_panel['aria-modal']).to eq('false')
+        expect(ocr_panel['aria-labelledby']).to be_present
+        expect(ocr_panel.has_attribute?('hidden')).to be(true)
+        expect(ocr_panel.at_css("##{ocr_panel['aria-labelledby']}")).to be_present
+        expect(ocr_panel.at_css("button[aria-label='#{I18n.t('receipt_cards.processing_phase.close')}']")).to be_present
+        expect(document.at_css("#receipt_#{ocr_receipt.public_id}")['class'].split).to include('flex', 'flex-col')
+        expect(document.css("#receipt_#{ocr_receipt.public_id} .animate-spin")).to be_empty
+        expect(document.at_css("#receipt_#{ocr_receipt.public_id}")['class']).not_to include('animate-pulse')
+        expect(document.at_css("#receipt_#{completed_receipt.public_id} .receipt-processing-trigger")).to be_nil
+      end
+    end
+
+    it 'processing popover controllerは浮動panelを位置補正し開閉状態を復元する設計にする' do
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_processing_popover_controller.js').read
+
+      aggregate_failures do
+        expect(controller_source).to include('window.sessionStorage')
+        expect(controller_source).to include('orphanedPanels')
+        expect(controller_source).to include('ORPHANED_PANEL_TTL_MS')
+        expect(controller_source).to include('shouldParkOpenPanel')
+        expect(controller_source).to include('parkOpenPanel')
+        expect(controller_source).to include('takeOrphanedPanel')
+        expect(controller_source).to include('adoptOrphanedPanel')
+        expect(controller_source).to include('syncPanelAttributes')
+        expect(controller_source).to include('preserveVisible')
+        expect(controller_source).to include('storage.setItem')
+        expect(controller_source).to include('storage.getItem')
+        expect(controller_source).to include('aria-expanded')
+        expect(controller_source).to include('getBoundingClientRect')
+        expect(controller_source).to include('viewportBounds')
+        expect(controller_source).to include('window.visualViewport')
+        expect(controller_source).to include('fitsViewport')
+        expect(controller_source).to include('clamp')
+        expect(controller_source).to include('receipt-processing-popover:open')
+        expect(controller_source).to include('pointerdown')
+        expect(controller_source).to include("event.key !== 'Escape'")
+        expect(controller_source).to include('document.body.appendChild')
+        expect(controller_source).to include('this.trigger.focus')
+        expect(controller_source).to include('event.preventDefault()')
+        expect(controller_source).to include('requestAnimationFrame')
+        expect(controller_source).to include('window.setTimeout')
+      end
+    end
+
+    it 'AI開始前のprocessing receipt cardではAI処理中と断定しない' do
+      processing_receipt = create(:receipt, :processing, :with_image, user: user)
+      create(
+        :receipt_analysis_run,
+        receipt: processing_receipt,
+        status: 'running',
+        stage: 'ai',
+        ocr_finished_at: Time.current,
+        ai_started_at: nil
+      )
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      card = document.at_css("#receipt_#{processing_receipt.public_id}")
+
+      aggregate_failures do
+        expect(card.text).to include(I18n.t('receipt_cards.processing_phase.organizing.label'))
+        expect(card.text).not_to include(I18n.t('receipt_cards.processing_phase.ai.label'))
       end
     end
 

@@ -211,6 +211,40 @@ RSpec.describe ReceiptAnalysisRun, type: :model do
     end
   end
 
+  describe 'processing phase broadcasts' do
+    it 'broadcasts the receipt card when a processing run phase changes' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:, status: 'queued', stage: 'queued')
+
+      expect(receipt).to receive(:broadcast_replace_later_to).with(
+        [ receipt.user, :receipts ],
+        target: receipt.dom_target_id,
+        partial: 'shared/receipts/receipt_card',
+        locals: { receipt: receipt, analysis_run: run }
+      )
+
+      run.update!(stage: 'ocr', status: 'running', ocr_started_at: Time.current)
+    end
+
+    it 'does not broadcast for snapshot-only updates' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, :running, receipt:, ocr_started_at: Time.current)
+
+      expect(receipt).not_to receive(:broadcast_replace_later_to)
+
+      run.update!(metadata: { 'note' => 'snapshot-only' })
+    end
+
+    it 'does not broadcast when the receipt is no longer processing' do
+      receipt = create(:receipt, :completed)
+      run = create(:receipt_analysis_run, :running, receipt:, ocr_started_at: Time.current)
+
+      expect(receipt).not_to receive(:broadcast_replace_later_to)
+
+      run.update!(stage: 'ai', ai_started_at: Time.current)
+    end
+  end
+
   describe 'database constraints' do
     it 'run_keyはDB制約でも一意にする' do
       run_key = SecureRandom.uuid

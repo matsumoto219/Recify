@@ -61,6 +61,8 @@ class ReceiptAnalysisRun < ApplicationRecord
 
   before_validation :assign_run_key, on: :create
   before_validation :assign_default_expires_at, on: :create
+  after_create_commit :broadcast_receipt_processing_phase_update, if: :broadcast_receipt_processing_phase_update?
+  after_update_commit :broadcast_receipt_processing_phase_update, if: :broadcast_receipt_processing_phase_update?
 
   validates :run_key, presence: true, uniqueness: true
   validates :source, presence: true, inclusion: { in: SOURCES }
@@ -119,6 +121,31 @@ class ReceiptAnalysisRun < ApplicationRecord
   end
 
   private
+
+  def broadcast_receipt_processing_phase_update?
+    return false unless receipt&.processing?
+    return false unless active?
+    return true if previously_new_record?
+
+    saved_change_to_stage? ||
+      saved_change_to_status? ||
+      saved_change_to_ocr_started_at? ||
+      saved_change_to_ocr_finished_at? ||
+      saved_change_to_ai_started_at? ||
+      saved_change_to_ai_finished_at? ||
+      saved_change_to_finalized_at?
+  end
+
+  def broadcast_receipt_processing_phase_update
+    return unless receipt&.user
+
+    receipt.broadcast_replace_later_to(
+      [ receipt.user, :receipts ],
+      target: receipt.dom_target_id,
+      partial: "shared/receipts/receipt_card",
+      locals: { receipt: receipt, analysis_run: self }
+    )
+  end
 
   def assign_run_key
     self.run_key ||= SecureRandom.uuid
