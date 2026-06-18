@@ -297,20 +297,42 @@
 
     <%= render "shared/ui/layout/surface_card", padding: :md do %>
       <%= render "shared/ui/layout/section_header",
-            icon: "mail",
+            icon: "contact_support",
             title: t("settings.index.sections.support"),
             subtitle: t("settings.index.support.description"),
             class: "mb-6" %>
 
-      <%= render "shared/ui/actions/button",
-            as: :link,
-            href: contact_path,
-            label: t("settings.index.support.contact"),
-            variant: :secondary,
-            full_width: true,
-            class: "px-4 text-left",
-            trailing_icon: "chevron_right",
-            trailing_icon_animated: true %>
+      <div class="grid gap-3 sm:grid-cols-3">
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: contact_path,
+              label: t("settings.index.support.contact"),
+              variant: :secondary,
+              full_width: true,
+              class: "px-4 text-left",
+              trailing_icon: "chevron_right",
+              trailing_icon_animated: true %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: terms_path,
+              label: t("settings.index.support.terms"),
+              variant: :secondary,
+              full_width: true,
+              class: "px-4 text-left",
+              trailing_icon: "chevron_right",
+              trailing_icon_animated: true %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: privacy_path,
+              label: t("settings.index.support.privacy"),
+              variant: :secondary,
+              full_width: true,
+              class: "px-4 text-left",
+              trailing_icon: "chevron_right",
+              trailing_icon_animated: true %>
+      </div>
     <% end %>
 
     <%= render "shared/ui/layout/surface_card",

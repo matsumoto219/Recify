@@ -56,18 +56,25 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'GET /settings' do
-    it '問い合わせ導線を表示する' do
+    it 'サポートと法務導線を表示する' do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
       support_heading = document.xpath("//h2[normalize-space()='#{I18n.t('settings.index.sections.support')}']").first
       support_icon = support_heading&.parent&.at_css('.material-symbols-outlined')&.text&.strip
+      contact_link = document.at_css("a[href='#{contact_path}']")
+      terms_link = document.at_css("a[href='#{terms_path}']")
+      privacy_link = document.at_css("a[href='#{privacy_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(response.body).not_to include('href="#"')
+        expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(I18n.t('settings.index.sections.support'))
-        expect(document.at_css("a[href='#{contact_path}']")).to be_present
-        expect(support_icon).to eq('mail')
+        expect(contact_link&.text&.squish).to include(I18n.t('settings.index.support.contact'))
+        expect(terms_link&.text&.squish).to include(I18n.t('settings.index.support.terms'))
+        expect(privacy_link&.text&.squish).to include(I18n.t('settings.index.support.privacy'))
+        expect(support_icon).to eq('contact_support')
       end
     end
 

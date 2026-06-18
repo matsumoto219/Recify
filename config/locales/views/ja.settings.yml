@@ -16,7 +16,7 @@ ja:
         calculation: 計算設定
         usage: 利用設定
         storage: ストレージ
-        support: お問い合わせ
+        support: サポート・法務
         account_actions: アカウント操作
       services:
         ocr: OCRサービス
@@ -66,8 +66,10 @@ ja:
           description: |-
             レシートを登録する際、画像を保存します
       support:
-        description: 困ったことや不具合等をサポートへお問い合わせできます。
-        contact: お問い合わせを開く
+        description: 困ったことの問い合わせや、利用規約・プライバシーポリシーを確認できます。
+        contact: お問い合わせ
+        terms: 利用規約
+        privacy: プライバシーポリシー
       danger:
         delete_account: 退会
         confirm: |-
