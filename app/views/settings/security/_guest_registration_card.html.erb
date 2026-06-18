@@ -16,7 +16,7 @@
   attempted_email = update_context == "guest_registration" ? params.dig(:user, :email).to_s : ""
 %>
 
-<div id="guest-registration" class="scroll-mt-24">
+<div id="guest-registration" class="scroll-mt-24" data-controller="legal-dialog">
   <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
     <%= render "shared/ui/layout/section_header",
           icon: "how_to_reg",
@@ -140,11 +140,19 @@
                     class: "cursor-pointer" %>
               <%= link_to t("settings.security.guest_registration.legal_agreement.terms"),
                     terms_path,
-                    class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+                    class: "inline-block whitespace-nowrap underline token-hover-text-brand",
+                    data: {
+                      action: "click->legal-dialog#open",
+                      legal_dialog_dialog_param: "terms"
+                    } %>
               <%= t("settings.security.guest_registration.legal_agreement.connector") %>
               <%= link_to t("settings.security.guest_registration.legal_agreement.privacy"),
                     privacy_path,
-                    class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+                    class: "inline-block whitespace-nowrap underline token-hover-text-brand",
+                    data: {
+                      action: "click->legal-dialog#open",
+                      legal_dialog_dialog_param: "privacy"
+                    } %>
               <%= label_tag legal_agreement_input_id,
                     t("settings.security.guest_registration.legal_agreement.suffix"),
                     class: "cursor-pointer" %>
@@ -168,5 +176,23 @@
         </div>
       </div>
     <% end %>
+  <% end %>
+
+  <%= render layout: "shared/ui/feedback/modal_dialog",
+        locals: {
+          id: "guest-registration-terms-dialog",
+          name: "terms",
+          title: t("legal.terms.title")
+        } do %>
+    <%= render "shared/legal/terms_summary" %>
+  <% end %>
+
+  <%= render layout: "shared/ui/feedback/modal_dialog",
+        locals: {
+          id: "guest-registration-privacy-dialog",
+          name: "privacy",
+          title: t("legal.privacy.title")
+        } do %>
+    <%= render "shared/legal/privacy_summary" %>
   <% end %>
 </div>

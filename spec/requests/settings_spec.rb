@@ -70,6 +70,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to include('href="#"')
         expect(response.body).not_to match(/translation missing/i)
+        expect(document.at_css('[data-controller~="legal-dialog"]')).to be_nil
         expect(response.body).to include(I18n.t('settings.index.sections.support'))
         expect(contact_link&.text&.squish).to include(I18n.t('settings.index.support.contact'))
         expect(terms_link&.text&.squish).to include(I18n.t('settings.index.support.terms'))
@@ -536,6 +537,12 @@ RSpec.describe 'Settings', type: :request do
       guest_registration_card = document.at_css('#guest-registration')
       terms_link = guest_registration_card.at_css("a[href='#{terms_path}']")
       privacy_link = guest_registration_card.at_css("a[href='#{privacy_path}']")
+      terms_dialog = guest_registration_card.at_css('dialog#guest-registration-terms-dialog')
+      privacy_dialog = guest_registration_card.at_css('dialog#guest-registration-privacy-dialog')
+      terms_full_link = terms_dialog.at_css("a[href='#{terms_path}']")
+      privacy_full_link = privacy_dialog.at_css("a[href='#{privacy_path}']")
+      terms_close_button = terms_dialog.at_css("button[data-action='legal-dialog#close']")
+      privacy_close_button = privacy_dialog.at_css("button[data-action='legal-dialog#close']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -544,6 +551,24 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.security.guest_registration.legal_agreement.terms'))
         expect(terms_link&.text&.strip).to eq(I18n.t('settings.security.guest_registration.legal_agreement.terms'))
         expect(privacy_link&.text&.strip).to eq(I18n.t('settings.security.guest_registration.legal_agreement.privacy'))
+        expect(terms_link['data-action']).to include('legal-dialog#open')
+        expect(terms_link['data-legal-dialog-dialog-param']).to eq('terms')
+        expect(privacy_link['data-action']).to include('legal-dialog#open')
+        expect(privacy_link['data-legal-dialog-dialog-param']).to eq('privacy')
+        expect(terms_dialog['data-legal-dialog-target']).to eq('dialog')
+        expect(terms_dialog['aria-modal']).to eq('true')
+        expect(terms_dialog['aria-labelledby']).to eq('guest-registration-terms-dialog-title')
+        expect(terms_dialog.at_css('#guest-registration-terms-dialog-title')).to be_present
+        expect(terms_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
+        expect(terms_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(terms_full_link.text).to include(I18n.t('legal.dialog.open_full_terms'))
+        expect(privacy_dialog['data-legal-dialog-target']).to eq('dialog')
+        expect(privacy_dialog['aria-modal']).to eq('true')
+        expect(privacy_dialog['aria-labelledby']).to eq('guest-registration-privacy-dialog-title')
+        expect(privacy_dialog.at_css('#guest-registration-privacy-dialog-title')).to be_present
+        expect(privacy_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
+        expect(privacy_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(privacy_full_link.text).to include(I18n.t('legal.dialog.open_full_privacy'))
         expect(guest_registration_card.at_css("a[href='#']")).to be_nil
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
         expect(response.body).not_to include(I18n.t('settings.security.email.title'))

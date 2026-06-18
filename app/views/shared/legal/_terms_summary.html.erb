@@ -1,0 +1,26 @@
+<section class="space-y-5">
+  <div class="rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3 text-sm token-text-base">
+    <p class="font-semibold token-text-warning"><%= t("legal.dialog.summary_label") %></p>
+    <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("legal.dialog.summary_notice") %></p>
+  </div>
+
+  <ul class="space-y-3">
+    <% t("legal.dialog.terms.items").each do |item| %>
+      <li class="flex gap-3 rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3">
+        <span class="material-symbols-outlined mt-0.5 text-[18px] token-text-brand" aria-hidden="true">check_circle</span>
+        <span class="text-sm leading-7 token-text-muted"><%= item %></span>
+      </li>
+    <% end %>
+  </ul>
+
+  <div class="pt-1">
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: terms_path,
+          label: t("legal.dialog.open_full_terms"),
+          variant: :secondary,
+          size: :compact,
+          full_width: true,
+          trailing_icon: "open_in_new" %>
+  </div>
+</section>

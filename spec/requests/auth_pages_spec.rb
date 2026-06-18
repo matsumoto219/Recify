@@ -349,6 +349,13 @@ RSpec.describe 'Auth pages', type: :request do
       terms_link = document.at_css("a[href='#{terms_path}']")
       privacy_link = document.at_css("a[href='#{privacy_path}']")
       legal_agreement_section = document.at_css("section[aria-label='#{I18n.t('auth.registrations.new.terms.aria_label')}']")
+      legal_dialog_root = document.at_css('[data-controller~="legal-dialog"]')
+      terms_dialog = document.at_css('dialog#registration-terms-dialog')
+      privacy_dialog = document.at_css('dialog#registration-privacy-dialog')
+      terms_full_link = terms_dialog.at_css("a[href='#{terms_path}']")
+      privacy_full_link = privacy_dialog.at_css("a[href='#{privacy_path}']")
+      terms_close_button = terms_dialog.at_css("button[data-action='legal-dialog#close']")
+      privacy_close_button = privacy_dialog.at_css("button[data-action='legal-dialog#close']")
       email_input = document.at_css('input[name="user[email]"]')
       password_input = document.at_css('input[name="user[password]"]')
       password_confirmation_input = document.at_css('input[name="user[password_confirmation]"]')
@@ -365,7 +372,27 @@ RSpec.describe 'Auth pages', type: :request do
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
         expect(terms_link&.text&.strip).to eq(I18n.t('auth.registrations.new.terms.terms'))
         expect(privacy_link&.text&.strip).to eq(I18n.t('auth.registrations.new.terms.privacy'))
+        expect(terms_link['data-action']).to include('legal-dialog#open')
+        expect(terms_link['data-legal-dialog-dialog-param']).to eq('terms')
+        expect(privacy_link['data-action']).to include('legal-dialog#open')
+        expect(privacy_link['data-legal-dialog-dialog-param']).to eq('privacy')
+        expect(legal_dialog_root).to be_present
+        expect(terms_dialog['data-legal-dialog-target']).to eq('dialog')
+        expect(terms_dialog['aria-modal']).to eq('true')
+        expect(terms_dialog['aria-labelledby']).to eq('registration-terms-dialog-title')
+        expect(terms_dialog.at_css('#registration-terms-dialog-title')).to be_present
+        expect(terms_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
+        expect(terms_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(terms_full_link.text).to include(I18n.t('legal.dialog.open_full_terms'))
+        expect(privacy_dialog['data-legal-dialog-target']).to eq('dialog')
+        expect(privacy_dialog['aria-modal']).to eq('true')
+        expect(privacy_dialog['aria-labelledby']).to eq('registration-privacy-dialog-title')
+        expect(privacy_dialog.at_css('#registration-privacy-dialog-title')).to be_present
+        expect(privacy_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
+        expect(privacy_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(privacy_full_link.text).to include(I18n.t('legal.dialog.open_full_privacy'))
         expect(legal_agreement_section.at_css("a[href='#']")).to be_nil
+        expect(document.at_css("a[href='#']")).to be_nil
         expect(email_input['placeholder']).to eq(I18n.t('auth.registrations.new.fields.email_placeholder'))
         expect(email_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present

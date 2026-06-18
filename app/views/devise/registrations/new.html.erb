@@ -1,7 +1,7 @@
 <div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
   <%= render "shared/ui/layout/ambient_background" %>
 
-  <div class="w-full max-w-[440px] z-10 space-y-8">
+  <div class="w-full max-w-[440px] z-10 space-y-8" data-controller="legal-dialog">
     <section aria-labelledby="registration-page-title">
       <%= render "shared/ui/miscellaneous/icon" %>
       <%= render "shared/ui/layout/section_header",
@@ -104,11 +104,19 @@
                       class: "cursor-pointer" %>
                 <%= link_to t("auth.registrations.new.terms.terms"),
                       terms_path,
-                      class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+                      class: "inline-block whitespace-nowrap underline token-hover-text-brand",
+                      data: {
+                        action: "click->legal-dialog#open",
+                        legal_dialog_dialog_param: "terms"
+                      } %>
                 <%= t("auth.registrations.new.terms.connector") %>
                 <%= link_to t("auth.registrations.new.terms.privacy"),
                       privacy_path,
-                      class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+                      class: "inline-block whitespace-nowrap underline token-hover-text-brand",
+                      data: {
+                        action: "click->legal-dialog#open",
+                        legal_dialog_dialog_param: "privacy"
+                      } %>
                 <%= label_tag legal_agreement_input_id,
                       t("auth.registrations.new.terms.suffix"),
                       class: "cursor-pointer" %>
@@ -146,6 +154,24 @@
                 arrow: :right %>
         </section>
       </div>
+    <% end %>
+
+    <%= render layout: "shared/ui/feedback/modal_dialog",
+          locals: {
+            id: "registration-terms-dialog",
+            name: "terms",
+            title: t("legal.terms.title")
+          } do %>
+      <%= render "shared/legal/terms_summary" %>
+    <% end %>
+
+    <%= render layout: "shared/ui/feedback/modal_dialog",
+          locals: {
+            id: "registration-privacy-dialog",
+            name: "privacy",
+            title: t("legal.privacy.title")
+          } do %>
+      <%= render "shared/legal/privacy_summary" %>
     <% end %>
   </div>
 </div>
