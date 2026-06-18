@@ -346,6 +346,9 @@ RSpec.describe 'Auth pages', type: :request do
 
       document = Nokogiri::HTML(response.body)
       login_link = document.at_css("a[href='#{new_user_session_path}']")
+      terms_link = document.at_css("a[href='#{terms_path}']")
+      privacy_link = document.at_css("a[href='#{privacy_path}']")
+      legal_agreement_section = document.at_css("section[aria-label='#{I18n.t('auth.registrations.new.terms.aria_label')}']")
       email_input = document.at_css('input[name="user[email]"]')
       password_input = document.at_css('input[name="user[password]"]')
       password_confirmation_input = document.at_css('input[name="user[password_confirmation]"]')
@@ -360,6 +363,9 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).to include(I18n.t('auth.registrations.new.terms.privacy'))
         expect(response.body).to include(I18n.t('auth.registrations.new.login_link'))
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
+        expect(terms_link&.text&.strip).to eq(I18n.t('auth.registrations.new.terms.terms'))
+        expect(privacy_link&.text&.strip).to eq(I18n.t('auth.registrations.new.terms.privacy'))
+        expect(legal_agreement_section.at_css("a[href='#']")).to be_nil
         expect(email_input['placeholder']).to eq(I18n.t('auth.registrations.new.fields.email_placeholder'))
         expect(email_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present

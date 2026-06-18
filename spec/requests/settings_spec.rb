@@ -526,12 +526,18 @@ RSpec.describe 'Settings', type: :request do
 
       document = Nokogiri::HTML(response.body)
       update_context_values = document.css('input[type="hidden"][name="update_context"]').map { |input| input['value'] }
+      guest_registration_card = document.at_css('#guest-registration')
+      terms_link = guest_registration_card.at_css("a[href='#{terms_path}']")
+      privacy_link = guest_registration_card.at_css("a[href='#{privacy_path}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.guest_registration.title'))
         expect(response.body).to include(I18n.t('settings.security.guest_registration.description'))
         expect(response.body).to include(I18n.t('settings.security.guest_registration.legal_agreement.terms'))
+        expect(terms_link&.text&.strip).to eq(I18n.t('settings.security.guest_registration.legal_agreement.terms'))
+        expect(privacy_link&.text&.strip).to eq(I18n.t('settings.security.guest_registration.legal_agreement.privacy'))
+        expect(guest_registration_card.at_css("a[href='#']")).to be_nil
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
         expect(response.body).not_to include(I18n.t('settings.security.email.title'))
         expect(response.body).not_to include(I18n.t('settings.security.password.title'))

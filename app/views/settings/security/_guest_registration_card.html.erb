@@ -110,23 +110,46 @@
           legal_agreement_error = legal_agreement_errors.first
         %>
         <section aria-label="<%= t("settings.security.guest_registration.legal_agreement.aria_label") %>" class="space-y-2">
-          <% legal_agreement_label = capture do %>
-            <%# TODO: 利用規約 / プライバシーポリシーの静的ページ作成後に link_to で接続する %>
-            <%= t("settings.security.guest_registration.legal_agreement.prefix") %>
-            <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.terms") %></span>
-            <%= t("settings.security.guest_registration.legal_agreement.connector") %>
-            <span class="underline token-hover-text-brand cursor-pointer"><%= t("settings.security.guest_registration.legal_agreement.privacy") %></span>
-            <%= t("settings.security.guest_registration.legal_agreement.suffix") %>
-          <% end %>
-          <%= render "shared/ui/form/checkbox_field",
-                f: f,
-                attribute: :legal_agreement,
-                label: legal_agreement_label,
-                required: true,
-                show_error_message: false,
-                wrapper_class: "rounded-lg border token-border-soft px-4 py-3 token-text-muted",
-                checkbox_class: "rounded token-checkbox",
-                label_class: "leading-relaxed" %>
+          <%
+            legal_agreement_input_id = "guest_registration_legal_agreement"
+            legal_agreement_label = [
+              t("settings.security.guest_registration.legal_agreement.prefix"),
+              t("settings.security.guest_registration.legal_agreement.terms"),
+              t("settings.security.guest_registration.legal_agreement.connector"),
+              t("settings.security.guest_registration.legal_agreement.privacy"),
+              t("settings.security.guest_registration.legal_agreement.suffix")
+            ].join.squish
+            legal_agreement_description_id = "guest-registration-legal-agreement-description"
+          %>
+          <div class="flex items-start gap-3 rounded-lg border token-border-soft px-4 py-3 text-sm token-text-muted">
+            <%= f.check_box :legal_agreement,
+                  {
+                    id: legal_agreement_input_id,
+                    class: "mt-0.5 h-4 w-4 rounded token-checkbox",
+                    required: true,
+                    aria: {
+                      label: legal_agreement_label,
+                      describedby: legal_agreement_description_id
+                    }
+                  },
+                  "1",
+                  "0" %>
+            <p id="<%= legal_agreement_description_id %>" class="min-w-0 leading-relaxed">
+              <%= label_tag legal_agreement_input_id,
+                    t("settings.security.guest_registration.legal_agreement.prefix"),
+                    class: "cursor-pointer" %>
+              <%= link_to t("settings.security.guest_registration.legal_agreement.terms"),
+                    terms_path,
+                    class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+              <%= t("settings.security.guest_registration.legal_agreement.connector") %>
+              <%= link_to t("settings.security.guest_registration.legal_agreement.privacy"),
+                    privacy_path,
+                    class: "inline-block whitespace-nowrap underline token-hover-text-brand" %>
+              <%= label_tag legal_agreement_input_id,
+                    t("settings.security.guest_registration.legal_agreement.suffix"),
+                    class: "cursor-pointer" %>
+            </p>
+          </div>
           <% if legal_agreement_error.present? %>
             <p class="px-1 text-xs token-text-error leading-relaxed"><%= legal_agreement_error %></p>
           <% end %>
