@@ -634,9 +634,11 @@ RSpec.describe 'Settings', type: :request do
         expect(recovery_codes_form['data-confirm-variant']).to eq('danger')
         expect(recovery_codes_form['data-confirm-icon']).to eq('key')
         expect(recovery_codes_form['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.two_factor.regenerate_recovery_codes'))
+        expect(recovery_codes_form['data-confirm-title']).to eq(I18n.t('settings.security.auth.recovery_codes.regenerate_confirm_title'))
         expect(totp_disable_form['data-confirm-variant']).to eq('danger')
         expect(totp_disable_form['data-confirm-icon']).to eq('security')
         expect(totp_disable_form['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.two_factor.disable'))
+        expect(totp_disable_form['data-confirm-title']).to eq(I18n.t('settings.security.auth.two_factor.disable_confirm_title'))
         codes.each { |code| expect(response.body).not_to include(code) }
         expect(response.body).not_to include(user.recovery_codes.first.code_digest)
       end
@@ -726,6 +728,7 @@ RSpec.describe 'Settings', type: :request do
         expect(delete_forms.first['data-confirm-variant']).to eq('danger')
         expect(delete_forms.first['data-confirm-icon']).to eq('passkey')
         expect(delete_forms.first['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.passkey.delete'))
+        expect(delete_forms.first['data-confirm-title']).to eq(I18n.t('settings.security.auth.passkey.delete_confirm_title'))
       end
     end
 

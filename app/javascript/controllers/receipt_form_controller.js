@@ -64,6 +64,9 @@ export default class extends Controller {
     deleteConfirmationMessage: { type: String, default: 'Delete this item?' },
     deleteAdjustmentConfirmationMessage: { type: String, default: 'Delete this adjustment?' },
     deletePaymentConfirmationMessage: { type: String, default: 'Delete this payment?' },
+    deleteConfirmTitle: { type: String, default: 'Delete?' },
+    deleteConfirmLabel: { type: String, default: 'Delete' },
+    deleteConfirmBackdrop: { type: String, default: 'plain' },
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
@@ -147,7 +150,7 @@ export default class extends Controller {
     this.recalculate()
   }
 
-  removeAdjustment (event) {
+  async removeAdjustment (event) {
     event.preventDefault()
 
     const row = this.adjustmentRowForAction(event.currentTarget)
@@ -156,7 +159,7 @@ export default class extends Controller {
     const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
     delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
 
-    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deleteAdjustmentConfirmationMessageValue)) return
+    if (!skipConfirmation && !(await this.confirmDelete(this.deleteAdjustmentConfirmationMessageValue, event.currentTarget))) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="adjustmentDestroyField"]')
     const rowContainer = this.adjustmentRowContainer(row)
@@ -172,7 +175,7 @@ export default class extends Controller {
     this.recalculate()
   }
 
-  removePayment (event) {
+  async removePayment (event) {
     event.preventDefault()
 
     const row = this.paymentRowForAction(event.currentTarget)
@@ -181,7 +184,7 @@ export default class extends Controller {
     const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
     delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
 
-    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deletePaymentConfirmationMessageValue)) return
+    if (!skipConfirmation && !(await this.confirmDelete(this.deletePaymentConfirmationMessageValue, event.currentTarget))) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="paymentDestroyField"]')
     const rowContainer = this.paymentRowContainer(row)
@@ -269,7 +272,7 @@ export default class extends Controller {
     }
   }
 
-  removeItem (event) {
+  async removeItem (event) {
     event.preventDefault()
 
     const row = this.itemRowForAction(event.currentTarget)
@@ -278,7 +281,7 @@ export default class extends Controller {
     const skipConfirmation = event.currentTarget.dataset.receiptFormSkipDeleteConfirmation === 'true'
     delete event.currentTarget.dataset.receiptFormSkipDeleteConfirmation
 
-    if (!skipConfirmation && this.deleteConfirmationEnabledValue && !window.confirm(this.deleteConfirmationMessageValue)) return
+    if (!skipConfirmation && !(await this.confirmDelete(this.deleteConfirmationMessageValue, event.currentTarget))) return
 
     const destroyField = row.querySelector('[data-receipt-form-target="destroyField"]')
     const rowContainer = this.itemRowContainer(row)
@@ -305,6 +308,22 @@ export default class extends Controller {
 
   itemRowContainer (row) {
     return row.closest('[data-controller~="swipe-action"]') || row
+  }
+
+  confirmDelete (message, restoreFocusElement) {
+    if (!this.deleteConfirmationEnabledValue) return Promise.resolve(true)
+
+    const confirm = window.RecifyConfirm?.confirm
+    if (typeof confirm !== 'function') return Promise.resolve(false)
+
+    return confirm(message, {
+      variant: 'danger',
+      icon: 'delete',
+      title: this.deleteConfirmTitleValue,
+      confirmLabel: this.deleteConfirmLabelValue,
+      backdrop: this.deleteConfirmBackdropValue,
+      restoreFocusElement
+    })
   }
 
   toggleItemDetails (event) {

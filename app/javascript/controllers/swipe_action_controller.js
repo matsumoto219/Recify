@@ -131,13 +131,13 @@ export default class extends Controller {
     delete this.element.dataset.swipeOpen
   }
 
-  fullDelete () {
+  async fullDelete () {
     if (!this.hasActionTarget) {
       this.close()
       return
     }
 
-    if (!this.confirmAction()) {
+    if (!(await this.confirmAction())) {
       this.close()
       return
     }
@@ -197,8 +197,23 @@ export default class extends Controller {
     const form = this.element.closest('[data-controller~="receipt-form"]')
     const enabled = form?.dataset.receiptFormDeleteConfirmationEnabledValue !== 'false'
     const message = form?.dataset.receiptFormDeleteConfirmationMessageValue || ''
+    const title = form?.dataset.receiptFormDeleteConfirmTitleValue || ''
+    const confirmLabel = form?.dataset.receiptFormDeleteConfirmLabelValue || ''
+    const backdrop = form?.dataset.receiptFormDeleteConfirmBackdropValue || ''
 
-    return !enabled || window.confirm(message)
+    if (!enabled) return Promise.resolve(true)
+
+    const confirm = window.RecifyConfirm?.confirm
+    if (typeof confirm !== 'function') return Promise.resolve(false)
+
+    return confirm(message, {
+      variant: 'danger',
+      icon: 'delete',
+      title,
+      confirmLabel,
+      backdrop,
+      restoreFocusElement: this.actionTarget
+    })
   }
 
   fullTranslateDistance () {

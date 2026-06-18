@@ -35,6 +35,7 @@ ja:
       title: レシート編集
     show:
       title: レシート詳細
+      delete_confirm_title: レシートを削除しますか？
       breadcrumb_index: レシート一覧
       review_description: 確認が必要な項目があります。
       warning_description: 内容を確認してください。
@@ -70,6 +71,7 @@ ja:
       delete_item_confirm: この明細を削除しますか？
       delete_adjustment_confirm: この値引き・手数料を削除しますか？
       delete_payment_confirm: この支払い行を削除しますか？
+      delete_confirm_title: 削除しますか？
       titles:
         new: レシート登録
         edit: レシート編集

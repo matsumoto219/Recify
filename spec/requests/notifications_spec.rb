@@ -92,6 +92,8 @@ RSpec.describe 'Notifications', type: :request do
         expect(delete_button['data-confirm-variant']).to eq('danger')
         expect(delete_button['data-confirm-icon']).to eq('delete')
         expect(delete_button['data-confirm-confirm-label']).to eq(I18n.t('notifications.item.delete'))
+        expect(delete_button['data-confirm-title']).to eq(I18n.t('notifications.item.delete_confirm_title'))
+        expect(delete_button['data-confirm-backdrop']).to eq('plain')
         expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
         expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: '通知1'))
       end
@@ -211,6 +213,8 @@ RSpec.describe 'Notifications', type: :request do
         expect(delete_button['data-confirm-variant']).to eq('danger')
         expect(delete_button['data-confirm-icon']).to eq('delete')
         expect(delete_button['data-confirm-confirm-label']).to eq(I18n.t('notifications.item.delete'))
+        expect(delete_button['data-confirm-title']).to eq(I18n.t('notifications.item.delete_confirm_title'))
+        expect(delete_button['data-confirm-backdrop']).to eq('plain')
         expect(delete_button.text).to include('close', I18n.t('notifications.item.delete'))
         expect(delete_button['aria-label']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))
         expect(delete_button['title']).to eq(I18n.t('notifications.item.delete_aria', title: notification.title))

@@ -16,7 +16,9 @@ RSpec.describe NotificationsHelper, type: :helper do
           turbo_confirm: I18n.t('notifications.item.delete_confirm'),
           confirm_variant: 'danger',
           confirm_icon: 'delete',
-          confirm_confirm_label: I18n.t('notifications.item.delete')
+          confirm_confirm_label: I18n.t('notifications.item.delete'),
+          confirm_title: I18n.t('notifications.item.delete_confirm_title'),
+          confirm_backdrop: 'plain'
         )
         expect(state.icon).to eq('error')
         expect(state.icon_class).to eq('token-state-error-soft')

@@ -33,14 +33,24 @@ class RecifyConfirmDialog {
   }
 
   confirm (message, formElement, submitter) {
+    return this.open({ message, formElement, submitter })
+  }
+
+  confirmWithOptions (message, options = {}) {
+    return this.open({ message, options: this.optionObject(options) })
+  }
+
+  open ({ message, formElement = null, submitter = null, options = {} }) {
+    options = this.optionObject(options)
+
     const dialog = this.ensureDialog()
 
     if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(false)
 
     if (this.resolve) this.finish(false)
 
-    this.restoreFocusElement = this.focusRestoreTarget(submitter, formElement)
-    this.applyContent({ message, formElement, submitter })
+    this.restoreFocusElement = this.focusRestoreTarget(submitter, formElement, options)
+    this.applyContent({ message, formElement, submitter, options })
     this.lockBodyScroll()
     dialog.showModal()
     this.focusCancelButton()
@@ -89,14 +99,15 @@ class RecifyConfirmDialog {
     }
   }
 
-  applyContent ({ message, formElement, submitter }) {
-    const variant = this.confirmVariant(formElement, submitter)
+  applyContent ({ message, formElement, submitter, options = {} }) {
+    const variant = this.confirmVariant(formElement, submitter, options)
     const labels = this.dialog.dataset
-    const title = this.confirmTitle(formElement, submitter, labels, variant)
-    const confirmLabel = this.confirmLabel(formElement, submitter, labels, variant)
+    const title = this.confirmTitle(formElement, submitter, labels, variant, options)
+    const cancelLabel = this.confirmCancelLabel(labels, options)
+    const confirmLabel = this.confirmLabel(formElement, submitter, labels, variant, options)
     const backdrop = this.allowedValue(
       ALLOWED_BACKDROPS,
-      this.dataValue('confirmBackdrop', submitter, formElement),
+      options.backdrop || this.dataValue('confirmBackdrop', submitter, formElement),
       labels.defaultBackdrop || 'blur'
     )
 
@@ -104,16 +115,16 @@ class RecifyConfirmDialog {
     this.dialog.dataset.confirmBackdrop = backdrop
     this.titleElement.textContent = title || ''
     this.messageElement.textContent = String(message || '')
-    this.cancelButton.textContent = labels.cancelLabel || ''
-    this.cancelButton.setAttribute('aria-label', labels.cancelLabel || '')
+    this.cancelButton.textContent = cancelLabel
+    this.cancelButton.setAttribute('aria-label', cancelLabel)
     this.confirmButton.textContent = confirmLabel
-    this.iconElement.textContent = this.confirmIcon(formElement, submitter, variant)
+    this.iconElement.textContent = this.confirmIcon(formElement, submitter, variant, options)
   }
 
-  confirmVariant (formElement, submitter) {
+  confirmVariant (formElement, submitter, options = {}) {
     const explicitVariant = this.allowedValue(
       ALLOWED_VARIANTS,
-      this.dataValue('confirmVariant', submitter, formElement),
+      options.variant || this.dataValue('confirmVariant', submitter, formElement),
       null
     )
     if (explicitVariant) return explicitVariant
@@ -130,16 +141,20 @@ class RecifyConfirmDialog {
     return String(method || '').toLowerCase()
   }
 
-  confirmTitle (formElement, submitter, labels, variant) {
-    const explicitTitle = this.boundedText(this.dataValue('confirmTitle', submitter, formElement), 80)
+  confirmTitle (formElement, submitter, labels, variant, options = {}) {
+    const explicitTitle = this.boundedText(options.title || this.dataValue('confirmTitle', submitter, formElement), 80)
     if (explicitTitle) return explicitTitle
 
     return variant === 'danger' ? labels.dangerTitle : labels.defaultTitle
   }
 
-  confirmLabel (formElement, submitter, labels, variant) {
+  confirmCancelLabel (labels, options = {}) {
+    return this.boundedText(options.cancelLabel, 40) || labels.cancelLabel || ''
+  }
+
+  confirmLabel (formElement, submitter, labels, variant, options = {}) {
     const explicitLabel = this.boundedText(
-      this.dataValue('confirmConfirmLabel', submitter, formElement),
+      options.confirmLabel || this.dataValue('confirmConfirmLabel', submitter, formElement),
       40
     )
     if (explicitLabel) return explicitLabel
@@ -152,10 +167,10 @@ class RecifyConfirmDialog {
       : (labels.confirmLabel || '')
   }
 
-  confirmIcon (formElement, submitter, variant) {
+  confirmIcon (formElement, submitter, variant, options = {}) {
     const explicitIcon = this.allowedValue(
       ALLOWED_ICONS,
-      this.dataValue('confirmIcon', submitter, formElement),
+      options.icon || this.dataValue('confirmIcon', submitter, formElement),
       null
     )
     if (explicitIcon) return explicitIcon
@@ -168,6 +183,10 @@ class RecifyConfirmDialog {
   allowedValue (allowedValues, value, fallback) {
     const normalizedValue = String(value || '').trim()
     return allowedValues.has(normalizedValue) ? normalizedValue : fallback
+  }
+
+  optionObject (options) {
+    return options && typeof options === 'object' ? options : {}
   }
 
   boundedText (value, maxLength) {
@@ -200,7 +219,9 @@ class RecifyConfirmDialog {
     })
   }
 
-  focusRestoreTarget (submitter, formElement) {
+  focusRestoreTarget (submitter, formElement, options = {}) {
+    if (options.restoreFocusElement instanceof window.HTMLElement) return options.restoreFocusElement
+
     return submitter instanceof window.HTMLElement ? submitter : formElement
   }
 
@@ -314,6 +335,10 @@ class RecifyConfirmDialog {
 }
 
 const recifyConfirmDialog = new RecifyConfirmDialog()
+
+window.RecifyConfirm = Object.assign(window.RecifyConfirm || {}, {
+  confirm: (message, options = {}) => recifyConfirmDialog.confirmWithOptions(message, options)
+})
 
 if (Turbo?.config?.forms) {
   Turbo.config.forms.confirm = (message, formElement, submitter) => (

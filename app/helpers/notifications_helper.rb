@@ -58,7 +58,9 @@ module NotificationsHelper
       t("notifications.item.delete_confirm"),
       variant: :danger,
       icon: :delete,
-      confirm_label: t("notifications.item.delete")
+      confirm_label: t("notifications.item.delete"),
+      title: t("notifications.item.delete_confirm_title"),
+      backdrop: :plain
     )
   end
 

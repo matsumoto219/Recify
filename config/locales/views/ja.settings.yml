@@ -161,6 +161,7 @@ ja:
           recovery_codes_remaining: "未使用のリカバリーコード: %{count}件"
           regenerate_recovery_codes: リカバリーコードを再生成
           disable: 無効化する
+          disable_confirm_title: 認証アプリを無効化しますか？
           disable_confirm: 認証アプリとリカバリーコードを無効化しますか？
           setup:
             title: 認証アプリを設定
@@ -187,6 +188,7 @@ ja:
           notice_title: この画面でのみ表示されます
           notice_body: リカバリーコードはあとから再表示できません。保存後は安全な場所に保管してください。
           done: 保存しました
+          regenerate_confirm_title: リカバリーコードを再生成しますか？
           regenerate_confirm: 現在のリカバリーコードを無効にして、新しいコードを発行しますか？
           status:
             ok:
@@ -212,6 +214,7 @@ ja:
           last_used_at: "最終使用: %{datetime}"
           unused: 未使用
           delete: 削除
+          delete_confirm_title: パスキーを削除しますか？
           delete_confirm: このパスキーを削除しますか？
           empty: 登録済みのパスキーはありません。
           label: ラベル

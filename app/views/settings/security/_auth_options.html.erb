@@ -58,7 +58,8 @@
                 t("settings.security.auth.recovery_codes.regenerate_confirm"),
                 variant: :danger,
                 icon: :key,
-                confirm_label: t("settings.security.auth.two_factor.regenerate_recovery_codes")
+                confirm_label: t("settings.security.auth.two_factor.regenerate_recovery_codes"),
+                title: t("settings.security.auth.recovery_codes.regenerate_confirm_title")
               ) do %>
           <%= render "shared/ui/actions/button",
                 label: t("settings.security.auth.two_factor.regenerate_recovery_codes"),
@@ -75,7 +76,8 @@
                 t("settings.security.auth.two_factor.disable_confirm"),
                 variant: :danger,
                 icon: :security,
-                confirm_label: t("settings.security.auth.two_factor.disable")
+                confirm_label: t("settings.security.auth.two_factor.disable"),
+                title: t("settings.security.auth.two_factor.disable_confirm_title")
               ) do %>
           <%= render "shared/ui/actions/button",
                 label: t("settings.security.auth.two_factor.disable"),
@@ -163,7 +165,8 @@
                         t("settings.security.auth.passkey.delete_confirm"),
                         variant: :danger,
                         icon: :passkey,
-                        confirm_label: t("settings.security.auth.passkey.delete")
+                        confirm_label: t("settings.security.auth.passkey.delete"),
+                        title: t("settings.security.auth.passkey.delete_confirm_title")
                       ) do %>
                   <%= render "shared/ui/actions/button",
                         label: t("settings.security.auth.passkey.delete"),

@@ -16,6 +16,7 @@ ja:
       open: 開く
       delete: 削除
       delete_confirm: この通知を削除しますか？
+      delete_confirm_title: 通知を削除しますか？
       delete_aria: "%{title}を削除"
       deleted_target: 対象は既に削除されています
     badge:

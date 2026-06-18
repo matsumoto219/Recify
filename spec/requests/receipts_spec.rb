@@ -4671,6 +4671,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(delete_form['data-confirm-variant']).to eq('danger')
         expect(delete_form['data-confirm-icon']).to eq('delete')
         expect(delete_form['data-confirm-confirm-label']).to eq(I18n.t('common.delete'))
+        expect(delete_form['data-confirm-title']).to eq(I18n.t('receipts.show.delete_confirm_title'))
       end
     end
 
@@ -5599,6 +5600,10 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('true')
         expect(form['data-receipt-form-delete-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_item_confirm'))
         expect(form['data-receipt-form-delete-adjustment-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_adjustment_confirm'))
+        expect(form['data-receipt-form-delete-payment-confirmation-message-value']).to eq(I18n.t('receipts.form.delete_payment_confirm'))
+        expect(form['data-receipt-form-delete-confirm-title-value']).to eq(I18n.t('receipts.form.delete_confirm_title'))
+        expect(form['data-receipt-form-delete-confirm-label-value']).to eq(I18n.t('common.delete'))
+        expect(form['data-receipt-form-delete-confirm-backdrop-value']).to eq('plain')
       end
     end
 
