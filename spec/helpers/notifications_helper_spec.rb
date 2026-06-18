@@ -12,7 +12,12 @@ RSpec.describe NotificationsHelper, type: :helper do
         expect(state).to be_unread
         expect(state).not_to be_stale_notifiable
         expect(state.read_path).to eq(read_notification_path(notification))
-        expect(state.delete_confirm_data).to eq(turbo_confirm: I18n.t('notifications.item.delete_confirm'))
+        expect(state.delete_confirm_data).to eq(
+          turbo_confirm: I18n.t('notifications.item.delete_confirm'),
+          confirm_variant: 'danger',
+          confirm_icon: 'delete',
+          confirm_confirm_label: I18n.t('notifications.item.delete')
+        )
         expect(state.icon).to eq('error')
         expect(state.icon_class).to eq('token-state-error-soft')
         expect(state.item_classes).to include('token-brand-soft-bg')

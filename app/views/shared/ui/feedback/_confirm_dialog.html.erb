@@ -1,0 +1,80 @@
+<%#
+  共通confirm dialog
+
+  任意:
+  - id: dialogのid。未指定時は "confirm-dialog"
+  - backdrop: 背景の種類。:blur / :plain / :none。未指定時は :blur
+  - panel_class: panelに追加するCSSクラス
+%>
+<%
+  dialog_id = local_assigns.fetch(:id, "confirm-dialog")
+  title_id = "#{dialog_id}-title"
+  message_id = "#{dialog_id}-message"
+  backdrop = local_assigns.fetch(:backdrop, :blur).to_s
+  panel_class = ["confirm-dialog-panel", local_assigns[:panel_class]].compact.join(" ")
+%>
+
+<dialog
+  id="<%= dialog_id %>"
+  class="confirm-dialog-shell"
+  data-confirm-dialog
+  data-default-backdrop="<%= backdrop %>"
+  data-confirm-backdrop="<%= backdrop %>"
+  data-default-title="<%= t("shared.confirm_dialog.title") %>"
+  data-danger-title="<%= t("shared.confirm_dialog.danger_title") %>"
+  data-cancel-label="<%= t("shared.confirm_dialog.cancel") %>"
+  data-confirm-label="<%= t("shared.confirm_dialog.confirm") %>"
+  data-danger-confirm-label="<%= t("shared.confirm_dialog.danger_confirm") %>"
+  data-close-label="<%= t("shared.confirm_dialog.close") %>"
+  aria-labelledby="<%= title_id %>"
+  aria-describedby="<%= message_id %>"
+  aria-modal="true">
+  <div class="confirm-dialog-overlay modal-overlay" data-confirm-dialog-cancel aria-hidden="true"></div>
+
+  <div class="confirm-dialog-viewport">
+    <%= render "shared/ui/layout/surface_card",
+          surface_variant: :glass,
+          shadow_variant: :default,
+          padding: :md,
+          title_id: title_id,
+          class: panel_class do %>
+      <span class="confirm-dialog-accent" aria-hidden="true"></span>
+
+      <div class="confirm-dialog-content">
+        <div class="confirm-dialog-icon-shell" aria-hidden="true">
+          <span class="material-symbols-outlined confirm-dialog-icon" data-confirm-dialog-icon>help</span>
+        </div>
+
+        <div class="min-w-0 flex-1">
+          <h2 id="<%= title_id %>" class="confirm-dialog-title" data-confirm-dialog-title>
+            <%= t("shared.confirm_dialog.title") %>
+          </h2>
+          <p id="<%= message_id %>" class="confirm-dialog-message" data-confirm-dialog-message></p>
+        </div>
+      </div>
+
+      <div class="confirm-dialog-actions">
+        <%= render "shared/ui/actions/button",
+              label: t("shared.confirm_dialog.cancel"),
+              variant: :secondary,
+              size: :compact,
+              type: "button",
+              full_width: true,
+              data: { confirm_dialog_cancel: true },
+              class: "confirm-dialog-action",
+              html_options: {
+                aria: { label: t("shared.confirm_dialog.cancel") },
+                autofocus: true
+              } %>
+        <%= render "shared/ui/actions/button",
+              label: t("shared.confirm_dialog.confirm"),
+              variant: :primary,
+              size: :compact,
+              type: "button",
+              full_width: true,
+              data: { confirm_dialog_confirm: true },
+              class: "confirm-dialog-action confirm-dialog-confirm-action" %>
+      </div>
+    <% end %>
+  </div>
+</dialog>

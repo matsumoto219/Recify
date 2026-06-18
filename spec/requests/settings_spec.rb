@@ -161,6 +161,9 @@ RSpec.describe 'Settings', type: :request do
     it 'renders settings index copy through locale keys' do
       get settings_path
 
+      document = Nokogiri::HTML(response.body)
+      delete_form = document.at_css("form[action='#{user_registration_path}'][method='post']")
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
@@ -171,6 +174,9 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.index.sections.calculation'))
         expect(response.body).to include(I18n.t('settings.index.sections.usage'))
         expect(response.body).to include(I18n.t('settings.index.danger.delete_account'))
+        expect(delete_form['data-confirm-variant']).to eq('danger')
+        expect(delete_form['data-confirm-icon']).to eq('delete')
+        expect(delete_form['data-confirm-confirm-label']).to eq(I18n.t('settings.index.danger.delete_account'))
       end
     end
 
@@ -614,6 +620,10 @@ RSpec.describe 'Settings', type: :request do
 
       get settings_security_path
 
+      document = Nokogiri::HTML(response.body)
+      recovery_codes_form = document.at_css("form[action='#{settings_security_recovery_codes_regenerate_path}']")
+      totp_disable_form = document.at_css("form[action='#{settings_security_totp_path}']")
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.auth.recovery_codes.status.ok.title'))
@@ -621,6 +631,12 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include('リカバリーコード')
         expect(response.body).not_to include('回復コード')
         expect(response.body).to include(settings_security_recovery_codes_regenerate_path)
+        expect(recovery_codes_form['data-confirm-variant']).to eq('danger')
+        expect(recovery_codes_form['data-confirm-icon']).to eq('key')
+        expect(recovery_codes_form['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.two_factor.regenerate_recovery_codes'))
+        expect(totp_disable_form['data-confirm-variant']).to eq('danger')
+        expect(totp_disable_form['data-confirm-icon']).to eq('security')
+        expect(totp_disable_form['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.two_factor.disable'))
         codes.each { |code| expect(response.body).not_to include(code) }
         expect(response.body).not_to include(user.recovery_codes.first.code_digest)
       end
@@ -707,6 +723,9 @@ RSpec.describe 'Settings', type: :request do
         expect(passkey_button['data-action']).to be_nil
         expect(label_input['disabled']).to eq('disabled')
         expect(delete_forms).to all(be_present)
+        expect(delete_forms.first['data-confirm-variant']).to eq('danger')
+        expect(delete_forms.first['data-confirm-icon']).to eq('passkey')
+        expect(delete_forms.first['data-confirm-confirm-label']).to eq(I18n.t('settings.security.auth.passkey.delete'))
       end
     end
 
@@ -1717,6 +1736,9 @@ RSpec.describe 'Settings', type: :request do
         expect(stream).to be_present
         expect(stream['action']).to eq('replace')
         expect(delete_button['data-turbo-confirm']).to eq(I18n.t('notifications.item.delete_confirm'))
+        expect(delete_button['data-confirm-variant']).to eq('danger')
+        expect(delete_button['data-confirm-icon']).to eq('delete')
+        expect(delete_button['data-confirm-confirm-label']).to eq(I18n.t('notifications.item.delete'))
       end
     end
 

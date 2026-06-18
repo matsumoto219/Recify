@@ -86,6 +86,13 @@ ja:
         error: エラー
         info: 通知
       close_label: 閉じる
+    confirm_dialog:
+      title: 操作を実行しますか？
+      danger_title: 重要な操作を確認してください
+      cancel: キャンセル
+      confirm: 実行
+      danger_confirm: 実行する
+      close: 確認ダイアログを閉じる
     maintenance_notice:
       title: お知らせ
       body: 現在、一部機能の調整を行っています。

@@ -79,6 +79,10 @@ RSpec.describe 'Receipts', type: :request do
     sign_out_form['data-turbo-confirm'] || sign_out_form.at_css('button')&.[]('data-turbo-confirm')
   end
 
+  def logout_confirm_data_value(sign_out_form, name)
+    sign_out_form[name] || sign_out_form.at_css('button')&.[](name)
+  end
+
   def manual_item_params(index)
     {
       confirmed_name: "商品#{index}",
@@ -221,6 +225,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(sign_out_form.at_css('button')).to be_present
         expect(sign_out_form.text).to include(I18n.t('common.logout'))
         expect(logout_confirm_value(sign_out_form)).to eq(I18n.t('dashboard.header.logout_confirm'))
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-variant')).to eq('neutral')
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-icon')).to eq('logout')
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-confirm-label')).to eq(I18n.t('common.logout'))
       end
     end
 
@@ -239,6 +246,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(sign_out_form).to be_present
         expect(sign_out_form.at_css('input[name="_method"]')['value']).to eq('delete')
         expect(logout_confirm_value(sign_out_form)).to eq(I18n.t('dashboard.header.logout_confirm_guest'))
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-variant')).to eq('neutral')
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-icon')).to eq('logout')
+        expect(logout_confirm_data_value(sign_out_form, 'data-confirm-confirm-label')).to eq(I18n.t('common.logout'))
       end
     end
 
@@ -4658,6 +4668,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(delete_form).to be_present
         expect(delete_form.at_css('input[name="_method"]')['value']).to eq('delete')
         expect(delete_form.text).to include(I18n.t('common.delete'))
+        expect(delete_form['data-confirm-variant']).to eq('danger')
+        expect(delete_form['data-confirm-icon']).to eq('delete')
+        expect(delete_form['data-confirm-confirm-label']).to eq(I18n.t('common.delete'))
       end
     end
 

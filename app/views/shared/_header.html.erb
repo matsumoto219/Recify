@@ -57,9 +57,12 @@
         <%= button_to destroy_user_session_path,
           method: :delete,
           form: { class: "contents" },
-          data: {
-            turbo_confirm: logout_confirm_message
-          },
+          data: confirm_dialog_data(
+            logout_confirm_message,
+            variant: :neutral,
+            icon: :logout,
+            confirm_label: t("common.logout")
+          ),
           class: "flex items-center gap-1 px-2 py-1 text-[0.75rem] token-text-muted header-text-error-hover transition-colors ml-1 rounded-md cursor-pointer bg-transparent border-0" do %>
           <span class="material-symbols-outlined text-[16px]">logout</span>
           <span class="hidden sm:inline"><%= t("common.logout") %></span>

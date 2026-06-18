@@ -350,7 +350,12 @@
           <%= form_with url: user_registration_path,
                         method: :delete,
                         local: true,
-                        data: { turbo_confirm: t("settings.index.danger.confirm") },
+                        data: confirm_dialog_data(
+                          t("settings.index.danger.confirm"),
+                          variant: :danger,
+                          icon: :delete,
+                          confirm_label: t("settings.index.danger.delete_account")
+                        ),
                         class: "contents" do %>
             <%= render "shared/ui/actions/button",
                   label: t("settings.index.danger.delete_account"),

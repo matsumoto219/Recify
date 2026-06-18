@@ -6,7 +6,7 @@
 
   任意:
   - variant: 状態の種類。:default / :danger / :warning。未指定時は :default
-  - surface_variant: 背景の種類。:bg_card / :bg_elevated / :bg_card_subtle / :bg_input / :bg_floating
+  - surface_variant: 背景の種類。:bg_card / :bg_elevated / :bg_card_subtle / :bg_input / :bg_floating / :glass
   - shadow_variant: 影の種類。:default / :indigo / :danger / :warning。未指定時は :default
   - hoverable: hover 表示を有効にする場合は true。未指定時は false
   - padding: 余白。:sm / :md / :lg / :responsive / :card
@@ -69,6 +69,8 @@
       "token-bg-input"
     when :bg_floating
       "token-bg-floating"
+    when :glass
+      "glass-panel"
     end
 
   accent_color =

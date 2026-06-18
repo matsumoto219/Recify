@@ -54,7 +54,12 @@
         <%= form_with url: settings_security_recovery_codes_regenerate_path,
               method: :post,
               local: true,
-              data: { turbo_confirm: t("settings.security.auth.recovery_codes.regenerate_confirm") } do %>
+              data: confirm_dialog_data(
+                t("settings.security.auth.recovery_codes.regenerate_confirm"),
+                variant: :danger,
+                icon: :key,
+                confirm_label: t("settings.security.auth.two_factor.regenerate_recovery_codes")
+              ) do %>
           <%= render "shared/ui/actions/button",
                 label: t("settings.security.auth.two_factor.regenerate_recovery_codes"),
                 variant: :secondary,
@@ -66,7 +71,12 @@
         <%= form_with url: settings_security_totp_path,
               method: :delete,
               local: true,
-              data: { turbo_confirm: t("settings.security.auth.two_factor.disable_confirm") } do %>
+              data: confirm_dialog_data(
+                t("settings.security.auth.two_factor.disable_confirm"),
+                variant: :danger,
+                icon: :security,
+                confirm_label: t("settings.security.auth.two_factor.disable")
+              ) do %>
           <%= render "shared/ui/actions/button",
                 label: t("settings.security.auth.two_factor.disable"),
                 variant: :ghost,
@@ -149,7 +159,12 @@
                 <%= form_with url: settings_passkey_path(passkey),
                       method: :delete,
                       local: true,
-                      data: { turbo_confirm: t("settings.security.auth.passkey.delete_confirm") } do %>
+                      data: confirm_dialog_data(
+                        t("settings.security.auth.passkey.delete_confirm"),
+                        variant: :danger,
+                        icon: :passkey,
+                        confirm_label: t("settings.security.auth.passkey.delete")
+                      ) do %>
                   <%= render "shared/ui/actions/button",
                         label: t("settings.security.auth.passkey.delete"),
                         variant: :ghost,

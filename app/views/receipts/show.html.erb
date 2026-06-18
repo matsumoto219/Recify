@@ -15,7 +15,12 @@
       <%= form_with url: receipt_path(@receipt),
             method: :delete,
             local: true,
-            data: { turbo_confirm: t("common.confirm_delete") },
+            data: confirm_dialog_data(
+              t("common.confirm_delete"),
+              variant: :danger,
+              icon: :delete,
+              confirm_label: t("common.delete")
+            ),
             class: "contents" do %>
         <%= render "shared/ui/actions/button",
               label: t("common.delete"),

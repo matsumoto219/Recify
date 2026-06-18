@@ -1,7 +1,29 @@
 module ApplicationHelper
+  CONFIRM_DIALOG_VARIANTS = %i[neutral danger].freeze
+  CONFIRM_DIALOG_ICONS = %i[help logout delete security passkey key warning].freeze
+  CONFIRM_DIALOG_BACKDROPS = %i[blur plain none].freeze
+
   def mobile_request?
     ua = request.user_agent.to_s
     ua.match?(/Mobile|iPhone|Android/)
+  end
+
+  def confirm_dialog_data(
+    message,
+    variant: :neutral,
+    icon: :help,
+    confirm_label: nil,
+    title: nil,
+    backdrop: nil
+  )
+    {
+      turbo_confirm: message,
+      confirm_variant: confirm_dialog_allowed_value(variant, CONFIRM_DIALOG_VARIANTS, :neutral),
+      confirm_icon: confirm_dialog_allowed_value(icon, CONFIRM_DIALOG_ICONS, :help),
+      confirm_confirm_label: confirm_label.presence,
+      confirm_title: title.presence,
+      confirm_backdrop: confirm_dialog_allowed_value(backdrop, CONFIRM_DIALOG_BACKDROPS, nil)
+    }.compact
   end
 
   def masked_email_with_domain(
@@ -36,5 +58,14 @@ module ApplicationHelper
     end
 
     "#{local_part}@#{domain}"
+  end
+
+  private
+
+  def confirm_dialog_allowed_value(value, allowed_values, fallback)
+    return fallback&.to_s if value.blank?
+
+    normalized_value = value.to_sym
+    allowed_values.include?(normalized_value) ? normalized_value.to_s : fallback&.to_s
   end
 end

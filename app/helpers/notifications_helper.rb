@@ -54,7 +54,12 @@ module NotificationsHelper
   def notification_delete_confirm_data(notification)
     return {} unless notification.user.delete_confirmation_enabled?
 
-    { turbo_confirm: t("notifications.item.delete_confirm") }
+    confirm_dialog_data(
+      t("notifications.item.delete_confirm"),
+      variant: :danger,
+      icon: :delete,
+      confirm_label: t("notifications.item.delete")
+    )
   end
 
   def notification_icon_config(kind)
