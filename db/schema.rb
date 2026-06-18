@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_16_091500) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -40,6 +40,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_091500) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "announcement_links", force: :cascade do |t|
+    t.bigint "announcement_id", null: false
+    t.datetime "created_at", null: false
+    t.boolean "external", default: false, null: false
+    t.string "label", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["announcement_id", "position"], name: "index_announcement_links_on_announcement_id_and_position"
+    t.index ["announcement_id"], name: "index_announcement_links_on_announcement_id"
+  end
+
+  create_table "announcements", force: :cascade do |t|
+    t.text "body", null: false
+    t.datetime "created_at", null: false
+    t.bigint "created_by_id"
+    t.datetime "ends_at"
+    t.string "kind", default: "general", null: false
+    t.boolean "pinned", default: false, null: false
+    t.integer "priority", default: 0, null: false
+    t.string "public_id", null: false
+    t.datetime "published_at"
+    t.datetime "starts_at"
+    t.string "status", default: "draft", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "updated_by_id"
+    t.index ["created_by_id"], name: "index_announcements_on_created_by_id"
+    t.index ["ends_at"], name: "index_announcements_on_ends_at"
+    t.index ["kind"], name: "index_announcements_on_kind"
+    t.index ["public_id"], name: "index_announcements_on_public_id", unique: true
+    t.index ["published_at"], name: "index_announcements_on_published_at"
+    t.index ["starts_at"], name: "index_announcements_on_starts_at"
+    t.index ["status", "pinned", "priority", "published_at"], name: "index_announcements_public_order"
+    t.index ["status"], name: "index_announcements_on_status"
+    t.index ["updated_by_id"], name: "index_announcements_on_updated_by_id"
   end
 
   create_table "audit_logs", force: :cascade do |t|
@@ -460,6 +498,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_091500) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "announcement_links", "announcements"
+  add_foreign_key "announcements", "users", column: "created_by_id", on_delete: :nullify
+  add_foreign_key "announcements", "users", column: "updated_by_id", on_delete: :nullify
   add_foreign_key "audit_logs", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "contact_requests", "users", column: "handled_by_user_id", on_delete: :nullify
   add_foreign_key "contact_requests", "users", on_delete: :nullify
