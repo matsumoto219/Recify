@@ -91,6 +91,8 @@
     <%= render "home/hero_mock" %>
   </section>
 
+  <%= render "home/announcements", announcements: @announcements %>
+
   <section id="home-problem" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="home-problem-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.problem") %>">
     <div class="mx-auto max-w-3xl text-center" data-home-reveal-target="item">
       <h2 id="home-problem-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">

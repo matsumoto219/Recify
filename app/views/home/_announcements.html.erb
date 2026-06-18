@@ -1,0 +1,58 @@
+<% announcements = local_assigns.fetch(:announcements) %>
+
+<% if announcements.present? %>
+  <section id="home-announcements" class="home-announcements-section mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="home-announcements-title" data-home-reveal-target="section" data-home-section-label="<%= t("home.section_nav.announcements") %>">
+    <div class="home-announcements-panel rounded-2xl border token-border-soft token-bg-card p-5 surface-card-shadow sm:p-6" data-home-reveal-target="item">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-lg token-brand-soft-bg px-3 py-1.5 text-xs font-bold token-text-brand">
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">campaign</span>
+            <%= t("home.announcements.badge") %>
+          </p>
+          <h2 id="home-announcements-title" class="mt-4 text-2xl font-black tracking-normal token-text-base sm:text-3xl">
+            <%= t("home.announcements.title") %>
+          </h2>
+          <p class="mt-2 max-w-2xl text-sm leading-7 token-text-muted sm:text-base">
+            <%= t("home.announcements.lead") %>
+          </p>
+        </div>
+
+        <p class="text-xs font-semibold token-text-muted">
+          <%= t("home.announcements.limit_note", count: announcements.size) %>
+        </p>
+      </div>
+
+      <ul class="home-announcements-list mt-5" aria-label="<%= t("home.announcements.list_aria") %>">
+        <% announcements.each do |announcement| %>
+          <% timestamp = announcement.published_at || announcement.created_at %>
+          <li class="home-announcement-row">
+            <%= link_to announcement_path(announcement), class: "home-announcement-link" do %>
+              <span class="home-announcement-main">
+                <span class="home-announcement-meta">
+                  <span class="home-announcement-kind">
+                    <%= t("announcements.kinds.#{announcement.kind}") %>
+                  </span>
+
+                  <% if announcement.pinned? %>
+                    <span class="home-announcement-pinned">
+                      <span class="material-symbols-outlined text-[15px]" aria-hidden="true">keep</span>
+                      <%= t("home.announcements.pinned") %>
+                    </span>
+                  <% end %>
+
+                  <time datetime="<%= timestamp.iso8601 %>">
+                    <%= l(timestamp, format: :short) %>
+                  </time>
+                </span>
+
+                <span class="home-announcement-title"><%= announcement.title %></span>
+              </span>
+
+              <span class="home-announcement-arrow material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  </section>
+<% end %>

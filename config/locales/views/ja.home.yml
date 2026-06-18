@@ -15,6 +15,7 @@ ja:
     section_nav:
       label: LPセクション
       hero: トップ
+      announcements: お知らせ
       problem: 課題
       before_after: Before / After
       features: 機能
@@ -135,6 +136,13 @@ ja:
         - icon: list_alt
           title: 一覧で管理
           body: 整理された記録を一覧で確認・検索できます。
+    announcements:
+      badge: Public Notice
+      title: お知らせ
+      lead: Recifyからの最新情報や予定をお届けします。
+      list_aria: 公開中のお知らせ
+      limit_note: "最新%{count}件を表示中"
+      pinned: 固定
     how_it_works:
       title: 使い方はシンプル。
       save_label: 保存する
