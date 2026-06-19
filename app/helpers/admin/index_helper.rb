@@ -73,6 +73,18 @@ module Admin
       }
     end
 
+    def admin_announcement_filter_options(values)
+      {
+        statuses: admin_localized_value_options(values[:statuses], "admin.announcements.statuses"),
+        kinds: admin_localized_value_options(values[:kinds], "announcements.kinds"),
+        pinned: [
+          [ t("admin.announcements.common.yes"), "true" ],
+          [ t("admin.announcements.common.no"), "false" ]
+        ],
+        limits: admin_limit_options("admin.announcements.index.filters.limit_unit")
+      }
+    end
+
     def admin_receipt_analysis_run_filter_options(values)
       {
         statuses: admin_value_options(values[:statuses]),

@@ -18,6 +18,7 @@ Rails.application.routes.draw do
       patch :resolve, on: :member
       patch :ignore, on: :member
     end
+    resources :announcements, only: %i[index show new create edit update]
     resources :contact_requests, only: %i[index show update]
     resources :users, only: %i[index show] do
       post "operations/lock", to: "user_operations#lock", as: :lock_operation, on: :member

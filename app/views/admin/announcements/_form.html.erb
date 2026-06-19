@@ -1,0 +1,147 @@
+<%
+  action_path = announcement.persisted? ? admin_announcement_path(announcement) : admin_announcements_path
+  method = announcement.persisted? ? :patch : :post
+  label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  control_class = "rounded-lg text-sm"
+  datetime_value = ->(value) { value.present? ? value.strftime("%Y-%m-%dT%H:%M") : nil }
+%>
+
+<%= form_with model: announcement, url: action_path, method: method, local: true, class: "space-y-6" do |form| %>
+  <% if announcement.errors.any? %>
+    <%= render "shared/ui/feedback/notice_surface",
+          notice_type: :alert,
+          title: t("admin.announcements.form.errors.title"),
+          message: t("admin.announcements.form.errors.message", count: announcement.errors.count),
+          class: "mb-2" %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-5">
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.announcements.form.sections.content") %></h2>
+      <p class="mt-1 text-sm token-text-muted"><%= t("admin.announcements.form.content_description") %></p>
+    </div>
+
+    <div class="space-y-5">
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :title,
+            label: t("admin.announcements.form.labels.title"),
+            with_icon: false,
+            required: true,
+            label_class: label_class,
+            input_class: control_class,
+            html_options: { maxlength: 120 } %>
+
+      <%= render "shared/ui/form/textarea_field",
+            f: form,
+            attribute: :body,
+            label: t("admin.announcements.form.labels.body"),
+            rows: 10,
+            required: true,
+            with_icon: false,
+            label_class: label_class,
+            textarea_class: "#{control_class} min-h-64",
+            html_options: { maxlength: 2000 } %>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-5">
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.announcements.form.sections.settings") %></h2>
+      <p class="mt-1 text-sm token-text-muted"><%= t("admin.announcements.form.settings_description") %></p>
+    </div>
+
+    <div class="grid gap-5 md:grid-cols-2">
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :kind,
+            label: t("admin.announcements.form.labels.kind"),
+            options: Announcement::KINDS.map { |kind| [ t("announcements.kinds.#{kind}"), kind ] },
+            selected: announcement.kind,
+            with_icon: false,
+            required: true,
+            label_class: label_class,
+            select_class: control_class %>
+
+      <%= render "shared/ui/form/number_field",
+            f: form,
+            attribute: :priority,
+            label: t("admin.announcements.form.labels.priority"),
+            min: Announcement::PRIORITY_RANGE.begin,
+            max: Announcement::PRIORITY_RANGE.end,
+            step: 1,
+            inputmode: :numeric,
+            label_class: label_class,
+            input_class: control_class,
+            text_align: :left %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: "announcement[starts_at]",
+            id: "announcement_starts_at",
+            type: "datetime-local",
+            label: t("admin.announcements.form.labels.starts_at"),
+            value: datetime_value.call(announcement.starts_at),
+            label_class: label_class,
+            field_class: "rounded-lg text-sm",
+            error_message: announcement.errors.full_messages_for(:starts_at).first %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: "announcement[ends_at]",
+            id: "announcement_ends_at",
+            type: "datetime-local",
+            label: t("admin.announcements.form.labels.ends_at"),
+            value: datetime_value.call(announcement.ends_at),
+            label_class: label_class,
+            field_class: "rounded-lg text-sm",
+            error_message: announcement.errors.full_messages_for(:ends_at).first %>
+
+      <div class="md:col-span-2">
+        <%= render "shared/ui/form/checkbox_field",
+              f: form,
+              attribute: :pinned,
+              label: t("admin.announcements.form.labels.pinned"),
+              hint: t("admin.announcements.form.hints.pinned"),
+              wrapper_class: "rounded-lg border token-border-soft token-bg-input p-4" %>
+      </div>
+    </div>
+
+    <p class="mt-5 rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted">
+      <%= t("admin.announcements.form.draft_only_notice") %>
+    </p>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-5">
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.announcements.form.sections.links") %></h2>
+      <p class="mt-1 text-sm token-text-muted"><%= t("admin.announcements.form.links_description") %></p>
+    </div>
+
+    <div class="space-y-4">
+      <% link_rows.each_with_index do |link, index| %>
+        <%= form.fields_for :announcement_links, link, child_index: index do |link_form| %>
+          <%= render "admin/announcements/link_fields",
+                form: link_form,
+                index: index,
+                label_class: label_class,
+                control_class: control_class %>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: announcement.persisted? ? admin_announcement_path(announcement) : admin_announcements_path,
+          label: t("admin.announcements.form.actions.cancel"),
+          variant: :secondary,
+          icon: "arrow_back",
+          size: :compact %>
+
+    <%= render "shared/ui/actions/button",
+          label: t("admin.announcements.form.actions.submit"),
+          type: "submit",
+          icon: "save",
+          size: :compact %>
+  </div>
+<% end %>

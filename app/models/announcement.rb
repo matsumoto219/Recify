@@ -23,6 +23,9 @@ class Announcement < ApplicationRecord
   belongs_to :created_by, class_name: "User", optional: true
   belongs_to :updated_by, class_name: "User", optional: true
   has_many :announcement_links, dependent: :destroy
+  accepts_nested_attributes_for :announcement_links,
+                                allow_destroy: true,
+                                reject_if: :blank_announcement_link_attributes?
 
   before_validation :assign_public_id, on: :create
 
@@ -111,5 +114,11 @@ class Announcement < ApplicationRecord
     return if starts_at.blank? || ends_at.blank? || ends_at > starts_at
 
     errors.add(:ends_at, :after_starts_at)
+  end
+
+  def blank_announcement_link_attributes?(attributes)
+    attributes["id"].blank? &&
+      attributes["label"].blank? &&
+      attributes["url"].blank?
   end
 end

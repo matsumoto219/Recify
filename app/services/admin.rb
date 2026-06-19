@@ -45,6 +45,14 @@ module Admin
       ContactRequestsQuery.call(**filters)
     end
 
+    def announcements(**filters)
+      AnnouncementsQuery.call(**filters)
+    end
+
+    def announcement_filter_options
+      AnnouncementsQuery.filter_options
+    end
+
     def contact_request_filter_options
       ContactRequestsQuery.filter_options
     end

@@ -1,0 +1,246 @@
+<% content_for :title, t("admin.announcements.index.title") %>
+
+<%
+  filters = @filters || {}
+  pagination = admin_index_pagination(@result, filters: filters)
+  filter_options = admin_announcement_filter_options(@filter_options || {})
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.announcements.index.title"),
+        subtitle: t("admin.announcements.index.description"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base" %>
+
+  <div class="flex justify-end">
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: new_admin_announcement_path,
+          label: t("admin.announcements.index.actions.new"),
+          icon: "add",
+          size: :compact %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.announcements.index.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.announcements.index.filters.description") %></p>
+      </div>
+
+      <%= link_to t("admin.announcements.index.filters.reset"), admin_announcements_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= form_with url: admin_announcements_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :status,
+            label: t("admin.announcements.index.filters.labels.status"),
+            options: [[ t("admin.announcements.index.filters.all"), "" ]] + filter_options[:statuses],
+            selected: filters[:status],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :kind,
+            label: t("admin.announcements.index.filters.labels.kind"),
+            options: [[ t("admin.announcements.index.filters.all"), "" ]] + filter_options[:kinds],
+            selected: filters[:kind],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :pinned,
+            label: t("admin.announcements.index.filters.labels.pinned"),
+            options: [[ t("admin.announcements.index.filters.all"), "" ]] + filter_options[:pinned],
+            selected: filters[:pinned],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.announcements.index.filters.labels.limit"),
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :public_id,
+            label: t("admin.announcements.index.filters.labels.public_id"),
+            value: filters[:public_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :title,
+            label: t("admin.announcements.index.filters.labels.title"),
+            value: filters[:title],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :starts_at_from,
+            id: :starts_at_from,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.starts_at_from"),
+            value: filters[:starts_at_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :starts_at_to,
+            id: :starts_at_to,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.starts_at_to"),
+            value: filters[:starts_at_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :ends_at_from,
+            id: :ends_at_from,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.ends_at_from"),
+            value: filters[:ends_at_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :ends_at_to,
+            id: :ends_at_to,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.ends_at_to"),
+            value: filters[:ends_at_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :published_at_from,
+            id: :published_at_from,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.published_at_from"),
+            value: filters[:published_at_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :published_at_to,
+            id: :published_at_to,
+            type: "datetime-local",
+            label: t("admin.announcements.index.filters.labels.published_at_to"),
+            value: filters[:published_at_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <div class="flex items-end gap-3 md:col-span-2">
+        <%= render "shared/ui/actions/button",
+              label: t("admin.announcements.index.filters.submit"),
+              type: "submit",
+              size: :compact,
+              icon: "filter_alt" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_announcements_path,
+              label: t("admin.announcements.index.filters.clear"),
+              variant: :secondary,
+              size: :compact,
+              icon: "restart_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.announcements.index.results.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.announcements.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
+      </div>
+
+      <%= render "admin/shared/index_pagination",
+            pagination: pagination,
+            path_method: :admin_announcements_path,
+            previous_label: t("admin.announcements.index.results.previous"),
+            next_label: t("admin.announcements.index.results.next") %>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :xl do %>
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.announcements.index.table.updated_at") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.announcements.index.table.public_id") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.index.table.status") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.index.table.kind") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :subject) %>"><%= t("admin.announcements.index.table.title") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.index.table.pinned") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.index.table.priority") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.announcements.index.table.public_window") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.index.table.links_count") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.announcements.index.table.detail") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @result.records.each do |record| %>
+            <% announcement = record[:announcement] %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:updated_at], format: :short) %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>"><%= record[:public_id] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.announcements.statuses.#{record[:status]}") %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("announcements.kinds.#{record[:kind]}") %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :subject) %>" title="<%= record[:title] %>"><%= record[:title] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:pinned] ? t("admin.announcements.common.yes") : t("admin.announcements.common.no") %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:priority] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>">
+                <span class="block"><%= t("admin.announcements.index.table.starts_at_value", value: record[:starts_at].present? ? l(record[:starts_at], format: :short) : "-") %></span>
+                <span class="block"><%= t("admin.announcements.index.table.ends_at_value", value: record[:ends_at].present? ? l(record[:ends_at], format: :short) : "-") %></span>
+              </td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:links_count] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.announcements.index.table.detail_link"), admin_announcement_path(announcement), class: "token-text-brand hover:underline" %></td>
+            </tr>
+          <% end %>
+
+          <% if @result.records.empty? %>
+            <tr>
+              <td colspan="10" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.announcements.index.results.empty") %></td>
+            </tr>
+          <% end %>
+        </tbody>
+    <% end %>
+  <% end %>
+</section>

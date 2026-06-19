@@ -6,12 +6,135 @@ ja:
       receipt_analysis_runs: 解析run管理
       audit_logs: 監査ログ
       security_events: セキュリティイベント
+      announcements: お知らせ
       contact_requests: 問い合わせ
       users: ユーザー管理
       cleanup: Cleanup確認
       system_operations: システム運用
       system_settings: システム設定
       back_to_app: 通常画面へ戻る
+    announcements:
+      common:
+        all: すべて
+        "yes": はい
+        "no": いいえ
+      statuses:
+        draft: 下書き
+        published: 公開中
+        archived: アーカイブ
+      messages:
+        created: お知らせの下書きを作成しました。
+        updated: お知らせの下書きを更新しました。
+      index:
+        title: お知らせ管理
+        description: 公開LPに掲載するお知らせを下書きとして作成・編集します。公開操作は別手順で行います。
+        actions:
+          new: 下書きを作成
+        filters:
+          title: フィルター
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          all: すべて
+          limit_unit: "%{count}件"
+          labels:
+            status: status
+            kind: 種別
+            pinned: 固定表示
+            public_id: public_id
+            title: タイトル
+            starts_at_from: 公開開始 from
+            starts_at_to: 公開開始 to
+            ends_at_from: 公開終了 from
+            ends_at_to: 公開終了 to
+            published_at_from: 公開日時 from
+            published_at_to: 公開日時 to
+            limit: 表示件数
+          submit: 絞り込む
+          clear: クリア
+        results:
+          title: お知らせ一覧
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当するお知らせはありません。
+        table:
+          updated_at: updated
+          public_id: public_id
+          status: status
+          kind: 種別
+          title: タイトル
+          pinned: 固定
+          priority: priority
+          public_window: 公開期間
+          starts_at_value: "開始: %{value}"
+          ends_at_value: "終了: %{value}"
+          links_count: links
+          detail: 詳細
+          detail_link: 詳細
+      show:
+        title: お知らせ詳細
+        readonly_notice: 公開済み・アーカイブ済みのお知らせはこのフォームでは編集できません。
+        actions:
+          edit: 編集
+        sections:
+          content: 内容
+          status: 状態
+          links: 関連リンク
+          metadata: メタデータ
+        labels:
+          title: タイトル
+          body: 本文
+          status: status
+          kind: 種別
+          pinned: 固定表示
+          priority: priority
+          public_id: public_id
+          published_at: 公開日時
+          starts_at: 公開開始
+          ends_at: 公開終了
+          created_by: 作成者
+          updated_by: 更新者
+          created_at: 作成日時
+          updated_at: 更新日時
+        link_kinds:
+          external: 外部リンク
+          internal: 内部リンク
+        links_empty: 関連リンクはありません。
+      new:
+        title: お知らせ下書き作成
+        description: 公開前のお知らせを下書きとして保存します。
+      edit:
+        title: お知らせ下書き編集
+      form:
+        sections:
+          content: 本文
+          settings: 表示設定
+          links: 関連リンク
+        labels:
+          title: タイトル
+          body: 本文
+          kind: 種別
+          priority: 表示優先度
+          starts_at: 公開開始日時
+          ends_at: 公開終了日時
+          pinned: LPで固定表示を優先する
+          link_label: リンク文言
+          link_url: URL
+        hints:
+          pinned: 公開後のLP表示順で優先されます。下書きの間は公開ページには表示されません。
+        content_description: 本文はプレーンテキストで入力してください。HTMLやMarkdownとしては表示しません。
+        settings_description: このフォームでは下書きとして保存します。公開・アーカイブはお知らせ詳細画面から実行します。
+        links_description: 関連リンクは最大3件です。http/https、または / から始まる内部パスだけを入力できます。外部リンクは公開ページで別タブ表示になります。
+        draft_only_notice: このフォームから保存しても公開状態にはなりません。statusパラメータが送られても下書きとして扱います。
+        link_fields:
+          title: "リンク%{number}"
+          optional: 任意
+        errors:
+          title: 入力内容を確認してください
+          message: "%{count}件のエラーがあります。"
+        actions:
+          submit: 下書き保存
+          cancel: 戻る
     passkey_reauthentications:
       new:
         title: 管理者パスキー再認証
