@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'zlib'
 
 RSpec.describe 'Admin announcements', type: :request do
   around do |example|
@@ -10,6 +11,12 @@ RSpec.describe 'Admin announcements', type: :request do
 
     example.run
   ensure
+    Array(@announcement_upload_tempfiles).each do |tempfile|
+      tempfile.close
+      tempfile.unlink
+    rescue Errno::ENOENT
+      nil
+    end
     Rails.application.env_config['action_dispatch.show_exceptions'] = original_show_exceptions
     Rails.application.env_config['action_dispatch.show_detailed_exceptions'] = original_show_detailed_exceptions
   end
@@ -37,6 +44,53 @@ RSpec.describe 'Admin announcements', type: :request do
 
   def stub_fresh_admin_reauthentication
     allow_any_instance_of(Admin::AnnouncementsController).to receive(:admin_passkey_reauthenticated?).and_return(true)
+  end
+
+  def png_bytes(width:, height:, minimum_byte_size: nil)
+    chunk = lambda do |type, data|
+      [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
+    end
+    header = [ width, height, 8, 2, 0, 0, 0 ].pack('NNCCCCC')
+    row = "\x00".b + ("\xFF\xFF\xFF".b * width)
+    compressed = Zlib::Deflate.deflate(row * height)
+
+    png = "\x89PNG\r\n\x1A\n".b +
+      chunk.call('IHDR'.b, header) +
+      chunk.call('IDAT'.b, compressed) +
+      chunk.call('IEND'.b, ''.b)
+    return png if minimum_byte_size.blank? || png.bytesize >= minimum_byte_size
+
+    png + ("\0".b * (minimum_byte_size - png.bytesize))
+  end
+
+  def uint24_le(value)
+    [ value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF ].pack('C3')
+  end
+
+  def webp_vp8x_bytes(width:, height:)
+    payload = "\0\0\0\0".b + uint24_le(width - 1) + uint24_le(height - 1)
+
+    "RIFF".b +
+      [ 4 + 8 + payload.bytesize ].pack('V') +
+      "WEBP".b +
+      "VP8X".b +
+      [ payload.bytesize ].pack('V') +
+      payload
+  end
+
+  def uploaded_file_from_bytes(bytes:, filename:, content_type:)
+    @announcement_upload_tempfiles ||= []
+    tempfile = Tempfile.new([ File.basename(filename, ".*"), File.extname(filename) ])
+    tempfile.binmode
+    tempfile.write(bytes)
+    tempfile.rewind
+    @announcement_upload_tempfiles << tempfile
+
+    Rack::Test::UploadedFile.new(tempfile.path, content_type, true, original_filename: filename)
+  end
+
+  def uploaded_fixture(path, content_type)
+    Rack::Test::UploadedFile.new(Rails.root.join(path), content_type)
   end
 
   describe 'GET /admin/announcements' do
@@ -128,6 +182,9 @@ RSpec.describe 'Admin announcements', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('admin.announcements.new.title'))
+        expect(document.at_css("input[type='file'][name='announcement[image]']")).to be_present
+        expect(document.at_css("input[name='announcement[image_alt_text]']")).to be_present
+        expect(document.at_css("input[type='file'][name='announcement[image]']")['accept']).to eq('image/jpeg,image/png,image/webp')
         expect(document.css("input[name*='announcement_links_attributes']").size).to be >= 3
         expect(response.body).to include(I18n.t('admin.announcements.form.link_fields.title', number: 3))
         expect(response.body).not_to include('translation missing')
@@ -164,6 +221,177 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(announcement.created_by).to eq(admin)
         expect(announcement.updated_by).to eq(admin)
         expect(announcement.announcement_links.order(:position).pluck(:label)).to eq(%w[お問い合わせ 利用規約 外部])
+      end
+    end
+
+    it 'JPEG画像と代替テキストを含む下書きを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      post admin_announcements_path,
+           params: {
+             announcement: announcement_params(
+               image: uploaded_fixture('spec/fixtures/files/receipt_sample.jpg', 'image/jpeg'),
+               image_alt_text: 'リリース告知画像'
+             )
+           }
+
+      announcement = Announcement.order(:created_at).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.image).to be_attached
+        expect(announcement.image.blob.content_type).to eq('image/jpeg')
+        expect(announcement.image_alt_text).to eq('リリース告知画像')
+      end
+    end
+
+    it 'PNG画像と代替テキストを含む下書きを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      post admin_announcements_path,
+           params: {
+             announcement: announcement_params(
+               image: uploaded_file_from_bytes(
+                 bytes: png_bytes(width: 320, height: 180),
+                 filename: 'announcement.png',
+                 content_type: 'image/png'
+               ),
+               image_alt_text: 'メンテナンス告知画像'
+             )
+           }
+
+      announcement = Announcement.order(:created_at).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.image).to be_attached
+        expect(announcement.image.blob.content_type).to eq('image/png')
+        expect(announcement.image_alt_text).to eq('メンテナンス告知画像')
+      end
+    end
+
+    it 'WebP画像と代替テキストを含む下書きを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      post admin_announcements_path,
+           params: {
+             announcement: announcement_params(
+               image: uploaded_file_from_bytes(
+                 bytes: webp_vp8x_bytes(width: 320, height: 180),
+                 filename: 'announcement.webp',
+                 content_type: 'image/webp'
+               ),
+               image_alt_text: 'WebP告知画像'
+             )
+           }
+
+      announcement = Announcement.order(:created_at).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.image).to be_attached
+        expect(announcement.image.blob.content_type).to eq('image/webp')
+        expect(announcement.image_alt_text).to eq('WebP告知画像')
+      end
+    end
+
+    it '画像ありで代替テキストが空ならvalidation errorにする' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: png_bytes(width: 320, height: 180),
+                   filename: 'announcement.png',
+                   content_type: 'image/png'
+                 ),
+                 image_alt_text: ''
+               )
+             }
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('admin.announcements.form.errors.title'))
+        expect(response.body).to include(I18n.t('activerecord.attributes.announcement.image_alt_text'))
+      end
+    end
+
+    it 'SVG画像を拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+                   filename: 'announcement.svg',
+                   content_type: 'image/svg+xml'
+                 ),
+                 image_alt_text: 'SVG告知画像'
+               )
+             }
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.invalid_content_type'))
+      end
+    end
+
+    it '2MBを超える画像を拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: png_bytes(width: 320, height: 180, minimum_byte_size: Announcement::MAX_IMAGE_FILE_SIZE + 1),
+                   filename: 'large-announcement.png',
+                   content_type: 'image/png'
+                 ),
+                 image_alt_text: '大きすぎる告知画像'
+               )
+             }
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.file_too_large'))
+      end
+    end
+
+    it 'JPEGとして送られた偽装画像を拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+                   filename: 'spoofed-announcement.jpg',
+                   content_type: 'image/jpeg'
+                 ),
+                 image_alt_text: '偽装告知画像'
+               )
+             }
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.invalid_content_type'))
       end
     end
 
@@ -347,6 +575,30 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(response.body).not_to include('translation missing')
       end
     end
+
+    it '添付画像情報を表示し、代替テキストはescapeする' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, image_alt_text: '<script>alert(1)</script>')
+      announcement.image.attach(
+        io: StringIO.new(png_bytes(width: 320, height: 180)),
+        filename: 'announcement.png',
+        content_type: 'image/png'
+      )
+      sign_in admin
+
+      get admin_announcement_path(announcement)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('admin.announcements.show.sections.image'))
+        expect(response.body).to include('announcement.png')
+        expect(response.body).to include('image/png')
+        expect(response.body).to include('&lt;script&gt;alert(1)&lt;/script&gt;')
+        expect(response.body).not_to include('<script>alert(1)</script>')
+        expect(response.body).not_to include(announcement.image.blob.key)
+        expect(response.body).not_to include('signed_id')
+      end
+    end
   end
 
   describe 'GET /admin/announcements/:id/edit' do
@@ -401,6 +653,90 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(announcement.public_id).to eq(original_public_id)
         expect(announcement.updated_by).to eq(admin)
         expect(announcement.announcement_links.pluck(:label)).to eq([ '新しいリンク' ])
+      end
+    end
+
+    it 'draft画像を差し替える' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft', image_alt_text: '古い画像')
+      announcement.image.attach(
+        io: StringIO.new(png_bytes(width: 320, height: 180)),
+        filename: 'old-announcement.png',
+        content_type: 'image/png'
+      )
+      sign_in admin
+
+      patch admin_announcement_path(announcement),
+            params: {
+              announcement: announcement_params(
+                image: uploaded_fixture('spec/fixtures/files/receipt_sample.jpg', 'image/jpeg'),
+                image_alt_text: '新しい画像'
+              )
+            }
+
+      announcement.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.image).to be_attached
+        expect(announcement.image.filename.to_s).to eq('receipt_sample.jpg')
+        expect(announcement.image.blob.content_type).to eq('image/jpeg')
+        expect(announcement.image_alt_text).to eq('新しい画像')
+      end
+    end
+
+    it 'draft画像を削除し、代替テキストを空にする' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft', image_alt_text: '削除する画像')
+      announcement.image.attach(
+        io: StringIO.new(png_bytes(width: 320, height: 180)),
+        filename: 'delete-announcement.png',
+        content_type: 'image/png'
+      )
+      sign_in admin
+
+      patch admin_announcement_path(announcement),
+            params: {
+              announcement: announcement_params(
+                remove_image: '1',
+                image_alt_text: ''
+              )
+            }
+
+      announcement.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.image).not_to be_attached
+        expect(announcement.image_alt_text).to be_nil
+      end
+    end
+
+    it 'validation失敗時はremove_image=1でも既存画像を削除しない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft', image_alt_text: '残す画像')
+      announcement.image.attach(
+        io: StringIO.new(png_bytes(width: 320, height: 180)),
+        filename: 'keep-announcement.png',
+        content_type: 'image/png'
+      )
+      sign_in admin
+
+      patch admin_announcement_path(announcement),
+            params: {
+              announcement: announcement_params(
+                title: '',
+                remove_image: '1',
+                image_alt_text: ''
+              )
+            }
+
+      announcement.reload
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(announcement.image).to be_attached
+        expect(announcement.image_alt_text).to eq('残す画像')
       end
     end
 

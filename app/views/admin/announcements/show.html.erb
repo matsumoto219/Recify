@@ -146,6 +146,42 @@
     <% end %>
   </div>
 
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.announcements.show.sections.image") %></h2>
+    <% if @announcement.image.attached? && @announcement.image.blob&.persisted? %>
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
+          <div class="flex aspect-video items-center justify-center p-3">
+            <%= image_tag @announcement.image.variant(resize_to_limit: [640, 360]),
+                  alt: @announcement.image_alt_text.presence || t("admin.announcements.show.image_preview_alt"),
+                  class: "max-h-full max-w-full rounded-lg object-contain" %>
+          </div>
+        </div>
+
+        <dl class="min-w-0 space-y-4 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_alt_text") %></dt>
+            <dd class="mt-1 break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.image_alt_text.presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_filename") %></dt>
+            <dd class="mt-1 break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.image.filename.to_s %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_content_type") %></dt>
+            <dd class="token-text-base"><%= @announcement.image.blob.content_type %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_file_size") %></dt>
+            <dd class="token-text-base"><%= number_to_human_size(@announcement.image.blob.byte_size) %></dd>
+          </div>
+        </dl>
+      </div>
+    <% else %>
+      <p class="text-sm token-text-muted"><%= t("admin.announcements.show.image_empty") %></p>
+    <% end %>
+  <% end %>
+
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.announcements.show.sections.links") %></h2>
     <% links = @announcement.announcement_links.sort_by(&:position) %>

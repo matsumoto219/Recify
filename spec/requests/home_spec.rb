@@ -105,6 +105,12 @@ RSpec.describe 'Home', type: :request do
 
     it '公開中のお知らせがある場合だけHero直下に最大6件表示する' do
       pinned = create(:announcement, :published, title: '固定のお知らせ', pinned: true, priority: 0, published_at: 6.days.ago)
+      pinned.update!(image_alt_text: 'LPには出さない画像')
+      pinned.image.attach(
+        io: StringIO.new(File.binread(Rails.root.join('spec/fixtures/files/receipt_sample.jpg'))),
+        filename: 'lp-announcement.jpg',
+        content_type: 'image/jpeg'
+      )
       high_priority = create(:announcement, :published, title: '優先度の高いお知らせ', priority: 90, published_at: 5.days.ago)
       middle_priority = create(:announcement, :published, title: '優先度中のお知らせ', priority: 50, published_at: 4.days.ago)
       lower_priority = create(:announcement, :published, title: '優先度低のお知らせ', priority: 40, published_at: 3.days.ago)
@@ -140,6 +146,8 @@ RSpec.describe 'Home', type: :request do
         expect(section.text).to include(I18n.t('announcements.kinds.general'))
         expect(section.at_css("a[href='#{announcements_path}']")).to be_present
         expect(section.text).to include(I18n.t('home.announcements.view_all'))
+        expect(section.at_css("img[alt='LPには出さない画像']")).to be_nil
+        expect(response.body).not_to include('lp-announcement.jpg')
         expect(response.body).not_to include('translation missing')
       end
     end

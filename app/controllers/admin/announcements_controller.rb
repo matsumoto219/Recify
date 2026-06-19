@@ -27,6 +27,7 @@ class Admin::AnnouncementsController < Admin::BaseController
     @announcement.updated_by = current_user
 
     if @announcement.save
+      purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.created"), status: :see_other
     else
       prepare_link_rows
@@ -48,6 +49,7 @@ class Admin::AnnouncementsController < Admin::BaseController
     @announcement.updated_by = current_user
 
     if @announcement.save
+      purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.updated"), status: :see_other
     else
       prepare_link_rows
@@ -144,6 +146,9 @@ class Admin::AnnouncementsController < Admin::BaseController
     permitted = params.require(:announcement).permit(
       :title,
       :body,
+      :image,
+      :image_alt_text,
+      :remove_image,
       :kind,
       :pinned,
       :priority,
@@ -151,6 +156,8 @@ class Admin::AnnouncementsController < Admin::BaseController
       :ends_at,
       announcement_links_attributes: %i[id label url position _destroy]
     ).to_h
+    permitted.delete("remove_image")
+    permitted.delete("image_alt_text") if remove_image_requested? && uploaded_announcement_image.blank?
 
     permitted["announcement_links_attributes"] = normalized_link_attributes(
       permitted["announcement_links_attributes"]
@@ -261,6 +268,23 @@ class Admin::AnnouncementsController < Admin::BaseController
     @announcement_link_rows = Array.new(LINK_FORM_ROWS) do |index|
       links_by_position[index] || AnnouncementLink.new(position: index)
     end
+  end
+
+  def remove_image_requested?
+    ActiveModel::Type::Boolean.new.cast(params.dig(:announcement, :remove_image))
+  end
+
+  def uploaded_announcement_image
+    params.dig(:announcement, :image)
+  end
+
+  def purge_announcement_image_if_requested!
+    return unless remove_image_requested?
+    return if uploaded_announcement_image.present?
+    return unless @announcement.image.attached?
+
+    Storage.purge_attachment(@announcement.image)
+    @announcement.update_columns(image_alt_text: nil, updated_at: Time.current)
   end
 
   def raise_not_found

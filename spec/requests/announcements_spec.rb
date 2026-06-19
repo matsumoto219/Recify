@@ -1,6 +1,15 @@
 require 'rails_helper'
 
 RSpec.describe 'Announcements', type: :request do
+  def attach_public_announcement_image(announcement, alt_text: '公開画像の代替テキスト')
+    announcement.update!(image_alt_text: alt_text)
+    announcement.image.attach(
+      io: StringIO.new(File.binread(Rails.root.join('spec/fixtures/files/receipt_sample.jpg'))),
+      filename: 'public-announcement.jpg',
+      content_type: 'image/jpeg'
+    )
+  end
+
   describe 'GET /announcements' do
     it '公開中のお知らせ一覧を表示し、公開対象外は出さない' do
       pinned = create(:announcement, :published, title: '固定のお知らせ', body: '固定本文', pinned: true, priority: -10, published_at: 5.days.ago)
@@ -105,6 +114,21 @@ RSpec.describe 'Announcements', type: :request do
         expect(document.at_css("a[href='#{announcement_path(announcement)}']")).to be_present
         expect(response.body).not_to include('/home_lp.css')
         expect(response.body).not_to include('data-controller="home-reveal"')
+      end
+    end
+
+    it '添付画像は一覧には表示しない' do
+      announcement = create(:announcement, :published, title: '画像付きお知らせ')
+      attach_public_announcement_image(announcement)
+
+      get announcements_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(document.at_css("img[alt='公開画像の代替テキスト']")).to be_nil
+        expect(response.body).not_to include('public-announcement.jpg')
       end
     end
   end
@@ -217,6 +241,21 @@ RSpec.describe 'Announcements', type: :request do
         expect(internal_anchor).to be_present
         expect(internal_anchor['target']).to be_nil
         expect(internal_anchor['rel']).to be_nil
+      end
+    end
+
+    it '添付画像は詳細ページにはまだ表示しない' do
+      announcement = create(:announcement, :published)
+      attach_public_announcement_image(announcement)
+
+      get announcement_path(announcement)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(document.at_css("img[alt='公開画像の代替テキスト']")).to be_nil
+        expect(response.body).not_to include('public-announcement.jpg')
       end
     end
   end

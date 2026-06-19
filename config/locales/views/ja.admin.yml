@@ -99,12 +99,17 @@ ja:
             message: アーカイブするとトップページとお知らせ詳細ページから表示されなくなります。
         sections:
           content: 内容
+          image: 画像
           status: 状態
           links: 関連リンク
           metadata: メタデータ
         labels:
           title: タイトル
           body: 本文
+          image_alt_text: 画像の代替テキスト
+          image_filename: ファイル名
+          image_content_type: ファイル形式
+          image_file_size: ファイルサイズ
           status: status
           kind: 種別
           pinned: 固定表示
@@ -121,6 +126,8 @@ ja:
           external: 外部リンク
           internal: 内部リンク
         links_empty: 関連リンクはありません。
+        image_empty: 添付画像はありません。
+        image_preview_alt: お知らせ添付画像
       new:
         title: お知らせ下書き作成
         description: 公開前のお知らせを下書きとして保存します。
@@ -129,11 +136,15 @@ ja:
       form:
         sections:
           content: 本文
+          image: 画像
           settings: 表示設定
           links: 関連リンク
         labels:
           title: タイトル
           body: 本文
+          image: 画像ファイル
+          image_alt_text: 代替テキスト
+          remove_image: 画像を削除
           kind: 種別
           priority: 表示優先度
           starts_at: 公開開始日時
@@ -143,7 +154,20 @@ ja:
           link_url: URL
         hints:
           pinned: 公開後のトップページ表示順で優先されます。下書きの間は公開ページには表示されません。
+          remove_image: 保存時に添付画像を削除し、代替テキストも空にします。新しい画像を選んだ場合は差し替えを優先します。
         content_description: 本文はプレーンテキストで入力してください。HTMLやMarkdownとしては表示しません。
+        image_description: お知らせ詳細ページに表示する画像を下書きに添付できます。公開前に内容を確認してください。
+        image_empty: 画像はまだ添付されていません。
+        image_preview_alt: 現在の添付画像
+        image_policy:
+          title: 画像アップロードの注意
+          public_notice: 公開後はお知らせ詳細ページに表示されます。
+          secret_notice: 秘密情報・個人情報・トークン類を含めないでください。
+          format_notice: JPEG / PNG / WebP、最大2MBまでアップロードできます。
+          dimension_notice: 画像サイズは100px以上、4096px以下にしてください。
+        image_metadata:
+          filename: ファイル名
+          file_size: ファイルサイズ
         settings_description: このフォームでは下書きとして保存します。公開・アーカイブはお知らせ詳細画面から実行します。
         links_description: 関連リンクは最大3件です。http/https、または / から始まる内部パスだけを入力できます。外部リンクは公開ページで別タブ表示になります。
         draft_only_notice: このフォームから保存しても公開状態にはなりません。statusパラメータが送られても下書きとして扱います。
