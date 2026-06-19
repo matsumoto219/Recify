@@ -606,24 +606,24 @@ ja:
         update_failed: セキュリティイベントの状態を更新できませんでした。
       index:
         title: セキュリティイベント
-        description: 攻撃試行や不審な操作をsafe excerptだけで確認します。
+        description: 攻撃試行や不審な操作を安全な抜粋だけで確認します。
         filters:
           title: フィルター
-          description: payload全文やsecretは保存しません。必要な調査キーだけで絞り込みます。
+          description: 本文全文や秘密情報は保存しません。必要な調査キーだけで絞り込みます。
           reset: リセット
           all: すべて
           limit_unit: "%{count}件"
           labels:
-            actor_user_id: user id
-            event_type: event type
-            severity: severity
-            state: state
+            actor_user_id: ユーザーID
+            event_type: イベント種別
+            severity: 重要度
+            state: 状態
             ip_address: IP
-            request_id: request id
-            path: path
-            matched_rule: matched rule
-            created_from: created from
-            created_to: created to
+            request_id: リクエストID
+            path: パス
+            matched_rule: 検知ルール
+            created_from: 開始日時
+            created_to: 終了日時
             limit: 表示件数
           submit: 絞り込む
           clear: クリア
@@ -634,45 +634,45 @@ ja:
           next: 次へ
           empty: 該当するセキュリティイベントはありません。
         table:
-          last_seen: last seen
-          severity: severity
-          event_type: event type
-          actor: user
+          last_seen: 最終検知
+          severity: 重要度
+          event_type: イベント種別
+          actor: ユーザー
           ip: IP
-          method: method
-          path: path
-          rule: rule
-          count: count
-          state: state
-          detail: detail
+          method: メソッド
+          path: パス
+          rule: ルール
+          count: 件数
+          state: 状態
+          detail: 詳細
           detail_link: 詳細
       show:
         title: セキュリティイベント詳細
         sections:
-          event: Event
-          request: Request
-          route: Route / Rule
-          timeline: Timeline
-          metadata: Metadata
+          event: イベント
+          request: リクエスト
+          route: 経路 / ルール
+          timeline: タイムライン
+          metadata: メタデータ
         labels:
           id: id
-          event_type: event_type
-          severity: severity
-          state: state
-          count: count
-          actor_user_id: user id
+          event_type: イベント種別
+          severity: 重要度
+          state: 状態
+          count: 件数
+          actor_user_id: ユーザーID
           ip_address: IP
-          request_id: request_id
-          user_agent: user_agent
-          method: method
-          path: path
-          field_name: field_name
-          matched_rule: matched_rule
-          payload_excerpt: payload excerpt
-          first_seen_at: first_seen_at
-          last_seen_at: last_seen_at
-          resolved_at: resolved_at
-          ignored_at: ignored_at
+          request_id: リクエストID
+          user_agent: ユーザーエージェント
+          method: メソッド
+          path: パス
+          field_name: フィールド
+          matched_rule: 検知ルール
+          payload_excerpt: 安全な抜粋
+          first_seen_at: 初回検知
+          last_seen_at: 最終検知
+          resolved_at: 対応日時
+          ignored_at: 無視日時
         actions:
           resolve: 対応済みにする
           ignore: 無視する

@@ -72,6 +72,8 @@ RSpec.describe 'Admin security events', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('セキュリティイベント')
+        expect(response.body).to include('イベント種別')
+        expect(response.body).to include('安全な抜粋')
         expect(response.body).to include(event.event_type)
         expect(response.body).to include('/receipts')
         expect(response.body).to include(admin_security_event_path(event))
@@ -134,6 +136,8 @@ RSpec.describe 'Admin security events', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('セキュリティイベント詳細')
+        expect(response.body).to include('安全な抜粋')
+        expect(response.body).to include('検知ルール')
         expect(response.body).to include('&lt;script&gt;alert(1)&lt;/script&gt;')
         expect(response.body).not_to include('<script>alert(1)</script>')
         expect(response.body).to include('&lt;img src=x onerror=alert(1)&gt;')
