@@ -335,7 +335,7 @@ class Ocr::ResponseParser
     return false if normalized.blank?
     return false if normalized.length < 2
     return false if normalized.length > 40
-    return false if normalized.match?(/住所|東京都|道府県|市|区|町|丁目|番地|電話|tel|fax/i)
+    return false if normalized.match?(profile.ocr_brand_store_name_exclusion_pattern)
     return false if normalized.match?(/^[-\d\s.,:;()]+$/)
 
     normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
@@ -376,21 +376,17 @@ class Ocr::ResponseParser
     normalized = normalize_store_name_candidate(text)
     return false if normalized.blank?
 
-    return true if normalized.match?(/店$/)
-    return true if normalized.match?(/支店|本店|営業所|センター|モール|ショップ|market|mart|store/i)
-    return true if normalized.match?(/通り|駅前|南口|北口|東口|西口/)
-
-    false
+    normalized.match?(profile.ocr_branch_like_store_name_pattern)
   end
 
   def store_name_noise_line?(text, allow_branch_like: false)
     normalized = normalize_store_name_candidate(text)
     return true if normalized.blank?
 
-    return true if normalized.match?(/tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i)
+    return true if normalized.match?(profile.ocr_store_name_noise_pattern)
     return true if normalized.match?(/^\d+[\d\s\/:\-()]*$/)
     return true if normalized.match?(/〒/)
-    return true if normalized.match?(/株式会社/)
+    return true if normalized.match?(profile.ocr_store_name_legal_entity_noise_pattern)
 
     return false if allow_branch_like && branch_like_store_name?(normalized)
 

@@ -26,7 +26,6 @@ class ReceiptAnalysisPipeline
       tax_detail_mismatch
       item_tax_rate_group_uncertain
     ].freeze
-    RESOLVABLE_PAYMENT_ADJUSTMENT_PATTERN = /キャッシュレス|還元|cashless|reward|payment\s*discount/i.freeze
     NON_RESOLVABLE_PAYMENT_ADJUSTMENT_KINDS = %w[
       point_usage
       coupon
@@ -799,7 +798,7 @@ class ReceiptAnalysisPipeline
     end
 
     def cash_payment_method?(method)
-      method.to_s.match?(/\A\s*cash\s*\z/i) || method.to_s.match?(/現金|現\s*計/)
+      method.to_s.match?(/\A\s*cash\s*\z/i) || method.to_s.match?(profile.finalize_cash_payment_method_pattern)
     end
 
     def amount_candidate_overrode_settlement_total?(amount_result, restored_total)
@@ -1378,7 +1377,7 @@ class ReceiptAnalysisPipeline
       return false if normalized.split.any? { |part| Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(part) }
       return false if normalized.match?(/[¥￥$€£]|\b(?:receipt|invoice|total|subtotal|tax|payment)\b/i)
       return false if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?|\d{1,2}[:：]\d{2}/)
-      return false if normalized.match?(/[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/)
+      return false if normalized.match?(profile.store_context_address_pattern)
 
       normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
     end
@@ -1567,7 +1566,7 @@ class ReceiptAnalysisPipeline
       Amounts::AdjustmentClassifier.call(normalized)[:effect] == :payment_adjustment &&
         normalized[:sign].to_s == "discount" &&
         amount&.positive? &&
-        text.match?(RESOLVABLE_PAYMENT_ADJUSTMENT_PATTERN)
+        text.match?(profile.analysis_cashless_reward_adjustment_pattern)
     end
 
     def clear_purchase_discount_adjustment?(adjustment)
@@ -1932,6 +1931,10 @@ class ReceiptAnalysisPipeline
       return value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
 
       {}.with_indifferent_access
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
   end
 end

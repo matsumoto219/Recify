@@ -309,8 +309,12 @@ class ReceiptAmountService
 
   def external_tax_description?
     @tax_details.any? do |tax_detail|
-      tax_detail[:description].to_s.match?(/外税|税別|消費税別|別途消費税/)
+      tax_detail[:description].to_s.match?(profile.analysis_external_tax_description_pattern)
     end
+  end
+
+  def profile
+    ReceiptAnalysisProfiles.default
   end
 
   def safe_tax_rate_coverage?

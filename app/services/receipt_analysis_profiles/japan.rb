@@ -556,6 +556,11 @@ module ReceiptAnalysisProfiles
     AI_ADDRESS_EXCLUSION_PATTERN = /電話|TEL|お客様相談室|サポート|ヘルプデスク|コールセンター/.freeze
     AI_ADDRESS_REGISTRATION_NOISE_PATTERN = /登録番号|店no|レジ|伝票|売上票/.freeze
     AI_ADDRESS_CANDIDATE_PATTERN = /[都道府県]|[市区町村郡].*\d|\d+[\-丁目番地号]/.freeze
+    OCR_BRAND_STORE_NAME_EXCLUSION_PATTERN = /住所|東京都|道府県|市|区|町|丁目|番地|電話|tel|fax/i.freeze
+    OCR_BRANCH_LIKE_STORE_NAME_PATTERN = /店$|支店|本店|営業所|センター|モール|ショップ|market|mart|store|通り|駅前|南口|北口|東口|西口/i.freeze
+    OCR_STORE_NAME_NOISE_PATTERN = /tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i.freeze
+    OCR_STORE_NAME_LEGAL_ENTITY_NOISE_PATTERN = /株式会社/.freeze
+    FINALIZE_CASH_PAYMENT_METHOD_PATTERN = /現金|現\s*計/.freeze
 
     class << self
       def country_codes
@@ -1188,6 +1193,26 @@ module ReceiptAnalysisProfiles
 
       def ai_address_candidate_pattern
         AI_ADDRESS_CANDIDATE_PATTERN
+      end
+
+      def ocr_brand_store_name_exclusion_pattern
+        OCR_BRAND_STORE_NAME_EXCLUSION_PATTERN
+      end
+
+      def ocr_branch_like_store_name_pattern
+        OCR_BRANCH_LIKE_STORE_NAME_PATTERN
+      end
+
+      def ocr_store_name_noise_pattern
+        OCR_STORE_NAME_NOISE_PATTERN
+      end
+
+      def ocr_store_name_legal_entity_noise_pattern
+        OCR_STORE_NAME_LEGAL_ENTITY_NOISE_PATTERN
+      end
+
+      def finalize_cash_payment_method_pattern
+        FINALIZE_CASH_PAYMENT_METHOD_PATTERN
       end
     end
   end
