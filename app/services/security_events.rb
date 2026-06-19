@@ -34,7 +34,7 @@ module SecurityEvents
           field_name: detection.field_name,
           matched_rule: detection.matched_rule,
           payload_excerpt: detection.payload_excerpt,
-          metadata: { source: "request_params" }
+          metadata: request_detection_metadata(detection)
         )
       end
     rescue StandardError => e
@@ -52,7 +52,10 @@ module SecurityEvents
         path: request_path(request),
         method: request_method(request),
         matched_rule: matched_rule.presence || "rate_limit",
-        metadata: filtered_rate_limit_metadata(metadata).merge(retry_after: retry_after).compact
+        metadata: categorized_metadata(
+          "rate_limit",
+          filtered_rate_limit_metadata(metadata).merge(retry_after: retry_after).compact
+        )
       )
     rescue StandardError => e
       Rails.logger.warn("[SecurityEvents] rate_limit_record_failed class=#{e.class.name}")
@@ -76,7 +79,7 @@ module SecurityEvents
         field_name: field_name,
         matched_rule: reason,
         payload_excerpt: file_metadata[:filename],
-        metadata: metadata.merge(file_metadata).merge(reason: reason).compact
+        metadata: categorized_metadata("upload", metadata.merge(file_metadata).merge(reason: reason).compact)
       )
     rescue StandardError => e
       Rails.logger.warn("[SecurityEvents] invalid_upload_record_failed class=#{e.class.name}")
@@ -89,7 +92,7 @@ module SecurityEvents
         request: request,
         actor_user: actor_user,
         matched_rule: "invalid_authenticity_token",
-        metadata: { source: "rails_csrf" }
+        metadata: { category: "auth", source: "rails_csrf" }
       )
     rescue StandardError => e
       Rails.logger.warn("[SecurityEvents] csrf_record_failed class=#{e.class.name}")
@@ -106,7 +109,7 @@ module SecurityEvents
         actor_user: actor_user,
         matched_rule: "suspicious_#{status}",
         payload_excerpt: path,
-        metadata: { status: status, source: "error_page" }
+        metadata: { category: "authorization", status: status, source: "error_page" }
       )
     rescue StandardError => e
       Rails.logger.warn("[SecurityEvents] suspicious_error_record_failed class=#{e.class.name}")
@@ -129,6 +132,7 @@ module SecurityEvents
           detail: normalized_detail
         ),
         metadata: {
+          category: "system",
           service: service,
           error_code: error_code,
           consecutive_failures: consecutive_failures,
@@ -160,6 +164,7 @@ module SecurityEvents
         matched_rule: "admin_action_count_gte_#{ADMIN_BURST_THRESHOLD}",
         payload_excerpt: action,
         metadata: {
+          category: "admin",
           action: action,
           count: action_count,
           window_seconds: ADMIN_BURST_WINDOW.to_i
@@ -170,6 +175,18 @@ module SecurityEvents
     end
 
     private
+
+    def request_detection_metadata(detection)
+      {
+        source: "request_params",
+        category: detection.category
+      }.compact
+    end
+
+    def categorized_metadata(category, metadata = {})
+      raw_metadata = metadata.respond_to?(:to_h) ? metadata.to_h : {}
+      raw_metadata.merge(category: category)
+    end
 
     def filtered_rate_limit_metadata(metadata)
       return {} unless metadata.respond_to?(:to_h)

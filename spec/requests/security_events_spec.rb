@@ -39,6 +39,7 @@ RSpec.describe 'Security events', type: :request do
       field_name: 'q',
       payload_excerpt: '<script>alert(1)</script>'
     )
+    expect(event.metadata).to include('category' => 'input', 'source' => 'request_params')
   end
 
   it '複数の入力系攻撃markerをHTTP経由でsafeに記録する' do
@@ -98,6 +99,10 @@ RSpec.describe 'Security events', type: :request do
       'open_redirect_attempt',
       'prompt_injection_attempt'
     )
+    expect(SecurityEvent.order(:created_at).last(2).map { |event| event.metadata['category'] }).to contain_exactly(
+      'url',
+      'ai'
+    )
   end
 
   it 'invalid uploadをfile bodyなしで記録する' do
@@ -119,7 +124,8 @@ RSpec.describe 'Security events', type: :request do
     expect(event.metadata).to include(
       'field_name' => 'receipt.image',
       'content_type' => 'image/jpeg',
-      'reason' => 'invalid_content_type'
+      'reason' => 'invalid_content_type',
+      'category' => 'upload'
     )
     expect(event.metadata.to_json).not_to include('not an image')
   ensure
@@ -159,7 +165,8 @@ RSpec.describe 'Security events', type: :request do
         'filename' => '<img src=x onerror=alert(1)>\\r\\nreceipt.jpg',
         'content_type' => 'image/jpeg',
         'extension' => '.jpg',
-        'reason' => 'invalid_content_type'
+        'reason' => 'invalid_content_type',
+        'category' => 'upload'
       )
       expect(event.attributes.to_json).not_to include('not an image body marker')
     end
@@ -205,6 +212,7 @@ RSpec.describe 'Security events', type: :request do
         matched_rule: 'suspicious_404'
       )
       expect(event.metadata).to include('status' => 404, 'source' => 'error_page')
+      expect(event.metadata).to include('category' => 'authorization')
     end
   end
 
@@ -257,7 +265,7 @@ RSpec.describe 'Security events', type: :request do
         severity: 'high',
         matched_rule: 'invalid_authenticity_token'
       )
-      expect(event.metadata).to include('source' => 'rails_csrf')
+      expect(event.metadata).to include('category' => 'auth', 'source' => 'rails_csrf')
       expect(event.attributes.to_json).not_to include('raw-csrf-token-should-not-be-saved')
     end
   ensure

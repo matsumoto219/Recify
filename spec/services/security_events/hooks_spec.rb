@@ -27,7 +27,7 @@ RSpec.describe 'SecurityEvents hooks' do
       matched_rule: 'auth/sign_in/ip',
       count: 2
     )
-    expect(event.metadata).to include('retry_after' => 60)
+    expect(event.metadata).to include('category' => 'rate_limit', 'retry_after' => 60)
   end
 
   it 'CSRF failureをtoken値なしで記録する' do
@@ -39,6 +39,7 @@ RSpec.describe 'SecurityEvents hooks' do
       severity: 'high',
       matched_rule: 'invalid_authenticity_token'
     )
+    expect(event.metadata).to include('category' => 'auth', 'source' => 'rails_csrf')
     expect(event.metadata.to_s).not_to include('csrf-token')
   end
 
@@ -79,6 +80,7 @@ RSpec.describe 'SecurityEvents hooks' do
         payload_excerpt: '<script>avatar</script>\\r\\n.png'
       )
       expect(event.metadata).to include(
+        'category' => 'upload',
         'field_name' => 'profile.avatar',
         'filename' => '<script>avatar</script>\\r\\n.png',
         'content_type' => 'image/png',
@@ -118,6 +120,7 @@ RSpec.describe 'SecurityEvents hooks' do
       matched_rule: 'external_service_quota_exceeded',
       payload_excerpt: 'ocr external_service_quota_exceeded quota exceeded'
     )
+    expect(event.metadata).to include('category' => 'system')
     expect(event.metadata.dig('detail', 'request_id')).to eq('provider-req')
   end
 
@@ -140,6 +143,7 @@ RSpec.describe 'SecurityEvents hooks' do
       matched_rule: "admin_action_count_gte_#{SecurityEvents::ADMIN_BURST_THRESHOLD}"
     )
     expect(event.metadata).to include(
+      'category' => 'admin',
       'action' => 'system_settings.update',
       'count' => SecurityEvents::ADMIN_BURST_THRESHOLD
     )
@@ -168,6 +172,7 @@ RSpec.describe 'SecurityEvents hooks' do
         payload_excerpt: 'admin.users.limit_update'
       )
       expect(event.metadata).to include(
+        'category' => 'admin',
         'action' => 'admin.users.limit_update',
         'count' => SecurityEvents::ADMIN_BURST_THRESHOLD
       )
