@@ -1,18 +1,7 @@
 module SecurityEvents
   class Recorder
     AGGREGATION_WINDOW = 1.hour
-    MAX_METADATA_ARRAY_ITEMS = 50
     PAYLOAD_DIGEST_EMPTY = nil
-
-    EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
-    AUTH_HEADER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]+/i
-    SECRET_ASSIGNMENT_PATTERN = /
-      (authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|token|password|cookie|session)
-      (["'\s:=]+)
-      ([^"',\s};&]+)
-    /ix
-    LONG_SECRET_PATTERN = /\b[A-Za-z0-9+\/=_-]{40,}\b/
-    SENSITIVE_KEY_PATTERN = SecurityEvent::SENSITIVE_KEY_PATTERN
 
     class << self
       def call(...)
@@ -153,7 +142,7 @@ module SecurityEvents
       return if raw_value.blank?
       return if binary_payload?(raw_value)
 
-      sanitize_payload_text(raw_value.to_s)
+      MetadataSanitizer.sanitize_text(raw_value.to_s)
     end
 
     def payload_digest
@@ -164,59 +153,13 @@ module SecurityEvents
     end
 
     def sanitized_metadata
-      sanitize_metadata_value(metadata)
+      MetadataSanitizer.call(metadata)
     end
 
     def merge_metadata(existing_metadata)
       existing_metadata.to_h.merge(sanitized_metadata) do |_key, old_value, new_value|
         new_value.presence || old_value
       end
-    end
-
-    def sanitize_metadata_value(value, key = nil)
-      return "[FILTERED]" if sensitive_key?(key)
-
-      case value
-      when Hash
-        value.each_with_object({}) do |(child_key, child_value), sanitized|
-          child_key = child_key.to_s
-          next if sensitive_key?(child_key)
-
-          sanitized[child_key] = sanitize_metadata_value(child_value, child_key)
-        end
-      when Array
-        value.first(MAX_METADATA_ARRAY_ITEMS).map { |child| sanitize_metadata_value(child) }
-      when String
-        sanitize_payload_text(value)
-      when Symbol
-        value.to_s
-      when Time, Date, DateTime
-        value.iso8601
-      when NilClass, TrueClass, FalseClass, Numeric
-        value
-      else
-        sanitize_payload_text(value.to_s)
-      end
-    end
-
-    def sanitize_payload_text(value)
-      sanitized = value.to_s.dup
-      sanitized = sanitized.encode("UTF-8", invalid: :replace, undef: :replace, replace: "")
-      sanitized.gsub!(EMAIL_PATTERN, "[REDACTED_EMAIL]")
-      sanitized.gsub!(AUTH_HEADER_PATTERN) { "#{$1} [FILTERED]" }
-      sanitized.gsub!(SECRET_ASSIGNMENT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
-      sanitized.gsub!(LONG_SECRET_PATTERN, "[FILTERED_SECRET]")
-      sanitized = visible_control_chars(sanitized)
-
-      truncate_bytes(sanitized, SecurityEvent::PAYLOAD_EXCERPT_MAX_BYTES)
-    end
-
-    def visible_control_chars(value)
-      value
-        .gsub("\r", "\\r")
-        .gsub("\n", "\\n")
-        .gsub("\t", "\\t")
-        .gsub(/[[:cntrl:]]/, "")
     end
 
     def binary_payload?(value)
@@ -227,22 +170,10 @@ module SecurityEvents
       false
     end
 
-    def sensitive_key?(key)
-      return false if key.blank?
-
-      SENSITIVE_KEY_PATTERN.match?(key.to_s)
-    end
-
     def safe_string(value)
       return if value.blank?
 
-      sanitize_payload_text(value.to_s)
-    end
-
-    def truncate_bytes(value, max_bytes)
-      return value if value.bytesize <= max_bytes
-
-      value.byteslice(0, max_bytes).scrub
+      MetadataSanitizer.sanitize_text(value.to_s)
     end
   end
 end

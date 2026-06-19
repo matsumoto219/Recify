@@ -98,35 +98,7 @@ class SecurityEvent < ApplicationRecord
   def sanitize_metadata
     return unless metadata.is_a?(Hash)
 
-    self.metadata = sanitize_metadata_value(metadata)
-  end
-
-  def sanitize_metadata_value(value)
-    case value
-    when Hash
-      value.each_with_object({}) do |(key, child), sanitized|
-        key = key.to_s
-        next if sensitive_key?(key)
-
-        sanitized[key] = sanitize_metadata_value(child)
-      end
-    when Array
-      value.first(50).map { |child| sanitize_metadata_value(child) }
-    when String
-      truncate_bytes(value, PAYLOAD_EXCERPT_MAX_BYTES)
-    when Symbol
-      value.to_s
-    when Time, Date, DateTime
-      value.iso8601
-    when NilClass, TrueClass, FalseClass, Numeric
-      value
-    else
-      truncate_bytes(value.to_s, PAYLOAD_EXCERPT_MAX_BYTES)
-    end
-  end
-
-  def sensitive_key?(key)
-    SENSITIVE_KEY_PATTERN.match?(key.to_s)
+    self.metadata = SecurityEvents.sanitize_metadata(metadata)
   end
 
   def metadata_is_hash

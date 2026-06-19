@@ -84,6 +84,28 @@ RSpec.describe SecurityEvents::Recorder do
     )
   end
 
+  it 'metadata内のURL secretやActive Storage情報をsafe化する' do
+    event = described_class.call(
+      event_type: 'suspicious_payload',
+      severity: 'medium',
+      request: request,
+      metadata: {
+        target_url: 'https://user:pass@example.com/path?token=secret#fragment',
+        blob_key: 'raw-storage-key',
+        preview_url: '/rails/active_storage/representations/redirect/signed-id/preview.png'
+      }
+    )
+
+    aggregate_failures do
+      expect(event.metadata).to include(
+        'target_url' => 'https://example.com/path',
+        'preview_url' => '[FILTERED_STORAGE_URL]'
+      )
+      expect(event.metadata).not_to include('blob_key')
+      expect(event.metadata.to_json).not_to include('secret', 'signed-id', 'raw-storage-key')
+    end
+  end
+
   it '長いpayloadを切り詰める' do
     event = described_class.call(
       event_type: 'suspicious_payload',

@@ -9,6 +9,14 @@ module SecurityEvents
       Detector.call(params: params, max_detections: max_detections, open_redirect_exemptions: open_redirect_exemptions)
     end
 
+    def sanitize_metadata(value)
+      MetadataSanitizer.call(value)
+    end
+
+    def sanitize_text(value)
+      MetadataSanitizer.sanitize_text(value)
+    end
+
     def record!(...)
       Recorder.call(...)
     end

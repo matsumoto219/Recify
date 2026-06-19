@@ -64,6 +64,26 @@ RSpec.describe SecurityEvent, type: :model do
     )
   end
 
+  it '直接保存されたmetadataも共通sanitizerで安全化する' do
+    event = create(
+      :security_event,
+      metadata: {
+        'target_url' => 'https://user:pass@example.com/path?token=secret#fragment',
+        'signed_id' => 'signed-id',
+        'storage_url' => '/rails/active_storage/blobs/redirect/signed-id/file.png'
+      }
+    )
+
+    aggregate_failures do
+      expect(event.metadata).to include(
+        'target_url' => 'https://example.com/path',
+        'storage_url' => '[FILTERED_STORAGE_URL]'
+      )
+      expect(event.metadata).not_to include('signed_id')
+      expect(event.metadata.to_json).not_to include('token=secret', 'signed-id')
+    end
+  end
+
   it 'actor_user削除後もsecurity eventを残す' do
     user = create(:user)
     event = create(:security_event, actor_user: user)
