@@ -1,6 +1,5 @@
 <%
   image_attached = announcement.image.attached? && announcement.image.blob&.persisted?
-  preview_image = announcement.image.variant(resize_to_limit: [640, 360]) if image_attached
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0" do %>
@@ -14,7 +13,7 @@
       <% if image_attached %>
         <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
           <div class="flex aspect-video items-center justify-center p-3">
-            <%= image_tag preview_image,
+            <%= image_tag announcement.image,
                   alt: announcement.image_alt_text.presence || t("admin.announcements.form.image_preview_alt"),
                   class: "max-h-full max-w-full rounded-lg object-contain" %>
           </div>

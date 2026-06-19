@@ -152,7 +152,7 @@
       <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
           <div class="flex aspect-video items-center justify-center p-3">
-            <%= image_tag @announcement.image.variant(resize_to_limit: [640, 360]),
+            <%= image_tag @announcement.image,
                   alt: @announcement.image_alt_text.presence || t("admin.announcements.show.image_preview_alt"),
                   class: "max-h-full max-w-full rounded-lg object-contain" %>
           </div>
