@@ -9,6 +9,12 @@ module SecurityEvents
       "medium" => 90.days,
       "low" => 30.days
     }.freeze
+    RETENTION_SETTING_KEYS = {
+      "critical" => "retention.security_events_critical_days",
+      "high" => "retention.security_events_high_days",
+      "medium" => "retention.security_events_medium_days",
+      "low" => "retention.security_events_low_days"
+    }.freeze
 
     class << self
       def call(dry_run: true, now: Time.current, limit: DEFAULT_LIMIT)
@@ -70,7 +76,7 @@ module SecurityEvents
     end
 
     def cutoff_for(severity)
-      now - RETENTIONS.fetch(severity.to_s)
+      now - retention_for(severity)
     end
 
     def cutoffs
@@ -80,7 +86,14 @@ module SecurityEvents
     end
 
     def retentions_in_days
-      RETENTIONS.transform_values { |retention| retention / 1.day }
+      RETENTIONS.keys.index_with { |severity| retention_for(severity) / 1.day }
+    end
+
+    def retention_for(severity)
+      key = RETENTION_SETTING_KEYS.fetch(severity.to_s)
+      SystemSettings.limit_for(key).days
+    rescue KeyError, SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      RETENTIONS.fetch(severity.to_s)
     end
 
     def normalize_limit(value)

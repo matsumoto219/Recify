@@ -139,6 +139,46 @@ module SystemSettings
         max: 60
       ),
       Definition.new(
+        key: "security_events.max_detections_per_request",
+        category: "security_event",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 50
+      ),
+      Definition.new(
+        key: "security_events.aggregation_window_minutes",
+        category: "security_event",
+        value_type: "integer",
+        default: 60,
+        editable: true,
+        risk_level: "medium",
+        min: 5,
+        max: 1440
+      ),
+      Definition.new(
+        key: "security_events.admin_burst_window_minutes",
+        category: "security_event",
+        value_type: "integer",
+        default: 60,
+        editable: true,
+        risk_level: "high",
+        min: 5,
+        max: 1440
+      ),
+      Definition.new(
+        key: "security_events.admin_burst_threshold",
+        category: "security_event",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "high",
+        min: 2,
+        max: 100
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",
@@ -505,6 +545,106 @@ module SystemSettings
         risk_level: "high",
         min: 1,
         max: 365
+      ),
+      Definition.new(
+        key: "retention.security_events_critical_days",
+        category: "retention",
+        value_type: "integer",
+        default: 180,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 1095
+      ),
+      Definition.new(
+        key: "retention.security_events_high_days",
+        category: "retention",
+        value_type: "integer",
+        default: 180,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 1095
+      ),
+      Definition.new(
+        key: "retention.security_events_medium_days",
+        category: "retention",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 730
+      ),
+      Definition.new(
+        key: "retention.security_events_low_days",
+        category: "retention",
+        value_type: "integer",
+        default: 30,
+        editable: true,
+        risk_level: "high",
+        min: 7,
+        max: 365
+      ),
+      Definition.new(
+        key: "retention.audit_logs_high_risk_admin_days",
+        category: "retention",
+        value_type: "integer",
+        default: 365,
+        editable: true,
+        risk_level: "high",
+        min: 90,
+        max: 3650
+      ),
+      Definition.new(
+        key: "retention.audit_logs_cleanup_execute_days",
+        category: "retention",
+        value_type: "integer",
+        default: 365,
+        editable: true,
+        risk_level: "high",
+        min: 90,
+        max: 3650
+      ),
+      Definition.new(
+        key: "retention.audit_logs_cleanup_failed_days",
+        category: "retention",
+        value_type: "integer",
+        default: 180,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 1825
+      ),
+      Definition.new(
+        key: "retention.audit_logs_passkey_reauth_days",
+        category: "retention",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 730
+      ),
+      Definition.new(
+        key: "retention.audit_logs_system_dry_run_days",
+        category: "retention",
+        value_type: "integer",
+        default: 30,
+        editable: true,
+        risk_level: "high",
+        min: 7,
+        max: 365
+      ),
+      Definition.new(
+        key: "retention.audit_logs_routine_system_days",
+        category: "retention",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 730
       ),
       Definition.new(
         key: "limits.max_uploads_per_day",

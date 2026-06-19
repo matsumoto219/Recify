@@ -17,6 +17,7 @@ module SystemSettings
   AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
   IMAGE_DIMENSION_RELATION_ERROR = "image_dimension_relationship"
   STORAGE_WARNING_THRESHOLD_RELATION_ERROR = "storage_warning_threshold_relationship"
+  SECURITY_EVENT_RETENTION_ORDER_ERROR = "security_event_retention_order"
   AMOUNT_LIMIT_RELATIONSHIPS = [
     [ "limits.receipt_total_amount_max", "limits.receipt_item_line_total_max" ],
     [ "limits.receipt_total_amount_max", "limits.receipt_adjustment_amount_max" ],
@@ -46,6 +47,13 @@ module SystemSettings
     storage.warning_remaining_bytes
     storage.error_remaining_bytes
   ].freeze
+  SECURITY_EVENT_RETENTION_KEYS_BY_SEVERITY = {
+    "critical" => "retention.security_events_critical_days",
+    "high" => "retention.security_events_high_days",
+    "medium" => "retention.security_events_medium_days",
+    "low" => "retention.security_events_low_days"
+  }.freeze
+  SECURITY_EVENT_RETENTION_KEYS = SECURITY_EVENT_RETENTION_KEYS_BY_SEVERITY.values.freeze
   USER_LIMIT_SETTING_SAFETY_KEYS = {
     "limits.receipt_uploads_per_day" => "limits.max_uploads_per_day",
     "limits.batch_files_per_day" => "limits.max_uploads_per_day",
@@ -407,6 +415,7 @@ module SystemSettings
       validate_amount_limit_relationships!(definition, value)
       validate_image_dimension_relationships!(definition, value)
       validate_storage_warning_threshold_relationships!(definition, value)
+      validate_security_event_retention_order!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -519,6 +528,21 @@ module SystemSettings
       return if values.fetch("storage.warning_remaining_bytes") > values.fetch("storage.error_remaining_bytes")
 
       raise ValidationError, STORAGE_WARNING_THRESHOLD_RELATION_ERROR
+    end
+
+    def validate_security_event_retention_order!(definition, value)
+      return unless SECURITY_EVENT_RETENTION_KEYS.include?(definition.key)
+
+      values = limits_for(SECURITY_EVENT_RETENTION_KEYS)
+      values[definition.key] = Integer(value)
+
+      critical_days = values.fetch("retention.security_events_critical_days")
+      high_days = values.fetch("retention.security_events_high_days")
+      medium_days = values.fetch("retention.security_events_medium_days")
+      low_days = values.fetch("retention.security_events_low_days")
+      return if critical_days >= high_days && high_days >= medium_days && medium_days >= low_days
+
+      raise ValidationError, SECURITY_EVENT_RETENTION_ORDER_ERROR
     end
 
     def override_integer_value(override)

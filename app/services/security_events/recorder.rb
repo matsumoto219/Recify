@@ -7,6 +7,12 @@ module SecurityEvents
       def call(...)
         new(...).call
       end
+
+      def aggregation_window
+        SystemSettings.limit_for("security_events.aggregation_window_minutes").minutes
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        AGGREGATION_WINDOW
+      end
     end
 
     def initialize(
@@ -96,7 +102,7 @@ module SecurityEvents
           ip_address: ip_address_from_context,
           path: path_from_context,
           payload_sha256: payload_digest,
-          last_seen_at: AGGREGATION_WINDOW.ago..
+          last_seen_at: self.class.aggregation_window.ago..
         )
         .order(last_seen_at: :desc, id: :desc)
         .first

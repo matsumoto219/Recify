@@ -47,6 +47,12 @@ RSpec.describe AuditLogs::RetentionPolicy do
         expect(described_class.retention_for(:user_delete)).to be_nil
       end
     end
+
+    it 'SystemSettingsの保持期間を返す' do
+      create(:system_setting, key: 'retention.audit_logs_routine_system_days', value: SystemSettings.stored_value(120))
+
+      expect(described_class.retention_for(:routine_system)).to eq(120.days)
+    end
   end
 
   describe '.cutoff_for' do

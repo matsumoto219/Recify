@@ -144,6 +144,28 @@ RSpec.describe SecurityEvents::Recorder do
     expect(SecurityEvent.first.count).to eq(2)
   end
 
+  it 'SystemSettingsの集約窓を過ぎたeventは新規作成する' do
+    create(:system_setting, key: 'security_events.aggregation_window_minutes', value: SystemSettings.stored_value(5))
+    event = described_class.call(
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    )
+    event.update!(last_seen_at: 10.minutes.ago)
+
+    described_class.call(
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    )
+
+    expect(SecurityEvent.count).to eq(2)
+  end
+
   it 'resolved済みeventは集約せず新規作成する' do
     event = described_class.call(
       event_type: 'path_traversal_attempt',

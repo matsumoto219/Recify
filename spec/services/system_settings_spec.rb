@@ -19,6 +19,10 @@ RSpec.describe SystemSettings do
         'maintenance.title',
         'maintenance.body',
         'security.admin_passkey_reauth_window_minutes',
+        'security_events.max_detections_per_request',
+        'security_events.aggregation_window_minutes',
+        'security_events.admin_burst_window_minutes',
+        'security_events.admin_burst_threshold',
         'storage.keep_receipt_images_default',
         'storage.usage_warning_percentage',
         'storage.usage_error_percentage',
@@ -56,6 +60,16 @@ RSpec.describe SystemSettings do
         'retention.analysis_runs_failed_days',
         'retention.orphan_blobs_hours',
         'retention.receipt_images_days',
+        'retention.security_events_critical_days',
+        'retention.security_events_high_days',
+        'retention.security_events_medium_days',
+        'retention.security_events_low_days',
+        'retention.audit_logs_high_risk_admin_days',
+        'retention.audit_logs_cleanup_execute_days',
+        'retention.audit_logs_cleanup_failed_days',
+        'retention.audit_logs_passkey_reauth_days',
+        'retention.audit_logs_system_dry_run_days',
+        'retention.audit_logs_routine_system_days',
         'limits.max_uploads_per_day',
         'limits.max_ocr_per_day',
         'limits.max_ai_per_day',
@@ -341,6 +355,20 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('storage.warning_remaining_bytes')).to eq(200.megabytes)
         expect(described_class.limit_for('storage.error_remaining_bytes')).to eq(50.megabytes)
         expect(described_class.limit_for('storage.remaining_warning_limit_bytes')).to eq(1.gigabyte)
+        expect(described_class.limit_for('security_events.max_detections_per_request')).to eq(5)
+        expect(described_class.limit_for('security_events.aggregation_window_minutes')).to eq(60)
+        expect(described_class.limit_for('security_events.admin_burst_window_minutes')).to eq(60)
+        expect(described_class.limit_for('security_events.admin_burst_threshold')).to eq(5)
+        expect(described_class.limit_for('retention.security_events_critical_days')).to eq(180)
+        expect(described_class.limit_for('retention.security_events_high_days')).to eq(180)
+        expect(described_class.limit_for('retention.security_events_medium_days')).to eq(90)
+        expect(described_class.limit_for('retention.security_events_low_days')).to eq(30)
+        expect(described_class.limit_for('retention.audit_logs_high_risk_admin_days')).to eq(365)
+        expect(described_class.limit_for('retention.audit_logs_cleanup_execute_days')).to eq(365)
+        expect(described_class.limit_for('retention.audit_logs_cleanup_failed_days')).to eq(180)
+        expect(described_class.limit_for('retention.audit_logs_passkey_reauth_days')).to eq(90)
+        expect(described_class.limit_for('retention.audit_logs_system_dry_run_days')).to eq(30)
+        expect(described_class.limit_for('retention.audit_logs_routine_system_days')).to eq(90)
       end
     end
   end
@@ -446,6 +474,24 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('storage.error_remaining_bytes', 199.megabytes.to_s)).to eq(199.megabytes)
         expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 10.megabytes.to_s)).to eq(10.megabytes)
         expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 100.gigabytes.to_s)).to eq(100.gigabytes)
+        expect(described_class.cast_update_value('security_events.max_detections_per_request', '1')).to eq(1)
+        expect(described_class.cast_update_value('security_events.max_detections_per_request', '50')).to eq(50)
+        expect(described_class.cast_update_value('security_events.aggregation_window_minutes', '5')).to eq(5)
+        expect(described_class.cast_update_value('security_events.aggregation_window_minutes', '1440')).to eq(1440)
+        expect(described_class.cast_update_value('security_events.admin_burst_window_minutes', '5')).to eq(5)
+        expect(described_class.cast_update_value('security_events.admin_burst_window_minutes', '1440')).to eq(1440)
+        expect(described_class.cast_update_value('security_events.admin_burst_threshold', '2')).to eq(2)
+        expect(described_class.cast_update_value('security_events.admin_burst_threshold', '100')).to eq(100)
+        expect(described_class.cast_update_value('retention.security_events_critical_days', '180')).to eq(180)
+        expect(described_class.cast_update_value('retention.security_events_high_days', '180')).to eq(180)
+        expect(described_class.cast_update_value('retention.security_events_medium_days', '90')).to eq(90)
+        expect(described_class.cast_update_value('retention.security_events_low_days', '30')).to eq(30)
+        expect(described_class.cast_update_value('retention.audit_logs_high_risk_admin_days', '365')).to eq(365)
+        expect(described_class.cast_update_value('retention.audit_logs_cleanup_execute_days', '365')).to eq(365)
+        expect(described_class.cast_update_value('retention.audit_logs_cleanup_failed_days', '180')).to eq(180)
+        expect(described_class.cast_update_value('retention.audit_logs_passkey_reauth_days', '90')).to eq(90)
+        expect(described_class.cast_update_value('retention.audit_logs_system_dry_run_days', '30')).to eq(30)
+        expect(described_class.cast_update_value('retention.audit_logs_routine_system_days', '90')).to eq(90)
         expect(described_class.cast_update_value('retention.notifications_read_days', '1')).to eq(1)
         expect(described_class.cast_update_value('retention.notifications_read_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.guest_users_days', '1')).to eq(1)
@@ -679,6 +725,30 @@ RSpec.describe SystemSettings do
         expect {
           described_class.cast_update_value('storage.remaining_warning_limit_bytes', (100.gigabytes + 1).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('security_events.max_detections_per_request', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security_events.max_detections_per_request', '51')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('security_events.aggregation_window_minutes', '4')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security_events.aggregation_window_minutes', '1441')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('security_events.admin_burst_window_minutes', '4')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security_events.admin_burst_window_minutes', '1441')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('security_events.admin_burst_threshold', '1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security_events.admin_burst_threshold', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end
 
@@ -810,6 +880,45 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('storage.error_remaining_bytes', 499.megabytes.to_s)).to eq(499.megabytes)
         expect {
           described_class.cast_update_value('storage.error_remaining_bytes', 500.megabytes.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
+    it 'SecurityEvent保持期間は severity 順の大小関係を維持する' do
+      error_message = 'security_event_retention_order'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('retention.security_events_critical_days', '180')).to eq(180)
+        expect {
+          described_class.cast_update_value('retention.security_events_high_days', '181')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.security_events_medium_days', '90')).to eq(90)
+        expect {
+          described_class.cast_update_value('retention.security_events_medium_days', '181')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.security_events_low_days', '30')).to eq(30)
+        expect {
+          described_class.cast_update_value('retention.security_events_low_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'retention.security_events_critical_days', value: described_class.stored_value(365))
+      create(:system_setting, key: 'retention.security_events_high_days', value: described_class.stored_value(180))
+      create(:system_setting, key: 'retention.security_events_medium_days', value: described_class.stored_value(90))
+      create(:system_setting, key: 'retention.security_events_low_days', value: described_class.stored_value(30))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('retention.security_events_high_days', '365')).to eq(365)
+        expect {
+          described_class.cast_update_value('retention.security_events_high_days', '366')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.security_events_medium_days', '180')).to eq(180)
+        expect {
+          described_class.cast_update_value('retention.security_events_medium_days', '181')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.security_events_low_days', '90')).to eq(90)
+        expect {
+          described_class.cast_update_value('retention.security_events_low_days', '91')
         }.to raise_error(SystemSettings::ValidationError, error_message)
       end
     end
@@ -1175,6 +1284,39 @@ RSpec.describe SystemSettings do
       )
     end
 
+    it 'SecurityEvent運用閾値は設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('security_events.max_detections_per_request')).to have_attributes(
+          category: 'security_event',
+          risk_level: 'high',
+          min: 1,
+          max: 50,
+          default: 5
+        )
+        expect(described_class.definition_for('security_events.aggregation_window_minutes')).to have_attributes(
+          category: 'security_event',
+          risk_level: 'medium',
+          min: 5,
+          max: 1440,
+          default: 60
+        )
+        expect(described_class.definition_for('security_events.admin_burst_window_minutes')).to have_attributes(
+          category: 'security_event',
+          risk_level: 'high',
+          min: 5,
+          max: 1440,
+          default: 60
+        )
+        expect(described_class.definition_for('security_events.admin_burst_threshold')).to have_attributes(
+          category: 'security_event',
+          risk_level: 'high',
+          min: 2,
+          max: 100,
+          default: 5
+        )
+      end
+    end
+
     it 'ストレージ警告閾値はmedium risk設定として扱う' do
       aggregate_failures do
         expect(described_class.definition_for('storage.usage_warning_percentage')).to have_attributes(
@@ -1211,6 +1353,81 @@ RSpec.describe SystemSettings do
           min: 10.megabytes,
           max: 100.gigabytes,
           default: 1.gigabyte
+        )
+      end
+    end
+
+    it 'SecurityEvent/AuditLog保持期間はhigh risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('retention.security_events_critical_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 1095,
+          default: 180
+        )
+        expect(described_class.definition_for('retention.security_events_high_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 1095,
+          default: 180
+        )
+        expect(described_class.definition_for('retention.security_events_medium_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 730,
+          default: 90
+        )
+        expect(described_class.definition_for('retention.security_events_low_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 7,
+          max: 365,
+          default: 30
+        )
+        expect(described_class.definition_for('retention.audit_logs_high_risk_admin_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 90,
+          max: 3650,
+          default: 365
+        )
+        expect(described_class.definition_for('retention.audit_logs_cleanup_execute_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 90,
+          max: 3650,
+          default: 365
+        )
+        expect(described_class.definition_for('retention.audit_logs_cleanup_failed_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 1825,
+          default: 180
+        )
+        expect(described_class.definition_for('retention.audit_logs_passkey_reauth_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 730,
+          default: 90
+        )
+        expect(described_class.definition_for('retention.audit_logs_system_dry_run_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 7,
+          max: 365,
+          default: 30
+        )
+        expect(described_class.definition_for('retention.audit_logs_routine_system_days')).to have_attributes(
+          category: 'retention',
+          risk_level: 'high',
+          min: 30,
+          max: 730,
+          default: 90
         )
       end
     end

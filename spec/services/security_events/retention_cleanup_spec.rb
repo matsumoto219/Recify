@@ -46,5 +46,20 @@ RSpec.describe SecurityEvents::RetentionCleanup do
 
       expect(result[:expired_count]).to eq(2)
     end
+
+    it 'SystemSettingsのseverity別保持期間を使う' do
+      now = Time.zone.parse('2026-06-16 12:00:00')
+      create(:system_setting, key: 'retention.security_events_medium_days', value: SystemSettings.stored_value(45))
+      expired = create(:security_event, severity: 'medium', last_seen_at: now - 46.days)
+      create(:security_event, severity: 'medium', last_seen_at: now - 44.days)
+
+      result = described_class.call(dry_run: true, now: now, limit: 100)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:sample_event_ids]).to eq([ expired.id ])
+        expect(result[:retentions]['medium']).to eq(45)
+      end
+    end
   end
 end

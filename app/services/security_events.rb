@@ -4,8 +4,12 @@ module SecurityEvents
   RATE_LIMIT_METADATA_KEYS = %i[matched limit period retry_after].freeze
 
   class << self
-    def detect(params:, max_detections: Detector::MAX_DETECTIONS, url_field_policy: UrlFieldPolicy.new)
-      Detector.call(params: params, max_detections: max_detections, url_field_policy: url_field_policy)
+    def detect(params:, max_detections: nil, url_field_policy: UrlFieldPolicy.new)
+      Detector.call(
+        params: params,
+        max_detections: max_detections || max_detections_per_request,
+        url_field_policy: url_field_policy
+      )
     end
 
     def sanitize_metadata(value)
@@ -148,11 +152,13 @@ module SecurityEvents
       event_type = admin_burst_event_type(action)
       return if event_type.blank?
 
-      since = ADMIN_BURST_WINDOW.ago
+      threshold = admin_burst_threshold
+      window = admin_burst_window
+      since = window.ago
       relation = AuditLog.where(actor_user_id: audit_log.actor_user_id, created_at: since..)
       relation = relation.where(action: action)
       action_count = relation.count
-      return if action_count < ADMIN_BURST_THRESHOLD
+      return if action_count < threshold
 
       record!(
         event_type: event_type,
@@ -161,13 +167,13 @@ module SecurityEvents
         ip_address: audit_log.ip_address,
         user_agent: audit_log.user_agent,
         request_id: audit_log.request_id,
-        matched_rule: "admin_action_count_gte_#{ADMIN_BURST_THRESHOLD}",
+        matched_rule: "admin_action_count_gte_#{threshold}",
         payload_excerpt: action,
         metadata: {
           category: "admin",
           action: action,
           count: action_count,
-          window_seconds: ADMIN_BURST_WINDOW.to_i
+          window_seconds: window.to_i
         }
       )
     rescue StandardError => e
@@ -175,6 +181,24 @@ module SecurityEvents
     end
 
     private
+
+    def max_detections_per_request
+      SystemSettings.limit_for("security_events.max_detections_per_request")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      Detector::MAX_DETECTIONS
+    end
+
+    def admin_burst_threshold
+      SystemSettings.limit_for("security_events.admin_burst_threshold")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      ADMIN_BURST_THRESHOLD
+    end
+
+    def admin_burst_window
+      SystemSettings.limit_for("security_events.admin_burst_window_minutes").minutes
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      ADMIN_BURST_WINDOW
+    end
 
     def request_detection_metadata(detection)
       {

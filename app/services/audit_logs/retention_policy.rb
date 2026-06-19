@@ -54,6 +54,15 @@ module AuditLogs
       routine_system: 90.days
     }.freeze
 
+    RETENTION_SETTING_KEYS = {
+      high_risk_admin: "retention.audit_logs_high_risk_admin_days",
+      cleanup_execute: "retention.audit_logs_cleanup_execute_days",
+      cleanup_failed: "retention.audit_logs_cleanup_failed_days",
+      passkey_reauth: "retention.audit_logs_passkey_reauth_days",
+      system_dry_run: "retention.audit_logs_system_dry_run_days",
+      routine_system: "retention.audit_logs_routine_system_days"
+    }.freeze
+
     ACTIONS = {
       user_delete: USER_DELETE_ACTIONS,
       high_risk_admin: HIGH_RISK_ADMIN_ACTIONS,
@@ -78,7 +87,13 @@ module AuditLogs
       end
 
       def retention_for(category)
-        RETENTIONS.fetch(category.to_sym)
+        category = category.to_sym
+        return RETENTIONS.fetch(category) if excluded?(category)
+
+        key = RETENTION_SETTING_KEYS.fetch(category)
+        SystemSettings.limit_for(key).days
+      rescue KeyError, SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        RETENTIONS.fetch(category)
       end
 
       def excluded?(category)
