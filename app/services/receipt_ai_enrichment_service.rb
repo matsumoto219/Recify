@@ -1,10 +1,11 @@
 class ReceiptAiEnrichmentService
   class AiEnrichmentError < StandardError
-    attr_reader :error_code
+    attr_reader :error_code, :internal_reason_code
 
-    def initialize(error_code, message)
+    def initialize(error_code, internal_reason_code:)
       @error_code = error_code
-      super(message)
+      @internal_reason_code = internal_reason_code.to_s
+      super(@internal_reason_code)
     end
   end
 
@@ -34,7 +35,7 @@ class ReceiptAiEnrichmentService
   end
 
   def initialize(ocr_result, ai_name_completion_enabled: false, capture_input: nil, before_provider_call: nil, client: Ai::Client.new)
-    @ocr_result = ocr_result || {}
+    @ocr_result = ocr_result
     @ai_name_completion_enabled = ai_name_completion_enabled == true
     @capture_input = capture_input
     @before_provider_call = before_provider_call
@@ -67,12 +68,12 @@ class ReceiptAiEnrichmentService
   rescue Usage::LimitExceeded
     raise
   rescue AiEnrichmentError => e
-    Rails.logger.error("[AIEnrichment] #{e.error_code} #{e.message}")
+    Rails.logger.error("[AIEnrichment] #{e.error_code} reason=#{e.internal_reason_code}")
     ExternalServices.mark_failure!(:ai, error_code: e.error_code)
     Ai::ResultTemplate.error(
       error_code: e.error_code,
       review_reasons: [ e.error_code ],
-      meta: { message: e.message }
+      meta: { internal_reason_code: e.internal_reason_code }
     )
   rescue Ai::Errors::ProviderError => e
     error_code = e.error_code.presence || "ai_api_error"
@@ -92,7 +93,7 @@ class ReceiptAiEnrichmentService
       review_reasons: [ "unexpected_error" ],
       meta: {
         error_class: e.class.name,
-        error_message: e.message
+        internal_reason_code: "unexpected_error"
       }
     )
   end
@@ -155,14 +156,21 @@ class ReceiptAiEnrichmentService
   end
 
   def validate_ocr_result!
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果が不正です") unless ocr_result.is_a?(Hash)
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCRが失敗しています") unless ocr_result[:success] == true || ocr_result["success"] == true
+    raise_input_error!("invalid_ocr_result") unless ocr_result.is_a?(Hash)
+    raise_input_error!("ocr_failed") unless ocr_result[:success] == true || ocr_result["success"] == true
 
     lines = ocr_result[:lines] || ocr_result["lines"]
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果のlinesが不足しています") unless lines.is_a?(Array)
+    raise_input_error!("missing_ocr_lines") unless lines.is_a?(Array)
 
     candidates = ocr_result[:candidates] || ocr_result["candidates"]
-    raise AiEnrichmentError.new("analysis_missing_keys", "OCR結果のcandidatesが不足しています") unless candidates.is_a?(Hash)
+    raise_input_error!("missing_ocr_candidates") unless candidates.is_a?(Hash)
+  end
+
+  def raise_input_error!(internal_reason_code)
+    raise AiEnrichmentError.new(
+      "analysis_missing_keys",
+      internal_reason_code: internal_reason_code
+    )
   end
 
   def log_result(result)

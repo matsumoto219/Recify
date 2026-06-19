@@ -28,10 +28,37 @@
 #       enabled: "ON"
 
 en:
-  hello: "Hello world"
   pwa:
     manifest:
       description: "A receipt management app that helps organize receipt details with image upload, automatic analysis, and AI assistance."
+  receipts:
+    processing_errors:
+      image_error: "The image could not be loaded. Try another image or continue by entering the details manually."
+      ocr_error: "OCR processing failed. You can retry with another image or continue with manual entry."
+      ai_error: "AI assistance failed. Please review and edit the OCR results."
+      system_error: "Processing failed. Please try again later or edit the receipt manually."
+      unexpected_failure: "An error occurred while analyzing the receipt. Please try again."
+      ai_fallback_saved: "Saved with OCR results because AI assistance failed (%{details})"
+    processing_error_codes:
+      no_text_detected: "No text could be read from the image. Check the lighting and focus, then try another image."
+      receipt_not_detected: "The receipt could not be recognized. Try an image that includes the entire receipt."
+      unsupported_country: "Only receipts from Japan are currently supported. Please try a receipt image from Japan."
+      ai_not_receipt: "The receipt could not be recognized. Try an image that includes the entire receipt."
+      ai_not_receipt_uncertain: "The receipt detection is uncertain. Please review the OCR results."
+      ai_unavailable: "AI assistance is temporarily unavailable. Please review and edit the OCR results."
+      external_service_quota_exceeded: "The OCR service is currently unavailable. Please try again later or continue with manual entry."
+      external_service_rate_limited: "The OCR service is currently unavailable. Please try again later or continue with manual entry."
+      external_service_auth_error: "The OCR service is currently unavailable. Please try again later or continue with manual entry."
+      external_service_unavailable: "The OCR service is currently unavailable. Please try again later or continue with manual entry."
+      ai_quota_exceeded: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_rate_limited: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_auth_error: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_config_error: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_timeout: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_invalid_request: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_invalid_response: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      ai_api_error: "AI assistance is currently unavailable. Please review and edit the OCR results."
+      usage_limit_exceeded: "You have reached today's analysis limit. Please try again later."
   users:
     display:
       guest_name: "Guest user"

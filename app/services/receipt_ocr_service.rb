@@ -9,7 +9,7 @@ class ReceiptOcrService
 
     def initialize(error_code, message = nil)
       @error_code = error_code
-      super(message)
+      super(message || error_code.to_s)
     end
   end
 
@@ -83,7 +83,7 @@ class ReceiptOcrService
 
   def validate_image!
     unless image&.attached?
-      raise OcrError.new("image_missing", "画像が添付されていません")
+      raise OcrError.new("image_missing")
     end
   end
 

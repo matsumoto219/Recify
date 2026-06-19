@@ -4905,6 +4905,25 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '処理失敗カードにはAI内部messageを表示しない' do
+      allow(Analysis).to receive(:processing_error_mapping).and_call_original
+
+      receipt.update!(
+        status: 'failed',
+        processing_error_code: 'analysis_missing_keys',
+        processing_error_message: 'OCR結果が不正です'
+      )
+
+      get receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('receipts.processing_error_card.failed_title'))
+        expect(response.body).to include(I18n.t('receipts.processing_errors.ai_error'))
+        expect(response.body).not_to include('OCR結果が不正です')
+      end
+    end
+
     it 'スマホ詳細ではエラーカードを金額サマリーと店舗情報より先に表示する' do
       receipt.image.attach(uploaded_image)
       receipt.update!(

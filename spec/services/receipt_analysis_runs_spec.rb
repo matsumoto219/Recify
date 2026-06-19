@@ -779,6 +779,7 @@ RSpec.describe ReceiptAnalysisRuns do
           fallback_provider: 'backup-provider',
           fallback_used: true,
           final_provider: 'backup-provider',
+          message: 'OCR結果が不正です',
           primary_error_detail: {
             service: 'ai',
             provider: 'openai',
@@ -914,6 +915,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(deep_json(run.ai_result_summary)).not_to include('do-not-store')
         expect(deep_json(run.ai_result_summary)).not_to include('sk-secret-token')
         expect(deep_json(run.ai_result_summary)).not_to include('RAW PRIMARY ERROR MUST NOT BE STORED')
+        expect(deep_json(run.ai_result_summary)).not_to include('OCR結果が不正です')
       end
     end
 

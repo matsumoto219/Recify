@@ -1044,7 +1044,15 @@ RSpec.describe Receipt, type: :model do
     it 'AI共通エラーはOCR結果の確認・修正文言へ寄せる' do
       receipt = build_stubbed(:receipt, :failed, processing_error_code: 'analysis_missing_keys')
 
-      expect(receipt.processing_error_user_message).to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
+      aggregate_failures do
+        expect(receipt.processing_error_user_message).to eq('AI補完に失敗しました。OCR結果を確認・修正してください。')
+        expect(receipt.processing_error_user_message).not_to include(
+          'OCR結果が不正です',
+          'OCRが失敗しています',
+          'OCR結果のlinesが不足しています',
+          'OCR結果のcandidatesが不足しています'
+        )
+      end
     end
 
     it 'AI provider失敗もAI共通エラー文言へ寄せる' do
@@ -1114,6 +1122,19 @@ RSpec.describe Receipt, type: :model do
       receipt = build_stubbed(:receipt, :review_needed, processing_error_code: 'ai_not_receipt_uncertain')
 
       expect(receipt.processing_error_user_message).to eq('レシート判定に迷いがあります。OCR結果を確認してください。')
+    end
+
+    it '英語localeでも処理失敗文言をcodeから表示できる' do
+      I18n.with_locale(:en) do
+        aggregate_failures do
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'analysis_missing_keys').processing_error_user_message)
+            .to eq('AI assistance failed. Please review and edit the OCR results.')
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_missing').processing_error_user_message)
+            .to eq('The image could not be loaded. Try another image or continue by entering the details manually.')
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'ai_api_error').processing_error_user_message)
+            .to eq('AI assistance is currently unavailable. Please review and edit the OCR results.')
+        end
+      end
     end
   end
 
@@ -1380,6 +1401,28 @@ RSpec.describe Receipt, type: :model do
 
         receipt.send(:broadcast_processing_flash)
       end
+    end
+
+    it 'processing flashには保存済み内部messageを使わない' do
+      receipt = build_stubbed(
+        :receipt,
+        user: user,
+        status: "failed",
+        processing_error_code: "analysis_missing_keys",
+        processing_error_message: "OCR結果が不正です"
+      )
+
+      expect(receipt).to receive(:broadcast_append_later_to).with(
+        [ user, :receipts ],
+        target: "toast-stream",
+        partial: "shared/ui/feedback/toast_notice",
+        locals: {
+          notice_type: :alert,
+          message: I18n.t("receipts.processing_errors.ai_error")
+        }
+      )
+
+      receipt.send(:broadcast_processing_flash)
     end
 
     it '通知OFFではprocessing flashをbroadcastしない' do

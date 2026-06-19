@@ -127,6 +127,7 @@ RSpec.describe ReceiptOcrService do
             payment_method_text: nil
           )
           expect(result.dig(:meta, :provider)).to eq(provider)
+          expect(result.to_s).not_to include('画像が添付されていません')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'image_missing')
         end

@@ -249,6 +249,9 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
+          expect(result.dig(:meta, :internal_reason_code)).to eq('invalid_ocr_result')
+          expect(result.dig(:meta, :message)).to be_nil
+          expect(result.to_s).not_to include('OCR結果が不正です')
           expect(before_provider_call).not_to have_received(:call)
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
@@ -263,6 +266,9 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
+          expect(result.dig(:meta, :internal_reason_code)).to eq('ocr_failed')
+          expect(result.dig(:meta, :message)).to be_nil
+          expect(result.to_s).not_to include('OCRが失敗しています')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
@@ -276,6 +282,9 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
+          expect(result.dig(:meta, :internal_reason_code)).to eq('missing_ocr_lines')
+          expect(result.dig(:meta, :message)).to be_nil
+          expect(result.to_s).not_to include('OCR結果のlinesが不足しています')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
@@ -289,6 +298,9 @@ RSpec.describe ReceiptAiEnrichmentService do
         aggregate_failures do
           expect(result[:success]).to eq(false)
           expect(result[:error_code]).to eq('analysis_missing_keys')
+          expect(result.dig(:meta, :internal_reason_code)).to eq('missing_ocr_candidates')
+          expect(result.dig(:meta, :message)).to be_nil
+          expect(result.to_s).not_to include('OCR結果のcandidatesが不足しています')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'analysis_missing_keys')
         end
@@ -307,6 +319,9 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
+          expect(result.dig(:meta, :internal_reason_code)).to eq('unexpected_error')
+          expect(result.dig(:meta, :error_message)).to be_nil
+          expect(result.to_s).not_to include('boom')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
         end
@@ -324,6 +339,9 @@ RSpec.describe ReceiptAiEnrichmentService do
           expect(result[:needs_review]).to eq(true)
           expect(result[:receipt_attributes]).to eq({})
           expect(result[:receipt_items_attributes]).to eq([])
+          expect(result.dig(:meta, :internal_reason_code)).to eq('unexpected_error')
+          expect(result.dig(:meta, :error_message)).to be_nil
+          expect(result.to_s).not_to include('boom')
           expect(ExternalServices).not_to have_received(:mark_success!)
           expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_api_error')
         end
