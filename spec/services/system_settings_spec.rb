@@ -49,6 +49,7 @@ RSpec.describe SystemSettings do
         'limits.notifications_per_user',
         'limits.batch_upload_max_files',
         'limits.public_announcements_per_page',
+        'limits.contact_request_url_count',
         'limits.receipt_image_max_file_size_bytes',
         'limits.receipt_image_min_dimension_px',
         'limits.receipt_image_max_dimension_px',
@@ -337,6 +338,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
         expect(described_class.limit_for('limits.batch_upload_max_files')).to eq(5)
         expect(described_class.limit_for('limits.public_announcements_per_page')).to eq(10)
+        expect(described_class.limit_for('limits.contact_request_url_count')).to eq(5)
         expect(described_class.limit_for('limits.receipt_image_max_file_size_bytes')).to eq(20.megabytes)
         expect(described_class.limit_for('limits.receipt_image_min_dimension_px')).to eq(100)
         expect(described_class.limit_for('limits.receipt_image_max_dimension_px')).to eq(10_000)
@@ -522,6 +524,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '20')).to eq(20)
         expect(described_class.cast_update_value('limits.public_announcements_per_page', '1')).to eq(1)
         expect(described_class.cast_update_value('limits.public_announcements_per_page', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.contact_request_url_count', '0')).to eq(0)
+        expect(described_class.cast_update_value('limits.contact_request_url_count', '20')).to eq(20)
         expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 1.megabyte.to_s)).to eq(1.megabyte)
         expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 50.megabytes.to_s)).to eq(50.megabytes)
         expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '1')).to eq(1)
@@ -870,6 +874,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.public_announcements_per_page', '51')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.contact_request_url_count', '-1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.contact_request_url_count', '21')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('storage.usage_warning_percentage', '0')
@@ -1337,6 +1347,16 @@ RSpec.describe SystemSettings do
         min: 1,
         max: 50,
         default: 10
+      )
+    end
+
+    it '問い合わせURL上限はmedium risk設定として扱う' do
+      expect(described_class.definition_for('limits.contact_request_url_count')).to have_attributes(
+        category: 'usage_limit',
+        risk_level: 'medium',
+        min: 0,
+        max: 20,
+        default: 5
       )
     end
 

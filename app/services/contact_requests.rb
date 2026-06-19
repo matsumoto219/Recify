@@ -42,6 +42,12 @@ module ContactRequests
       ContactRequest::CATEGORIES
     end
 
+    def max_url_count
+      SystemSettings.limit_for("limits.contact_request_url_count")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      MAX_URL_COUNT
+    end
+
     def contact_request_retention_days
       RetentionPolicy.retention_days
     end
@@ -130,7 +136,7 @@ module ContactRequests
     end
 
     def apply_url_guard(contact_request)
-      return if contact_request.body.to_s.scan(URL_PATTERN).size <= MAX_URL_COUNT
+      return if contact_request.body.to_s.scan(URL_PATTERN).size <= max_url_count
 
       contact_request.errors.add(:body, :too_many_urls)
     end

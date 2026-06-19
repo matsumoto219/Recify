@@ -437,6 +437,16 @@ module SystemSettings
         max: 50
       ),
       Definition.new(
+        key: "limits.contact_request_url_count",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "medium",
+        min: 0,
+        max: 20
+      ),
+      Definition.new(
         key: "limits.receipt_image_max_file_size_bytes",
         category: "upload_limit",
         value_type: "integer",

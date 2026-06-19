@@ -127,6 +127,24 @@ RSpec.describe ContactRequests do
       end
     end
 
+    it '設定されたURL上限で問い合わせ本文を検証する' do
+      create(:system_setting, key: 'limits.contact_request_url_count', value: SystemSettings.stored_value(2))
+      allowed_body = 2.times.map { |index| "https://example.com/allowed-#{index}" }.join("\n")
+      rejected_body = 3.times.map { |index| "https://example.com/rejected-#{index}" }.join("\n")
+
+      allowed_result = described_class.create(user: nil, params: valid_params(body: allowed_body), request: request)
+      rejected_result = described_class.create(user: nil, params: valid_params(body: rejected_body), request: request)
+
+      aggregate_failures do
+        expect(described_class.max_url_count).to eq(2)
+        expect(allowed_result).to be_success
+        expect(allowed_result.contact_request).to be_persisted
+        expect(rejected_result).not_to be_success
+        expect(rejected_result.contact_request).not_to be_persisted
+        expect(rejected_result.contact_request.errors[:body]).to be_present
+      end
+    end
+
     it 'body/subject length validationを返す' do
       result = described_class.create(
         user: nil,
