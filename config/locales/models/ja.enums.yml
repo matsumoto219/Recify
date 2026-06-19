@@ -28,6 +28,22 @@ ja:
         hobby: 趣味
         other: その他
 
+      quantity_unit:
+        each: 個
+        item: 点
+        piece: 本
+        bag: 袋
+        sheet: 枚
+        unit: 台
+        box: 箱
+        set: セット
+        gram: g
+        kilogram: kg
+        milligram: mg
+        liter: L
+        milliliter: ml
+        cubic_centimeter: cc
+
       review_reason:
         store_name_missing: "店舗名が取得できていません"
         store_name_uncertain: "店舗名の精度が低い可能性があります"

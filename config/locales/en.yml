@@ -28,6 +28,23 @@
 #       enabled: "ON"
 
 en:
+  enums:
+    receipt_item:
+      quantity_unit:
+        each: each
+        item: item
+        piece: piece
+        bag: bag
+        sheet: sheet
+        unit: unit
+        box: box
+        set: set
+        gram: g
+        kilogram: kg
+        milligram: mg
+        liter: L
+        milliliter: ml
+        cubic_centimeter: cc
   pwa:
     manifest:
       description: "A receipt management app that helps organize receipt details with image upload, automatic analysis, and AI assistance."
