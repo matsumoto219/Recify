@@ -29,11 +29,35 @@ RSpec.describe SecurityEvent, type: :model do
   end
 
   it 'payload excerptを上限まで切り詰める' do
-    event = build(:security_event, payload_excerpt: 'a' * (described_class::PAYLOAD_EXCERPT_MAX_BYTES + 10))
+    event = build(:security_event, payload_excerpt: 'safe text ' * 120)
 
     event.valid?
 
     expect(event.payload_excerpt.bytesize).to eq(described_class::PAYLOAD_EXCERPT_MAX_BYTES)
+  end
+
+  it '直接保存されたpayload excerptもsecret風文字列をredactする' do
+    event = create(
+      :security_event,
+      payload_excerpt: 'email=user@example.com&password=secret123&Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789TOKEN'
+    )
+
+    aggregate_failures do
+      expect(event.payload_excerpt).to include('[REDACTED_EMAIL]')
+      expect(event.payload_excerpt).to include('password=[FILTERED]')
+      expect(event.payload_excerpt).to include('Authorization: [FILTERED]')
+      expect(event.payload_excerpt).not_to include('user@example.com', 'secret123', 'abcdefghijklmnopqrstuvwxyz0123456789TOKEN')
+    end
+  end
+
+  it '直接保存されたpayload excerptの制御文字を可視化または除去する' do
+    event = create(:security_event, payload_excerpt: "<script>alert(1)</script>\r\nreceipt\tname\x01")
+
+    aggregate_failures do
+      expect(event.payload_excerpt).to include('<script>alert(1)</script>')
+      expect(event.payload_excerpt).to include('\\r\\n', '\\t')
+      expect(event.payload_excerpt).not_to include("\r", "\n", "\t", "\x01")
+    end
   end
 
   it 'metadataはHashだけ許可する' do

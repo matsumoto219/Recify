@@ -91,7 +91,7 @@ class SecurityEvent < ApplicationRecord
     self.request_id = truncate_string(request_id.to_s.presence, STRING_FIELD_MAX_LENGTH)
     self.field_name = truncate_string(field_name.to_s.presence, STRING_FIELD_MAX_LENGTH)
     self.matched_rule = truncate_string(matched_rule.to_s.presence, STRING_FIELD_MAX_LENGTH)
-    self.payload_excerpt = truncate_bytes(payload_excerpt.to_s.presence, PAYLOAD_EXCERPT_MAX_BYTES)
+    self.payload_excerpt = sanitized_payload_excerpt
     self.payload_sha256 = payload_sha256.to_s.presence
   end
 
@@ -109,6 +109,13 @@ class SecurityEvent < ApplicationRecord
     return if value.blank?
 
     value.to_s.first(max_length)
+  end
+
+  def sanitized_payload_excerpt
+    value = payload_excerpt.to_s.presence
+    return if value.blank?
+
+    truncate_bytes(SecurityEvents.sanitize_text(value), PAYLOAD_EXCERPT_MAX_BYTES)
   end
 
   def truncate_bytes(value, max_bytes)
