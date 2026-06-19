@@ -2,10 +2,11 @@
 
 <article class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
   <nav aria-label="<%= t("announcements.show.breadcrumb_aria") %>">
-    <%= link_to root_path, class: "inline-flex items-center gap-2 text-sm font-semibold token-text-brand transition-opacity hover:opacity-80" do %>
-      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
-      <span><%= t("announcements.show.back_to_home") %></span>
-    <% end %>
+    <%= render "shared/ui/navigation/navigation_link",
+          path: root_path,
+          text: t("announcements.show.back_to_home"),
+          arrow: :left,
+          align: :left %>
   </nav>
 
   <header class="space-y-5 text-center">
@@ -38,7 +39,7 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :lg do %>
     <div class="space-y-6">
-      <div class="whitespace-pre-line text-sm leading-8 token-text-base"><%= @announcement.body %></div>
+      <div class="whitespace-pre-wrap break-words text-sm leading-8 token-text-base [overflow-wrap:anywhere]" data-announcement-body><%= @announcement.body %></div>
 
       <% if @announcement_links.any? %>
         <section class="border-t token-border-soft pt-5" aria-labelledby="announcement-links-title">

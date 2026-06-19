@@ -76,10 +76,13 @@ RSpec.describe 'Announcements', type: :request do
       get announcement_path(announcement)
 
       document = Nokogiri::HTML(response.body)
-      body_container = document.at_css('article .whitespace-pre-line')
+      body_container = document.at_css('[data-announcement-body]')
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
+        expect(body_container['class']).to include('whitespace-pre-wrap')
+        expect(body_container['class']).to include('break-words')
+        expect(body_container['class']).to include('[overflow-wrap:anywhere]')
         expect(body_container.at_css('script')).to be_nil
         expect(body_container.at_css('b')).to be_nil
         expect(response.body).to include('&lt;script&gt;alert')
