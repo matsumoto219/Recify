@@ -1,6 +1,43 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptItem, type: :model do
+  describe 'quantity unit code validation' do
+    it 'default codeを設定する' do
+      item = build(:receipt).receipt_items.build(confirmed_name: '標準単位商品', price: 100, quantity: 1, line_total: 100)
+
+      expect(item.quantity_unit_code).to eq('each')
+    end
+
+    it '許可されたquantity_unit_codeを保存できる' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '重量商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'kilogram',
+        line_total: 100,
+        needs_review: false
+      )
+
+      expect(item).to be_valid
+    end
+
+    it '候補外のquantity_unit_codeを拒否する' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '未知単位商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'custom',
+        line_total: 100,
+        needs_review: false
+      )
+
+      aggregate_failures do
+        expect(item).not_to be_valid
+        expect(item.errors[:quantity_unit_code]).to be_present
+      end
+    end
+  end
+
   describe 'quantity validation' do
     def build_item(quantity:, quantity_unit:)
       build(:receipt).receipt_items.build(

@@ -260,6 +260,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
     t.string "product_code"
     t.decimal "quantity", precision: 10, scale: 3
     t.string "quantity_unit"
+    t.string "quantity_unit_code", default: "each", null: false
     t.text "raw_text"
     t.bigint "receipt_id", null: false
     t.jsonb "review_reasons", default: [], null: false

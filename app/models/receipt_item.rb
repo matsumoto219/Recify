@@ -48,6 +48,8 @@ class ReceiptItem < ApplicationRecord
 
   belongs_to :receipt
 
+  attribute :quantity_unit_code, :string, default: -> { ReceiptQuantityUnit.default_code }
+
   scope :needs_review_only, -> { where(needs_review: true) }
 
   validates :category, inclusion: { in: CATEGORIES }, allow_blank: true
@@ -97,6 +99,9 @@ class ReceiptItem < ApplicationRecord
   validates :suggested_name, length: { maximum: 500 }, allow_blank: true  # AI補完候補名(MAX500文字)
   validates :confirmed_name, length: { maximum: 500 }, allow_blank: true  # ユーザー確定名(MAX500文字)
   validates :quantity_unit, length: { maximum: 50 }, allow_blank: true    # 数量単位(MAX50文字)
+  validates :quantity_unit_code,
+            presence: true,
+            inclusion: { in: ->(_item) { ReceiptQuantityUnit.allowed_codes } }
   validates :product_code, length: { maximum: 100 }, allow_blank: true    # 商品コード(MAX100文字)
 
   # AI関連(信頼度 0.0~1.0)
