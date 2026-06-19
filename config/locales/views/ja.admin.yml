@@ -33,7 +33,7 @@ ja:
         archive_not_allowed: このお知らせはアーカイブできません。
       index:
         title: お知らせ管理
-        description: 公開LPに掲載するお知らせを下書きとして作成・編集します。公開操作は別手順で行います。
+        description: 公開ページに掲載するお知らせを下書きとして作成・編集します。公開操作は別手順で行います。
         actions:
           new: 下書きを作成
         filters:
@@ -93,10 +93,10 @@ ja:
         confirm:
           publish:
             title: お知らせを公開しますか？
-            message: 公開条件を満たす場合、LPとお知らせ詳細ページに表示されます。関連リンクも公開されます。
+            message: 公開条件を満たす場合、トップページとお知らせ詳細ページに表示されます。関連リンクも公開されます。
           archive:
             title: お知らせをアーカイブしますか？
-            message: アーカイブするとLPと公開お知らせ詳細から表示されなくなります。
+            message: アーカイブするとトップページとお知らせ詳細ページから表示されなくなります。
         sections:
           content: 内容
           status: 状態
@@ -138,11 +138,11 @@ ja:
           priority: 表示優先度
           starts_at: 公開開始日時
           ends_at: 公開終了日時
-          pinned: LPで固定表示を優先する
+          pinned: 公開ページで固定表示を優先する
           link_label: リンク文言
           link_url: URL
         hints:
-          pinned: 公開後のLP表示順で優先されます。下書きの間は公開ページには表示されません。
+          pinned: 公開後のトップページ表示順で優先されます。下書きの間は公開ページには表示されません。
         content_description: 本文はプレーンテキストで入力してください。HTMLやMarkdownとしては表示しません。
         settings_description: このフォームでは下書きとして保存します。公開・アーカイブはお知らせ詳細画面から実行します。
         links_description: 関連リンクは最大3件です。http/https、または / から始まる内部パスだけを入力できます。外部リンクは公開ページで別タブ表示になります。

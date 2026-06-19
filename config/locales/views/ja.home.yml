@@ -13,7 +13,7 @@ ja:
       login: ログイン
       sign_up: 新規登録
     section_nav:
-      label: LPセクション
+      label: ページセクション
       hero: トップ
       announcements: お知らせ
       problem: 課題
@@ -33,7 +33,7 @@ ja:
         - icon: task_alt
           label: 保存
     hero_mock:
-      aria_label: レシート解析画面のモック
+      aria_label: レシート解析画面のイメージ
       receipt:
         title: レシート
         merchant: SHOP MART
@@ -137,7 +137,7 @@ ja:
           title: 一覧で管理
           body: 整理された記録を一覧で確認・検索できます。
     announcements:
-      badge: Public Notice
+      badge: 最新情報
       title: お知らせ
       lead: Recifyからの最新情報や予定をお届けします。
       list_aria: 公開中のお知らせ
@@ -171,7 +171,6 @@ ja:
         - icon: cloud_off
           title: サービス停止時の制御
           body: 読み取りや補完に問題がある場合でも、安全に停止・制御できる設計です。
-    notice: 本画面は開発中のモックであり、実際の仕様・デザインとは異なる場合があります。
     final_cta:
       heading_lines:
         - レシート整理を、

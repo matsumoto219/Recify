@@ -3,22 +3,23 @@
   row_number = index + 1
 %>
 
-<div class="rounded-xl border token-border-soft token-bg-input p-4">
-  <div class="mb-4 flex items-center justify-between gap-3">
+<div class="min-w-0 overflow-hidden rounded-xl border token-border-soft token-bg-input p-4">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <h3 class="text-sm font-bold token-text-base"><%= t("admin.announcements.form.link_fields.title", number: row_number) %></h3>
-    <span class="text-xs token-text-muted"><%= t("admin.announcements.form.link_fields.optional") %></span>
+    <span class="shrink-0 text-xs token-text-muted"><%= t("admin.announcements.form.link_fields.optional") %></span>
   </div>
 
   <%= form.hidden_field :id if link.persisted? %>
   <%= form.hidden_field :position, value: index %>
 
-  <div class="grid gap-4 md:grid-cols-2">
+  <div class="grid min-w-0 gap-4 lg:grid-cols-2">
     <%= render "shared/ui/form/text_field",
           f: form,
           attribute: :label,
           label: t("admin.announcements.form.labels.link_label"),
           with_icon: false,
-          size: :dense,
+          size: :regular,
+          input_wrapper_class: "min-w-0",
           label_class: label_class,
           input_class: control_class,
           html_options: { maxlength: 80 } %>
@@ -28,7 +29,8 @@
           attribute: :url,
           label: t("admin.announcements.form.labels.link_url"),
           with_icon: false,
-          size: :dense,
+          size: :regular,
+          input_wrapper_class: "min-w-0",
           label_class: label_class,
           input_class: control_class,
           html_options: { maxlength: 2048 } %>

@@ -7,7 +7,7 @@ ja:
       incident: 重要
     show:
       breadcrumb_aria: お知らせページ
-      back_to_home: LPへ戻る
+      back_to_home: トップへ戻る
       subtitle: Recifyからのお知らせです。
       pinned: 固定表示
       published_at: "公開日: %{datetime}"

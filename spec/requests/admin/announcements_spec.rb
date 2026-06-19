@@ -295,6 +295,36 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(Announcement.find_by(title: 'iOSアプリ リリース予定')).to be_nil
       end
     end
+
+    it '正規外部URLの抑制範囲外にある危険URLはSecurityEventとして検知する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      cases = {
+        '//evil.example.com' => 'protocol_relative_url',
+        'https://user@example.com' => 'userinfo_url',
+        "https://example.com/\npath" => 'control_character_url'
+      }
+
+      aggregate_failures do
+        cases.each do |url, matched_rule|
+          expect {
+            post admin_announcements_path,
+                 params: {
+                   announcement: announcement_params(
+                     announcement_links_attributes: {
+                       '0' => { label: '危険なリンク', url: url, position: '0' },
+                       '1' => { label: '', url: '', position: '1' },
+                       '2' => { label: '', url: '', position: '2' }
+                     }
+                   )
+                 }
+          }.to change(SecurityEvent.where(event_type: 'open_redirect_attempt', matched_rule: matched_rule), :count).by(1)
+
+          expect(response).to have_http_status(:unprocessable_content)
+        end
+      end
+    end
   end
 
   describe 'GET /admin/announcements/:id' do
@@ -520,6 +550,23 @@ RSpec.describe 'Admin announcements', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:not_found)
         expect(announcement.reload.status).to eq('draft')
+      end
+    end
+
+    it 'archivedから直接公開できない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, :archived)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect {
+        patch publish_admin_announcement_path(announcement)
+      }.not_to change(AuditLog, :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(flash[:alert]).to eq(I18n.t('admin.announcements.messages.publish_not_allowed'))
+        expect(announcement.reload.status).to eq('archived')
       end
     end
   end
