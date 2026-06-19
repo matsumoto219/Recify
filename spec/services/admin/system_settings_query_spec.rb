@@ -115,6 +115,8 @@ RSpec.describe Admin::SystemSettingsQuery do
         'limits.receipt_tax_details_per_receipt',
         'limits.notifications_per_user',
         'limits.batch_upload_max_files',
+        'limits.public_announcements_per_page',
+        'limits.contact_request_url_count',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
@@ -166,7 +168,17 @@ RSpec.describe Admin::SystemSettingsQuery do
         'retention.analysis_runs_default_days',
         'retention.analysis_runs_failed_days',
         'retention.orphan_blobs_hours',
-        'retention.receipt_images_days'
+        'retention.receipt_images_days',
+        'retention.security_events_critical_days',
+        'retention.security_events_high_days',
+        'retention.security_events_medium_days',
+        'retention.security_events_low_days',
+        'retention.audit_logs_high_risk_admin_days',
+        'retention.audit_logs_cleanup_execute_days',
+        'retention.audit_logs_cleanup_failed_days',
+        'retention.audit_logs_passkey_reauth_days',
+        'retention.audit_logs_system_dry_run_days',
+        'retention.audit_logs_routine_system_days'
       )
     end
 

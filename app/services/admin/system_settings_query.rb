@@ -9,8 +9,13 @@ module Admin
       usage_limit_safety
       amount_limit
       snapshot_limit
+      ai_prompt_limit
+      upload_limit
       retention
       storage_policy
+      storage_warning
+      external_service_status
+      security_event
       amount_engine
       ui_toggle
       ui_notice
