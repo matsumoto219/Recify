@@ -84,6 +84,16 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
         expect(described_class.normalize('杯')).to eq('each')
       end
     end
+
+    it '国別profile aliasを受け取って正規化できる' do
+      aliases = { '缶' => 'piece' }
+
+      aggregate_failures do
+        expect(described_class.normalize('缶', aliases: aliases)).to eq('piece')
+        expect(described_class.normalize('個', aliases: aliases)).to eq('each')
+        expect(described_class.normalize('通', aliases: aliases)).to eq('each')
+      end
+    end
   end
 
   describe '.label' do

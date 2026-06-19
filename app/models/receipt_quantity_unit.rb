@@ -44,12 +44,12 @@ class ReceiptQuantityUnit
       DEFAULT_CODE
     end
 
-    def normalize(value, default: DEFAULT_CODE)
+    def normalize(value, default: DEFAULT_CODE, aliases: LEGACY_LABEL_TO_CODE)
       normalized = value.to_s.strip
       return default if normalized.blank?
       return normalized if ALLOWED_CODES.include?(normalized)
 
-      LEGACY_LABEL_TO_CODE.fetch(normalized, default)
+      aliases.fetch(normalized, default)
     end
 
     def label(code, locale: I18n.locale)
