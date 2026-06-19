@@ -1,6 +1,47 @@
 require 'rails_helper'
+require 'zlib'
 
 RSpec.describe Announcement, type: :model do
+  def png_bytes(width:, height:, minimum_byte_size: nil)
+    chunk = lambda do |type, data|
+      [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
+    end
+    header = [ width, height, 8, 2, 0, 0, 0 ].pack('NNCCCCC')
+    row = "\x00".b + ("\xFF\xFF\xFF".b * width)
+    compressed = Zlib::Deflate.deflate(row * height)
+
+    png = "\x89PNG\r\n\x1A\n".b +
+      chunk.call('IHDR'.b, header) +
+      chunk.call('IDAT'.b, compressed) +
+      chunk.call('IEND'.b, ''.b)
+    return png if minimum_byte_size.blank? || png.bytesize >= minimum_byte_size
+
+    png + ("\0".b * (minimum_byte_size - png.bytesize))
+  end
+
+  def uint24_le(value)
+    [ value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF ].pack('C3')
+  end
+
+  def webp_vp8x_bytes(width:, height:)
+    payload = "\0\0\0\0".b + uint24_le(width - 1) + uint24_le(height - 1)
+
+    "RIFF".b +
+      [ 4 + 8 + payload.bytesize ].pack('V') +
+      "WEBP".b +
+      "VP8X".b +
+      [ payload.bytesize ].pack('V') +
+      payload
+  end
+
+  def attach_announcement_image(announcement, bytes:, filename:, content_type:)
+    announcement.image.attach(
+      io: StringIO.new(bytes),
+      filename: filename,
+      content_type: content_type
+    )
+  end
+
   describe 'validations' do
     it 'valid factory' do
       expect(build(:announcement)).to be_valid
@@ -117,6 +158,165 @@ RSpec.describe Announcement, type: :model do
       announcement = build(:announcement, created_by: nil, updated_by: nil)
 
       expect(announcement).to be_valid
+    end
+
+    it '画像なしの場合は画像代替テキストなしでも有効にする' do
+      announcement = build(:announcement, image_alt_text: '')
+
+      expect(announcement).to be_valid
+    end
+
+    it 'JPEG画像を許可する' do
+      announcement = build(:announcement, image_alt_text: 'キャンペーン画像')
+      attach_announcement_image(
+        announcement,
+        bytes: File.binread(Rails.root.join('spec/fixtures/files/receipt_sample.jpg')),
+        filename: 'announcement.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      expect(announcement).to be_valid
+    end
+
+    it 'PNG画像を許可する' do
+      announcement = build(:announcement, image_alt_text: 'メンテナンス告知画像')
+      attach_announcement_image(
+        announcement,
+        bytes: png_bytes(width: 320, height: 180),
+        filename: 'announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).to be_valid
+    end
+
+    it 'WebP画像を許可する' do
+      announcement = build(:announcement, image_alt_text: 'リリース告知画像')
+      attach_announcement_image(
+        announcement,
+        bytes: webp_vp8x_bytes(width: 320, height: 180),
+        filename: 'announcement.webp',
+        content_type: 'image/webp'
+      )
+
+      expect(announcement).to be_valid
+    end
+
+    it 'SVG / GIF / text/plainを拒否する' do
+      cases = [
+        {
+          bytes: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+          filename: 'announcement.svg',
+          content_type: 'image/svg+xml'
+        },
+        {
+          bytes: 'GIF89a',
+          filename: 'announcement.gif',
+          content_type: 'image/gif'
+        },
+        {
+          bytes: 'not image',
+          filename: 'announcement.txt',
+          content_type: 'text/plain'
+        }
+      ]
+
+      cases.each do |entry|
+        announcement = build(:announcement, image_alt_text: '不正な画像')
+        attach_announcement_image(announcement, **entry)
+
+        expect(announcement).not_to be_valid
+        expect(announcement.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+      end
+    end
+
+    it '2MBを超える画像を拒否する' do
+      announcement = build(:announcement, image_alt_text: '大きすぎる画像')
+      attach_announcement_image(
+        announcement,
+        bytes: png_bytes(width: 320, height: 180, minimum_byte_size: described_class::MAX_IMAGE_FILE_SIZE + 1),
+        filename: 'large-announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors.of_kind?(:image, :file_too_large)).to be(true)
+    end
+
+    it '100px未満の画像を拒否する' do
+      announcement = build(:announcement, image_alt_text: '小さすぎる画像')
+      attach_announcement_image(
+        announcement,
+        bytes: png_bytes(width: described_class::MIN_IMAGE_DIMENSION - 1, height: 120),
+        filename: 'small-announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors.of_kind?(:image, :image_too_small)).to be(true)
+    end
+
+    it '4096pxを超える画像を拒否する' do
+      announcement = build(:announcement, image_alt_text: '大きすぎる寸法の画像')
+      attach_announcement_image(
+        announcement,
+        bytes: png_bytes(width: described_class::MAX_IMAGE_DIMENSION + 1, height: 120),
+        filename: 'wide-announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors.of_kind?(:image, :image_too_large)).to be(true)
+    end
+
+    it '壊れた画像を拒否する' do
+      announcement = build(:announcement, image_alt_text: '壊れた画像')
+      attach_announcement_image(
+        announcement,
+        bytes: 'not image',
+        filename: 'broken-announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it 'JPEGとして送られたSVG偽装画像を拒否する' do
+      announcement = build(:announcement, image_alt_text: '偽装画像')
+      attach_announcement_image(
+        announcement,
+        bytes: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        filename: 'spoofed-announcement.jpg',
+        content_type: 'image/jpeg'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors.of_kind?(:image, :invalid_content_type)).to be(true)
+    end
+
+    it '画像ありの場合は画像代替テキストを必須にする' do
+      announcement = build(:announcement, image_alt_text: '')
+      attach_announcement_image(
+        announcement,
+        bytes: png_bytes(width: 320, height: 180),
+        filename: 'announcement.png',
+        content_type: 'image/png'
+      )
+
+      expect(announcement).not_to be_valid
+      expect(announcement.errors[:image_alt_text]).to be_present
+    end
+
+    it '画像代替テキストは160文字までにする' do
+      valid = build(:announcement, image_alt_text: 'a' * 160)
+      too_long = build(:announcement, image_alt_text: 'a' * 161)
+
+      aggregate_failures do
+        expect(valid).to be_valid
+        expect(too_long).not_to be_valid
+        expect(too_long.errors[:image_alt_text]).to be_present
+      end
     end
   end
 

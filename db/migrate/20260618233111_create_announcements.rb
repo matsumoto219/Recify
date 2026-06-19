@@ -4,6 +4,7 @@ class CreateAnnouncements < ActiveRecord::Migration[8.1]
       t.string :public_id, null: false
       t.string :title, null: false
       t.text :body, null: false
+      t.string :image_alt_text
       t.string :status, null: false, default: "draft"
       t.string :kind, null: false, default: "general"
       t.boolean :pinned, null: false, default: false

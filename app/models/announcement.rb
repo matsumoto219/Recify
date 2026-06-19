@@ -19,10 +19,19 @@ class Announcement < ApplicationRecord
   ].freeze
 
   PRIORITY_RANGE = -100..100
+  ALLOWED_IMAGE_CONTENT_TYPES = %w[
+    image/jpeg
+    image/png
+    image/webp
+  ].freeze
+  MAX_IMAGE_FILE_SIZE = 2.megabytes
+  MIN_IMAGE_DIMENSION = 100
+  MAX_IMAGE_DIMENSION = 4096
 
   belongs_to :created_by, class_name: "User", optional: true
   belongs_to :updated_by, class_name: "User", optional: true
   has_many :announcement_links, dependent: :destroy
+  has_one_attached :image
   accepts_nested_attributes_for :announcement_links,
                                 allow_destroy: true,
                                 reject_if: :blank_announcement_link_attributes?
@@ -38,6 +47,8 @@ class Announcement < ApplicationRecord
   validates :body, presence: true, length: { maximum: 2000 }
   validates :status, presence: true, inclusion: { in: STATUSES }
   validates :kind, presence: true, inclusion: { in: KINDS }
+  validates :image_alt_text, presence: true, if: -> { image.attached? }
+  validates :image_alt_text, length: { maximum: 160 }, allow_blank: true
   validates :priority,
             numericality: {
               only_integer: true,
@@ -46,6 +57,9 @@ class Announcement < ApplicationRecord
             }
   validates :pinned, inclusion: { in: [ true, false ] }
   validate :ends_at_after_starts_at
+  validate :validate_image_content_type
+  validate :validate_image_file_size
+  validate :validate_image_dimensions
 
   scope :draft, -> { where(status: "draft") }
   scope :published, -> { where(status: "published") }
@@ -114,6 +128,43 @@ class Announcement < ApplicationRecord
     return if starts_at.blank? || ends_at.blank? || ends_at > starts_at
 
     errors.add(:ends_at, :after_starts_at)
+  end
+
+  def validate_image_content_type
+    return unless image.attached?
+    return if ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
+
+    errors.add(:image, :invalid_content_type)
+  end
+
+  def validate_image_file_size
+    return unless image.attached?
+    return if image.blob.byte_size <= MAX_IMAGE_FILE_SIZE
+
+    errors.add(:image, :file_too_large)
+  end
+
+  def validate_image_dimensions
+    return unless image.attached?
+    return unless ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
+
+    dimensions = Storage.extract_image_dimensions(blob: image.blob, attached_change: attachment_changes["image"])
+    unless dimensions
+      errors.add(:image, :invalid_content_type)
+      return
+    end
+
+    width = dimensions.fetch(:width)
+    height = dimensions.fetch(:height)
+
+    if width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION
+      errors.add(:image, :image_too_small)
+      return
+    end
+
+    return if width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION
+
+    errors.add(:image, :image_too_large)
   end
 
   def blank_announcement_link_attributes?(attributes)

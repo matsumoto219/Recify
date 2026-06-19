@@ -8,8 +8,21 @@ ja:
       receipt_tax_detail: 税内訳
       notification: 通知
       contact_request: 問い合わせ
+      announcement: お知らせ
 
     attributes:
+      announcement:
+        title: タイトル
+        body: 本文
+        image: 添付画像
+        image_alt_text: 画像の代替テキスト
+        status: ステータス
+        kind: 種別
+        pinned: 固定表示
+        priority: 優先度
+        published_at: 公開日時
+        starts_at: 表示開始日時
+        ends_at: 表示終了日時
       receipt:
         user: ユーザー
         store_name: 店舗名
@@ -151,6 +164,13 @@ ja:
           attributes:
             body:
               too_many_urls: "にURLが多すぎます"
+        announcement:
+          attributes:
+            image:
+              invalid_content_type: "はJPEG/PNG/WebP形式でアップロードしてください"
+              file_too_large: "は2MB以下にしてください"
+              image_too_small: "は100px以上の画像をアップロードしてください"
+              image_too_large: "は4096px以下の画像をアップロードしてください"
         passkey:
           attributes:
             user:

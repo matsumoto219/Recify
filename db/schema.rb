@@ -59,6 +59,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
     t.datetime "created_at", null: false
     t.bigint "created_by_id"
     t.datetime "ends_at"
+    t.string "image_alt_text"
     t.string "kind", default: "general", null: false
     t.boolean "pinned", default: false, null: false
     t.integer "priority", default: 0, null: false
