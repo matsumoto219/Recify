@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
-    <title>このブラウザはサポートされていません - Recify</title>
+    <title>Unsupported Browser - Recify</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
@@ -245,8 +245,8 @@
               </svg>
             </div>
             <div class="content">
-              <h1 id="error-title">このブラウザはサポートされていません</h1>
-              <p>最新のブラウザで再度アクセスしてください。</p>
+              <h1 id="error-title" data-i18n-key="heading">Unsupported Browser</h1>
+              <p data-i18n-key="message">This browser is not supported. Please use an up-to-date browser.</p>
             </div>
             <p class="error-code">Error Code: 406</p>
           </section>
@@ -260,5 +260,39 @@
         </div>
       </footer>
     </div>
+    <script type="application/json" id="error-page-i18n">
+      {
+        "ja": {
+          "pageTitle": "このブラウザはサポートされていません - Recify",
+          "heading": "このブラウザはサポートされていません",
+          "message": "最新のブラウザで再度アクセスしてください。"
+        }
+      }
+    </script>
+<script>
+  (() => {
+    const languages = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).filter(Boolean);
+    const locale = languages.some((language) => language.toLowerCase().startsWith("ja")) ? "ja" : "en";
+    document.documentElement.lang = locale;
+    if (locale !== "ja") return;
+
+    const dataElement = document.getElementById("error-page-i18n");
+    if (!dataElement) return;
+
+    try {
+      const messages = JSON.parse(dataElement.textContent).ja;
+      document.title = messages.pageTitle;
+
+      document.querySelectorAll("[data-i18n-key]").forEach((element) => {
+        const text = messages[element.dataset.i18nKey];
+        if (typeof text === "string") {
+          element.textContent = text;
+        }
+      });
+    } catch (_error) {
+      document.documentElement.lang = "en";
+    }
+  })();
+</script>
   </body>
 </html>

@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
-    <title>接続に問題が発生しています - Recify</title>
+    <title>Connection Problem - Recify</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
@@ -188,11 +188,8 @@
         <div class="wrap">
           <section class="card" aria-labelledby="error-title">
             <div class="icon" aria-hidden="true">502</div>
-            <h1 id="error-title">接続に問題が発生しています</h1>
-            <p>
-              サーバーへの接続が一時的に不安定です。<br>
-              しばらく時間をおいてから再度お試しください。
-            </p>
+            <h1 id="error-title" data-i18n-key="heading">Connection Problem</h1>
+            <p data-i18n-key="message">The connection to the server is temporarily unstable. Please try again later.</p>
             <p class="code">Error Code: 502</p>
           </section>
         </div>
@@ -203,5 +200,39 @@
         <p>© 2026 Recify</p>
       </footer>
     </div>
+    <script type="application/json" id="error-page-i18n">
+      {
+        "ja": {
+          "pageTitle": "接続に問題が発生しています - Recify",
+          "heading": "接続に問題が発生しています",
+          "message": "サーバーへの接続が一時的に不安定です。しばらく時間をおいてから再度お試しください。"
+        }
+      }
+    </script>
+<script>
+  (() => {
+    const languages = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).filter(Boolean);
+    const locale = languages.some((language) => language.toLowerCase().startsWith("ja")) ? "ja" : "en";
+    document.documentElement.lang = locale;
+    if (locale !== "ja") return;
+
+    const dataElement = document.getElementById("error-page-i18n");
+    if (!dataElement) return;
+
+    try {
+      const messages = JSON.parse(dataElement.textContent).ja;
+      document.title = messages.pageTitle;
+
+      document.querySelectorAll("[data-i18n-key]").forEach((element) => {
+        const text = messages[element.dataset.i18nKey];
+        if (typeof text === "string") {
+          element.textContent = text;
+        }
+      });
+    } catch (_error) {
+      document.documentElement.lang = "en";
+    }
+  })();
+</script>
   </body>
 </html>

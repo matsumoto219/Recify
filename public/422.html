@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
-    <title>処理できませんでした - Recify</title>
+    <title>Unprocessable Request - Recify</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
@@ -242,8 +242,8 @@
               </svg>
             </div>
             <div class="content">
-              <h1 id="error-title">処理できませんでした</h1>
-              <p>リクエストを処理できませんでした。時間を置いて再度お試しください。</p>
+              <h1 id="error-title" data-i18n-key="heading">Unprocessable Request</h1>
+              <p data-i18n-key="message">The request could not be processed. Please try again later.</p>
             </div>
             <p class="error-code">Error Code: 422</p>
           </section>
@@ -257,5 +257,39 @@
         </div>
       </footer>
     </div>
+    <script type="application/json" id="error-page-i18n">
+      {
+        "ja": {
+          "pageTitle": "処理できませんでした - Recify",
+          "heading": "処理できませんでした",
+          "message": "リクエストを処理できませんでした。時間をおいてから再度お試しください。"
+        }
+      }
+    </script>
+<script>
+  (() => {
+    const languages = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).filter(Boolean);
+    const locale = languages.some((language) => language.toLowerCase().startsWith("ja")) ? "ja" : "en";
+    document.documentElement.lang = locale;
+    if (locale !== "ja") return;
+
+    const dataElement = document.getElementById("error-page-i18n");
+    if (!dataElement) return;
+
+    try {
+      const messages = JSON.parse(dataElement.textContent).ja;
+      document.title = messages.pageTitle;
+
+      document.querySelectorAll("[data-i18n-key]").forEach((element) => {
+        const text = messages[element.dataset.i18nKey];
+        if (typeof text === "string") {
+          element.textContent = text;
+        }
+      });
+    } catch (_error) {
+      document.documentElement.lang = "en";
+    }
+  })();
+</script>
   </body>
 </html>

@@ -393,21 +393,110 @@ RSpec.describe 'Error pages', type: :request do
   end
 
   describe 'proxy static fallback pages' do
-    it 'public/502.html, public/503.html, public/504.html が存在し、基本文言を含む' do
-      expected_pages = {
-        '502.html' => [ '接続に問題が発生しています', 'サーバーへの接続が一時的に不安定です。' ],
-        '503.html' => [ 'ただいま一時停止しています', 'アクセス集中のため、サイトを一時的に停止しています。' ],
-        '504.html' => [ '応答に時間がかかっています', 'サーバーからの応答に時間がかかっています。' ]
+    let(:static_error_pages) do
+      {
+        '400.html' => {
+          code: '400',
+          en_title: 'Bad Request - Recify',
+          en_heading: 'Bad Request',
+          en_message: 'The request could not be processed.',
+          ja_heading: '不正なリクエストです'
+        },
+        '404.html' => {
+          code: '404',
+          en_title: 'Page Not Found - Recify',
+          en_heading: 'Page Not Found',
+          en_message: 'The page you are looking for could not be found.',
+          ja_heading: 'ページが見つかりません'
+        },
+        '406-unsupported-browser.html' => {
+          code: '406',
+          en_title: 'Unsupported Browser - Recify',
+          en_heading: 'Unsupported Browser',
+          en_message: 'This browser is not supported. Please use an up-to-date browser.',
+          ja_heading: 'このブラウザはサポートされていません'
+        },
+        '422.html' => {
+          code: '422',
+          en_title: 'Unprocessable Request - Recify',
+          en_heading: 'Unprocessable Request',
+          en_message: 'The request could not be processed. Please try again later.',
+          ja_heading: '処理できませんでした'
+        },
+        '500.html' => {
+          code: '500',
+          en_title: 'Server Error - Recify',
+          en_heading: 'Server Error',
+          en_message: 'Something went wrong. Please try again later.',
+          ja_heading: 'サーバーエラーが発生しました'
+        },
+        '502.html' => {
+          code: '502',
+          en_title: 'Connection Problem - Recify',
+          en_heading: 'Connection Problem',
+          en_message: 'The connection to the server is temporarily unstable. Please try again later.',
+          ja_heading: '接続に問題が発生しています'
+        },
+        '503.html' => {
+          code: '503',
+          en_title: 'Temporarily Unavailable - Recify',
+          en_heading: 'Temporarily Unavailable',
+          en_message: 'The site is temporarily unavailable due to high traffic. Please try again later.',
+          ja_heading: 'ただいま一時停止しています'
+        },
+        '504.html' => {
+          code: '504',
+          en_title: 'Gateway Timeout - Recify',
+          en_heading: 'Gateway Timeout',
+          en_message: 'The server is taking longer than expected to respond. Please try again later.',
+          ja_heading: '応答に時間がかかっています'
+        }
       }
+    end
 
-      expected_pages.each do |filename, expected_texts|
+    it 'public/*.html static fallback pages default to English and keep Japanese fallback data' do
+      static_error_pages.each do |filename, expected|
         static_page = Rails.root.join('public', filename)
 
         expect(static_page).to exist
         html = static_page.read
-        expected_texts.each { |text| expect(html).to include(text) }
-        expect(html).to include("Error Code: #{filename.delete_suffix('.html')}")
-        expect(html).to include('no-store')
+        document = Nokogiri::HTML(html)
+        i18n_data = JSON.parse(document.at_css('script#error-page-i18n[type="application/json"]').text)
+
+        aggregate_failures filename do
+          expect(document.at_css('html')['lang']).to eq('en')
+          expect(document.at_css('title').text).to eq(expected[:en_title])
+          expect(document.at_css('[data-i18n-key="heading"]').text).to eq(expected[:en_heading])
+          expect(document.at_css('[data-i18n-key="message"]').text).to eq(expected[:en_message])
+          expect(i18n_data.dig('ja', 'pageTitle')).to end_with(' - Recify')
+          expect(i18n_data.dig('ja', 'heading')).to eq(expected[:ja_heading])
+          expect(i18n_data.dig('ja', 'message')).to be_present
+          expect(html).to include("Error Code: #{expected[:code]}")
+        end
+      end
+    end
+
+    it 'static fallback language switch uses textContent without HTML injection' do
+      static_error_pages.each_key do |filename|
+        html = Rails.root.join('public', filename).read
+
+        aggregate_failures filename do
+          expect(html).to include('navigator.languages')
+          expect(html).to include('navigator.language')
+          expect(html).to include('startsWith("ja")')
+          expect(html).to include('document.documentElement.lang = locale')
+          expect(html).to include('textContent')
+          expect(html).not_to include('innerHTML')
+        end
+      end
+    end
+
+    it 'proxy 5xx static pages remain no-store for Kamal proxy fallback' do
+      %w[502.html 503.html 504.html].each do |filename|
+        static_page = Rails.root.join('public', filename)
+
+        expect(static_page).to exist
+        expect(static_page.read).to include('no-store')
       end
     end
 

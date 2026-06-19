@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
-    <title>応答に時間がかかっています - Recify</title>
+    <title>Gateway Timeout - Recify</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
@@ -188,11 +188,8 @@
         <div class="wrap">
           <section class="card" aria-labelledby="error-title">
             <div class="icon" aria-hidden="true">504</div>
-            <h1 id="error-title">応答に時間がかかっています</h1>
-            <p>
-              サーバーからの応答に時間がかかっています。<br>
-              しばらく時間をおいてから再度お試しください。
-            </p>
+            <h1 id="error-title" data-i18n-key="heading">Gateway Timeout</h1>
+            <p data-i18n-key="message">The server is taking longer than expected to respond. Please try again later.</p>
             <p class="code">Error Code: 504</p>
           </section>
         </div>
@@ -203,5 +200,39 @@
         <p>© 2026 Recify</p>
       </footer>
     </div>
+    <script type="application/json" id="error-page-i18n">
+      {
+        "ja": {
+          "pageTitle": "応答に時間がかかっています - Recify",
+          "heading": "応答に時間がかかっています",
+          "message": "サーバーからの応答に時間がかかっています。しばらく時間をおいてから再度お試しください。"
+        }
+      }
+    </script>
+<script>
+  (() => {
+    const languages = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).filter(Boolean);
+    const locale = languages.some((language) => language.toLowerCase().startsWith("ja")) ? "ja" : "en";
+    document.documentElement.lang = locale;
+    if (locale !== "ja") return;
+
+    const dataElement = document.getElementById("error-page-i18n");
+    if (!dataElement) return;
+
+    try {
+      const messages = JSON.parse(dataElement.textContent).ja;
+      document.title = messages.pageTitle;
+
+      document.querySelectorAll("[data-i18n-key]").forEach((element) => {
+        const text = messages[element.dataset.i18nKey];
+        if (typeof text === "string") {
+          element.textContent = text;
+        }
+      });
+    } catch (_error) {
+      document.documentElement.lang = "en";
+    }
+  })();
+</script>
   </body>
 </html>
