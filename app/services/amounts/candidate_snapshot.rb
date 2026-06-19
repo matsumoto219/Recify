@@ -74,6 +74,7 @@ module Amounts
         item.to_h.symbolize_keys.slice(
           :price,
           :quantity,
+          :quantity_unit_code,
           :quantity_unit,
           :original_line_total,
           :line_total,

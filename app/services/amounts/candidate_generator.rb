@@ -2,6 +2,8 @@
 
 module Amounts
   class CandidateGenerator
+    include Amounts::QuantityUnitResolver
+
     ROUNDING_MODES = %i[floor round ceil].freeze
     SAME_RATE_MIXED_MAX_ITEMS = 20
     SAME_RATE_MIXED_MAX_STATES = 50_000
@@ -1201,7 +1203,7 @@ module Amounts
       quantity = Amounts::NumberParser.parse_quantity(item[:quantity], default: BigDecimal("1"))
       quantity = BigDecimal("1") if quantity <= 0
       return nil unless quantity.frac.zero?
-      return nil unless default_or_countable_quantity_unit?(item[:quantity_unit])
+      return nil unless default_or_countable_quantity_unit_for_item?(item)
 
       quantity_integer = quantity.to_i
       return nil unless quantity_integer.positive?
@@ -1214,14 +1216,10 @@ module Amounts
       to_i(item[:discount_amount]).positive? || normalize_rate(item[:discount_rate]).positive?
     end
 
-    def default_or_countable_quantity_unit?(unit)
-      unit.to_s.strip.blank? || countable_quantity_unit?(unit)
-    end
-
     def item_line_total(item)
       item = indifferent_hash(item)
       return to_i(item[:line_total]) if present?(item[:line_total])
-      return 0 unless countable_quantity_unit?(item[:quantity_unit])
+      return 0 unless countable_quantity_unit_for_item?(item)
 
       price = to_i(item[:price])
       quantity = Amounts::NumberParser.parse_quantity(item[:quantity])
@@ -1289,12 +1287,6 @@ module Amounts
         detail_rates = final_detected_tax_details.map { |detail| detail[:rate] }.uniq
         detail_rates.one? ? detail_rates.first : BigDecimal("0")
       end
-    end
-
-    def countable_quantity_unit?(unit)
-      return true unless defined?(ReceiptItem::COUNTABLE_QUANTITY_UNITS)
-
-      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
 
     def rounded_tax_from_gross(gross_total, rate, rounding_mode)

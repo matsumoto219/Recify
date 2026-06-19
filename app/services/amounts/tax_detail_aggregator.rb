@@ -2,6 +2,8 @@
 
 module Amounts
   class TaxDetailAggregator
+    include Amounts::QuantityUnitResolver
+
     def initialize(items:, adjustments: [], fallback_tax_rate: nil, fallback_net_amount: nil, fallback_tax_amount: nil, rounding_mode: :floor, receipt_tax_basis: :total_includes_tax)
       @items = Array(items)
       @adjustments = Array(adjustments)
@@ -102,7 +104,7 @@ module Amounts
     def item_line_total(item)
       line_total = fetch_value(item, :line_total)
       return to_i(line_total) if present?(line_total)
-      return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
+      return 0 unless countable_quantity_unit_for_item?(item)
 
       price = to_amount_decimal(fetch_value(item, :price))
       quantity = to_decimal(fetch_value(item, :quantity, 1))
@@ -228,10 +230,6 @@ module Amounts
 
     def round_amount(value)
       BigDecimal(value.to_s).round(0).to_i
-    end
-
-    def countable_quantity_unit?(unit)
-      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
   end
 end

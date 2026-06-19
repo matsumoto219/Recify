@@ -2,6 +2,8 @@
 
 module Amounts
   class CandidateConsistencyReviewer
+    include Amounts::QuantityUnitResolver
+
     def initialize(receipt:, items:, tax_details:, context:)
       @receipt = receipt || {}
       @items = Array(items)
@@ -445,12 +447,11 @@ module Amounts
       line_total = original_line_total_for(item)
       price = BigDecimal(to_i(fetch_value(item, :price)).to_s)
       quantity = Amounts::NumberParser.parse_quantity(fetch_value(item, :quantity))
-      quantity_unit = fetch_value(item, :quantity_unit)
 
       return false unless line_total.positive?
       return false unless price.positive?
       return false unless quantity.positive?
-      return false unless countable_quantity_unit?(quantity_unit)
+      return false unless countable_quantity_unit_for_item?(item)
 
       unit_total = price * quantity
       return false if line_total == unit_total
@@ -531,7 +532,7 @@ module Amounts
     def item_line_total(item)
       line_total = fetch_value(item, :line_total)
       return to_i(line_total) if value_was_present?(item, :line_total)
-      return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
+      return 0 unless countable_quantity_unit_for_item?(item)
 
       price = BigDecimal(to_i(fetch_value(item, :price)).to_s)
       quantity = Amounts::NumberParser.parse_quantity(fetch_value(item, :quantity))
@@ -552,10 +553,6 @@ module Amounts
       return flag if [ true, false ].include?(flag)
 
       present?(fetch_value(item, key))
-    end
-
-    def countable_quantity_unit?(unit)
-      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
     end
 
     def normalize_rate(value)

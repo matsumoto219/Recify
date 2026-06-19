@@ -2,6 +2,8 @@
 
 module Amounts
   class HardRejector
+    include Amounts::QuantityUnitResolver
+
     ITEM_GROSS_MISMATCH_RATIO = BigDecimal("0.20")
     ITEM_GROSS_MISMATCH_MIN = 100
 
@@ -165,8 +167,7 @@ module Amounts
 
       price = Amounts::NumberParser.parse_amount(fetch_value(item, :price))
       quantity = Amounts::NumberParser.parse_quantity(fetch_value(item, :quantity))
-      unit = fetch_value(item, :quantity_unit).to_s.strip
-      return 0 unless defined?(ReceiptItem::COUNTABLE_QUANTITY_UNITS) && ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit)
+      return 0 unless countable_quantity_unit_for_item?(item)
 
       BigDecimal(price.to_s).*(quantity.positive? ? quantity : BigDecimal("1")).round(0).to_i
     end

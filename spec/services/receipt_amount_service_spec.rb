@@ -140,6 +140,24 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'native engineではquantity_unit_codeを保持して金額計算する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 250, quantity: 2, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') }
+        ]
+      )
+
+      item = result.dig(:computed, :items).first
+
+      aggregate_failures do
+        expect(item[:quantity_unit_code]).to eq('each')
+        expect(item[:quantity_unit]).to eq('個')
+        expect(item[:line_total]).to eq(500)
+        expect(result[:resolved]).to include(subtotal: 500, tax: 0, total: 500)
+      end
+    end
+
     it 'native engineでもnil/0 quantityを1として扱う' do
       result = call_service(
         receipt: {},
@@ -159,7 +177,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'native engineではmeasurement/unknown unitのline_total欠落をprice掛け算で補完しない' do
+    it 'native engineではmeasurement unitのline_total欠落を補完せず未知単位はdefault codeへ整理する' do
       result = call_service(
         receipt: {},
         receipt_items: [
@@ -171,9 +189,9 @@ RSpec.describe ReceiptAmountService do
       items = result.dig(:computed, :items)
 
       aggregate_failures do
-        # 検算: kg/束はcountableではないため 14,400 x 0.3 = 4,320 へは寄せず、明細金額は0円に留める。
-        expect(items.map { |item| item[:line_total] }).to eq([ 0, 0 ])
-        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        # 検算: kgはmeasurementのため補完しない。候補外の束は保存せずdefault eachへ整理する。
+        expect(items.map { |item| item[:line_total] }).to eq([ 0, 4_320 ])
+        expect(result[:resolved]).to include(subtotal: 4_320, tax: 0, total: 4_320)
       end
     end
 
@@ -2806,7 +2824,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'does not fill line_total from price multiplied by quantity for unknown unit' do
+    it 'normalizes unknown unit before filling line_total from price multiplied by quantity' do
       result = call_service(
         receipt: {},
         receipt_items: [
@@ -2816,8 +2834,8 @@ RSpec.describe ReceiptAmountService do
       )
 
       aggregate_failures do
-        expect(result[:computed][:items].first[:line_total]).to eq(0)
-        expect(result[:resolved][:total]).not_to eq(4_320)
+        expect(result[:computed][:items].first[:line_total]).to eq(4_320)
+        expect(result[:resolved][:total]).to eq(4_320)
         expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
       end
     end
@@ -2885,7 +2903,7 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
-    it 'does not mark item_total_mismatch for unknown unit when line_total conflicts with price times quantity' do
+    it 'marks item_total_mismatch for normalized unknown unit when line_total conflicts with price times quantity' do
       result = call_service(
         receipt: {},
         receipt_items: [
@@ -2896,8 +2914,8 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(result[:resolved][:total]).to eq(500)
-        expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
-        expect(result[:needs_review]).to be(false)
+        expect(result[:inconsistencies]).to include(:item_total_mismatch)
+        expect(result[:needs_review]).to be(true)
       end
     end
 

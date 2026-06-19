@@ -1,5 +1,7 @@
 module Amounts
   class ItemTotalAggregator
+    include Amounts::QuantityUnitResolver
+
     def initialize(items:, context: :analysis, rounding_mode: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE)
       @items = Array(items)
       @context = normalize_context(context)
@@ -107,7 +109,7 @@ module Amounts
     end
 
     def countable_unit_line_total(item)
-      return 0 unless countable_quantity_unit?(fetch_value(item, :quantity_unit))
+      return 0 unless countable_quantity_unit_for_item?(item)
 
       price = to_amount_decimal(fetch_value(item, :price))
       round_amount(price * normalized_quantity_for(item))
@@ -188,13 +190,9 @@ module Amounts
       BigDecimal(value.to_s).round(0).to_i
     end
 
-    def countable_quantity_unit?(unit)
-      ReceiptItem::COUNTABLE_QUANTITY_UNITS.include?(unit.to_s.strip)
-    end
-
     def manual_countable_unit_price_input?(item)
       manual_input_context? &&
-        countable_quantity_unit?(fetch_value(item, :quantity_unit)) &&
+        countable_quantity_unit_for_item?(item) &&
         value_present?(fetch_value(item, :price))
     end
 
