@@ -58,13 +58,14 @@ module SecurityEvents
       Rails.logger.warn("[SecurityEvents] rate_limit_record_failed class=#{e.class.name}")
     end
 
-    def record_invalid_upload!(request:, actor_user:, file:, reason:, field_name: "receipt.image", metadata: {})
+    def record_invalid_upload!(request:, actor_user:, file:, reason:, field_name: "receipt.image", metadata: {}, validation_errors: nil)
       file_metadata = {
         field_name: field_name,
         filename: upload_filename(file),
         content_type: upload_content_type(file),
         byte_size: upload_byte_size(file),
-        extension: upload_extension(file)
+        extension: upload_extension(file),
+        validation_errors: normalized_validation_errors(validation_errors)
       }.compact
 
       record!(
@@ -228,6 +229,11 @@ module SecurityEvents
       return if filename.blank?
 
       File.extname(filename).presence
+    end
+
+    def normalized_validation_errors(errors)
+      values = Array(errors).filter_map { |error| error.to_s.presence }.first(5)
+      values.presence
     end
 
     def original_request_path(request)

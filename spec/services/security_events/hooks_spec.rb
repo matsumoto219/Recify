@@ -42,6 +42,60 @@ RSpec.describe 'SecurityEvents hooks' do
     expect(event.metadata.to_s).not_to include('csrf-token')
   end
 
+  it 'invalid uploadを任意field_nameで安全なmetadataだけ記録する' do
+    file = instance_double(
+      ActionDispatch::Http::UploadedFile,
+      original_filename: "<script>avatar</script>\r\n.png",
+      content_type: 'image/png',
+      size: 1024
+    )
+
+    SecurityEvents.record_invalid_upload!(
+      request: request,
+      actor_user: nil,
+      file: file,
+      reason: 'invalid_content_type',
+      field_name: 'profile.avatar',
+      metadata: {
+        signed_id: 'signed-id',
+        storage_url: '/rails/active_storage/blobs/redirect/signed-id/file.png'
+      },
+      validation_errors: [
+        'invalid content type',
+        'image too small',
+        'extra 1',
+        'extra 2',
+        'extra 3',
+        'extra 4'
+      ]
+    )
+
+    event = SecurityEvent.find_by!(event_type: 'invalid_upload')
+
+    aggregate_failures do
+      expect(event).to have_attributes(
+        field_name: 'profile.avatar',
+        matched_rule: 'invalid_content_type',
+        payload_excerpt: '<script>avatar</script>\\r\\n.png'
+      )
+      expect(event.metadata).to include(
+        'field_name' => 'profile.avatar',
+        'filename' => '<script>avatar</script>\\r\\n.png',
+        'content_type' => 'image/png',
+        'byte_size' => 1024,
+        'extension' => '.png',
+        'validation_errors' => [
+          'invalid content type',
+          'image too small',
+          'extra 1',
+          'extra 2',
+          'extra 3'
+        ]
+      )
+      expect(event.metadata.to_json).not_to include('signed-id', '/rails/active_storage')
+    end
+  end
+
   it '外部サービス連続失敗をsecurity eventに記録する' do
     detail = ExternalServices.error_detail(
       service: :ocr,
