@@ -179,12 +179,18 @@ RSpec.describe 'Announcements', type: :request do
       archived = create(:announcement, status: 'archived')
       scheduled = create(:announcement, :published, starts_at: 1.day.from_now)
       expired = create(:announcement, :published, ends_at: 1.day.ago)
+      hidden_announcements = [ draft, archived, scheduled, expired ]
+
+      hidden_announcements.each do |announcement|
+        attach_public_announcement_image(announcement, alt_text: "非公開画像#{announcement.public_id}")
+      end
 
       aggregate_failures do
-        [ draft, archived, scheduled, expired ].each do |announcement|
+        hidden_announcements.each do |announcement|
           get announcement_path(announcement)
 
           expect(response).to have_http_status(:not_found)
+          expect(response.body).not_to include("非公開画像#{announcement.public_id}")
         end
       end
     end
@@ -244,18 +250,42 @@ RSpec.describe 'Announcements', type: :request do
       end
     end
 
-    it '添付画像は詳細ページにはまだ表示しない' do
+    it '添付画像を詳細ページだけに表示し、download linkや内部情報は出さない' do
       announcement = create(:announcement, :published)
       attach_public_announcement_image(announcement)
 
       get announcement_path(announcement)
 
       document = Nokogiri::HTML(response.body)
+      image = document.at_css("img[alt='公開画像の代替テキスト']")
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
-        expect(document.at_css("img[alt='公開画像の代替テキスト']")).to be_nil
-        expect(response.body).not_to include('public-announcement.jpg')
+        expect(image).to be_present
+        expect(image['loading']).to eq('lazy')
+        expect(document.at_css("a[download]")).to be_nil
+        expect(document.at_css("a[href*='public-announcement.jpg']")).to be_nil
+        expect(response.body).not_to include(announcement.image.blob.key)
+        expect(document.text).not_to include(announcement.image.blob.signed_id)
+        expect(response.body).not_to include('image/jpeg')
+      end
+    end
+
+    it '添付画像のalt textをescapeして表示する' do
+      announcement = create(:announcement, :published)
+      malicious_alt = '<script>alert("image")</script>'
+      attach_public_announcement_image(announcement, alt_text: malicious_alt)
+
+      get announcement_path(announcement)
+
+      document = Nokogiri::HTML(response.body)
+      image = document.css('img').find { |node| node['alt'] == malicious_alt }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(image).to be_present
+        expect(document.css('script').map(&:text).join).not_to include('alert("image")')
+        expect(response.body).to include('&lt;script&gt;alert(&quot;image&quot;)&lt;/script&gt;')
       end
     end
   end
