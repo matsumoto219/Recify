@@ -3,8 +3,9 @@
     <div class="md:hidden shrink-0 flex items-center" data-brand-logo-slot="mobile-header">
       <%= render "shared/brand/logo",
             href: receipts_path,
-            variant: :icon,
-            size: :lg %>
+            variant: :compact,
+            size: :sm,
+            class_name: "mobile-header-brand-logo" %>
     </div>
 
     <div class="hidden sm:block max-w-md w-full">

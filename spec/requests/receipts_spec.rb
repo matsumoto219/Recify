@@ -402,7 +402,7 @@ RSpec.describe 'Receipts', type: :request do
       header_logo_slot = document.at_css('#dashboard-header [data-brand-logo-slot="mobile-header"]')
       sidebar_full_logo = document.at_css('#desktop-sidebar .brand-logo-full')
       sidebar_icon_logo = document.at_css('#desktop-sidebar .brand-logo-icon')
-      header_icon_logo = document.at_css('#dashboard-header .brand-logo-icon')
+      header_logo = document.at_css('#dashboard-header .mobile-header-brand-logo')
 
       aggregate_failures do
         expect(document.at_css('#receipts-page-header').text).to include(I18n.t('receipts.index.title'))
@@ -417,9 +417,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(sidebar_icon_logo['aria-label']).to eq('Recify')
         expect(sidebar_icon_logo['class']).to include('brand-logo-lg')
         expect(sidebar_icon_logo.at_css('.brand-logo-text')).to be_nil
-        expect(header_icon_logo['href']).to eq(receipts_path)
-        expect(header_icon_logo['class']).to include('brand-logo-lg')
-        expect(header_icon_logo.at_css('.brand-logo-text')).to be_nil
+        expect(header_logo['href']).to eq(receipts_path)
+        expect(header_logo['class']).to include('brand-logo-compact')
+        expect(header_logo.at_css('.brand-logo-text').text).to eq('Recify')
+        expect(tailwind_css).to include('.mobile-header-brand-logo .brand-logo-text')
+        expect(tailwind_css).to include('@media (width >= 640px), (width <= 359px)')
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.receipts'))
         expect(document.at_css('#desktop-sidebar').text).to include(I18n.t('dashboard.nav.new_receipt'))
         expect(document.at_css('#mobile-bottom-nav').text).to include(I18n.t('dashboard.nav.mobile_receipts'))
