@@ -518,6 +518,7 @@ RSpec.describe ReceiptAnalysisRuns do
           {
             index: index,
             raw_text: "商品#{index}",
+            quantity_unit_code: "each",
             line_total: index * 100,
             matched_content_lines: [ '保存しない周辺行' ]
           }
@@ -542,6 +543,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot.dig('truncated', 'full_context_lines')).to eq(true)
         expect(snapshot['full_context_lines'].size).to eq(150)
         expect(snapshot['items'].size).to eq(50)
+        expect(snapshot.dig('items', 0, 'quantity_unit_code')).to eq('each')
         expect(snapshot.dig('store', 'customer_facing_store_candidates').size).to eq(10)
         expect(snapshot.dig('store', 'store_candidates').size).to eq(10)
         expect(snapshot.dig('store', 'operator_candidates').size).to eq(10)

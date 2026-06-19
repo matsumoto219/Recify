@@ -110,12 +110,14 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(items.size).to eq(2)
           expect(items.first[:raw_text]).to eq('コーヒー')
-          expect(items.first[:quantity_unit]).to eq('杯')
+          expect(items.first[:quantity_unit_code]).to eq('each')
+          expect(items.first[:quantity_unit]).to eq('個')
           expect(items.first[:product_code]).to eq('C001')
           expect(items.first[:line_total]).to eq(180)
           expect(items.first[:confidence]).to be_present
           expect(items.second[:raw_text]).to eq('サンド')
           expect(items.second[:quantity]).to eq(2)
+          expect(items.second[:quantity_unit_code]).to eq('each')
           expect(items.second[:quantity_unit]).to eq('個')
           expect(items.second[:product_code]).to eq('S001')
           expect(items.second[:line_total]).to eq(1100)
@@ -215,6 +217,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         aggregate_failures do
           expect(item[:quantity]).to eq(BigDecimal('0.3'))
+          expect(item[:quantity_unit_code]).to eq('kilogram')
           expect(item[:quantity_unit]).to eq('kg')
         end
       end
@@ -2667,12 +2670,14 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
           expect(first_item[:category]).to eq('drink')
-          expect(first_item[:quantity_unit]).to eq('杯')
+          expect(first_item[:quantity_unit_code]).to eq('each')
+          expect(first_item[:quantity_unit]).to eq('個')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:needs_review]).to eq(false)
 
           expect(second_item[:suggested_name]).to eq('たまごサンド')
           expect(second_item[:category]).to eq('food')
+          expect(second_item[:quantity_unit_code]).to eq('each')
           expect(second_item[:quantity_unit]).to eq('個')
           expect(second_item[:product_code]).to eq('S001')
           expect(second_item[:needs_review]).to eq(true)
@@ -2948,6 +2953,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(item[:price]).to eq(14_400)
           expect(item[:quantity]).to eq(BigDecimal('0.300'))
+          expect(item[:quantity_unit_code]).to eq('kilogram')
           expect(item[:quantity_unit]).to eq('kg')
           expect(item[:line_total]).to eq(4_320)
         end
@@ -3170,8 +3176,10 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           aggregate_failures do
             expect(params[:receipt_items_attributes].size).to eq(2)
             expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
-            expect(first_item[:quantity_unit]).to eq('杯')
+            expect(first_item[:quantity_unit_code]).to eq('each')
+            expect(first_item[:quantity_unit]).to eq('個')
             expect(second_item[:raw_text]).to eq('サンド')
+            expect(second_item[:quantity_unit_code]).to eq('each')
             expect(second_item[:quantity_unit]).to eq('個')
             expect(second_item[:product_code]).to eq('S001')
           end
@@ -3228,7 +3236,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           aggregate_failures do
             expect(params[:receipt_items_attributes].size).to eq(1)
             expect(first_item[:raw_text]).to eq('コーヒー')
-            expect(first_item[:quantity_unit]).to eq('杯')
+            expect(first_item[:quantity_unit_code]).to eq('each')
+            expect(first_item[:quantity_unit]).to eq('個')
             expect(first_item[:product_code]).to eq('C001')
             expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
             expect(first_item[:category]).to eq('drink')
@@ -3431,7 +3440,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:store_name]).to eq('サンプルストア')
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
           expect(first_item[:raw_text]).to eq('コーヒー')
-          expect(first_item[:quantity_unit]).to eq('杯')
+          expect(first_item[:quantity_unit_code]).to eq('each')
+          expect(first_item[:quantity_unit]).to eq('個')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:price]).to eq(180)
           expect(first_payment[:amount]).to eq(1280)

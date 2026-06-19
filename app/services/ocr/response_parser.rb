@@ -1454,12 +1454,14 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
+      quantity_unit_code = ReceiptQuantityUnit.normalize(value_object.dig("QuantityUnit", "valueString"))
 
       {
         raw_text: raw_text,
         price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
         quantity: value_object.dig("Quantity", "valueNumber"),
-        quantity_unit: value_object.dig("QuantityUnit", "valueString"),
+        quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
+        quantity_unit_code: quantity_unit_code,
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: line_total,
         original_line_total: original_line_total,

@@ -63,7 +63,7 @@ module Ai
         For item outputs:
         - Every returned item MUST map to an input item by index.
         - Do NOT add or remove item indexes.
-        - price, quantity, quantity_unit, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.
+        - price, quantity, quantity_unit_code, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.
 
         For receipt_adjustments outputs:
         - amount MUST be an unsigned absolute integer.

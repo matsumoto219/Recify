@@ -637,7 +637,7 @@ module Analysis
         source_items = repair_amount_only_split_items(source_items, lines)
 
         ai_items_present = normalized_ai_items.present?
-        # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit は編集/表示で利用する。
+        # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit_code は編集/表示で利用する。
         source_items.each_with_index.filter_map do |item, index|
           normalized_item =
             if item.respond_to?(:with_indifferent_access)
@@ -650,8 +650,11 @@ module Analysis
 
           raw_text = normalized_item[:raw_text].to_s
           quantity = normalize_quantity(normalized_item[:quantity])
-          quantity_unit = normalized_item[:quantity_unit]
-          quantity_fraction_invalid = integer_quantity_fraction?(quantity, quantity_unit)
+          quantity_unit_code = normalize_quantity_unit_code(
+            normalized_item[:quantity_unit_code].presence || normalized_item[:quantity_unit]
+          )
+          quantity_unit = ReceiptQuantityUnit.legacy_label(quantity_unit_code)
+          quantity_fraction_invalid = integer_quantity_fraction?(quantity, quantity_unit_code)
           quantity = BigDecimal("1") if quantity_fraction_invalid
           discount_amount = normalize_amount(normalized_item[:discount_amount])
           explicit_original_line_total = normalize_amount(normalized_item[:original_line_total])
@@ -701,7 +704,8 @@ module Analysis
             original_line_total: original_line_total,
             discount_amount: discount_amount,
             discount_rate: normalize_rate(normalized_item[:discount_rate]),
-            # Azure Items[].QuantityUnit -> receipt_items.quantity_unit
+            # Azure Items[].QuantityUnit -> receipt_items.quantity_unit_code
+            quantity_unit_code: quantity_unit_code,
             quantity_unit: quantity_unit,
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
@@ -2309,6 +2313,7 @@ module Analysis
           normalize_confidence(amount_item[:confidence]),
           normalize_confidence(name_item[:confidence])
         ].compact.min
+        quantity_unit_code = merged_quantity_unit_code(name_item, amount_item)
 
         amount_item.merge(name_item.compact).merge(
           raw_text: split_item_name(name_item),
@@ -2319,7 +2324,8 @@ module Analysis
           discount_amount: normalize_amount(amount_item[:discount_amount]),
           discount_rate: amount_item[:discount_rate],
           quantity: name_item[:quantity].presence || amount_item[:quantity],
-          quantity_unit: name_item[:quantity_unit].presence || amount_item[:quantity_unit],
+          quantity_unit_code: quantity_unit_code,
+          quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
           product_code: name_item[:product_code].presence || amount_item[:product_code],
           tax_rate: name_item[:tax_rate].presence || amount_item[:tax_rate],
           tax_rate_confidence: name_item[:tax_rate_confidence].presence || amount_item[:tax_rate_confidence],
@@ -2624,13 +2630,15 @@ module Analysis
           ai_item = lookup_candidates.lazy.map { |idx| ai_items_by_index[idx] }.find(&:present?) || {}.with_indifferent_access
           merged_item = candidate_item.merge(ai_item.compact)
 
-          # quantity_unit / product_code はOCR優先で保持する。
+          # quantity_unit_code / product_code はOCR優先で保持する。
+          quantity_unit_code = merged_quantity_unit_code(candidate_item, ai_item)
           merged_item.merge(
             suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
             category: ai_item[:category].presence || candidate_item[:category],
             needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
             review_reasons: ai_item[:review_reasons].presence || candidate_item[:review_reasons],
-            quantity_unit: ai_item[:quantity_unit].presence || candidate_item[:quantity_unit],
+            quantity_unit_code: quantity_unit_code,
+            quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
             tax_rate_confidence: ai_item[:tax_rate_confidence],
@@ -2719,7 +2727,8 @@ module Analysis
             category: detect_category(line),
             price: price,
             quantity: quantity,
-            quantity_unit: nil,
+            quantity_unit_code: ReceiptQuantityUnit.default_code,
+            quantity_unit: ReceiptQuantityUnit.legacy_label(ReceiptQuantityUnit.default_code),
             product_code: nil,
             tax_rate: nil,
             original_line_total: extract_item_line_total(line, price:, quantity:),
@@ -3061,6 +3070,17 @@ module Analysis
         quantity = ReceiptAmountService.parse_quantity(value, default: BigDecimal("1"))
 
         quantity.positive? ? quantity : BigDecimal("1")
+      end
+
+      def normalize_quantity_unit_code(value)
+        ReceiptQuantityUnit.normalize(value)
+      end
+
+      def merged_quantity_unit_code(primary_item, fallback_item)
+        primary = primary_item[:quantity_unit_code].presence || primary_item[:quantity_unit]
+        fallback = fallback_item[:quantity_unit_code].presence || fallback_item[:quantity_unit]
+
+        normalize_quantity_unit_code(primary.presence || fallback)
       end
 
       def integer_quantity_fraction?(quantity, quantity_unit)

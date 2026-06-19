@@ -207,7 +207,7 @@ RSpec.describe Ai::PromptTemplate do
         expect(system_prompt).to include('Output invariants:')
         expect(system_prompt).to include('Every returned item MUST map to an input item by index.')
         expect(system_prompt).to include('Do NOT add or remove item indexes.')
-        expect(system_prompt).to include('price, quantity, quantity_unit, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.')
+        expect(system_prompt).to include('price, quantity, quantity_unit_code, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.')
         expect(system_prompt).to include('amount MUST be an unsigned absolute integer.')
         expect(system_prompt).to include('source_text and source_line_index MUST refer to full_context_lines.')
         expect(system_prompt).to include('Do NOT output an adjustment if its amount cannot be tied to OCR text.')
