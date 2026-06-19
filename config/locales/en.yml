@@ -29,6 +29,9 @@
 
 en:
   hello: "Hello world"
+  pwa:
+    manifest:
+      description: "A receipt management app that helps organize receipt details with image upload, automatic analysis, and AI assistance."
   users:
     display:
       guest_name: "Guest user"

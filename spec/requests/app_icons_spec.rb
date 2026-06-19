@@ -45,7 +45,8 @@ RSpec.describe "App icons", type: :request do
   end
 
   it "keeps the PWA manifest prepared without placeholder colors" do
-    manifest = JSON.parse(Rails.root.join("app/views/pwa/manifest.json.erb").read)
+    manifest_json = ApplicationController.renderer.render(template: "pwa/manifest", formats: :json)
+    manifest = JSON.parse(manifest_json)
 
     aggregate_failures do
       expect(manifest).to include(
@@ -54,7 +55,7 @@ RSpec.describe "App icons", type: :request do
         "theme_color" => "#4B4DD8",
         "background_color" => "#FAFAFA"
       )
-      expect(manifest["description"]).to be_present
+      expect(manifest["description"]).to eq(I18n.t("pwa.manifest.description"))
       expect(manifest["icons"]).to include(
         { "src" => "/icon-192.png", "type" => "image/png", "sizes" => "192x192" },
         { "src" => "/icon-512.png", "type" => "image/png", "sizes" => "512x512" }

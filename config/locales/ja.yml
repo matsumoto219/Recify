@@ -1,4 +1,7 @@
 ja:
+  pwa:
+    manifest:
+      description: レシート画像をアップロードし、自動解析とAI補完で明細整理をサポートするレシート管理アプリです。
   users:
     display:
       guest_name: ゲストユーザー
