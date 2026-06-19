@@ -7,6 +7,52 @@ class AnnouncementLink < ApplicationRecord
 
   before_validation :assign_external
 
+  class << self
+    def safe_url?(value)
+      value = value.to_s
+      return false if value.blank? || unsafe_url_characters?(value)
+
+      return valid_internal_path?(value) if value.start_with?("/")
+
+      valid_external_url?(value)
+    end
+
+    def safe_external_url?(value)
+      safe_url?(value) && external_url?(value)
+    end
+
+    def external_url?(value)
+      uri = URI.parse(value.to_s)
+      uri.is_a?(URI::HTTP) &&
+        ALLOWED_EXTERNAL_SCHEMES.include?(uri.scheme) &&
+        uri.host.present? &&
+        uri.userinfo.blank?
+    rescue URI::InvalidURIError
+      false
+    end
+
+    private
+
+    def unsafe_url_characters?(value)
+      value.match?(CONTROL_CHARACTER_PATTERN) || value.include?("\\")
+    end
+
+    def valid_internal_path?(value)
+      !value.start_with?("//")
+    end
+
+    def valid_external_url?(value)
+      uri = URI.parse(value)
+
+      uri.is_a?(URI::HTTP) &&
+        ALLOWED_EXTERNAL_SCHEMES.include?(uri.scheme) &&
+        uri.host.present? &&
+        uri.userinfo.blank?
+    rescue URI::InvalidURIError
+      false
+    end
+  end
+
   validates :label, presence: true, length: { maximum: 80 }
   validates :url, presence: true, length: { maximum: 2048 }
   validates :position,
@@ -21,54 +67,14 @@ class AnnouncementLink < ApplicationRecord
   private
 
   def assign_external
-    self.external = external_url?(url)
+    self.external = self.class.external_url?(url)
   end
 
   def safe_url
     value = url.to_s
     return if value.blank?
 
-    if unsafe_url_characters?(value)
-      errors.add(:url, :invalid)
-      return
-    end
-
-    return validate_internal_path(value) if value.start_with?("/")
-
-    validate_external_url(value)
-  end
-
-  def unsafe_url_characters?(value)
-    value.match?(CONTROL_CHARACTER_PATTERN) || value.include?("\\")
-  end
-
-  def validate_internal_path(value)
-    return unless value.start_with?("//")
-
-    errors.add(:url, :invalid)
-  end
-
-  def validate_external_url(value)
-    uri = URI.parse(value)
-
-    unless uri.is_a?(URI::HTTP) &&
-        ALLOWED_EXTERNAL_SCHEMES.include?(uri.scheme) &&
-        uri.host.present? &&
-        uri.userinfo.blank?
-      errors.add(:url, :invalid)
-    end
-  rescue URI::InvalidURIError
-    errors.add(:url, :invalid)
-  end
-
-  def external_url?(value)
-    uri = URI.parse(value.to_s)
-    uri.is_a?(URI::HTTP) &&
-      ALLOWED_EXTERNAL_SCHEMES.include?(uri.scheme) &&
-      uri.host.present? &&
-      uri.userinfo.blank?
-  rescue URI::InvalidURIError
-    false
+    errors.add(:url, :invalid) unless self.class.safe_url?(value)
   end
 
   def links_per_announcement_limit

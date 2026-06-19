@@ -125,9 +125,10 @@ module SecurityEvents
       end
     end
 
-    def initialize(params:, max_detections: MAX_DETECTIONS)
+    def initialize(params:, max_detections: MAX_DETECTIONS, open_redirect_exemptions: [])
       @params = params
       @max_detections = max_detections.to_i.positive? ? max_detections.to_i : MAX_DETECTIONS
+      @open_redirect_exemptions = Array(open_redirect_exemptions)
     end
 
     def call
@@ -145,7 +146,7 @@ module SecurityEvents
 
     private
 
-    attr_reader :params, :max_detections
+    attr_reader :params, :max_detections, :open_redirect_exemptions
 
     def detect_value(field_name, value)
       return [] if value.blank?
@@ -163,17 +164,47 @@ module SecurityEvents
         )
       end
 
-      open_redirect = detect_open_redirect(field_name, text)
+      unsafe_url = detect_unsafe_url(field_name, text)
+      matches << unsafe_url if unsafe_url
+      open_redirect = detect_open_redirect(field_name, text) unless unsafe_url
       matches << open_redirect if open_redirect
       parameter_tampering = detect_parameter_tampering(field_name, text)
       matches << parameter_tampering if parameter_tampering
       matches
     end
 
+    def detect_unsafe_url(field_name, text)
+      return unless URL_FIELD_PATTERN.match?(field_name.to_s)
+
+      value = text.to_s.strip
+      matched_rule =
+        if value.match?(/\A(?:data|file|vbscript):/i)
+          "forbidden_url_scheme"
+        elsif value.start_with?("//")
+          "protocol_relative_url"
+        elsif value.include?("\\")
+          "backslash_url"
+        elsif value.match?(/[\r\n\u0000]/)
+          "control_character_url"
+        elsif http_url_with_userinfo?(value)
+          "userinfo_url"
+        end
+      return unless matched_rule
+
+      Detection.new(
+        event_type: "open_redirect_attempt",
+        severity: "medium",
+        matched_rule: matched_rule,
+        field_name: field_name,
+        payload_excerpt: text
+      )
+    end
+
     def detect_open_redirect(field_name, text)
       return unless URL_FIELD_PATTERN.match?(field_name.to_s)
       return unless text.match?(%r{\Ahttps?://}i)
       return if text.match?(%r{\Ahttps?://(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/|\z)}i)
+      return if open_redirect_exempted?(field_name, text)
 
       Detection.new(
         event_type: "open_redirect_attempt",
@@ -182,6 +213,19 @@ module SecurityEvents
         field_name: field_name,
         payload_excerpt: text
       )
+    end
+
+    def open_redirect_exempted?(field_name, text)
+      open_redirect_exemptions.any? do |exemption|
+        exemption.respond_to?(:call) && exemption.call(field_name.to_s, text.to_s)
+      end
+    end
+
+    def http_url_with_userinfo?(value)
+      uri = URI.parse(value)
+      uri.is_a?(URI::HTTP) && uri.userinfo.present?
+    rescue URI::InvalidURIError
+      false
     end
 
     def detect_parameter_tampering(field_name, text)

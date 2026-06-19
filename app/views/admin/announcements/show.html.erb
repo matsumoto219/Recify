@@ -11,19 +11,101 @@
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm" %>
 
-  <div class="flex flex-wrap justify-end gap-3">
-    <% if @announcement.status == "draft" %>
-      <%= render "shared/ui/actions/button",
-            as: :link,
-            href: edit_admin_announcement_path(@announcement),
-            label: t("admin.announcements.show.actions.edit"),
-            icon: "edit",
-            size: :compact %>
-    <% else %>
-      <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted">
-        <%= t("admin.announcements.show.readonly_notice") %>
-      </span>
-    <% end %>
+  <div class="space-y-3 rounded-xl border token-border-soft token-bg-card-subtle p-4">
+    <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+      <div class="space-y-1">
+        <h2 class="text-base font-bold token-text-base"><%= t("admin.announcements.show.operations.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.announcements.show.operations.description") %></p>
+        <% unless admin_passkey_reauthenticated? %>
+          <p class="text-xs font-semibold token-text-warning">
+            <%= t("admin.announcements.show.operations.reauthentication_required") %>
+          </p>
+        <% end %>
+      </div>
+
+      <% unless admin_passkey_reauthenticated? %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: new_admin_passkey_reauthentication_path(return_to: admin_announcement_path(@announcement)),
+              label: t("admin.announcements.show.actions.reauthenticate"),
+              icon: "passkey",
+              size: :compact,
+              variant: :secondary %>
+      <% end %>
+    </div>
+
+    <div class="flex flex-wrap justify-end gap-3">
+      <% if @announcement.status == "draft" %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: edit_admin_announcement_path(@announcement),
+              label: t("admin.announcements.show.actions.edit"),
+              icon: "edit",
+              size: :compact,
+              variant: :secondary %>
+
+        <%= form_with url: publish_admin_announcement_path(@announcement),
+              method: :patch,
+              local: true,
+              data: confirm_dialog_data(
+                t("admin.announcements.show.confirm.publish.message"),
+                variant: :neutral,
+                icon: :warning,
+                title: t("admin.announcements.show.confirm.publish.title"),
+                confirm_label: t("admin.announcements.show.actions.publish")
+              ) do %>
+          <%= render "shared/ui/actions/button",
+                label: t("admin.announcements.show.actions.publish"),
+                type: "submit",
+                icon: "publish",
+                size: :compact %>
+        <% end %>
+
+        <%= form_with url: archive_admin_announcement_path(@announcement),
+              method: :patch,
+              local: true,
+              data: confirm_dialog_data(
+                t("admin.announcements.show.confirm.archive.message"),
+                variant: :danger,
+                icon: :warning,
+                title: t("admin.announcements.show.confirm.archive.title"),
+                confirm_label: t("admin.announcements.show.actions.archive")
+              ) do %>
+          <%= render "shared/ui/actions/button",
+                label: t("admin.announcements.show.actions.archive"),
+                type: "submit",
+                icon: "archive",
+                size: :compact,
+                variant: :danger %>
+        <% end %>
+      <% elsif @announcement.status == "published" %>
+        <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted">
+          <%= t("admin.announcements.show.readonly_notice") %>
+        </span>
+
+        <%= form_with url: archive_admin_announcement_path(@announcement),
+              method: :patch,
+              local: true,
+              data: confirm_dialog_data(
+                t("admin.announcements.show.confirm.archive.message"),
+                variant: :danger,
+                icon: :warning,
+                title: t("admin.announcements.show.confirm.archive.title"),
+                confirm_label: t("admin.announcements.show.actions.archive")
+              ) do %>
+          <%= render "shared/ui/actions/button",
+                label: t("admin.announcements.show.actions.archive"),
+                type: "submit",
+                icon: "archive",
+                size: :compact,
+                variant: :danger %>
+        <% end %>
+      <% else %>
+        <span class="rounded-lg border token-border-soft px-3 py-2 text-sm font-semibold token-text-muted">
+          <%= t("admin.announcements.show.archived_notice") %>
+        </span>
+      <% end %>
+    </div>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-3">

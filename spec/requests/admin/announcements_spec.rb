@@ -35,6 +35,10 @@ RSpec.describe 'Admin announcements', type: :request do
     }.deep_merge(overrides)
   end
 
+  def stub_fresh_admin_reauthentication
+    allow_any_instance_of(Admin::AnnouncementsController).to receive(:admin_passkey_reauthenticated?).and_return(true)
+  end
+
   describe 'GET /admin/announcements' do
     it '非ログインユーザーには既存404と同じbody/headerを返す' do
       get '/__recify_missing_route__'
@@ -163,6 +167,31 @@ RSpec.describe 'Admin announcements', type: :request do
       end
     end
 
+    it '正規の外部リンクURLはopen redirect検知ノイズにしない' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 announcement_links_attributes: {
+                   '0' => { label: '外部', url: 'https://example.com/news', position: '0' },
+                   '1' => { label: '', url: '', position: '1' },
+                   '2' => { label: '', url: '', position: '2' }
+                 }
+               )
+             }
+      }.not_to change(SecurityEvent.where(event_type: 'open_redirect_attempt', matched_rule: 'external_redirect_url'), :count)
+
+      announcement = Announcement.order(:created_at).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.announcement_links.first).to be_external
+      end
+    end
+
     it '空のリンク行は無視し、draftはLPにもpublic showにも出さない' do
       admin = create(:user, :admin)
       sign_in admin
@@ -222,6 +251,7 @@ RSpec.describe 'Admin announcements', type: :request do
     it '安全でないURLを拒否する' do
       admin = create(:user, :admin)
       sign_in admin
+      announcement_count = Announcement.count
 
       expect {
         post admin_announcements_path,
@@ -234,10 +264,36 @@ RSpec.describe 'Admin announcements', type: :request do
                  }
                )
              }
-      }.not_to change(Announcement, :count)
+      }.to change(SecurityEvent.where(event_type: 'xss_attempt'), :count).by(1)
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.body).to include(I18n.t('admin.announcements.form.errors.title'))
+      aggregate_failures do
+        expect(Announcement.count).to eq(announcement_count)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('admin.announcements.form.errors.title'))
+      end
+    end
+
+    it '危険なURL schemeはSecurityEventとして検知し、保存しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 announcement_links_attributes: {
+                   '0' => { label: '危険なリンク', url: 'file:///etc/passwd', position: '0' },
+                   '1' => { label: '', url: '', position: '1' },
+                   '2' => { label: '', url: '', position: '2' }
+                 }
+               )
+             }
+      }.to change(SecurityEvent.where(event_type: 'open_redirect_attempt', matched_rule: 'forbidden_url_scheme'), :count).by(1)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(Announcement.find_by(title: 'iOSアプリ リリース予定')).to be_nil
+      end
     end
   end
 
@@ -331,6 +387,207 @@ RSpec.describe 'Admin announcements', type: :request do
           expect(response).to have_http_status(:not_found)
           expect(announcement.reload.title).not_to eq('変更')
         end
+      end
+    end
+
+    it '正規の外部リンクURLへの更新はopen redirect検知ノイズにしない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft')
+      create(:announcement_link, announcement: announcement, label: '古いリンク', url: '/terms', position: 0)
+      sign_in admin
+
+      expect {
+        patch admin_announcement_path(announcement),
+              params: {
+                announcement: announcement_params(
+                  announcement_links_attributes: {
+                    '0' => {
+                      id: announcement.announcement_links.first.id.to_s,
+                      label: '外部',
+                      url: 'https://example.com/news',
+                      position: '0'
+                    },
+                    '1' => { label: '', url: '', position: '1' },
+                    '2' => { label: '', url: '', position: '2' }
+                  }
+                )
+              }
+      }.not_to change(SecurityEvent.where(event_type: 'open_redirect_attempt', matched_rule: 'external_redirect_url'), :count)
+
+      expect(announcement.reload.announcement_links.first.url).to eq('https://example.com/news')
+    end
+  end
+
+  describe 'PATCH /admin/announcements/:id/publish' do
+    it '再認証済みadminがdraftを公開し、AuditLogを残す' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft', title: '公開するお知らせ')
+      create(
+        :announcement_link,
+        announcement: announcement,
+        label: '外部リンク',
+        url: 'https://example.com/news?token=secret#fragment',
+        position: 0
+      )
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect {
+        patch publish_admin_announcement_path(announcement)
+      }.to change(AuditLog, :count).by(1)
+
+      announcement.reload
+      audit_log = AuditLog.last
+      audit_json = audit_log.attributes.slice('metadata', 'before_state', 'after_state').to_json
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.status).to eq('published')
+        expect(announcement.published_at).to be_present
+        expect(announcement.updated_by).to eq(admin)
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          actor_kind: 'admin',
+          action: 'announcement.publish',
+          target_type: 'Announcement',
+          target_id: announcement.id,
+          target_uid: announcement.public_id,
+          outcome: 'succeeded'
+        )
+        expect(audit_log.metadata).to include(
+          'public_id' => announcement.public_id,
+          'title' => '公開するお知らせ',
+          'kind' => announcement.kind,
+          'pinned' => announcement.pinned,
+          'priority' => announcement.priority
+        )
+        expect(audit_log.metadata.dig('links', 0, 'url')).to eq('https://example.com/news')
+        expect(audit_log.before_state).to include('status' => 'draft')
+        expect(audit_log.after_state).to include('status' => 'published')
+        expect(audit_json).not_to include('token=secret', 'fragment')
+      end
+
+      sign_out admin
+
+      get root_path
+
+      expect(response.body).to include('公開するお知らせ')
+
+      get announcement_path(announcement)
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'starts_atが未来なら公開後もLPにはまだ表示しない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft', title: '予約中のお知らせ', starts_at: 1.day.from_now)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      patch publish_admin_announcement_path(announcement)
+
+      announcement.reload
+      sign_out admin
+      get root_path
+
+      aggregate_failures do
+        expect(announcement.status).to eq('published')
+        expect(response.body).not_to include('予約中のお知らせ')
+      end
+    end
+
+    it '未再認証adminは公開できない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft')
+      sign_in admin
+
+      expect {
+        patch publish_admin_announcement_path(announcement)
+      }.not_to change(AuditLog, :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_announcement_path(announcement)))
+        expect(announcement.reload.status).to eq('draft')
+      end
+    end
+
+    it 'non-adminは公開できない' do
+      announcement = create(:announcement, status: 'draft')
+      sign_in create(:user)
+
+      patch publish_admin_announcement_path(announcement)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(announcement.reload.status).to eq('draft')
+      end
+    end
+  end
+
+  describe 'PATCH /admin/announcements/:id/archive' do
+    it '再認証済みadminが公開中のお知らせをアーカイブし、公開面から隠す' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, :published, title: '消えるお知らせ')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect {
+        patch archive_admin_announcement_path(announcement)
+      }.to change(AuditLog, :count).by(1)
+
+      announcement.reload
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_announcement_path(announcement))
+        expect(announcement.status).to eq('archived')
+        expect(announcement.updated_by).to eq(admin)
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'announcement.archive',
+          target_type: 'Announcement',
+          target_id: announcement.id,
+          target_uid: announcement.public_id,
+          outcome: 'succeeded'
+        )
+        expect(audit_log.before_state).to include('status' => 'published')
+        expect(audit_log.after_state).to include('status' => 'archived')
+      end
+
+      sign_out admin
+
+      get root_path
+
+      expect(response.body).not_to include('消えるお知らせ')
+
+      get announcement_path(announcement)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'draftもアーカイブできる' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, status: 'draft')
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      patch archive_admin_announcement_path(announcement)
+
+      expect(announcement.reload.status).to eq('archived')
+    end
+
+    it '未再認証adminはアーカイブできない' do
+      admin = create(:user, :admin)
+      announcement = create(:announcement, :published)
+      sign_in admin
+
+      expect {
+        patch archive_admin_announcement_path(announcement)
+      }.not_to change(AuditLog, :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_announcement_path(announcement)))
+        expect(announcement.reload.status).to eq('published')
       end
     end
   end

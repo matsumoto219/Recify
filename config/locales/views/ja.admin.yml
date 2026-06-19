@@ -25,6 +25,12 @@ ja:
       messages:
         created: お知らせの下書きを作成しました。
         updated: お知らせの下書きを更新しました。
+        published: お知らせを公開しました。
+        archived: お知らせをアーカイブしました。
+        publish_failed: お知らせを公開できませんでした。入力内容を確認してください。
+        archive_failed: お知らせをアーカイブできませんでした。入力内容を確認してください。
+        publish_not_allowed: このお知らせは公開できません。
+        archive_not_allowed: このお知らせはアーカイブできません。
       index:
         title: お知らせ管理
         description: 公開LPに掲載するお知らせを下書きとして作成・編集します。公開操作は別手順で行います。
@@ -73,9 +79,24 @@ ja:
           detail_link: 詳細
       show:
         title: お知らせ詳細
-        readonly_notice: 公開済み・アーカイブ済みのお知らせはこのフォームでは編集できません。
+        readonly_notice: 公開中のお知らせは編集できません。変更が必要な場合は一度アーカイブしてください。
+        archived_notice: アーカイブ済みのお知らせに追加操作はありません。
         actions:
           edit: 編集
+          publish: 公開する
+          archive: アーカイブする
+          reauthenticate: パスキー再認証
+        operations:
+          title: 公開操作
+          description: 公開・アーカイブは公開ページに影響するため、パスキー再認証後に実行してください。関連リンクも公開対象になります。
+          reauthentication_required: この操作にはパスキー再認証が必要です。
+        confirm:
+          publish:
+            title: お知らせを公開しますか？
+            message: 公開条件を満たす場合、LPとお知らせ詳細ページに表示されます。関連リンクも公開されます。
+          archive:
+            title: お知らせをアーカイブしますか？
+            message: アーカイブするとLPと公開お知らせ詳細から表示されなくなります。
         sections:
           content: 内容
           status: 状態

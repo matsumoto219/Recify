@@ -1,5 +1,8 @@
 class Admin::AnnouncementsController < Admin::BaseController
   LINK_FORM_ROWS = 3
+  PUBLISHABLE_STATUS = "draft"
+  ARCHIVABLE_STATUSES = %w[draft published].freeze
+  AUDIT_LINK_LIMIT = 3
 
   def index
     @filters = filter_params
@@ -49,6 +52,69 @@ class Admin::AnnouncementsController < Admin::BaseController
     else
       prepare_link_rows
       render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def publish
+    @announcement = find_announcement
+    return unless ensure_reauthenticated_for_announcement!
+
+    unless @announcement.status == PUBLISHABLE_STATUS
+      redirect_to admin_announcement_path(@announcement),
+                  alert: t("admin.announcements.messages.publish_not_allowed"),
+                  status: :see_other
+      return
+    end
+
+    before_status = @announcement.status
+    @announcement.status = "published"
+    @announcement.published_at ||= Time.current
+    @announcement.updated_by = current_user
+
+    if @announcement.save
+      record_announcement_audit!(
+        action: "announcement.publish",
+        before_status: before_status,
+        after_status: @announcement.status
+      )
+      redirect_to admin_announcement_path(@announcement),
+                  notice: t("admin.announcements.messages.published"),
+                  status: :see_other
+    else
+      redirect_to admin_announcement_path(@announcement),
+                  alert: t("admin.announcements.messages.publish_failed"),
+                  status: :see_other
+    end
+  end
+
+  def archive
+    @announcement = find_announcement
+    return unless ensure_reauthenticated_for_announcement!
+
+    unless ARCHIVABLE_STATUSES.include?(@announcement.status)
+      redirect_to admin_announcement_path(@announcement),
+                  alert: t("admin.announcements.messages.archive_not_allowed"),
+                  status: :see_other
+      return
+    end
+
+    before_status = @announcement.status
+    @announcement.status = "archived"
+    @announcement.updated_by = current_user
+
+    if @announcement.save
+      record_announcement_audit!(
+        action: "announcement.archive",
+        before_status: before_status,
+        after_status: @announcement.status
+      )
+      redirect_to admin_announcement_path(@announcement),
+                  notice: t("admin.announcements.messages.archived"),
+                  status: :see_other
+    else
+      redirect_to admin_announcement_path(@announcement),
+                  alert: t("admin.announcements.messages.archive_failed"),
+                  status: :see_other
     end
   end
 
@@ -118,6 +184,72 @@ class Admin::AnnouncementsController < Admin::BaseController
     return if @announcement.status == "draft"
 
     raise_not_found
+  end
+
+  def ensure_reauthenticated_for_announcement!
+    return true if admin_passkey_reauthenticated?
+
+    redirect_to new_admin_passkey_reauthentication_path(return_to: admin_announcement_path(@announcement)),
+                alert: t("admin.passkey_reauthentications.messages.required"),
+                status: :see_other
+    false
+  end
+
+  def record_announcement_audit!(action:, before_status:, after_status:)
+    AuditLogs.record_admin_action!(
+      actor: current_user,
+      action: action,
+      target: @announcement,
+      target_uid: @announcement.public_id,
+      outcome: "succeeded",
+      request: request,
+      metadata: announcement_audit_metadata,
+      before_state: { status: before_status },
+      after_state: {
+        status: after_status,
+        published_at: @announcement.published_at
+      }
+    )
+  end
+
+  def announcement_audit_metadata
+    {
+      public_id: @announcement.public_id,
+      title: @announcement.title,
+      kind: @announcement.kind,
+      starts_at: @announcement.starts_at,
+      ends_at: @announcement.ends_at,
+      pinned: @announcement.pinned,
+      priority: @announcement.priority,
+      published_at: @announcement.published_at,
+      links: announcement_audit_links
+    }
+  end
+
+  def announcement_audit_links
+    @announcement.announcement_links.sort_by(&:position).first(AUDIT_LINK_LIMIT).map do |link|
+      {
+        position: link.position,
+        label: link.label,
+        external: link.external?,
+        url: sanitized_audit_url(link.url)
+      }
+    end
+  end
+
+  def sanitized_audit_url(value)
+    url = value.to_s
+    uri = URI.parse(url)
+
+    if url.start_with?("/")
+      uri.path.presence || "/"
+    else
+      port = uri.port && uri.port != uri.default_port ? ":#{uri.port}" : ""
+      path = uri.path.presence || "/"
+      "#{uri.scheme}://#{uri.host}#{port}#{path}"
+    end
+  rescue URI::InvalidURIError
+    "[invalid]"
   end
 
   def prepare_link_rows

@@ -92,6 +92,17 @@ RSpec.describe AnnouncementLink, type: :model do
       end
     end
 
+    it 'class methodでも安全なURLと安全な外部URLを判定できる' do
+      aggregate_failures do
+        expect(described_class.safe_url?('/contact')).to be(true)
+        expect(described_class.safe_url?('https://example.com/news')).to be(true)
+        expect(described_class.safe_external_url?('https://example.com/news')).to be(true)
+        expect(described_class.safe_external_url?('/contact')).to be(false)
+        expect(described_class.safe_url?('file:///etc/passwd')).to be(false)
+        expect(described_class.safe_url?('//evil.example.com')).to be(false)
+      end
+    end
+
     it 'positionは0以上の整数にする' do
       negative = build(:announcement_link, position: -1)
       decimal = build(:announcement_link, position: 1.5)
