@@ -76,7 +76,9 @@ export default class extends Controller {
     adjustmentDiscountKinds: { type: String, default: 'receipt_discount,coupon,point_usage,return_refund' },
     adjustmentSurchargeLabel: { type: String, default: 'Surcharge' },
     adjustmentDiscountLabel: { type: String, default: 'Discount' },
-    decimalQuantityUnits: { type: String, default: 'kg,g,mg,L,ml,cc' },
+    countableQuantityUnits: { type: String, default: 'each,item,piece,bag,sheet,unit,box,set' },
+    decimalQuantityUnits: { type: String, default: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
+    defaultQuantityUnit: { type: String, default: 'each' },
     integerQuantityStep: { type: String, default: '1' },
     decimalQuantityStep: { type: String, default: '0.001' },
     receiptTotalAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
@@ -1028,7 +1030,7 @@ export default class extends Controller {
   }
 
   countableQuantityUnits () {
-    return ['個', '点', '本', '袋', '枚', '台', '箱', 'セット']
+    return this.quantityUnitList(this.countableQuantityUnitsValue)
   }
 
   syncQuantityInputSteps () {
@@ -1089,7 +1091,11 @@ export default class extends Controller {
   }
 
   decimalQuantityUnitList () {
-    return this.decimalQuantityUnitsValue
+    return this.quantityUnitList(this.decimalQuantityUnitsValue)
+  }
+
+  quantityUnitList (value) {
+    return String(value ?? '')
       .split(',')
       .map((unit) => unit.trim())
       .filter((unit) => unit !== '')

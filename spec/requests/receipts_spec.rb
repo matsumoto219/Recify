@@ -5798,6 +5798,9 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(form['data-receipt-form-delete-confirmation-enabled-value']).to eq('true')
+        expect(form['data-receipt-form-countable-quantity-units-value']).to eq('each,item,piece,bag,sheet,unit,box,set')
+        expect(form['data-receipt-form-decimal-quantity-units-value']).to eq('gram,kilogram,milligram,liter,milliliter,cubic_centimeter')
+        expect(form['data-receipt-form-default-quantity-unit-value']).to eq('each')
         expect(item_row).to be_present
         expect(item_row['data-action']).to include('mouseenter->receipt-form#scheduleLineTotalTooltip')
         expect(item_row['data-action']).to include('mouseleave->receipt-form#hideLineTotalTooltip')
@@ -6185,11 +6188,14 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       option_values = document.css('select[name$="[quantity_unit_code]"] option').map { |option| option['value'] }.uniq
+      controller_source = Rails.root.join('app/javascript/controllers/receipt_form_controller.js').read
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(option_values).to include('each', 'item', 'piece', 'bag', 'sheet', 'unit', 'box', 'set')
         expect(option_values).to include('kilogram', 'gram', 'milligram', 'liter', 'milliliter', 'cubic_centimeter')
+        expect(controller_source).to include('countableQuantityUnitsValue')
+        expect(controller_source).not_to include("['個', '点', '本', '袋', '枚', '台', '箱', 'セット']")
       end
     end
 

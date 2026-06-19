@@ -61,6 +61,14 @@ class ReceiptFormPresenter
     ReceiptQuantityUnit.decimal_codes.join(",")
   end
 
+  def countable_quantity_units_value
+    ReceiptQuantityUnit.countable_codes.join(",")
+  end
+
+  def default_quantity_unit_value
+    ReceiptQuantityUnit.default_code
+  end
+
   def integer_quantity_step_value
     "1"
   end
