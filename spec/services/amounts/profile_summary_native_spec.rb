@@ -57,10 +57,10 @@ RSpec.describe 'Amounts::ProfileSummary native profile regression' do
         tax_rate: BigDecimal('0.08')
       },
       items: [
-        { price: 271, quantity: 1, quantity_unit: '個', original_line_total: 271, discount_amount: 136, discount_rate: BigDecimal('0.5'), line_total: 135, tax_rate: BigDecimal('0.08') },
-        { price: 489, quantity: 1, quantity_unit: '個', original_line_total: 489, discount_amount: 245, discount_rate: BigDecimal('0.5'), line_total: 244, tax_rate: BigDecimal('0.08') },
-        { price: 432, quantity: 1, quantity_unit: '個', original_line_total: 432, discount_amount: 130, discount_rate: BigDecimal('0.3'), line_total: 302, tax_rate: BigDecimal('0.08') },
-        { price: 3_222, quantity: 1, quantity_unit: '個', original_line_total: 3_222, discount_amount: 0, line_total: 3_222, tax_rate: BigDecimal('0.08') }
+        { price: 271, quantity: 1, quantity_unit_code: 'each', original_line_total: 271, discount_amount: 136, discount_rate: BigDecimal('0.5'), line_total: 135, tax_rate: BigDecimal('0.08') },
+        { price: 489, quantity: 1, quantity_unit_code: 'each', original_line_total: 489, discount_amount: 245, discount_rate: BigDecimal('0.5'), line_total: 244, tax_rate: BigDecimal('0.08') },
+        { price: 432, quantity: 1, quantity_unit_code: 'each', original_line_total: 432, discount_amount: 130, discount_rate: BigDecimal('0.3'), line_total: 302, tax_rate: BigDecimal('0.08') },
+        { price: 3_222, quantity: 1, quantity_unit_code: 'each', original_line_total: 3_222, discount_amount: 0, line_total: 3_222, tax_rate: BigDecimal('0.08') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 3_903, amount: 312 }
@@ -83,7 +83,7 @@ RSpec.describe 'Amounts::ProfileSummary native profile regression' do
     result = native_summary(
       receipt: { subtotal_amount: 1_000, tax_amount: 100, total_amount: 1_100 },
       items: [
-        { price: 1_000, quantity: 1, quantity_unit: '個', line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        { price: 1_000, quantity: 1, quantity_unit_code: 'each', line_total: 1_000, tax_rate: BigDecimal('0.1') }
       ],
       tax_details: [
         { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税' }
@@ -104,7 +104,7 @@ RSpec.describe 'Amounts::ProfileSummary native profile regression' do
     result = native_summary(
       receipt: { subtotal_amount: 1_000, tax_amount: 100, total_amount: 1_101 },
       items: [
-        { price: 1_000, quantity: 1, quantity_unit: '個', line_total: 1_000, tax_rate: BigDecimal('0.1') }
+        { price: 1_000, quantity: 1, quantity_unit_code: 'each', line_total: 1_000, tax_rate: BigDecimal('0.1') }
       ],
       tax_details: [
         { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税' }

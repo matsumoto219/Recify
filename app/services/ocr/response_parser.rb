@@ -1460,7 +1460,6 @@ class Ocr::ResponseParser
         raw_text: raw_text,
         price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
         quantity: value_object.dig("Quantity", "valueNumber"),
-        quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
         quantity_unit_code: quantity_unit_code,
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: line_total,

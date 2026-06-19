@@ -131,7 +131,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
                   raw_text: '保存しない',
                   price: 140,
                   quantity: BigDecimal('1'),
-                  quantity_unit: '個',
+                  quantity_unit_code: 'each',
                   original_line_total: 130,
                   line_total: 140,
                   tax_rate: BigDecimal('0.08')
@@ -161,7 +161,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           {
             'price' => 140,
             'quantity' => '1.0',
-            'quantity_unit' => '個',
+            'quantity_unit_code' => 'each',
             'original_line_total' => 130,
             'line_total' => 140,
             'tax_rate' => '0.08'

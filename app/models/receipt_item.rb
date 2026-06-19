@@ -11,46 +11,9 @@ class ReceiptItem < ApplicationRecord
     other
   ].freeze
 
-  COUNTABLE_QUANTITY_UNITS = %w[
-    個
-    点
-    本
-    袋
-    枚
-    台
-    箱
-    セット
-  ].freeze
-
-  MEASUREMENT_QUANTITY_UNITS = %w[
-    kg
-    g
-    mg
-    L
-    ml
-    cc
-  ].freeze
-
-  INTEGER_QUANTITY_UNITS = [
-    *COUNTABLE_QUANTITY_UNITS,
-    "その他"
-  ].freeze
-
-  DECIMAL_QUANTITY_UNITS = MEASUREMENT_QUANTITY_UNITS
-
-  QUANTITY_UNITS = [
-    *COUNTABLE_QUANTITY_UNITS,
-    *MEASUREMENT_QUANTITY_UNITS,
-    "その他"
-  ].freeze
-
-  DEFAULT_QUANTITY_UNIT = "個"
-
   belongs_to :receipt
 
   attribute :quantity_unit_code, :string, default: -> { ReceiptQuantityUnit.default_code }
-
-  before_validation :sync_legacy_quantity_unit_from_code
 
   scope :needs_review_only, -> { where(needs_review: true) }
 
@@ -100,7 +63,6 @@ class ReceiptItem < ApplicationRecord
   validates :raw_text, length: { maximum: 1000 }, allow_blank: true       # OCR原文テキスト(MAX1000文字)
   validates :suggested_name, length: { maximum: 500 }, allow_blank: true  # AI補完候補名(MAX500文字)
   validates :confirmed_name, length: { maximum: 500 }, allow_blank: true  # ユーザー確定名(MAX500文字)
-  validates :quantity_unit, length: { maximum: 50 }, allow_blank: true    # 数量単位(MAX50文字)
   validates :quantity_unit_code,
             presence: true,
             inclusion: { in: ->(_item) { ReceiptQuantityUnit.allowed_codes } }
@@ -159,12 +121,7 @@ class ReceiptItem < ApplicationRecord
   end
 
   def normalized_quantity_unit_code
-    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
-    code = quantity_unit_code.presence
-
-    return code if code.present? && (code != ReceiptQuantityUnit.default_code || legacy_code.blank?)
-
-    legacy_code.presence || code.presence || ReceiptQuantityUnit.default_code
+    quantity_unit_code.presence || ReceiptQuantityUnit.default_code
   end
 
   def formatted_quantity
@@ -210,21 +167,6 @@ class ReceiptItem < ApplicationRecord
     errors.add(:quantity, :must_be_integer_for_unit) unless decimal.frac.zero?
   rescue ArgumentError
     nil
-  end
-
-  def sync_legacy_quantity_unit_from_code
-    return unless has_attribute?(:quantity_unit)
-    return if quantity_unit_code.blank?
-    return unless ReceiptQuantityUnit.allowed_codes.include?(quantity_unit_code)
-
-    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
-    if legacy_code.present? &&
-       quantity_unit_code == ReceiptQuantityUnit.default_code &&
-       !will_save_change_to_quantity_unit_code?
-      return
-    end
-
-    self.quantity_unit = ReceiptQuantityUnit.legacy_label(quantity_unit_code)
   end
 
   def inferred_discount_rate

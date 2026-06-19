@@ -75,7 +75,6 @@ module Amounts
           :price,
           :quantity,
           :quantity_unit_code,
-          :quantity_unit,
           :original_line_total,
           :line_total,
           :discount_amount,

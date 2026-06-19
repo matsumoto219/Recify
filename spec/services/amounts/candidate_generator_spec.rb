@@ -20,7 +20,7 @@ RSpec.describe Amounts::CandidateGenerator do
         {
           price: 271,
           quantity: 1,
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           line_total: nil,
           discount_rate: BigDecimal('0.5'),
           tax_rate: BigDecimal('0')

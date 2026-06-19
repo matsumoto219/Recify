@@ -39,19 +39,19 @@ RSpec.describe ReceiptItem, type: :model do
   end
 
   describe 'quantity validation' do
-    def build_item(quantity:, quantity_unit:)
+    def build_item(quantity:, quantity_unit_code:)
       build(:receipt).receipt_items.build(
         confirmed_name: '数量確認商品',
         price: 100,
         quantity: quantity,
-        quantity_unit: quantity_unit,
+        quantity_unit_code: quantity_unit_code,
         line_total: 100,
         needs_review: false
       )
     end
 
     it 'integer-only unitでは小数quantityを許可しない' do
-      item = build_item(quantity: BigDecimal('1.1'), quantity_unit: '個')
+      item = build_item(quantity: BigDecimal('1.1'), quantity_unit_code: 'each')
 
       aggregate_failures do
         expect(item).not_to be_valid
@@ -60,32 +60,20 @@ RSpec.describe ReceiptItem, type: :model do
     end
 
     it 'integer-only unitでは整数quantityを許可する' do
-      item = build_item(quantity: BigDecimal('1'), quantity_unit: '個')
+      item = build_item(quantity: BigDecimal('1'), quantity_unit_code: 'each')
 
       expect(item).to be_valid
     end
 
-    it 'その他では小数quantityを許可しない' do
-      item = build_item(quantity: BigDecimal('1.1'), quantity_unit: 'その他')
-
-      expect(item).not_to be_valid
-    end
-
-    it '未知単位では小数quantityを許可しない' do
-      item = build_item(quantity: BigDecimal('1.1'), quantity_unit: '束')
-
-      expect(item).not_to be_valid
-    end
-
     it 'measurement unitでは小数quantityを許可する' do
       aggregate_failures do
-        expect(build_item(quantity: BigDecimal('0.3'), quantity_unit: 'kg')).to be_valid
-        expect(build_item(quantity: BigDecimal('1.25'), quantity_unit: 'ml')).to be_valid
+        expect(build_item(quantity: BigDecimal('0.3'), quantity_unit_code: 'kilogram')).to be_valid
+        expect(build_item(quantity: BigDecimal('1.25'), quantity_unit_code: 'milliliter')).to be_valid
       end
     end
 
     it '負数quantityは引き続き許可しない' do
-      item = build_item(quantity: BigDecimal('-1'), quantity_unit: 'kg')
+      item = build_item(quantity: BigDecimal('-1'), quantity_unit_code: 'kilogram')
 
       expect(item).not_to be_valid
     end
@@ -105,12 +93,12 @@ RSpec.describe ReceiptItem, type: :model do
       expect(item.formatted_quantity_with_unit).to eq('0.300 kg')
     end
 
-    it '既知の旧quantity_unitは一時互換としてcodeへ正規化して表示する' do
+    it 'codeをlocaleラベルへ変換して表示する' do
       item = build(:receipt).receipt_items.build(
         confirmed_name: '旧単位商品',
         price: 100,
         quantity: 1,
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 100,
         needs_review: false
       )
@@ -118,12 +106,12 @@ RSpec.describe ReceiptItem, type: :model do
       expect(item.formatted_quantity_with_unit).to eq('1 kg')
     end
 
-    it '候補外の旧quantity_unitは保持表示せずdefault labelで表示する' do
+    it 'default codeはdefault labelで表示する' do
       item = build(:receipt).receipt_items.build(
         confirmed_name: '未知単位商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '束',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: false
       )

@@ -88,7 +88,7 @@ RSpec.describe 'Receipts', type: :request do
       confirmed_name: "商品#{index}",
       price: 100,
       quantity: 1,
-      quantity_unit: '個',
+      quantity_unit_code: 'each',
       line_total: 100,
       needs_review: false
     }
@@ -152,7 +152,7 @@ RSpec.describe 'Receipts', type: :request do
             raw_text: 'コーヒー',
             price: 180,
             quantity: 1,
-            quantity_unit: '杯',
+            quantity_unit_code: 'each',
             line_total: 180,
             tax_rate: 10,
             confidence: 0.98
@@ -161,7 +161,7 @@ RSpec.describe 'Receipts', type: :request do
             raw_text: 'サンド',
             price: 550,
             quantity: 2,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1100,
             tax_rate: 10,
             confidence: 0.97
@@ -2407,7 +2407,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: 'テスト商品',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 1000,
               needs_review: false
             }
@@ -2522,7 +2522,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '追加商品',
         price: 200,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 200,
         needs_review: false
       }
@@ -2756,7 +2756,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '画像付き商品',
                 price: 1500,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 line_total: 1500,
                 needs_review: false
               }
@@ -2788,7 +2788,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '画像保持OFF商品',
               price: 1500,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 1500,
               needs_review: false
             }
@@ -2821,7 +2821,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '解析しない画像付き商品',
               price: 1800,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 1800,
               needs_review: false
             }
@@ -2887,7 +2887,7 @@ RSpec.describe 'Receipts', type: :request do
                 category: '',
                 price: '',
                 quantity: '1',
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 product_code: '',
                 discount_rate: '',
                 tax_rate: '',
@@ -2923,7 +2923,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '',
                 price: '',
                 quantity: '1',
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 line_total: '0',
                 needs_review: false,
                 _destroy: '1'
@@ -2955,7 +2955,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '保持する商品',
                 price: '120',
                 quantity: '2',
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: '10',
                 line_total: '',
                 needs_review: false
@@ -3086,7 +3086,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 108,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3121,7 +3121,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 108,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3155,7 +3155,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 1000,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -3203,7 +3203,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3250,7 +3250,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3297,7 +3297,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3341,7 +3341,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3378,7 +3378,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1980,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3416,7 +3416,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: nil,
               needs_review: false
             }
@@ -3457,7 +3457,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1000,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: nil,
               needs_review: false
             }
@@ -3498,7 +3498,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 1100,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -3544,7 +3544,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 100,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -3581,7 +3581,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 1000,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -3627,7 +3627,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 1000,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -3672,7 +3672,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 1000,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -3710,7 +3710,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '丸め設定商品',
               price: 999,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: 10.5,
               tax_rate: 10,
               line_total: nil,
@@ -3743,7 +3743,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '割引商品',
               price: 999,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: 10.5,
               tax_rate: 10,
               line_total: nil,
@@ -3781,7 +3781,7 @@ RSpec.describe 'Receipts', type: :request do
                 category: '',
                 price: '',
                 quantity: '1',
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 product_code: '',
                 discount_rate: '',
                 tax_rate: '',
@@ -3815,7 +3815,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '金額未入力商品',
               price: '',
               quantity: '',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: '',
               tax_rate: '',
               line_total: '',
@@ -3847,7 +3847,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '0円商品',
               price: '0',
               quantity: '',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: '',
               tax_rate: '',
               line_total: '0',
@@ -3878,7 +3878,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '0円商品',
               price: '0',
               quantity: '1',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: '',
               tax_rate: '',
               line_total: '1',
@@ -3912,7 +3912,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '0率商品',
               price: '100',
               quantity: '',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: '0',
               tax_rate: '0',
               line_total: nil,
@@ -3944,7 +3944,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '全額割引商品',
               price: 310,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: 100,
               tax_rate: 10,
               line_total: nil,
@@ -3977,7 +3977,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '通常商品',
               price: 310,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: '',
               tax_rate: 10,
               line_total: nil,
@@ -4010,7 +4010,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '不正割引商品',
                 price: 310,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 discount_rate: 100.1,
                 tax_rate: 10,
                 line_total: nil,
@@ -4051,7 +4051,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
         expect(item.quantity_unit_code).to eq('kilogram')
-        expect(item.quantity_unit).to eq('kg')
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.line_total).to eq(4_320)
       end
     end
@@ -4091,7 +4091,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(8_640)
         expect(items.first.quantity).to eq(BigDecimal('0.300'))
         expect(items.first.quantity_unit_code).to eq('kilogram')
-        expect(items.first.quantity_unit).to eq('kg')
+        expect(items.first.quantity_unit_code).to eq('kilogram')
         expect(items.first.line_total).to eq(4_320)
         expect(items.second.line_total).to eq(4_320)
       end
@@ -4154,7 +4154,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).not_to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
         expect(item.quantity_unit_code).to eq('kilogram')
-        expect(item.quantity_unit).to eq('kg')
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.line_total).to eq(0)
       end
     end
@@ -4219,7 +4219,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '軽減税率商品',
               price: 108,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 8,
               line_total: nil,
               needs_review: false
@@ -4228,7 +4228,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '標準税率商品',
               price: 110,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -4260,7 +4260,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '商品A',
                 price: 110,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -4290,7 +4290,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '丸め確認商品',
               price: 108,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -4318,7 +4318,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '商品A',
               price: 110,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -4501,7 +4501,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: 'MIX SWEETS',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -4510,7 +4510,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: 'アウトレット袋S',
         price: 44,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 44,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -4543,7 +4543,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '税率推定ミス商品',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1_000,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -4570,7 +4570,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '軽減税率商品',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1_000,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -4761,12 +4761,12 @@ RSpec.describe 'Receipts', type: :request do
       expect(response.body).to include('テスト店')
     end
 
-    it '明細数量をquantity_unit付きで表示し、unitが空なら個として表示する' do
+    it '明細数量をquantity_unit_codeの表示ラベル付きで表示する' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         needs_review: false
       )
@@ -4774,7 +4774,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '通常商品',
         price: 100,
         quantity: 2,
-        quantity_unit: nil,
+        quantity_unit_code: 'each',
         line_total: 200,
         needs_review: false
       )
@@ -4788,12 +4788,12 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'quantity_unit nil の既存明細は表示上個にfallbackする' do
+    it 'default quantity_unit_code の明細は表示上個にfallbackする' do
       receipt.receipt_items.create!(
         confirmed_name: '単位なし商品',
         price: 100,
         quantity: 2,
-        quantity_unit: nil,
+        quantity_unit_code: 'each',
         line_total: 200,
         needs_review: false
       )
@@ -4806,12 +4806,12 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'quantity_unit が未知単位の場合はdetail表示でdefault単位に整理する' do
+    it '未知単位は保存せずdetail表示ではdefault単位に整理する' do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '束',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: false
       )
@@ -4829,7 +4829,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '割引商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 310,
         discount_amount: 155,
         line_total: 155,
@@ -4851,7 +4851,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '率なし割引商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: nil,
         discount_amount: 155,
         line_total: 155,
@@ -4872,7 +4872,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '通常商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 310,
         discount_amount: 0,
         line_total: 310,
@@ -5427,7 +5427,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '商品A',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1_000,
         tax_rate: BigDecimal('0.1'),
         needs_review: false
@@ -5465,7 +5465,7 @@ RSpec.describe 'Receipts', type: :request do
         category: 'food',
         price: 130,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 130,
         line_total: 140,
         tax_rate: BigDecimal('0.08'),
@@ -5493,7 +5493,7 @@ RSpec.describe 'Receipts', type: :request do
         category: 'daily_goods',
         price: 100,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 100,
         line_total: 110,
         discount_rate: BigDecimal('0.10'),
@@ -5519,7 +5519,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: 'MIX SWEETS',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -5528,7 +5528,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: 'アウトレット袋S',
         price: 44,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 44,
         tax_rate: BigDecimal('0.08'),
         needs_review: false
@@ -5662,7 +5662,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '外税商品A',
         price: 108,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 216,
         needs_review: false
@@ -5671,7 +5671,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '外税商品B',
         price: 3_687,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 3_687,
         needs_review: false
@@ -5727,7 +5727,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '通常商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 310,
         needs_review: false,
         review_reasons: []
@@ -5780,7 +5780,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '接続確認商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         discount_rate: BigDecimal('0.5'),
         original_line_total: 310,
         line_total: 155,
@@ -5932,7 +5932,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: 'warning確認商品',
         price: 0,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 0,
         needs_review: false,
         review_reasons: [ 'zero_amount_item_incomplete' ]
@@ -5970,7 +5970,7 @@ RSpec.describe 'Receipts', type: :request do
           confirmed_name: name,
           price: 100,
           quantity: quantity,
-          quantity_unit: quantity.frac.zero? ? '個' : 'kg',
+          quantity_unit_code: quantity.frac.zero? ? 'each' : 'kilogram',
           line_total: 100,
           needs_review: false
         )
@@ -5993,7 +5993,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '数量未入力商品',
         price: 500,
         quantity: nil,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 500,
         needs_review: false
       )
@@ -6016,7 +6016,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '割引商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 310,
         discount_amount: 155,
         line_total: 155,
@@ -6039,7 +6039,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '割引商品',
         price: 310,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 310,
         needs_review: false
       )
@@ -6061,7 +6061,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '印字済み割引商品',
         price: 999,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         original_line_total: 999,
         discount_rate: BigDecimal('0.105'),
         discount_amount: 104,
@@ -6134,7 +6134,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '量り売り商品',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         needs_review: false
       )
@@ -6199,12 +6199,12 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '未知quantity_unitの既存明細は候補外値を選択肢として保持しない' do
+    it '未知単位は候補外値を選択肢として保持しない' do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '束',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: false
       )
@@ -6310,7 +6310,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '既存商品',
         price: 700,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1400,
         needs_review: false
       )
@@ -6331,7 +6331,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '既存商品',
         price: 700,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 700,
         needs_review: false
       )
@@ -6344,7 +6344,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: item.quantity_unit,
+              quantity_unit_code: item.quantity_unit_code,
               line_total: item.line_total,
               needs_review: false
             },
@@ -6435,7 +6435,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '既存商品',
         price: 1000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1000,
         needs_review: false
@@ -6461,7 +6461,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: item.quantity_unit,
+              quantity_unit_code: item.quantity_unit_code,
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -6499,7 +6499,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '既存商品',
         price: 1000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1000,
         needs_review: false
@@ -6525,7 +6525,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: item.confirmed_name,
                 price: item.price,
                 quantity: item.quantity,
-                quantity_unit: item.quantity_unit,
+                quantity_unit_code: item.quantity_unit_code,
                 tax_rate: 10,
                 line_total: item.line_total,
                 needs_review: false
@@ -6614,7 +6614,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '商品A',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_000,
         needs_review: false
@@ -6630,7 +6630,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: item.quantity_unit,
+              quantity_unit_code: item.quantity_unit_code,
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -6674,7 +6674,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '商品A',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_000,
         needs_review: false
@@ -6690,7 +6690,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: item.quantity_unit,
+              quantity_unit_code: item.quantity_unit_code,
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -6735,7 +6735,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '商品A',
         price: 1_000,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_000,
         needs_review: false
@@ -6751,7 +6751,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: item.quantity_unit,
+              quantity_unit_code: item.quantity_unit_code,
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -7071,7 +7071,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '修正済み商品',
         price: 110,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 110,
         needs_review: false
@@ -7087,7 +7087,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '修正済み商品',
               price: 110,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: 110,
               needs_review: false
@@ -7114,7 +7114,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '修正前商品',
         price: 100,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: false
       )
@@ -7129,7 +7129,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '修正後商品',
               price: 100,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 200,
               needs_review: false
@@ -7154,7 +7154,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '税込商品',
         price: 108,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 108,
         needs_review: false
@@ -7170,7 +7170,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '税込商品',
               price: 108,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 8,
               line_total: 108,
               needs_review: false
@@ -7201,7 +7201,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '税内訳商品',
         price: 108,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 108,
         needs_review: false
@@ -7217,7 +7217,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '税内訳商品',
               price: 108,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 8,
               line_total: 108,
               needs_review: false
@@ -7243,7 +7243,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '0円確認商品',
         price: nil,
         quantity: nil,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 0,
         needs_review: false
       )
@@ -7258,7 +7258,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '0円確認商品',
               price: '',
               quantity: '',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 0,
               needs_review: false
@@ -7283,7 +7283,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '未確定商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: true,
         review_reasons: [ 'item_name_uncertain' ]
@@ -7299,7 +7299,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '確認済み商品',
               price: 100,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 100,
               needs_review: true,
@@ -7327,7 +7327,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '単体確認商品',
         price: 300,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 300,
         needs_review: false
       )
@@ -7342,7 +7342,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '単体確認商品',
               price: 300,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 300,
               needs_review: false
@@ -7366,7 +7366,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '未確認商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: true,
         review_reasons: [ 'item_name_uncertain' ]
@@ -7382,7 +7382,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '未確認商品',
               price: 100,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 100,
               needs_review: true,
@@ -7455,7 +7455,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '1円商品',
         price: 1,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1,
         needs_review: false
       )
@@ -7470,7 +7470,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '0円商品',
               price: 0,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: '',
               line_total: 1,
               needs_review: false
@@ -7506,7 +7506,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '1円商品',
         price: 1,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 1,
         needs_review: false
       )
@@ -7521,7 +7521,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 1,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 1,
               needs_review: false,
               _destroy: '1'
@@ -7561,7 +7561,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '税込商品',
         price: 110,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 110,
         needs_review: false
@@ -7583,7 +7583,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 110,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: 110,
               needs_review: false,
@@ -7624,7 +7624,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '解析商品',
         price: 1_280,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_280,
         needs_review: false
@@ -7646,7 +7646,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 1_280,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: 1_280,
               needs_review: false,
@@ -7679,7 +7679,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '丸め設定更新前',
         price: 108,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 108,
         needs_review: false
@@ -7700,7 +7700,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '丸め設定更新後商品',
               price: 108,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -7737,11 +7737,11 @@ RSpec.describe 'Receipts', type: :request do
         }
       )
       items = [
-        receipt.receipt_items.create!(confirmed_name: '手巻おにぎり辛子明太子', category: 'food', price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 0),
-        receipt.receipt_items.create!(confirmed_name: '炭酸飲料 500ml', category: 'drink', price: 151, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 1),
-        receipt.receipt_items.create!(confirmed_name: 'ネイルカラー サンプルPK', category: 'daily_goods', price: 330, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 2),
-        receipt.receipt_items.create!(confirmed_name: '雑貨A', category: 'other', price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 3),
-        receipt.receipt_items.create!(confirmed_name: '50円切手', category: 'other', price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0'), needs_review: false, position_index: 4)
+        receipt.receipt_items.create!(confirmed_name: '手巻おにぎり辛子明太子', category: 'food', price: 140, quantity: 1, quantity_unit_code: 'each', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 0),
+        receipt.receipt_items.create!(confirmed_name: '炭酸飲料 500ml', category: 'drink', price: 151, quantity: 1, quantity_unit_code: 'each', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08'), needs_review: false, position_index: 1),
+        receipt.receipt_items.create!(confirmed_name: 'ネイルカラー サンプルPK', category: 'daily_goods', price: 330, quantity: 1, quantity_unit_code: 'each', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 2),
+        receipt.receipt_items.create!(confirmed_name: '雑貨A', category: 'other', price: 490, quantity: 1, quantity_unit_code: 'each', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10'), needs_review: false, position_index: 3),
+        receipt.receipt_items.create!(confirmed_name: '50円切手', category: 'other', price: 50, quantity: 1, quantity_unit_code: 'each', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0'), needs_review: false, position_index: 4)
       ]
       adjustment = receipt.receipt_adjustments.create!(
         kind: 'receipt_discount',
@@ -7767,7 +7767,7 @@ RSpec.describe 'Receipts', type: :request do
                 category: item.category,
                 price: item.price,
                 quantity: 1,
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: item.tax_rate.to_d * 100,
                 line_total: item.line_total,
                 needs_review: false
@@ -7820,7 +7820,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '外税商品A',
         price: 108,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 216,
         needs_review: false
@@ -7829,7 +7829,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '外税商品B',
         price: 3_687,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.08'),
         line_total: 3_687,
         needs_review: false
@@ -7851,7 +7851,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item_a.confirmed_name,
               price: 108,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 8,
               line_total: 216,
               needs_review: false
@@ -7861,7 +7861,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item_b.confirmed_name,
               price: 3_687,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 8,
               line_total: 3_687,
               needs_review: false
@@ -7889,7 +7889,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '割引更新前商品',
         price: 300,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 600,
         needs_review: false
@@ -7905,7 +7905,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '割引更新後商品',
               price: 300,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               discount_rate: 50,
               tax_rate: 10,
               line_total: nil,
@@ -7933,7 +7933,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '更新前量り売り商品',
         price: 100,
         quantity: 1,
-        quantity_unit: nil,
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 100,
         needs_review: false
@@ -7966,7 +7966,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.total_amount).to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
         expect(item.quantity_unit_code).to eq('kilogram')
-        expect(item.quantity_unit).to eq('kg')
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.line_total).to eq(4_320)
       end
     end
@@ -7976,7 +7976,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '単位だけ変更する商品',
         price: 9_999,
         quantity: 9,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 200,
         needs_review: false
@@ -8007,7 +8007,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(item.quantity_unit_code).to eq('kilogram')
-        expect(item.quantity_unit).to eq('kg')
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.line_total).to eq(200)
         expect(receipt.total_amount).to eq(200)
       end
@@ -8018,7 +8018,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '個数商品',
         price: 500,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_000,
         needs_review: false
@@ -8058,7 +8058,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '数量空欄更新商品',
         price: 500,
         quantity: 2,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 1_000,
         needs_review: false
@@ -8097,7 +8097,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '量り売り商品',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         tax_rate: BigDecimal('0.1'),
         line_total: 4_320,
         needs_review: false
@@ -8168,7 +8168,6 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(item.quantity_unit_code).to eq('each')
-        expect(item.quantity_unit).to eq('個')
         expect(item.line_total).to eq(100)
       end
     end

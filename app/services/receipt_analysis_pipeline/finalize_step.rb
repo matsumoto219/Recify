@@ -1772,7 +1772,7 @@ class ReceiptAnalysisPipeline
         line_total = normalize_amount(symbolized[:line_total])
         discount_amount = normalize_amount(symbolized[:discount_amount])
         next if [ price, original_line_total, line_total, discount_amount ].compact.any?(&:negative?)
-        quantity_unit_code = ReceiptQuantityUnit.normalize(symbolized[:quantity_unit_code].presence || symbolized[:quantity_unit])
+        quantity_unit_code = ReceiptQuantityUnit.normalize(symbolized[:quantity_unit_code])
 
         {
           raw_text: symbolized[:raw_text].to_s,
@@ -1782,7 +1782,6 @@ class ReceiptAnalysisPipeline
           price: price,
           quantity: normalize_quantity(symbolized[:quantity]),
           quantity_unit_code: quantity_unit_code,
-          quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
           product_code: symbolized[:product_code].presence,
           tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
           original_line_total: original_line_total,

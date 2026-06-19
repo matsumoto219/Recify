@@ -5,9 +5,7 @@ module Amounts
     private
 
     def normalized_quantity_unit_code_for(item)
-      ReceiptQuantityUnit.normalize(
-        fetch_value(item, :quantity_unit_code).presence || fetch_value(item, :quantity_unit)
-      )
+      ReceiptQuantityUnit.normalize(fetch_value(item, :quantity_unit_code))
     end
 
     def countable_quantity_unit_for_item?(item)
@@ -16,10 +14,9 @@ module Amounts
 
     def default_or_countable_quantity_unit_for_item?(item)
       quantity_unit_code = fetch_value(item, :quantity_unit_code)
-      quantity_unit = fetch_value(item, :quantity_unit)
-      return true if quantity_unit_code.blank? && quantity_unit.blank?
+      return true if quantity_unit_code.blank?
 
-      ReceiptQuantityUnit.countable?(quantity_unit_code.presence || quantity_unit)
+      ReceiptQuantityUnit.countable?(quantity_unit_code)
     end
   end
 end

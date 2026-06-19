@@ -650,10 +650,7 @@ module Analysis
 
           raw_text = normalized_item[:raw_text].to_s
           quantity = normalize_quantity(normalized_item[:quantity])
-          quantity_unit_code = normalize_quantity_unit_code(
-            normalized_item[:quantity_unit_code].presence || normalized_item[:quantity_unit]
-          )
-          quantity_unit = ReceiptQuantityUnit.legacy_label(quantity_unit_code)
+          quantity_unit_code = normalize_quantity_unit_code(normalized_item[:quantity_unit_code])
           quantity_fraction_invalid = integer_quantity_fraction?(quantity, quantity_unit_code)
           quantity = BigDecimal("1") if quantity_fraction_invalid
           discount_amount = normalize_amount(normalized_item[:discount_amount])
@@ -706,7 +703,6 @@ module Analysis
             discount_rate: normalize_rate(normalized_item[:discount_rate]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit_code
             quantity_unit_code: quantity_unit_code,
-            quantity_unit: quantity_unit,
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
@@ -2325,7 +2321,6 @@ module Analysis
           discount_rate: amount_item[:discount_rate],
           quantity: name_item[:quantity].presence || amount_item[:quantity],
           quantity_unit_code: quantity_unit_code,
-          quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
           product_code: name_item[:product_code].presence || amount_item[:product_code],
           tax_rate: name_item[:tax_rate].presence || amount_item[:tax_rate],
           tax_rate_confidence: name_item[:tax_rate_confidence].presence || amount_item[:tax_rate_confidence],
@@ -2638,7 +2633,6 @@ module Analysis
             needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
             review_reasons: ai_item[:review_reasons].presence || candidate_item[:review_reasons],
             quantity_unit_code: quantity_unit_code,
-            quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
             tax_rate_confidence: ai_item[:tax_rate_confidence],
@@ -2728,7 +2722,6 @@ module Analysis
             price: price,
             quantity: quantity,
             quantity_unit_code: ReceiptQuantityUnit.default_code,
-            quantity_unit: ReceiptQuantityUnit.legacy_label(ReceiptQuantityUnit.default_code),
             product_code: nil,
             tax_rate: nil,
             original_line_total: extract_item_line_total(line, price:, quantity:),
@@ -3077,8 +3070,8 @@ module Analysis
       end
 
       def merged_quantity_unit_code(primary_item, fallback_item)
-        primary = primary_item[:quantity_unit_code].presence || primary_item[:quantity_unit]
-        fallback = fallback_item[:quantity_unit_code].presence || fallback_item[:quantity_unit]
+        primary = primary_item[:quantity_unit_code]
+        fallback = fallback_item[:quantity_unit_code]
 
         normalize_quantity_unit_code(primary.presence || fallback)
       end

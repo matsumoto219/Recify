@@ -125,7 +125,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+          { price: 250, quantity: 2, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') }
         ]
       )
 
@@ -152,7 +152,6 @@ RSpec.describe ReceiptAmountService do
 
       aggregate_failures do
         expect(item[:quantity_unit_code]).to eq('each')
-        expect(item[:quantity_unit]).to eq('個')
         expect(item[:line_total]).to eq(500)
         expect(result[:resolved]).to include(subtotal: 500, tax: 0, total: 500)
       end
@@ -162,8 +161,8 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 250, quantity: nil, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') },
-          { price: 300, quantity: 0, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+          { price: 250, quantity: nil, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') },
+          { price: 300, quantity: 0, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') }
         ]
       )
 
@@ -181,8 +180,8 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil, tax_rate: BigDecimal('0') },
-          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '束', line_total: nil, tax_rate: BigDecimal('0') }
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: nil, tax_rate: BigDecimal('0') },
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') }
         ]
       )
 
@@ -199,7 +198,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 4_320, tax_rate: BigDecimal('0') }
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: 4_320, tax_rate: BigDecimal('0') }
         ]
       )
 
@@ -217,7 +216,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 999, quantity: 1, quantity_unit: '個', discount_rate: BigDecimal('0.105'), line_total: nil, tax_rate: BigDecimal('0') }
+          { price: 999, quantity: 1, quantity_unit_code: 'each', discount_rate: BigDecimal('0.105'), line_total: nil, tax_rate: BigDecimal('0') }
         ],
         context: :manual
       )
@@ -242,7 +241,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 271,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: nil,
             discount_rate: BigDecimal('0.5'),
             tax_rate: BigDecimal('0')
@@ -266,7 +265,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 300, quantity: 2, quantity_unit: '個', original_line_total: 600, discount_amount: 300, line_total: 300, tax_rate: BigDecimal('0') }
+          { price: 300, quantity: 2, quantity_unit_code: 'each', original_line_total: 600, discount_amount: 300, line_total: 300, tax_rate: BigDecimal('0') }
         ]
       )
 
@@ -285,7 +284,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0') }
+          { price: 140, quantity: 1, quantity_unit_code: 'each', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0') }
         ],
         context: :manual
       )
@@ -398,7 +397,7 @@ RSpec.describe ReceiptAmountService do
           tax_rate: 0
         },
         receipt_items: [
-          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0') }
+          { price: 250, quantity: 2, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0') }
         ],
         context: :manual
       )
@@ -615,7 +614,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 300, quantity: 2, quantity_unit: '個', line_total: 500, tax_rate: BigDecimal('0.1') }
+          { price: 300, quantity: 2, quantity_unit_code: 'each', line_total: 500, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -734,7 +733,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -972,11 +971,11 @@ RSpec.describe ReceiptAmountService do
           tax_amount: 95
         },
         receipt_items: [
-          { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
-          { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
-          { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.1') },
-          { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.1') },
-          { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
+          { price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: BigDecimal('0.08') },
+          { price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: BigDecimal('0.08') },
+          { price: 300, quantity: 1, quantity_unit_code: 'each', line_total: 300, tax_rate: BigDecimal('0.1') },
+          { price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: BigDecimal('0.1') },
+          { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
         ],
         receipt_tax_details: [
           { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
@@ -1105,7 +1104,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 999,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_rate: BigDecimal('0.105'),
             line_total: nil,
             tax_rate: BigDecimal('0.1')
@@ -1120,7 +1119,7 @@ RSpec.describe ReceiptAmountService do
           total_amount: 1_100
         },
         receipt_items: [
-          { price: 1_000, quantity: 1, quantity_unit: '個', line_total: 1_000, tax_rate: BigDecimal('0.1') }
+          { price: 1_000, quantity: 1, quantity_unit_code: 'each', line_total: 1_000, tax_rate: BigDecimal('0.1') }
         ],
         receipt_tax_details: [
           { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100, description: '外税' }
@@ -1819,11 +1818,11 @@ RSpec.describe ReceiptAmountService do
             tax_amount: 95
           },
           receipt_items: [
-            { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') },
-            { price: 151, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08') },
-            { price: 330, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10') },
-            { price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
-            { price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
+            { price: 140, quantity: 1, quantity_unit_code: 'each', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') },
+            { price: 151, quantity: 1, quantity_unit_code: 'each', original_line_total: 140, line_total: 151, tax_rate: BigDecimal('0.08') },
+            { price: 330, quantity: 1, quantity_unit_code: 'each', original_line_total: 300, line_total: 330, tax_rate: BigDecimal('0.10') },
+            { price: 490, quantity: 1, quantity_unit_code: 'each', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
+            { price: 50, quantity: 1, quantity_unit_code: 'each', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
           ],
           receipt_adjustments: [
             { kind: 'receipt_discount', label: 'キャッシュレス還元額', sign: 'discount', amount: 22 }
@@ -2048,7 +2047,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 250, quantity: 2, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+          { price: 250, quantity: 2, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -2065,7 +2064,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 250, quantity: nil, quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+          { price: 250, quantity: nil, quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0.1') }
         ],
         context: :manual
       )
@@ -2086,7 +2085,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 300,
             quantity: 2,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 600,
             discount_amount: 300,
             line_total: 300,
@@ -2115,7 +2114,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 999,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_rate: BigDecimal('0.105'),
             line_total: nil,
             tax_rate: BigDecimal('0.1')
@@ -2141,7 +2140,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 310,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_amount: '',
             discount_rate: '',
             line_total: nil,
@@ -2169,7 +2168,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 310,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_amount: 0,
             discount_rate: '',
             line_total: nil,
@@ -2198,7 +2197,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 271,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 271,
             discount_amount: 136,
             discount_rate: BigDecimal('0.5'),
@@ -2231,7 +2230,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 271,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 271,
             discount_amount: 136,
             discount_rate: BigDecimal('0.5'),
@@ -2241,7 +2240,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 489,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 489,
             discount_amount: 245,
             discount_rate: BigDecimal('0.5'),
@@ -2251,7 +2250,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 432,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 432,
             discount_amount: 130,
             discount_rate: BigDecimal('0.3'),
@@ -2261,7 +2260,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 3_222,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 3_222,
             discount_amount: 0,
             line_total: 3_222,
@@ -2308,9 +2307,9 @@ RSpec.describe ReceiptAmountService do
           tax_rate: BigDecimal('0.08')
         },
         receipt_items: [
-          { price: 108, quantity: 2, quantity_unit: '個', line_total: 216, tax_rate: BigDecimal('0.08') },
-          { price: 271, quantity: 1, quantity_unit: '個', original_line_total: 271, discount_amount: 136, discount_rate: BigDecimal('0.5'), line_total: 135, tax_rate: BigDecimal('0.08') },
-          { price: 3_552, quantity: 1, quantity_unit: '個', line_total: 3_552, tax_rate: BigDecimal('0.08') }
+          { price: 108, quantity: 2, quantity_unit_code: 'each', line_total: 216, tax_rate: BigDecimal('0.08') },
+          { price: 271, quantity: 1, quantity_unit_code: 'each', original_line_total: 271, discount_amount: 136, discount_rate: BigDecimal('0.5'), line_total: 135, tax_rate: BigDecimal('0.08') },
+          { price: 3_552, quantity: 1, quantity_unit_code: 'each', line_total: 3_552, tax_rate: BigDecimal('0.08') }
         ],
         receipt_tax_details: [
           { rate: BigDecimal('0.08'), net_amount: 3_903, amount: 312, description: '8%対象' }
@@ -2340,7 +2339,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 999,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_rate: BigDecimal('0.105'),
             line_total: nil,
             tax_rate: BigDecimal('0.1')
@@ -2367,7 +2366,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -2401,7 +2400,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -2449,7 +2448,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -2492,7 +2491,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -2625,7 +2624,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 1_000,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1_000,
             tax_rate: BigDecimal('0.1')
           }
@@ -2656,7 +2655,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 310,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             discount_rate: 100,
             line_total: nil,
             tax_rate: BigDecimal('0.1')
@@ -2682,7 +2681,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 0,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 0,
             tax_rate: BigDecimal('0.1')
           }
@@ -2712,7 +2711,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 0,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 1,
             tax_rate: BigDecimal('0.1')
           }
@@ -2738,7 +2737,7 @@ RSpec.describe ReceiptAmountService do
           {
             price: 310,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             original_line_total: 310,
             discount_amount: 155,
             line_total: 155,
@@ -2761,7 +2760,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -2778,7 +2777,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: '0,300', line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
+          { price: 14_400, quantity: '0,300', line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'each' }
         ],
         context: :analysis
       )
@@ -2794,7 +2793,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: 'kg' }
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'kilogram' }
         ],
         context: :analysis
       )
@@ -2811,7 +2810,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), line_total: 4_320, tax_rate: BigDecimal('0.1'), quantity_unit: 'kg' }
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: 4_320, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'kilogram' }
         ],
         context: :analysis
       )
@@ -2828,7 +2827,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '束' }
+          { price: 14_400, quantity: BigDecimal('0.300'), line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'each' }
         ],
         context: :analysis
       )
@@ -2846,7 +2845,7 @@ RSpec.describe ReceiptAmountService do
           total_amount: '5,000'
         },
         receipt_items: [
-          { price: '1,234', quantity: 2, line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit: '個' },
+          { price: '1,234', quantity: 2, line_total: nil, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'each' },
           { price: nil, quantity: 1, line_total: '4,320', tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
@@ -2875,7 +2874,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 300, quantity: 2, line_total: 500, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
+          { price: 300, quantity: 2, line_total: 500, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'each' }
         ],
         context: :analysis
       )
@@ -2891,7 +2890,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 500, tax_rate: BigDecimal('0.1') }
+          { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: 500, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -2907,7 +2906,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 300, quantity: 2, quantity_unit: '束', line_total: 500, tax_rate: BigDecimal('0.1') }
+          { price: 300, quantity: 2, quantity_unit_code: 'each', line_total: 500, tax_rate: BigDecimal('0.1') }
         ],
         context: :analysis
       )
@@ -2923,7 +2922,7 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {},
         receipt_items: [
-          { price: 100, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.1'), quantity_unit: '個' }
+          { price: 100, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.1'), quantity_unit_code: 'each' }
         ],
         context: :analysis
       )

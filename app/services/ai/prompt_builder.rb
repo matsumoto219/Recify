@@ -168,7 +168,7 @@ module Ai
         raw_text: raw_text,
         price: normalize_number(fetch(item, :price)),
         quantity: normalize_number(fetch(item, :quantity)),
-        quantity_unit_code: ReceiptQuantityUnit.normalize(fetch(item, :quantity_unit_code).presence || fetch(item, :quantity_unit)),
+        quantity_unit_code: ReceiptQuantityUnit.normalize(fetch(item, :quantity_unit_code)),
         line_total: normalize_number(fetch(item, :line_total) || fetch(item, :total_price)),
         tax_rate: normalize_tax_rate(fetch(item, :tax_rate)),
         product_code: fetch(item, :product_code),

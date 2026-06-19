@@ -20,11 +20,11 @@ RSpec.describe 'Amount Engine integration' do
         total_amount: 1_515
       },
       items: [
-        { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
-        { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
-        { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.10') },
-        { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.10') },
-        { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
+        { price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit_code: 'each', line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
@@ -78,11 +78,11 @@ RSpec.describe 'Amount Engine integration' do
         total_amount: 1_161
       },
       items: [
-        { price: 130, quantity: 1, quantity_unit: '個', line_total: 130, tax_rate: BigDecimal('0.08') },
-        { price: 140, quantity: 1, quantity_unit: '個', line_total: 140, tax_rate: BigDecimal('0.08') },
-        { price: 300, quantity: 1, quantity_unit: '個', line_total: 300, tax_rate: BigDecimal('0.10') },
-        { price: 490, quantity: 1, quantity_unit: '個', line_total: 490, tax_rate: BigDecimal('0.10') },
-        { price: 50, quantity: 1, quantity_unit: '個', line_total: 50, tax_rate: BigDecimal('0') }
+        { price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit_code: 'each', line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '消費税等' },
@@ -142,11 +142,11 @@ RSpec.describe 'Amount Engine integration' do
         total_amount: 1_515
       },
       items: [
-        { price: 130, quantity: 1, quantity_unit: '個', original_line_total: 130, line_total: 130, tax_rate: BigDecimal('0.08') },
-        { price: 140, quantity: 1, quantity_unit: '個', original_line_total: 140, line_total: 140, tax_rate: BigDecimal('0.08') },
-        { price: 300, quantity: 1, quantity_unit: '個', original_line_total: 300, line_total: 300, tax_rate: BigDecimal('0.10') },
-        { price: 490, quantity: 1, quantity_unit: '個', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
-        { price: 50, quantity: 1, quantity_unit: '個', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
+        { price: 130, quantity: 1, quantity_unit_code: 'each', original_line_total: 130, line_total: 130, tax_rate: BigDecimal('0.08') },
+        { price: 140, quantity: 1, quantity_unit_code: 'each', original_line_total: 140, line_total: 140, tax_rate: BigDecimal('0.08') },
+        { price: 300, quantity: 1, quantity_unit_code: 'each', original_line_total: 300, line_total: 300, tax_rate: BigDecimal('0.10') },
+        { price: 490, quantity: 1, quantity_unit_code: 'each', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit_code: 'each', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
       ],
       tax_details: [
         { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
@@ -222,7 +222,7 @@ RSpec.describe 'Amount Engine integration' do
       result = call_amount_engine(
         receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
         items: [
-          { price: 100, quantity: 2, quantity_unit: '個', line_total: 200, tax_rate: BigDecimal('0.10') }
+          { price: 100, quantity: 2, quantity_unit_code: 'each', line_total: 200, tax_rate: BigDecimal('0.10') }
         ],
         payments: [
           { method: 'cash', amount: 220 }
@@ -268,7 +268,7 @@ RSpec.describe 'Amount Engine integration' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
       items: [
-        { price: 100, quantity: 2, quantity_unit: '個', line_total: 200, tax_rate: BigDecimal('0.10') }
+        { price: 100, quantity: 2, quantity_unit_code: 'each', line_total: 200, tax_rate: BigDecimal('0.10') }
       ],
       payments: [
         { method: 'cash', amount: 220 }
@@ -290,7 +290,7 @@ RSpec.describe 'Amount Engine integration' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 100, tax_amount: 10, total_amount: 110 },
       items: [
-        { price: 100, quantity: 1, quantity_unit: '個', line_total: 100, discount_rate: BigDecimal('0.10'), tax_rate: BigDecimal('0.10') }
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, discount_rate: BigDecimal('0.10'), tax_rate: BigDecimal('0.10') }
       ],
       payments: [
         { method: 'cash', amount: 110 }

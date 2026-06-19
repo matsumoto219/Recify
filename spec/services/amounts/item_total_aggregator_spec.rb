@@ -31,7 +31,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'fills line_total from price multiplied by quantity when line_total is absent' do
     result = aggregate([
-      { price: 250, quantity: 2, quantity_unit: '個', line_total: nil }
+      { price: 250, quantity: 2, quantity_unit_code: 'each', line_total: nil }
     ])
 
     aggregate_failures do
@@ -55,7 +55,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'fills line_total from price multiplied by decimal quantity when line_total is absent' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '個', line_total: nil }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'each', line_total: nil }
     ])
 
     aggregate_failures do
@@ -68,7 +68,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'keeps original_line_total as the pre-discount row total and line_total as the discounted row total' do
     result = aggregate([
-      { price: nil, quantity: 2, quantity_unit: '個', original_line_total: 600, discount_amount: 300, line_total: 300 }
+      { price: nil, quantity: 2, quantity_unit_code: 'each', original_line_total: 600, discount_amount: 300, line_total: 300 }
     ])
 
     aggregate_failures do
@@ -83,7 +83,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
     result = aggregate(
       [
         {
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           original_line_total: 271,
           discount_amount: 136,
           discount_rate: BigDecimal('0.5'),
@@ -104,7 +104,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
     result = aggregate(
       [
         {
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           original_line_total: 271,
           discount_amount: 135,
           discount_rate: BigDecimal('0.5'),
@@ -125,7 +125,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
     result = aggregate(
       [
         {
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           original_line_total: 310,
           discount_amount: 155,
           discount_rate: '',
@@ -147,7 +147,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
     result = aggregate(
       [
         {
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           original_line_total: 310,
           discount_amount: 0,
           amount_discount_amount_present: true,
@@ -172,7 +172,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
         {
           price: 140,
           quantity: 1,
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           original_line_total: 130,
           line_total: 140,
           tax_rate: BigDecimal('0.08')
@@ -191,7 +191,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'parses decimal comma quantity as decimal when filling line_total' do
     result = aggregate([
-      { price: 14_400, quantity: '0,300', quantity_unit: '個', line_total: nil }
+      { price: 14_400, quantity: '0,300', quantity_unit_code: 'each', line_total: nil }
     ])
 
     aggregate_failures do
@@ -203,7 +203,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'parses comma separated amount strings as yen amounts' do
     result = aggregate([
-      { price: '1,234', quantity: 2, quantity_unit: '個', line_total: nil }
+      { price: '1,234', quantity: 2, quantity_unit_code: 'each', line_total: nil }
     ])
 
     aggregate_failures do
@@ -214,7 +214,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'does not fill line_total for measurement unit when line_total is absent' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: nil }
     ])
 
     aggregate_failures do
@@ -240,7 +240,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'keeps explicit line_total for measurement unit' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 4_320 }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: 4_320 }
     ])
 
     aggregate_failures do
@@ -253,7 +253,7 @@ RSpec.describe Amounts::ItemTotalAggregator do
 
   it 'normalizes unknown unit to the default code before filling line_total' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '束', line_total: nil }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'each', line_total: nil }
     ])
 
     aggregate_failures do

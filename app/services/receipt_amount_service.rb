@@ -501,7 +501,7 @@ class ReceiptAmountService
     original_line_total = fetch_value(i, :original_line_total)
     line_total = fetch_value(i, :line_total)
     discount_amount = fetch_value(i, :discount_amount)
-    quantity_unit_code = ReceiptQuantityUnit.normalize(fetch_value(i, :quantity_unit_code).presence || fetch_value(i, :quantity_unit))
+    quantity_unit_code = ReceiptQuantityUnit.normalize(fetch_value(i, :quantity_unit_code))
 
     {
       price: to_i_or_nil(price),
@@ -511,7 +511,6 @@ class ReceiptAmountService
       discount_amount: to_i_or_nil(discount_amount),
       discount_rate: fetch_value(i, :discount_rate),
       quantity_unit_code: quantity_unit_code,
-      quantity_unit: ReceiptQuantityUnit.legacy_label(quantity_unit_code),
       tax_rate: fetch_value(i, :tax_rate),
       amount_price_present: value_present?(price),
       amount_quantity_present: value_present?(quantity),

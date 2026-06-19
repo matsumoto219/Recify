@@ -811,7 +811,6 @@ class ReceiptsController < ApplicationController
 
       code ||= raw_code.to_s
       item_attributes["quantity_unit_code"] = code
-      item_attributes["quantity_unit"] = ReceiptQuantityUnit.legacy_label(code) if ReceiptQuantityUnit.allowed_codes.include?(code)
     end
   end
 

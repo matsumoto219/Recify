@@ -296,7 +296,7 @@ RSpec.describe Receipt, type: :model do
           confirmed_name: item_name,
           category: "food",
           quantity: 1,
-          quantity_unit: "個",
+          quantity_unit_code: "each",
           price: total_amount,
           line_total: total_amount,
           position_index: 1

@@ -58,7 +58,7 @@ ja:
         category: カテゴリ
         price: 価格
         quantity: 数量
-        quantity_unit: 単位
+        quantity_unit_code: 単位
         line_total: 明細小計
         needs_review: 要確認
         position_index: 表示順

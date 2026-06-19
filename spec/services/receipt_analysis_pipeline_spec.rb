@@ -86,7 +86,7 @@ RSpec.describe ReceiptAnalysisPipeline do
             raw_text: 'コーヒー',
             price: 180,
             quantity: 1,
-            quantity_unit: '杯',
+            quantity_unit_code: 'each',
             product_code: 'C001',
             line_total: 180,
             tax_rate: 10,
@@ -96,7 +96,7 @@ RSpec.describe ReceiptAnalysisPipeline do
             raw_text: 'サンド',
             price: 550,
             quantity: 2,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             product_code: 'S001',
             line_total: 1100,
             tax_rate: 10,
@@ -1958,7 +1958,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               raw_text: '商品A',
               price: 4_800,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 4_800,
               tax_rate: 8,
               confidence: 0.95
@@ -1984,7 +1984,7 @@ RSpec.describe ReceiptAnalysisPipeline do
             category: 'food',
             price: 4_800,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 4_800,
             tax_rate: 0.08,
             needs_review: false,
@@ -2067,7 +2067,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               raw_text: '駐車券自家用車等',
               price: 500,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               line_total: 500,
               tax_rate: 10,
               confidence: 0.95
@@ -2093,7 +2093,7 @@ RSpec.describe ReceiptAnalysisPipeline do
             category: 'other',
             price: 500,
             quantity: 1,
-            quantity_unit: '個',
+            quantity_unit_code: 'each',
             line_total: 500,
             tax_rate: 0.1,
             needs_review: false,
@@ -2138,7 +2138,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           raw_text: '手巻おにぎり辛子明太子',
           price: 130,
           quantity: 1,
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           line_total: 130,
           tax_rate: 8,
           confidence: 0.95
@@ -2152,7 +2152,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           category: 'food',
           price: 130,
           quantity: 1,
-          quantity_unit: '個',
+          quantity_unit_code: 'each',
           line_total: 130,
           tax_rate: 8,
           needs_review: false,
@@ -2170,7 +2170,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               {
                 price: 140,
                 quantity: BigDecimal('1'),
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 original_line_total: 130,
                 line_total: 140,
                 tax_rate: BigDecimal('0.08')
@@ -2198,7 +2198,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               purchase_total: 140,
               final_payment_total: 140,
               computed_items: [
-                { price: 140, quantity: BigDecimal('1'), quantity_unit: '個', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') }
+                { price: 140, quantity: BigDecimal('1'), quantity_unit_code: 'each', original_line_total: 130, line_total: 140, tax_rate: BigDecimal('0.08') }
               ]
             }
           }
@@ -2252,7 +2252,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               raw_text: '手巻おにぎり辛子明太子',
               price: 130,
               quantity: 1,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               original_line_total: 130,
               line_total: 130,
               tax_rate: 8,
@@ -4025,7 +4025,7 @@ RSpec.describe ReceiptAnalysisPipeline do
               raw_text: 'MIX SWEETS',
               price: 14_400,
               quantity: BigDecimal('0.300'),
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               line_total: 4_320,
               tax_rate: 8,
               confidence: 0.95

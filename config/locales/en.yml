@@ -30,7 +30,7 @@
 en:
   enums:
     receipt_item:
-      quantity_unit:
+      quantity_unit_code:
         each: each
         item: item
         piece: piece

@@ -34,7 +34,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
               raw_text: 'コーヒー',
               price: 180,
               quantity: 1,
-              quantity_unit: '杯',
+              quantity_unit_code: 'each',
               product_code: 'C001',
               line_total: 180,
               confidence: 0.98
@@ -43,7 +43,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
               raw_text: 'サンド',
               price: 550,
               quantity: 2,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               product_code: 'S001',
               line_total: 1100,
               confidence: 0.97
@@ -111,14 +111,12 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(items.size).to eq(2)
           expect(items.first[:raw_text]).to eq('コーヒー')
           expect(items.first[:quantity_unit_code]).to eq('each')
-          expect(items.first[:quantity_unit]).to eq('個')
           expect(items.first[:product_code]).to eq('C001')
           expect(items.first[:line_total]).to eq(180)
           expect(items.first[:confidence]).to be_present
           expect(items.second[:raw_text]).to eq('サンド')
           expect(items.second[:quantity]).to eq(2)
           expect(items.second[:quantity_unit_code]).to eq('each')
-          expect(items.second[:quantity_unit]).to eq('個')
           expect(items.second[:product_code]).to eq('S001')
           expect(items.second[:line_total]).to eq(1100)
         end
@@ -208,9 +206,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it '小数quantityとquantity_unitを保持する' do
+      it '小数quantityとquantity_unit_codeを保持する' do
         ocr_result[:candidates][:items].first[:quantity] = 0.3
-        ocr_result[:candidates][:items].first[:quantity_unit] = 'kg'
+        ocr_result[:candidates][:items].first[:quantity_unit_code] = 'kilogram'
 
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
         item = params[:receipt_items_attributes].first
@@ -218,7 +216,6 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(item[:quantity]).to eq(BigDecimal('0.3'))
           expect(item[:quantity_unit_code]).to eq('kilogram')
-          expect(item[:quantity_unit]).to eq('kg')
         end
       end
 
@@ -1753,7 +1750,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             tax_amount: 164,
             country_region: 'JPN',
             items: [
-              { raw_text: 'MIX SWEETS', price: 14_400, quantity: 0.3, quantity_unit: 'kg', line_total: 4_320, confidence: 0.95 },
+              { raw_text: 'MIX SWEETS', price: 14_400, quantity: 0.3, quantity_unit_code: 'kilogram', line_total: 4_320, confidence: 0.95 },
               { raw_text: 'Short Dated Stock Discount', line_total: -2_160, confidence: 0.94 },
               { raw_text: 'アウトレット袋S', price: 44, quantity: 1, line_total: 44, confidence: 0.95 }
             ],
@@ -2661,7 +2658,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
       end
 
-      it 'AI補完で明細名とカテゴリを上書きしてもAzure由来のquantity_unitとproduct_codeを保持する' do
+      it 'AI補完で明細名とカテゴリを上書きしてもAzure由来のquantity_unit_codeとproduct_codeを保持する' do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         first_item = params[:receipt_items_attributes].first
@@ -2671,14 +2668,12 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
           expect(first_item[:category]).to eq('drink')
           expect(first_item[:quantity_unit_code]).to eq('each')
-          expect(first_item[:quantity_unit]).to eq('個')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:needs_review]).to eq(false)
 
           expect(second_item[:suggested_name]).to eq('たまごサンド')
           expect(second_item[:category]).to eq('food')
           expect(second_item[:quantity_unit_code]).to eq('each')
-          expect(second_item[:quantity_unit]).to eq('個')
           expect(second_item[:product_code]).to eq('S001')
           expect(second_item[:needs_review]).to eq(true)
         end
@@ -2944,7 +2939,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       it 'quantityだけはdecimal commaを小数として正規化する' do
         ocr_result[:candidates][:items].first[:price] = '14,400円'
         ocr_result[:candidates][:items].first[:quantity] = '0,300'
-        ocr_result[:candidates][:items].first[:quantity_unit] = 'kg'
+        ocr_result[:candidates][:items].first[:quantity_unit_code] = 'kilogram'
         ocr_result[:candidates][:items].first[:line_total] = nil
 
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
@@ -2954,7 +2949,6 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(item[:price]).to eq(14_400)
           expect(item[:quantity]).to eq(BigDecimal('0.300'))
           expect(item[:quantity_unit_code]).to eq('kilogram')
-          expect(item[:quantity_unit]).to eq('kg')
           expect(item[:line_total]).to eq(4_320)
         end
       end
@@ -2962,7 +2956,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       it 'integer-only unitの小数quantityは未確定扱いで1にfallbackする' do
         ocr_result[:candidates][:items].first[:price] = '100円'
         ocr_result[:candidates][:items].first[:quantity] = '1.5'
-        ocr_result[:candidates][:items].first[:quantity_unit] = '個'
+        ocr_result[:candidates][:items].first[:quantity_unit_code] = 'each'
         ocr_result[:candidates][:items].first[:line_total] = nil
 
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
@@ -3134,7 +3128,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
                   raw_text: 'コーヒー',
                   price: 180,
                   quantity: 1,
-                  quantity_unit: '杯',
+                  quantity_unit_code: 'each',
                   product_code: 'C001',
                   line_total: 180
                 },
@@ -3142,7 +3136,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
                   raw_text: 'サンド',
                   price: 550,
                   quantity: 2,
-                  quantity_unit: '個',
+                  quantity_unit_code: 'each',
                   product_code: 'S001',
                   line_total: 1100
                 }
@@ -3177,10 +3171,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             expect(params[:receipt_items_attributes].size).to eq(2)
             expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
-            expect(first_item[:quantity_unit]).to eq('個')
             expect(second_item[:raw_text]).to eq('サンド')
             expect(second_item[:quantity_unit_code]).to eq('each')
-            expect(second_item[:quantity_unit]).to eq('個')
             expect(second_item[:product_code]).to eq('S001')
           end
         end
@@ -3196,7 +3188,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
                   raw_text: 'コーヒー',
                   price: 180,
                   quantity: 1,
-                  quantity_unit: '杯',
+                  quantity_unit_code: 'each',
                   product_code: 'C001',
                   line_total: 180
                 }
@@ -3237,7 +3229,6 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             expect(params[:receipt_items_attributes].size).to eq(1)
             expect(first_item[:raw_text]).to eq('コーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
-            expect(first_item[:quantity_unit]).to eq('個')
             expect(first_item[:product_code]).to eq('C001')
             expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
             expect(first_item[:category]).to eq('drink')
@@ -3413,7 +3404,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
                 'raw_text' => 'コーヒー',
                 'price' => '180円',
                 'quantity' => '1',
-                'quantity_unit' => '杯',
+                'quantity_unit_code' => 'each',
                 'product_code' => 'C001',
                 'line_total' => '180円'
               }
@@ -3441,7 +3432,6 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
           expect(first_item[:raw_text]).to eq('コーヒー')
           expect(first_item[:quantity_unit_code]).to eq('each')
-          expect(first_item[:quantity_unit]).to eq('個')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:price]).to eq(180)
           expect(first_payment[:amount]).to eq(1280)

@@ -55,7 +55,7 @@ RSpec.describe Amounts::TaxDetailAggregator do
 
   it 'does not generate tax details from measurement unit without line_total' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: nil, tax_rate: BigDecimal('0.1') }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: nil, tax_rate: BigDecimal('0.1') }
     ])
 
     expect(result).to be_empty
@@ -71,7 +71,7 @@ RSpec.describe Amounts::TaxDetailAggregator do
 
   it 'generates tax details from countable unit without line_total' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: '個', line_total: nil, tax_rate: BigDecimal('0.1') }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'each', line_total: nil, tax_rate: BigDecimal('0.1') }
     ])
 
     aggregate_failures do
@@ -97,7 +97,7 @@ RSpec.describe Amounts::TaxDetailAggregator do
 
   it 'uses explicit line_total for measurement unit' do
     result = aggregate([
-      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit: 'kg', line_total: 4_320, tax_rate: BigDecimal('0.1') }
+      { price: 14_400, quantity: BigDecimal('0.300'), quantity_unit_code: 'kilogram', line_total: 4_320, tax_rate: BigDecimal('0.1') }
     ])
 
     aggregate_failures do

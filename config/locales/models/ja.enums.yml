@@ -28,7 +28,7 @@ ja:
         hobby: 趣味
         other: その他
 
-      quantity_unit:
+      quantity_unit_code:
         each: 個
         item: 点
         piece: 本

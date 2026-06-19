@@ -55,7 +55,7 @@ class ReceiptQuantityUnit
     def label(code, locale: I18n.locale)
       normalized = normalize(code)
 
-      I18n.t("enums.receipt_item.quantity_unit.#{normalized}", locale: locale, default: normalized)
+      I18n.t("enums.receipt_item.quantity_unit_code.#{normalized}", locale: locale, default: normalized)
     end
 
     def options(locale: I18n.locale)
@@ -64,12 +64,6 @@ class ReceiptQuantityUnit
 
     def option_entries(locale: I18n.locale)
       ALLOWED_CODES.map { |code| { value: code, label: label(code, locale: locale) } }
-    end
-
-    def legacy_label(code)
-      unit = unit_for(code)
-
-      unit&.legacy_labels&.first || label(code, locale: :ja)
     end
 
     def countable?(code)
@@ -86,14 +80,6 @@ class ReceiptQuantityUnit
 
     def inputmode_for(code)
       decimal?(code) ? "decimal" : "numeric"
-    end
-
-    private
-
-    def unit_for(code)
-      normalized = normalize(code)
-
-      UNITS.find { |unit| unit.code == normalized }
     end
   end
 end

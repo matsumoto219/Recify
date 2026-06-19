@@ -117,15 +117,6 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
     end
   end
 
-  describe '.legacy_label' do
-    it '中間移行中の旧quantity_unit互換ラベルを返す' do
-      aggregate_failures do
-        expect(described_class.legacy_label('each')).to eq('個')
-        expect(described_class.legacy_label('kilogram')).to eq('kg')
-      end
-    end
-  end
-
   describe '.step_for and .inputmode_for' do
     it '個数系は整数入力、計量系は小数入力にする' do
       aggregate_failures do

@@ -8,7 +8,6 @@ class CreateReceiptItems < ActiveRecord::Migration[8.1]
       t.string :category
       t.bigint :price
       t.decimal :quantity, precision: 10, scale: 3
-      t.string :quantity_unit
       t.string :quantity_unit_code, null: false, default: "each"
       t.string :product_code
       t.bigint :original_line_total
