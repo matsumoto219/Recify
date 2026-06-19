@@ -39,12 +39,6 @@ module SecurityEvents
           pattern: /(?:\.\.\/|\.\.\\|%2e%2e|%252e%252e|%2fetc%2fpasswd|\/etc\/passwd)/i
         },
         {
-          event_type: "ssrf_attempt",
-          severity: "high",
-          matched_rule: "private_or_metadata_url",
-          pattern: %r{https?://(?:localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.169\.254|metadata\.google\.internal|metadata\.azure\.com|\[::1\])}i
-        },
-        {
           event_type: "crlf_injection_attempt",
           severity: "medium",
           matched_rule: "encoded_or_literal_crlf_header",

@@ -6,31 +6,6 @@ module SecurityEvents
     MAX_SCAN_VALUE_BYTES = 2_000
     MAX_DEPTH = 4
     MAX_ARRAY_ITEMS = 20
-    PROTECTED_RECEIPT_FIELDS = %w[
-      id
-      user_id
-      receipt_id
-      public_id
-      display_id
-      status
-      processing_error_code
-      processing_error_message
-      keep_image
-      image_purged_at
-      image_purged_reason
-    ].freeze
-    PROTECTED_USER_FIELDS = %w[
-      id
-      admin
-      role
-      guest
-      confirmed_at
-      locked_at
-      failed_attempts
-      session_version
-      user_limit
-      storage_bytes_used
-    ].freeze
     SENSITIVE_KEY_PATTERN = /
       password|token|authorization|cookie|secret|api[_-]?key|access[_-]?token|
       refresh[_-]?token|totp|otp|recovery[_-]?code|backup[_-]?code|csrf|
@@ -52,6 +27,7 @@ module SecurityEvents
       }
     ].freeze
     INPUT_RULE = Rules::InputRule.new
+    PARAMETER_TAMPERING_RULE = Rules::ParameterTamperingRule.new
 
     class << self
       def call(...)
@@ -88,8 +64,7 @@ module SecurityEvents
       text = scan_text(value)
       matches = detect_rule_matches(field_name, text)
       matches.concat(detect_url_matches(field_name, text, matches))
-      parameter_tampering = detect_parameter_tampering(field_name, text)
-      matches << parameter_tampering if parameter_tampering
+      matches.concat(PARAMETER_TAMPERING_RULE.call(param_path: field_name, value: text).map(&:to_detection))
       matches
     end
 
@@ -97,98 +72,24 @@ module SecurityEvents
       matches = INPUT_RULE.call(param_path: field_name, value: text).map(&:to_detection)
       matches.concat(
         AI_TEXT_RULES.filter_map do |rule|
-        next unless rule.fetch(:pattern).match?(text)
+          next unless rule.fetch(:pattern).match?(text)
 
-        build_detection(
-          event_type: rule.fetch(:event_type),
-          severity: rule.fetch(:severity),
-          matched_rule: rule.fetch(:matched_rule),
-          field_name: field_name,
-          text: text
-        )
-      end
+          build_detection(
+            event_type: rule.fetch(:event_type),
+            severity: rule.fetch(:severity),
+            matched_rule: rule.fetch(:matched_rule),
+            field_name: field_name,
+            text: text
+          )
+        end
       )
     end
 
     def detect_url_matches(field_name, text, existing_matches)
-      unsafe_url = detect_unsafe_url(field_name, text)
-      return [ unsafe_url ] if unsafe_url
-      return [] if ssrf_detected?(existing_matches)
-
-      open_redirect = detect_open_redirect(field_name, text)
-      open_redirect ? [ open_redirect ] : []
-    end
-
-    def ssrf_detected?(matches)
-      matches.any? { |detection| detection.event_type == "ssrf_attempt" }
-    end
-
-    def detect_unsafe_url(field_name, text)
-      return unless url_field_policy.url_field?(field_name)
-
-      value = text.to_s.strip
-      matched_rule =
-        if value.match?(/\A(?:data|file|vbscript):/i)
-          "forbidden_url_scheme"
-        elsif value.start_with?("//")
-          "protocol_relative_url"
-        elsif value.include?("\\")
-          "backslash_url"
-        elsif value.match?(/[\r\n\u0000]/)
-          "control_character_url"
-        elsif http_url_with_userinfo?(value)
-          "userinfo_url"
-        end
-      return unless matched_rule
-
-      build_detection(
-        event_type: "open_redirect_attempt",
-        severity: "medium",
-        matched_rule: matched_rule,
-        field_name: field_name,
-        text: text
-      )
-    end
-
-    def detect_open_redirect(field_name, text)
-      return unless url_field_policy.open_redirect_candidate?(field_name, text)
-      return unless text.match?(%r{\Ahttps?://}i)
-      return if text.match?(%r{\Ahttps?://(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/|\z)}i)
-
-      build_detection(
-        event_type: "open_redirect_attempt",
-        severity: "medium",
-        matched_rule: "external_redirect_url",
-        field_name: field_name,
-        text: text
-      )
-    end
-
-    def http_url_with_userinfo?(value)
-      uri = URI.parse(value)
-      uri.is_a?(URI::HTTP) && uri.userinfo.present?
-    rescue URI::InvalidURIError
-      false
-    end
-
-    def detect_parameter_tampering(field_name, text)
-      segments = field_name.to_s.split(".")
-      matched_rule =
-        if segments.first == "receipt" && (segments & PROTECTED_RECEIPT_FIELDS).any?
-          "protected_receipt_attribute"
-        elsif segments.first == "user" && (segments & PROTECTED_USER_FIELDS).any?
-          "protected_user_attribute"
-        end
-
-      return unless matched_rule
-
-      build_detection(
-        event_type: "parameter_tampering_attempt",
-        severity: "medium",
-        matched_rule: matched_rule,
-        field_name: field_name,
-        text: text
-      )
+      Rules::UrlRule
+        .new(url_field_policy: url_field_policy)
+        .call(param_path: field_name, value: text, context: { existing_matches: existing_matches })
+        .map(&:to_detection)
     end
 
     def build_detection(event_type:, severity:, matched_rule:, field_name:, text:)
