@@ -51,8 +51,9 @@ module SecurityEvents
       Rails.logger.warn("[SecurityEvents] rate_limit_record_failed class=#{e.class.name}")
     end
 
-    def record_invalid_upload!(request:, actor_user:, file:, reason:, metadata: {})
+    def record_invalid_upload!(request:, actor_user:, file:, reason:, field_name: "receipt.image", metadata: {})
       file_metadata = {
+        field_name: field_name,
         filename: upload_filename(file),
         content_type: upload_content_type(file),
         byte_size: upload_byte_size(file),
@@ -64,7 +65,7 @@ module SecurityEvents
         severity: "medium",
         request: request,
         actor_user: actor_user,
-        field_name: "receipt.image",
+        field_name: field_name,
         matched_rule: reason,
         payload_excerpt: file_metadata[:filename],
         metadata: metadata.merge(file_metadata).merge(reason: reason).compact

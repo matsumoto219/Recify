@@ -228,13 +228,15 @@ RSpec.describe 'Admin announcements', type: :request do
       admin = create(:user, :admin)
       sign_in admin
 
-      post admin_announcements_path,
-           params: {
-             announcement: announcement_params(
-               image: uploaded_fixture('spec/fixtures/files/receipt_sample.jpg', 'image/jpeg'),
-               image_alt_text: 'リリース告知画像'
-             )
-           }
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_fixture('spec/fixtures/files/receipt_sample.jpg', 'image/jpeg'),
+                 image_alt_text: 'リリース告知画像'
+               )
+             }
+      }.not_to change(SecurityEvent.where(event_type: 'invalid_upload'), :count)
 
       announcement = Announcement.order(:created_at).last
 
@@ -250,17 +252,19 @@ RSpec.describe 'Admin announcements', type: :request do
       admin = create(:user, :admin)
       sign_in admin
 
-      post admin_announcements_path,
-           params: {
-             announcement: announcement_params(
-               image: uploaded_file_from_bytes(
-                 bytes: png_bytes(width: 320, height: 180),
-                 filename: 'announcement.png',
-                 content_type: 'image/png'
-               ),
-               image_alt_text: 'メンテナンス告知画像'
-             )
-           }
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: png_bytes(width: 320, height: 180),
+                   filename: 'announcement.png',
+                   content_type: 'image/png'
+                 ),
+                 image_alt_text: 'メンテナンス告知画像'
+               )
+             }
+      }.not_to change(SecurityEvent.where(event_type: 'invalid_upload'), :count)
 
       announcement = Announcement.order(:created_at).last
 
@@ -276,17 +280,19 @@ RSpec.describe 'Admin announcements', type: :request do
       admin = create(:user, :admin)
       sign_in admin
 
-      post admin_announcements_path,
-           params: {
-             announcement: announcement_params(
-               image: uploaded_file_from_bytes(
-                 bytes: webp_vp8x_bytes(width: 320, height: 180),
-                 filename: 'announcement.webp',
-                 content_type: 'image/webp'
-               ),
-               image_alt_text: 'WebP告知画像'
-             )
-           }
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: webp_vp8x_bytes(width: 320, height: 180),
+                   filename: 'announcement.webp',
+                   content_type: 'image/webp'
+                 ),
+                 image_alt_text: 'WebP告知画像'
+               )
+             }
+      }.not_to change(SecurityEvent.where(event_type: 'invalid_upload'), :count)
 
       announcement = Announcement.order(:created_at).last
 
@@ -301,6 +307,7 @@ RSpec.describe 'Admin announcements', type: :request do
     it '画像ありで代替テキストが空ならvalidation errorにする' do
       admin = create(:user, :admin)
       sign_in admin
+      invalid_upload_count = SecurityEvent.where(event_type: 'invalid_upload').count
 
       expect {
         post admin_announcements_path,
@@ -320,12 +327,14 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('admin.announcements.form.errors.title'))
         expect(response.body).to include(I18n.t('activerecord.attributes.announcement.image_alt_text'))
+        expect(SecurityEvent.where(event_type: 'invalid_upload').count).to eq(invalid_upload_count)
       end
     end
 
     it 'SVG画像を拒否する' do
       admin = create(:user, :admin)
       sign_in admin
+      announcement_count = Announcement.count
 
       expect {
         post admin_announcements_path,
@@ -339,17 +348,34 @@ RSpec.describe 'Admin announcements', type: :request do
                  image_alt_text: 'SVG告知画像'
                )
              }
-      }.not_to change(Announcement, :count)
+      }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
 
+      event = SecurityEvent.order(:created_at).last
       aggregate_failures do
+        expect(Announcement.count).to eq(announcement_count)
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.invalid_content_type'))
+        expect(event).to have_attributes(
+          actor_user: admin,
+          field_name: 'announcement.image',
+          matched_rule: 'invalid_content_type'
+        )
+        expect(event.metadata).to include(
+          'field_name' => 'announcement.image',
+          'filename' => 'announcement.svg',
+          'content_type' => 'image/svg+xml',
+          'reason' => 'invalid_content_type',
+          'controller' => 'admin/announcements',
+          'action' => 'create'
+        )
+        expect(event.metadata.to_json).not_to include('<svg', 'signed_id', '/rails/active_storage')
       end
     end
 
     it '2MBを超える画像を拒否する' do
       admin = create(:user, :admin)
       sign_in admin
+      announcement_count = Announcement.count
 
       expect {
         post admin_announcements_path,
@@ -363,17 +389,68 @@ RSpec.describe 'Admin announcements', type: :request do
                  image_alt_text: '大きすぎる告知画像'
                )
              }
-      }.not_to change(Announcement, :count)
+      }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
 
+      event = SecurityEvent.order(:created_at).last
       aggregate_failures do
+        expect(Announcement.count).to eq(announcement_count)
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.file_too_large'))
+        expect(event).to have_attributes(
+          field_name: 'announcement.image',
+          matched_rule: 'file_too_large'
+        )
+        expect(event.metadata).to include(
+          'field_name' => 'announcement.image',
+          'filename' => 'large-announcement.png',
+          'content_type' => 'image/png',
+          'reason' => 'file_too_large'
+        )
+      end
+    end
+
+    it 'text/plain画像アップロードを拒否し、SecurityEventに記録する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      announcement_count = Announcement.count
+
+      expect {
+        post admin_announcements_path,
+             params: {
+               announcement: announcement_params(
+                 image: uploaded_file_from_bytes(
+                   bytes: 'not an image body marker',
+                   filename: 'announcement.txt',
+                   content_type: 'text/plain'
+                 ),
+                 image_alt_text: 'テキスト偽装告知画像'
+               )
+             }
+      }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
+
+      event = SecurityEvent.order(:created_at).last
+      aggregate_failures do
+        expect(Announcement.count).to eq(announcement_count)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.invalid_content_type'))
+        expect(event).to have_attributes(
+          field_name: 'announcement.image',
+          matched_rule: 'invalid_content_type'
+        )
+        expect(event.metadata).to include(
+          'field_name' => 'announcement.image',
+          'filename' => 'announcement.txt',
+          'content_type' => 'text/plain',
+          'reason' => 'invalid_content_type'
+        )
+        expect(event.metadata.to_json).not_to include('not an image body marker')
       end
     end
 
     it 'JPEGとして送られた偽装画像を拒否する' do
       admin = create(:user, :admin)
       sign_in admin
+      announcement_count = Announcement.count
 
       expect {
         post admin_announcements_path,
@@ -387,11 +464,23 @@ RSpec.describe 'Admin announcements', type: :request do
                  image_alt_text: '偽装告知画像'
                )
              }
-      }.not_to change(Announcement, :count)
+      }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
 
+      event = SecurityEvent.order(:created_at).last
       aggregate_failures do
+        expect(Announcement.count).to eq(announcement_count)
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.invalid_content_type'))
+        expect(event).to have_attributes(
+          field_name: 'announcement.image',
+          matched_rule: 'invalid_content_type'
+        )
+        expect(event.metadata).to include(
+          'field_name' => 'announcement.image',
+          'filename' => 'spoofed-announcement.jpg',
+          'content_type' => 'image/jpeg',
+          'reason' => 'invalid_content_type'
+        )
       end
     end
 
@@ -695,13 +784,15 @@ RSpec.describe 'Admin announcements', type: :request do
       )
       sign_in admin
 
-      patch admin_announcement_path(announcement),
-            params: {
-              announcement: announcement_params(
-                remove_image: '1',
-                image_alt_text: ''
-              )
-            }
+      expect {
+        patch admin_announcement_path(announcement),
+              params: {
+                announcement: announcement_params(
+                  remove_image: '1',
+                  image_alt_text: ''
+                )
+              }
+      }.not_to change(SecurityEvent.where(event_type: 'invalid_upload'), :count)
 
       announcement.reload
 
@@ -722,14 +813,16 @@ RSpec.describe 'Admin announcements', type: :request do
       )
       sign_in admin
 
-      patch admin_announcement_path(announcement),
-            params: {
-              announcement: announcement_params(
-                title: '',
-                remove_image: '1',
-                image_alt_text: ''
-              )
-            }
+      expect {
+        patch admin_announcement_path(announcement),
+              params: {
+                announcement: announcement_params(
+                  title: '',
+                  remove_image: '1',
+                  image_alt_text: ''
+                )
+              }
+      }.not_to change(SecurityEvent.where(event_type: 'invalid_upload'), :count)
 
       announcement.reload
 

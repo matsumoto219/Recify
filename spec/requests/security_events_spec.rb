@@ -115,7 +115,9 @@ RSpec.describe 'Security events', type: :request do
     }.to change(SecurityEvent.where(event_type: 'invalid_upload'), :count).by(1)
 
     event = SecurityEvent.last
+    expect(event.field_name).to eq('receipt.image')
     expect(event.metadata).to include(
+      'field_name' => 'receipt.image',
       'content_type' => 'image/jpeg',
       'reason' => 'invalid_content_type'
     )

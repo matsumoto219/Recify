@@ -30,6 +30,7 @@ class Admin::AnnouncementsController < Admin::BaseController
       purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.created"), status: :see_other
     else
+      record_invalid_announcement_upload_security_event(uploaded_announcement_image, @announcement.errors)
       prepare_link_rows
       render :new, status: :unprocessable_entity
     end
@@ -52,6 +53,7 @@ class Admin::AnnouncementsController < Admin::BaseController
       purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.updated"), status: :see_other
     else
+      record_invalid_announcement_upload_security_event(uploaded_announcement_image, @announcement.errors)
       prepare_link_rows
       render :edit, status: :unprocessable_entity
     end
@@ -301,6 +303,32 @@ class Admin::AnnouncementsController < Admin::BaseController
 
     Storage.purge_attachment(@announcement.image)
     @announcement.update_columns(image_alt_text: nil, updated_at: Time.current)
+  end
+
+  def record_invalid_announcement_upload_security_event(file, errors)
+    reason = announcement_image_security_event_reason(errors)
+    return if file.blank? || reason.blank?
+
+    SecurityEvents.record_invalid_upload!(
+      request: request,
+      actor_user: current_user,
+      file: file,
+      reason: reason,
+      field_name: "announcement.image",
+      metadata: {
+        controller: controller_path,
+        action: action_name,
+        validation_errors: errors.full_messages_for(:image).first(3)
+      }
+    )
+  end
+
+  def announcement_image_security_event_reason(errors)
+    return "invalid_content_type" if errors.of_kind?(:image, :invalid_content_type)
+    return "file_too_large" if errors.of_kind?(:image, :file_too_large)
+    return "image_too_small" if errors.of_kind?(:image, :image_too_small)
+
+    "image_too_large" if errors.of_kind?(:image, :image_too_large)
   end
 
   def raise_not_found
