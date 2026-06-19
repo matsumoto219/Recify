@@ -465,6 +465,8 @@ RSpec.describe 'Settings', type: :request do
 
   describe 'GET /settings/account' do
     it 'avatar input and preview controller are present' do
+      create(:system_setting, key: 'limits.avatar_image_max_file_size_bytes', value: SystemSettings.stored_value(6.megabytes))
+
       get settings_account_path
 
       document = Nokogiri::HTML(response.body)
@@ -893,10 +895,10 @@ RSpec.describe 'Settings', type: :request do
       invalid_file&.unlink
     end
 
-    it 'files larger than 5MB are rejected and not attached' do
+    it 'avatar上限を超える画像は拒否し添付しない' do
       large_file = Tempfile.new([ 'large-avatar', '.jpg' ])
       large_file.binmode
-      large_file.write('0' * (5.megabytes + 1))
+      large_file.write('0' * (User.avatar_max_file_size + 1))
       large_file.rewind
 
       patch user_registration_path,

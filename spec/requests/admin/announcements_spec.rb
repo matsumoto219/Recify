@@ -174,10 +174,14 @@ RSpec.describe 'Admin announcements', type: :request do
     it 'adminが下書き作成画面を閲覧できる' do
       admin = create(:user, :admin)
       sign_in admin
+      create(:system_setting, key: 'limits.announcement_image_max_file_size_bytes', value: SystemSettings.stored_value(3.megabytes))
+      create(:system_setting, key: 'limits.announcement_image_min_dimension_px', value: SystemSettings.stored_value(120))
+      create(:system_setting, key: 'limits.announcement_image_max_dimension_px', value: SystemSettings.stored_value(2048))
 
       get new_admin_announcement_path
 
       document = Nokogiri::HTML(response.body)
+      image_max_size = ActiveSupport::NumberHelper.number_to_human_size(Announcement.image_max_file_size)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -187,6 +191,8 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(document.at_css("input[type='file'][name='announcement[image]']")['accept']).to eq('image/jpeg,image/png,image/webp')
         expect(document.css("input[name*='announcement_links_attributes']").size).to be >= 3
         expect(response.body).to include(I18n.t('admin.announcements.form.link_fields.title', number: 3))
+        expect(response.body).to include(I18n.t('admin.announcements.form.image_policy.format_notice', max_size: image_max_size))
+        expect(response.body).to include(I18n.t('admin.announcements.form.image_policy.dimension_notice', min_dimension: 120, max_dimension: 2048))
         expect(response.body).not_to include('translation missing')
       end
     end
@@ -372,7 +378,7 @@ RSpec.describe 'Admin announcements', type: :request do
       end
     end
 
-    it '2MBを超える画像を拒否する' do
+    it '画像サイズ上限を超える画像を拒否する' do
       admin = create(:user, :admin)
       sign_in admin
       announcement_count = Announcement.count
@@ -382,7 +388,7 @@ RSpec.describe 'Admin announcements', type: :request do
              params: {
                announcement: announcement_params(
                  image: uploaded_file_from_bytes(
-                   bytes: png_bytes(width: 320, height: 180, minimum_byte_size: Announcement::MAX_IMAGE_FILE_SIZE + 1),
+                   bytes: png_bytes(width: 320, height: 180, minimum_byte_size: Announcement.image_max_file_size + 1),
                    filename: 'large-announcement.png',
                    content_type: 'image/png'
                  ),
