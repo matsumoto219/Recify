@@ -74,7 +74,11 @@ module Amounts
     def description
       percentage = rate * 100
       formatted = percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
-      "#{formatted}%対象"
+      profile.tax_rate_target_label(formatted)
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
 
     def tax_from_gross(gross_amount, tax_rate)

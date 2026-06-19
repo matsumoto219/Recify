@@ -502,6 +502,11 @@ module ReceiptAnalysisProfiles
     ANALYSIS_NON_TAXABLE_TEXT_PATTERN = /非課税|非課稅|non.?tax|tax.?free/i.freeze
     ANALYSIS_FALLBACK_TAX_TARGET_NON_ITEM_PATTERN = /対象計|対象額|税率対象|内税|内消費税/.freeze
     ANALYSIS_FALLBACK_TAX_AMOUNT_LINE_PATTERN = /\A(?:税込み?|税抜き?)(?:金額|価格)?[¥￥]?\d[\d,，]*円?\z/.freeze
+    AMOUNT_TAX_DETAIL_INTERMEDIATE_PATTERN = /小\s*計.*税抜|税抜.*小\s*計|課税小計|対象小計/i.freeze
+    AMOUNT_TAX_DETAIL_GROSS_PATTERN = /対象|税込|内消費税|内税|included/i.freeze
+    AMOUNT_TAX_DETAIL_NET_PATTERN = /外税|税別|税抜|別途消費税|net|exclusive|tax\s*exclusive/i.freeze
+    AMOUNT_TAX_DETAIL_TAX_ONLY_PATTERN = /消費税等?$|消費税$|税額$|tax$/i.freeze
+    AMOUNT_TAX_DETAIL_GROSS_DESCRIPTION_PATTERN = /対象|対象額/.freeze
 
     class << self
       def country_codes
@@ -1034,6 +1039,26 @@ module ReceiptAnalysisProfiles
 
       def analysis_fallback_tax_amount_line_pattern
         ANALYSIS_FALLBACK_TAX_AMOUNT_LINE_PATTERN
+      end
+
+      def amount_tax_detail_intermediate_pattern
+        AMOUNT_TAX_DETAIL_INTERMEDIATE_PATTERN
+      end
+
+      def amount_tax_detail_gross_pattern
+        AMOUNT_TAX_DETAIL_GROSS_PATTERN
+      end
+
+      def amount_tax_detail_net_pattern
+        AMOUNT_TAX_DETAIL_NET_PATTERN
+      end
+
+      def amount_tax_detail_tax_only_pattern
+        AMOUNT_TAX_DETAIL_TAX_ONLY_PATTERN
+      end
+
+      def amount_tax_detail_gross_description_pattern
+        AMOUNT_TAX_DETAIL_GROSS_DESCRIPTION_PATTERN
       end
     end
   end

@@ -3,10 +3,6 @@
 module Amounts
   class TaxDetailBasisDetector
     BASIS_VALUES = %i[gross net tax_only summary intermediate unknown].freeze
-    INTERMEDIATE_PATTERNS = /小\s*計.*税抜|税抜.*小\s*計|課税小計|対象小計/i.freeze
-    GROSS_PATTERNS = /対象|税込|内消費税|内税|included/i.freeze
-    NET_PATTERNS = /外税|税別|税抜|別途消費税|net|exclusive|tax\s*exclusive/i.freeze
-    TAX_ONLY_PATTERNS = /消費税等?$|消費税$|税額$|tax$/i.freeze
 
     class << self
       def call(tax_details, rounding_modes: %i[floor round ceil])
@@ -54,12 +50,12 @@ module Amounts
       return :intermediate if intermediate_detail?(tax_detail)
       return :tax_only if net_amount <= 0 && tax_amount.positive?
       return :unknown unless rate.positive? && net_amount.positive? && tax_amount.positive?
-      return :net if description.match?(NET_PATTERNS)
+      return :net if description.match?(profile.amount_tax_detail_net_pattern)
 
       gross_match = tax_from_gross_matches?(net_amount, rate, tax_amount)
       net_match = tax_from_net_matches?(net_amount, rate, tax_amount)
 
-      return :gross if gross_match && description.match?(GROSS_PATTERNS)
+      return :gross if gross_match && description.match?(profile.amount_tax_detail_gross_pattern)
       return :net if net_match && !gross_match
       return :gross if gross_match && !net_match
       return :net if net_match
@@ -68,14 +64,14 @@ module Amounts
     end
 
     def summary_detail?(tax_detail)
-      tax_detail[:rate].zero? &&
+        tax_detail[:rate].zero? &&
         tax_detail[:net_amount].to_i.zero? &&
         tax_detail[:amount].to_i.positive? &&
-        tax_detail[:description].to_s.match?(TAX_ONLY_PATTERNS)
+        tax_detail[:description].to_s.match?(profile.amount_tax_detail_tax_only_pattern)
     end
 
     def intermediate_detail?(tax_detail)
-      return true if tax_detail[:description].to_s.match?(INTERMEDIATE_PATTERNS) && same_rate_final_detail_exists?(tax_detail)
+      return true if tax_detail[:description].to_s.match?(profile.amount_tax_detail_intermediate_pattern) && same_rate_final_detail_exists?(tax_detail)
 
       inferred_intermediate_detail?(tax_detail)
     end
@@ -87,7 +83,7 @@ module Amounts
         other[:rate] == tax_detail[:rate] &&
           other[:net_amount].to_i.positive? &&
           other[:amount].to_i.positive? &&
-          !other[:description].to_s.match?(INTERMEDIATE_PATTERNS)
+          !other[:description].to_s.match?(profile.amount_tax_detail_intermediate_pattern)
       end
     end
 
@@ -185,6 +181,10 @@ module Amounts
       rate > 1 ? rate / 100 : rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
   end
 end

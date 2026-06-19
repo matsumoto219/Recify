@@ -319,7 +319,7 @@ module Amounts
 
     def explicit_external_tax_evidence?
       tax_details.any? do |tax_detail|
-        fetch_value(tax_detail, :description).to_s.match?(/外税|税別|消費税別|別途消費税|exclusive|sales\s*tax/i)
+        fetch_value(tax_detail, :description).to_s.match?(profile.analysis_external_tax_description_pattern)
       end
     end
 
@@ -404,6 +404,10 @@ module Amounts
 
     def amount_or_nil(value)
       Amounts::NumberParser.parse_amount_or_nil(value)
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
 
     def present?(value)

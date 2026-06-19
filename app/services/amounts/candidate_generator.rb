@@ -1112,7 +1112,7 @@ module Amounts
     def description_for(rate)
       percentage = rate * 100
       formatted = percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
-      "#{formatted}%対象"
+      profile.tax_rate_target_label(formatted)
     end
 
     def payment_reconciliation(purchase_total, payment_adjustment_total)
@@ -1279,7 +1279,7 @@ module Amounts
         item[:name]
       ].compact.join(" ").unicode_normalize(:nfkc)
 
-      text.match?(/非課税|非課稅|non.?tax|tax.?free/i)
+      text.match?(profile.analysis_non_taxable_text_pattern)
     end
 
     def fallback_tax_rate
@@ -1339,6 +1339,10 @@ module Amounts
       elsif object.respond_to?(key)
         object.public_send(key)
       end
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
   end
 end

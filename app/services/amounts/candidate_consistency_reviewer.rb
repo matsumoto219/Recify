@@ -388,7 +388,7 @@ module Amounts
 
     def tax_detail_descriptions_suggest_gross?
       comparable_source_tax_details.any? do |tax_detail|
-        fetch_value(tax_detail, :description).to_s.match?(/対象|対象額/)
+        fetch_value(tax_detail, :description).to_s.match?(profile.amount_tax_detail_gross_description_pattern)
       end
     end
 
@@ -575,6 +575,10 @@ module Amounts
 
     def to_i(value)
       Amounts::NumberParser.parse_amount(value)
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
 
     def present?(value)

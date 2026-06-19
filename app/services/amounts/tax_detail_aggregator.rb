@@ -117,7 +117,11 @@ module Amounts
       percentage = rate * 100
       formatted_percentage = percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
 
-      "#{formatted_percentage}%対象"
+      profile.tax_rate_target_label(formatted_percentage)
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
 
     def normalize_tax_rate(value)

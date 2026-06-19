@@ -284,7 +284,7 @@ module Amounts
     end
 
     def external_tax_evidence?
-      return true if tax_details.any? { |detail| fetch_value(detail, :description).to_s.match?(/外税|税別|消費税別|別途消費税|exclusive|sales\s*tax/i) }
+      return true if tax_details.any? { |detail| fetch_value(detail, :description).to_s.match?(profile.analysis_external_tax_description_pattern) }
 
       subtotal = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :subtotal_amount))
       tax = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :tax_amount))
@@ -311,6 +311,10 @@ module Amounts
       elsif object.respond_to?(key)
         object.public_send(key)
       end
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
   end
 end

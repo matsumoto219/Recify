@@ -5,7 +5,6 @@ module Amounts
     PAYMENT_ADJUSTMENT_KINDS = %w[point_usage].freeze
     PURCHASE_DISCOUNT_KINDS = %w[receipt_discount coupon return_refund].freeze
     SURCHARGE_KINDS = %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].freeze
-    CASHLESS_PAYMENT_PATTERNS = /キャッシュレス|還元|ポイント利用|point\s*usage|cashless|reward|payment\s*discount/i.freeze
 
     class << self
       def call(adjustment)
@@ -68,7 +67,7 @@ module Amounts
         adjustment[:source_text]
       ].compact.join(" ")
 
-      text.match?(CASHLESS_PAYMENT_PATTERNS)
+      text.match?(profile.analysis_cashless_reward_adjustment_pattern)
     end
 
     def purchase_known?
@@ -150,6 +149,10 @@ module Amounts
       rate > 1 ? rate / 100 : rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def profile
+      ReceiptAnalysisProfiles.default
     end
   end
 end
