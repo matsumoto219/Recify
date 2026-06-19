@@ -1,6 +1,7 @@
 /* Home LP scoped presentation and motion. */
 .home-lp {
   position: relative;
+  isolation: isolate;
 
   --home-lp-accent-gradient: linear-gradient(
     90deg,
@@ -32,9 +33,323 @@
   );
 }
 
+.home-lp-fixed-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--brand-primary) 5%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--brand-primary) 5%, transparent) 1px,
+      transparent 1px
+    );
+  background-position:
+    center,
+    center;
+  background-size:
+    46px 46px,
+    46px 46px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000000 18%,
+    #000000 82%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.home-lp.is-grid-visible .home-lp-fixed-grid {
+  opacity: 0.46;
+}
+
 .home-lp > section {
   position: relative;
   z-index: 1;
+}
+
+.home-lp > section:not(.home-hero-section) {
+  isolation: isolate;
+
+  --home-section-ghost-opacity: 0.2;
+}
+
+.home-lp > section:not(.home-hero-section)::after {
+  position: absolute;
+  top: var(--home-section-ghost-top, 14%);
+  left: var(--home-section-ghost-left, calc(50% + 20rem));
+  z-index: -1;
+  width: var(--home-section-ghost-width, min(18rem, 36vw));
+  height: var(--home-section-ghost-height, 12rem);
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  border-radius: 1.35rem;
+  background: var(--home-section-ghost-bg);
+  box-shadow:
+    0 24px 64px color-mix(in srgb, var(--brand-primary) 9%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0.9rem, 0) scale(0.985) rotate(var(--home-section-ghost-rotate, 0deg));
+  transition:
+    opacity 620ms ease,
+    transform 620ms ease;
+  content: "";
+}
+
+.home-lp > section.is-ghost-visible:not(.home-hero-section)::after {
+  opacity: var(--home-section-ghost-opacity);
+  transform: translate3d(0, 0, 0) scale(1) rotate(var(--home-section-ghost-rotate, 0deg));
+}
+
+#home-announcements {
+  --home-section-ghost-left: calc(50% + 22rem);
+  --home-section-ghost-top: 10%;
+  --home-section-ghost-width: 17rem;
+  --home-section-ghost-height: 10rem;
+  --home-section-ghost-rotate: 1.2deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand-primary) 42%, transparent),
+      color-mix(in srgb, var(--brand-gradient-start) 34%, transparent)
+    ) 1.25rem 1.1rem / 4.4rem 0.7rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-base) 28%, transparent),
+      transparent
+    ) 1.25rem 2.75rem / 12rem 0.28rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-muted) 24%, transparent),
+      transparent
+    ) 1.25rem 3.75rem / 9.5rem 0.24rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-muted) 20%, transparent),
+      transparent
+    ) 1.25rem 5.15rem / 13rem 0.22rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand-primary) 22%, transparent),
+      transparent
+    ) 1.25rem 6.35rem / 10.5rem 0.22rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 68%, transparent);
+}
+
+#home-problem {
+  --home-section-ghost-left: calc(50% - 42rem);
+  --home-section-ghost-top: 18%;
+  --home-section-ghost-width: 14rem;
+  --home-section-ghost-height: 16rem;
+  --home-section-ghost-rotate: -4deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-base) 28%, transparent),
+      transparent
+    ) 2rem 1.75rem / 8.5rem 0.35rem no-repeat,
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--text-muted) 20%, transparent) 0 0.28rem,
+      transparent 0.28rem 1.1rem
+    ) 2rem 3.4rem / 10rem 7.2rem no-repeat,
+    linear-gradient(
+      to right,
+      transparent 0%,
+      color-mix(in srgb, var(--brand-primary) 18%, transparent) 50%,
+      transparent 100%
+    ) center 12rem / 8rem 0.35rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 72%, transparent);
+}
+
+#home-before-after {
+  --home-section-ghost-left: calc(50% + 18rem);
+  --home-section-ghost-top: 13%;
+  --home-section-ghost-width: 19rem;
+  --home-section-ghost-height: 11rem;
+  --home-section-ghost-rotate: 2deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      color-mix(in srgb, var(--text-muted) 17%, transparent),
+      color-mix(in srgb, var(--text-muted) 17%, transparent)
+    ) 1.35rem 2rem / 5.9rem 0.35rem no-repeat,
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 33%, transparent),
+      color-mix(in srgb, var(--brand-primary) 33%, transparent)
+    ) 11.8rem 2rem / 5.1rem 0.35rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--border-soft) 44%, transparent),
+      transparent
+    ) 1.35rem 4rem / 5.8rem 3.8rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand-primary) 17%, transparent),
+      transparent
+    ) 11.8rem 4rem / 5.2rem 3.8rem no-repeat,
+    linear-gradient(
+      90deg,
+      transparent 0 42%,
+      color-mix(in srgb, var(--brand-primary) 34%, transparent) 42% 58%,
+      transparent 58% 100%
+    ) center 5.55rem / 3rem 0.32rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 68%, transparent);
+}
+
+#home-features {
+  --home-section-ghost-left: calc(50% - 41rem);
+  --home-section-ghost-top: 16%;
+  --home-section-ghost-width: 18rem;
+  --home-section-ghost-height: 12rem;
+  --home-section-ghost-rotate: -1.6deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 28%, transparent),
+      color-mix(in srgb, var(--brand-primary) 28%, transparent)
+    ) 1.35rem 1.25rem / 3.2rem 0.18rem no-repeat,
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 28%, transparent),
+      color-mix(in srgb, var(--brand-primary) 28%, transparent)
+    ) 13.45rem 1.25rem / 3.2rem 0.18rem no-repeat,
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 28%, transparent),
+      color-mix(in srgb, var(--brand-primary) 28%, transparent)
+    ) 1.35rem 9.95rem / 3.2rem 0.18rem no-repeat,
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 28%, transparent),
+      color-mix(in srgb, var(--brand-primary) 28%, transparent)
+    ) 13.45rem 9.95rem / 3.2rem 0.18rem no-repeat,
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--text-muted) 18%, transparent) 0 0.26rem,
+      transparent 0.26rem 1.05rem
+    ) center 3rem / 11rem 5.5rem no-repeat,
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in srgb, var(--brand-primary) 18%, transparent) 50%,
+      transparent 100%
+    ) center / 100% 100% no-repeat,
+    color-mix(in srgb, var(--bg-card) 64%, transparent);
+}
+
+#home-how {
+  --home-section-ghost-left: calc(50% + 20rem);
+  --home-section-ghost-top: 18%;
+  --home-section-ghost-width: 20rem;
+  --home-section-ghost-height: 9.5rem;
+  --home-section-ghost-rotate: 1.5deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand-primary) 30%, transparent) 0 19%,
+      transparent 19% 41%,
+      color-mix(in srgb, var(--brand-primary) 30%, transparent) 41% 59%,
+      transparent 59% 81%,
+      color-mix(in srgb, var(--brand-primary) 30%, transparent) 81% 100%
+    ) center 4.2rem / 14rem 0.2rem no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 55%, transparent) 0 0.42rem,
+      color-mix(in srgb, var(--brand-primary) 13%, transparent) 0.45rem 0.85rem,
+      transparent 0.88rem
+    ) 3.1rem 3.45rem / 2rem 2rem no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 55%, transparent) 0 0.42rem,
+      color-mix(in srgb, var(--brand-primary) 13%, transparent) 0.45rem 0.85rem,
+      transparent 0.88rem
+    ) center 3.45rem / 2rem 2rem no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 55%, transparent) 0 0.42rem,
+      color-mix(in srgb, var(--brand-primary) 13%, transparent) 0.45rem 0.85rem,
+      transparent 0.88rem
+    ) 14.9rem 3.45rem / 2rem 2rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-muted) 20%, transparent),
+      transparent
+    ) 2.4rem 6.4rem / 4rem 0.24rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-muted) 20%, transparent),
+      transparent
+    ) center 6.4rem / 4rem 0.24rem no-repeat,
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-muted) 20%, transparent),
+      transparent
+    ) 13.7rem 6.4rem / 4rem 0.24rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 66%, transparent);
+}
+
+#home-trust {
+  --home-section-ghost-left: calc(50% - 40rem);
+  --home-section-ghost-top: 14%;
+  --home-section-ghost-width: 15rem;
+  --home-section-ghost-height: 15rem;
+  --home-section-ghost-rotate: -2.2deg;
+  --home-section-ghost-bg:
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 40%, transparent) 0 0.45rem,
+      transparent 0.48rem
+    ) 4rem 4.2rem / 1.2rem 1.2rem no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 40%, transparent) 0 0.45rem,
+      transparent 0.48rem
+    ) 9.7rem 4.2rem / 1.2rem 1.2rem no-repeat,
+    linear-gradient(
+      135deg,
+      transparent 0 44%,
+      color-mix(in srgb, var(--brand-primary) 30%, transparent) 44% 53%,
+      transparent 53% 100%
+    ) center 7rem / 5.4rem 3rem no-repeat,
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--brand-primary) 13%, transparent),
+      transparent
+    ) center 2.2rem / 8.4rem 9.2rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 64%, transparent);
+}
+
+#home-final-cta {
+  --home-section-ghost-left: calc(50% + 19rem);
+  --home-section-ghost-top: 7%;
+  --home-section-ghost-width: 17rem;
+  --home-section-ghost-height: 12.5rem;
+  --home-section-ghost-rotate: 2.8deg;
+  --home-section-ghost-bg:
+    linear-gradient(
+      color-mix(in srgb, var(--brand-primary) 34%, transparent),
+      color-mix(in srgb, var(--brand-primary) 34%, transparent)
+    ) 2rem 2rem / 4.5rem 0.38rem no-repeat,
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--text-muted) 18%, transparent) 0 0.24rem,
+      transparent 0.24rem 0.95rem
+    ) 2rem 3.5rem / 8rem 4.2rem no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 46%, transparent) 0 1.15rem,
+      transparent 1.2rem
+    ) 11.7rem 4.3rem / 3.3rem 3.3rem no-repeat,
+    linear-gradient(
+      135deg,
+      transparent 0 42%,
+      color-mix(in srgb, var(--text-on-brand) 62%, transparent) 42% 52%,
+      transparent 52% 100%
+    ) 12.65rem 5.45rem / 1.4rem 0.9rem no-repeat,
+    color-mix(in srgb, var(--bg-card) 66%, transparent);
 }
 
 .home-section-nav {
@@ -1231,6 +1546,53 @@
   }
 }
 
+[data-theme="dark"] .home-lp.is-grid-visible .home-lp-fixed-grid {
+  opacity: 0.34;
+}
+
+[data-theme="dark"] .home-lp > section:not(.home-hero-section)::after {
+  --home-section-ghost-opacity: 0.16;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .home-lp.is-grid-visible .home-lp-fixed-grid {
+    opacity: 0.34;
+  }
+
+  [data-theme="system"] .home-lp > section:not(.home-hero-section)::after {
+    --home-section-ghost-opacity: 0.16;
+  }
+}
+
+@media (width < 768px) {
+  [data-theme] .home-lp-fixed-grid {
+    background-size:
+      40px 40px,
+      40px 40px;
+  }
+
+  [data-theme] .home-lp.is-grid-visible .home-lp-fixed-grid {
+    opacity: 0.28;
+  }
+
+  [data-theme] .home-lp > section:not(.home-hero-section)::after {
+    top: 7%;
+    right: -5.5rem;
+    left: auto;
+    width: 13rem;
+    height: 9rem;
+
+    --home-section-ghost-opacity: 0.11;
+  }
+
+  #home-problem::after,
+  #home-features::after,
+  #home-trust::after {
+    right: auto;
+    left: -5.5rem;
+  }
+}
+
 @media (width >= 1280px) {
   .home-lp .home-hero-section {
     gap: clamp(5rem, 6vw, 7rem);
@@ -1916,5 +2278,10 @@
 
   .home-announcement-link {
     transform: none;
+  }
+
+  .home-lp > section:not(.home-hero-section)::after {
+    transition: none;
+    transform: rotate(var(--home-section-ghost-rotate, 0deg));
   }
 }

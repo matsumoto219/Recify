@@ -12,6 +12,7 @@ export default class extends Controller {
     this.setupConditionalBreaks()
     this.setupReveal()
     this.setupSectionNavigation()
+    this.setupSectionGhosts()
     this.setupSnapIndicators()
   }
 
@@ -47,6 +48,9 @@ export default class extends Controller {
     this.mockObserver = null
     this.sectionObserver?.disconnect()
     this.sectionObserver = null
+    this.ghostObserver?.disconnect()
+    this.ghostObserver = null
+    this.element.classList.remove('is-grid-visible')
     this.clearSectionNavigationTimer()
     if (this.handleScrollEnd) {
       window.removeEventListener('scrollend', this.handleScrollEnd)
@@ -307,6 +311,42 @@ export default class extends Controller {
     window.addEventListener('scroll', this.handleScroll, { passive: true })
     this.handleScrollEnd = () => this.finishProgrammaticSectionNavigation()
     window.addEventListener('scrollend', this.handleScrollEnd, { passive: true })
+  }
+
+  setupSectionGhosts () {
+    const sections = this.sectionTargets.filter((section) => !section.classList.contains('home-hero-section'))
+
+    if (sections.length === 0) return
+
+    if (!('IntersectionObserver' in window)) {
+      sections.forEach((section) => section.classList.add('is-ghost-visible'))
+      this.element.classList.add('is-grid-visible')
+      return
+    }
+
+    this.ghostObserver = new window.IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          entry.target.classList.toggle('is-ghost-visible', entry.isIntersecting)
+        })
+
+        this.updateFixedGridVisibility(sections)
+      },
+      {
+        root: null,
+        rootMargin: '-18% 0px -18% 0px',
+        threshold: 0.12
+      }
+    )
+
+    sections.forEach((section) => this.ghostObserver.observe(section))
+  }
+
+  updateFixedGridVisibility (sections) {
+    this.element.classList.toggle(
+      'is-grid-visible',
+      sections.some((section) => section.classList.contains('is-ghost-visible'))
+    )
   }
 
   buildSectionNavigation () {
