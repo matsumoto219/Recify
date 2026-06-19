@@ -261,6 +261,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       admin_navigation_labels = admin_navigation.css('.admin-navigation-label')
       current_admin_navigation_link = admin_navigation.at_css('a[aria-current="page"]')
       inactive_admin_navigation_link = admin_navigation_links.find { |link| link['href'] == admin_users_path }
+      announcements_admin_navigation_link = admin_navigation_links.find { |link| link['href'] == admin_announcements_path }
       back_admin_navigation_link = admin_navigation.at_css('a.admin-navigation-back')
       tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
 
@@ -298,10 +299,12 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(document.at_css('[data-controller="service-status-polling"].h-full')).to be_present
         expect(document.at_css('[data-service-status-polling-target="serviceStatusCard"].h-full')).to be_present
         expect(admin_navigation).to be_present
-        expect(admin_navigation_links.size).to eq(10)
+        expect(admin_navigation_links.size).to eq(11)
         expect(admin_navigation_links.all? { |link| link['aria-label'].present? }).to be(true)
         expect(admin_navigation_links.none? { |link| link['class'].include?('hover:underline') }).to be(true)
-        expect(admin_navigation_labels.size).to eq(10)
+        expect(admin_navigation_labels.size).to eq(11)
+        expect(announcements_admin_navigation_link).to be_present
+        expect(announcements_admin_navigation_link.text).to include('お知らせ')
         expect(current_admin_navigation_link['href']).to eq(admin_root_path)
         expect(current_admin_navigation_link['class']).to include('admin-navigation-current')
         expect(current_admin_navigation_link['class']).to include('token-text-brand')
