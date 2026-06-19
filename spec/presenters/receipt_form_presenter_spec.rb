@@ -24,7 +24,7 @@ RSpec.describe ReceiptFormPresenter do
       receipt = build(:receipt)
       item = ReceiptItem.new(
         receipt: receipt,
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         tax_rate: BigDecimal('0.08'),
         needs_review: true,
         review_reasons: %w[item_name_uncertain item_tax_rate_uncertain price_tax_inclusion_uncertain]
@@ -33,7 +33,7 @@ RSpec.describe ReceiptFormPresenter do
       row = described_class.new(receipt: receipt).item_row(item, new_record: false)
 
       aggregate_failures do
-        expect(row.selected_unit).to eq('kg')
+        expect(row.selected_unit).to eq('kilogram')
         expect(row.quantity_step).to eq('0.001')
         expect(row.quantity_inputmode).to eq('decimal')
         expect(row.name_highlight_variant).to eq(:error)

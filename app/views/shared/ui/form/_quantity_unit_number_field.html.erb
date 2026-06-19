@@ -7,7 +7,7 @@
 
   任意:
     - quantity_attribute: 数量属性（default: :quantity）
-    - unit_attribute: 単位属性（default: :quantity_unit）
+    - unit_attribute: 単位属性（default: :quantity_unit_code）
     - value: 数量inputの表示値
     - selected_unit: 選択中の単位
     - unit_options: 単位select options
@@ -22,7 +22,7 @@
 %>
 <%
   quantity_attribute = local_assigns.fetch(:quantity_attribute, :quantity)
-  unit_attribute = local_assigns.fetch(:unit_attribute, :quantity_unit)
+  unit_attribute = local_assigns.fetch(:unit_attribute, :quantity_unit_code)
   value = local_assigns[:value]
   selected_unit = local_assigns[:selected_unit]
   unit_options = local_assigns.fetch(:unit_options, [])

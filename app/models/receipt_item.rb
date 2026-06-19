@@ -50,6 +50,8 @@ class ReceiptItem < ApplicationRecord
 
   attribute :quantity_unit_code, :string, default: -> { ReceiptQuantityUnit.default_code }
 
+  before_validation :sync_legacy_quantity_unit_from_code
+
   scope :needs_review_only, -> { where(needs_review: true) }
 
   validates :category, inclusion: { in: CATEGORIES }, allow_blank: true
@@ -121,7 +123,7 @@ class ReceiptItem < ApplicationRecord
   end
 
   def self.quantity_unit_options
-    QUANTITY_UNITS.map { |unit| [ unit, unit ] }
+    ReceiptQuantityUnit.options
   end
 
   def self.decimal_quantity_unit?(unit)
@@ -153,7 +155,16 @@ class ReceiptItem < ApplicationRecord
   end
 
   def quantity_unit_label
-    ReceiptQuantityUnit.label(display_quantity_unit_code)
+    ReceiptQuantityUnit.label(normalized_quantity_unit_code)
+  end
+
+  def normalized_quantity_unit_code
+    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
+    code = quantity_unit_code.presence
+
+    return code if code.present? && (code != ReceiptQuantityUnit.default_code || legacy_code.blank?)
+
+    legacy_code.presence || code.presence || ReceiptQuantityUnit.default_code
   end
 
   def formatted_quantity
@@ -191,23 +202,29 @@ class ReceiptItem < ApplicationRecord
 
   private
 
-  def display_quantity_unit_code
-    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
-    code = quantity_unit_code.presence
-
-    return code if code.present? && (code != ReceiptQuantityUnit.default_code || legacy_code.blank?)
-
-    legacy_code.presence || code.presence || ReceiptQuantityUnit.default_code
-  end
-
   def quantity_must_be_integer_for_integer_unit
     return if quantity.blank?
-    return if self.class.decimal_quantity_unit?(display_quantity_unit_code)
+    return if self.class.decimal_quantity_unit?(normalized_quantity_unit_code)
 
     decimal = BigDecimal(quantity.to_s)
     errors.add(:quantity, :must_be_integer_for_unit) unless decimal.frac.zero?
   rescue ArgumentError
     nil
+  end
+
+  def sync_legacy_quantity_unit_from_code
+    return unless has_attribute?(:quantity_unit)
+    return if quantity_unit_code.blank?
+    return unless ReceiptQuantityUnit.allowed_codes.include?(quantity_unit_code)
+
+    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
+    if legacy_code.present? &&
+       quantity_unit_code == ReceiptQuantityUnit.default_code &&
+       !will_save_change_to_quantity_unit_code?
+      return
+    end
+
+    self.quantity_unit = ReceiptQuantityUnit.legacy_label(quantity_unit_code)
   end
 
   def inferred_discount_rate

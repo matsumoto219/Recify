@@ -4024,7 +4024,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    it 'measurement unitの小数quantityとquantity_unitを保存し、明示line_totalを維持する' do
+    it 'measurement unitの小数quantityとquantity_unit_codeを保存し、明示line_totalを維持する' do
       post receipts_path, params: {
         receipt: {
           store_name: '量り売り作成',
@@ -4034,7 +4034,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '量り売り商品',
               price: 14_400,
               quantity: '0.300',
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: 4_320,
               needs_review: false
@@ -4050,6 +4050,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.total_amount).to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.quantity_unit).to eq('kg')
         expect(item.line_total).to eq(4_320)
       end
@@ -4065,7 +4066,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '量り売り商品',
               price: '14,400',
               quantity: '0,300',
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: '4,320',
               needs_review: false
@@ -4089,6 +4090,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.total_amount).to eq(8_640)
         expect(items.first.quantity).to eq(BigDecimal('0.300'))
+        expect(items.first.quantity_unit_code).to eq('kilogram')
         expect(items.first.quantity_unit).to eq('kg')
         expect(items.first.line_total).to eq(4_320)
         expect(items.second.line_total).to eq(4_320)
@@ -4106,7 +4108,7 @@ RSpec.describe 'Receipts', type: :request do
                 confirmed_name: '小数個数商品',
                 price: 100,
                 quantity: '1.1',
-                quantity_unit: '個',
+                quantity_unit_code: 'each',
                 tax_rate: 10,
                 line_total: nil,
                 needs_review: false
@@ -4135,7 +4137,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '量り売り商品',
               price: 14_400,
               quantity: '0.300',
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -4151,6 +4153,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(receipt.total_amount).not_to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.quantity_unit).to eq('kg')
         expect(item.line_total).to eq(0)
       end
@@ -5691,23 +5694,27 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'quantity_unitを編集できるselectを表示する' do
+    it 'quantity_unit_codeを編集できるselectを表示する' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         needs_review: false
       )
 
       get edit_receipt_path(receipt)
 
+      document = Nokogiri::HTML(response.body)
+      quantity_unit_options = document.css('select[name$="[quantity_unit_code]"] option')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('quantity_unit')
-        expect(response.body).to include('kg')
-        expect(response.body).to include('その他')
+        expect(response.body).to include('quantity_unit_code')
+        expect(response.body).to include('kilogram')
+        expect(quantity_unit_options.map(&:text)).to include('kg')
+        expect(quantity_unit_options.map(&:text)).not_to include('その他')
       end
     end
 
@@ -6099,7 +6106,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '量り売り商品',
         price: 14_400,
         quantity: BigDecimal('0.300'),
-        quantity_unit: 'kg',
+        quantity_unit_code: 'kilogram',
         line_total: 4_320,
         needs_review: false
       )
@@ -6132,7 +6139,7 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
-      quantity_unit_select = document.at_css('select[name$="[quantity_unit]"]')
+      quantity_unit_select = document.at_css('select[name$="[quantity_unit_code]"]')
       quantity_input = document.at_css('[data-receipt-form-target="quantityInput"]')
 
       aggregate_failures do
@@ -6169,7 +6176,7 @@ RSpec.describe 'Receipts', type: :request do
         confirmed_name: '単位確認商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '個',
+        quantity_unit_code: 'each',
         line_total: 100,
         needs_review: false
       )
@@ -6177,16 +6184,16 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
-      option_values = document.css('select[name$="[quantity_unit]"] option').map { |option| option['value'] }.uniq
+      option_values = document.css('select[name$="[quantity_unit_code]"] option').map { |option| option['value'] }.uniq
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(option_values).to include('個', '点', '本', '袋', '枚', '台', '箱', 'セット')
-        expect(option_values).to include('kg', 'g', 'mg', 'L', 'ml', 'cc')
+        expect(option_values).to include('each', 'item', 'piece', 'bag', 'sheet', 'unit', 'box', 'set')
+        expect(option_values).to include('kilogram', 'gram', 'milligram', 'liter', 'milliliter', 'cubic_centimeter')
       end
     end
 
-    it '未知quantity_unitの既存明細は現在値を選択肢として保持する' do
+    it '未知quantity_unitの既存明細は候補外値を選択肢として保持しない' do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
@@ -6199,13 +6206,13 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
-      quantity_unit_select = document.at_css('select[name$="[quantity_unit]"]')
+      quantity_unit_select = document.at_css('select[name$="[quantity_unit_code]"]')
       selected_option = quantity_unit_select.at_css('option[selected]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(quantity_unit_select.css('option').map { |option| option['value'] }).to include('束')
-        expect(selected_option['value']).to eq('束')
+        expect(quantity_unit_select.css('option').map { |option| option['value'] }).not_to include('束')
+        expect(selected_option['value']).to eq('each')
       end
     end
 
@@ -7915,7 +7922,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'measurement unitの小数quantityとquantity_unitを更新し、明示line_totalを維持できる' do
+    it 'measurement unitの小数quantityとquantity_unit_codeを更新し、明示line_totalを維持できる' do
       item = receipt.receipt_items.create!(
         confirmed_name: '更新前量り売り商品',
         price: 100,
@@ -7936,7 +7943,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: '更新後量り売り商品',
               price: 14_400,
               quantity: '0.300',
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: 4_320,
               needs_review: false
@@ -7952,6 +7959,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.total_amount).to eq(4_320)
         expect(item.quantity).to eq(BigDecimal('0.300'))
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.quantity_unit).to eq('kg')
         expect(item.line_total).to eq(4_320)
       end
@@ -7978,7 +7986,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: item.quantity,
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -7992,6 +8000,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.quantity_unit_code).to eq('kilogram')
         expect(item.quantity_unit).to eq('kg')
         expect(item.line_total).to eq(200)
         expect(receipt.total_amount).to eq(200)
@@ -8019,7 +8028,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 500,
               quantity: 3,
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -8059,7 +8068,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 500,
               quantity: '',
-              quantity_unit: '個',
+              quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
               needs_review: false
@@ -8098,7 +8107,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: 14_400,
               quantity: '0.500',
-              quantity_unit: 'kg',
+              quantity_unit_code: 'kilogram',
               tax_rate: 10,
               line_total: 4_320,
               needs_review: false
@@ -8118,12 +8127,12 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '未知quantity_unitはそのままPATCHしても維持される' do
+    it '旧quantity_unit paramだけでは数量単位を更新しない' do
       item = receipt.receipt_items.create!(
-        confirmed_name: '未知単位商品',
+        confirmed_name: '旧param確認商品',
         price: 100,
         quantity: 1,
-        quantity_unit: '束',
+        quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
         line_total: 100,
         needs_review: false
@@ -8139,7 +8148,7 @@ RSpec.describe 'Receipts', type: :request do
               confirmed_name: item.confirmed_name,
               price: item.price,
               quantity: '1',
-              quantity_unit: '束',
+              quantity_unit: 'kg',
               tax_rate: 10,
               line_total: item.line_total,
               needs_review: false
@@ -8152,7 +8161,8 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
-        expect(item.quantity_unit).to eq('束')
+        expect(item.quantity_unit_code).to eq('each')
+        expect(item.quantity_unit).to eq('個')
         expect(item.line_total).to eq(100)
       end
     end

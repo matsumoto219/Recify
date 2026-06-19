@@ -58,7 +58,7 @@ class ReceiptFormPresenter
   end
 
   def decimal_quantity_units_value
-    ReceiptItem::DECIMAL_QUANTITY_UNITS.join(",")
+    ReceiptQuantityUnit.decimal_codes.join(",")
   end
 
   def integer_quantity_step_value
@@ -176,7 +176,7 @@ class ReceiptFormPresenter
     end
 
     def selected_unit
-      new_record? ? ReceiptItem::DEFAULT_QUANTITY_UNIT : item.quantity_unit.presence || ReceiptItem::DEFAULT_QUANTITY_UNIT
+      new_record? ? ReceiptQuantityUnit.default_code : item.normalized_quantity_unit_code
     end
 
     def quantity_value

@@ -66,6 +66,12 @@ class ReceiptQuantityUnit
       ALLOWED_CODES.map { |code| { value: code, label: label(code, locale: locale) } }
     end
 
+    def legacy_label(code)
+      unit = unit_for(code)
+
+      unit&.legacy_labels&.first || label(code, locale: :ja)
+    end
+
     def countable?(code)
       COUNTABLE_CODES.include?(normalize(code))
     end
@@ -80,6 +86,14 @@ class ReceiptQuantityUnit
 
     def inputmode_for(code)
       decimal?(code) ? "decimal" : "numeric"
+    end
+
+    private
+
+    def unit_for(code)
+      normalized = normalize(code)
+
+      UNITS.find { |unit| unit.code == normalized }
     end
   end
 end

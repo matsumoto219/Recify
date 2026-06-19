@@ -572,7 +572,7 @@ class ReceiptsController < ApplicationController
         :category,
         :price,
         :quantity,
-        :quantity_unit,
+        :quantity_unit_code,
         # ProductCode は保存/permit済みだが、UI入力欄はまだ出していない。
         :product_code,
         :tax_rate,
@@ -621,6 +621,7 @@ class ReceiptsController < ApplicationController
 
     permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
     normalize_receipt_item_tax_rates!(permitted)
+    normalize_receipt_item_quantity_units!(permitted)
     normalize_receipt_adjustment_attributes!(permitted)
     prune_blank_new_receipt_items!(permitted)
     prune_blank_new_receipt_adjustments!(permitted)
@@ -792,6 +793,25 @@ class ReceiptsController < ApplicationController
     items_attributes.each_value do |item_attributes|
       raw_tax_rate = item_attributes["tax_rate"]
       item_attributes["tax_rate"] = normalize_tax_rate(raw_tax_rate)
+    end
+  end
+
+  def normalize_receipt_item_quantity_units!(permitted)
+    items_attributes = permitted["receipt_items_attributes"]
+    return if items_attributes.blank?
+
+    items_attributes.each_value do |item_attributes|
+      raw_code = item_attributes["quantity_unit_code"]
+      code =
+        if raw_code.blank?
+          ReceiptQuantityUnit.default_code
+        else
+          ReceiptQuantityUnit.normalize(raw_code, default: nil)
+        end
+
+      code ||= raw_code.to_s
+      item_attributes["quantity_unit_code"] = code
+      item_attributes["quantity_unit"] = ReceiptQuantityUnit.legacy_label(code) if ReceiptQuantityUnit.allowed_codes.include?(code)
     end
   end
 
@@ -1363,7 +1383,7 @@ class ReceiptsController < ApplicationController
       category
       price
       quantity
-      quantity_unit
+      quantity_unit_code
       product_code
       tax_rate
       line_total
