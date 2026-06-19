@@ -2,6 +2,7 @@ class SecurityEvent < ApplicationRecord
   EVENT_TYPES = %w[
     suspicious_payload
     sql_injection_attempt
+    nosql_injection_attempt
     xss_attempt
     html_injection_attempt
     command_injection_attempt
@@ -13,9 +14,14 @@ class SecurityEvent < ApplicationRecord
     header_injection_attempt
     log_injection_attempt
     redos_attempt
+    csv_injection_attempt
+    xml_injection_attempt
+    xpath_injection_attempt
+    ldap_injection_attempt
     suspicious_file_upload
     mime_spoofing_attempt
     invalid_json_attempt
+    json_injection_attempt
     schema_abuse_attempt
     prompt_injection_attempt
     ocr_text_injection_attempt

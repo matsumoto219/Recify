@@ -52,6 +52,12 @@ module SecurityEvents
         pattern: /(?:;\s*)?\b(?:drop|alter|truncate)\s+(?:table|database)\b/i
       },
       {
+        event_type: "nosql_injection_attempt",
+        severity: "medium",
+        matched_rule: "nosql_operator_marker",
+        pattern: /(?:["']?\$(?:ne|gt|gte|lt|lte|in|nin|where|regex)["']?\s*:|\b\$where\b)/i
+      },
+      {
         event_type: "xss_attempt",
         severity: "high",
         matched_rule: "script_or_javascript",
@@ -104,6 +110,36 @@ module SecurityEvents
         severity: "medium",
         matched_rule: "nested_quantifier_regex",
         pattern: /\((?:[^()]{1,40}[+*])\)[+*]/
+      },
+      {
+        event_type: "csv_injection_attempt",
+        severity: "medium",
+        matched_rule: "spreadsheet_formula_marker",
+        pattern: /\A[=+@]\s*(?:cmd|powershell|hyperlink|importxml|importdata|webservice|[A-Z]+\s*\()/i
+      },
+      {
+        event_type: "xml_injection_attempt",
+        severity: "medium",
+        matched_rule: "xml_doctype_or_entity",
+        pattern: /(?:<!DOCTYPE\b|<!ENTITY\b|<\?xml\b.{0,200}<!DOCTYPE\b)/im
+      },
+      {
+        event_type: "xpath_injection_attempt",
+        severity: "medium",
+        matched_rule: "xpath_boolean_bypass",
+        pattern: /(?:\bor\s+count\s*\(|\bor\s+name\s*\(|\]\s*\[|\bor\s+['"]1['"]\s*=\s*['"]1['"])/i
+      },
+      {
+        event_type: "ldap_injection_attempt",
+        severity: "medium",
+        matched_rule: "ldap_filter_breakout",
+        pattern: /(?:\*\)\s*\(|\(\|\s*\([^)]*\*\)|\(\&\s*\([^)]*\*\))/
+      },
+      {
+        event_type: "schema_abuse_attempt",
+        severity: "medium",
+        matched_rule: "json_schema_control_key",
+        pattern: /["'](?:__proto__|constructor|prototype|\$schema|\$ref)["']\s*:/i
       },
       {
         event_type: "prompt_injection_attempt",

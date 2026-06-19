@@ -179,6 +179,7 @@ RSpec.describe SecurityEvents::Detector do
   it '主要な入力系攻撃markerを分類する' do
     cases = {
       sql_injection_attempt: { q: "' OR 1=1 --" },
+      nosql_injection_attempt: { filter: '{"$ne": null}' },
       xss_attempt: { comment: '<img src=x onerror=alert(1)>' },
       html_injection_attempt: { body: '<svg><animate /></svg>' },
       template_injection_attempt: { template: '<%= 7 * 7 %>' },
@@ -187,6 +188,11 @@ RSpec.describe SecurityEvents::Detector do
       crlf_injection_attempt: { header: "ok\r\nSet-Cookie: injected=1" },
       log_injection_attempt: { memo: "normal\n[ERROR] forged line" },
       redos_attempt: { pattern: '(a+)*' },
+      csv_injection_attempt: { exported_cell: '=HYPERLINK("https://evil.example","click")' },
+      xml_injection_attempt: { xml: '<!DOCTYPE data [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>' },
+      xpath_injection_attempt: { xpath: "' or count(/*)>0 or '" },
+      ldap_injection_attempt: { ldap_filter: '*)(uid=*))(|(uid=*' },
+      schema_abuse_attempt: { json_body: '{"$ref":"http://evil.example/schema.json"}' },
       open_redirect_attempt: { return_to: 'https://evil.example/path' },
       ssrf_attempt: { callback_url: 'http://169.254.169.254/latest/meta-data' }
     }
@@ -196,5 +202,42 @@ RSpec.describe SecurityEvents::Detector do
     cases.each_key do |event_type|
       expect(results.fetch(event_type)).to include(event_type.to_s)
     end
+  end
+
+  it '危険URLのmarkerをredirect用途のfieldで分類する' do
+    cases = {
+      'file:///etc/passwd' => 'forbidden_url_scheme',
+      '//evil.example/path' => 'protocol_relative_url',
+      'https://user@example.com/path' => 'userinfo_url',
+      "https://example.com/\nLocation: https://evil.example" => 'control_character_url',
+      'https:\\evil.example\path' => 'backslash_url'
+    }
+
+    aggregate_failures do
+      cases.each do |value, matched_rule|
+        detections = described_class.call(params: { redirect_to: value })
+
+        expect(detections).to include(
+          have_attributes(
+            event_type: 'open_redirect_attempt',
+            matched_rule: matched_rule,
+            field_name: 'redirect_to'
+          )
+        )
+      end
+    end
+  end
+
+  it '別レイヤーで扱う通常値をSecurityEvent化しない' do
+    detections = described_class.call(
+      params: {
+        memo: 'レシート管理の通常メモです。CSVでの出力予定はありません。',
+        amount: '-1200',
+        page: '2',
+        controller: 'receipts'
+      }
+    )
+
+    expect(detections).to be_empty
   end
 end
