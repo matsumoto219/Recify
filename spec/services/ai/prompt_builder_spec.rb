@@ -103,10 +103,23 @@ RSpec.describe Ai::PromptBuilder do
           ]
         )
         expect(result[:adjustment_candidates]).to eq([])
+        expect(result[:profile_hints]).to include(
+          payment_terms: include('現金', 'クレジット'),
+          tax_terms: include('消費税', '軽減税率'),
+          adjustment_terms: include('値引', 'ポイント利用')
+        )
         expect(result.dig(:meta, :item_count)).to eq(2)
         expect(result.dig(:meta, :adjustment_candidate_count)).to eq(0)
         expect(result.dig(:meta, :confidence_summary, :items_average)).to eq(0.75)
       end
+    end
+
+    it '明示的なunsupported countryではJapan profile hintsを入れない' do
+      result = described_class.build(
+        ocr_result.deep_merge(candidates: { country_region: 'USA' })
+      )
+
+      expect(result[:profile_hints]).to eq({})
     end
 
     it '長いレシートfixtureでもitem数とconfidence summaryの互換性を保つ' do

@@ -202,6 +202,24 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it 'profile hints がある場合だけローカル解析語彙として提示する' do
+      prompt = described_class.build(
+        input.merge(
+          profile_hints: {
+            payment_terms: %w[現金 クレジット],
+            tax_terms: %w[消費税 軽減税率],
+            adjustment_terms: %w[値引 ポイント利用]
+          }
+        )
+      )
+
+      aggregate_failures do
+        expect(prompt[:user]).to include('Local receipt profile hints:')
+        expect(prompt[:user]).to include('payment_terms: 現金, クレジット')
+        expect(prompt[:user]).to include('Use these hints only to interpret OCR text that is already present.')
+      end
+    end
+
     it '出力不変条件をsystem promptで指示する' do
       aggregate_failures do
         expect(system_prompt).to include('Output invariants:')

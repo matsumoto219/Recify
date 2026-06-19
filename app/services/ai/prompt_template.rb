@@ -215,6 +215,7 @@ module Ai
         - If a known local payment brand appears, use country_region and payment_context_lines to classify it.
         - Do NOT treat brand names in points, membership, coupons, loyalty programs, or advertising context as payment methods.
         - Do NOT infer a payment method from generic words such as "Pay", "Card", "Point", or "Member" without payment context.
+        #{local_profile_hint_rules}
 
         For items:
         - Preserve input item indexes.
@@ -301,6 +302,20 @@ module Ai
           - suggested_name: preserve the item name exactly as captured by OCR and do not edit it under any circumstances.
         RULES
       end
+    end
+
+    def local_profile_hint_rules
+      hints = input[:profile_hints]
+      return "" unless hints.is_a?(Hash) && hints.values.any?(&:present?)
+
+      <<~RULES.chomp
+
+        Local receipt profile hints:
+        - payment_terms: #{Array(hints[:payment_terms]).join(", ")}
+        - tax_terms: #{Array(hints[:tax_terms]).join(", ")}
+        - adjustment_terms: #{Array(hints[:adjustment_terms]).join(", ")}
+        - Use these hints only to interpret OCR text that is already present. Do NOT output local terms unless they are supported by OCR context.
+      RULES
     end
 
     def allowed_categories

@@ -51,6 +51,7 @@ module Ai
         items: build_items_payload,
         adjustment_candidates: build_adjustment_candidates_payload,
         adjustment_context_lines: build_adjustment_context_lines,
+        profile_hints: build_profile_hints,
         meta: build_meta
       }
     end
@@ -210,7 +211,7 @@ module Ai
 
       # 店舗 / 購入日時 / 支払い判定に不要な明細・金額ノイズを落とす
       # 支払区分は payment_context_lines の補助材料になり得るためここでは落とさない
-      return true if text.match?(/小計|合計|税込|税抜|内税|外税|消費税|税率|値引|割引|預り|釣り|お釣り|数量|個数|単価|商品コード|商品番号|SKU/)
+      return true if text.match?(analysis_profile.ai_removable_noise_line_pattern)
       return true if text.match?(/\d+%|\d+％/)
 
       false
@@ -303,7 +304,7 @@ module Ai
         end
         next if operator_reference_line?(text) && customer_facing_store_candidates.present?
         next if store_name_candidate_noise_line?(text)
-        next if text.match?(/tel|電話|レジ|伝票|領収|日時|合計|小計/i)
+        next if text.match?(analysis_profile.ai_store_candidate_reference_noise_pattern)
         next if text.match?(/^\d+[\d\s\-\/:]*$/)
 
         text
@@ -430,10 +431,10 @@ module Ai
       return true if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
       return true if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
       return true if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
-      return true if compact_text.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
+      return true if compact_text.match?(analysis_profile.store_context_compact_noise_pattern)
       return true if normalized.match?(/ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i)
-      return true if normalized.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
-      return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
+      return true if normalized.match?(analysis_profile.store_building_or_floor_pattern)
+      return true if normalized.match?(analysis_profile.store_context_noise_pattern)
       return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
       return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
 
@@ -467,21 +468,21 @@ module Ai
       return false if text.empty?
 
       date_time_line?(text) ||
-        text.match?(/購入|会計|発行|伝票|領収|オーダー|注文|日時|時刻/)
+        text.match?(analysis_profile.ai_purchase_context_line_pattern)
     end
 
     def payment_context_line?(line)
       text = line.to_s.strip
       return false if text.empty?
 
-      text.match?(/現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/)
+      text.match?(analysis_profile.ai_payment_context_line_pattern)
     end
 
     def tax_context_line?(line)
       text = line.to_s.strip
       return false if text.empty?
 
-      text.match?(/税率|税額|内税|外税|消費税|軽減税率|標準税率|対象|\d+％|\d+%/)
+      text.match?(analysis_profile.ai_tax_context_line_pattern)
     end
 
     def item_content_lines(raw_text)
@@ -600,8 +601,8 @@ module Ai
       return false if text.empty?
       compact_text = text.gsub(/[[:space:]]+/, "")
       return false if text.length <= 1
-      return false if compact_text.match?(/\A(?:領|収|証|合計|お預り|お預かり|預り|預かり|お釣り?|釣り?|釣銭)\z/)
-      return false if compact_text.match?(/\A(?:t|T)?(?:会員番号|カード番号|ポイント)/)
+      return false if compact_text.match?(analysis_profile.ai_branch_single_noise_pattern)
+      return false if compact_text.match?(analysis_profile.ai_branch_card_or_point_prefix_pattern)
       if normalized_store_name(text) == normalized_store_name(candidate_value(:store_name))
         return false unless heading_candidates_extend_ocr_store_name?
       end
@@ -615,21 +616,21 @@ module Ai
       # ただし店舗名と商品名が同一になる特殊ケースはあり得るため、最終判定は filtered_content も参照する AI に委ねる。
       return false if item_like_line?(text)
       return false if text.match?(/\A[\d\-\+]{6,}\z/)
-      return false if text.match?(/株式会社|有限会社|合同会社/)
-      return false if text.match?(/お客様相談室|サポート|ヘルプデスク|コールセンター/)
-      return false if text.match?(/登録番号|電話|tel|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/i)
-      return false if text.gsub(/[[:space:]]+/, "").match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
-      return false if text.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
+      return false if text.match?(analysis_profile.store_legal_entity_branch_exclusion_pattern)
+      return false if text.match?(analysis_profile.ai_branch_support_noise_pattern)
+      return false if text.match?(analysis_profile.ai_branch_registration_noise_pattern)
+      return false if text.gsub(/[[:space:]]+/, "").match?(analysis_profile.store_context_compact_noise_pattern)
+      return false if text.match?(analysis_profile.store_building_or_floor_pattern)
       return false if text.match?(/\d{4}年|\d{1,2}月|\d{1,2}日/)
       return false if text.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
-      return false if text.match?(/ます[。.]?\z/)
-      return false if text.match?(/ご利用日|利用日/)
-      return false if text.match?(/オーダー|注文|時刻|日時/)
-      return false if text.match?(/ポイント|楽天ポイント|Tポイント|dポイント|Ponta|WAON POINT|nanacoポイント/i)
-      return false if text.match?(/明細|会員|カード|マネー|残高|貯まり|利用可能|ご確認|https?:|www\.|\.jp/i)
+      return false if text.match?(analysis_profile.ai_branch_polite_statement_pattern)
+      return false if text.match?(analysis_profile.ai_branch_usage_date_pattern)
+      return false if text.match?(analysis_profile.ai_branch_order_time_pattern)
+      return false if text.match?(analysis_profile.ai_branch_point_noise_pattern)
+      return false if text.match?(analysis_profile.ai_branch_detail_noise_pattern)
       return false if text.match?(/[¥￥円]/)
 
-      text.match?(/店|通り|駅前|本町|中央|南|北|東|西/) ||
+      text.match?(analysis_profile.ai_branch_location_marker_pattern) ||
         (text.length <= 20 && !text.match?(/[都道府県市区町村郡]/) && !text.match?(/\d{2,}/))
     end
 
@@ -665,12 +666,10 @@ module Ai
       return false if text.empty?
       return false if date_time_line?(text)
       return false if text.match?(/\A[\d\-\+]{6,}\z/)
-      return false if text.match?(/電話|TEL|お客様相談室|サポート|ヘルプデスク|コールセンター/)
-      return false if text.match?(/登録番号|店no|レジ|伝票|売上票/)
+      return false if text.match?(analysis_profile.ai_address_exclusion_pattern)
+      return false if text.match?(analysis_profile.ai_address_registration_noise_pattern)
 
-      text.match?(/[都道府県]/) ||
-        (text.match?(/[市区町村郡]/) && text.match?(/\d/)) ||
-        text.match?(/\d+[\-丁目番地号]/)
+      text.match?(analysis_profile.ai_address_candidate_pattern)
     end
 
     def filtered_reference_lines
@@ -789,6 +788,18 @@ module Ai
 
     def meta_hash
       @meta_hash ||= fetch(ocr_result, :meta) || {}
+    end
+
+    def build_profile_hints
+      explicit_profile&.ai_profile_hints || {}
+    end
+
+    def explicit_profile
+      @explicit_profile ||= ReceiptAnalysisProfiles.fetch(candidate_value(:country_region))
+    end
+
+    def analysis_profile
+      @analysis_profile ||= explicit_profile || ReceiptAnalysisProfiles.default
     end
 
     def candidate_value(key)

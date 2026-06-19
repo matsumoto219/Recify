@@ -507,6 +507,55 @@ module ReceiptAnalysisProfiles
     AMOUNT_TAX_DETAIL_NET_PATTERN = /外税|税別|税抜|別途消費税|net|exclusive|tax\s*exclusive/i.freeze
     AMOUNT_TAX_DETAIL_TAX_ONLY_PATTERN = /消費税等?$|消費税$|税額$|tax$/i.freeze
     AMOUNT_TAX_DETAIL_GROSS_DESCRIPTION_PATTERN = /対象|対象額/.freeze
+    AI_PAYMENT_HINTS = [
+      "現金",
+      "クレジット",
+      "商品券",
+      "交通系IC",
+      "電子マネー",
+      "PayPay",
+      "楽天ペイ",
+      "d払い",
+      "au PAY",
+      "メルペイ"
+    ].freeze
+    AI_TAX_HINTS = [
+      "対象",
+      "税込",
+      "税抜",
+      "内税",
+      "外税",
+      "消費税",
+      "軽減税率",
+      "非課税"
+    ].freeze
+    AI_ADJUSTMENT_HINTS = [
+      "値引",
+      "割引",
+      "クーポン",
+      "ポイント利用",
+      "返品",
+      "返金",
+      "キャッシュレス還元"
+    ].freeze
+    AI_REMOVABLE_NOISE_LINE_PATTERN = /小計|合計|税込|税抜|内税|外税|消費税|税率|値引|割引|預り|釣り|お釣り|数量|個数|単価|商品コード|商品番号|SKU/.freeze
+    AI_STORE_CANDIDATE_REFERENCE_NOISE_PATTERN = /tel|電話|レジ|伝票|領収|日時|合計|小計/i.freeze
+    AI_PURCHASE_CONTEXT_LINE_PATTERN = /購入|会計|発行|伝票|領収|オーダー|注文|日時|時刻/.freeze
+    AI_PAYMENT_CONTEXT_LINE_PATTERN = /現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/.freeze
+    AI_TAX_CONTEXT_LINE_PATTERN = /税率|税額|内税|外税|消費税|軽減税率|標準税率|対象|\d+％|\d+%/.freeze
+    AI_BRANCH_SINGLE_NOISE_PATTERN = /\A(?:領|収|証|合計|お預り|お預かり|預り|預かり|お釣り?|釣り?|釣銭)\z/.freeze
+    AI_BRANCH_CARD_OR_POINT_PREFIX_PATTERN = /\A(?:t|T)?(?:会員番号|カード番号|ポイント)/.freeze
+    AI_BRANCH_SUPPORT_NOISE_PATTERN = /お客様相談室|サポート|ヘルプデスク|コールセンター/.freeze
+    AI_BRANCH_REGISTRATION_NOISE_PATTERN = /登録番号|電話|tel|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/i.freeze
+    AI_BRANCH_POLITE_STATEMENT_PATTERN = /ます[。.]?\z/.freeze
+    AI_BRANCH_USAGE_DATE_PATTERN = /ご利用日|利用日/.freeze
+    AI_BRANCH_ORDER_TIME_PATTERN = /オーダー|注文|時刻|日時/.freeze
+    AI_BRANCH_POINT_NOISE_PATTERN = /ポイント|楽天ポイント|Tポイント|dポイント|Ponta|WAON POINT|nanacoポイント/i.freeze
+    AI_BRANCH_DETAIL_NOISE_PATTERN = /明細|会員|カード|マネー|残高|貯まり|利用可能|ご確認|https?:|www\.|\.jp/i.freeze
+    AI_BRANCH_LOCATION_MARKER_PATTERN = /店|通り|駅前|本町|中央|南|北|東|西/.freeze
+    AI_ADDRESS_EXCLUSION_PATTERN = /電話|TEL|お客様相談室|サポート|ヘルプデスク|コールセンター/.freeze
+    AI_ADDRESS_REGISTRATION_NOISE_PATTERN = /登録番号|店no|レジ|伝票|売上票/.freeze
+    AI_ADDRESS_CANDIDATE_PATTERN = /[都道府県]|[市区町村郡].*\d|\d+[\-丁目番地号]/.freeze
 
     class << self
       def country_codes
@@ -1059,6 +1108,86 @@ module ReceiptAnalysisProfiles
 
       def amount_tax_detail_gross_description_pattern
         AMOUNT_TAX_DETAIL_GROSS_DESCRIPTION_PATTERN
+      end
+
+      def ai_profile_hints
+        {
+          payment_terms: AI_PAYMENT_HINTS,
+          tax_terms: AI_TAX_HINTS,
+          adjustment_terms: AI_ADJUSTMENT_HINTS
+        }
+      end
+
+      def ai_removable_noise_line_pattern
+        AI_REMOVABLE_NOISE_LINE_PATTERN
+      end
+
+      def ai_store_candidate_reference_noise_pattern
+        AI_STORE_CANDIDATE_REFERENCE_NOISE_PATTERN
+      end
+
+      def ai_purchase_context_line_pattern
+        AI_PURCHASE_CONTEXT_LINE_PATTERN
+      end
+
+      def ai_payment_context_line_pattern
+        AI_PAYMENT_CONTEXT_LINE_PATTERN
+      end
+
+      def ai_tax_context_line_pattern
+        AI_TAX_CONTEXT_LINE_PATTERN
+      end
+
+      def ai_branch_single_noise_pattern
+        AI_BRANCH_SINGLE_NOISE_PATTERN
+      end
+
+      def ai_branch_card_or_point_prefix_pattern
+        AI_BRANCH_CARD_OR_POINT_PREFIX_PATTERN
+      end
+
+      def ai_branch_support_noise_pattern
+        AI_BRANCH_SUPPORT_NOISE_PATTERN
+      end
+
+      def ai_branch_registration_noise_pattern
+        AI_BRANCH_REGISTRATION_NOISE_PATTERN
+      end
+
+      def ai_branch_polite_statement_pattern
+        AI_BRANCH_POLITE_STATEMENT_PATTERN
+      end
+
+      def ai_branch_usage_date_pattern
+        AI_BRANCH_USAGE_DATE_PATTERN
+      end
+
+      def ai_branch_order_time_pattern
+        AI_BRANCH_ORDER_TIME_PATTERN
+      end
+
+      def ai_branch_point_noise_pattern
+        AI_BRANCH_POINT_NOISE_PATTERN
+      end
+
+      def ai_branch_detail_noise_pattern
+        AI_BRANCH_DETAIL_NOISE_PATTERN
+      end
+
+      def ai_branch_location_marker_pattern
+        AI_BRANCH_LOCATION_MARKER_PATTERN
+      end
+
+      def ai_address_exclusion_pattern
+        AI_ADDRESS_EXCLUSION_PATTERN
+      end
+
+      def ai_address_registration_noise_pattern
+        AI_ADDRESS_REGISTRATION_NOISE_PATTERN
+      end
+
+      def ai_address_candidate_pattern
+        AI_ADDRESS_CANDIDATE_PATTERN
       end
     end
   end
