@@ -1,246 +1,20 @@
 module Analysis
   module ReceiptFallbackPatterns
-    # OCRフォールバック用の簡易ルール（AI失敗時のみ使用）
-    PAYMENT_METHOD_PATTERNS = {
-      "debit_card" => [
-        /デビット(?:カード)?/i,
-        /debit(?:\s*card)?/i,
-        /j[-\s]?debit/i,
-        /visa\s*debit/i
-      ],
-      "credit_card" => [
-        /クレジット(?:カード)?/i,
-        /credit(?:\s*card)?/i,
-        /master(?:card)?/i,
-        /master\s*card/i,
-        /visa(?!\s*debit)/i,
-        /jcb/i,
-        /amex/i,
-        /american\s*express/i,
-        /diners/i,
-        /discover/i,
-        /uc/i,
-        /dc/i,
-        /銀聯/i,
-        /unionpay/i,
-        /union\s*pay/i
-      ],
-      "qr_payment" => [
-        /qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?/i,
-        /paypay/i,
-        /楽天(?:ペイ|pay)/i,
-        /rakuten\s*pay/i,
-        /d払い/i,
-        /d\s*payment/i,
-        /au\s*pay/i,
-        /aupay/i,
-        /メルペイ/i,
-        /line\s*pay/i,
-        /linepay/i,
-        /alipay/i,
-        /wechat\s*pay/i
-      ],
-      "e_money" => [
-        /suica/i,
-        /pasmo/i,
-        /icoca/i,
-        /交通系\s*ic/i,
-        /交通系電子マネー/i,
-        /電子マネー/i,
-        /waon(?!\s*point)/i,
-        /nanaco/i,
-        /楽天edy/i,
-        /\bedy\b/i,
-        /(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])/i,
-        /quick\s*pay/i,
-        /quic\s*pay/i,
-        /qui\s*c\s*pay/i,
-        /contactless/i,
-        /タッチ決済/i,
-        /コンタクトレス/i,
-        /\bnfc\b/i,
-        /mobile\s*payment/i,
-        /apple\s*pay/i,
-        /google\s*pay/i
-      ],
-      "cash" => [
-        /現金/i,
-        /cash/i,
-        /お釣り/i,
-        /おつり/i,
-        /釣銭/i,
-        /預り/i,
-        /お預り/i,
-        /現\s*計/i
-      ]
-    }.freeze
-
-    CATEGORY_PATTERNS = {
-      "drink" => [
-        /ｺｰﾋｰ/i,
-        /コーヒー/i,
-        /焙煎コーヒー/i,
-        /カフェラテ/i,
-        /ラテ/i,
-        /お茶/i,
-        /tea/i,
-        /coffee/i,
-        /ジュース/i,
-        /オレンジジュース/i,
-        /牛乳/i,
-        /ミルク/i,
-        /天然水/i,
-        /ミネラルウォーター/i,
-        /(?:\A|[[:space:]])水[[:space:]]*\d+(?:ml|l)\b/i,
-        /(?:\A|[[:space:]])水[[:space:]]*[\(（]飲料[\)）]/i,
-        /炭酸/i,
-        /酒/i,
-        /ビール/i
-      ],
-      "food" => [
-        /ｻﾝﾄﾞ/i,
-        /サンド/i,
-        /パン/i,
-        /弁当/i,
-        /おにぎり/i,
-        /ラーメン/i,
-        /うどん/i,
-        /牛丼/i,
-        /惣菜/i,
-        /豆腐/i,
-        /野菜/i,
-        /魚/i,
-        /肉/i,
-        /バナナ/i,
-        /ミニトマト/i,
-        /トマト/i,
-        /たまご/i,
-        /卵/i,
-        /ヨーグルト/i,
-        /米/i,
-        /じゃがいも/i,
-        /もやし/i,
-        /かぼちゃ/i,
-        /サラダ/i,
-        /パスタ/i,
-        /ハンバーグ/i,
-        /コロッケ/i,
-        /ごはん/i,
-        /ゼリー/i,
-        /プリン/i,
-        /シュークリーム/i,
-        /チーズ/i,
-        /チキン/i,
-        /鶏/i,
-        /豚/i,
-        /牛/i,
-        /サーモン/i,
-        /海老/i,
-        /エビ/i,
-        /クッキー/i
-      ],
-      "daily_goods" => [
-        /乾電池/i,
-        /ティッシュ/i,
-        /やわらかティッシュ/i,
-        /洗剤/i,
-        /シャンプー/i,
-        /歯ブラシ/i,
-        /石鹸/i,
-        /トイレットペーパー/i
-      ],
-      "household" => [
-        /キッチン/i,
-        /ラップ/i,
-        /スポンジ/i,
-        /洗濯/i,
-        /掃除/i,
-        /電球/i,
-        /収納/i
-      ],
-      "medical" => [
-        /薬/i,
-        /ドラッグ/i,
-        /病院/i,
-        /処方/i,
-        /湿布/i,
-        /マスク/i
-      ],
-      "beauty" => [
-        /化粧/i,
-        /コスメ/i,
-        /美容/i,
-        /乳液/i,
-        /化粧水/i
-      ],
-      "transportation" => [
-        /電車/i,
-        /バス/i,
-        /タクシー/i,
-        /駐車/i,
-        /高速(?:道路|料金|代)/i,
-        /ガソリン/i
-      ],
-      "hobby" => [
-        /雑誌/i,
-        /書籍/i,
-        /文庫/i,
-        /単行本/i,
-        /コミック/i,
-        /ゲーム/i,
-        /玩具/i,
-        /ホビー/i,
-        /文具/i,
-        /ノート/i,
-        /ボールペン/i,
-        /クリアファイル/i,
-        /修正テープ/i
-      ]
-    }.freeze
-
-    PAYMENT_METHOD_EXCLUSION_PATTERNS = [
-      /ポイント/i,
-      /point/i,
-      /会員/i,
-      /member/i,
-      /waon\s*point/i,
-      /楽天ポイント/i,
-      /tポイント/i,
-      /dポイント/i,
-      /ponta/i
-    ].freeze
-    PAYMENT_METHOD_SUPPORT_ONLY_PATTERNS = [
-      /対応/i,
-      /使えます/i,
-      /使える/i,
-      /利用可/i,
-      /ご利用(?:いただけます|できます|可能)/i,
-      /取扱/i,
-      /取り扱/i,
-      /accepted/i,
-      /available/i,
-      /supported/i,
-      /we\s+accept/i
-    ].freeze
-    PAYMENT_METHOD_TRANSACTION_CONTEXT_PATTERN = /
-      支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge
-    /ix.freeze
-
     module_function
 
-    def detect_payment_method(text)
+    def detect_payment_method(text, profile: ReceiptAnalysisProfiles.default)
       normalized_text = normalize_text(text)
       return nil if normalized_text.blank?
-      return nil if payment_noise_only?(normalized_text)
+      return nil if payment_noise_only?(normalized_text, profile: profile)
 
-      detect_by_patterns(normalized_text, PAYMENT_METHOD_PATTERNS) || "other"
+      detect_by_patterns(normalized_text, profile.fallback_payment_method_patterns) || "other"
     end
 
-    def detect_category(text)
+    def detect_category(text, profile: ReceiptAnalysisProfiles.default)
       normalized_text = normalize_text(text)
       return nil if normalized_text.blank?
 
-      detect_by_patterns(normalized_text, CATEGORY_PATTERNS) || "other"
+      detect_by_patterns(normalized_text, profile.fallback_item_category_patterns) || "other"
     end
 
     def detect_by_patterns(text, patterns)
@@ -259,11 +33,11 @@ module Analysis
       text.to_s.unicode_normalize(:nfkc).downcase.gsub(/[[:space:]]+/, " ").strip.presence
     end
 
-    def payment_noise_only?(text)
-      has_exclusion = PAYMENT_METHOD_EXCLUSION_PATTERNS.any? { |pattern| text.match?(pattern) }
-      has_payment_signal = detect_by_patterns(text, PAYMENT_METHOD_PATTERNS).present?
-      support_only = PAYMENT_METHOD_SUPPORT_ONLY_PATTERNS.any? { |pattern| text.match?(pattern) } &&
-        !text.match?(PAYMENT_METHOD_TRANSACTION_CONTEXT_PATTERN)
+    def payment_noise_only?(text, profile: ReceiptAnalysisProfiles.default)
+      has_exclusion = profile.fallback_payment_method_exclusion_patterns.any? { |pattern| text.match?(pattern) }
+      has_payment_signal = detect_by_patterns(text, profile.fallback_payment_method_patterns).present?
+      support_only = profile.fallback_payment_method_support_only_patterns.any? { |pattern| text.match?(pattern) } &&
+        !text.match?(profile.fallback_payment_method_transaction_context_pattern)
 
       support_only || (has_exclusion && !has_payment_signal)
     end

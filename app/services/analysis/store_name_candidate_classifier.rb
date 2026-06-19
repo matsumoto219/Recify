@@ -1,55 +1,6 @@
 module Analysis
   class StoreNameCandidateClassifier
-    LEGAL_ENTITY_PATTERN = /
-      株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|
-      \b(?:inc\.?|incorporated|ltd\.?|limited|llc|gmbh|ag|bv|nv|plc|corp\.?|corporation|company)\b|
-      \b(?:co\.?\s*,?\s*ltd\.?|pty\s+ltd|pvt\.?\s+ltd|s\.?\s*a\.?|s\.?\s*a\.?\s*s\.?)\b
-    /ix.freeze
-
-    OPERATOR_CONTEXT_PATTERN = /
-      指定管理者|運営会社|管理会社|受託会社|委託先|管理者|運営者|登録事業者|適格請求書発行事業者|
-      operated\s+by|managed\s+by|management\s+company|operator|licensee|franchisee|franchise\s+owner|
-      contractor|concessionaire|tax[-\s]*registered|registered\s+(?:entity|business|merchant|company)|
-      legal\s+entity|merchant\s+of\s+record|trading\s+as
-    /ix.freeze
-
-    HEADING_STOP_PATTERN = /
-      領収書|領収証|レシート|receipt|登録番号|インボイス|適格請求書|tax\s*(?:id|number)|vat\s*(?:id|number)|
-      tel|電話|fax|住所|所在地|合計|小計|消費税|税率|税額|税込|税抜|現計|支払|お支払|決済|点数|
-      total|subtotal|tax|payment|cash|change
-    /ix.freeze
-
-    ADDRESS_LIKE_PATTERN = /
-      [都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]|
-      \b(?:street|st\.|road|rd\.|avenue|ave\.|blvd\.|drive|dr\.|suite|floor)\b.*\d
-    /ix.freeze
-
-    DATE_TIME_PATTERN = /
-      \d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?|\d{1,2}[:：]\d{2}|\d{1,2}時\d{1,2}分
-    /x.freeze
-
     MONEY_OR_NUMERIC_PATTERN = /\A[\d\s\-\/:().,¥￥$€£%]+\z/.freeze
-    DESCRIPTIVE_ONLY_HEADING_PATTERN = /
-      \A(
-        [\s&＆・\/\-]+|
-        イタリアン|フレンチ|中華|和食|洋食|ワイン|カフェ|喫茶|レストラン|ダイニング|バー|グリル|
-        restaurant|cafe|coffee|bar|grill|dining|wine|bistro|kitchen
-      )+\z
-    /ix.freeze
-    STORE_MESSAGE_LINE_PATTERN = /
-      営業時間|営業案内|年中無休|定休日|元旦を除く|毎日.*安い|この価格|品質.*価格|
-      暮らし応援価格|地域一番店|お買得|お買い得|特売|セール|
-      business\s+hours|opening\s+hours|store\s+hours|hours\s*[:：]|open\s+\d|open\s+daily|
-      everyday\s+low\s+price|low\s+price|best\s+price|quality\s+and\s+price|
-      promotion|campaign|special\s+offer
-    /ix.freeze
-    LEGAL_ENTITY_DESIGNATOR_ONLY_PATTERN = /
-      \A(
-        株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|
-        inc\.?|incorporated|ltd\.?|limited|llc|gmbh|ag|bv|nv|plc|corp\.?|corporation|company|
-        co\.?\s*,?\s*ltd\.?|pty\s+ltd|pvt\.?\s+ltd|s\.?\s*a\.?|s\.?\s*a\.?\s*s\.?
-      )\z
-    /ix.freeze
 
     class << self
       def customer_facing_heading_candidates(lines, max_lines: 8)
@@ -131,19 +82,19 @@ module Analysis
       end
 
       def legal_entity_name?(text)
-        normalize_name(text).to_s.match?(LEGAL_ENTITY_PATTERN)
+        normalize_name(text).to_s.match?(profile.store_legal_entity_pattern)
       end
 
       def operator_context_line?(text)
-        normalize_name(text).to_s.match?(OPERATOR_CONTEXT_PATTERN)
+        normalize_name(text).to_s.match?(profile.store_operator_context_pattern)
       end
 
       def descriptive_heading_line?(text)
-        normalize_name(text).to_s.match?(DESCRIPTIVE_ONLY_HEADING_PATTERN)
+        normalize_name(text).to_s.match?(profile.store_descriptive_only_heading_pattern)
       end
 
       def store_message_line?(text)
-        normalize_name(text).to_s.match?(STORE_MESSAGE_LINE_PATTERN)
+        normalize_name(text).to_s.match?(profile.store_message_line_pattern)
       end
 
       def isolated_logo_fragment?(text)
@@ -177,6 +128,10 @@ module Analysis
       end
 
       private
+
+      def profile
+        ReceiptAnalysisProfiles.default
+      end
 
       def customer_facing_heading_line?(text)
         return false if text.length < 2
@@ -245,20 +200,20 @@ module Analysis
         return false if heading_boundary_line?(normalized)
         return false if descriptive_heading_line?(normalized)
         return false if store_message_line?(normalized)
-        return false if normalized.match?(ADDRESS_LIKE_PATTERN)
+        return false if normalized.match?(profile.store_address_like_pattern)
         return false if normalized.match?(MONEY_OR_NUMERIC_PATTERN)
         return false unless normalized.match?(/\A[ァ-ヶー]{2,}/)
 
-        normalized.match?(/店|本店|支店|営業所|センター|マーケット|スーパー|ストア|ショップ|カフェ|レストラン|食堂|商店|薬局|ドラッグ|コンビニ|駐車場/)
+        normalized.match?(profile.store_local_complete_name_suffix_pattern)
       end
 
       def heading_boundary_line?(text)
         normalized = normalize_name(text).to_s
         return true if store_message_line?(normalized)
-        return true if normalized.match?(HEADING_STOP_PATTERN)
-        return true if normalized.gsub(/[[:space:]]+/, "").match?(HEADING_STOP_PATTERN)
-        return true if normalized.match?(ADDRESS_LIKE_PATTERN)
-        return true if normalized.match?(DATE_TIME_PATTERN)
+        return true if normalized.match?(profile.store_heading_stop_pattern)
+        return true if normalized.gsub(/[[:space:]]+/, "").match?(profile.store_heading_stop_pattern)
+        return true if normalized.match?(profile.store_address_like_pattern)
+        return true if normalized.match?(profile.store_date_time_pattern)
         return true if normalized.match?(/\bT\d{13}\b/i)
 
         false
@@ -314,7 +269,7 @@ module Analysis
       end
 
       def legal_entity_designator_only?(text)
-        normalize_name(text).to_s.match?(LEGAL_ENTITY_DESIGNATOR_ONLY_PATTERN)
+        normalize_name(text).to_s.match?(profile.store_legal_entity_designator_only_pattern)
       end
 
       def remove_legal_entity_designators(text)
@@ -327,8 +282,8 @@ module Analysis
 
       def remove_japanese_legal_designators(text)
         text
-          .sub(/\A(?:株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人)\s*/i, "")
-          .sub(/\s*(?:株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人)\z/i, "")
+          .sub(profile.store_japanese_legal_designator_prefix_pattern, "")
+          .sub(profile.store_japanese_legal_designator_suffix_pattern, "")
       end
 
       def remove_english_legal_designators(text)

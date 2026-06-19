@@ -1,40 +1,10 @@
 module Analysis
   class ReceiptBuildParamsService
     TAX_RATE_CONFIDENCE_WARNING_THRESHOLD = BigDecimal("0.75")
-    FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i
-    FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i
-    FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i
-    FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i
-    FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現\s*計|cash\s*total|payment|paid|tender|settlement|charge/i
-    FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i
-    FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i
-    FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN = /住所|所在地|丁目|番地|登録番号|事業者番号|伝票番号|処理番号|処理通番|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|電話|tel|phone|〒|郵便|レジ\s*#?\s*\d|加盟店名|店舗|店名|支店|\d+\s*号店|merchant|address|approval|terminal|member/i
-    FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/
     PARENTHESIZED_PAYMENT_CODE_PATTERN = /[（(]\s*\d{1,6}\s*[)）]/
-    VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i
-    POINT_PAYMENT_LINE_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:redemption|payment|used|use|redeemed)|points?\s*(?:redemption|payment|used|redeemed)/i
-    POINT_PAYMENT_STRONG_LINE_PATTERN = /ポイント\s*(?:支払|払い|決済)|point\s*(?:redemption|payment|redeemed)|points?\s*(?:redemption|payment|redeemed)/i
-    POINT_DISPLAY_LINE_PATTERN = /獲得ポイント|現在ポイント|保有ポイント|ポイント残高|スマイルポイント|付与ポイント|earned\s*points?|current\s*points?|points?\s*balance/i
-    PAYMENT_BLOCK_ANCHOR_PATTERN = /お支払い方法|お支払方法|支払方法|payment\s*method|payment|tender|settlement/i
-    EXPLICIT_PAYMENT_MONEY_PATTERN = /[¥￥]\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)|(?:\d{1,3}(?:[,，]\d{3})+|\d+)\s*円/
-    CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i
-    CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i
-    SETTLEMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，.]\d{3})+|\d+)(?:円)?/
-    REDUCED_TAX_MARKER_PATTERN = /軽|軽減/.freeze
-    FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/
-    FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i
-    FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}
     FALLBACK_URL_OR_EMAIL_PATTERN = %r{https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}}i
-    FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
-    ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/
-    POINT_ONLY_TEXT_PATTERN = /ポイント|point|(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i
-    POINT_MONEY_CONTEXT_PATTERN = /[¥￥円]|[▲△\-−]|利用額|支払額|決済額|金額|amount|payment|paid/i
-    POST_SETTLEMENT_PROMO_ADJUSTMENT_PATTERN = /円引き|値引|割引|クーポン|coupon|discount|off|キャンペーン|アプリ|次回|特典|プレゼント|get/i
-    POST_SETTLEMENT_PROMO_CONTEXT_PATTERN = /アンケート|広告|キャンペーン|アプリ|次回|特典|プレゼント|get|回答期限|coupon|survey|promotion|campaign/i
-    POST_SETTLEMENT_BOUNDARY_PATTERN = /合計|総合計|お支払|支払|決済|現金|現\s*計|クレジット|カード売上票|お客様控|レシート\s*no|receipt\s*no|payment|paid|total|カード番号|承認番号|取引番号/i
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
-    NON_REPRESENTATIVE_PAYMENT_PATTERN = /ポイント|point|クーポン|coupon|商品券|ギフト(?:カード)?|gift(?:\s*certificate|\s*card)?|voucher|優待券|利用券/i
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
 
     class << self
@@ -136,6 +106,10 @@ module Analysis
 
       private
 
+      def profile
+        ReceiptAnalysisProfiles.default
+      end
+
       def normalize_ocr_result(ocr_result)
         return {} unless ocr_result.is_a?(Hash)
 
@@ -213,7 +187,7 @@ module Analysis
         return preferred_total if preferred_total.blank?
         return preferred_total unless settlement_total&.positive?
 
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
         return settlement_total if deposit_amount&.positive? && preferred_total.to_i == deposit_amount
 
         preferred_total
@@ -250,7 +224,7 @@ module Analysis
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
         preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
         settlement_total = settlement_purchase_total_from_lines(lines)
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
 
         preferred_total.present? &&
           settlement_total&.positive? &&
@@ -322,7 +296,7 @@ module Analysis
       end
 
       def store_name_has_location_marker?(store_name)
-        store_name.to_s.match?(/店|支店|本店|営業所|センター|モール|通り|駅前|南口|北口|東口|西口|\bdowntown\b|\bnorth\b|\bsouth\b|\beast\b|\bwest\b/i)
+        store_name.to_s.match?(profile.store_location_marker_pattern)
       end
 
       def local_complete_store_name_replacement(store_name, lines)
@@ -457,7 +431,7 @@ module Analysis
       def customer_facing_branch_line?(line)
         normalized = line.to_s
         return false unless customer_facing_store_line?(normalized)
-        return false if normalized.match?(/株式会社|有限会社|合同会社/)
+        return false if normalized.match?(profile.store_legal_entity_branch_exclusion_pattern)
         return false if store_brand_type_line?(normalized)
         return false if building_or_floor_line?(normalized)
         return false if normalized.match?(/[¥￥円$€£]/)
@@ -483,7 +457,7 @@ module Analysis
 
       def store_branch_candidate_line(line)
         normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
-        normalized = normalized.sub(/\s*(?:tel|電話|phone)\s*[:：]?\s*[+\d][\d+\-ー−()（）\s]*.*\z/i, "")
+        normalized = normalized.sub(profile.store_branch_phone_suffix_pattern, "")
         normalized.strip.presence
       end
 
@@ -499,7 +473,7 @@ module Analysis
         normalized = line.to_s
         return false unless customer_facing_store_line?(normalized)
         return false if isolated_logo_fragment_prefix?(normalized, header_lines:, line_index:)
-        return false if normalized.match?(/店|支店|本店|営業所|センター|モール|通り|駅前|南口|北口|東口|西口/i)
+        return false if normalized.match?(profile.store_location_marker_pattern)
         return false if normalized.match?(/[¥￥円$€£]/)
 
         normalized.length <= 40
@@ -520,7 +494,7 @@ module Analysis
         return false if customer_facing_branch_line?(normalized)
         return false if store_name_context_noise_line?(normalized)
 
-        normalized.match?(/ショコラ|チョコ|ブティック|カフェ|レストラン|ショップ|ストア|マーケット|食堂|ダイニング/)
+        normalized.match?(profile.store_local_business_descriptor_pattern)
       end
 
       def normalize_local_business_descriptor(line)
@@ -540,7 +514,7 @@ module Analysis
         return normalized if match.blank?
 
         base = match[1].to_s.strip
-        suffix = base.match?(/\A[一-龠]{1,3}\z/) ? "プレミアムアウトレット店" : "店"
+        suffix = base.match?(/\A[一-龠]{1,3}\z/) ? profile.store_premium_outlet_suffix : profile.store_branch_suffix
         "#{base}#{suffix}"
       end
 
@@ -588,24 +562,24 @@ module Analysis
       end
 
       def store_brand_type_line?(line)
-        line.to_s.match?(/マーケット|スーパー|ストア|ショップ|カフェ|レストラン|食堂|商店|薬局|ドラッグ|コンビニ|market|mart|store|shop|cafe|restaurant/i)
+        line.to_s.match?(profile.store_brand_type_pattern)
       end
 
       def building_or_floor_line?(line)
-        line.to_s.match?(/ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/)
+        line.to_s.match?(profile.store_building_or_floor_pattern)
       end
 
       def store_name_context_noise_line?(line)
         normalized = line.to_s
         compact = normalized.gsub(/[[:space:]]+/, "")
         return true if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
-        return true if compact.match?(/領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i)
+        return true if compact.match?(profile.store_context_compact_noise_pattern)
         return true if building_or_floor_line?(normalized)
-        return true if normalized.match?(/登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i)
+        return true if normalized.match?(profile.store_context_noise_pattern)
         return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
         return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
-        return true if normalized.match?(/[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/)
-        return true if normalized.match?(/tel|電話|fax|領収書|領収証|レシート|合計|小計|消費税|税率|税額|支払|決済|total|subtotal|tax|payment/i)
+        return true if normalized.match?(profile.store_context_address_pattern)
+        return true if normalized.match?(profile.store_context_receipt_noise_pattern)
 
         false
       end
@@ -875,16 +849,16 @@ module Analysis
 
       def post_settlement_promo_adjustment?(source_text, source_line_index, lines)
         return false if source_line_index.nil?
-        return false unless source_text.to_s.match?(POST_SETTLEMENT_PROMO_ADJUSTMENT_PATTERN)
+        return false unless source_text.to_s.match?(profile.analysis_post_settlement_promo_adjustment_pattern)
         return false unless post_settlement_boundary_before?(lines, source_line_index)
 
         context = lines_around(lines, source_line_index, before: 4, after: 4).join(" ")
-        context.match?(POST_SETTLEMENT_PROMO_CONTEXT_PATTERN)
+        context.match?(profile.analysis_post_settlement_promo_context_pattern)
       end
 
       def post_settlement_boundary_before?(lines, source_line_index)
         Array(lines)[0...source_line_index].to_a.reverse.take(20).any? do |line|
-          line.to_s.match?(POST_SETTLEMENT_BOUNDARY_PATTERN)
+          line.to_s.match?(profile.analysis_post_settlement_boundary_pattern)
         end
       end
 
@@ -907,7 +881,7 @@ module Analysis
       end
 
       def voucher_payment_text?(text)
-        text.to_s.match?(VOUCHER_PAYMENT_PATTERN)
+        text.to_s.match?(profile.analysis_voucher_payment_pattern)
       end
 
       def voucher_payment_method_text(adjustment)
@@ -932,7 +906,7 @@ module Analysis
         source = text.to_s.strip
         amount_text = rightmost_fallback_amount_candidate(source)
         source = source.sub(amount_text.to_s, "") if amount_text.present?
-        source.gsub(/[¥￥,，\d\s　]+/, " ").strip.presence || "商品券"
+        source.gsub(/[¥￥,，\d\s　]+/, " ").strip.presence || profile.voucher_label
       end
 
       def deduplicate_fallback_payments(payments)
@@ -1049,8 +1023,8 @@ module Analysis
         return nil unless total&.positive?
         return nil if !allow_tax_detail_conflict && external_tax_details_conflict_with_receipt_total?(tax_details, total)
 
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
-        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
+        change_amount = settlement_amount_from_lines(lines, profile.analysis_cash_change_label_pattern)
         return nil unless deposit_amount&.positive? && !change_amount.nil?
         return nil unless deposit_amount - change_amount == total
 
@@ -1066,7 +1040,7 @@ module Analysis
         return payments unless total&.positive? && settlement_total == total
         return payments if external_tax_detail_context?(tax_details)
 
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
         return payments unless deposit_amount&.positive?
 
         Array(payments).map do |payment|
@@ -1090,8 +1064,8 @@ module Analysis
         missing_amount = total - payment_sum
         return normalized_payments unless missing_amount.positive?
 
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
-        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
+        change_amount = settlement_amount_from_lines(lines, profile.analysis_cash_change_label_pattern)
         return normalized_payments unless deposit_amount&.positive? && !change_amount.nil?
         return normalized_payments unless deposit_amount - change_amount == missing_amount
 
@@ -1119,7 +1093,7 @@ module Analysis
       def external_tax_detail_context?(tax_details)
         Array(tax_details).any? do |tax_detail|
           description = tax_detail.respond_to?(:[]) ? tax_detail[:description] || tax_detail["description"] : nil
-          description.to_s.match?(/外税|税別|税抜|消費税別|別途消費税|exclusive|sales\s*tax/i)
+          description.to_s.match?(profile.analysis_external_tax_description_pattern)
         end
       end
 
@@ -1140,8 +1114,8 @@ module Analysis
       end
 
       def settlement_purchase_total_from_lines(lines)
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
-        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
+        change_amount = settlement_amount_from_lines(lines, profile.analysis_cash_change_label_pattern)
         return nil unless deposit_amount&.positive? && !change_amount.nil?
 
         total = deposit_amount - change_amount
@@ -1206,17 +1180,17 @@ module Analysis
       def point_payment_context_line?(lines, index)
         text = Array(lines)[index].to_s.unicode_normalize(:nfkc).strip
         return false if text.blank?
-        return false if text.match?(POINT_DISPLAY_LINE_PATTERN)
-        return false unless text.match?(POINT_PAYMENT_LINE_PATTERN)
+        return false if text.match?(profile.analysis_point_display_line_pattern)
+        return false unless text.match?(profile.analysis_point_payment_line_pattern)
 
-        text.match?(POINT_PAYMENT_STRONG_LINE_PATTERN) ||
+        text.match?(profile.analysis_point_payment_strong_line_pattern) ||
           explicit_money_amount_from_text(text).present? ||
           payment_block_context?(lines, index)
       end
 
       def payment_block_context?(lines, index)
         context = lines_around(lines, index, before: 3, after: 0).join(" ").unicode_normalize(:nfkc)
-        context.match?(PAYMENT_BLOCK_ANCHOR_PATTERN)
+        context.match?(profile.analysis_payment_block_anchor_pattern)
       end
 
       def point_payment_amount_with_source(lines, index)
@@ -1236,7 +1210,7 @@ module Analysis
       end
 
       def explicit_money_amount_from_text(text)
-        amounts = text.to_s.unicode_normalize(:nfkc).to_enum(:scan, EXPLICIT_PAYMENT_MONEY_PATTERN).filter_map do |match|
+        amounts = text.to_s.unicode_normalize(:nfkc).to_enum(:scan, profile.analysis_explicit_payment_money_pattern).filter_map do |match|
           normalize_amount(match)&.to_i
         end.select(&:positive?)
         amounts.max
@@ -1244,43 +1218,43 @@ module Analysis
 
       def payment_method_like_line?(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        text.match?(FALLBACK_PAYMENT_LINE_PATTERN) ||
-          text.match?(POINT_PAYMENT_LINE_PATTERN) ||
-          text.match?(PAYMENT_BLOCK_ANCHOR_PATTERN)
+        text.match?(profile.analysis_fallback_payment_line_pattern) ||
+          text.match?(profile.analysis_point_payment_line_pattern) ||
+          text.match?(profile.analysis_payment_block_anchor_pattern)
       end
 
       def point_payment_method_text(line)
         text = line.to_s.unicode_normalize(:nfkc).strip
-        text = text.gsub(EXPLICIT_PAYMENT_MONEY_PATTERN, " ")
+        text = text.gsub(profile.analysis_explicit_payment_money_pattern, " ")
         text = text.gsub(/(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i, " ")
-        text.gsub(/[¥￥,，\d\s　:：]+/, " ").strip.presence || "ポイント利用"
+        text.gsub(/[¥￥,，\d\s　:：]+/, " ").strip.presence || profile.point_usage_label
       end
 
       def fallback_payment_context_line?(line)
         text = line.to_s.unicode_normalize(:nfkc).strip
         return false if text.blank?
-        return false if text.match?(FALLBACK_PAYMENT_EXCLUDED_PATTERN)
+        return false if text.match?(profile.analysis_fallback_payment_excluded_pattern)
         return false if fallback_payment_metadata_label_line?(text)
         return false if fallback_payment_support_only_line?(text)
         return true if fallback_payment_amount_label_line?(text)
-        return false unless text.match?(FALLBACK_PAYMENT_LINE_PATTERN) || fallback_payment_amount_label_line?(text)
+        return false unless text.match?(profile.analysis_fallback_payment_line_pattern) || fallback_payment_amount_label_line?(text)
 
-        fallback_payment_amount(text).present? || text.match?(FALLBACK_PAYMENT_ACTION_PATTERN)
+        fallback_payment_amount(text).present? || text.match?(profile.analysis_fallback_payment_action_pattern)
       end
 
       def fallback_payment_support_only_line?(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        text.match?(FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN) &&
-          !text.match?(FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN)
+        text.match?(profile.analysis_fallback_payment_support_only_pattern) &&
+          !text.match?(profile.analysis_fallback_payment_transaction_context_pattern)
       end
 
       def fallback_payment_transaction_context_line?(line)
-        line.to_s.unicode_normalize(:nfkc).match?(FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN)
+        line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_fallback_payment_transaction_context_pattern)
       end
 
       def fallback_payment_neighbor_amount_allowed?(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        text.match?(FALLBACK_PAYMENT_ACTION_PATTERN) || fallback_payment_amount_label_line?(text)
+        text.match?(profile.analysis_fallback_payment_action_pattern) || fallback_payment_amount_label_line?(text)
       end
 
       def fallback_payment_context_amount(lines, index, receipt_total:)
@@ -1316,7 +1290,7 @@ module Analysis
       end
 
       def cash_total_payment_line?(line)
-        line.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]/, "").match?(/現計|cashtotal/i)
+        line.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]/, "").match?(profile.analysis_cash_total_payment_pattern)
       end
 
       def cash_total_payment_amount(lines, index, receipt_total:)
@@ -1361,7 +1335,7 @@ module Analysis
         return nil if fallback_payment_amount_noise_line?(text)
         return nil if text.match?(/[▲△\-−]\s*[¥￥]?\s*\d/)
 
-        matches = text.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match.to_s }
+        matches = text.to_enum(:scan, profile.analysis_fallback_amount_candidate_pattern).map { Regexp.last_match.to_s }
         amounts = matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?)
         return nil if amounts.blank?
 
@@ -1405,17 +1379,17 @@ module Analysis
 
       def fallback_payment_amount_label_line?(line)
         text = line.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]:：]/, "")
-        text.match?(FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN)
+        text.match?(profile.analysis_fallback_payment_amount_label_pattern)
       end
 
       def fallback_payment_metadata_label_line?(line)
-        line.to_s.unicode_normalize(:nfkc).match?(FALLBACK_PAYMENT_METADATA_LABEL_PATTERN)
+        line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_fallback_payment_metadata_label_pattern)
       end
 
       def fallback_payment_amount_noise_line?(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        text.match?(FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN) ||
-          text.match?(FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN)
+        text.match?(profile.analysis_fallback_payment_amount_noise_pattern) ||
+          text.match?(profile.analysis_fallback_payment_address_amount_noise_pattern)
       end
 
       def select_fallback_payments(payments, receipt_total:)
@@ -1461,13 +1435,13 @@ module Analysis
       end
 
       def positive_amounts_from_text(text)
-        text.to_s.to_enum(:scan, ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN).filter_map do |match|
+        text.to_s.to_enum(:scan, profile.analysis_adjustment_amount_candidate_pattern).filter_map do |match|
           normalize_amount(match)&.to_i&.abs
         end.select(&:positive?)
       end
 
       def settlement_amounts_from_text(text)
-        text.to_s.unicode_normalize(:nfkc).to_enum(:scan, SETTLEMENT_AMOUNT_CANDIDATE_PATTERN).filter_map do |match|
+        text.to_s.unicode_normalize(:nfkc).to_enum(:scan, profile.analysis_settlement_amount_candidate_pattern).filter_map do |match|
           normalize_settlement_amount(match)&.to_i&.abs
         end.select { |amount| amount >= 0 }
       end
@@ -1536,7 +1510,7 @@ module Analysis
           next unless tax.positive?
 
           {
-            description: "#{rate_percentage_label(target[:rate])}%対象",
+            description: profile.tax_rate_target_label(rate_percentage_label(target[:rate])),
             rate: target[:rate],
             net_amount: target[:gross_amount] - tax,
             amount: tax
@@ -1600,7 +1574,7 @@ module Analysis
 
       def tax_total_amount_from_lines(lines)
         Array(lines).each_with_index do |line, index|
-          next unless line.to_s.unicode_normalize(:nfkc).match?(/消費税.*合計|税額.*合計|tax\s*total/i)
+          next unless line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_total_line_pattern)
 
           amount = Array(lines)[index, 3].to_a.flat_map do |candidate|
             positive_amounts_from_text(candidate)
@@ -1623,7 +1597,7 @@ module Analysis
           gross = assignment[:gross_amount]
           tax = assignment[:tax_amount]
           {
-            description: "#{rate_percentage_label(assignment[:rate])}%対象",
+            description: profile.tax_rate_target_label(rate_percentage_label(assignment[:rate])),
             rate: assignment[:rate],
             net_amount: gross - tax,
             amount: tax
@@ -1642,8 +1616,8 @@ module Analysis
 
       def tax_target_rate_candidates_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        return [] unless text.match?(/対象/)
-        return [] if text.match?(/消費税|税額|tax/i)
+        return [] unless text.match?(profile.analysis_tax_target_marker_pattern)
+        return [] if text.match?(profile.analysis_tax_amount_description_pattern)
 
         text.scan(/(\d+(?:\.\d+)?)\s*[%％]/).flatten.flat_map do |raw_rate|
           tax_rate_candidates_from_text_number(raw_rate)
@@ -1662,7 +1636,7 @@ module Analysis
 
       def tax_section_amount_entries(lines, first_rate_index)
         section = Array(lines)[first_rate_index..].to_a.take_while do |line|
-          !line.to_s.match?(/消費税.*合計|税額.*合計|tax\s*total/i)
+          !line.to_s.match?(profile.analysis_tax_total_line_pattern)
         end
         section.each_with_index.flat_map do |line, offset|
           positive_amounts_from_text(line).select { |amount| amount > 20 }.map do |amount|
@@ -1757,7 +1731,7 @@ module Analysis
           next unless gross&.positive?
 
           {
-            description: "#{rate_percentage_label(rate)}%対象",
+            description: profile.tax_rate_target_label(rate_percentage_label(rate)),
             rate: rate,
             net_amount: gross - tax,
             amount: tax
@@ -1785,7 +1759,7 @@ module Analysis
 
       def tax_summary_rate_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
-        return nil if text.match?(/外税|税別|税抜|別途消費税|exclusive|sales\s*tax/i)
+        return nil if text.match?(profile.analysis_external_tax_description_pattern)
 
         match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
         normalize_rate(match[1]) if match
@@ -1973,7 +1947,7 @@ module Analysis
 
         item_line_indexes(item, lines).any? do |index|
           Array(lines)[index..(index + 4)].to_a.any? do |line|
-            line.to_s.match?(REDUCED_TAX_MARKER_PATTERN) &&
+            line.to_s.match?(profile.analysis_reduced_tax_marker_pattern) &&
               positive_amounts_from_text(line).include?(item_amount)
           end
         end
@@ -2265,7 +2239,7 @@ module Analysis
         source = text.to_s.unicode_normalize(:nfkc).strip
         return false unless source.match?(/[¥￥円\d]/)
 
-        remainder = source.gsub(FALLBACK_AMOUNT_CANDIDATE_PATTERN, "")
+        remainder = source.gsub(profile.analysis_fallback_amount_candidate_pattern, "")
         remainder = remainder.gsub(/[¥￥円,，\s　:：*＊\-−+＋().（）\[\]【】]/, "")
         remainder.blank?
       end
@@ -2386,7 +2360,7 @@ module Analysis
       end
 
       def negative_adjustment_context_text?(text)
-        text.to_s.match?(/値引|割引|ディスカウント|discount|off|クーポン|coupon|ポイント|point|返品|返金|refund|return/i)
+        text.to_s.match?(profile.analysis_negative_adjustment_context_pattern)
       end
 
       def signed_adjustment_amount_near_line?(lines, source_line_index, amount)
@@ -2421,7 +2395,7 @@ module Analysis
 
       def point_count_only_adjustment?(adjustment, amount:, source_line_index:, lines:)
         context = adjustment_context_text(adjustment, source_line_index, lines)
-        return false unless context.match?(POINT_ONLY_TEXT_PATTERN)
+        return false unless context.match?(profile.analysis_point_only_text_pattern)
         return false if point_money_context?(context, amount)
 
         true
@@ -2445,7 +2419,7 @@ module Analysis
 
       def point_money_context?(text, amount)
         source = text.to_s
-        return false unless source.match?(POINT_MONEY_CONTEXT_PATTERN)
+        return false unless source.match?(profile.analysis_point_money_context_pattern)
 
         adjustment_amounts_in_text(source).include?(amount.to_i.abs)
       end
@@ -2477,7 +2451,7 @@ module Analysis
 
       def item_discount_context?(context, amount)
         texts = Array(context).map(&:to_s)
-        discount_label_present = texts.any? { |text| text.match?(/割引|discount|off/i) }
+        discount_label_present = texts.any? { |text| text.match?(profile.analysis_item_discount_label_pattern) }
         signed_amount_present = texts.any? do |text|
           text.match?(/[▲△\-−]/) && adjustment_amounts_in_text(text).include?(amount.to_i.abs)
         end
@@ -2488,14 +2462,14 @@ module Analysis
 
       def receipt_level_adjustment_context?(lines, source_line_index)
         line = Array(lines)[source_line_index].to_s
-        return true if line.match?(/クーポン|ポイント|coupon|point/i)
+        return true if line.match?(profile.analysis_receipt_level_adjustment_line_pattern)
 
         previous_lines = lines_around(lines, source_line_index - 1, before: 2, after: 0)
-        previous_lines.any? { |previous_line| previous_line.to_s.match?(/小計|合計|総合計|total|subtotal/i) }
+        previous_lines.any? { |previous_line| previous_line.to_s.match?(profile.analysis_previous_subtotal_context_pattern) }
       end
 
       def adjustment_amounts_in_text(text)
-        text.to_s.scan(ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN).map do |match|
+        text.to_s.scan(profile.analysis_adjustment_amount_candidate_pattern).map do |match|
           normalize_amount(match).to_i.abs
         end.select(&:positive?)
       end
@@ -2527,7 +2501,7 @@ module Analysis
       end
 
       def generic_return_refund_label?(text)
-        text.to_s.unicode_normalize(:nfkc).strip.match?(/\A(?:返品|返金|返却|refund|return)\z/i)
+        text.to_s.unicode_normalize(:nfkc).strip.match?(profile.analysis_generic_return_refund_label_pattern)
       end
 
       def adjustment_source_label_without_amount(source_text)
@@ -2540,26 +2514,26 @@ module Analysis
 
       def infer_ocr_adjustment_kind(source_text, sign)
         text = source_text.to_s
-        return "return_refund" if text.match?(/返品|返金|返却|refund|return/i)
-        return "coupon" if text.match?(/クーポン|coupon/i)
+        return "return_refund" if text.match?(profile.analysis_return_refund_kind_pattern)
+        return "coupon" if text.match?(profile.analysis_coupon_kind_pattern)
         return "receipt_discount" if cashless_reward_adjustment_text?(text)
-        return "point_usage" if text.match?(/ポイント利用|point\s*use|points?\s*redeemed/i)
-        return "receipt_discount" if text.match?(/値引|割引|ディスカウント|discount|off/i)
-        return "late_night_charge" if text.match?(/深夜|late.?night|midnight|after.?hours/i)
-        return "service_charge" if text.match?(/サービス料|service\s*charge/i)
-        return "delivery_fee" if text.match?(/配送料|送料|delivery|shipping/i)
-        return "bag_fee" if text.match?(/レジ袋|袋代|bag/i)
-        return "handling_fee" if text.match?(/手数料|handling|fee|charge/i) && sign == "surcharge"
+        return "point_usage" if text.match?(profile.analysis_point_usage_kind_pattern)
+        return "receipt_discount" if text.match?(profile.analysis_receipt_discount_kind_pattern)
+        return "late_night_charge" if text.match?(profile.analysis_late_night_charge_kind_pattern)
+        return "service_charge" if text.match?(profile.analysis_service_charge_kind_pattern)
+        return "delivery_fee" if text.match?(profile.analysis_delivery_fee_kind_pattern)
+        return "bag_fee" if text.match?(profile.analysis_bag_fee_kind_pattern)
+        return "handling_fee" if text.match?(profile.analysis_handling_fee_kind_pattern) && sign == "surcharge"
 
         "other"
       end
 
       def cashless_reward_adjustment_text?(text)
-        text.to_s.match?(/キャッシュレス|cashless|payment\s*discount/i)
+        text.to_s.match?(profile.analysis_cashless_reward_adjustment_pattern)
       end
 
       def infer_tax_rate_from_text(text)
-        match = text.to_s.unicode_normalize(:nfkc).match(/(?:税率|対象|税込|税抜|軽)?\s*(8|10)\s*%/)
+        match = text.to_s.unicode_normalize(:nfkc).match(profile.analysis_tax_rate_hint_pattern)
         return nil unless match
 
         BigDecimal(match[1]) / 100
@@ -2573,7 +2547,7 @@ module Analysis
           item[:name]
         ].compact.join(" ").unicode_normalize(:nfkc)
 
-        text.match?(/非課税|非課稅|non.?tax|tax.?free/i)
+        text.match?(profile.analysis_non_taxable_text_pattern)
       end
 
       def normalize_non_negative_integer(value)
@@ -2756,15 +2730,15 @@ module Analysis
         text = line.to_s.strip
         compact_text = text.gsub(/\s+/, "").delete(":：")
 
-        return true if compact_text.match?(FALLBACK_NON_ITEM_KEYWORD_PATTERN)
-        return true if compact_text.match?(/対象計|対象額|税率対象|内税|内消費税/)
-        return true if text.match?(POINT_PAYMENT_LINE_PATTERN) || text.match?(POINT_DISPLAY_LINE_PATTERN)
-        return true if compact_text.match?(/\A(?:税込み?|税抜き?)(?:金額|価格)?[¥￥]?\d[\d,，]*円?\z/)
-        return true if text.match?(FALLBACK_REFERENCE_LINE_PATTERN)
+        return true if compact_text.match?(profile.analysis_fallback_non_item_keyword_pattern)
+        return true if compact_text.match?(profile.analysis_fallback_tax_target_non_item_pattern)
+        return true if text.match?(profile.analysis_point_payment_line_pattern) || text.match?(profile.analysis_point_display_line_pattern)
+        return true if compact_text.match?(profile.analysis_fallback_tax_amount_line_pattern)
+        return true if text.match?(profile.analysis_fallback_reference_line_pattern)
         return true if text.match?(/\bT\d{13}\b/i)
-        return true if text.match?(FALLBACK_DATE_TIME_LINE_PATTERN)
+        return true if text.match?(profile.analysis_fallback_date_time_line_pattern)
         return true if text.match?(FALLBACK_URL_OR_EMAIL_PATTERN)
-        return true if text.match?(FALLBACK_PAYMENT_LINE_PATTERN)
+        return true if text.match?(profile.analysis_fallback_payment_line_pattern)
 
         false
       end
@@ -2783,7 +2757,7 @@ module Analysis
         return false if voucher_payment_text?(text)
         return false unless Array(receipt_payments).any? { |payment| normalize_amount(payment[:amount]).to_i == amount }
 
-        text.match?(FALLBACK_PAYMENT_LINE_PATTERN) ||
+        text.match?(profile.analysis_fallback_payment_line_pattern) ||
           (!source_line_index.nil? && payment_block_context?(lines, source_line_index))
       end
 
@@ -2793,7 +2767,7 @@ module Analysis
 
       def rightmost_fallback_amount_candidate(line)
         source = fallback_amount_source(line)
-        matches = source.to_enum(:scan, FALLBACK_AMOUNT_CANDIDATE_PATTERN).map { Regexp.last_match }
+        matches = source.to_enum(:scan, profile.analysis_fallback_amount_candidate_pattern).map { Regexp.last_match }
         return nil if matches.empty?
 
         matches.max_by { |match| match.end(0) }.to_s
@@ -2865,8 +2839,8 @@ module Analysis
           normalize_detected_payment_method(Analysis::ReceiptFallbackPatterns.detect_payment_method(payment[:method])) == "cash"
         end
 
-        deposit_amount = settlement_amount_from_lines(lines, CASH_DEPOSIT_LABEL_PATTERN)
-        change_amount = settlement_amount_from_lines(lines, CASH_CHANGE_LABEL_PATTERN)
+        deposit_amount = settlement_amount_from_lines(lines, profile.analysis_cash_deposit_label_pattern)
+        change_amount = settlement_amount_from_lines(lines, profile.analysis_cash_change_label_pattern)
         return false unless deposit_amount&.positive? && !change_amount.nil?
 
         non_voucher_payments.sum { |payment| payment[:amount].to_i } == deposit_amount - change_amount
@@ -2877,7 +2851,7 @@ module Analysis
           normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
           method_text = normalized_payment[:method]
           next if method_text.blank?
-          next if method_text.match?(NON_REPRESENTATIVE_PAYMENT_PATTERN)
+          next if method_text.match?(profile.analysis_non_representative_payment_pattern)
 
           detected = Analysis::ReceiptFallbackPatterns.detect_payment_method(method_text)
           normalize_detected_payment_method(detected)

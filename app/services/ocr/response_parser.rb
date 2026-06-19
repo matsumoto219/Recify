@@ -1,12 +1,4 @@
 class Ocr::ResponseParser
-  PAYMENT_METHOD_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
-  POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
-  PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|diners|discover|unionpay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|edy|id|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|nfc|mobilepayment|applepay|googlepay|qr(?:コード)?|paypay|楽天ペイ|rakutenpay|d払い|dpayment|aupay|メルペイ|linepay|alipay|wechatpay|デビット|debit|カード|支払|決済/i.freeze
-  PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|weaccept/i.freeze
-  PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i.freeze
-  CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
-  VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
-  SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
   MULTIPLE_RECEIPTS_REVIEW_REASON = "multiple_receipts_suspected"
   MULTIPLE_RECEIPTS_MIN_LINES = 8
   MULTIPLE_RECEIPTS_MIN_CLUSTER_RATIO = 0.2
@@ -17,19 +9,7 @@ class Ocr::ResponseParser
   ADJUSTMENT_MONEY_PATTERN = /[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_SIGNED_MONEY_PATTERN = /(?:\A|[\s　])(?:[▲△]|[\-−]\s*)[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_AMOUNT_ONLY_PATTERN = /\A\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?\s*\z/.freeze
-  ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /返品|返金|取消|キャンセル|値引|割引|クーポン|coupon|discount|refund|return/i.freeze
-  ADJUSTMENT_SURCHARGE_LABEL_PATTERN = /深夜|サービス料|配送料|送料|レジ袋|袋代|手数料|チャージ|fee|charge|surcharge|delivery|shipping|bag|handling/i.freeze
-  ADJUSTMENT_EXCLUDED_LINE_PATTERN = /小計|商品小計|合計|総合計|税抜合計|税込合計|対象|消費税|税額|税率|内税|外税|お預かり|お預り|預り|釣銭|お釣り|つり銭|支払|お支払|決済|現金|カード|au\s*pay|paypay|楽天ペイ|ポイント|獲得|利用可能|残高|カード番号|取引番号|レシート|領収|tel|電話|住所|登録番号|返品はお受け|返品.*(?:不可|致しかね)|お受け致しかね|barcode|qr|total|subtotal|tax|payment|change|point/i.freeze
-  ADJUSTMENT_ZONE_START_PATTERN = /小計|商品小計|税抜合計|内税品計|subtotal/i.freeze
-  ADJUSTMENT_ZONE_END_PATTERN = /合計|総合計|total/i.freeze
-  MERCHANT_ANCHOR_PATTERN = /店舗|店名|店|マーケット|スーパー|株式会社|有限会社|住所|所在地|電話|tel|market|store|mart|shop/i.freeze
-  DATETIME_ANCHOR_PATTERN = /(?:\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?)|(?:\d{1,2}[:：]\d{2})/.freeze
-  SUBTOTAL_ANCHOR_PATTERN = /小\s*計|subtotal/i.freeze
-  TOTAL_ANCHOR_PATTERN = /合\s*計|総合計|total/i.freeze
-  TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
-  PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
   PAYMENT_QUERY_FIELD_NAME = "PaymentMethods"
-  GENERIC_TAX_DETAIL_DESCRIPTION_PATTERN = /\A(?:内)?消費税等?\z|\A税額\z|\Atax\z/i.freeze
   POLLING_METRICS_KEY = Ocr::Client::POLLING_METRICS_KEY
   POLLING_METRIC_KEYS = %i[
     elapsed_ms
@@ -45,9 +25,10 @@ class Ocr::ResponseParser
     retry_count
   ].freeze
 
-  def initialize(response:, provider: nil)
+  def initialize(response:, provider: nil, profile: nil)
     @response = response
     @provider = provider
+    @profile = profile || ReceiptAnalysisProfiles.default
   end
 
   def call
@@ -138,7 +119,7 @@ class Ocr::ResponseParser
 
   private
 
-  attr_reader :response, :provider
+  attr_reader :response, :provider, :profile
 
   InvalidOcrResponseError = Class.new(StandardError)
 
@@ -482,7 +463,7 @@ class Ocr::ResponseParser
   def extract_total_amount_from_lines(lines)
     amount_candidates = Array(lines).filter_map do |line|
       next if settlement_line?(line)
-      next unless line.match?(/合計|小計|total|税込|現計/i)
+      next unless line.match?(profile.ocr_total_amount_line_pattern)
 
       digits = line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }
       digits.max if digits.any?
@@ -507,7 +488,7 @@ class Ocr::ResponseParser
 
     fields.dig("Subtotal", "valueCurrency", "amount") ||
       fields.dig("Subtotal", "valueNumber") ||
-      extract_amount_from_lines(lines, /小計|subtotal|税抜/i)
+      extract_amount_from_lines(lines, profile.ocr_subtotal_amount_line_pattern)
   rescue NoMethodError, TypeError
     nil
   end
@@ -520,7 +501,7 @@ class Ocr::ResponseParser
       fields.dig("Tax", "valueCurrency", "amount") ||
       fields.dig("Tax", "valueNumber") ||
       extract_tax_amount_from_tax_details(parsed_response, lines) ||
-      extract_amount_from_lines(lines, /消費税|税額|tax/i)
+      extract_amount_from_lines(lines, profile.ocr_tax_amount_description_pattern)
   rescue NoMethodError, TypeError
     nil
   end
@@ -607,16 +588,17 @@ class Ocr::ResponseParser
   end
 
   def extract_payment_method_from_lines(lines)
+    analysis_profile = profile
     profiles = Array(lines).filter_map do |line|
       profile = payment_line_profile(line)
       profile if profile[:payment_text].present?
     end
 
-    return "現金" if profiles.any? { |profile| profile[:cash_total] }
-    return "商品券" if profiles.any? { |profile| profile[:voucher] }
+    return analysis_profile.cash_label if profiles.any? { |line_profile| line_profile[:cash_total] }
+    return analysis_profile.voucher_label if profiles.any? { |line_profile| line_profile[:voucher] }
 
     card_slip_index = profiles.find_index do |profile|
-      profile[:payment_text].match?(/クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i)
+      profile[:payment_text].match?(analysis_profile.ocr_card_slip_context_pattern)
     end
 
     if card_slip_index
@@ -634,7 +616,7 @@ class Ocr::ResponseParser
       next false if profile[:point_only]
       next false if profile[:support_only]
 
-      profile[:payment_text].match?(/支払|決済|payment/i) && profile[:payment_match].present?
+      profile[:payment_text].match?(analysis_profile.ocr_payment_result_context_pattern) && profile[:payment_match].present?
     end
     return payment_line[:payment_match] if payment_line.present?
 
@@ -671,15 +653,15 @@ class Ocr::ResponseParser
   end
 
   def point_or_membership_only_payment_text?(normalized)
-    normalized.match?(POINT_KEYWORDS_PATTERN) && !normalized.match?(PAYMENT_KEYWORDS_PATTERN)
+    normalized.match?(profile.ocr_point_keywords_pattern) && !normalized.match?(profile.ocr_payment_keywords_pattern)
   end
 
   def support_only_payment_text?(normalized)
-    normalized.match?(PAYMENT_SUPPORT_ONLY_PATTERN) && !normalized.match?(PAYMENT_TRANSACTION_CONTEXT_PATTERN)
+    normalized.match?(profile.ocr_payment_support_only_pattern) && !normalized.match?(profile.ocr_payment_transaction_context_pattern)
   end
 
   def payment_method_pattern
-    PAYMENT_METHOD_PATTERN
+    profile.ocr_payment_method_pattern
   end
 
   def payment_line_profile(line)
@@ -695,9 +677,9 @@ class Ocr::ResponseParser
         payment_text: payment_text,
         point_only: payment_text.present? && point_or_membership_only_payment_text?(payment_text),
         support_only: payment_text.present? && support_only_payment_text?(payment_text),
-        cash_total: payment_text.present? && payment_text.match?(CASH_TOTAL_PATTERN),
-        voucher: payment_text.present? && payment_text.match?(VOUCHER_PAYMENT_PATTERN),
-        settlement: raw.match?(SETTLEMENT_LINE_PATTERN),
+        cash_total: payment_text.present? && payment_text.match?(profile.ocr_cash_total_pattern),
+        voucher: payment_text.present? && payment_text.match?(profile.ocr_voucher_payment_pattern),
+        settlement: raw.match?(profile.ocr_settlement_line_pattern),
         payment_match: payment_text.present? ? payment_text.match(payment_method_pattern)&.[](0) : nil
       }.freeze
     end
@@ -958,7 +940,7 @@ class Ocr::ResponseParser
 
   def known_adjustment_label?(line)
     text = line.to_s
-    text.match?(ADJUSTMENT_DISCOUNT_LABEL_PATTERN) || text.match?(ADJUSTMENT_SURCHARGE_LABEL_PATTERN)
+    text.match?(profile.ocr_adjustment_discount_label_pattern) || text.match?(profile.ocr_adjustment_surcharge_label_pattern)
   end
 
   def adjustment_zone_label?(lines, index)
@@ -969,12 +951,12 @@ class Ocr::ResponseParser
     before_lines = lines[[ index - 4, 0 ].max...index].to_a
     after_lines = lines[(index + 1)..[ index + 5, lines.length - 1 ].min].to_a
 
-    before_lines.any? { |candidate| candidate.to_s.match?(ADJUSTMENT_ZONE_START_PATTERN) } &&
-      after_lines.any? { |candidate| candidate.to_s.match?(ADJUSTMENT_ZONE_END_PATTERN) }
+    before_lines.any? { |candidate| candidate.to_s.match?(profile.ocr_adjustment_zone_start_pattern) } &&
+      after_lines.any? { |candidate| candidate.to_s.match?(profile.ocr_adjustment_zone_end_pattern) }
   end
 
   def adjustment_excluded_line?(line)
-    line.to_s.match?(ADJUSTMENT_EXCLUDED_LINE_PATTERN)
+    line.to_s.match?(profile.ocr_adjustment_excluded_line_pattern)
   end
 
   def item_line_candidate?(line, items)
@@ -999,8 +981,8 @@ class Ocr::ResponseParser
   def adjustment_sign_hint(*texts)
     joined = texts.compact.join(" ")
     return "discount" if joined.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
-    return "discount" if joined.match?(ADJUSTMENT_DISCOUNT_LABEL_PATTERN)
-    return "surcharge" if joined.match?(ADJUSTMENT_SURCHARGE_LABEL_PATTERN)
+    return "discount" if joined.match?(profile.ocr_adjustment_discount_label_pattern)
+    return "surcharge" if joined.match?(profile.ocr_adjustment_surcharge_label_pattern)
 
     nil
   end
@@ -1145,12 +1127,12 @@ class Ocr::ResponseParser
   def receipt_anchor_categories(content)
     text = content.to_s
     categories = []
-    categories << :merchant if text.match?(MERCHANT_ANCHOR_PATTERN)
-    categories << :date_time if text.match?(DATETIME_ANCHOR_PATTERN)
-    categories << :subtotal if text.match?(SUBTOTAL_ANCHOR_PATTERN)
-    categories << :total if text.match?(TOTAL_ANCHOR_PATTERN)
-    categories << :tax if text.match?(TAX_ANCHOR_PATTERN)
-    categories << :payment if text.match?(PAYMENT_ANCHOR_PATTERN)
+    categories << :merchant if text.match?(profile.ocr_merchant_anchor_pattern)
+    categories << :date_time if text.match?(profile.ocr_datetime_anchor_pattern)
+    categories << :subtotal if text.match?(profile.ocr_subtotal_anchor_pattern)
+    categories << :total if text.match?(profile.ocr_total_anchor_pattern)
+    categories << :tax if text.match?(profile.ocr_tax_anchor_pattern)
+    categories << :payment if text.match?(profile.ocr_payment_anchor_pattern)
     categories
   end
 
@@ -1235,7 +1217,7 @@ class Ocr::ResponseParser
       next unless tax.positive?
 
       {
-        description: "#{rate_percentage_label(target[:rate])}%対象",
+        description: profile.tax_rate_target_label(rate_percentage_label(target[:rate])),
         rate: target[:rate].to_f,
         net_amount: target[:gross_amount] - tax,
         amount: tax
@@ -1287,8 +1269,8 @@ class Ocr::ResponseParser
 
   def tax_target_rate_from_line(line)
     text = line.to_s
-    return nil unless text.match?(/対象/)
-    return nil if text.match?(/消費税|税額|tax/i)
+    return nil unless text.match?(profile.ocr_tax_target_marker_pattern)
+    return nil if text.match?(profile.ocr_tax_amount_description_pattern)
 
     match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
     normalize_rate_value(match[1]) if match
@@ -1309,7 +1291,7 @@ class Ocr::ResponseParser
   end
 
   def generic_tax_detail_description?(description)
-    description.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, "").match?(GENERIC_TAX_DETAIL_DESCRIPTION_PATTERN)
+    description.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, "").match?(profile.ocr_generic_tax_detail_description_pattern)
   end
 
   def tax_detail_context_description(lines, rate:, amount:, net_amount:)
@@ -1354,7 +1336,7 @@ class Ocr::ResponseParser
   def tax_detail_context_label_line?(line, rate_label)
     text = line.to_s
     text.match?(/#{Regexp.escape(rate_label)}\s*[%％]/) &&
-      text.match?(/小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i)
+      text.match?(profile.ocr_tax_context_label_pattern)
   end
 
   def tax_detail_line_amounts(line)
@@ -1402,8 +1384,8 @@ class Ocr::ResponseParser
 
   def tax_target_line?(line, rate_label)
     text = line.to_s
-    text.match?(/#{Regexp.escape(rate_label)}\s*[%％].{0,8}対象/) &&
-      !text.match?(/消費税|税額|tax/i)
+    text.match?(profile.ocr_tax_rate_target_line_pattern(rate_label)) &&
+      !text.match?(profile.ocr_tax_amount_description_pattern)
   end
 
   def tax_target_amount_from_line(line)
@@ -1454,7 +1436,7 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
-      quantity_unit_code = ReceiptQuantityUnit.normalize(value_object.dig("QuantityUnit", "valueString"))
+      quantity_unit_code = profile.normalize_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
 
       {
         raw_text: raw_text,
@@ -1486,7 +1468,7 @@ class Ocr::ResponseParser
   end
 
   def clean_item_raw_text(raw_text, item)
-    return raw_text unless item["content"].to_s.match?(/値引|割引|discount/i)
+    return raw_text unless item["content"].to_s.match?(profile.ocr_item_discount_keyword_pattern)
 
     raw_text.to_s.lines.first&.chomp.presence || raw_text
   end
@@ -1613,11 +1595,11 @@ class Ocr::ResponseParser
   def item_discount_keyword_line?(line)
     return false if receipt_level_discount_line?(line)
 
-    line.match?(/値引|割引|discount|off/i)
+    line.match?(profile.ocr_item_discount_line_pattern)
   end
 
   def receipt_level_discount_line?(line)
-    line.match?(/クーポン|会員|夜間|ポイント|アプリ|coupon|member|point/i)
+    line.match?(profile.ocr_receipt_level_discount_line_pattern)
   end
 
   def extract_discount_rate_from_line(line)

@@ -18,6 +18,7 @@ module Analysis
 
     def initialize(ocr_result)
       @ocr_result = ocr_result || {}
+      @profile = ReceiptAnalysisProfiles.default
     end
 
     def call
@@ -32,7 +33,7 @@ module Analysis
 
     private
 
-    attr_reader :ocr_result
+    attr_reader :ocr_result, :profile
 
     def score
       @score ||= begin
@@ -152,13 +153,13 @@ module Analysis
 
     def receipt_amount_context_line?
       text_lines.any? do |line|
-        line.match?(/(領収書|領収証|レシート|receipt|合計|小計|消費税|税額|税込|税抜|支払|決済|お預かり|お預り|預かり|預り|お釣り|釣銭|つり銭)/i) &&
+        line.match?(profile.signal_receipt_amount_context_pattern) &&
           amount_like_text?(line)
       end
     end
 
     def receipt_word?
-      text_lines.any? { |line| line.match?(/領収書|領収証|レシート|receipt/i) }
+      text_lines.any? { |line| line.match?(profile.signal_receipt_word_pattern) }
     end
 
     def money_like_item_lines_score
@@ -171,7 +172,7 @@ module Analysis
 
     def money_like_item_line?(line)
       normalized = line.to_s
-      return false if normalized.match?(/合計|小計|消費税|税額|税込|税抜|支払|決済|お預かり|お預り|預かり|預り|お釣り|釣銭|つり銭/i)
+      return false if normalized.match?(profile.signal_non_item_context_pattern)
       return false unless normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
 
       amount_like_text?(normalized)
@@ -212,16 +213,16 @@ module Analysis
 
     def phone_number_signal?
       candidates[:store_phone_number].present? ||
-        text_lines.any? { |line| line.match?(/tel|電話|0\d{1,4}-\d{1,4}-\d{3,4}/i) }
+        text_lines.any? { |line| line.match?(profile.signal_phone_pattern) }
     end
 
     def address_signal?
       candidates[:store_address].present? ||
-        text_lines.any? { |line| line.match?(/〒|東京都|北海道|(?:京都|大阪)府|.{1,8}[県市区町村]|丁目|番地/) }
+        text_lines.any? { |line| line.match?(profile.signal_address_pattern) }
     end
 
     def registration_number_signal?
-      text_lines.any? { |line| line.match?(/登録番号|事業者番号|T\d{13}/i) }
+      text_lines.any? { |line| line.match?(profile.signal_registration_number_pattern) }
     end
 
     def receipt_doc_type?
@@ -244,31 +245,17 @@ module Analysis
     def household_budget_context?
       return false if receipt_word?
 
-      keywords = %w[収入 支出 固定支出 変動支出 貯金 生活費 残金 家賃 サブスク 目標貯金]
       normalized_text = text_lines.join("\n")
 
-      keywords.count { |keyword| normalized_text.include?(keyword) } >= 4
+      profile.signal_household_budget_keywords.count { |keyword| normalized_text.include?(keyword) } >= 4
     end
 
     def marketing_web_page_context?
       return false if receipt_word? || payments? || payment_method_text? || tax_details?
 
-      patterns = [
-        %r{https?://}i,
-        /www\./i,
-        /\.(?:jp|com|net|org)(?:\/|\b)/i,
-        /ホーム/,
-        /メニュー/,
-        /お知らせ/,
-        /アクセス/,
-        /ご予約/,
-        /販売期間/,
-        /all rights reserved/i,
-        /copyright/i
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) } >= 3
+      profile.signal_marketing_web_page_patterns.count { |pattern| normalized_text.match?(pattern) } >= 3
     end
 
     def menu_or_catalog_context?
@@ -296,114 +283,33 @@ module Analysis
     end
 
     def menu_context_score
-      patterns = [
-        /\bmenu\b/i,
-        /メニュー/,
-        /dinner/i,
-        /lunch/i,
-        /appetizer/i,
-        /前菜/,
-        /main/i,
-        /メイン/,
-        /set menu/i,
-        /セットメニュー/,
-        /dessert/i,
-        /drink/i
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) }
+      profile.signal_menu_context_patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def catalog_context_score
-      patterns = [
-        /商品一覧/,
-        /商品画像/,
-        /商品名/,
-        /商品コード/,
-        /カテゴリー/,
-        /特徴/,
-        /希望小売価格/,
-        /在庫状況/,
-        /おすすめ/,
-        /レビュー/,
-        /送料無料/,
-        /会員限定/,
-        /ランキング/,
-        /人気商品/,
-        /商品説明/
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) }
+      profile.signal_catalog_context_patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def social_context_score
-      patterns = [
-        /x\.com/i,
-        /@\w+/,
-        /#\S+/,
-        /ポスト/,
-        /投稿/,
-        /返信/,
-        /コメント/,
-        /シェア/,
-        /フォロー/,
-        /いいね/,
-        /表示/,
-        /grok/i
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) }
+      profile.signal_social_context_patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def flyer_context_score
-      patterns = [
-        /チラシ/,
-        /広告/,
-        /セール/,
-        /キャンペーン/,
-        /大特価/,
-        /特価/,
-        /週末限定/,
-        /期間限定/,
-        /お買い得/,
-        /まとめ買い/,
-        /セール開催/,
-        /会員募集中/,
-        /日替り特価/,
-        /ご来店ください/,
-        /ご用意しました/,
-        /入会金/,
-        /年会費/
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) }
+      profile.signal_flyer_context_patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def pdf_document_context_score
-      patterns = [
-        /\.pdf/i,
-        /\/users\//i,
-        /操作マニュアル/,
-        /マニュアル/,
-        /第\d+(?:\.\d+)?版/,
-        /はじめに/,
-        /基本の流れ/,
-        /画面の説明/,
-        /本文/,
-        /章/,
-        /ページ/,
-        /アップロード/,
-        /ocr/i,
-        /ai/i,
-        /ファイル/
-      ]
       normalized_text = text_lines.join("\n")
 
-      patterns.count { |pattern| normalized_text.match?(pattern) }
+      profile.signal_pdf_document_context_patterns.count { |pattern| normalized_text.match?(pattern) }
     end
 
     def text_lines
