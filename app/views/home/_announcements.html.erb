@@ -17,9 +17,21 @@
           </p>
         </div>
 
-        <p class="text-xs font-semibold token-text-muted">
-          <%= t("home.announcements.limit_note", count: announcements.size) %>
-        </p>
+        <div class="flex flex-col items-start gap-3 sm:items-end">
+          <p class="text-xs font-semibold token-text-muted">
+            <%= t("home.announcements.limit_note", count: announcements.size) %>
+          </p>
+
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: announcements_path,
+                label: t("home.announcements.view_all"),
+                variant: :secondary,
+                size: :sm,
+                radius: :xl,
+                trailing_icon: "arrow_forward",
+                trailing_icon_animated: true %>
+        </div>
       </div>
 
       <ul class="home-announcements-list mt-5" aria-label="<%= t("home.announcements.list_aria") %>">

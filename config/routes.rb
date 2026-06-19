@@ -70,7 +70,7 @@ Rails.application.routes.draw do
   post "/contact", to: "contact_requests#create"
   get "/terms", to: "legal#terms", as: :terms
   get "/privacy", to: "legal#privacy", as: :privacy
-  resources :announcements, only: [ :show ], param: :public_id
+  resources :announcements, only: %i[index show], param: :public_id
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

@@ -302,7 +302,17 @@
             subtitle: t("settings.index.support.description"),
             class: "mb-6" %>
 
-      <div class="grid gap-3 sm:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2">
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: announcements_path,
+              label: t("settings.index.support.announcements"),
+              variant: :secondary,
+              full_width: true,
+              class: "px-4 text-left",
+              trailing_icon: "chevron_right",
+              trailing_icon_animated: true %>
+
         <%= render "shared/ui/actions/button",
               as: :link,
               href: contact_path,
@@ -312,11 +322,21 @@
               class: "px-4 text-left",
               trailing_icon: "chevron_right",
               trailing_icon_animated: true %>
+      </div>
+    <% end %>
 
+    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+      <%= render "shared/ui/layout/section_header",
+            icon: "policy",
+            title: t("settings.index.sections.legal"),
+            subtitle: t("settings.index.legal.description"),
+            class: "mb-6" %>
+
+      <div class="grid gap-3 sm:grid-cols-2">
         <%= render "shared/ui/actions/button",
               as: :link,
               href: terms_path,
-              label: t("settings.index.support.terms"),
+              label: t("settings.index.legal.terms"),
               variant: :secondary,
               full_width: true,
               class: "px-4 text-left",
@@ -326,7 +346,7 @@
         <%= render "shared/ui/actions/button",
               as: :link,
               href: privacy_path,
-              label: t("settings.index.support.privacy"),
+              label: t("settings.index.legal.privacy"),
               variant: :secondary,
               full_width: true,
               class: "px-4 text-left",

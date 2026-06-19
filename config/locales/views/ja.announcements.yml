@@ -5,6 +5,14 @@ ja:
       release: リリース
       maintenance: メンテナンス
       incident: 重要
+    index:
+      meta_title: お知らせ一覧
+      title: お知らせ一覧
+      subtitle: Recifyからのお知らせや予定をまとめて確認できます。
+      pinned: 固定表示
+      read_more: 詳細を見る
+      empty_title: 現在表示できるお知らせはありません。
+      empty_body: 新しいお知らせが公開されたら、こちらに表示されます。
     show:
       breadcrumb_aria: お知らせページ
       back_to_home: トップへ戻る

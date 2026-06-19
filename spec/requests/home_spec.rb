@@ -138,6 +138,8 @@ RSpec.describe 'Home', type: :request do
         expect(section.at_css("a[href='#{announcement_path(pinned)}']")).to be_present
         expect(section.text).to include(I18n.t('home.announcements.pinned'))
         expect(section.text).to include(I18n.t('announcements.kinds.general'))
+        expect(section.at_css("a[href='#{announcements_path}']")).to be_present
+        expect(section.text).to include(I18n.t('home.announcements.view_all'))
         expect(response.body).not_to include('translation missing')
       end
     end

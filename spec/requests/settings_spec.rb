@@ -56,13 +56,16 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'GET /settings' do
-    it 'サポートと法務導線を表示する' do
+    it 'サポートと法務導線を分けて表示する' do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
       support_heading = document.xpath("//h2[normalize-space()='#{I18n.t('settings.index.sections.support')}']").first
       support_icon = support_heading&.parent&.at_css('.material-symbols-outlined')&.text&.strip
+      legal_heading = document.xpath("//h2[normalize-space()='#{I18n.t('settings.index.sections.legal')}']").first
+      legal_icon = legal_heading&.parent&.at_css('.material-symbols-outlined')&.text&.strip
       contact_link = document.at_css("a[href='#{contact_path}']")
+      announcements_link = document.at_css("a[href='#{announcements_path}']")
       terms_link = document.at_css("a[href='#{terms_path}']")
       privacy_link = document.at_css("a[href='#{privacy_path}']")
 
@@ -72,10 +75,13 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(document.at_css('[data-controller~="legal-dialog"]')).to be_nil
         expect(response.body).to include(I18n.t('settings.index.sections.support'))
+        expect(response.body).to include(I18n.t('settings.index.sections.legal'))
         expect(contact_link&.text&.squish).to include(I18n.t('settings.index.support.contact'))
-        expect(terms_link&.text&.squish).to include(I18n.t('settings.index.support.terms'))
-        expect(privacy_link&.text&.squish).to include(I18n.t('settings.index.support.privacy'))
+        expect(announcements_link&.text&.squish).to include(I18n.t('settings.index.support.announcements'))
+        expect(terms_link&.text&.squish).to include(I18n.t('settings.index.legal.terms'))
+        expect(privacy_link&.text&.squish).to include(I18n.t('settings.index.legal.privacy'))
         expect(support_icon).to eq('contact_support')
+        expect(legal_icon).to eq('policy')
       end
     end
 
@@ -400,6 +406,7 @@ RSpec.describe 'Settings', type: :request do
         I18n.t('settings.index.sections.calculation'),
         I18n.t('settings.index.sections.usage'),
         I18n.t('settings.index.sections.support'),
+        I18n.t('settings.index.sections.legal'),
         I18n.t('settings.index.sections.account_actions')
       ]
 

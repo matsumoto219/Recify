@@ -142,6 +142,7 @@ ja:
       lead: Recifyからの最新情報や予定をお届けします。
       list_aria: 公開中のお知らせ
       limit_note: "最新%{count}件を表示中"
+      view_all: お知らせ一覧を見る
       pinned: 固定
     how_it_works:
       title: 使い方はシンプル。

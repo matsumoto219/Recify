@@ -16,7 +16,8 @@ ja:
         calculation: 計算設定
         usage: 利用設定
         storage: ストレージ
-        support: サポート・法務
+        support: サポート
+        legal: 法務・ポリシー
         account_actions: アカウント操作
       services:
         ocr: OCRサービス
@@ -66,8 +67,11 @@ ja:
           description: |-
             レシートを登録する際、画像を保存します
       support:
-        description: 困ったことの問い合わせや、利用規約・プライバシーポリシーを確認できます。
+        description: お知らせや問い合わせ先を確認できます。
+        announcements: お知らせ
         contact: お問い合わせ
+      legal:
+        description: 利用規約とプライバシーポリシーを確認できます。
         terms: 利用規約
         privacy: プライバシーポリシー
       danger:

@@ -1,0 +1,70 @@
+<% content_for :title, t("announcements.index.meta_title") %>
+
+<section class="mx-auto max-w-5xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
+  <%= render "shared/ui/layout/section_header",
+        title: t("announcements.index.title"),
+        subtitle: t("announcements.index.subtitle"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base",
+        align: :center %>
+
+  <% if @announcements.any? %>
+    <div class="space-y-4">
+      <% @announcements.each do |announcement| %>
+        <% timestamp = announcement.published_at || announcement.created_at %>
+        <% excerpt = truncate(announcement.body.to_s.squish, length: 100) %>
+
+        <%= render "shared/ui/layout/surface_card", padding: :md, hoverable: true do %>
+          <article class="min-w-0 space-y-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="inline-flex items-center rounded-full border token-border-brand-soft token-bg-brand-soft px-3 py-1 text-xs font-bold token-text-brand">
+                <%= t("announcements.kinds.#{announcement.kind}") %>
+              </span>
+
+              <% if announcement.pinned? %>
+                <span class="inline-flex items-center rounded-full border token-border-soft token-bg-card-subtle px-3 py-1 text-xs font-semibold token-text-muted">
+                  <span class="material-symbols-outlined mr-1 text-[15px]" aria-hidden="true">keep</span>
+                  <%= t("announcements.index.pinned") %>
+                </span>
+              <% end %>
+
+              <time class="text-xs font-semibold token-text-muted" datetime="<%= timestamp.iso8601 %>">
+                <%= l(timestamp, format: :short) %>
+              </time>
+            </div>
+
+            <div class="min-w-0 space-y-3">
+              <h2 class="break-words text-xl font-black leading-8 token-text-base [overflow-wrap:anywhere]">
+                <%= link_to announcement.title,
+                      announcement_path(announcement),
+                      class: "transition-colors token-hover-text-brand" %>
+              </h2>
+
+              <p class="break-words text-sm leading-7 token-text-muted [overflow-wrap:anywhere]" data-announcement-excerpt>
+                <%= excerpt %>
+              </p>
+            </div>
+
+            <%= render "shared/ui/navigation/navigation_link",
+                  path: announcement_path(announcement),
+                  text: t("announcements.index.read_more"),
+                  arrow: :right,
+                  align: :left %>
+          </article>
+        <% end %>
+      <% end %>
+    </div>
+
+    <%= render "shared/ui/navigation/pagination", pagy: @pagy %>
+  <% else %>
+    <%= render "shared/ui/layout/surface_card", padding: :lg do %>
+      <div class="mx-auto max-w-xl py-6 text-center">
+        <span class="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl token-brand-soft-bg token-text-brand">
+          <span class="material-symbols-outlined text-3xl" aria-hidden="true">campaign</span>
+        </span>
+        <p class="mt-5 text-base font-bold token-text-base"><%= t("announcements.index.empty_title") %></p>
+        <p class="mt-2 text-sm leading-7 token-text-muted"><%= t("announcements.index.empty_body") %></p>
+      </div>
+    <% end %>
+  <% end %>
+</section>

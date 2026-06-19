@@ -1,6 +1,114 @@
 require 'rails_helper'
 
 RSpec.describe 'Announcements', type: :request do
+  describe 'GET /announcements' do
+    it '公開中のお知らせ一覧を表示し、公開対象外は出さない' do
+      pinned = create(:announcement, :published, title: '固定のお知らせ', body: '固定本文', pinned: true, priority: -10, published_at: 5.days.ago)
+      high_priority = create(:announcement, :published, title: '優先度の高いお知らせ', body: '優先本文', priority: 80, published_at: 4.days.ago)
+      newer = create(:announcement, :published, title: '新しいお知らせ', body: "#{'長い本文' * 40}末尾は一覧に出さない", priority: 0, published_at: 1.day.ago)
+      older = create(:announcement, :published, title: '古いお知らせ', body: '古い本文', priority: 0, published_at: 3.days.ago)
+      draft = create(:announcement, title: '下書きのお知らせ')
+      archived = create(:announcement, :archived, title: 'アーカイブ済みのお知らせ')
+      scheduled = create(:announcement, :scheduled, title: '予約中のお知らせ')
+      expired = create(:announcement, :expired, title: '終了済みのお知らせ')
+
+      get announcements_path
+
+      document = Nokogiri::HTML(response.body)
+      public_header = document.at_css('#public-header')
+      public_footer = document.at_css('#public-footer')
+      titles = document.css('h2 a[href^="/announcements/"]').map { |node| node.text.squish }
+      announcement_links = document.css('a[href^="/announcements/"]').map { |link| link['href'] }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('announcements.index.title'))
+        expect(public_header).to be_present
+        expect(public_footer).to be_present
+        expect(titles).to eq([ pinned.title, high_priority.title, newer.title, older.title ])
+        expect(response.body).to include(I18n.t('announcements.index.pinned'))
+        expect(response.body).to include('長い本文')
+        expect(response.body).not_to include('末尾は一覧に出さない')
+        expect(response.body).not_to include(draft.title)
+        expect(response.body).not_to include(archived.title)
+        expect(response.body).not_to include(scheduled.title)
+        expect(response.body).not_to include(expired.title)
+        expect(announcement_links).to include(announcement_path(pinned), announcement_path(newer))
+        expect(announcement_links).not_to include("/announcements/#{pinned.id}")
+        expect(response.body).not_to include('/admin/announcements')
+        expect(response.body).not_to include('translation missing')
+        expect(response.body).not_to include('href="#"')
+      end
+    end
+
+    it '10件ずつページングする' do
+      announcements = 12.times.map do |index|
+        create(
+          :announcement,
+          :published,
+          title: "ページングお知らせ#{index + 1}",
+          priority: 0,
+          published_at: index.minutes.ago
+        )
+      end
+
+      get announcements_path
+      first_page = Nokogiri::HTML(response.body)
+
+      get announcements_path(page: 2)
+      second_page = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(first_page.css('h2 a[href^="/announcements/"]').size).to eq(10)
+        expect(second_page.css('h2 a[href^="/announcements/"]').size).to eq(2)
+        expect(first_page.text).to include(announcements.first.title)
+        expect(first_page.text).not_to include(announcements.last.title)
+        expect(second_page.text).to include(announcements.last.title)
+        expect(second_page.at_css("a[href='#{announcements_path(page: 1)}']")).to be_present
+      end
+    end
+
+    it 'お知らせがない場合は空状態を表示する' do
+      get announcements_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('announcements.index.empty_title'))
+        expect(response.body).to include(I18n.t('announcements.index.empty_body'))
+      end
+    end
+
+    it 'title/bodyのHTML文字列をescapeし、ログイン済みでもpublic layoutで表示する' do
+      user = create(:user)
+      announcement = create(
+        :announcement,
+        :published,
+        title: '<script>alert("title")</script>',
+        body: '<script>alert("body")</script>'
+      )
+      sign_in user
+
+      get announcements_path
+
+      document = Nokogiri::HTML(response.body)
+      public_header = document.at_css('#public-header')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(public_header).to be_present
+        expect(public_header.at_css("a[href='#{receipts_path}']")).to be_present
+        expect(document.at_css('#desktop-sidebar')).to be_nil
+        expect(document.css('script').map(&:text).join).not_to include('alert("title")')
+        expect(document.css('script').map(&:text).join).not_to include('alert("body")')
+        expect(response.body).to include('&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;')
+        expect(response.body).to include('&lt;script&gt;alert(&quot;body&quot;)&lt;/script&gt;')
+        expect(document.at_css("a[href='#{announcement_path(announcement)}']")).to be_present
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
+      end
+    end
+  end
+
   describe 'GET /announcements/:public_id' do
     it '公開中のお知らせをpublic_idで表示する' do
       announcement = create(
