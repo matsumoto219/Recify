@@ -6,7 +6,6 @@ module SecurityEvents
     MAX_SCAN_VALUE_BYTES = 2_000
     MAX_DEPTH = 4
     MAX_ARRAY_ITEMS = 20
-    URL_FIELD_PATTERN = /\b(?:redirect(?:_to)?|return_to|next|callback|url|uri|target|continue)\b/i
     PROTECTED_RECEIPT_FIELDS = %w[
       id
       user_id
@@ -161,10 +160,10 @@ module SecurityEvents
       end
     end
 
-    def initialize(params:, max_detections: MAX_DETECTIONS, open_redirect_exemptions: [])
+    def initialize(params:, max_detections: MAX_DETECTIONS, url_field_policy: UrlFieldPolicy.new)
       @params = params
       @max_detections = max_detections.to_i.positive? ? max_detections.to_i : MAX_DETECTIONS
-      @open_redirect_exemptions = Array(open_redirect_exemptions)
+      @url_field_policy = url_field_policy || UrlFieldPolicy.new
     end
 
     def call
@@ -182,7 +181,7 @@ module SecurityEvents
 
     private
 
-    attr_reader :params, :max_detections, :open_redirect_exemptions
+    attr_reader :params, :max_detections, :url_field_policy
 
     def detect_value(field_name, value)
       return [] if value.blank?
@@ -202,15 +201,19 @@ module SecurityEvents
 
       unsafe_url = detect_unsafe_url(field_name, text)
       matches << unsafe_url if unsafe_url
-      open_redirect = detect_open_redirect(field_name, text) unless unsafe_url
+      open_redirect = detect_open_redirect(field_name, text) unless unsafe_url || ssrf_detected?(matches)
       matches << open_redirect if open_redirect
       parameter_tampering = detect_parameter_tampering(field_name, text)
       matches << parameter_tampering if parameter_tampering
       matches
     end
 
+    def ssrf_detected?(matches)
+      matches.any? { |detection| detection.event_type == "ssrf_attempt" }
+    end
+
     def detect_unsafe_url(field_name, text)
-      return unless URL_FIELD_PATTERN.match?(field_name.to_s)
+      return unless url_field_policy.url_field?(field_name)
 
       value = text.to_s.strip
       matched_rule =
@@ -237,10 +240,9 @@ module SecurityEvents
     end
 
     def detect_open_redirect(field_name, text)
-      return unless URL_FIELD_PATTERN.match?(field_name.to_s)
+      return unless url_field_policy.open_redirect_candidate?(field_name, text)
       return unless text.match?(%r{\Ahttps?://}i)
       return if text.match?(%r{\Ahttps?://(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/|\z)}i)
-      return if open_redirect_exempted?(field_name, text)
 
       Detection.new(
         event_type: "open_redirect_attempt",
@@ -249,12 +251,6 @@ module SecurityEvents
         field_name: field_name,
         payload_excerpt: text
       )
-    end
-
-    def open_redirect_exempted?(field_name, text)
-      open_redirect_exemptions.any? do |exemption|
-        exemption.respond_to?(:call) && exemption.call(field_name.to_s, text.to_s)
-      end
     end
 
     def http_url_with_userinfo?(value)

@@ -2,11 +2,10 @@ module SecurityEvents
   ADMIN_BURST_WINDOW = 1.hour
   ADMIN_BURST_THRESHOLD = 5
   RATE_LIMIT_METADATA_KEYS = %i[matched limit period retry_after].freeze
-  ANNOUNCEMENT_LINK_URL_FIELD_PATTERN = /\Aannouncement\.announcement_links_attributes\.\d+\.url\z/
 
   class << self
-    def detect(params:, max_detections: Detector::MAX_DETECTIONS, open_redirect_exemptions: [])
-      Detector.call(params: params, max_detections: max_detections, open_redirect_exemptions: open_redirect_exemptions)
+    def detect(params:, max_detections: Detector::MAX_DETECTIONS, url_field_policy: UrlFieldPolicy.new)
+      Detector.call(params: params, max_detections: max_detections, url_field_policy: url_field_policy)
     end
 
     def sanitize_metadata(value)
@@ -26,7 +25,7 @@ module SecurityEvents
     end
 
     def record_request_detections!(request:, params:, actor_user: nil)
-      detect(params: params, open_redirect_exemptions: open_redirect_exemptions_for(request)).each do |detection|
+      detect(params: params, url_field_policy: UrlFieldPolicy.for_request(request)).each do |detection|
         record!(
           event_type: detection.event_type,
           severity: detection.severity,
@@ -170,22 +169,6 @@ module SecurityEvents
     end
 
     private
-
-    def open_redirect_exemptions_for(request)
-      return [] unless admin_announcements_write_request?(request)
-
-      [
-        lambda do |field_name, value|
-          ANNOUNCEMENT_LINK_URL_FIELD_PATTERN.match?(field_name) &&
-            AnnouncementLink.safe_external_url?(value)
-        end
-      ]
-    end
-
-    def admin_announcements_write_request?(request)
-      request_path(request).to_s.start_with?("/admin/announcements") &&
-        %w[POST PATCH PUT].include?(request_method(request).to_s.upcase)
-    end
 
     def filtered_rate_limit_metadata(metadata)
       return {} unless metadata.respond_to?(:to_h)

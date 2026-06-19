@@ -228,6 +228,37 @@ RSpec.describe SecurityEvents::Detector do
     end
   end
 
+  it 'camelCaseのredirect系fieldもopen redirect候補として検知する' do
+    detections = described_class.call(
+      params: {
+        redirectUrl: 'https://evil.example/redirect',
+        returnUrl: 'https://evil.example/return'
+      }
+    )
+
+    expect(detections.select { |detection| detection.event_type == 'open_redirect_attempt' }.map(&:field_name)).to contain_exactly(
+      'redirectUrl',
+      'returnUrl'
+    )
+  end
+
+  it 'admin announcementsの正規外部link保存URLはopen redirect扱いしない' do
+    policy = SecurityEvents::UrlFieldPolicy.new(path: '/admin/announcements', method: 'POST')
+
+    detections = described_class.call(
+      params: {
+        announcement: {
+          announcement_links_attributes: {
+            '0' => { url: 'https://example.com/news' }
+          }
+        }
+      },
+      url_field_policy: policy
+    )
+
+    expect(detections).to be_empty
+  end
+
   it '別レイヤーで扱う通常値をSecurityEvent化しない' do
     detections = described_class.call(
       params: {
