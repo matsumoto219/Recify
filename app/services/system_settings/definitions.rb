@@ -427,6 +427,16 @@ module SystemSettings
         max: 20
       ),
       Definition.new(
+        key: "limits.public_announcements_per_page",
+        category: "usage_limit",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "low",
+        min: 1,
+        max: 50
+      ),
+      Definition.new(
         key: "limits.receipt_image_max_file_size_bytes",
         category: "upload_limit",
         value_type: "integer",

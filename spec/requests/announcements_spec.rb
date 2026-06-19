@@ -77,6 +77,33 @@ RSpec.describe 'Announcements', type: :request do
       end
     end
 
+    it '設定された表示件数でページングする' do
+      create(:system_setting, key: 'limits.public_announcements_per_page', value: SystemSettings.stored_value(3))
+      announcements = 5.times.map do |index|
+        create(
+          :announcement,
+          :published,
+          title: "設定件数お知らせ#{index + 1}",
+          priority: 0,
+          published_at: index.minutes.ago
+        )
+      end
+
+      get announcements_path
+      first_page = Nokogiri::HTML(response.body)
+
+      get announcements_path(page: 2)
+      second_page = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(first_page.css('h2 a[href^="/announcements/"]').size).to eq(3)
+        expect(second_page.css('h2 a[href^="/announcements/"]').size).to eq(2)
+        expect(first_page.text).to include(announcements.first.title)
+        expect(first_page.text).not_to include(announcements.last.title)
+        expect(second_page.text).to include(announcements.last.title)
+      end
+    end
+
     it 'お知らせがない場合は空状態を表示する' do
       get announcements_path
 

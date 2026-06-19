@@ -7,7 +7,7 @@ class AnnouncementsController < ApplicationController
     @pagy, @announcements = pagy(
       :offset,
       Announcement.visible_on_public.ordered_for_public,
-      limit: INDEX_LIMIT
+      limit: self.class.index_limit
     )
   end
 
@@ -16,5 +16,11 @@ class AnnouncementsController < ApplicationController
                                 .includes(:announcement_links)
                                 .find_by!(public_id: params[:public_id])
     @announcement_links = @announcement.announcement_links.order(:position, :id).select(&:valid?)
+  end
+
+  def self.index_limit
+    SystemSettings.limit_for("limits.public_announcements_per_page")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    INDEX_LIMIT
   end
 end

@@ -48,6 +48,7 @@ RSpec.describe SystemSettings do
         'limits.receipt_payment_amount_max',
         'limits.notifications_per_user',
         'limits.batch_upload_max_files',
+        'limits.public_announcements_per_page',
         'limits.receipt_image_max_file_size_bytes',
         'limits.receipt_image_min_dimension_px',
         'limits.receipt_image_max_dimension_px',
@@ -335,6 +336,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_payment_amount_max')).to eq(999_999_999)
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
         expect(described_class.limit_for('limits.batch_upload_max_files')).to eq(5)
+        expect(described_class.limit_for('limits.public_announcements_per_page')).to eq(10)
         expect(described_class.limit_for('limits.receipt_image_max_file_size_bytes')).to eq(20.megabytes)
         expect(described_class.limit_for('limits.receipt_image_min_dimension_px')).to eq(100)
         expect(described_class.limit_for('limits.receipt_image_max_dimension_px')).to eq(10_000)
@@ -518,6 +520,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.notifications_per_user', '500')).to eq(500)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '1')).to eq(1)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '20')).to eq(20)
+        expect(described_class.cast_update_value('limits.public_announcements_per_page', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.public_announcements_per_page', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 1.megabyte.to_s)).to eq(1.megabyte)
         expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 50.megabytes.to_s)).to eq(50.megabytes)
         expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '1')).to eq(1)
@@ -860,6 +864,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', (20.megabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.public_announcements_per_page', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.public_announcements_per_page', '51')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('storage.usage_warning_percentage', '0')
@@ -1317,6 +1327,16 @@ RSpec.describe SystemSettings do
         min: 1,
         max: 20,
         default: 5
+      )
+    end
+
+    it '公開お知らせ一覧の表示件数はlow risk設定として扱う' do
+      expect(described_class.definition_for('limits.public_announcements_per_page')).to have_attributes(
+        category: 'usage_limit',
+        risk_level: 'low',
+        min: 1,
+        max: 50,
+        default: 10
       )
     end
 
