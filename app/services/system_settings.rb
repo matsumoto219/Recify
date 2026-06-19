@@ -15,6 +15,7 @@ module SystemSettings
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
   ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
   AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
+  IMAGE_DIMENSION_RELATION_ERROR = "image_dimension_relationship"
   AMOUNT_LIMIT_RELATIONSHIPS = [
     [ "limits.receipt_total_amount_max", "limits.receipt_item_line_total_max" ],
     [ "limits.receipt_total_amount_max", "limits.receipt_adjustment_amount_max" ],
@@ -31,6 +32,11 @@ module SystemSettings
     retention.analysis_runs_default_days
     retention.analysis_runs_failed_days
   ].freeze
+  IMAGE_DIMENSION_RELATIONSHIPS = [
+    [ "limits.receipt_image_min_dimension_px", "limits.receipt_image_max_dimension_px" ],
+    [ "limits.announcement_image_min_dimension_px", "limits.announcement_image_max_dimension_px" ]
+  ].freeze
+  IMAGE_DIMENSION_LIMIT_KEYS = IMAGE_DIMENSION_RELATIONSHIPS.flatten.freeze
   USER_LIMIT_SETTING_SAFETY_KEYS = {
     "limits.receipt_uploads_per_day" => "limits.max_uploads_per_day",
     "limits.batch_files_per_day" => "limits.max_uploads_per_day",
@@ -390,6 +396,7 @@ module SystemSettings
       validate_user_limit_safety_ceiling!(definition, value)
       validate_analysis_run_retention_order!(definition, value)
       validate_amount_limit_relationships!(definition, value)
+      validate_image_dimension_relationships!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -464,6 +471,20 @@ module SystemSettings
       return unless invalid_relationship
 
       raise ValidationError, AMOUNT_LIMIT_RELATION_ERROR
+    end
+
+    def validate_image_dimension_relationships!(definition, value)
+      return unless IMAGE_DIMENSION_LIMIT_KEYS.include?(definition.key)
+
+      values = limits_for(IMAGE_DIMENSION_LIMIT_KEYS)
+      values[definition.key] = Integer(value)
+
+      invalid_relationship = IMAGE_DIMENSION_RELATIONSHIPS.any? do |min_key, max_key|
+        values.fetch(min_key) > values.fetch(max_key)
+      end
+      return unless invalid_relationship
+
+      raise ValidationError, IMAGE_DIMENSION_RELATION_ERROR
     end
 
     def override_integer_value(override)

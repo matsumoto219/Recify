@@ -61,6 +61,12 @@ class User < ApplicationRecord
     GUEST_CLEANUP_RETENTION_PERIOD
   end
 
+  def self.avatar_max_file_size
+    SystemSettings.limit_for("limits.avatar_image_max_file_size_bytes")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    MAX_AVATAR_FILE_SIZE
+  end
+
   scope :guest_cleanup_candidates, ->(cutoff = guest_cleanup_retention_period.ago) {
     where(guest: true)
       .where.not(confirmed_at: nil)
@@ -223,8 +229,9 @@ class User < ApplicationRecord
   def avatar_size
     return unless avatar.attached?
 
-    if avatar.blob.byte_size > MAX_AVATAR_FILE_SIZE
-      errors.add(:avatar, :file_too_large)
+    max_file_size = self.class.avatar_max_file_size
+    if avatar.blob.byte_size > max_file_size
+      errors.add(:avatar, :file_too_large, max_size: ActiveSupport::NumberHelper.number_to_human_size(max_file_size))
     end
   end
 end

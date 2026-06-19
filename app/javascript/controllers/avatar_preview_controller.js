@@ -13,7 +13,8 @@ export default class extends Controller {
 
   static values = {
     invalidTypeMessage: { type: String, default: 'Please select a PNG, JPG, or WebP image.' },
-    fileTooLargeMessage: { type: String, default: 'Please select an image up to 5MB.' }
+    fileTooLargeMessage: { type: String, default: 'Please select an image up to 5MB.' },
+    maxFileSizeBytes: { type: Number, default: 5 * 1024 * 1024 }
   }
 
   connect () {
@@ -92,7 +93,7 @@ export default class extends Controller {
       return this.invalidTypeMessageValue
     }
 
-    const maxBytes = 5 * 1024 * 1024
+    const maxBytes = this.maxFileSizeBytesValue
     if (file.size > maxBytes) {
       return this.fileTooLargeMessageValue
     }

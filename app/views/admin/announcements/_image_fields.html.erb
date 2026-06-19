@@ -1,5 +1,8 @@
 <%
   image_attached = announcement.image.attached? && announcement.image.blob&.persisted?
+  image_max_file_size = Announcement.image_max_file_size
+  image_min_dimension = Announcement.image_min_dimension
+  image_max_dimension = Announcement.image_max_dimension
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0" do %>
@@ -76,8 +79,8 @@
         <ul class="list-disc space-y-1 pl-5">
           <li><%= t("admin.announcements.form.image_policy.public_notice") %></li>
           <li><%= t("admin.announcements.form.image_policy.secret_notice") %></li>
-          <li><%= t("admin.announcements.form.image_policy.format_notice") %></li>
-          <li><%= t("admin.announcements.form.image_policy.dimension_notice") %></li>
+          <li><%= t("admin.announcements.form.image_policy.format_notice", max_size: number_to_human_size(image_max_file_size)) %></li>
+          <li><%= t("admin.announcements.form.image_policy.dimension_notice", min_dimension: image_min_dimension, max_dimension: image_max_dimension) %></li>
         </ul>
       </div>
     </div>

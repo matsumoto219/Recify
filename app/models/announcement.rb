@@ -89,6 +89,24 @@ class Announcement < ApplicationRecord
     public_id
   end
 
+  def self.image_max_file_size
+    SystemSettings.limit_for("limits.announcement_image_max_file_size_bytes")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    MAX_IMAGE_FILE_SIZE
+  end
+
+  def self.image_min_dimension
+    SystemSettings.limit_for("limits.announcement_image_min_dimension_px")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    MIN_IMAGE_DIMENSION
+  end
+
+  def self.image_max_dimension
+    SystemSettings.limit_for("limits.announcement_image_max_dimension_px")
+  rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+    MAX_IMAGE_DIMENSION
+  end
+
   private
 
   def assign_public_id
@@ -139,9 +157,10 @@ class Announcement < ApplicationRecord
 
   def validate_image_file_size
     return unless image.attached?
-    return if image.blob.byte_size <= MAX_IMAGE_FILE_SIZE
+    max_file_size = self.class.image_max_file_size
+    return if image.blob.byte_size <= max_file_size
 
-    errors.add(:image, :file_too_large)
+    errors.add(:image, :file_too_large, max_size: ActiveSupport::NumberHelper.number_to_human_size(max_file_size))
   end
 
   def validate_image_dimensions
@@ -157,14 +176,17 @@ class Announcement < ApplicationRecord
     width = dimensions.fetch(:width)
     height = dimensions.fetch(:height)
 
-    if width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION
-      errors.add(:image, :image_too_small)
+    min_dimension = self.class.image_min_dimension
+    max_dimension = self.class.image_max_dimension
+
+    if width < min_dimension || height < min_dimension
+      errors.add(:image, :image_too_small, min_dimension: min_dimension)
       return
     end
 
-    return if width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION
+    return if width <= max_dimension && height <= max_dimension
 
-    errors.add(:image, :image_too_large)
+    errors.add(:image, :image_too_large, max_dimension: max_dimension)
   end
 
   def blank_announcement_link_attributes?(attributes)

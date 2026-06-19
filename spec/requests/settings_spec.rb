@@ -468,12 +468,14 @@ RSpec.describe 'Settings', type: :request do
       get settings_account_path
 
       document = Nokogiri::HTML(response.body)
+      avatar_max_size = ActiveSupport::NumberHelper.number_to_human_size(User.avatar_max_file_size)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(document.at_css('[data-controller~="avatar-preview"]')).to be_present
         expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-invalid-type-message-value']).to eq(I18n.t('settings.account.avatar.validation.invalid_type'))
-        expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-file-too-large-message-value']).to eq(I18n.t('settings.account.avatar.validation.file_too_large'))
+        expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-file-too-large-message-value']).to eq(I18n.t('settings.account.avatar.validation.file_too_large', max_size: avatar_max_size))
+        expect(document.at_css('[data-controller~="avatar-preview"]')['data-avatar-preview-max-file-size-bytes-value']).to eq(User.avatar_max_file_size.to_s)
         expect(document.at_css('input[type="file"][name="user[avatar]"]')).to be_present
         expect(document.at_css('input[type="file"][name="user[avatar]"]')['accept']).to eq('image/png,image/jpeg,image/webp')
       end
@@ -909,7 +911,12 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(user.reload.avatar).not_to be_attached
-        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.avatar.file_too_large'))
+        expect(response.body).to include(
+          I18n.t(
+            'activerecord.errors.models.user.attributes.avatar.file_too_large',
+            max_size: ActiveSupport::NumberHelper.number_to_human_size(User.avatar_max_file_size)
+          )
+        )
       end
     ensure
       large_file&.close

@@ -297,6 +297,76 @@ module SystemSettings
         max: 20
       ),
       Definition.new(
+        key: "limits.receipt_image_max_file_size_bytes",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 20.megabytes,
+        editable: true,
+        risk_level: "high",
+        min: 1.megabyte,
+        max: 50.megabytes
+      ),
+      Definition.new(
+        key: "limits.receipt_image_min_dimension_px",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 100,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 5000
+      ),
+      Definition.new(
+        key: "limits.receipt_image_max_dimension_px",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 10_000,
+        editable: true,
+        risk_level: "high",
+        min: 1000,
+        max: 20_000
+      ),
+      Definition.new(
+        key: "limits.announcement_image_max_file_size_bytes",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 2.megabytes,
+        editable: true,
+        risk_level: "high",
+        min: 100.kilobytes,
+        max: 10.megabytes
+      ),
+      Definition.new(
+        key: "limits.announcement_image_min_dimension_px",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 100,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 4096
+      ),
+      Definition.new(
+        key: "limits.announcement_image_max_dimension_px",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 4096,
+        editable: true,
+        risk_level: "high",
+        min: 1000,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.avatar_image_max_file_size_bytes",
+        category: "upload_limit",
+        value_type: "integer",
+        default: 5.megabytes,
+        editable: true,
+        risk_level: "high",
+        min: 100.kilobytes,
+        max: 20.megabytes
+      ),
+      Definition.new(
         key: "retention.notifications_read_days",
         category: "retention",
         value_type: "integer",

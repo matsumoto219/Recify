@@ -89,12 +89,12 @@ ja:
       avatar:
         preview_alt: プロフィール画像プレビュー
         title: プロフィール写真
-        description: PNG / JPG / WebP を設定できます(5MB以下)
+        description: PNG / JPG / WebP を設定できます(%{max_size}以下)
         remove_label: 現在のプロフィール画像を削除する
         remove_description: 保存すると画像は削除され、初期アイコン表示に戻ります。
         validation:
           invalid_type: PNG / JPG / WebP形式の画像を選択してください。
-          file_too_large: 画像サイズは5MB以下にしてください。
+          file_too_large: 画像サイズは%{max_size}以下にしてください。
       fields:
         name: ユーザー名
         name_placeholder: 任意のユーザー名を入力

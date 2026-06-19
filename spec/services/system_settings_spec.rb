@@ -35,6 +35,13 @@ RSpec.describe SystemSettings do
         'limits.receipt_payment_amount_max',
         'limits.notifications_per_user',
         'limits.batch_upload_max_files',
+        'limits.receipt_image_max_file_size_bytes',
+        'limits.receipt_image_min_dimension_px',
+        'limits.receipt_image_max_dimension_px',
+        'limits.announcement_image_max_file_size_bytes',
+        'limits.announcement_image_min_dimension_px',
+        'limits.announcement_image_max_dimension_px',
+        'limits.avatar_image_max_file_size_bytes',
         'retention.notifications_read_days',
         'retention.guest_users_days',
         'retention.user_sessions_days',
@@ -290,6 +297,13 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.receipt_payment_amount_max')).to eq(999_999_999)
         expect(described_class.limit_for('limits.notifications_per_user')).to eq(100)
         expect(described_class.limit_for('limits.batch_upload_max_files')).to eq(5)
+        expect(described_class.limit_for('limits.receipt_image_max_file_size_bytes')).to eq(20.megabytes)
+        expect(described_class.limit_for('limits.receipt_image_min_dimension_px')).to eq(100)
+        expect(described_class.limit_for('limits.receipt_image_max_dimension_px')).to eq(10_000)
+        expect(described_class.limit_for('limits.announcement_image_max_file_size_bytes')).to eq(2.megabytes)
+        expect(described_class.limit_for('limits.announcement_image_min_dimension_px')).to eq(100)
+        expect(described_class.limit_for('limits.announcement_image_max_dimension_px')).to eq(4096)
+        expect(described_class.limit_for('limits.avatar_image_max_file_size_bytes')).to eq(5.megabytes)
         expect(described_class.limit_for('retention.notifications_read_days')).to eq(30)
         expect(described_class.limit_for('retention.guest_users_days')).to eq(7)
         expect(described_class.limit_for('retention.user_sessions_days')).to eq(90)
@@ -398,6 +412,20 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.notifications_per_user', '500')).to eq(500)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '1')).to eq(1)
         expect(described_class.cast_update_value('limits.batch_upload_max_files', '20')).to eq(20)
+        expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 1.megabyte.to_s)).to eq(1.megabyte)
+        expect(described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', 50.megabytes.to_s)).to eq(50.megabytes)
+        expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '5000')).to eq(5000)
+        expect(described_class.cast_update_value('limits.receipt_image_max_dimension_px', '1000')).to eq(1000)
+        expect(described_class.cast_update_value('limits.receipt_image_max_dimension_px', '20000')).to eq(20_000)
+        expect(described_class.cast_update_value('limits.announcement_image_max_file_size_bytes', 100.kilobytes.to_s)).to eq(100.kilobytes)
+        expect(described_class.cast_update_value('limits.announcement_image_max_file_size_bytes', 10.megabytes.to_s)).to eq(10.megabytes)
+        expect(described_class.cast_update_value('limits.announcement_image_min_dimension_px', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.announcement_image_min_dimension_px', '4096')).to eq(4096)
+        expect(described_class.cast_update_value('limits.announcement_image_max_dimension_px', '1000')).to eq(1000)
+        expect(described_class.cast_update_value('limits.announcement_image_max_dimension_px', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 100.kilobytes.to_s)).to eq(100.kilobytes)
+        expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 20.megabytes.to_s)).to eq(20.megabytes)
         expect(described_class.cast_update_value('retention.notifications_read_days', '1')).to eq(1)
         expect(described_class.cast_update_value('retention.notifications_read_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.guest_users_days', '1')).to eq(1)
@@ -583,6 +611,24 @@ RSpec.describe SystemSettings do
         expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', (1.megabyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.receipt_image_max_file_size_bytes', (50.megabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.announcement_image_max_file_size_bytes', (100.kilobytes - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.announcement_image_max_file_size_bytes', (10.megabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', (100.kilobytes - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', (20.megabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end
 
@@ -644,6 +690,29 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, error_message)
         expect {
           described_class.cast_update_value('limits.receipt_item_line_total_max', '1500000000')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
+    it '画像寸法上限は最小寸法以上だけ許可する' do
+      error_message = 'image_dimension_relationship'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '5000')).to eq(5000)
+        expect(described_class.cast_update_value('limits.announcement_image_min_dimension_px', '4096')).to eq(4096)
+      end
+
+      create(:system_setting, key: 'limits.receipt_image_max_dimension_px', value: described_class.stored_value(2000))
+      create(:system_setting, key: 'limits.announcement_image_max_dimension_px', value: described_class.stored_value(2000))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('limits.receipt_image_min_dimension_px', '1500')).to eq(1500)
+        expect {
+          described_class.cast_update_value('limits.receipt_image_min_dimension_px', '2001')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('limits.announcement_image_min_dimension_px', '1500')).to eq(1500)
+        expect {
+          described_class.cast_update_value('limits.announcement_image_min_dimension_px', '2001')
         }.to raise_error(SystemSettings::ValidationError, error_message)
       end
     end
@@ -824,6 +893,60 @@ RSpec.describe SystemSettings do
         max: 20,
         default: 5
       )
+    end
+
+    it '画像アップロード制限は無制限不可の設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('limits.receipt_image_max_file_size_bytes')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'high',
+          min: 1.megabyte,
+          max: 50.megabytes,
+          default: 20.megabytes
+        )
+        expect(described_class.definition_for('limits.receipt_image_min_dimension_px')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'medium',
+          min: 1,
+          max: 5000,
+          default: 100
+        )
+        expect(described_class.definition_for('limits.receipt_image_max_dimension_px')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'high',
+          min: 1000,
+          max: 20_000,
+          default: 10_000
+        )
+        expect(described_class.definition_for('limits.announcement_image_max_file_size_bytes')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'high',
+          min: 100.kilobytes,
+          max: 10.megabytes,
+          default: 2.megabytes
+        )
+        expect(described_class.definition_for('limits.announcement_image_min_dimension_px')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'medium',
+          min: 1,
+          max: 4096,
+          default: 100
+        )
+        expect(described_class.definition_for('limits.announcement_image_max_dimension_px')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'high',
+          min: 1000,
+          max: 10_000,
+          default: 4096
+        )
+        expect(described_class.definition_for('limits.avatar_image_max_file_size_bytes')).to have_attributes(
+          category: 'upload_limit',
+          risk_level: 'high',
+          min: 100.kilobytes,
+          max: 20.megabytes,
+          default: 5.megabytes
+        )
+      end
     end
 
     it '既読通知保持期間はmedium risk設定として扱う' do

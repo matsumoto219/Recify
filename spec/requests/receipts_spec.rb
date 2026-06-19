@@ -1994,7 +1994,12 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include(I18n.t('activerecord.errors.models.receipt.attributes.image.image_too_small'))
+        expect(response.body).to include(
+          I18n.t(
+            'activerecord.errors.models.receipt.attributes.image.image_too_small',
+            min_dimension: Receipt.image_min_dimension
+          )
+        )
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
       end
     end

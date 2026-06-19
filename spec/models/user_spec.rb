@@ -428,7 +428,7 @@ RSpec.describe User, type: :model do
 
       expect(user).not_to be_valid
 
-      expected_message = "#{I18n.t('activerecord.attributes.user.avatar')}#{I18n.t('activerecord.errors.models.user.attributes.avatar.file_too_large')}"
+      expected_message = "#{I18n.t('activerecord.attributes.user.avatar')}#{I18n.t('activerecord.errors.models.user.attributes.avatar.file_too_large', max_size: ActiveSupport::NumberHelper.number_to_human_size(User.avatar_max_file_size))}"
       expect(user.errors.full_messages_for(:avatar)).to include(expected_message)
     end
   end

@@ -10,6 +10,8 @@
     <%
       form_resource = defined?(resource) && resource.present? ? resource : current_user
       form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user
+      avatar_max_file_size = User.avatar_max_file_size
+      avatar_max_file_size_label = number_to_human_size(avatar_max_file_size)
     %>
     <%= form_with model: form_resource, as: form_resource_name, url: registration_path(form_resource_name), method: :patch, html: { multipart: true } do |f| %>
       <%= hidden_field_tag :update_context, "account" %>
@@ -18,7 +20,8 @@
           class="flex flex-col md:flex-row items-center gap-6 min-w-0"
           data-controller="avatar-preview"
           data-avatar-preview-invalid-type-message-value="<%= t("settings.account.avatar.validation.invalid_type") %>"
-          data-avatar-preview-file-too-large-message-value="<%= t("settings.account.avatar.validation.file_too_large") %>">
+          data-avatar-preview-file-too-large-message-value="<%= t("settings.account.avatar.validation.file_too_large", max_size: avatar_max_file_size_label) %>"
+          data-avatar-preview-max-file-size-bytes-value="<%= avatar_max_file_size %>">
           <div class="relative group">
             <%= render "shared/ui/miscellaneous/avatar",
                   user: form_resource,
@@ -31,7 +34,7 @@
 
           <div class="text-center md:text-left w-full min-w-0">
             <h2 class="truncate text-lg font-semibold token-text-base mb-1" title="<%= t("settings.account.avatar.title") %>"><%= t("settings.account.avatar.title") %></h2>
-            <p class="text-xs token-text-muted mb-4 break-words"><%= t("settings.account.avatar.description") %></p>
+            <p class="text-xs token-text-muted mb-4 break-words"><%= t("settings.account.avatar.description", max_size: avatar_max_file_size_label) %></p>
             <%= f.file_field :avatar,
                   class: "block w-full text-sm avatar-file-input file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
                   accept: "image/png,image/jpeg,image/webp",

@@ -163,8 +163,8 @@ ja:
           title: 画像アップロードの注意
           public_notice: 公開後はお知らせ詳細ページに表示されます。
           secret_notice: 秘密情報・個人情報・トークン類を含めないでください。
-          format_notice: JPEG / PNG / WebP、最大2MBまでアップロードできます。
-          dimension_notice: 画像サイズは100px以上、4096px以下にしてください。
+          format_notice: JPEG / PNG / WebP、最大%{max_size}までアップロードできます。
+          dimension_notice: 画像サイズは%{min_dimension}px以上、%{max_dimension}px以下にしてください。
         image_metadata:
           filename: ファイル名
           file_size: ファイルサイズ

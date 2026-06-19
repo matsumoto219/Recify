@@ -476,9 +476,29 @@ class ReceiptsController < ApplicationController
   def batch_upload_security_event_reason(errors)
     messages = Array(errors).join(" ")
     return "invalid_content_type" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.invalid_content_type"))
-    return "file_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.file_too_large"))
-    return "image_too_small" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_small"))
-    "image_too_large" if messages.include?(I18n.t("activerecord.errors.models.receipt.attributes.image.image_too_large"))
+    return "file_too_large" if messages.include?(receipt_image_error_message(:file_too_large))
+    return "image_too_small" if messages.include?(receipt_image_error_message(:image_too_small))
+    "image_too_large" if messages.include?(receipt_image_error_message(:image_too_large))
+  end
+
+  def receipt_image_error_message(code)
+    case code
+    when :file_too_large
+      I18n.t(
+        "activerecord.errors.models.receipt.attributes.image.file_too_large",
+        max_size: ActiveSupport::NumberHelper.number_to_human_size(Receipt.image_max_file_size)
+      )
+    when :image_too_small
+      I18n.t(
+        "activerecord.errors.models.receipt.attributes.image.image_too_small",
+        min_dimension: Receipt.image_min_dimension
+      )
+    when :image_too_large
+      I18n.t(
+        "activerecord.errors.models.receipt.attributes.image.image_too_large",
+        max_dimension: Receipt.image_max_dimension
+      )
+    end
   end
 
   def consume_single_upload_limit!

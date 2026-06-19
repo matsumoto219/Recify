@@ -395,7 +395,12 @@ RSpec.describe 'Admin announcements', type: :request do
       aggregate_failures do
         expect(Announcement.count).to eq(announcement_count)
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include(I18n.t('activerecord.errors.models.announcement.attributes.image.file_too_large'))
+        expect(response.body).to include(
+          I18n.t(
+            'activerecord.errors.models.announcement.attributes.image.file_too_large',
+            max_size: ActiveSupport::NumberHelper.number_to_human_size(Announcement.image_max_file_size)
+          )
+        )
         expect(event).to have_attributes(
           field_name: 'announcement.image',
           matched_rule: 'file_too_large'
