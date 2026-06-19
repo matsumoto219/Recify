@@ -125,7 +125,7 @@ class ReceiptItem < ApplicationRecord
   end
 
   def self.decimal_quantity_unit?(unit)
-    DECIMAL_QUANTITY_UNITS.include?(unit.to_s.strip)
+    ReceiptQuantityUnit.decimal?(unit)
   end
 
   def self.integer_quantity_unit?(unit)
@@ -153,7 +153,7 @@ class ReceiptItem < ApplicationRecord
   end
 
   def quantity_unit_label
-    quantity_unit.presence || DEFAULT_QUANTITY_UNIT
+    ReceiptQuantityUnit.label(display_quantity_unit_code)
   end
 
   def formatted_quantity
@@ -191,9 +191,18 @@ class ReceiptItem < ApplicationRecord
 
   private
 
+  def display_quantity_unit_code
+    legacy_code = ReceiptQuantityUnit.normalize(quantity_unit, default: nil)
+    code = quantity_unit_code.presence
+
+    return code if code.present? && (code != ReceiptQuantityUnit.default_code || legacy_code.blank?)
+
+    legacy_code.presence || code.presence || ReceiptQuantityUnit.default_code
+  end
+
   def quantity_must_be_integer_for_integer_unit
     return if quantity.blank?
-    return if self.class.decimal_quantity_unit?(quantity_unit)
+    return if self.class.decimal_quantity_unit?(display_quantity_unit_code)
 
     decimal = BigDecimal(quantity.to_s)
     errors.add(:quantity, :must_be_integer_for_unit) unless decimal.frac.zero?

@@ -91,6 +91,47 @@ RSpec.describe ReceiptItem, type: :model do
     end
   end
 
+  describe '#formatted_quantity_with_unit' do
+    it 'quantity_unit_codeをlocaleラベルで表示する' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '重量商品',
+        price: 100,
+        quantity: BigDecimal('0.3'),
+        quantity_unit_code: 'kilogram',
+        line_total: 100,
+        needs_review: false
+      )
+
+      expect(item.formatted_quantity_with_unit).to eq('0.300 kg')
+    end
+
+    it '既知の旧quantity_unitは一時互換としてcodeへ正規化して表示する' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '旧単位商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit: 'kg',
+        line_total: 100,
+        needs_review: false
+      )
+
+      expect(item.formatted_quantity_with_unit).to eq('1 kg')
+    end
+
+    it '候補外の旧quantity_unitは保持表示せずdefault labelで表示する' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '未知単位商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit: '束',
+        line_total: 100,
+        needs_review: false
+      )
+
+      expect(item.formatted_quantity_with_unit).to eq('1 個')
+    end
+  end
+
   describe 'amount limit validation' do
     it 'SystemSettingsの明細単価/合計上限を参照する' do
       create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))

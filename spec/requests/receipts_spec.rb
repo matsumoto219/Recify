@@ -4803,7 +4803,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'quantity_unit が未知単位でもdetail表示でそのまま表示できる' do
+    it 'quantity_unit が未知単位の場合はdetail表示でdefault単位に整理する' do
       receipt.receipt_items.create!(
         confirmed_name: '未知単位商品',
         price: 100,
@@ -4817,7 +4817,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include('数量: 1 束')
+        expect(response.body).to include('数量: 1 個')
       end
     end
 
