@@ -73,7 +73,7 @@ RSpec.describe 'User registrations', type: :request do
       document = Nokogiri::HTML(response.body)
       flash = document.at_css('#flash')
       notice_surface = flash&.at_css('[data-controller~="notice-surface"]')
-      home_stylesheet = document.at_css("link[rel='stylesheet'][href='/home_lp.css']")
+      home_stylesheet = document.at_css("link[rel='stylesheet'][href^='/home_lp.css?v=']")
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
@@ -83,7 +83,7 @@ RSpec.describe 'User registrations', type: :request do
         expect(notice_surface.text).to include(I18n.t('devise.registrations.destroyed'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
         expect(home_stylesheet).to be_present
-        expect(home_stylesheet['data-turbo-track']).to be_nil
+        expect(home_stylesheet['data-turbo-track']).to eq('reload')
       end
     end
 

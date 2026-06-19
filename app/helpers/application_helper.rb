@@ -8,6 +8,13 @@ module ApplicationHelper
     ua.match?(/Mobile|iPhone|Android/)
   end
 
+  def home_lp_stylesheet_path
+    stylesheet_path = Rails.root.join("public/home_lp.css")
+    version = "#{File.mtime(stylesheet_path).to_i}-#{File.size(stylesheet_path)}"
+
+    "/home_lp.css?v=#{version}"
+  end
+
   def confirm_dialog_data(
     message,
     variant: :neutral,

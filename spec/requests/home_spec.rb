@@ -10,7 +10,7 @@ RSpec.describe 'Home', type: :request do
       section_nav = document.at_css('.home-section-nav')
       public_header = document.at_css('#public-header')
       public_footer = document.at_css('#public-footer')
-      home_stylesheet = document.at_css("link[rel='stylesheet'][href='/home_lp.css']")
+      home_stylesheet = document.at_css("link[rel='stylesheet'][href^='/home_lp.css?v=']")
       sign_up_link = public_header.at_css("a[href='#{new_user_registration_path}']")
       final_cta = document.at_css('[data-home-final-cta]')
       detail_items = I18n.t('home.hero_mock.detail.items')
@@ -38,9 +38,9 @@ RSpec.describe 'Home', type: :request do
         expect(response.body).to include(I18n.t('home.how_it_works.title'))
         expect(response.body).to include(I18n.t('home.trust.title'))
         expect(response.body).to include(I18n.t('home.final_cta.heading_lines').first)
-        expect(response.body).to include('/home_lp.css')
+        expect(response.body).to include('/home_lp.css?v=')
         expect(home_stylesheet).to be_present
-        expect(home_stylesheet['data-turbo-track']).to be_nil
+        expect(home_stylesheet['data-turbo-track']).to eq('reload')
         expect(home_lp).to be_present
         expect(home_lp.css('[data-home-reveal-target="item"]').size).to be >= 10
         expect(home_lp.css('[data-home-reveal-target="section"]').map { |node| node['id'] }).to include(*section_ids)

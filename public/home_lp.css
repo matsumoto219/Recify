@@ -574,6 +574,16 @@
   line-height: 1;
 }
 
+@media (640px <= width < 1024px) {
+  .home-lp-snap-track > .home-lp-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: calc((100% - 1.25rem) / 2);
+    max-width: 100%;
+    margin-inline: auto;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .home-lp-card:hover {
     border-color: var(--home-lp-card-hover-border);

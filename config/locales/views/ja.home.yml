@@ -5,11 +5,17 @@ ja:
     hero:
       badge: 自動解析で、レシート整理をスムーズに
       heading_lines:
-        - レシートを撮るだけ。
-        - 支出記録をもっと簡単に。
-      description:
-        - Recifyは、レシート画像から店舗名・金額・明細を読み取り、AI補完で整理をサポートするレシート管理アプリです。
-        - 手入力の手間を減らし、あとから確認しやすい記録を残せます。
+        - レシートを撮るだけ
+        - 支出記録をもっと簡単に
+      heading_secondary_segments:
+        - 支出記録を
+        - もっと簡単に
+      description_paragraphs:
+        -
+          - Recifyは、レシート画像から店舗名・金額・明細を読み取り、
+          - AI補完で整理をサポートするレシート管理アプリです。
+        -
+          - 手入力の手間を減らし、あとから確認しやすい記録を残せます。
       login: ログイン
       sign_up: 新規登録
     section_nav:
@@ -50,6 +56,7 @@ ja:
             amount: ¥120
         subtotal_label: 小計
         tax_label: 内消費税 8%
+        tax_amount: ¥54
         total_label: 合計
         total_amount: ¥736
       result:
@@ -66,6 +73,7 @@ ja:
       detail:
         title: 明細
         add: + 明細を追加
+        ai_label: "AI:"
         items:
           - name: ミネラルウォーター
             category: 飲料
@@ -89,6 +97,9 @@ ja:
           - 保存準備完了
     problem:
       title: レシート管理、後回しになっていませんか？
+      title_lines:
+        - レシート管理、
+        - 後回しになっていませんか？
       items:
         - icon: draw
           title: 手入力が面倒
@@ -100,7 +111,10 @@ ja:
           title: 確認作業が不安
           body: 金額や明細の見落としが心配で、記録に自信が持てない。
     before_after:
-      title: 撮ったレシートを、見返せる記録へ。
+      title: 撮ったレシートを、見返せる記録へ
+      title_lines:
+        - 撮ったレシートを、
+        - 見返せる記録へ
       lead: 写真や紙のまま残したレシートを、店舗名・日付・金額・明細ごとに整理された記録へ変えていきます。
       before:
         label: Before
@@ -119,7 +133,10 @@ ja:
           - 明細やカテゴリを確認しやすい
           - あとから検索しやすい
     features:
-      title: 読み取りから整理まで、ひとつの流れで。
+      title: 読み取りから整理まで、ひとつの流れで
+      title_lines:
+        - 読み取りから整理まで、
+        - ひとつの流れで
       items:
         - icon: cloud_upload
           title: レシート画像アップロード
@@ -145,8 +162,16 @@ ja:
       view_all: お知らせ一覧を見る
       pinned: 固定
     how_it_works:
-      title: 使い方はシンプル。
+      title: 使い方はシンプル
       save_label: 保存する
+      visual:
+        receipt_title: RECEIPT
+        image_sheet_title: レシート画像
+        ocr_badge: OCR
+        result_labels:
+          - 店舗名
+          - 合計金額
+          - 明細
       steps:
         - title: 撮る・アップロードする
           body: レシートを撮影するか、画像を選んでアップロード。
@@ -155,7 +180,7 @@ ja:
         - title: 確認して保存する
           body: 内容を確認し、必要に応じて編集して保存できます。
     trust:
-      title: 安心して使えるレシート管理を。
+      title: 安心して使えるレシート管理を
       items:
         - icon: passkey
           title: パスキー対応
@@ -175,7 +200,7 @@ ja:
     final_cta:
       heading_lines:
         - レシート整理を、
-        - 今日からもっと簡単に。
+        - 今日からもっと簡単に
       description: Recifyで、手間なく、見つけやすく、安心して使えるレシート管理を始めましょう。
       login: ログイン
       sign_up: 新規登録

@@ -1,23 +1,26 @@
 <% content_for :title, t("home.meta.title") %>
 <% content_for :head do %>
-  <%= tag.link rel: "stylesheet", href: "/home_lp.css" %>
+  <%= tag.link rel: "stylesheet", href: home_lp_stylesheet_path, "data-turbo-track": "reload" %>
 <% end %>
 
 <%
   hero_heading_lines = t("home.hero.heading_lines")
   hero_heading_primary = hero_heading_lines.first
   hero_heading_secondary = hero_heading_lines.second
-  hero_heading_secondary_segments = ["支出記録を", "もっと簡単に。"]
-  hero_description = t("home.hero.description")
-  hero_description_intro_prefix, hero_description_intro_suffix = hero_description.first.split("AI補完", 2)
+  hero_heading_secondary_segments = t("home.hero.heading_secondary_segments")
+  hero_description_paragraphs = t("home.hero.description_paragraphs")
   hero_char_delay_ms = 34
   hero_type_complete_delay_ms =
     (hero_heading_primary.length + hero_heading_secondary.length) * hero_char_delay_ms + 340
   problem_items = t("home.problem.items")
+  problem_title_lines = t("home.problem.title_lines")
   feature_items = t("home.features.items")
+  feature_title_lines = t("home.features.title_lines")
   how_it_works_steps = t("home.how_it_works.steps")
+  how_visual = t("home.how_it_works.visual")
   trust_items = t("home.trust.items")
   before_after = t("home.before_after")
+  before_after_title_lines = before_after.fetch(:title_lines)
 %>
 
 <div class="home-lp overflow-hidden" data-controller="home-reveal">
@@ -57,15 +60,13 @@
       </h1>
 
       <div class="mt-7 max-w-2xl space-y-2 text-sm leading-7 token-text-muted sm:text-base">
-        <% hero_description.each_with_index do |line, index| %>
-          <% if index.zero? %>
-            <p>
-              <%= hero_description_intro_prefix %><br>
-              <%= "AI補完#{hero_description_intro_suffix}" %>
-            </p>
-          <% else %>
-            <p><%= line %></p>
-          <% end %>
+        <% hero_description_paragraphs.each do |paragraph_lines| %>
+          <% lines = Array(paragraph_lines) %>
+          <p>
+            <% lines.each_with_index do |line, index| %>
+              <%= line %><%= tag.br if index < lines.size - 1 %>
+            <% end %>
+          </p>
         <% end %>
       </div>
 
@@ -100,8 +101,9 @@
       <h2 id="home-problem-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= t("home.problem.title") %></span>
         <span class="home-lp-conditional-title" data-home-conditional-break aria-hidden="true">
-          <span>レシート管理、</span><br class="home-lp-conditional-break">
-          <span>後回しになっていませんか？</span>
+          <% problem_title_lines.each_with_index do |line, index| %>
+            <span><%= line %></span><%= tag.br(class: "home-lp-conditional-break") if index < problem_title_lines.size - 1 %>
+          <% end %>
         </span>
         <span class="home-lp-section-accent" aria-hidden="true"></span>
       </h2>
@@ -126,8 +128,9 @@
       <h2 id="home-before-after-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= before_after.fetch(:title) %></span>
         <span class="home-lp-conditional-title" data-home-conditional-break aria-hidden="true">
-          <span>撮ったレシートを、</span><br class="home-lp-conditional-break">
-          <span>見返せる記録へ。</span>
+          <% before_after_title_lines.each_with_index do |line, index| %>
+            <span><%= line %></span><%= tag.br(class: "home-lp-conditional-break") if index < before_after_title_lines.size - 1 %>
+          <% end %>
         </span>
         <span class="home-lp-section-accent" aria-hidden="true"></span>
       </h2>
@@ -180,8 +183,9 @@
       <h2 id="home-features-title" class="home-lp-section-heading text-2xl font-black tracking-normal token-text-base sm:text-3xl">
         <span class="sr-only"><%= t("home.features.title") %></span>
         <span class="home-lp-conditional-title" data-home-conditional-break aria-hidden="true">
-          <span>読み取りから整理まで、</span><br class="home-lp-conditional-break">
-          <span>ひとつの流れで。</span>
+          <% feature_title_lines.each_with_index do |line, index| %>
+            <span><%= line %></span><%= tag.br(class: "home-lp-conditional-break") if index < feature_title_lines.size - 1 %>
+          <% end %>
         </span>
         <span class="home-lp-section-accent" aria-hidden="true"></span>
       </h2>
@@ -231,14 +235,14 @@
                 <div class="home-step-phone-frame">
                   <div class="home-step-phone-camera"></div>
                   <div class="home-step-capture-preview">
-                    <span class="home-step-capture-title">RECEIPT</span>
+                    <span class="home-step-capture-title"><%= how_visual.fetch(:receipt_title) %></span>
                     <span class="home-step-capture-line"></span>
                     <span class="home-step-capture-line"></span>
                     <span class="home-step-capture-line"></span>
                   </div>
                 </div>
                 <div class="home-step-image-sheet">
-                  <span class="home-step-image-sheet-title">レシート画像</span>
+                  <span class="home-step-image-sheet-title"><%= how_visual.fetch(:image_sheet_title) %></span>
                   <span class="home-step-image-sheet-line"></span>
                   <span class="home-step-image-sheet-line"></span>
                   <span class="home-step-image-sheet-line"></span>
@@ -256,25 +260,19 @@
                   <span class="home-step-scan-corner home-step-scan-corner-bottom-right"></span>
                   <span class="home-step-scan-line"></span>
                   <div class="home-step-scan-document">
-                    <span class="home-step-ocr-badge">OCR</span>
+                    <span class="home-step-ocr-badge"><%= how_visual.fetch(:ocr_badge) %></span>
                     <span class="home-step-receipt-line w-3/4"></span>
                     <span class="home-step-receipt-line w-full"></span>
                     <span class="home-step-receipt-line w-5/6"></span>
                   </div>
                 </div>
                 <div class="home-step-result-card">
-                  <span class="home-step-result-row">
-                    <span class="home-step-result-check" aria-hidden="true"></span>
-                    <span class="home-step-result-label">店舗名</span>
-                  </span>
-                  <span class="home-step-result-row">
-                    <span class="home-step-result-check" aria-hidden="true"></span>
-                    <span class="home-step-result-label">合計金額</span>
-                  </span>
-                  <span class="home-step-result-row">
-                    <span class="home-step-result-check" aria-hidden="true"></span>
-                    <span class="home-step-result-label">明細</span>
-                  </span>
+                  <% how_visual.fetch(:result_labels).each do |label| %>
+                    <span class="home-step-result-row">
+                      <span class="home-step-result-check" aria-hidden="true"></span>
+                      <span class="home-step-result-label"><%= label %></span>
+                    </span>
+                  <% end %>
                 </div>
               </div>
             <% else %>
