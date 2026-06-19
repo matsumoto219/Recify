@@ -55,6 +55,10 @@ RSpec.describe 'Contact requests', type: :request do
       get contact_path
 
       document = Nokogiri::HTML(response.body)
+      public_header = document.at_css('#public-header')
+      public_footer = document.at_css('#public-footer')
+      ambient_background = document.at_css('.ambient-background')
+      back_link = document.at_css("a.navigation-link[href='#{root_path}']")
       safety_text = document.at_css('.token-bg-warning-soft').text
       email_input = document.at_css("input[type='email'][name='contact_request[email]']")
       category_select = document.at_css("select[name='contact_request[category]']")
@@ -62,6 +66,11 @@ RSpec.describe 'Contact requests', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(public_header).to be_present
+        expect(public_footer).to be_present
+        expect(ambient_background).to be_present
+        expect(back_link).to be_present
+        expect(back_link.text).to include(I18n.t('contact_requests.navigation.back_to_top'))
         expect(response.body).to include(I18n.t('contact_requests.new.title'))
         expect(category_first_option['value']).to eq('')
         expect(category_first_option.text).to eq(I18n.t('contact_requests.placeholders.category'))
@@ -75,6 +84,9 @@ RSpec.describe 'Contact requests', type: :request do
         expect(safety_text).to include('クレジットカード番号')
         expect(safety_text).to include('レシート内容など個人情報を含む場合は、必要な範囲に絞って記載してください。')
         expect(safety_text).not_to include('recovery code', 'TOTP secret', 'cookie', 'session')
+        expect(response.body).not_to include('/home_lp.css')
+        expect(response.body).not_to include('data-controller="home-reveal"')
+        expect(response.body).not_to include('href="#"')
         expect(response.body).not_to include('TODO', '未実装')
       end
     end
@@ -133,6 +145,8 @@ RSpec.describe 'Contact requests', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect(document.at_css('#public-header')).to be_nil
+        expect(document.at_css('#public-footer')).to be_nil
         expect(response.body).to include('contact-user@example.com')
         expect(document.at_css('input[name="contact_request[email]"]')).to be_nil
         expect(sender_name_input['value']).to eq('登録 花子')

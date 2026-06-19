@@ -9,6 +9,7 @@ class ApplicationController < ActionController::Base
     "legal" => %w[terms privacy]
   }.freeze
   AUTH_HEADER_ACTIONS = {
+    "contact_requests" => %w[new create],
     "users/sessions" => %w[new create],
     "users/registrations" => %w[new create],
     "users/passwords" => %w[new create edit update],

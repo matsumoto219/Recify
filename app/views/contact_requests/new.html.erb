@@ -1,14 +1,12 @@
+<%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
+
 <section class="mx-auto max-w-3xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-12 md:pb-10">
   <% unless user_signed_in? %>
-    <div class="flex justify-center">
-      <%= render "shared/ui/actions/button",
-            as: :link,
-            href: root_path,
-            label: t("contact_requests.navigation.back_to_top"),
-            variant: :ghost,
-            size: :sm,
-            icon: "arrow_back" %>
-    </div>
+    <%= render "shared/ui/navigation/navigation_link",
+          path: root_path,
+          text: t("contact_requests.navigation.back_to_top"),
+          arrow: :left,
+          align: :left %>
   <% end %>
 
   <%= render "shared/ui/layout/section_header",
