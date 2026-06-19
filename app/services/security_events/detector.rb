@@ -37,7 +37,7 @@ module SecurityEvents
       session|credential|challenge|raw[_-]?response|prompt|raw[_-]?text
     /ix
 
-    RULES = [
+    INPUT_RULES = [
       {
         event_type: "sql_injection_attempt",
         severity: "high",
@@ -139,7 +139,10 @@ module SecurityEvents
         severity: "medium",
         matched_rule: "json_schema_control_key",
         pattern: /["'](?:__proto__|constructor|prototype|\$schema|\$ref)["']\s*:/i
-      },
+      }
+    ].freeze
+
+    AI_TEXT_RULES = [
       {
         event_type: "prompt_injection_attempt",
         severity: "medium",
@@ -153,6 +156,7 @@ module SecurityEvents
         pattern: /(?:ignore receipt|override total|do not trust|ai instruction|assistant:|system:)/i
       }
     ].freeze
+    RULES = (INPUT_RULES + AI_TEXT_RULES).freeze
 
     class << self
       def call(...)
@@ -187,25 +191,34 @@ module SecurityEvents
       return [] if value.blank?
 
       text = scan_text(value)
-      matches = RULES.filter_map do |rule|
+      matches = detect_rule_matches(field_name, text)
+      matches.concat(detect_url_matches(field_name, text, matches))
+      parameter_tampering = detect_parameter_tampering(field_name, text)
+      matches << parameter_tampering if parameter_tampering
+      matches
+    end
+
+    def detect_rule_matches(field_name, text)
+      RULES.filter_map do |rule|
         next unless rule.fetch(:pattern).match?(text)
 
-        Detection.new(
+        build_detection(
           event_type: rule.fetch(:event_type),
           severity: rule.fetch(:severity),
           matched_rule: rule.fetch(:matched_rule),
           field_name: field_name,
-          payload_excerpt: text
+          text: text
         )
       end
+    end
 
+    def detect_url_matches(field_name, text, existing_matches)
       unsafe_url = detect_unsafe_url(field_name, text)
-      matches << unsafe_url if unsafe_url
-      open_redirect = detect_open_redirect(field_name, text) unless unsafe_url || ssrf_detected?(matches)
-      matches << open_redirect if open_redirect
-      parameter_tampering = detect_parameter_tampering(field_name, text)
-      matches << parameter_tampering if parameter_tampering
-      matches
+      return [ unsafe_url ] if unsafe_url
+      return [] if ssrf_detected?(existing_matches)
+
+      open_redirect = detect_open_redirect(field_name, text)
+      open_redirect ? [ open_redirect ] : []
     end
 
     def ssrf_detected?(matches)
@@ -230,12 +243,12 @@ module SecurityEvents
         end
       return unless matched_rule
 
-      Detection.new(
+      build_detection(
         event_type: "open_redirect_attempt",
         severity: "medium",
         matched_rule: matched_rule,
         field_name: field_name,
-        payload_excerpt: text
+        text: text
       )
     end
 
@@ -244,12 +257,12 @@ module SecurityEvents
       return unless text.match?(%r{\Ahttps?://}i)
       return if text.match?(%r{\Ahttps?://(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/|\z)}i)
 
-      Detection.new(
+      build_detection(
         event_type: "open_redirect_attempt",
         severity: "medium",
         matched_rule: "external_redirect_url",
         field_name: field_name,
-        payload_excerpt: text
+        text: text
       )
     end
 
@@ -271,9 +284,19 @@ module SecurityEvents
 
       return unless matched_rule
 
-      Detection.new(
+      build_detection(
         event_type: "parameter_tampering_attempt",
         severity: "medium",
+        matched_rule: matched_rule,
+        field_name: field_name,
+        text: text
+      )
+    end
+
+    def build_detection(event_type:, severity:, matched_rule:, field_name:, text:)
+      Detection.new(
+        event_type: event_type,
+        severity: severity,
         matched_rule: matched_rule,
         field_name: field_name,
         payload_excerpt: text
