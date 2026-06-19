@@ -16,6 +16,7 @@ module SystemSettings
   ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
   AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
   IMAGE_DIMENSION_RELATION_ERROR = "image_dimension_relationship"
+  STORAGE_WARNING_THRESHOLD_RELATION_ERROR = "storage_warning_threshold_relationship"
   AMOUNT_LIMIT_RELATIONSHIPS = [
     [ "limits.receipt_total_amount_max", "limits.receipt_item_line_total_max" ],
     [ "limits.receipt_total_amount_max", "limits.receipt_adjustment_amount_max" ],
@@ -37,6 +38,14 @@ module SystemSettings
     [ "limits.announcement_image_min_dimension_px", "limits.announcement_image_max_dimension_px" ]
   ].freeze
   IMAGE_DIMENSION_LIMIT_KEYS = IMAGE_DIMENSION_RELATIONSHIPS.flatten.freeze
+  STORAGE_USAGE_PERCENTAGE_KEYS = %w[
+    storage.usage_warning_percentage
+    storage.usage_error_percentage
+  ].freeze
+  STORAGE_REMAINING_BYTES_KEYS = %w[
+    storage.warning_remaining_bytes
+    storage.error_remaining_bytes
+  ].freeze
   USER_LIMIT_SETTING_SAFETY_KEYS = {
     "limits.receipt_uploads_per_day" => "limits.max_uploads_per_day",
     "limits.batch_files_per_day" => "limits.max_uploads_per_day",
@@ -397,6 +406,7 @@ module SystemSettings
       validate_analysis_run_retention_order!(definition, value)
       validate_amount_limit_relationships!(definition, value)
       validate_image_dimension_relationships!(definition, value)
+      validate_storage_warning_threshold_relationships!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -485,6 +495,30 @@ module SystemSettings
       return unless invalid_relationship
 
       raise ValidationError, IMAGE_DIMENSION_RELATION_ERROR
+    end
+
+    def validate_storage_warning_threshold_relationships!(definition, value)
+      if STORAGE_USAGE_PERCENTAGE_KEYS.include?(definition.key)
+        validate_storage_usage_percentage_relationship!(definition, value)
+      elsif STORAGE_REMAINING_BYTES_KEYS.include?(definition.key)
+        validate_storage_remaining_bytes_relationship!(definition, value)
+      end
+    end
+
+    def validate_storage_usage_percentage_relationship!(definition, value)
+      values = limits_for(STORAGE_USAGE_PERCENTAGE_KEYS)
+      values[definition.key] = Integer(value)
+      return if values.fetch("storage.usage_warning_percentage") < values.fetch("storage.usage_error_percentage")
+
+      raise ValidationError, STORAGE_WARNING_THRESHOLD_RELATION_ERROR
+    end
+
+    def validate_storage_remaining_bytes_relationship!(definition, value)
+      values = limits_for(STORAGE_REMAINING_BYTES_KEYS)
+      values[definition.key] = Integer(value)
+      return if values.fetch("storage.warning_remaining_bytes") > values.fetch("storage.error_remaining_bytes")
+
+      raise ValidationError, STORAGE_WARNING_THRESHOLD_RELATION_ERROR
     end
 
     def override_integer_value(override)

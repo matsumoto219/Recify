@@ -223,6 +223,31 @@ RSpec.describe Storage::UsageCalculator do
         expect(registered_usage.state).to eq(:normal)
       end
     end
+
+    it 'SystemSettingsの使用率閾値でwarning/errorを判定する' do
+      user.update!(storage_limit_bytes: 1.gigabyte)
+      receipt = create(:receipt, user:)
+      attach_blob(receipt, :image, 750.megabytes)
+      create(:system_setting, key: 'storage.usage_warning_percentage', value: SystemSettings.stored_value(70))
+      create(:system_setting, key: 'storage.usage_error_percentage', value: SystemSettings.stored_value(90))
+
+      expect(described_class.new(user).state).to eq(:warning)
+
+      SystemSetting.find_by!(key: 'storage.usage_error_percentage').update!(value: SystemSettings.stored_value(73))
+
+      expect(described_class.new(user).state).to eq(:error)
+    end
+
+    it 'SystemSettingsの残容量閾値で大容量上限のwarning/errorを判定する' do
+      user.update!(storage_limit_bytes: 5.gigabytes)
+      receipt = create(:receipt, user:)
+      attach_blob(receipt, :image, 4.7.gigabytes.to_i)
+      create(:system_setting, key: 'storage.warning_remaining_bytes', value: SystemSettings.stored_value(800.megabytes))
+      create(:system_setting, key: 'storage.error_remaining_bytes', value: SystemSettings.stored_value(400.megabytes))
+      create(:system_setting, key: 'storage.remaining_warning_limit_bytes', value: SystemSettings.stored_value(1.gigabyte))
+
+      expect(described_class.new(user).state).to eq(:error)
+    end
   end
 
   describe 'memoization' do

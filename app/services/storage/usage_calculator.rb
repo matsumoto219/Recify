@@ -8,6 +8,36 @@ module Storage
 
     attr_reader :user
 
+    def self.error_usage_percentage
+      SystemSettings.limit_for("storage.usage_error_percentage")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      ERROR_USAGE_PERCENTAGE
+    end
+
+    def self.error_remaining_bytes
+      SystemSettings.limit_for("storage.error_remaining_bytes")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      ERROR_REMAINING_BYTES
+    end
+
+    def self.warning_usage_percentage
+      SystemSettings.limit_for("storage.usage_warning_percentage")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      WARNING_USAGE_PERCENTAGE
+    end
+
+    def self.warning_remaining_bytes
+      SystemSettings.limit_for("storage.warning_remaining_bytes")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      WARNING_REMAINING_BYTES
+    end
+
+    def self.remaining_warning_limit_bytes
+      SystemSettings.limit_for("storage.remaining_warning_limit_bytes")
+    rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      WARNING_REMAINING_LIMIT_BYTES
+    end
+
     def initialize(user)
       @user = user
     end
@@ -61,17 +91,17 @@ module Storage
     private
 
     def error?
-      usage_percentage >= ERROR_USAGE_PERCENTAGE ||
-        (large_storage_limit? && remaining_bytes < ERROR_REMAINING_BYTES)
+      usage_percentage >= self.class.error_usage_percentage ||
+        (large_storage_limit? && remaining_bytes < self.class.error_remaining_bytes)
     end
 
     def warning?
-      usage_percentage >= WARNING_USAGE_PERCENTAGE ||
-        (large_storage_limit? && remaining_bytes < WARNING_REMAINING_BYTES)
+      usage_percentage >= self.class.warning_usage_percentage ||
+        (large_storage_limit? && remaining_bytes < self.class.warning_remaining_bytes)
     end
 
     def large_storage_limit?
-      limit_bytes >= WARNING_REMAINING_LIMIT_BYTES
+      limit_bytes >= self.class.remaining_warning_limit_bytes
     end
 
     def used_bytes_excluding(blob)

@@ -147,6 +147,56 @@ module SystemSettings
         risk_level: "medium"
       ),
       Definition.new(
+        key: "storage.usage_warning_percentage",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 80,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 99
+      ),
+      Definition.new(
+        key: "storage.usage_error_percentage",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 95,
+        editable: true,
+        risk_level: "medium",
+        min: 2,
+        max: 100
+      ),
+      Definition.new(
+        key: "storage.warning_remaining_bytes",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 200.megabytes,
+        editable: true,
+        risk_level: "medium",
+        min: 1.megabyte,
+        max: 20.gigabytes
+      ),
+      Definition.new(
+        key: "storage.error_remaining_bytes",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 50.megabytes,
+        editable: true,
+        risk_level: "medium",
+        min: 1.megabyte,
+        max: 10.gigabytes
+      ),
+      Definition.new(
+        key: "storage.remaining_warning_limit_bytes",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 1.gigabyte,
+        editable: true,
+        risk_level: "medium",
+        min: 10.megabytes,
+        max: 100.gigabytes
+      ),
+      Definition.new(
         key: "limits.receipt_upload_soft_limit",
         category: "soft_limit",
         value_type: "integer",

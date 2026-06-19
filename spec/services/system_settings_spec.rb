@@ -20,6 +20,11 @@ RSpec.describe SystemSettings do
         'maintenance.body',
         'security.admin_passkey_reauth_window_minutes',
         'storage.keep_receipt_images_default',
+        'storage.usage_warning_percentage',
+        'storage.usage_error_percentage',
+        'storage.warning_remaining_bytes',
+        'storage.error_remaining_bytes',
+        'storage.remaining_warning_limit_bytes',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
         'limits.manual_receipts_per_day',
@@ -331,6 +336,11 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.guest_storage_bytes')).to eq(50.megabytes)
         expect(described_class.limit_for('limits.api_requests_per_minute')).to eq(60)
         expect(described_class.limit_for('limits.api_requests_per_day')).to eq(1000)
+        expect(described_class.limit_for('storage.usage_warning_percentage')).to eq(80)
+        expect(described_class.limit_for('storage.usage_error_percentage')).to eq(95)
+        expect(described_class.limit_for('storage.warning_remaining_bytes')).to eq(200.megabytes)
+        expect(described_class.limit_for('storage.error_remaining_bytes')).to eq(50.megabytes)
+        expect(described_class.limit_for('storage.remaining_warning_limit_bytes')).to eq(1.gigabyte)
       end
     end
   end
@@ -426,6 +436,16 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.announcement_image_max_dimension_px', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 100.kilobytes.to_s)).to eq(100.kilobytes)
         expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 20.megabytes.to_s)).to eq(20.megabytes)
+        expect(described_class.cast_update_value('storage.usage_warning_percentage', '1')).to eq(1)
+        expect(described_class.cast_update_value('storage.usage_warning_percentage', '94')).to eq(94)
+        expect(described_class.cast_update_value('storage.usage_error_percentage', '81')).to eq(81)
+        expect(described_class.cast_update_value('storage.usage_error_percentage', '100')).to eq(100)
+        expect(described_class.cast_update_value('storage.warning_remaining_bytes', 200.megabytes.to_s)).to eq(200.megabytes)
+        expect(described_class.cast_update_value('storage.warning_remaining_bytes', 20.gigabytes.to_s)).to eq(20.gigabytes)
+        expect(described_class.cast_update_value('storage.error_remaining_bytes', 1.megabyte.to_s)).to eq(1.megabyte)
+        expect(described_class.cast_update_value('storage.error_remaining_bytes', 199.megabytes.to_s)).to eq(199.megabytes)
+        expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 10.megabytes.to_s)).to eq(10.megabytes)
+        expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 100.gigabytes.to_s)).to eq(100.gigabytes)
         expect(described_class.cast_update_value('retention.notifications_read_days', '1')).to eq(1)
         expect(described_class.cast_update_value('retention.notifications_read_days', '365')).to eq(365)
         expect(described_class.cast_update_value('retention.guest_users_days', '1')).to eq(1)
@@ -629,6 +649,36 @@ RSpec.describe SystemSettings do
         expect {
           described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', (20.megabytes + 1).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.usage_warning_percentage', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.usage_warning_percentage', '100')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.usage_error_percentage', '1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.usage_error_percentage', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.warning_remaining_bytes', (1.megabyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.warning_remaining_bytes', (20.gigabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.error_remaining_bytes', (1.megabyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.error_remaining_bytes', (10.gigabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.remaining_warning_limit_bytes', (10.megabytes - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.remaining_warning_limit_bytes', (100.gigabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end
 
@@ -713,6 +763,53 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.announcement_image_min_dimension_px', '1500')).to eq(1500)
         expect {
           described_class.cast_update_value('limits.announcement_image_min_dimension_px', '2001')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
+    it 'ストレージ警告閾値はwarningとerrorの大小関係を維持する' do
+      error_message = 'storage_warning_threshold_relationship'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('storage.usage_warning_percentage', '94')).to eq(94)
+        expect {
+          described_class.cast_update_value('storage.usage_warning_percentage', '95')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.usage_error_percentage', '81')).to eq(81)
+        expect {
+          described_class.cast_update_value('storage.usage_error_percentage', '80')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.warning_remaining_bytes', 51.megabytes.to_s)).to eq(51.megabytes)
+        expect {
+          described_class.cast_update_value('storage.warning_remaining_bytes', 50.megabytes.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.error_remaining_bytes', 199.megabytes.to_s)).to eq(199.megabytes)
+        expect {
+          described_class.cast_update_value('storage.error_remaining_bytes', 200.megabytes.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'storage.usage_warning_percentage', value: described_class.stored_value(60))
+      create(:system_setting, key: 'storage.usage_error_percentage', value: described_class.stored_value(90))
+      create(:system_setting, key: 'storage.warning_remaining_bytes', value: described_class.stored_value(500.megabytes))
+      create(:system_setting, key: 'storage.error_remaining_bytes', value: described_class.stored_value(100.megabytes))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('storage.usage_warning_percentage', '89')).to eq(89)
+        expect {
+          described_class.cast_update_value('storage.usage_warning_percentage', '90')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.usage_error_percentage', '61')).to eq(61)
+        expect {
+          described_class.cast_update_value('storage.usage_error_percentage', '60')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.warning_remaining_bytes', 101.megabytes.to_s)).to eq(101.megabytes)
+        expect {
+          described_class.cast_update_value('storage.warning_remaining_bytes', 100.megabytes.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.error_remaining_bytes', 499.megabytes.to_s)).to eq(499.megabytes)
+        expect {
+          described_class.cast_update_value('storage.error_remaining_bytes', 500.megabytes.to_s)
         }.to raise_error(SystemSettings::ValidationError, error_message)
       end
     end
@@ -1076,6 +1173,46 @@ RSpec.describe SystemSettings do
         max: 60,
         default: 5
       )
+    end
+
+    it 'ストレージ警告閾値はmedium risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('storage.usage_warning_percentage')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 1,
+          max: 99,
+          default: 80
+        )
+        expect(described_class.definition_for('storage.usage_error_percentage')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 2,
+          max: 100,
+          default: 95
+        )
+        expect(described_class.definition_for('storage.warning_remaining_bytes')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 1.megabyte,
+          max: 20.gigabytes,
+          default: 200.megabytes
+        )
+        expect(described_class.definition_for('storage.error_remaining_bytes')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 1.megabyte,
+          max: 10.gigabytes,
+          default: 50.megabytes
+        )
+        expect(described_class.definition_for('storage.remaining_warning_limit_bytes')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 10.megabytes,
+          max: 100.gigabytes,
+          default: 1.gigabyte
+        )
+      end
     end
 
     it '税抜単価の税込補正切り替えはhigh risk設定として扱う' do
