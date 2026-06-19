@@ -1,6 +1,6 @@
 module SecurityEvents
   class Detector
-    Detection = Struct.new(:event_type, :severity, :matched_rule, :field_name, :payload_excerpt, keyword_init: true)
+    Detection = Struct.new(:event_type, :severity, :category, :matched_rule, :field_name, :payload_excerpt, :metadata, keyword_init: true)
 
     MAX_DETECTIONS = 5
     MAX_SCAN_VALUE_BYTES = 2_000
@@ -294,13 +294,14 @@ module SecurityEvents
     end
 
     def build_detection(event_type:, severity:, matched_rule:, field_name:, text:)
-      Detection.new(
+      DetectionCandidate.new(
         event_type: event_type,
         severity: severity,
+        category: nil,
         matched_rule: matched_rule,
         field_name: field_name,
-        payload_excerpt: text
-      )
+        value_excerpt: text
+      ).to_detection
     end
 
     def each_string(value, prefix = nil, depth = 0, &block)
