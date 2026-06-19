@@ -47,6 +47,11 @@ export default class extends Controller {
     this.mockObserver = null
     this.sectionObserver?.disconnect()
     this.sectionObserver = null
+    this.clearSectionNavigationTimer()
+    if (this.handleScrollEnd) {
+      window.removeEventListener('scrollend', this.handleScrollEnd)
+      this.handleScrollEnd = null
+    }
     if (this.handleScroll) {
       window.removeEventListener('scroll', this.handleScroll)
     }
@@ -199,15 +204,51 @@ export default class extends Controller {
 
     window.addEventListener('resize', this.handleConditionalBreakResize, { passive: true })
     this.updateConditionalBreaks()
+
+    document.fonts?.ready?.then(() => {
+      if (!this.element.isConnected) return
+
+      this.updateConditionalBreaks()
+    })
   }
 
   updateConditionalBreaks () {
     window.requestAnimationFrame(() => {
       this.conditionalBreakElements?.forEach((element) => {
-        element.classList.remove('is-wrapped')
-        element.classList.toggle('is-wrapped', element.getClientRects().length > 1)
+        element.classList.toggle('is-wrapped', this.shouldUseConditionalBreak(element))
       })
     })
+  }
+
+  shouldUseConditionalBreak (element) {
+    const container = element.parentElement
+    if (!container) return false
+
+    element.classList.remove('is-wrapped')
+
+    const availableWidth = container.getBoundingClientRect().width
+    if (availableWidth <= 0) return false
+
+    const measuringElement = element.cloneNode(true)
+    measuringElement.classList.remove('is-wrapped')
+    measuringElement.setAttribute('aria-hidden', 'true')
+    Object.assign(measuringElement.style, {
+      display: 'inline-block',
+      left: '-9999px',
+      maxWidth: 'none',
+      pointerEvents: 'none',
+      position: 'absolute',
+      top: '0',
+      visibility: 'hidden',
+      whiteSpace: 'nowrap',
+      width: 'max-content'
+    })
+
+    container.appendChild(measuringElement)
+    const requiredWidth = measuringElement.getBoundingClientRect().width
+    measuringElement.remove()
+
+    return requiredWidth > availableWidth + 1
   }
 
   navigate (event) {
@@ -217,7 +258,7 @@ export default class extends Controller {
     if (!section || this.reducedMotion) return
 
     event.preventDefault()
-    this.activateSection(sectionId)
+    this.startProgrammaticSectionNavigation(sectionId, section)
     section.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -259,8 +300,13 @@ export default class extends Controller {
     )
 
     this.sectionTargets.forEach((section) => this.sectionObserver.observe(section))
-    this.handleScroll = () => this.activateLastSectionAtPageEnd()
+    this.handleScroll = () => {
+      this.releaseProgrammaticSectionNavigationWhenSettled()
+      this.activateLastSectionAtPageEnd()
+    }
     window.addEventListener('scroll', this.handleScroll, { passive: true })
+    this.handleScrollEnd = () => this.finishProgrammaticSectionNavigation()
+    window.addEventListener('scrollend', this.handleScrollEnd, { passive: true })
   }
 
   buildSectionNavigation () {
@@ -427,6 +473,8 @@ export default class extends Controller {
   }
 
   updateActiveSection (entries) {
+    if (this.programmaticSectionId) return
+
     const visibleEntry = entries
       .filter((entry) => entry.isIntersecting)
       .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0]
@@ -450,7 +498,61 @@ export default class extends Controller {
     })
   }
 
+  startProgrammaticSectionNavigation (sectionId, section) {
+    this.programmaticSectionId = sectionId
+    this.activateSection(sectionId)
+    this.clearSectionNavigationTimer()
+    this.sectionNavigationTimer = window.setTimeout(
+      () => this.finishProgrammaticSectionNavigation(),
+      this.resolveSectionNavigationTimeout(section)
+    )
+  }
+
+  finishProgrammaticSectionNavigation () {
+    if (!this.programmaticSectionId) return
+
+    const sectionId = this.programmaticSectionId
+
+    this.programmaticSectionId = null
+    this.clearSectionNavigationTimer()
+    this.activateSection(sectionId)
+  }
+
+  releaseProgrammaticSectionNavigationWhenSettled () {
+    if (!this.programmaticSectionId) return
+
+    const section = document.getElementById(this.programmaticSectionId)
+    if (!section) {
+      this.finishProgrammaticSectionNavigation()
+      return
+    }
+
+    const targetTop = Math.abs(section.getBoundingClientRect().top)
+    const documentElement = document.documentElement
+    const distanceToBottom = documentElement.scrollHeight - (window.scrollY + window.innerHeight)
+    const isLastSection = this.sectionTargets[this.sectionTargets.length - 1]?.id === this.programmaticSectionId
+
+    if (targetTop <= 3 || (isLastSection && distanceToBottom <= 8)) {
+      this.finishProgrammaticSectionNavigation()
+    }
+  }
+
+  clearSectionNavigationTimer () {
+    if (!this.sectionNavigationTimer) return
+
+    window.clearTimeout(this.sectionNavigationTimer)
+    this.sectionNavigationTimer = null
+  }
+
+  resolveSectionNavigationTimeout (section) {
+    const distance = Math.abs(section.getBoundingClientRect().top)
+
+    return Math.min(1800, Math.max(700, distance * 0.35))
+  }
+
   activateLastSectionAtPageEnd () {
+    if (this.programmaticSectionId) return
+
     const documentElement = document.documentElement
     const distanceToBottom = documentElement.scrollHeight - (window.scrollY + window.innerHeight)
 
