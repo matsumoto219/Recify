@@ -80,6 +80,21 @@ RSpec.describe SystemSettings do
         'limits.max_storage_bytes',
         'limits.snapshot_ocr_items_max',
         'limits.snapshot_ai_normalized_items_max',
+        'limits.snapshot_ocr_lines_max',
+        'limits.snapshot_ai_input_full_context_lines_max',
+        'limits.snapshot_ai_input_adjustment_context_lines_max',
+        'limits.snapshot_ai_input_filtered_content_max_bytes',
+        'limits.snapshot_string_max_bytes',
+        'limits.snapshot_ai_input_items_max',
+        'limits.snapshot_store_candidates_max',
+        'limits.snapshot_purchase_candidates_max',
+        'limits.snapshot_payment_candidates_max',
+        'limits.snapshot_tax_details_max',
+        'limits.snapshot_review_reasons_max',
+        'limits.ai_prompt_filtered_content_lines_max',
+        'limits.ai_prompt_full_context_lines_max',
+        'limits.ai_prompt_raw_text_length_max',
+        'limits.ai_prompt_purchase_candidates_max',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
@@ -342,6 +357,21 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.max_storage_bytes')).to eq(100.gigabytes)
         expect(described_class.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.snapshot_ai_normalized_items_max')).to eq(1000)
+        expect(described_class.limit_for('limits.snapshot_ocr_lines_max')).to eq(150)
+        expect(described_class.limit_for('limits.snapshot_ai_input_full_context_lines_max')).to eq(150)
+        expect(described_class.limit_for('limits.snapshot_ai_input_adjustment_context_lines_max')).to eq(40)
+        expect(described_class.limit_for('limits.snapshot_ai_input_filtered_content_max_bytes')).to eq(8.kilobytes)
+        expect(described_class.limit_for('limits.snapshot_string_max_bytes')).to eq(500)
+        expect(described_class.limit_for('limits.snapshot_ai_input_items_max')).to eq(50)
+        expect(described_class.limit_for('limits.snapshot_store_candidates_max')).to eq(10)
+        expect(described_class.limit_for('limits.snapshot_purchase_candidates_max')).to eq(5)
+        expect(described_class.limit_for('limits.snapshot_payment_candidates_max')).to eq(10)
+        expect(described_class.limit_for('limits.snapshot_tax_details_max')).to eq(10)
+        expect(described_class.limit_for('limits.snapshot_review_reasons_max')).to eq(20)
+        expect(described_class.limit_for('limits.ai_prompt_filtered_content_lines_max')).to eq(40)
+        expect(described_class.limit_for('limits.ai_prompt_full_context_lines_max')).to eq(150)
+        expect(described_class.limit_for('limits.ai_prompt_raw_text_length_max')).to eq(4000)
+        expect(described_class.limit_for('limits.ai_prompt_purchase_candidates_max')).to eq(5)
         expect(described_class.limit_for('limits.batch_files_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ocr_jobs_per_day')).to eq(50)
         expect(described_class.limit_for('limits.ai_jobs_per_day')).to eq(50)
@@ -443,6 +473,36 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10000')).to eq(10_000)
+        expect(described_class.cast_update_value('limits.snapshot_ocr_lines_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.snapshot_ocr_lines_max', '1000')).to eq(1000)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '1000')).to eq(1000)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_adjustment_context_lines_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_adjustment_context_lines_max', '500')).to eq(500)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_filtered_content_max_bytes', 1.kilobyte.to_s)).to eq(1.kilobyte)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_filtered_content_max_bytes', 100.kilobytes.to_s)).to eq(100.kilobytes)
+        expect(described_class.cast_update_value('limits.snapshot_string_max_bytes', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.snapshot_string_max_bytes', '5000')).to eq(5000)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_items_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.snapshot_ai_input_items_max', '5000')).to eq(5000)
+        expect(described_class.cast_update_value('limits.snapshot_store_candidates_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.snapshot_store_candidates_max', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.snapshot_purchase_candidates_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.snapshot_purchase_candidates_max', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.snapshot_payment_candidates_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.snapshot_payment_candidates_max', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.snapshot_tax_details_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.snapshot_tax_details_max', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.snapshot_review_reasons_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.snapshot_review_reasons_max', '100')).to eq(100)
+        expect(described_class.cast_update_value('limits.ai_prompt_filtered_content_lines_max', '5')).to eq(5)
+        expect(described_class.cast_update_value('limits.ai_prompt_filtered_content_lines_max', '500')).to eq(500)
+        expect(described_class.cast_update_value('limits.ai_prompt_full_context_lines_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.ai_prompt_full_context_lines_max', '1000')).to eq(1000)
+        expect(described_class.cast_update_value('limits.ai_prompt_raw_text_length_max', '500')).to eq(500)
+        expect(described_class.cast_update_value('limits.ai_prompt_raw_text_length_max', '50000')).to eq(50_000)
+        expect(described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '1')).to eq(1)
+        expect(described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '0')).to eq(0)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '200')).to eq(200)
         expect(described_class.cast_update_value('limits.receipt_payments_per_receipt', '0')).to eq(0)
@@ -539,6 +599,96 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ocr_lines_max', '9')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ocr_lines_max', '1001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '9')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '1001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_adjustment_context_lines_max', '9')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_adjustment_context_lines_max', '501')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_filtered_content_max_bytes', (1.kilobyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_filtered_content_max_bytes', (100.kilobytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_string_max_bytes', '99')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_string_max_bytes', '5001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_items_max', '9')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_ai_input_items_max', '5001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_store_candidates_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_store_candidates_max', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_purchase_candidates_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_purchase_candidates_max', '51')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_payment_candidates_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_payment_candidates_max', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_tax_details_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_tax_details_max', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.snapshot_review_reasons_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.snapshot_review_reasons_max', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_filtered_content_lines_max', '4')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_filtered_content_lines_max', '501')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_full_context_lines_max', '9')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_full_context_lines_max', '1001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_raw_text_length_max', '499')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_raw_text_length_max', '50001')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '51')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '-1')
@@ -1339,6 +1489,79 @@ RSpec.describe SystemSettings do
           min: 1.gigabyte,
           max: 1.terabyte,
           default: 100.gigabytes
+        )
+      end
+    end
+
+    it 'OCR/AI snapshot上限は運用設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('limits.snapshot_ocr_lines_max')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'high',
+          min: 10,
+          max: 1000,
+          default: 150
+        )
+        expect(described_class.definition_for('limits.snapshot_ai_input_filtered_content_max_bytes')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'high',
+          min: 1.kilobyte,
+          max: 100.kilobytes,
+          default: 8.kilobytes
+        )
+        expect(described_class.definition_for('limits.snapshot_string_max_bytes')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'high',
+          min: 100,
+          max: 5000,
+          default: 500
+        )
+        expect(described_class.definition_for('limits.snapshot_store_candidates_max')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'medium',
+          min: 1,
+          max: 100,
+          default: 10
+        )
+        expect(described_class.definition_for('limits.snapshot_review_reasons_max')).to have_attributes(
+          category: 'snapshot_limit',
+          risk_level: 'medium',
+          min: 1,
+          max: 100,
+          default: 20
+        )
+      end
+    end
+
+    it 'AI prompt上限は運用設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('limits.ai_prompt_filtered_content_lines_max')).to have_attributes(
+          category: 'ai_prompt_limit',
+          risk_level: 'high',
+          min: 5,
+          max: 500,
+          default: 40
+        )
+        expect(described_class.definition_for('limits.ai_prompt_full_context_lines_max')).to have_attributes(
+          category: 'ai_prompt_limit',
+          risk_level: 'high',
+          min: 10,
+          max: 1000,
+          default: 150
+        )
+        expect(described_class.definition_for('limits.ai_prompt_raw_text_length_max')).to have_attributes(
+          category: 'ai_prompt_limit',
+          risk_level: 'high',
+          min: 500,
+          max: 50_000,
+          default: 4000
+        )
+        expect(described_class.definition_for('limits.ai_prompt_purchase_candidates_max')).to have_attributes(
+          category: 'ai_prompt_limit',
+          risk_level: 'medium',
+          min: 1,
+          max: 50,
+          default: 5
         )
       end
     end

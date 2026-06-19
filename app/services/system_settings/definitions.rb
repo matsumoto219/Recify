@@ -747,6 +747,156 @@ module SystemSettings
         max: 10_000
       ),
       Definition.new(
+        key: "limits.snapshot_ocr_lines_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 150,
+        editable: true,
+        risk_level: "high",
+        min: 10,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.snapshot_ai_input_full_context_lines_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 150,
+        editable: true,
+        risk_level: "high",
+        min: 10,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.snapshot_ai_input_adjustment_context_lines_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 40,
+        editable: true,
+        risk_level: "medium",
+        min: 10,
+        max: 500
+      ),
+      Definition.new(
+        key: "limits.snapshot_ai_input_filtered_content_max_bytes",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 8.kilobytes,
+        editable: true,
+        risk_level: "high",
+        min: 1.kilobyte,
+        max: 100.kilobytes
+      ),
+      Definition.new(
+        key: "limits.snapshot_string_max_bytes",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 500,
+        editable: true,
+        risk_level: "high",
+        min: 100,
+        max: 5000
+      ),
+      Definition.new(
+        key: "limits.snapshot_ai_input_items_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 50,
+        editable: true,
+        risk_level: "high",
+        min: 10,
+        max: 5000
+      ),
+      Definition.new(
+        key: "limits.snapshot_store_candidates_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.snapshot_purchase_candidates_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 50
+      ),
+      Definition.new(
+        key: "limits.snapshot_payment_candidates_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.snapshot_tax_details_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.snapshot_review_reasons_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 20,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 100
+      ),
+      Definition.new(
+        key: "limits.ai_prompt_filtered_content_lines_max",
+        category: "ai_prompt_limit",
+        value_type: "integer",
+        default: 40,
+        editable: true,
+        risk_level: "high",
+        min: 5,
+        max: 500
+      ),
+      Definition.new(
+        key: "limits.ai_prompt_full_context_lines_max",
+        category: "ai_prompt_limit",
+        value_type: "integer",
+        default: 150,
+        editable: true,
+        risk_level: "high",
+        min: 10,
+        max: 1000
+      ),
+      Definition.new(
+        key: "limits.ai_prompt_raw_text_length_max",
+        category: "ai_prompt_limit",
+        value_type: "integer",
+        default: 4000,
+        editable: true,
+        risk_level: "high",
+        min: 500,
+        max: 50_000
+      ),
+      Definition.new(
+        key: "limits.ai_prompt_purchase_candidates_max",
+        category: "ai_prompt_limit",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 50
+      ),
+      Definition.new(
         key: "limits.batch_files_per_day",
         category: "usage_limit",
         value_type: "integer",

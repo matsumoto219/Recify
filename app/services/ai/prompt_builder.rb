@@ -9,6 +9,28 @@ module Ai
       def build(ocr_result, ai_name_completion_enabled: false)
         new(ocr_result, ai_name_completion_enabled: ai_name_completion_enabled).build
       end
+
+      def filtered_content_lines_max
+        prompt_limit_for("limits.ai_prompt_filtered_content_lines_max", MAX_FILTERED_CONTENT_LINES)
+      end
+
+      def full_context_lines_max
+        prompt_limit_for("limits.ai_prompt_full_context_lines_max", MAX_FULL_CONTEXT_LINES)
+      end
+
+      def raw_text_length_max
+        prompt_limit_for("limits.ai_prompt_raw_text_length_max", MAX_RAW_TEXT_LENGTH)
+      end
+
+      def purchase_candidates_max
+        prompt_limit_for("limits.ai_prompt_purchase_candidates_max", MAX_PURCHASE_CANDIDATES)
+      end
+
+      def prompt_limit_for(key, fallback)
+        SystemSettings.limit_for(key)
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        fallback
+      end
     end
 
     def initialize(ocr_result, ai_name_completion_enabled: false)
@@ -126,7 +148,7 @@ module Ai
     end
 
     def build_full_context_lines
-      @full_context_lines ||= lines.first(MAX_FULL_CONTEXT_LINES).map.with_index do |line, index|
+      @full_context_lines ||= lines.first(self.class.full_context_lines_max).map.with_index do |line, index|
         {
           index: index,
           text: line,
@@ -175,7 +197,7 @@ module Ai
     end
 
     def filtered_content_lines
-      @filtered_content_lines ||= lines.reject { |line| removable_noise_line?(line) }.first(MAX_FILTERED_CONTENT_LINES)
+      @filtered_content_lines ||= lines.reject { |line| removable_noise_line?(line) }.first(self.class.filtered_content_lines_max)
     end
 
     def removable_noise_line?(line)
@@ -195,7 +217,7 @@ module Ai
     end
 
     def purchased_at_candidates
-      lines.select { |line| date_time_line?(line) }.uniq.first(MAX_PURCHASE_CANDIDATES)
+      lines.select { |line| date_time_line?(line) }.uniq.first(self.class.purchase_candidates_max)
     end
 
     def purchase_context_lines
@@ -754,7 +776,7 @@ module Ai
     end
 
     def raw_text
-      @raw_text ||= fetch(ocr_result, :raw_text).to_s.first(MAX_RAW_TEXT_LENGTH)
+      @raw_text ||= fetch(ocr_result, :raw_text).to_s.first(self.class.raw_text_length_max)
     end
 
     def content_text

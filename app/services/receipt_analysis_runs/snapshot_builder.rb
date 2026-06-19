@@ -119,6 +119,50 @@ module ReceiptAnalysisRuns
         snapshot_limit_for("limits.snapshot_ai_normalized_items_max", DEFAULT_MAX_AI_NORMALIZED_ITEMS)
       end
 
+      def snapshot_ocr_lines_max
+        snapshot_limit_for("limits.snapshot_ocr_lines_max", MAX_OCR_LINES)
+      end
+
+      def snapshot_ai_input_full_context_lines_max
+        snapshot_limit_for("limits.snapshot_ai_input_full_context_lines_max", MAX_FULL_CONTEXT_LINES)
+      end
+
+      def snapshot_ai_input_adjustment_context_lines_max
+        snapshot_limit_for("limits.snapshot_ai_input_adjustment_context_lines_max", MAX_ADJUSTMENT_CONTEXT_LINES)
+      end
+
+      def snapshot_ai_input_filtered_content_max_bytes
+        snapshot_limit_for("limits.snapshot_ai_input_filtered_content_max_bytes", FILTERED_CONTENT_MAX_BYTES)
+      end
+
+      def snapshot_string_max_bytes
+        snapshot_limit_for("limits.snapshot_string_max_bytes", STRING_MAX_BYTES)
+      end
+
+      def snapshot_ai_input_items_max
+        snapshot_limit_for("limits.snapshot_ai_input_items_max", MAX_ITEMS)
+      end
+
+      def snapshot_store_candidates_max
+        snapshot_limit_for("limits.snapshot_store_candidates_max", MAX_STORE_CANDIDATES)
+      end
+
+      def snapshot_purchase_candidates_max
+        snapshot_limit_for("limits.snapshot_purchase_candidates_max", MAX_PURCHASED_AT_CANDIDATES)
+      end
+
+      def snapshot_payment_candidates_max
+        snapshot_limit_for("limits.snapshot_payment_candidates_max", MAX_PAYMENT_CANDIDATES)
+      end
+
+      def snapshot_tax_details_max
+        snapshot_limit_for("limits.snapshot_tax_details_max", MAX_TAX_DETAILS)
+      end
+
+      def snapshot_review_reasons_max
+        snapshot_limit_for("limits.snapshot_review_reasons_max", MAX_REVIEW_REASONS)
+      end
+
       def snapshot_limit_for(key, fallback)
         SystemSettings.limit_for(key)
       rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
@@ -161,7 +205,7 @@ module ReceiptAnalysisRuns
           receipt_tax_details_count: Array(params[:receipt_tax_details_attributes]).size,
           receipt_adjustments_count: Array(params[:receipt_adjustments_attributes]).size,
           corrections: build_params_corrections_snapshot(params[:corrections], params[:tax_rate_correction]),
-          review_reasons: limited_strings(params[:review_reasons], MAX_REVIEW_REASONS)
+          review_reasons: limited_strings(params[:review_reasons], snapshot_review_reasons_limit)
         }.compact
       )
     end
@@ -201,7 +245,8 @@ module ReceiptAnalysisRuns
     def ocr_result_snapshot(ocr_result)
       result = normalized_hash(ocr_result)
       candidates = normalized_hash(result[:candidates])
-      lines = limited_strings(result[:lines], MAX_OCR_LINES)
+      ocr_lines_limit = snapshot_ocr_lines_limit
+      lines = limited_strings(result[:lines], ocr_lines_limit)
       candidates_snapshot = ocr_candidates_snapshot(candidates)
 
       sanitize_hash(
@@ -214,7 +259,7 @@ module ReceiptAnalysisRuns
           error_code: safe_string(result[:error_code]),
           meta: ocr_meta_snapshot(result[:meta]),
           truncated: {
-            lines: Array(result[:lines]).size > MAX_OCR_LINES,
+            lines: Array(result[:lines]).size > ocr_lines_limit,
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
             tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
@@ -227,7 +272,11 @@ module ReceiptAnalysisRuns
     def ai_input_snapshot(ai_input)
       input = normalized_hash(ai_input)
 
-      filtered_content = truncate_string(input[:filtered_content], max_bytes: FILTERED_CONTENT_MAX_BYTES)
+      filtered_content_max_bytes = snapshot_ai_input_filtered_content_limit
+      ai_input_items_limit = snapshot_ai_input_items_limit
+      full_context_lines_limit = snapshot_ai_input_full_context_lines_limit
+      adjustment_context_lines_limit = snapshot_ai_input_adjustment_context_lines_limit
+      filtered_content = truncate_string(input[:filtered_content], max_bytes: filtered_content_max_bytes)
       items = limited_items(input[:items])
 
       sanitize_hash(
@@ -235,7 +284,7 @@ module ReceiptAnalysisRuns
           schema_version: AI_INPUT_SCHEMA_VERSION,
           prompt_schema_version: PROMPT_SCHEMA_VERSION,
           filtered_content: filtered_content,
-          full_context_lines: limited_context_lines(input[:full_context_lines], MAX_FULL_CONTEXT_LINES),
+          full_context_lines: limited_context_lines(input[:full_context_lines], full_context_lines_limit),
           store: store_snapshot(input[:store]),
           purchase: purchase_snapshot(input[:purchase]),
           payment: payment_snapshot(input[:payment]),
@@ -244,10 +293,10 @@ module ReceiptAnalysisRuns
           adjustment_context_lines: limited_adjustment_context_lines(input[:adjustment_context_lines]),
           meta: ai_input_meta_snapshot(input[:meta]),
           truncated: {
-            filtered_content: truncated?(input[:filtered_content], max_bytes: FILTERED_CONTENT_MAX_BYTES),
-            items: Array(input[:items]).size > MAX_ITEMS,
-            full_context_lines: Array(input[:full_context_lines]).size > MAX_FULL_CONTEXT_LINES,
-            adjustment_context_lines: Array(input[:adjustment_context_lines]).size > MAX_ADJUSTMENT_CONTEXT_LINES
+            filtered_content: truncated?(input[:filtered_content], max_bytes: filtered_content_max_bytes),
+            items: Array(input[:items]).size > ai_input_items_limit,
+            full_context_lines: Array(input[:full_context_lines]).size > full_context_lines_limit,
+            adjustment_context_lines: Array(input[:adjustment_context_lines]).size > adjustment_context_lines_limit
           }
         }.compact
       )
@@ -264,7 +313,7 @@ module ReceiptAnalysisRuns
           success: result[:success] == true,
           error_code: safe_string(result[:error_code]),
           needs_review: result[:needs_review] == true,
-          review_reasons: limited_strings(result[:review_reasons], MAX_REVIEW_REASONS),
+          review_reasons: limited_strings(result[:review_reasons], snapshot_review_reasons_limit),
           receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
           receipt_items_attributes: receipt_items_snapshot,
           receipt_adjustments_attributes: receipt_adjustments_snapshot,
@@ -277,7 +326,7 @@ module ReceiptAnalysisRuns
           truncated: {
             receipt_items_attributes: Array(result[:receipt_items_attributes]).size > ai_normalized_items_snapshot_limit,
             receipt_adjustments_attributes: Array(result[:receipt_adjustments_attributes]).size > receipt_adjustments_snapshot_limit,
-            review_reasons: Array(result[:review_reasons]).size > MAX_REVIEW_REASONS
+            review_reasons: Array(result[:review_reasons]).size > snapshot_review_reasons_limit
           }
         }.compact
       )
@@ -293,7 +342,7 @@ module ReceiptAnalysisRuns
           success: result[:success] == true,
           needs_review: result[:needs_review] == true,
           error_code: safe_string(result[:error_code]),
-          review_reasons: limited_strings(result[:review_reasons], MAX_REVIEW_REASONS),
+          review_reasons: limited_strings(result[:review_reasons], snapshot_review_reasons_limit),
           provider: safe_string(meta[:provider] || meta[:primary_provider]),
           model: safe_string(meta[:model]),
           fallback_provider: safe_string(meta[:fallback_provider]),
@@ -321,15 +370,15 @@ module ReceiptAnalysisRuns
           schema_version: FINAL_RESULT_SCHEMA_VERSION,
           receipt_status: safe_string(receipt_attrs[:status] || receipt&.status),
           processing_error_code: safe_string(receipt_attrs[:processing_error_code] || receipt&.processing_error_code),
-          review_reasons: limited_strings(receipt_attrs[:review_reasons] || receipt&.review_reasons, MAX_REVIEW_REASONS),
+          review_reasons: limited_strings(receipt_attrs[:review_reasons] || receipt&.review_reasons, snapshot_review_reasons_limit),
           item_count: count_records(items_attributes, receipt&.receipt_items),
           payment_count: count_records(payments_attributes, receipt&.receipt_payments),
           tax_detail_count: count_records(tax_details_attributes, receipt&.receipt_tax_details),
           adjustment_count: count_records(adjustments_attributes, receipt&.receipt_adjustments),
           amount: amount_snapshot(receipt, receipt_attrs),
-          amount_mismatch_codes: limited_strings(amount[:mismatch_codes], MAX_REVIEW_REASONS),
-          amount_blocking_mismatch_codes: limited_strings(amount[:blocking_mismatch_codes], MAX_REVIEW_REASONS),
-          amount_warning_mismatch_codes: limited_strings(amount[:warning_mismatch_codes], MAX_REVIEW_REASONS)
+          amount_mismatch_codes: limited_strings(amount[:mismatch_codes], snapshot_review_reasons_limit),
+          amount_blocking_mismatch_codes: limited_strings(amount[:blocking_mismatch_codes], snapshot_review_reasons_limit),
+          amount_warning_mismatch_codes: limited_strings(amount[:warning_mismatch_codes], snapshot_review_reasons_limit)
         }.compact
       )
     end
@@ -395,20 +444,23 @@ module ReceiptAnalysisRuns
     end
 
     def ocr_candidates_snapshot(candidates)
+      purchase_candidates_limit = snapshot_purchase_candidates_limit
+      payment_candidates_limit = snapshot_payment_candidates_limit
+
       {
         store_name: safe_string(candidates[:store_name]),
         store_address: safe_string(candidates[:store_address]),
         store_address_components: sanitize_hash(candidates[:store_address_components]).presence,
         store_phone_number: safe_string(candidates[:store_phone_number]),
         purchased_at_text: safe_string(candidates[:purchased_at_text]),
-        purchased_at_candidates: limited_strings(candidates[:purchased_at_candidates], MAX_PURCHASED_AT_CANDIDATES),
-        purchase_context_lines: limited_strings(candidates[:purchase_context_lines], MAX_PURCHASED_AT_CANDIDATES),
+        purchased_at_candidates: limited_strings(candidates[:purchased_at_candidates], purchase_candidates_limit),
+        purchase_context_lines: limited_strings(candidates[:purchase_context_lines], purchase_candidates_limit),
         total_amount: safe_value(candidates[:total_amount]),
         subtotal_amount: safe_value(candidates[:subtotal_amount]),
         tax_amount: safe_value(candidates[:tax_amount]),
         tax_rate: safe_value(candidates[:tax_rate]),
         payment_method_text: safe_string(candidates[:payment_method_text]),
-        payment_candidates: limited_hashes(candidates[:payment_candidates], MAX_PAYMENT_CANDIDATES),
+        payment_candidates: limited_hashes(candidates[:payment_candidates], payment_candidates_limit),
         tip_amount: safe_value(candidates[:tip_amount]),
         currency_code: safe_string(candidates[:currency_code]),
         country_region: safe_string(candidates[:country_region]),
@@ -417,7 +469,7 @@ module ReceiptAnalysisRuns
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
         adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], receipt_adjustments_snapshot_limit),
         items: limited_ocr_items(candidates[:items]),
-        review_reasons: limited_strings(candidates[:review_reasons], MAX_REVIEW_REASONS),
+        review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
     end
@@ -565,7 +617,7 @@ module ReceiptAnalysisRuns
           discount_amount: safe_value(item[:discount_amount]),
           discount_rate: safe_value(item[:discount_rate]),
           needs_review: item.key?(:needs_review) ? item[:needs_review] == true : nil,
-          review_reasons: limited_strings(item[:review_reasons], MAX_REVIEW_REASONS),
+          review_reasons: limited_strings(item[:review_reasons], snapshot_review_reasons_limit),
           confidence: safe_value(item[:confidence])
         }.compact
       end
@@ -586,7 +638,7 @@ module ReceiptAnalysisRuns
           source_line_index: safe_value(adjustment[:source_line_index]),
           confidence: safe_value(adjustment[:confidence]),
           needs_review: adjustment.key?(:needs_review) ? adjustment[:needs_review] == true : nil,
-          review_reasons: limited_strings(adjustment[:review_reasons], MAX_REVIEW_REASONS),
+          review_reasons: limited_strings(adjustment[:review_reasons], snapshot_review_reasons_limit),
           position_index: safe_value(adjustment[:position_index])
         }.compact
       end
@@ -653,51 +705,99 @@ module ReceiptAnalysisRuns
       @receipt_adjustments_snapshot_limit ||= ReceiptAdjustment.per_receipt_limit
     end
 
+    def snapshot_ocr_lines_limit
+      @snapshot_ocr_lines_limit ||= self.class.snapshot_ocr_lines_max
+    end
+
+    def snapshot_ai_input_full_context_lines_limit
+      @snapshot_ai_input_full_context_lines_limit ||= self.class.snapshot_ai_input_full_context_lines_max
+    end
+
+    def snapshot_ai_input_adjustment_context_lines_limit
+      @snapshot_ai_input_adjustment_context_lines_limit ||= self.class.snapshot_ai_input_adjustment_context_lines_max
+    end
+
+    def snapshot_ai_input_filtered_content_limit
+      @snapshot_ai_input_filtered_content_limit ||= self.class.snapshot_ai_input_filtered_content_max_bytes
+    end
+
+    def snapshot_string_limit
+      @snapshot_string_limit ||= self.class.snapshot_string_max_bytes
+    end
+
+    def snapshot_ai_input_items_limit
+      @snapshot_ai_input_items_limit ||= self.class.snapshot_ai_input_items_max
+    end
+
+    def snapshot_store_candidates_limit
+      @snapshot_store_candidates_limit ||= self.class.snapshot_store_candidates_max
+    end
+
+    def snapshot_purchase_candidates_limit
+      @snapshot_purchase_candidates_limit ||= self.class.snapshot_purchase_candidates_max
+    end
+
+    def snapshot_payment_candidates_limit
+      @snapshot_payment_candidates_limit ||= self.class.snapshot_payment_candidates_max
+    end
+
+    def snapshot_tax_details_limit
+      @snapshot_tax_details_limit ||= self.class.snapshot_tax_details_max
+    end
+
+    def snapshot_review_reasons_limit
+      @snapshot_review_reasons_limit ||= self.class.snapshot_review_reasons_max
+    end
+
     def store_snapshot(value)
       store = normalized_hash(value)
+      store_candidates_limit = snapshot_store_candidates_limit
 
       {
         store_name: safe_string(store[:store_name]),
         store_address: safe_string(store[:store_address]),
         store_phone_number: safe_string(store[:store_phone_number]),
-        customer_facing_store_candidates: limited_strings(store[:customer_facing_store_candidates], MAX_STORE_CANDIDATES),
-        store_candidates: limited_strings(store[:store_candidates], MAX_STORE_CANDIDATES),
-        operator_candidates: limited_strings(store[:operator_candidates], MAX_STORE_CANDIDATES),
-        branch_name_candidates: limited_strings(store[:branch_name_candidates], MAX_STORE_CANDIDATES),
-        address_candidates: limited_strings(store[:address_candidates], MAX_STORE_CANDIDATES)
+        customer_facing_store_candidates: limited_strings(store[:customer_facing_store_candidates], store_candidates_limit),
+        store_candidates: limited_strings(store[:store_candidates], store_candidates_limit),
+        operator_candidates: limited_strings(store[:operator_candidates], store_candidates_limit),
+        branch_name_candidates: limited_strings(store[:branch_name_candidates], store_candidates_limit),
+        address_candidates: limited_strings(store[:address_candidates], store_candidates_limit)
       }.compact
     end
 
     def purchase_snapshot(value)
       purchase = normalized_hash(value)
+      purchase_candidates_limit = snapshot_purchase_candidates_limit
 
       {
         purchased_at_text: safe_string(purchase[:purchased_at_text]),
-        purchased_at_candidates: limited_strings(purchase[:purchased_at_candidates], MAX_PURCHASED_AT_CANDIDATES),
-        purchase_context_lines: limited_strings(purchase[:purchase_context_lines], MAX_PURCHASED_AT_CANDIDATES)
+        purchased_at_candidates: limited_strings(purchase[:purchased_at_candidates], purchase_candidates_limit),
+        purchase_context_lines: limited_strings(purchase[:purchase_context_lines], purchase_candidates_limit)
       }.compact
     end
 
     def payment_snapshot(value)
       payment = normalized_hash(value)
+      payment_candidates_limit = snapshot_payment_candidates_limit
 
       {
         payment_method: safe_string(payment[:payment_method]),
         payment_method_text: safe_string(payment[:payment_method_text]),
-        payment_candidates: limited_hashes(payment[:payment_candidates], MAX_PAYMENT_CANDIDATES),
-        payment_context_lines: limited_strings(payment[:payment_context_lines], MAX_PAYMENT_CANDIDATES)
+        payment_candidates: limited_hashes(payment[:payment_candidates], payment_candidates_limit),
+        payment_context_lines: limited_strings(payment[:payment_context_lines], payment_candidates_limit)
       }.compact
     end
 
     def tax_snapshot(value)
       tax = normalized_hash(value)
+      tax_details_limit = snapshot_tax_details_limit
 
       {
         tax_rate: safe_value(tax[:tax_rate]),
         tax_amount: safe_value(tax[:tax_amount]),
         total_amount: safe_value(tax[:total_amount]),
-        tax_details: limited_hashes(tax[:tax_details], MAX_TAX_DETAILS),
-        tax_context_lines: limited_strings(tax[:tax_context_lines], MAX_TAX_DETAILS)
+        tax_details: limited_hashes(tax[:tax_details], tax_details_limit),
+        tax_context_lines: limited_strings(tax[:tax_context_lines], tax_details_limit)
       }.compact
     end
 
@@ -717,7 +817,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_items(items)
-      Array(items).first(MAX_ITEMS).filter_map do |item|
+      Array(items).first(snapshot_ai_input_items_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
 
@@ -736,7 +836,7 @@ module ReceiptAnalysisRuns
     end
 
     def limited_adjustment_context_lines(lines)
-      limited_context_lines(lines, MAX_ADJUSTMENT_CONTEXT_LINES)
+      limited_context_lines(lines, snapshot_ai_input_adjustment_context_lines_limit)
     end
 
     def limited_context_lines(lines, max)
@@ -866,7 +966,7 @@ module ReceiptAnalysisRuns
     def safe_string(value)
       return nil if value.nil?
 
-      truncate_string(value.to_s, max_bytes: STRING_MAX_BYTES)
+      truncate_string(value.to_s, max_bytes: snapshot_string_limit)
     end
 
     def truncate_string(value, max_bytes:)

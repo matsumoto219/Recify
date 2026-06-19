@@ -444,6 +444,23 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'OCR lines snapshot上限はSystemSettings値を参照する' do
+      create(:system_setting, key: 'limits.snapshot_ocr_lines_max', value: SystemSettings.stored_value(20))
+      run = described_class.start(receipt:, source: 'upload').run
+      ocr_result = {
+        success: true,
+        lines: Array.new(21) { |index| "OCR行#{index}" }
+      }
+
+      described_class.record_ocr_snapshot(run, ocr_result)
+      snapshot = run.reload.ocr_result_snapshot
+
+      aggregate_failures do
+        expect(snapshot['lines'].size).to eq(20)
+        expect(snapshot.dig('truncated', 'lines')).to eq(true)
+      end
+    end
+
     it 'OCR adjustment snapshot上限は調整行SystemSettings値を参照しactual_countを維持する' do
       create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(100))
       run = described_class.start(receipt:, source: 'upload').run
@@ -535,6 +552,51 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot_json).not_to include('RAW RESPONSE MUST NOT BE STORED')
         expect(snapshot_json).not_to include('drop-me')
         expect(snapshot_json).not_to include('保存しない周辺行')
+      end
+    end
+
+    it 'AI input snapshot上限はSystemSettings値を参照する' do
+      create(:system_setting, key: 'limits.snapshot_ai_input_filtered_content_max_bytes', value: SystemSettings.stored_value(1.kilobyte))
+      create(:system_setting, key: 'limits.snapshot_ai_input_full_context_lines_max', value: SystemSettings.stored_value(20))
+      create(:system_setting, key: 'limits.snapshot_ai_input_adjustment_context_lines_max', value: SystemSettings.stored_value(10))
+      create(:system_setting, key: 'limits.snapshot_ai_input_items_max', value: SystemSettings.stored_value(10))
+      create(:system_setting, key: 'limits.snapshot_store_candidates_max', value: SystemSettings.stored_value(2))
+      create(:system_setting, key: 'limits.snapshot_purchase_candidates_max', value: SystemSettings.stored_value(2))
+      create(:system_setting, key: 'limits.snapshot_payment_candidates_max', value: SystemSettings.stored_value(2))
+      create(:system_setting, key: 'limits.snapshot_tax_details_max', value: SystemSettings.stored_value(2))
+
+      run = described_class.start(receipt:, source: 'upload').run
+      ai_input = {
+        filtered_content: 'あ' * 2_000,
+        store: {
+          customer_facing_store_candidates: Array.new(4) { |index| "施設候補#{index}" },
+          store_candidates: Array.new(4) { |index| "店舗候補#{index}" }
+        },
+        full_context_lines: Array.new(21) { |index| { index: index, text: "OCR行#{index}" } },
+        adjustment_context_lines: Array.new(11) { |index| { index: index, text: "調整行#{index}" } },
+        purchase: { purchased_at_candidates: Array.new(4) { |index| "2026/05/2#{index} 10:00" } },
+        payment: { payment_candidates: Array.new(4) { |index| { method: "支払い#{index}" } } },
+        tax: { tax_details: Array.new(4) { |index| { description: "税#{index}", amount: index } } },
+        items: Array.new(11) { |index| { index: index, raw_text: "商品#{index}", line_total: index } }
+      }
+
+      described_class.record_ai_input(run, ai_input)
+      snapshot = run.reload.ai_input_snapshot
+
+      aggregate_failures do
+        expect(snapshot['filtered_content'].bytesize).to be <= 1.kilobyte
+        expect(snapshot['full_context_lines'].size).to eq(20)
+        expect(snapshot['adjustment_context_lines'].size).to eq(10)
+        expect(snapshot['items'].size).to eq(10)
+        expect(snapshot.dig('store', 'customer_facing_store_candidates').size).to eq(2)
+        expect(snapshot.dig('store', 'store_candidates').size).to eq(2)
+        expect(snapshot.dig('purchase', 'purchased_at_candidates').size).to eq(2)
+        expect(snapshot.dig('payment', 'payment_candidates').size).to eq(2)
+        expect(snapshot.dig('tax', 'tax_details').size).to eq(2)
+        expect(snapshot.dig('truncated', 'filtered_content')).to eq(true)
+        expect(snapshot.dig('truncated', 'items')).to eq(true)
+        expect(snapshot.dig('truncated', 'full_context_lines')).to eq(true)
+        expect(snapshot.dig('truncated', 'adjustment_context_lines')).to eq(true)
       end
     end
 

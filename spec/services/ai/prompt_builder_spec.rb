@@ -125,6 +125,32 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it 'SystemSettingsのprompt上限を参照する' do
+      create(:system_setting, key: 'limits.ai_prompt_filtered_content_lines_max', value: SystemSettings.stored_value(5))
+      create(:system_setting, key: 'limits.ai_prompt_full_context_lines_max', value: SystemSettings.stored_value(10))
+      create(:system_setting, key: 'limits.ai_prompt_raw_text_length_max', value: SystemSettings.stored_value(500))
+      create(:system_setting, key: 'limits.ai_prompt_purchase_candidates_max', value: SystemSettings.stored_value(2))
+      raw_text = Array.new(30) do |index|
+        date_text = format('2026/05/%02d 10:00', (index % 20) + 1)
+        "#{date_text} 商品#{index} #{index + 100}"
+      end.join("\n")
+
+      result = described_class.build({
+        success: true,
+        raw_text: raw_text,
+        candidates: {
+          items: []
+        }
+      })
+
+      aggregate_failures do
+        expect(result[:filtered_content].lines.size).to be <= 5
+        expect(result[:full_context_lines].size).to eq(10)
+        expect(result.dig(:purchase, :purchased_at_candidates).size).to eq(2)
+        expect(result.dig(:meta, :raw_text_length)).to be <= 500
+      end
+    end
+
     it '顧客向け施設名候補と運営主体候補をAI入力で分ける' do
       parking_ocr_result = ocr_result.deep_merge(
         lines: [
