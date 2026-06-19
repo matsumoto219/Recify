@@ -21,6 +21,20 @@ RSpec.describe ReceiptAnalysisProfiles do
     it '明示的なunsupported countryをJP扱いにしない' do
       expect(described_class.fetch('USA')).to be_nil
     end
+
+    it 'registryにprofileを追加すれば国コードで切り替えられる' do
+      test_profile = Module.new
+
+      stub_const(
+        'ReceiptAnalysisProfiles::Registry::SUPPORTED_COUNTRY_CODES',
+        { 'TST' => test_profile }.freeze
+      )
+
+      aggregate_failures do
+        expect(described_class.fetch('TST')).to eq(test_profile)
+        expect(described_class.fetch('JPN')).to be_nil
+      end
+    end
   end
 
   describe 'JP profile generated labels' do
