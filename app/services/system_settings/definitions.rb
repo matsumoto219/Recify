@@ -179,6 +179,46 @@ module SystemSettings
         max: 100
       ),
       Definition.new(
+        key: "external_services.failure_window_minutes",
+        category: "external_service_status",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 60
+      ),
+      Definition.new(
+        key: "external_services.degraded_failure_threshold",
+        category: "external_service_status",
+        value_type: "integer",
+        default: 2,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 20
+      ),
+      Definition.new(
+        key: "external_services.down_failure_threshold",
+        category: "external_service_status",
+        value_type: "integer",
+        default: 3,
+        editable: true,
+        risk_level: "high",
+        min: 2,
+        max: 50
+      ),
+      Definition.new(
+        key: "external_services.recovery_success_threshold",
+        category: "external_service_status",
+        value_type: "integer",
+        default: 2,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 20
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",

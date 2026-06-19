@@ -46,9 +46,9 @@ module ExternalServices
       when "ok", "reset"
         StatusStore.reset!(service)
       when "degraded"
-        mark_failures!(StatusStore::DEGRADED_THRESHOLD)
+        mark_failures!(StatusStore.degraded_failure_threshold)
       when "down"
-        mark_failures!(StatusStore::DOWN_THRESHOLD)
+        mark_failures!(StatusStore.down_failure_threshold)
       end
 
       {

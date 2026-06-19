@@ -20,7 +20,7 @@ module ExternalServices
       ai_fallback_failed
     ].freeze
 
-    FAILURE_WINDOW = 5.minutes
+    FAILURE_WINDOW_MINUTES = 5
     DEGRADED_THRESHOLD = 2
     DOWN_THRESHOLD = 3
     RECOVERY_SUCCESS_THRESHOLD = 2
@@ -38,7 +38,7 @@ module ExternalServices
         data["last_error_detail"] = nil
         data["last_checked_at"] = current_time.iso8601
 
-        if data["state"] == "down" && data["consecutive_successes"] >= RECOVERY_SUCCESS_THRESHOLD
+        if data["state"] == "down" && data["consecutive_successes"] >= recovery_success_threshold
           data["state"] = "ok"
           data["monitoring"] = false
           data["next_check_at"] = nil
@@ -63,20 +63,22 @@ module ExternalServices
 
         data["consecutive_successes"] = 0
 
+        down_failure_limit = down_failure_threshold
+
         if data["state"] == "down"
-          data["consecutive_failures"] = DOWN_THRESHOLD
+          data["consecutive_failures"] = down_failure_limit
           record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
           return write(service, data)
         end
 
-        data["consecutive_failures"] = [ data["consecutive_failures"] + 1, DOWN_THRESHOLD ].min
+        data["consecutive_failures"] = [ data["consecutive_failures"] + 1, down_failure_limit ].min
         data["first_failed_at"] ||= now.iso8601
 
-        if data["consecutive_failures"] >= DOWN_THRESHOLD
+        if data["consecutive_failures"] >= down_failure_limit
           data["state"] = "down"
           data["monitoring"] = true
           data["next_check_at"] = next_check_at_for(1, now).iso8601
-        elsif data["consecutive_failures"] >= DEGRADED_THRESHOLD
+        elsif data["consecutive_failures"] >= degraded_failure_threshold
           data["state"] = "degraded"
           data["monitoring"] = true
           data["next_check_at"] = next_check_at_for(0, now).iso8601
@@ -149,6 +151,22 @@ module ExternalServices
 
       def external_error?(error_code)
         EXTERNAL_ERROR_CODES.include?(error_code.to_s)
+      end
+
+      def failure_window
+        SystemSettings.limit_for("external_services.failure_window_minutes").minutes
+      end
+
+      def degraded_failure_threshold
+        SystemSettings.limit_for("external_services.degraded_failure_threshold")
+      end
+
+      def down_failure_threshold
+        SystemSettings.limit_for("external_services.down_failure_threshold")
+      end
+
+      def recovery_success_threshold
+        SystemSettings.limit_for("external_services.recovery_success_threshold")
       end
 
       private
@@ -244,7 +262,7 @@ module ExternalServices
 
       def reset_failure_window!(data, now)
         first_failed_at = parse_time(data["first_failed_at"])
-        return if first_failed_at.present? && (now - first_failed_at) <= FAILURE_WINDOW
+        return if first_failed_at.present? && (now - first_failed_at) <= failure_window
 
         data["consecutive_failures"] = 0
         data["first_failed_at"] = nil

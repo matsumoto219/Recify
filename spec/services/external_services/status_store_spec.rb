@@ -184,6 +184,35 @@ RSpec.describe ExternalServices::StatusStore do
       end
     end
 
+    it 'SystemSettingsの失敗閾値で degraded / down を判定する' do
+      create(:system_setting, key: 'external_services.down_failure_threshold', value: SystemSettings.stored_value(4))
+      create(:system_setting, key: 'external_services.degraded_failure_threshold', value: SystemSettings.stored_value(3))
+
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+
+        aggregate_failures '2回失敗ではまだok' do
+          expect(described_class.snapshot(:ocr)[:state]).to eq('ok')
+          expect(described_class.snapshot(:ocr)[:consecutive_failures]).to eq(2)
+        end
+
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+
+        aggregate_failures '3回失敗でdegraded' do
+          expect(described_class.snapshot(:ocr)[:state]).to eq('degraded')
+          expect(described_class.snapshot(:ocr)[:consecutive_failures]).to eq(3)
+        end
+
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+
+        aggregate_failures '4回失敗でdown' do
+          expect(described_class.snapshot(:ocr)[:state]).to eq('down')
+          expect(described_class.snapshot(:ocr)[:consecutive_failures]).to eq(4)
+        end
+      end
+    end
+
     it 'down 後の追加失敗では next_check_at を後ろ倒ししない' do
       travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
         described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
@@ -238,6 +267,25 @@ RSpec.describe ExternalServices::StatusStore do
         aggregate_failures do
           expect(snapshot[:state]).to eq('ok')
           expect(snapshot[:consecutive_failures]).to eq(1)
+          expect(snapshot[:first_failed_at]).to be_present
+        end
+      end
+    end
+
+    it 'SystemSettingsの失敗ウィンドウ内ならfailureカウントを維持する' do
+      create(:system_setting, key: 'external_services.failure_window_minutes', value: SystemSettings.stored_value(10))
+
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:06:00')) do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        snapshot = described_class.snapshot(:ocr)
+
+        aggregate_failures do
+          expect(snapshot[:state]).to eq('degraded')
+          expect(snapshot[:consecutive_failures]).to eq(2)
           expect(snapshot[:first_failed_at]).to be_present
         end
       end
@@ -367,6 +415,32 @@ RSpec.describe ExternalServices::StatusStore do
           expect(snapshot[:monitoring]).to eq(false)
           expect(snapshot[:consecutive_successes]).to eq(2)
           expect(snapshot[:next_check_at]).to be_nil
+        end
+      end
+    end
+
+    it 'SystemSettingsの復旧成功閾値で down から ok に戻る' do
+      create(:system_setting, key: 'external_services.recovery_success_threshold', value: SystemSettings.stored_value(3))
+
+      travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
+        3.times { described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable') }
+      end
+
+      travel_to(Time.zone.parse('2026-04-15 10:03:00')) do
+        described_class.mark_success!(:ocr)
+        described_class.mark_success!(:ocr)
+
+        aggregate_failures '2回成功ではまだdown' do
+          expect(described_class.snapshot(:ocr)[:state]).to eq('down')
+          expect(described_class.snapshot(:ocr)[:consecutive_successes]).to eq(2)
+        end
+
+        described_class.mark_success!(:ocr)
+
+        aggregate_failures '3回成功でok' do
+          expect(described_class.snapshot(:ocr)[:state]).to eq('ok')
+          expect(described_class.snapshot(:ocr)[:consecutive_successes]).to eq(3)
+          expect(described_class.snapshot(:ocr)[:monitoring]).to eq(false)
         end
       end
     end

@@ -23,6 +23,10 @@ RSpec.describe SystemSettings do
         'security_events.aggregation_window_minutes',
         'security_events.admin_burst_window_minutes',
         'security_events.admin_burst_threshold',
+        'external_services.failure_window_minutes',
+        'external_services.degraded_failure_threshold',
+        'external_services.down_failure_threshold',
+        'external_services.recovery_success_threshold',
         'storage.keep_receipt_images_default',
         'storage.usage_warning_percentage',
         'storage.usage_error_percentage',
@@ -359,6 +363,10 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('security_events.aggregation_window_minutes')).to eq(60)
         expect(described_class.limit_for('security_events.admin_burst_window_minutes')).to eq(60)
         expect(described_class.limit_for('security_events.admin_burst_threshold')).to eq(5)
+        expect(described_class.limit_for('external_services.failure_window_minutes')).to eq(5)
+        expect(described_class.limit_for('external_services.degraded_failure_threshold')).to eq(2)
+        expect(described_class.limit_for('external_services.down_failure_threshold')).to eq(3)
+        expect(described_class.limit_for('external_services.recovery_success_threshold')).to eq(2)
         expect(described_class.limit_for('retention.security_events_critical_days')).to eq(180)
         expect(described_class.limit_for('retention.security_events_high_days')).to eq(180)
         expect(described_class.limit_for('retention.security_events_medium_days')).to eq(90)
@@ -482,6 +490,14 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('security_events.admin_burst_window_minutes', '1440')).to eq(1440)
         expect(described_class.cast_update_value('security_events.admin_burst_threshold', '2')).to eq(2)
         expect(described_class.cast_update_value('security_events.admin_burst_threshold', '100')).to eq(100)
+        expect(described_class.cast_update_value('external_services.failure_window_minutes', '1')).to eq(1)
+        expect(described_class.cast_update_value('external_services.failure_window_minutes', '60')).to eq(60)
+        expect(described_class.cast_update_value('external_services.degraded_failure_threshold', '1')).to eq(1)
+        expect(described_class.cast_update_value('external_services.degraded_failure_threshold', '2')).to eq(2)
+        expect(described_class.cast_update_value('external_services.down_failure_threshold', '3')).to eq(3)
+        expect(described_class.cast_update_value('external_services.down_failure_threshold', '50')).to eq(50)
+        expect(described_class.cast_update_value('external_services.recovery_success_threshold', '1')).to eq(1)
+        expect(described_class.cast_update_value('external_services.recovery_success_threshold', '20')).to eq(20)
         expect(described_class.cast_update_value('retention.security_events_critical_days', '180')).to eq(180)
         expect(described_class.cast_update_value('retention.security_events_high_days', '180')).to eq(180)
         expect(described_class.cast_update_value('retention.security_events_medium_days', '90')).to eq(90)
@@ -749,6 +765,30 @@ RSpec.describe SystemSettings do
         expect {
           described_class.cast_update_value('security_events.admin_burst_threshold', '101')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('external_services.failure_window_minutes', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('external_services.failure_window_minutes', '61')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('external_services.degraded_failure_threshold', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('external_services.degraded_failure_threshold', '21')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('external_services.down_failure_threshold', '1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('external_services.down_failure_threshold', '51')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('external_services.recovery_success_threshold', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('external_services.recovery_success_threshold', '21')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
       end
     end
 
@@ -919,6 +959,35 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.security_events_low_days', '90')).to eq(90)
         expect {
           described_class.cast_update_value('retention.security_events_low_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
+    it '外部サービス状態閾値はdegradedよりdownを大きくする' do
+      error_message = 'external_service_status_threshold_relationship'
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('external_services.degraded_failure_threshold', '2')).to eq(2)
+        expect(described_class.cast_update_value('external_services.down_failure_threshold', '3')).to eq(3)
+        expect {
+          described_class.cast_update_value('external_services.degraded_failure_threshold', '3')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect {
+          described_class.cast_update_value('external_services.down_failure_threshold', '2')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'external_services.down_failure_threshold', value: described_class.stored_value(6))
+      create(:system_setting, key: 'external_services.degraded_failure_threshold', value: described_class.stored_value(4))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('external_services.degraded_failure_threshold', '5')).to eq(5)
+        expect {
+          described_class.cast_update_value('external_services.degraded_failure_threshold', '6')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('external_services.down_failure_threshold', '5')).to eq(5)
+        expect {
+          described_class.cast_update_value('external_services.down_failure_threshold', '4')
         }.to raise_error(SystemSettings::ValidationError, error_message)
       end
     end
@@ -1313,6 +1382,39 @@ RSpec.describe SystemSettings do
           min: 2,
           max: 100,
           default: 5
+        )
+      end
+    end
+
+    it '外部サービス状態閾値はhigh risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('external_services.failure_window_minutes')).to have_attributes(
+          category: 'external_service_status',
+          risk_level: 'high',
+          min: 1,
+          max: 60,
+          default: 5
+        )
+        expect(described_class.definition_for('external_services.degraded_failure_threshold')).to have_attributes(
+          category: 'external_service_status',
+          risk_level: 'high',
+          min: 1,
+          max: 20,
+          default: 2
+        )
+        expect(described_class.definition_for('external_services.down_failure_threshold')).to have_attributes(
+          category: 'external_service_status',
+          risk_level: 'high',
+          min: 2,
+          max: 50,
+          default: 3
+        )
+        expect(described_class.definition_for('external_services.recovery_success_threshold')).to have_attributes(
+          category: 'external_service_status',
+          risk_level: 'high',
+          min: 1,
+          max: 20,
+          default: 2
         )
       end
     end

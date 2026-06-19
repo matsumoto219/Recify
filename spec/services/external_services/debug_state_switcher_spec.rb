@@ -36,6 +36,21 @@ RSpec.describe ExternalServices::DebugStateSwitcher do
       end
     end
 
+    it 'SystemSettingsの状態閾値に合わせて切り替える' do
+      create(:system_setting, key: 'external_services.down_failure_threshold', value: SystemSettings.stored_value(4))
+      create(:system_setting, key: 'external_services.degraded_failure_threshold', value: SystemSettings.stored_value(3))
+
+      degraded_result = described_class.call(service: 'ocr', state: 'degraded')
+      down_result = described_class.call(service: 'ai', state: 'down')
+
+      aggregate_failures do
+        expect(degraded_result.dig(:snapshot, :state)).to eq('degraded')
+        expect(degraded_result.dig(:snapshot, :consecutive_failures)).to eq(3)
+        expect(down_result.dig(:snapshot, :state)).to eq('down')
+        expect(down_result.dig(:snapshot, :consecutive_failures)).to eq(4)
+      end
+    end
+
     it 'resetでserviceを初期状態に戻す' do
       described_class.call(service: 'ocr', state: 'down')
 

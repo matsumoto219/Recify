@@ -18,6 +18,7 @@ module SystemSettings
   IMAGE_DIMENSION_RELATION_ERROR = "image_dimension_relationship"
   STORAGE_WARNING_THRESHOLD_RELATION_ERROR = "storage_warning_threshold_relationship"
   SECURITY_EVENT_RETENTION_ORDER_ERROR = "security_event_retention_order"
+  EXTERNAL_SERVICE_STATUS_THRESHOLD_RELATION_ERROR = "external_service_status_threshold_relationship"
   AMOUNT_LIMIT_RELATIONSHIPS = [
     [ "limits.receipt_total_amount_max", "limits.receipt_item_line_total_max" ],
     [ "limits.receipt_total_amount_max", "limits.receipt_adjustment_amount_max" ],
@@ -46,6 +47,10 @@ module SystemSettings
   STORAGE_REMAINING_BYTES_KEYS = %w[
     storage.warning_remaining_bytes
     storage.error_remaining_bytes
+  ].freeze
+  EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS = %w[
+    external_services.degraded_failure_threshold
+    external_services.down_failure_threshold
   ].freeze
   SECURITY_EVENT_RETENTION_KEYS_BY_SEVERITY = {
     "critical" => "retention.security_events_critical_days",
@@ -416,6 +421,7 @@ module SystemSettings
       validate_image_dimension_relationships!(definition, value)
       validate_storage_warning_threshold_relationships!(definition, value)
       validate_security_event_retention_order!(definition, value)
+      validate_external_service_status_threshold_relationship!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -543,6 +549,16 @@ module SystemSettings
       return if critical_days >= high_days && high_days >= medium_days && medium_days >= low_days
 
       raise ValidationError, SECURITY_EVENT_RETENTION_ORDER_ERROR
+    end
+
+    def validate_external_service_status_threshold_relationship!(definition, value)
+      return unless EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS.include?(definition.key)
+
+      values = limits_for(EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS)
+      values[definition.key] = Integer(value)
+      return if values.fetch("external_services.degraded_failure_threshold") < values.fetch("external_services.down_failure_threshold")
+
+      raise ValidationError, EXTERNAL_SERVICE_STATUS_THRESHOLD_RELATION_ERROR
     end
 
     def override_integer_value(override)
