@@ -12,21 +12,8 @@ module SecurityEvents
       session|credential|challenge|raw[_-]?response|prompt|raw[_-]?text
     /ix
 
-    AI_TEXT_RULES = [
-      {
-        event_type: "prompt_injection_attempt",
-        severity: "medium",
-        matched_rule: "prompt_override_marker",
-        pattern: /(?:ignore (?:all )?(?:previous|prior) instructions|system prompt|developer message|you are now|jailbreak|prompt injection)/i
-      },
-      {
-        event_type: "ocr_text_injection_attempt",
-        severity: "medium",
-        matched_rule: "receipt_instruction_marker",
-        pattern: /(?:ignore receipt|override total|do not trust|ai instruction|assistant:|system:)/i
-      }
-    ].freeze
     INPUT_RULE = Rules::InputRule.new
+    AI_PROMPT_RULE = Rules::AiPromptRule.new
     PARAMETER_TAMPERING_RULE = Rules::ParameterTamperingRule.new
 
     class << self
@@ -70,19 +57,7 @@ module SecurityEvents
 
     def detect_rule_matches(field_name, text)
       matches = INPUT_RULE.call(param_path: field_name, value: text).map(&:to_detection)
-      matches.concat(
-        AI_TEXT_RULES.filter_map do |rule|
-          next unless rule.fetch(:pattern).match?(text)
-
-          build_detection(
-            event_type: rule.fetch(:event_type),
-            severity: rule.fetch(:severity),
-            matched_rule: rule.fetch(:matched_rule),
-            field_name: field_name,
-            text: text
-          )
-        end
-      )
+      matches.concat(AI_PROMPT_RULE.call(param_path: field_name, value: text).map(&:to_detection))
     end
 
     def detect_url_matches(field_name, text, existing_matches)
@@ -90,17 +65,6 @@ module SecurityEvents
         .new(url_field_policy: url_field_policy)
         .call(param_path: field_name, value: text, context: { existing_matches: existing_matches })
         .map(&:to_detection)
-    end
-
-    def build_detection(event_type:, severity:, matched_rule:, field_name:, text:)
-      DetectionCandidate.new(
-        event_type: event_type,
-        severity: severity,
-        category: nil,
-        matched_rule: matched_rule,
-        field_name: field_name,
-        value_excerpt: text
-      ).to_detection
     end
 
     def each_string(value, prefix = nil, depth = 0, &block)
