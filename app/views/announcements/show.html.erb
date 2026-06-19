@@ -1,5 +1,7 @@
 <% content_for :title, @announcement.title %>
 
+<%= render "shared/ui/layout/ambient_background" %>
+
 <article class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
   <nav aria-label="<%= t("announcements.show.breadcrumb_aria") %>">
     <%= render "shared/ui/navigation/navigation_link",
