@@ -229,8 +229,24 @@ class Admin::AnnouncementsController < Admin::BaseController
       pinned: @announcement.pinned,
       priority: @announcement.priority,
       published_at: @announcement.published_at,
+      **announcement_audit_image_metadata,
       links: announcement_audit_links
     }
+  end
+
+  def announcement_audit_image_metadata
+    image_attached = @announcement.image.attached? && @announcement.image.blob&.persisted?
+    metadata = {
+      image_attached: image_attached,
+      image_alt_text_present: @announcement.image_alt_text.present?
+    }
+    return metadata unless image_attached
+
+    metadata.merge(
+      image_filename: @announcement.image.filename.to_s,
+      image_content_type: @announcement.image.blob.content_type,
+      image_byte_size: @announcement.image.blob.byte_size
+    )
   end
 
   def announcement_audit_links

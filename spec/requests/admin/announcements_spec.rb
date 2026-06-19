@@ -828,6 +828,11 @@ RSpec.describe 'Admin announcements', type: :request do
           'priority' => announcement.priority
         )
         expect(audit_log.metadata.dig('links', 0, 'url')).to eq('https://example.com/news')
+        expect(audit_log.metadata).to include(
+          'image_attached' => false,
+          'image_alt_text_present' => false
+        )
+        expect(audit_log.metadata).not_to include('image_filename', 'image_content_type', 'image_byte_size')
         expect(audit_log.before_state).to include('status' => 'draft')
         expect(audit_log.after_state).to include('status' => 'published')
         expect(audit_json).not_to include('token=secret', 'fragment')
@@ -842,6 +847,50 @@ RSpec.describe 'Admin announcements', type: :request do
       get announcement_path(announcement)
 
       expect(response).to have_http_status(:ok)
+    end
+
+    it '画像付きAnnouncementを公開するとAuditLogに安全な画像概要だけを残す' do
+      admin = create(:user, :admin)
+      announcement = create(
+        :announcement,
+        status: 'draft',
+        title: '画像付きのお知らせ',
+        body: 'body-secret-token-value',
+        image_alt_text: '<script>alert("alt-secret")</script>'
+      )
+      announcement.image.attach(
+        io: File.open(Rails.root.join('spec/fixtures/files/receipt_sample.jpg')),
+        filename: 'audit-image<script>.jpg',
+        content_type: 'image/jpeg'
+      )
+      blob = announcement.image.blob
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect {
+        patch publish_admin_announcement_path(announcement)
+      }.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+      audit_json = audit_log.metadata.to_json
+
+      aggregate_failures do
+        expect(audit_log.metadata).to include(
+          'image_attached' => true,
+          'image_filename' => blob.filename.to_s,
+          'image_content_type' => 'image/jpeg',
+          'image_byte_size' => blob.byte_size,
+          'image_alt_text_present' => true
+        )
+        expect(audit_json).not_to include(blob.key)
+        expect(audit_json).not_to include(blob.signed_id)
+        expect(audit_json).not_to include(blob.checksum)
+        expect(audit_json).not_to include('/rails/active_storage')
+        expect(audit_json).not_to include('body-secret-token-value')
+        expect(audit_json).not_to include('<script>alert("alt-secret")</script>')
+        expect(audit_json).not_to include('checksum')
+        expect(audit_json).not_to include('signed_id')
+      end
     end
 
     it 'starts_atが未来なら公開後もLPにはまだ表示しない' do
