@@ -83,7 +83,7 @@ RSpec.describe 'User registrations', type: :request do
         expect(notice_surface.text).to include(I18n.t('devise.registrations.destroyed'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
         expect(home_stylesheet).to be_present
-        expect(home_stylesheet['data-turbo-track']).to eq('reload')
+        expect(home_stylesheet['data-turbo-track']).to be_nil
       end
     end
 

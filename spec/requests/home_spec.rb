@@ -40,7 +40,7 @@ RSpec.describe 'Home', type: :request do
         expect(response.body).to include(I18n.t('home.final_cta.heading_lines').first)
         expect(response.body).to include('/home_lp.css?v=')
         expect(home_stylesheet).to be_present
-        expect(home_stylesheet['data-turbo-track']).to eq('reload')
+        expect(home_stylesheet['data-turbo-track']).to be_nil
         expect(home_lp).to be_present
         expect(home_lp.css('[data-home-reveal-target="item"]').size).to be >= 10
         expect(home_lp.css('[data-home-reveal-target="section"]').map { |node| node['id'] }).to include(*section_ids)

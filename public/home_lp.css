@@ -66,7 +66,7 @@
   transition: opacity 420ms ease;
 }
 
-.home-lp.is-grid-visible .home-lp-fixed-grid {
+.home-lp.is-fixed-grid-visible .home-lp-fixed-grid {
   opacity: 0.46;
 }
 
@@ -431,6 +431,11 @@
     transparent 100%
   );
   opacity: 0.52;
+  transition: opacity 220ms ease;
+}
+
+.home-lp.is-fixed-grid-visible .home-hero-section::before {
+  opacity: 0;
 }
 
 .home-hero-section::after {
@@ -1556,7 +1561,7 @@
   }
 }
 
-[data-theme="dark"] .home-lp.is-grid-visible .home-lp-fixed-grid {
+[data-theme="dark"] .home-lp.is-fixed-grid-visible .home-lp-fixed-grid {
   opacity: 0.34;
 }
 
@@ -1565,7 +1570,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  [data-theme="system"] .home-lp.is-grid-visible .home-lp-fixed-grid {
+  [data-theme="system"] .home-lp.is-fixed-grid-visible .home-lp-fixed-grid {
     opacity: 0.34;
   }
 
@@ -1581,7 +1586,7 @@
       40px 40px;
   }
 
-  [data-theme] .home-lp.is-grid-visible .home-lp-fixed-grid {
+  [data-theme] .home-lp.is-fixed-grid-visible .home-lp-fixed-grid {
     opacity: 0.28;
   }
 

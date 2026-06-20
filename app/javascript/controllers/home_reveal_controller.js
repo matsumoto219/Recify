@@ -12,6 +12,7 @@ export default class extends Controller {
     this.setupConditionalBreaks()
     this.setupReveal()
     this.setupSectionNavigation()
+    this.setupBackgroundGrid()
     this.setupSectionGhosts()
     this.setupSnapIndicators()
   }
@@ -50,7 +51,19 @@ export default class extends Controller {
     this.sectionObserver = null
     this.ghostObserver?.disconnect()
     this.ghostObserver = null
-    this.element.classList.remove('is-grid-visible')
+    this.element.classList.remove('is-fixed-grid-visible')
+    if (this.backgroundGridFrame) {
+      window.cancelAnimationFrame(this.backgroundGridFrame)
+      this.backgroundGridFrame = null
+    }
+    if (this.handleBackgroundGridScroll) {
+      window.removeEventListener('scroll', this.handleBackgroundGridScroll)
+      this.handleBackgroundGridScroll = null
+    }
+    if (this.handleBackgroundGridResize) {
+      window.removeEventListener('resize', this.handleBackgroundGridResize)
+      this.handleBackgroundGridResize = null
+    }
     this.clearSectionNavigationTimer()
     if (this.handleScrollEnd) {
       window.removeEventListener('scrollend', this.handleScrollEnd)
@@ -320,7 +333,6 @@ export default class extends Controller {
 
     if (!('IntersectionObserver' in window)) {
       sections.forEach((section) => section.classList.add('is-ghost-visible'))
-      this.element.classList.add('is-grid-visible')
       return
     }
 
@@ -329,8 +341,6 @@ export default class extends Controller {
         entries.forEach((entry) => {
           entry.target.classList.toggle('is-ghost-visible', entry.isIntersecting)
         })
-
-        this.updateFixedGridVisibility(sections)
       },
       {
         root: null,
@@ -342,11 +352,34 @@ export default class extends Controller {
     sections.forEach((section) => this.ghostObserver.observe(section))
   }
 
-  updateFixedGridVisibility (sections) {
-    this.element.classList.toggle(
-      'is-grid-visible',
-      sections.some((section) => section.classList.contains('is-ghost-visible'))
-    )
+  setupBackgroundGrid () {
+    this.heroSection = this.element.querySelector('.home-hero-section')
+    if (!this.heroSection) return
+
+    this.handleBackgroundGridScroll = () => this.scheduleBackgroundGridUpdate()
+    this.handleBackgroundGridResize = () => this.scheduleBackgroundGridUpdate()
+    window.addEventListener('scroll', this.handleBackgroundGridScroll, { passive: true })
+    window.addEventListener('resize', this.handleBackgroundGridResize, { passive: true })
+    this.updateBackgroundGridVisibility()
+  }
+
+  scheduleBackgroundGridUpdate () {
+    if (this.backgroundGridFrame) return
+
+    this.backgroundGridFrame = window.requestAnimationFrame(() => {
+      this.backgroundGridFrame = null
+      this.updateBackgroundGridVisibility()
+    })
+  }
+
+  updateBackgroundGridVisibility () {
+    if (!this.heroSection) return
+
+    const heroRect = this.heroSection.getBoundingClientRect()
+    const switchLine = Math.min(160, Math.max(72, window.innerHeight * 0.14))
+    const shouldShowFixedGrid = heroRect.bottom <= switchLine
+
+    this.element.classList.toggle('is-fixed-grid-visible', shouldShowFixedGrid)
   }
 
   buildSectionNavigation () {
