@@ -116,4 +116,41 @@ RSpec.describe 'filter_parameter_logging' do
       expect(filtered[:array].first[:session_uid_digest]).to eq('[FILTERED]')
     end
   end
+
+  it 'filters provider, authorization, and Active Storage identifiers recursively' do
+    params = {
+      authorization: 'Bearer raw-token',
+      endpoint: 'https://internal-provider.example.test',
+      azure_ocr_api_key: 'azure-secret',
+      openai_api_key: 'openai-secret',
+      signed_id: 'signed-storage-id',
+      blob_key: 'active-storage-key',
+      storage_key: 'storage-key',
+      checksum: 'storage-checksum',
+      content_md5: 'storage-md5',
+      nested: {
+        signedId: 'nested-signed-id',
+        blobKey: 'nested-blob-key',
+        storageKey: 'nested-storage-key',
+        checksum: 'nested-checksum'
+      },
+      safe_label: 'receipt image'
+    }
+
+    filtered = filter.filter(params)
+
+    aggregate_failures do
+      expect(filtered[:authorization]).to eq('[FILTERED]')
+      expect(filtered[:endpoint]).to eq('[FILTERED]')
+      expect(filtered[:azure_ocr_api_key]).to eq('[FILTERED]')
+      expect(filtered[:openai_api_key]).to eq('[FILTERED]')
+      expect(filtered[:signed_id]).to eq('[FILTERED]')
+      expect(filtered[:blob_key]).to eq('[FILTERED]')
+      expect(filtered[:storage_key]).to eq('[FILTERED]')
+      expect(filtered[:checksum]).to eq('[FILTERED]')
+      expect(filtered[:content_md5]).to eq('[FILTERED]')
+      expect(filtered[:nested].values).to all(eq('[FILTERED]'))
+      expect(filtered[:safe_label]).to eq('receipt image')
+    end
+  end
 end
