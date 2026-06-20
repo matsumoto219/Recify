@@ -1,6 +1,27 @@
 require 'rails_helper'
 
 RSpec.describe ApplicationMailer, type: :mailer do
+  describe 'mailer assets' do
+    around do |example|
+      original_default_url_options = described_class.default_url_options.dup
+
+      example.run
+    ensure
+      described_class.default_url_options = original_default_url_options
+    end
+
+    it 'メール内画像URLはmailerのhost/protocol設定から絶対URLにする' do
+      described_class.default_url_options = { host: 'mail.recify.test', protocol: 'https' }
+
+      asset_url = described_class.new.send(:mailer_asset_url, 'brand/recify-logo-wordmark.png')
+
+      aggregate_failures do
+        expect(asset_url).to start_with('https://mail.recify.test/assets/brand/recify-logo-wordmark')
+        expect(asset_url).to end_with('.png')
+      end
+    end
+  end
+
   describe 'recipient names' do
     let(:mailer) { described_class.new }
 
