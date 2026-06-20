@@ -40,7 +40,30 @@ registry:
 env:
   secret:
     - RAILS_MASTER_KEY
+    - RECIFY_DATABASE_PASSWORD
+    - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
+    - ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
+    - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
+    - APP_HOST
+    - WEBAUTHN_RP_ID
+    - WEBAUTHN_ALLOWED_ORIGINS
+    - SUPPORT_NOTIFICATION_EMAIL
+    - SMTP_HOST
+    - SMTP_PORT
+    - SMTP_USERNAME
+    - SMTP_PASSWORD
+    - SMTP_FROM
+    - AZURE_OCR_ENDPOINT
+    - AZURE_OCR_API_KEY
+    - OPENAI_API_KEY
+    - OPENAI_AI_MODEL
+    - TURNSTILE_SITE_KEY
+    - TURNSTILE_SECRET_KEY
   clear:
+    APP_PROTOCOL: https
+    FORCE_SSL: true
+    ASSUME_SSL: true
+
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     # When you start using multiple servers, you should split out job processing to a dedicated machine.
     SOLID_QUEUE_IN_PUMA: true

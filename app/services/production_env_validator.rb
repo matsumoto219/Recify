@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "production_runtime_config"
+
 class ProductionEnvValidator
   ValidationError = Class.new(StandardError)
 
@@ -12,6 +14,7 @@ class ProductionEnvValidator
   ALWAYS_REQUIRED_ENV = %w[
     RAILS_MASTER_KEY
     RECIFY_DATABASE_PASSWORD
+    APP_HOST
     WEBAUTHN_RP_ID
     WEBAUTHN_ALLOWED_ORIGINS
     SUPPORT_NOTIFICATION_EMAIL
@@ -57,6 +60,8 @@ class ProductionEnvValidator
     end
 
     def boot_validate!
+      return if ENV["SECRET_KEY_BASE_DUMMY"].present?
+
       validate!(strict: Rails.env.production?)
     end
   end
@@ -73,6 +78,7 @@ class ProductionEnvValidator
     @application_mailer_from = application_mailer_from
     @devise_mailer_sender = devise_mailer_sender
     @strict = strict
+    @runtime_config = ProductionRuntimeConfig.new(env: env)
   end
 
   def validate!
@@ -135,6 +141,7 @@ class ProductionEnvValidator
     missing << "application_mailer.default_from" if placeholder?(resolved_application_mailer_from)
     missing << "devise.mailer_sender" if placeholder?(resolved_devise_mailer_sender)
     missing << "action_mailer.smtp_settings" if smtp_delivery? && smtp_settings.blank?
+    missing += runtime_config.missing_smtp_env if smtp_delivery?
     missing
   end
 
@@ -153,6 +160,10 @@ class ProductionEnvValidator
 
   def smtp_settings
     rails_config.action_mailer.smtp_settings
+  end
+
+  def runtime_config
+    @runtime_config
   end
 
   def env_feature_enabled?(key)

@@ -27,9 +27,15 @@ RSpec.describe ProductionEnvValidator do
     {
       "RAILS_MASTER_KEY" => "master",
       "RECIFY_DATABASE_PASSWORD" => "database",
+      "APP_HOST" => "recify-app.com",
       "WEBAUTHN_RP_ID" => "recify-app.com",
       "WEBAUTHN_ALLOWED_ORIGINS" => "https://recify-app.com",
       "SUPPORT_NOTIFICATION_EMAIL" => "support@example.test",
+      "SMTP_HOST" => "smtp.example.test",
+      "SMTP_PORT" => "587",
+      "SMTP_USERNAME" => "smtp-user",
+      "SMTP_PASSWORD" => "smtp-password",
+      "SMTP_FROM" => "noreply@example.test",
       "AZURE_OCR_ENDPOINT" => "https://example.cognitiveservices.azure.com",
       "AZURE_OCR_API_KEY" => "azure-key",
       "OPENAI_API_KEY" => "openai-key",
@@ -65,14 +71,27 @@ RSpec.describe ProductionEnvValidator do
   end
 
   it "does not include secret values in error messages" do
-    env = required_env.merge("RAILS_MASTER_KEY" => "super-secret-value")
+    env = required_env.merge("RAILS_MASTER_KEY" => "super-secret-value", "SMTP_PASSWORD" => "smtp-secret-value")
     env.delete("WEBAUTHN_RP_ID")
+    env.delete("SMTP_USERNAME")
 
     expect do
       described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
     end.to raise_error(described_class::ValidationError) { |error|
       expect(error.message).to include("WEBAUTHN_RP_ID")
+      expect(error.message).to include("SMTP_USERNAME")
       expect(error.message).not_to include("super-secret-value")
+      expect(error.message).not_to include("smtp-secret-value")
+    }
+  end
+
+  it "requires APP_HOST in production strict mode" do
+    env = required_env.except("APP_HOST")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("APP_HOST")
     }
   end
 
@@ -163,6 +182,19 @@ RSpec.describe ProductionEnvValidator do
       expect(error.message).to include("application_mailer.default_from")
       expect(error.message).to include("devise.mailer_sender")
       expect(error.message).to include("action_mailer.smtp_settings")
+    }
+  end
+
+  it "requires SMTP ENV keys when SMTP delivery is enabled" do
+    env = required_env.except("SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("SMTP_PORT")
+      expect(error.message).to include("SMTP_USERNAME")
+      expect(error.message).to include("SMTP_PASSWORD")
+      expect(error.message).to include("SMTP_FROM")
     }
   end
 
