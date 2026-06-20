@@ -16,3 +16,7 @@ ja:
       next: 次のページ
       page: "%{page}ページ目へ"
       end_of_archive: End of Archive
+  meta:
+    site_name: Recify
+    title_format: "%{title} | %{site}"
+    default_description: レシート画像の自動解析で明細整理をサポートするレシート管理アプリです。

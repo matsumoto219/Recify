@@ -1,4 +1,5 @@
 <% content_for :title, t("home.meta.title") %>
+<% content_for :meta_description, t("home.meta.description", default: t("meta.default_description")) %>
 <% content_for :head do %>
   <%= tag.link rel: "stylesheet", href: home_lp_stylesheet_path %>
 <% end %>

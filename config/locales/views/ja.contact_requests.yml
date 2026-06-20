@@ -4,6 +4,7 @@ ja:
       back_to_top: トップへ戻る
     new:
       title: お問い合わせ
+      meta_description: Recifyへのお問い合わせを受け付けるページです。
       subtitle: アカウント、レシート解析、不具合などについてサポートへお問い合わせできます。
       safety_title: 安全のため、必要な範囲の情報のみ入力してください。
       safety_items:

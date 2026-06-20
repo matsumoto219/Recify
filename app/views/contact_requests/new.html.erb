@@ -1,3 +1,6 @@
+<% content_for :title, t("contact_requests.new.title") %>
+<% content_for :meta_description, t("contact_requests.new.meta_description", default: t("contact_requests.new.subtitle")) %>
+
 <%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
 
 <section class="mx-auto max-w-3xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-12 md:pb-10">

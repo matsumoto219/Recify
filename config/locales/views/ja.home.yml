@@ -2,6 +2,7 @@ ja:
   home:
     meta:
       title: Recify
+      description: レシート画像の自動解析で明細整理をサポート
     hero:
       badge: 自動解析で、レシート整理をスムーズに
       heading_lines:

@@ -70,6 +70,7 @@ Rails.application.routes.draw do
   post "/contact", to: "contact_requests#create"
   get "/terms", to: "legal#terms", as: :terms
   get "/privacy", to: "legal#privacy", as: :privacy
+  get "/sitemap.xml", to: "sitemap#show", defaults: { format: :xml }, as: :sitemap
   resources :announcements, only: %i[index show], param: :public_id
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

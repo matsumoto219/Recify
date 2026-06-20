@@ -1,4 +1,6 @@
 <% content_for :title, @announcement.title %>
+<% content_for :meta_description, meta_text_excerpt(@announcement.body) %>
+<% content_for :meta_type, "article" %>
 
 <%= render "shared/ui/layout/ambient_background" %>
 

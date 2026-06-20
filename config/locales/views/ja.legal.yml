@@ -22,6 +22,7 @@ ja:
           - データ保持期間、削除、匿名化、バックアップの扱いを正式本文で説明します。
     terms:
       title: 利用規約
+      meta_description: Recifyの利用条件を掲載するページです。
       lead: Recifyの利用条件を掲載するためのページです。
       last_updated_on: 2026年6月17日
       sections:
@@ -33,6 +34,7 @@ ja:
           body: 規約変更時の案内方法と問い合わせ先への導線を正式本文で整えます。
     privacy:
       title: プライバシーポリシー
+      meta_description: Recifyで扱う個人情報とデータ保護方針を掲載するページです。
       lead: Recifyで扱う個人情報とデータ保護方針を掲載するためのページです。
       last_updated_on: 2026年6月17日
       sections:

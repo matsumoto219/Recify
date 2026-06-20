@@ -7,6 +7,7 @@ ja:
       incident: 重要
     index:
       meta_title: お知らせ一覧
+      meta_description: Recifyからのお知らせや予定をまとめて確認できます。
       title: お知らせ一覧
       subtitle: Recifyからのお知らせや予定をまとめて確認できます。
       pinned: 固定表示

@@ -28,6 +28,10 @@
 #       enabled: "ON"
 
 en:
+  meta:
+    site_name: Recify
+    title_format: "%{title} | %{site}"
+    default_description: "A receipt management app that helps organize receipt details with automatic analysis."
   enums:
     receipt_item:
       quantity_unit_code:
