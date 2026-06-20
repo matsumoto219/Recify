@@ -127,6 +127,83 @@ RSpec.describe SystemSettings do
         expect(keys).not_to include('default_url_options')
       end
     end
+
+    it 'provider credentialや本番ENVに置くべき値をeditable definitionに含めない' do
+      forbidden_patterns = [
+        /(^|[._-])(secret|password|token|credential|credentials)([._-]|$)/,
+        /api_key/,
+        /smtp/,
+        /webauthn/,
+        /database/,
+        /endpoint/,
+        /openai/,
+        /azure/,
+        /cloudflare/
+      ]
+      matching_keys = described_class.definitions.keys.select do |key|
+        forbidden_patterns.any? { |pattern| pattern.match?(key) }
+      end
+
+      expect(matching_keys).to be_empty
+    end
+
+    it '本番運用で調整する数値設定は有限の範囲と範囲内defaultを持つ' do
+      bounded_categories = %w[
+        amount_engine
+        security
+        security_event
+        external_service_status
+        storage_warning
+        soft_limit
+        usage_limit
+        amount_limit
+        upload_limit
+        retention
+        usage_limit_safety
+        snapshot_limit
+        ai_prompt_limit
+      ]
+      target_definitions = described_class.definitions.values.select do |definition|
+        bounded_categories.include?(definition.category) && definition.value_type == 'integer'
+      end
+
+      aggregate_failures do
+        expect(target_definitions.map(&:key)).to include(
+          'limits.receipt_image_max_file_size_bytes',
+          'limits.announcement_image_max_file_size_bytes',
+          'limits.avatar_image_max_file_size_bytes',
+          'retention.security_events_high_days',
+          'retention.audit_logs_high_risk_admin_days',
+          'external_services.down_failure_threshold',
+          'limits.ai_prompt_raw_text_length_max',
+          'limits.snapshot_ocr_items_max'
+        )
+
+        target_definitions.each do |definition|
+          expect(definition.min).not_to be_nil, "#{definition.key} should define min"
+          expect(definition.max).not_to be_nil, "#{definition.key} should define max"
+          expect(definition.default).to be_between(definition.min, definition.max).inclusive,
+            "#{definition.key} default should be within min/max"
+        end
+      end
+    end
+
+    it '本番前提の初期値は危険な大小関係になっていない' do
+      values = described_class.definitions.transform_values(&:default)
+
+      aggregate_failures do
+        expect(values.fetch('storage.usage_warning_percentage')).to be < values.fetch('storage.usage_error_percentage')
+        expect(values.fetch('storage.warning_remaining_bytes')).to be > values.fetch('storage.error_remaining_bytes')
+        expect(values.fetch('external_services.degraded_failure_threshold')).to be < values.fetch('external_services.down_failure_threshold')
+        expect(values.fetch('retention.analysis_runs_failed_days')).to be >= values.fetch('retention.analysis_runs_default_days')
+        expect(values.fetch('retention.analysis_runs_default_days')).to be >= values.fetch('retention.analysis_runs_short_days')
+        expect(values.fetch('retention.security_events_critical_days')).to be >= values.fetch('retention.security_events_high_days')
+        expect(values.fetch('retention.security_events_high_days')).to be >= values.fetch('retention.security_events_medium_days')
+        expect(values.fetch('retention.security_events_medium_days')).to be >= values.fetch('retention.security_events_low_days')
+        expect(values.fetch('limits.receipt_items_per_receipt')).to be <= values.fetch('limits.snapshot_ocr_items_max')
+        expect(values.fetch('limits.receipt_items_per_receipt')).to be <= values.fetch('limits.snapshot_ai_normalized_items_max')
+      end
+    end
   end
 
   describe '.value_for' do
