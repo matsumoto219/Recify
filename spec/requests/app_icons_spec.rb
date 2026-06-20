@@ -3,6 +3,15 @@
 require "rails_helper"
 
 RSpec.describe "App icons", type: :request do
+  def png_info(path)
+    data = File.binread(path, 26)
+
+    expect(data.byteslice(0, 8)).to eq("\x89PNG\r\n\x1A\n".b)
+    width, height, bit_depth, color_type = data.byteslice(16, 10).unpack("NNCC")
+
+    { width: width, height: height, bit_depth: bit_depth, color_type: color_type }
+  end
+
   def document
     Nokogiri::HTML(response.body)
   end
@@ -61,6 +70,25 @@ RSpec.describe "App icons", type: :request do
         { "src" => "/icon-512.png", "type" => "image/png", "sizes" => "512x512" }
       )
       expect(manifest.to_json).not_to include("red")
+    end
+  end
+
+  it "keeps brand OGP and full logo assets in expected public-ready dimensions" do
+    ogp_path = Rails.root.join("app/assets/images/brand/recify-ogp.png")
+    full_logo_png_path = Rails.root.join("app/assets/images/brand/recify-logo-full.png")
+    wordmark_png_path = Rails.root.join("app/assets/images/brand/recify-logo-wordmark.png")
+    full_logo_svg_path = Rails.root.join("app/assets/images/brand/recify-logo-full.svg")
+    wordmark_svg_path = Rails.root.join("app/assets/images/brand/recify-logo-wordmark.svg")
+
+    aggregate_failures do
+      expect(png_info(ogp_path)).to include(width: 1200, height: 630, bit_depth: 8, color_type: 2)
+      expect(File.size(ogp_path)).to be <= 500.kilobytes
+      expect(png_info(full_logo_png_path)).to include(width: 1200, height: 360, bit_depth: 8, color_type: 6)
+      expect(png_info(wordmark_png_path)).to include(width: 1200, height: 260, bit_depth: 8, color_type: 6)
+      expect(full_logo_svg_path.read).to include("RECEIPT MANAGEMENT")
+      expect(wordmark_svg_path.read).not_to include("RECEIPT MANAGEMENT")
+      expect(full_logo_svg_path.read).not_to match(/<script|<image|foreignObject|\b(?:href|xlink:href)=["']https?:/i)
+      expect(wordmark_svg_path.read).not_to match(/<script|<image|foreignObject|\b(?:href|xlink:href)=["']https?:/i)
     end
   end
 end

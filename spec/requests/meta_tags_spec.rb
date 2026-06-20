@@ -91,6 +91,28 @@ RSpec.describe "Public meta tags", type: :request do
                      expected_path: "/contact"
   end
 
+  describe "GET /terms" do
+    def perform_request
+      get terms_path
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "利用規約 | Recify",
+                     expected_description: I18n.t("legal.terms.meta_description"),
+                     expected_path: "/terms"
+  end
+
+  describe "GET /privacy" do
+    def perform_request
+      get privacy_path
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "プライバシーポリシー | Recify",
+                     expected_description: I18n.t("legal.privacy.meta_description"),
+                     expected_path: "/privacy"
+  end
+
   it "設定済みhostを優先し、Host headerをOGP URLへ反映しない" do
     Rails.application.routes.default_url_options.clear
     Rails.application.routes.default_url_options.merge!(host: "recify-app.test", protocol: "https")
