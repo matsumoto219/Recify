@@ -1,1 +1,8 @@
-# See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
+User-agent: *
+Disallow: /admin
+Disallow: /receipts
+Disallow: /settings
+Disallow: /notifications
+Disallow: /users
+Disallow: /rails/active_storage/
+Allow: /
