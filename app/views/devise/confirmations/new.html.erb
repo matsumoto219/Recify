@@ -35,12 +35,12 @@
     end
 %>
 
-<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+<div class="<%= auth_page_shell_class %>">
   <%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">
     <section aria-labelledby="confirmation-resend-page-title">
-      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/miscellaneous/icon" if auth_page_show_icon? %>
       <%= render "shared/ui/layout/section_header",
             title: t("auth.confirmations.new.title"),
             subtitle: t("auth.confirmations.new.subtitle"),

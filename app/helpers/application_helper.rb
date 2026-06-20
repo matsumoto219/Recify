@@ -15,6 +15,18 @@ module ApplicationHelper
     "/home_lp.css?v=#{version}"
   end
 
+  def auth_page_shell_class
+    if dashboard_auth_page?
+      "auth-page-shell auth-page-shell-dashboard w-full flex justify-center px-0 py-4 md:py-6 relative overflow-hidden"
+    else
+      "auth-page-shell auth-page-shell-standalone min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden"
+    end
+  end
+
+  def auth_page_show_icon?
+    !dashboard_auth_page?
+  end
+
   def confirm_dialog_data(
     message,
     variant: :neutral,
@@ -68,6 +80,10 @@ module ApplicationHelper
   end
 
   private
+
+  def dashboard_auth_page?
+    user_signed_in? && !public_layout_page?
+  end
 
   def confirm_dialog_allowed_value(value, allowed_values, fallback)
     return fallback&.to_s if value.blank?

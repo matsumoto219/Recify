@@ -1,9 +1,9 @@
-<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
-  <%= render "shared/ui/layout/ambient_background" %>
+<div class="<%= auth_page_shell_class %>">
+  <%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8" data-controller="legal-dialog">
     <section aria-labelledby="registration-page-title">
-      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/miscellaneous/icon" if auth_page_show_icon? %>
       <%= render "shared/ui/layout/section_header",
             title: t("auth.registrations.new.title"),
             subtitle: t("auth.registrations.new.subtitle"),

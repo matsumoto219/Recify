@@ -65,6 +65,32 @@ RSpec.describe 'Auth pages', type: :request do
     end
   end
 
+  def expect_dashboard_auth_layout(document)
+    aggregate_failures do
+      shell = document.at_css('.auth-page-shell')
+
+      expect(shell).to be_present
+      expect(shell['class']).to include('auth-page-shell-dashboard')
+      expect(shell['class']).not_to include('min-h-screen')
+      expect(shell['class']).not_to include('items-center')
+      expect(document.at_css('.auth-icon-surface')).to be_nil
+      expect(document.at_css('#dashboard-header')).to be_present
+      expect(document.at_css('#desktop-sidebar')).to be_present
+    end
+  end
+
+  def expect_standalone_auth_layout(document)
+    aggregate_failures do
+      shell = document.at_css('.auth-page-shell')
+
+      expect(shell).to be_present
+      expect(shell['class']).to include('auth-page-shell-standalone')
+      expect(shell['class']).to include('min-h-screen')
+      expect(shell['class']).to include('items-center')
+      expect(document.at_css('.auth-icon-surface .brand-logo-icon')).to be_present
+    end
+  end
+
   def expect_public_header(document)
     public_header = document.at_css('#public-header')
 
@@ -118,6 +144,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect_standalone_auth_layout(document)
         expect(public_header).to be_present
         expect(public_header.at_css('.brand-logo-full[aria-label="Recify"]')).to be_present
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_nil
@@ -799,6 +826,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect_dashboard_auth_layout(document)
         expect(response.body).to include(I18n.t('auth.registrations.edit.title'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.normal.title'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.normal.description'))
@@ -826,6 +854,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(guest.reload.name).to be_blank
         expect(document.css('main').size).to eq(1)
+        expect_dashboard_auth_layout(document)
         expect(response.body).to include(I18n.t('auth.registrations.edit.guest.title'))
         expect(response.body).to include(I18n.t('auth.registrations.edit.guest.description'))
         expect(document.at_css("a[href='#{settings_security_path(anchor: 'guest-registration')}']")).to be_present
@@ -922,6 +951,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
+        expect_standalone_auth_layout(document)
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
         expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.passwords.new.title'))
@@ -1006,6 +1036,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(response.body).not_to match(/translation missing/i)
         expect(document.css('main').size).to eq(1)
         expect(document.css('.ambient-background').size).to eq(1)
+        expect_standalone_auth_layout(document)
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
         expect(public_header.at_css("a[href='#{new_user_registration_path}']")).to be_present
         expect(response.body).to include(I18n.t('auth.confirmations.new.title'))
@@ -1063,6 +1094,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(document.css('.ambient-background').size).to eq(1)
+        expect_dashboard_auth_layout(document)
         expect(response.body).not_to include(fake_email)
         expect(response.body).to include('guest-pending-confirmation@example.com')
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_guest_registration'))
@@ -1086,6 +1118,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(document.css('.ambient-background').size).to eq(1)
+        expect_dashboard_auth_layout(document)
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
         expect(email_input['value']).to eq('normal-pending-confirmation@example.com')
         expect(document.at_css("a[href='#{settings_security_path(anchor: 'email')}']")).to be_present
@@ -1103,6 +1136,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
+        expect_dashboard_auth_layout(document)
         expect(response.body).to include(I18n.t('auth.confirmations.new.back_to_security'))
         expect(document.at_css("a[href='#{settings_security_path}']")).to be_present
         expect(response.body).not_to include('cf-turnstile')

@@ -8,10 +8,10 @@
 
 <%# Direct-access fallback for /users/edit. Actual profile, email, password, and guest registration updates live in settings pages. %>
 
-<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+<div class="<%= auth_page_shell_class %>">
   <div class="w-full max-w-[520px] z-10 space-y-8">
     <section aria-labelledby="edit-registration-title">
-      <%= render "shared/ui/miscellaneous/icon" %>
+      <%= render "shared/ui/miscellaneous/icon" if auth_page_show_icon? %>
       <%= render "shared/ui/layout/section_header",
             title: t("auth.registrations.edit.title"),
             subtitle: t("auth.registrations.edit.subtitle"),
