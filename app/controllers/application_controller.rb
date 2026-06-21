@@ -134,7 +134,7 @@ class ApplicationController < ActionController::Base
   end
 
   def store_legal_consent_return_to
-    return unless request.get?
+    return unless request.get? || request.head?
     return unless legal_consent_safe_return_path?(request.fullpath)
 
     session[LEGAL_CONSENT_RETURN_TO_SESSION_KEY] = request.fullpath
