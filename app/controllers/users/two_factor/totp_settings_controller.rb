@@ -7,7 +7,7 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
   before_action :set_no_store_headers, only: %i[new create]
 
   def new
-    return redirect_to settings_security_path(anchor: "two-factor"), alert: t("settings.security.auth.two_factor.messages.already_enabled") if totp_enabled?
+    return redirect_to settings_security_path(anchor: "two-factor"), notice: t("settings.security.auth.two_factor.messages.already_enabled") if totp_enabled?
 
     setup = TwoFactor.prepare_totp_setup(user: current_user)
     session[SETUP_SESSION_KEY] = {
@@ -18,7 +18,7 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
   end
 
   def create
-    return redirect_to settings_security_path(anchor: "two-factor"), alert: t("settings.security.auth.two_factor.messages.already_enabled") if totp_enabled?
+    return redirect_to settings_security_path(anchor: "two-factor"), notice: t("settings.security.auth.two_factor.messages.already_enabled") if totp_enabled?
 
     setup_session = current_setup_session
     if setup_session.blank?

@@ -30,6 +30,18 @@ RSpec.describe 'User TOTP settings', type: :request do
       expect(response).to redirect_to(settings_security_path)
     end
 
+    it 'すでに有効な場合は通常通知で設定へ戻す' do
+      sign_in user
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      get new_settings_security_totp_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: "two-factor"))
+        expect(flash[:notice]).to eq(I18n.t('settings.security.auth.two_factor.messages.already_enabled'))
+      end
+    end
+
     it '手入力用の設定キーはsetup画面限定で表示し、no-storeかつDB/AuditLogへ保存しない' do
       sign_in user
 
@@ -128,6 +140,17 @@ RSpec.describe 'User TOTP settings', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(new_settings_security_totp_path)
         expect(session[:totp_setup]).to be_blank
+      end
+    end
+
+    it 'すでに有効な場合は通常通知で設定へ戻す' do
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+
+      post settings_security_totp_path, params: { code: '123456' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: "two-factor"))
+        expect(flash[:notice]).to eq(I18n.t('settings.security.auth.two_factor.messages.already_enabled'))
       end
     end
 

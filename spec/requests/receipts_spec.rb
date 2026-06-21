@@ -5307,7 +5307,10 @@ RSpec.describe 'Receipts', type: :request do
 
       get receipt_path(processing_receipt)
 
-      expect(response).to redirect_to(receipts_path)
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(flash[:warning]).to eq(I18n.t('flash.receipts.processing'))
+      end
     end
 
     context '未ログイン時' do

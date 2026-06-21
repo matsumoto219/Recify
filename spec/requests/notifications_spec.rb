@@ -346,7 +346,7 @@ RSpec.describe 'Notifications', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(notifications_path)
         expect(notification.reload).to be_read
-        expect(flash[:alert]).to eq(I18n.t('notifications.item.deleted_target'))
+        expect(flash[:warning]).to eq(I18n.t('notifications.item.deleted_target'))
       end
     end
 

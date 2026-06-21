@@ -331,7 +331,7 @@ class ReceiptsController < ApplicationController
   def block_processing_receipt
     return unless @receipt.processing?
 
-    redirect_to receipts_path, alert: t("flash.receipts.processing")
+    redirect_to receipts_path, flash: { warning: t("flash.receipts.processing") }
   end
 
   def set_external_service_states
