@@ -58,6 +58,10 @@ RSpec.describe 'Legal pages', type: :request do
   end
 
   describe 'GET /privacy' do
+    def privacy_section_titles
+      I18n.t('legal.privacy.sections').map { |section| section.fetch(:title) }
+    end
+
     it '未ログインでプライバシーポリシーshellを表示する' do
       expect(privacy_path).to eq('/privacy')
 
@@ -66,13 +70,22 @@ RSpec.describe 'Legal pages', type: :request do
       public_header = document.at_css('#public-header')
       public_footer = document.at_css('#public-footer')
       sign_up_link = public_header&.at_css("a[href='#{new_user_registration_path}']")
+      headings = document.css('h2').map { |heading| heading.text.squish }
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include(I18n.t('legal.privacy.title'))
-        expect(response.body).to include(I18n.t('legal.common.placeholder_title'))
-        expect(response.body).to include(I18n.t('legal.common.placeholder_body'))
+        expect(response.body).not_to include(I18n.t('legal.common.placeholder_title'))
+        expect(response.body).not_to include(I18n.t('legal.common.placeholder_body'))
         expect(response.body).to include(I18n.t('legal.common.last_updated', date: I18n.t('legal.privacy.last_updated_on')))
+        expect(headings).to include(*privacy_section_titles)
+        expect(response.body).to include('レシート画像')
+        expect(response.body).to include('OCR解析')
+        expect(response.body).to include('AI補完')
+        expect(response.body).to include('外部サービス')
+        expect(response.body).to include('保存期間と削除')
+        expect(response.body).to include('Cookie')
+        expect(response.body).to include('お問い合わせ')
         expect(public_header).to be_present
         expect(public_header.at_css("a[href='#{new_user_session_path}']")).to be_present
         expect(sign_up_link).to be_present
@@ -84,6 +97,8 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response.body).not_to include('/home_lp.css')
         expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('href="#"')
+        expect(response.body).not_to include('作成中')
+        expect(response.body).not_to include('正式な本文は公開前')
         expect(response.body).not_to include('translation missing')
       end
     end
@@ -100,6 +115,7 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response).to have_http_status(:ok)
         expect(response).not_to redirect_to(receipts_path)
         expect(response.body).to include(I18n.t('legal.privacy.title'))
+        expect(response.body).not_to include(I18n.t('legal.common.placeholder_title'))
         expect(public_header).to be_present
         expect(receipts_link).to be_present
         expect(receipts_link['class']).to include('btn-secondary')
