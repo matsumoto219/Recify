@@ -17,7 +17,7 @@
     <h3 class="text-sm font-bold token-text-base"><%= t("notifications.dropdown.title") %></h3>
   </div>
 
-  <div class="max-h-80 overflow-y-auto">
+  <div class="max-h-80 overflow-y-auto token-scrollbar-brand">
     <% if notifications.any? %>
       <%= render partial: "shared/notifications/dropdown_item",
         collection: notifications,

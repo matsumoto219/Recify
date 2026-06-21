@@ -34,7 +34,7 @@
         </div>
       </div>
 
-      <ul class="home-announcements-list mt-5" aria-label="<%= t("home.announcements.list_aria") %>">
+      <ul class="home-announcements-list mt-5 token-scrollbar-brand" aria-label="<%= t("home.announcements.list_aria") %>">
         <% announcements.each do |announcement| %>
           <% timestamp = announcement.published_at || announcement.created_at %>
           <li class="home-announcement-row">

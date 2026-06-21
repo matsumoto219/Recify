@@ -12,6 +12,25 @@ body {
   display: none;
 }
 
+.token-scrollbar-brand {
+  scrollbar-color: color-mix(in srgb, var(--brand-primary) 36%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar {
+  width: 0.375rem;
+  height: 0.375rem;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-primary) 32%, transparent);
+}
+
 /* ===== Shared Token Utilities ===== */
 .token-text-base {
   color: var(--text-base);
