@@ -15,17 +15,27 @@
     <%= t("legal.common.last_updated", date: t("legal.terms.last_updated_on")) %>
   </p>
 
-  <div class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-base">
-    <p class="font-semibold token-text-warning"><%= t("legal.common.placeholder_title") %></p>
-    <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("legal.common.placeholder_body") %></p>
-  </div>
-
   <div class="space-y-4">
     <% t("legal.terms.sections").each do |section| %>
       <%= render "shared/ui/layout/surface_card", padding: :md do %>
-        <section class="space-y-2">
+        <section class="space-y-4">
           <h2 class="text-lg font-bold token-text-base"><%= section.fetch(:title) %></h2>
-          <p class="text-sm leading-7 token-text-muted"><%= section.fetch(:body) %></p>
+
+          <% Array(section[:paragraphs]).each do |paragraph| %>
+            <p class="text-sm leading-7 token-text-muted"><%= paragraph %></p>
+          <% end %>
+
+          <% if section[:items].present? %>
+            <ul class="space-y-2 pl-5 text-sm leading-7 token-text-muted">
+              <% section.fetch(:items).each do |item| %>
+                <li class="list-disc"><%= item %></li>
+              <% end %>
+            </ul>
+          <% end %>
+
+          <% Array(section[:paragraphs_after]).each do |paragraph| %>
+            <p class="text-sm leading-7 token-text-muted"><%= paragraph %></p>
+          <% end %>
         </section>
       <% end %>
     <% end %>

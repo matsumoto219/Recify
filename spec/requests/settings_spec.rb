@@ -580,6 +580,9 @@ RSpec.describe 'Settings', type: :request do
         expect(terms_dialog.at_css('#guest-registration-terms-dialog-title')).to be_present
         expect(terms_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
         expect(terms_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(terms_dialog.text).to include(I18n.t('legal.dialog.terms.summary_notice'))
+        expect(terms_dialog.text).to include(I18n.t('legal.dialog.terms.items').first)
+        expect(terms_dialog.text).not_to include(I18n.t('legal.dialog.summary_notice'))
         expect(terms_full_link.text).to include(I18n.t('legal.dialog.open_full_terms'))
         expect(privacy_dialog['data-legal-dialog-target']).to eq('dialog')
         expect(privacy_dialog['aria-modal']).to eq('true')
@@ -587,6 +590,8 @@ RSpec.describe 'Settings', type: :request do
         expect(privacy_dialog.at_css('#guest-registration-privacy-dialog-title')).to be_present
         expect(privacy_close_button['aria-label']).to eq(I18n.t('legal.dialog.close'))
         expect(privacy_dialog.text).to include(I18n.t('legal.dialog.summary_label'))
+        expect(privacy_dialog.text).not_to include('正式本文')
+        expect(privacy_dialog.text).not_to include('正式な本文は公開前')
         expect(privacy_full_link.text).to include(I18n.t('legal.dialog.open_full_privacy'))
         expect(guest_registration_card.at_css("a[href='#']")).to be_nil
         expect(document.at_css("input[type='checkbox'][name='user[legal_agreement]']")).to be_present
