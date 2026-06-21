@@ -49,12 +49,27 @@ RSpec.describe "Production-like public smoke", type: :request do
     end
   end
 
+  def current_legal_version_path(document_type)
+    document = LegalDocument.current!(document_type, locale: :ja)
+
+    case document_type.to_s
+    when "terms"
+      terms_version_path(document.version)
+    when "privacy"
+      privacy_version_path(document.version)
+    end
+  end
+
   it "public HTML entrypoints are ready for production-like smoke" do
     announcement = create(:announcement, :published, title: "公開お知らせ", body: "公開本文")
     paths = [
       root_path,
       terms_path,
+      terms_versions_path,
+      current_legal_version_path(:terms),
       privacy_path,
+      privacy_versions_path,
+      current_legal_version_path(:privacy),
       contact_path,
       announcements_path,
       announcement_path(announcement)
@@ -76,6 +91,10 @@ RSpec.describe "Production-like public smoke", type: :request do
         expect_no_internal_markers(response.body)
       end
     end
+  end
+
+  it "legal document YAML and database state are synchronized" do
+    expect(LegalDocuments::Verifier.verify_database!).to be(true)
   end
 
   it "machine-readable and static smoke endpoints stay small and safe" do
@@ -106,6 +125,13 @@ RSpec.describe "Production-like public smoke", type: :request do
       aggregate_failures path do
         expect(disallow_paths.any? { |prefix| path == prefix || path.start_with?("#{prefix}/") }).to be(false)
       end
+    end
+
+    aggregate_failures "legal version URLs are intentionally omitted from sitemap" do
+      expect(sitemap_paths).not_to include(terms_versions_path)
+      expect(sitemap_paths).not_to include(current_legal_version_path(:terms))
+      expect(sitemap_paths).not_to include(privacy_versions_path)
+      expect(sitemap_paths).not_to include(current_legal_version_path(:privacy))
     end
   end
 end

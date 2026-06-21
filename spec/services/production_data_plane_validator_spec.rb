@@ -3,6 +3,10 @@
 require "rails_helper"
 
 RSpec.describe ProductionDataPlaneValidator do
+  before do
+    LegalDocuments::Sync.call
+  end
+
   let(:rails_config) do
     ActiveSupport::OrderedOptions.new.tap do |config|
       config.active_job = ActiveSupport::OrderedOptions.new
@@ -110,6 +114,22 @@ RSpec.describe ProductionDataPlaneValidator do
     result = validator.call
 
     expect(result).to be_success
+  end
+
+  it "legal_documentsのDB同期検証を含める" do
+    legal_documents_validator = class_double(
+      ProductionLegalDocumentsValidator,
+      call: ProductionLegalDocumentsValidator::Result.new(
+        missing_items: [ "legal_documents.database: DB current terms/ja count is 0" ]
+      )
+    )
+
+    result = validator(legal_documents_validator: legal_documents_validator).call
+
+    aggregate_failures do
+      expect(result.missing_items).to include("legal_documents.database: DB current terms/ja count is 0")
+      expect(legal_documents_validator).to have_received(:call).with(database: true)
+    end
   end
 
   it "production primary/cache/queue/cable DB role不足を検出する" do

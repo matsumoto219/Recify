@@ -57,6 +57,28 @@ RSpec.describe ProductionEnvValidator do
     expect(result.missing_keys).to be_empty
   end
 
+  it "production strict mode includes legal document file validation" do
+    legal_documents_validator = class_double(
+      ProductionLegalDocumentsValidator,
+      call: ProductionLegalDocumentsValidator::Result.new(
+        missing_items: [ "legal_documents.files: current terms/ja was not found" ]
+      )
+    )
+
+    result = described_class.call(
+      env: required_env,
+      rails_config: rails_config,
+      strict: true,
+      legal_documents_validator: legal_documents_validator,
+      **validator_options
+    )
+
+    aggregate_failures do
+      expect(result.missing_keys).to include("legal_documents.files: current terms/ja was not found")
+      expect(legal_documents_validator).to have_received(:call).with(database: false)
+    end
+  end
+
   it "production strict mode reports all missing keys together" do
     env = required_env.except("RAILS_MASTER_KEY", "RECIFY_DATABASE_PASSWORD")
     rails_config.active_record.encryption.primary_key = nil

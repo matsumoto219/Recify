@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "production_legal_documents_validator"
+
 require "erb"
 require "yaml"
 
@@ -50,7 +52,8 @@ class ProductionDataPlaneValidator
     cache_config: nil,
     storage_config: nil,
     recurring_config: nil,
-    deploy_config: nil
+    deploy_config: nil,
+    legal_documents_validator: ProductionLegalDocumentsValidator
   )
     @rails_config = rails_config
     @database_configurations = database_configurations
@@ -61,6 +64,7 @@ class ProductionDataPlaneValidator
     @storage_config = storage_config
     @recurring_config = recurring_config
     @deploy_config = deploy_config
+    @legal_documents_validator = legal_documents_validator
   end
 
   def validate!
@@ -87,7 +91,12 @@ class ProductionDataPlaneValidator
     missing += missing_solid_cache_items
     missing += missing_active_storage_items
     missing += missing_recurring_items
+    missing += missing_legal_document_database_items
     missing
+  end
+
+  def missing_legal_document_database_items
+    legal_documents_validator.call(database: true).missing_items
   end
 
   def missing_database_items
@@ -239,4 +248,6 @@ class ProductionDataPlaneValidator
   def error_message(items)
     "Missing required production data-plane configuration: #{items.join(', ')}"
   end
+
+  attr_reader :legal_documents_validator
 end

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "production_legal_documents_validator"
 require_relative "production_runtime_config"
 
 class ProductionEnvValidator
@@ -71,12 +72,14 @@ class ProductionEnvValidator
     rails_config: Rails.application.config,
     application_mailer_from: nil,
     devise_mailer_sender: nil,
+    legal_documents_validator: ProductionLegalDocumentsValidator,
     strict: Rails.env.production?
   )
     @env = env
     @rails_config = rails_config
     @application_mailer_from = application_mailer_from
     @devise_mailer_sender = devise_mailer_sender
+    @legal_documents_validator = legal_documents_validator
     @strict = strict
     @runtime_config = ProductionRuntimeConfig.new(env: env)
   end
@@ -104,7 +107,12 @@ class ProductionEnvValidator
     missing += missing_ocr_keys
     missing += missing_ai_keys
     missing += missing_turnstile_keys
+    missing += missing_legal_document_file_items
     missing + missing_mail_configuration_keys
+  end
+
+  def missing_legal_document_file_items
+    legal_documents_validator.call(database: false).missing_items
   end
 
   def missing_encryption_keys
@@ -206,5 +214,5 @@ class ProductionEnvValidator
     "Missing required production environment configuration: #{keys.join(', ')}"
   end
 
-  attr_reader :application_mailer_from, :devise_mailer_sender
+  attr_reader :application_mailer_from, :devise_mailer_sender, :legal_documents_validator
 end
