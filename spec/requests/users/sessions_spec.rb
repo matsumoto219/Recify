@@ -27,6 +27,7 @@ RSpec.describe 'User password sessions', type: :request do
 
   it 'passkey未登録userはpassword loginで従来通りログイン完了する' do
     user = create(:user)
+    accept_current_legal_documents_for_request(user)
 
     expect do
       post user_session_path,
@@ -293,6 +294,7 @@ RSpec.describe 'User password sessions', type: :request do
 
   it 'session version一致なら通常アクセスできる' do
     user = create(:user)
+    accept_current_legal_documents_for_request(user)
 
     post user_session_path,
          params: { user: { email: user.email, password: 'password' } }
@@ -304,6 +306,7 @@ RSpec.describe 'User password sessions', type: :request do
 
   it 'request時に現在sessionのlast_seen_atを更新する' do
     user = create(:user)
+    accept_current_legal_documents_for_request(user)
 
     post user_session_path,
          params: { user: { email: user.email, password: 'password' } }
@@ -320,6 +323,7 @@ RSpec.describe 'User password sessions', type: :request do
 
   it 'last_seen_atが5分未満なら更新しない' do
     user = create(:user)
+    accept_current_legal_documents_for_request(user)
 
     post user_session_path,
          params: { user: { email: user.email, password: 'password' } }

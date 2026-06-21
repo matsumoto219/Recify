@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "openssl"
+require "uri"
 
 class ApplicationController < ActionController::Base
   PUBLIC_LAYOUT_ACTIONS = {
@@ -19,6 +20,8 @@ class ApplicationController < ActionController::Base
   PUBLIC_HEADER_ACTIONS = PUBLIC_LAYOUT_ACTIONS.merge(AUTH_HEADER_ACTIONS).freeze
 
   USER_SESSION_VERSION_SESSION_KEY = :user_session_version
+  LEGAL_CONSENT_RETURN_TO_SESSION_KEY = :legal_consent_return_to
+  LEGAL_CONSENT_LOCALE = :ja
 
   class RateLimitStore
     class << self
@@ -51,6 +54,7 @@ class ApplicationController < ActionController::Base
   before_action :enforce_user_session_version!, unless: :skip_user_session_version_enforcement?
   before_action :enforce_maintenance_existing_session!
   before_action :record_security_event_request_detections
+  before_action :enforce_legal_reconsent!
   before_action :prepare_notifications_dropdown, if: :prepare_notifications_dropdown?
 
   rescue_from ActionController::InvalidAuthenticityToken, with: :record_csrf_failure_and_raise
@@ -83,6 +87,65 @@ class ApplicationController < ActionController::Base
 
   def public_header_page?
     PUBLIC_HEADER_ACTIONS.fetch(controller_path, []).include?(action_name)
+  end
+
+  def enforce_legal_reconsent!
+    return unless request.format.html?
+    return if legal_reconsent_exempt_request?
+    return unless user_signed_in?
+    return if current_user.guest?
+
+    requirement = LegalConsents::Requirement.new(user: current_user, locale: legal_consent_locale)
+    return unless requirement.required?
+
+    store_legal_consent_return_to
+    redirect_to legal_consent_path,
+                flash: { warning: t("legal_consents.flash.required") },
+                status: :see_other
+  end
+
+  def legal_reconsent_exempt_request?
+    return true if controller_path == "legal_consents"
+    return true if public_layout_page?
+    return true if %w[contact_requests errors sitemap guest_sessions].include?(controller_path)
+    return true if legal_reconsent_devise_request?
+
+    false
+  end
+
+  def legal_reconsent_devise_request?
+    case controller_path
+    when "users/sessions"
+      %w[new create destroy].include?(action_name)
+    when "users/registrations"
+      %w[new create].include?(action_name)
+    when "users/passwords", "users/confirmations", "users/unlocks", "users/passkey_sessions"
+      true
+    else
+      false
+    end
+  end
+
+  def store_legal_consent_return_to
+    return unless request.get?
+    return unless legal_consent_safe_return_path?(request.fullpath)
+
+    session[LEGAL_CONSENT_RETURN_TO_SESSION_KEY] = request.fullpath
+  end
+
+  def legal_consent_safe_return_path?(path)
+    path = path.to_s
+    return false unless path.start_with?("/")
+    return false if path.start_with?("//")
+
+    uri = URI.parse(path)
+    uri.host.blank? && uri.scheme.blank?
+  rescue URI::InvalidURIError
+    false
+  end
+
+  def legal_consent_locale
+    LEGAL_CONSENT_LOCALE
   end
 
   def enforce_user_session_version!

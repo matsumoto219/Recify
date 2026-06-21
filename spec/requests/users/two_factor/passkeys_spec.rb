@@ -143,6 +143,7 @@ RSpec.describe 'User passkey step-up', type: :request do
 
     it 'step-up成功でログインし、pending/challengeを削除してTrackableを更新する' do
       user = create(:user)
+      accept_current_legal_documents_for_request(user)
       passkey = create_passkey_with_fake_client(user)
       start_pending_step_up(user)
       options = step_up_options_payload

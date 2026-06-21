@@ -1,0 +1,23 @@
+ja:
+  legal_consents:
+    flash:
+      required: 利用規約またはプライバシーポリシーの更新への同意が必要です。
+      accepted: 利用規約とプライバシーポリシーへの同意を記録しました。
+      already_current: すでに最新の利用規約とプライバシーポリシーに同意済みです。
+    errors:
+      agreement_required: 続行するには利用規約とプライバシーポリシーへの同意が必要です。
+    show:
+      title: 利用規約とプライバシーポリシーの確認
+      subtitle: Recifyを引き続き利用する前に、更新された利用規約とプライバシーポリシーを確認してください。
+      description: 重要な内容が更新された場合、Recifyでは利用規約またはプライバシーポリシーへの再同意をお願いしています。
+      restricted_notice: 同意が完了するまで、レシート管理や設定などのログイン後機能は利用できません。全文は各リンクから確認できます。
+      required_documents: 確認が必要な項目
+      version: "バージョン: %{version}"
+      open_document:
+        terms: 利用規約を確認
+        privacy: プライバシーポリシーを確認
+      agreement_label: 利用規約とプライバシーポリシーを確認し、内容に同意します。
+      agreement_hint: 同意すると、現在のアカウントに同意履歴が記録されます。
+      submit: 同意して続ける
+      submitting: 記録しています
+      logout: ログアウト

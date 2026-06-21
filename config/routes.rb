@@ -68,6 +68,7 @@ Rails.application.routes.draw do
   post "/users/guest_sign_in", to: "guest_sessions#create", as: :guest_sign_in
   get "/contact", to: "contact_requests#new", as: :contact
   post "/contact", to: "contact_requests#create"
+  resource :legal_consent, only: %i[show create], path: "legal/consent"
   get "/terms", to: "legal#terms", as: :terms
   get "/privacy", to: "legal#privacy", as: :privacy
   get "/sitemap.xml", to: "sitemap#show", defaults: { format: :xml }, as: :sitemap

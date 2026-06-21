@@ -48,6 +48,40 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include Devise::Test::IntegrationHelpers, type: :request
 
+  module LegalConsentRequestHelpers
+    def sign_in(resource, scope: nil)
+      accept_current_legal_documents_for_request(resource) unless @skip_legal_acceptance_sign_in
+      super
+    end
+
+    def sign_in_without_legal_acceptance(resource, scope: nil)
+      @skip_legal_acceptance_sign_in = true
+      sign_in(resource, scope: scope)
+    ensure
+      @skip_legal_acceptance_sign_in = false
+    end
+
+    def accept_current_legal_documents_for_request(resource, context: "signup")
+      return unless resource.is_a?(User)
+      return unless resource.persisted?
+      return if resource.guest?
+
+      LegalDocuments::Sync.call
+      LegalAcceptances::Recorder.record_current_documents!(
+        user: resource,
+        acceptance_context: context,
+        request: nil,
+        locale: :ja
+      )
+    end
+  end
+
+  config.include LegalConsentRequestHelpers, type: :request
+
+  config.before(type: :request) do
+    LegalDocuments::Sync.call if ActiveRecord::Base.connection.data_source_exists?("legal_documents")
+  end
+
   config.around do |example|
     turnstile_env_keys = %w[
       TURNSTILE_ENABLED
