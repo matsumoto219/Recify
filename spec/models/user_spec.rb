@@ -138,34 +138,17 @@ RSpec.describe User, type: :model do
         expect(user).to be_confirmed
         expect(user.confirmation_token).to be_nil
         expect(user.name).to be_blank
-        expect(user.terms_accepted_at).to be_nil
-        expect(user.privacy_accepted_at).to be_nil
+        expect(user.legal_acceptances).to be_empty
       end
     end
   end
 
-  describe 'legal acceptance' do
-    around do |example|
-      travel_to(Time.zone.parse('2026-05-23 10:00:00')) { example.run }
-    end
+  describe 'legal agreement validation' do
+    it '同意必須contextでは同意済みなら有効にする' do
+      user = build(:user, legal_agreement_required: true, legal_agreement: '1')
 
-    it '同意必須contextではaccepted_atとversionをサーバー側で保存する' do
-      user = build(:user,
-                   legal_agreement_required: true,
-                   legal_agreement: '1',
-                   terms_accepted_at: 1.year.ago,
-                   terms_version: 'client-version',
-                   privacy_accepted_at: 1.year.ago,
-                   privacy_version: 'client-version')
-
-      user.save!
-
-      aggregate_failures do
-        expect(user.terms_accepted_at).to eq(Time.current)
-        expect(user.terms_version).to eq(described_class::LEGAL_TERMS_VERSION)
-        expect(user.privacy_accepted_at).to eq(Time.current)
-        expect(user.privacy_version).to eq(described_class::LEGAL_PRIVACY_VERSION)
-      end
+      expect(user).to be_valid
+      expect { user.save! }.not_to change(LegalAcceptance, :count)
     end
 
     it '同意必須contextで未同意なら不正にする' do

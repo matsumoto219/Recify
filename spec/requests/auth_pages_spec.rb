@@ -479,21 +479,18 @@ RSpec.describe 'Auth pages', type: :request do
 
     it 'registration creates unconfirmed user and sends confirmation mail' do
       email = 'new-confirmable-user@example.com'
-      accepted_at = Time.zone.parse('2026-05-23 10:00:00')
 
-      travel_to(accepted_at) do
-        expect do
-          post user_registration_path,
-            params: {
-              user: {
-                email: email,
-                password: 'password',
-                password_confirmation: 'password',
-                legal_agreement: '1'
-              }
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
             }
-        end.to change(User, :count).by(1)
-      end
+          }
+      end.to change(User, :count).by(1)
 
       user = User.find_by!(email: email)
 
@@ -503,10 +500,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(flash[:notice]).not_to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(user).not_to be_confirmed
         expect(user.confirmation_token).to be_present
-        expect(user.terms_accepted_at).to eq(accepted_at)
-        expect(user.terms_version).to eq(User::LEGAL_TERMS_VERSION)
-        expect(user.privacy_accepted_at).to eq(accepted_at)
-        expect(user.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
+        expect(user.legal_acceptances).to be_empty
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
@@ -685,31 +679,26 @@ RSpec.describe 'Auth pages', type: :request do
 
     it 'registration ignores spoofed legal acceptance params' do
       email = 'spoofed-legal-acceptance@example.com'
-      accepted_at = Time.zone.parse('2026-05-23 11:00:00')
 
-      travel_to(accepted_at) do
-        post user_registration_path,
-          params: {
-            user: {
-              email: email,
-              password: 'password',
-              password_confirmation: 'password',
-              legal_agreement: '1',
-              terms_accepted_at: 1.year.ago,
-              terms_version: 'client-version',
-              privacy_accepted_at: 1.year.ago,
-              privacy_version: 'client-version'
-            }
+      post user_registration_path,
+        params: {
+          user: {
+            email: email,
+            password: 'password',
+            password_confirmation: 'password',
+            legal_agreement: '1',
+            terms_accepted_at: 1.year.ago,
+            terms_version: 'client-version',
+            privacy_accepted_at: 1.year.ago,
+            privacy_version: 'client-version'
           }
-      end
+        }
 
       user = User.find_by!(email: email)
 
       aggregate_failures do
-        expect(user.terms_accepted_at).to eq(accepted_at)
-        expect(user.terms_version).to eq(User::LEGAL_TERMS_VERSION)
-        expect(user.privacy_accepted_at).to eq(accepted_at)
-        expect(user.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
+        expect(response).to redirect_to(new_user_session_path)
+        expect(user.legal_acceptances).to be_empty
       end
     end
 

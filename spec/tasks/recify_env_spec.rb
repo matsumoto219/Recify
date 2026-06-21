@@ -5,7 +5,7 @@ require "rake"
 
 RSpec.describe "recify:env tasks" do
   before(:all) do
-    Rails.application.load_tasks
+    Rails.application.load_tasks unless Rake::Task.task_defined?("recify:env:validate")
   end
 
   let(:task) { Rake::Task["recify:env:validate"] }

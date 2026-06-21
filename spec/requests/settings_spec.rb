@@ -1072,10 +1072,7 @@ RSpec.describe 'Settings', type: :request do
         expect(guest.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to eq('guest-upgrade@example.com')
         expect(guest).to be_valid_password('password123')
-        expect(guest.terms_accepted_at).to eq(accepted_at)
-        expect(guest.terms_version).to eq(User::LEGAL_TERMS_VERSION)
-        expect(guest.privacy_accepted_at).to eq(accepted_at)
-        expect(guest.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
+        expect(guest.legal_acceptances).to be_empty
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(delivered_recipients).to include('guest-upgrade@example.com')
         expect(delivered_recipients).not_to include(fake_email)
@@ -1252,8 +1249,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
         expect(guest.reload.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to be_nil
-        expect(guest.terms_accepted_at).to be_nil
-        expect(guest.privacy_accepted_at).to be_nil
+        expect(guest.legal_acceptances).to be_empty
         expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
@@ -1280,8 +1276,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
         expect(guest.reload.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to be_nil
-        expect(guest.terms_accepted_at).to be_nil
-        expect(guest.privacy_accepted_at).to be_nil
+        expect(guest.legal_acceptances).to be_empty
         expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
@@ -1290,32 +1285,27 @@ RSpec.describe 'Settings', type: :request do
       sign_out user
       guest = User.guest!
       sign_in guest
-      accepted_at = Time.zone.parse('2026-05-23 13:00:00')
 
-      travel_to(accepted_at) do
-        patch user_registration_path,
-              params: {
-                update_context: 'guest_registration',
-                user: {
-                  email: 'guest-spoofed-legal@example.com',
-                  password: 'password123',
-                  password_confirmation: 'password123',
-                  legal_agreement: '1',
-                  terms_accepted_at: 1.year.ago,
-                  terms_version: 'client-version',
-                  privacy_accepted_at: 1.year.ago,
-                  privacy_version: 'client-version'
-                }
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'guest-spoofed-legal@example.com',
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '1',
+                terms_accepted_at: 1.year.ago,
+                terms_version: 'client-version',
+                privacy_accepted_at: 1.year.ago,
+                privacy_version: 'client-version'
               }
-      end
+            }
 
       guest.reload
 
       aggregate_failures do
-        expect(guest.terms_accepted_at).to eq(accepted_at)
-        expect(guest.terms_version).to eq(User::LEGAL_TERMS_VERSION)
-        expect(guest.privacy_accepted_at).to eq(accepted_at)
-        expect(guest.privacy_version).to eq(User::LEGAL_PRIVACY_VERSION)
+        expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(guest.legal_acceptances).to be_empty
       end
     end
 

@@ -12,6 +12,7 @@ class User < ApplicationRecord
   has_many :user_sessions, dependent: :destroy
   has_many :user_limit_overrides, dependent: :destroy
   has_many :usage_counters, dependent: :destroy
+  has_many :legal_acceptances, dependent: :destroy
   has_one :totp_credential, dependent: :destroy
   has_many :recovery_codes, dependent: :destroy
   has_many :requested_receipt_analysis_runs,
@@ -39,8 +40,6 @@ class User < ApplicationRecord
   MAX_AVATAR_FILE_SIZE = 5.megabytes
   DEFAULT_GUEST_CLEANUP_RETENTION_DAYS = 7
   GUEST_CLEANUP_RETENTION_PERIOD = DEFAULT_GUEST_CLEANUP_RETENTION_DAYS.days
-  LEGAL_TERMS_VERSION = "2026-06-21"
-  LEGAL_PRIVACY_VERSION = "2026-06-21"
 
   attr_accessor :legal_agreement, :legal_agreement_required
 
@@ -52,8 +51,6 @@ class User < ApplicationRecord
 
   validate :pending_email_must_be_available, if: -> { pending_email_candidate.present? }
   validate :legal_agreement_must_be_accepted, if: :legal_agreement_required?
-
-  before_validation :record_legal_acceptance, if: -> { legal_agreement_required? && legal_agreement_accepted? }
 
   def self.guest_cleanup_retention_period
     SystemSettings.limit_for("retention.guest_users_days").days
@@ -163,15 +160,6 @@ class User < ApplicationRecord
     return if legal_agreement_accepted?
 
     errors.add(:legal_agreement, :accepted)
-  end
-
-  def record_legal_acceptance
-    accepted_at = Time.current
-
-    self.terms_accepted_at = accepted_at
-    self.terms_version = LEGAL_TERMS_VERSION
-    self.privacy_accepted_at = accepted_at
-    self.privacy_version = LEGAL_PRIVACY_VERSION
   end
 
   def pending_email_candidate

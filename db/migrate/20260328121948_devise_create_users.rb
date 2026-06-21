@@ -52,12 +52,6 @@ class DeviseCreateUsers < ActiveRecord::Migration[8.1]
       t.string :theme_preference, null: false, default: "system"
       t.boolean :delete_confirmation_enabled, null: false, default: true
 
-      ## Legal acceptance
-      t.datetime :terms_accepted_at
-      t.string :terms_version
-      t.datetime :privacy_accepted_at
-      t.string :privacy_version
-
       ## Admin / security
       t.boolean :admin, null: false, default: false
       t.string :webauthn_id

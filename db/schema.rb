@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -133,6 +133,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
     t.index ["request_uid"], name: "index_contact_requests_on_request_uid", unique: true
     t.index ["status"], name: "index_contact_requests_on_status"
     t.index ["user_id"], name: "index_contact_requests_on_user_id"
+  end
+
+  create_table "legal_acceptances", force: :cascade do |t|
+    t.string "acceptance_context", null: false
+    t.datetime "accepted_at", null: false
+    t.datetime "created_at", null: false
+    t.string "document_type", null: false
+    t.inet "ip_address"
+    t.bigint "legal_document_id", null: false
+    t.string "locale", default: "ja", null: false
+    t.string "request_id", limit: 128
+    t.datetime "updated_at", null: false
+    t.string "user_agent", limit: 512
+    t.bigint "user_id", null: false
+    t.string "version", null: false
+    t.index ["accepted_at"], name: "index_legal_acceptances_on_accepted_at"
+    t.index ["document_type", "version", "locale"], name: "index_legal_acceptances_on_type_version_locale"
+    t.index ["legal_document_id"], name: "index_legal_acceptances_on_legal_document_id"
+    t.index ["user_id", "document_type", "version", "locale"], name: "index_legal_acceptances_on_user_type_version_locale", unique: true
+    t.index ["user_id", "legal_document_id"], name: "index_legal_acceptances_on_user_and_document", unique: true
+    t.index ["user_id"], name: "index_legal_acceptances_on_user_id"
+  end
+
+  create_table "legal_documents", force: :cascade do |t|
+    t.string "content_digest", null: false
+    t.datetime "created_at", null: false
+    t.boolean "current", default: false, null: false
+    t.string "document_type", null: false
+    t.date "effective_on", null: false
+    t.date "last_updated_on", null: false
+    t.string "locale", default: "ja", null: false
+    t.date "published_on", null: false
+    t.boolean "reconsent_required", default: true, null: false
+    t.string "source_path", null: false
+    t.string "status", default: "published", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "version", null: false
+    t.index ["document_type", "locale", "status"], name: "index_legal_documents_on_type_locale_status"
+    t.index ["document_type", "locale"], name: "index_legal_documents_one_current_per_type_locale", unique: true, where: "(current = true)"
+    t.index ["document_type", "version", "locale"], name: "index_legal_documents_on_type_version_locale", unique: true
+    t.index ["source_path"], name: "index_legal_documents_on_source_path", unique: true
   end
 
   create_table "notifications", force: :cascade do |t|
@@ -470,8 +512,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
     t.inet "last_sign_in_ip"
     t.datetime "locked_at"
     t.string "name"
-    t.datetime "privacy_accepted_at"
-    t.string "privacy_version"
     t.boolean "product_name_ai_completion_enabled", default: false, null: false
     t.boolean "push_notification_enabled", default: true, null: false
     t.datetime "remember_created_at"
@@ -481,8 +521,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
     t.integer "sign_in_count", default: 0, null: false
     t.bigint "storage_limit_bytes", default: 1073741824, null: false
     t.string "tax_rounding_mode", default: "floor", null: false
-    t.datetime "terms_accepted_at"
-    t.string "terms_version"
     t.string "theme_preference", default: "system", null: false
     t.string "unconfirmed_email"
     t.string "unlock_token"
@@ -505,6 +543,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_18_233112) do
   add_foreign_key "audit_logs", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "contact_requests", "users", column: "handled_by_user_id", on_delete: :nullify
   add_foreign_key "contact_requests", "users", on_delete: :nullify
+  add_foreign_key "legal_acceptances", "legal_documents"
+  add_foreign_key "legal_acceptances", "users"
   add_foreign_key "notifications", "users"
   add_foreign_key "passkeys", "users"
   add_foreign_key "receipt_adjustments", "receipts"
