@@ -189,6 +189,11 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(document.at_css("input[type='file'][name='announcement[image]']")).to be_present
         expect(document.at_css("input[name='announcement[image_alt_text]']")).to be_present
         expect(document.at_css("input[type='file'][name='announcement[image]']")['accept']).to eq('image/jpeg,image/png,image/webp')
+        expect(document.at_css('[data-controller~="attachment-preview"]')).to be_present
+        expect(document.at_css('[data-attachment-preview-target~="image"]')['class']).to include('hidden')
+        expect(document.at_css('[data-attachment-preview-target~="fallback"]')['class']).not_to include('hidden')
+        expect(document.at_css("input[type='file'][name='announcement[image]']")['data-action']).to include('change->attachment-preview#preview')
+        expect(document.at_css('[data-attachment-preview-target~="error"]')['class']).to include('hidden')
         expect(document.css("input[name*='announcement_links_attributes']").size).to be >= 3
         expect(response.body).to include(I18n.t('admin.announcements.form.link_fields.title', number: 3))
         expect(response.body).to include(I18n.t('admin.announcements.form.image_policy.format_notice', max_size: image_max_size))
@@ -719,6 +724,35 @@ RSpec.describe 'Admin announcements', type: :request do
 
           expect(response).to have_http_status(:not_found)
         end
+      end
+    end
+
+    it '保存済み画像をプレビューし、削除チェックと差し替えプレビューを連動できる' do
+      admin = create(:user, :admin)
+      draft = create(:announcement, status: 'draft', image_alt_text: '既存画像')
+      draft.image.attach(
+        io: StringIO.new(png_bytes(width: 320, height: 180)),
+        filename: 'announcement-preview.png',
+        content_type: 'image/png'
+      )
+      sign_in admin
+
+      get edit_admin_announcement_path(draft)
+
+      document = Nokogiri::HTML(response.body)
+      preview_image = document.at_css('[data-attachment-preview-target~="image"]')
+      fallback = document.at_css('[data-attachment-preview-target~="fallback"]')
+      remove_checkbox = document.at_css("input[name='announcement[remove_image]']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(preview_image).to be_present
+        expect(preview_image['src']).to include('/rails/active_storage/')
+        expect(preview_image['data-persisted-url']).to include('/rails/active_storage/')
+        expect(preview_image['class']).not_to include('hidden')
+        expect(fallback['class']).to include('hidden')
+        expect(remove_checkbox['data-action']).to include('change->attachment-preview#toggleRemove')
+        expect(remove_checkbox['data-attachment-preview-target']).to include('removeCheckbox')
       end
     end
   end

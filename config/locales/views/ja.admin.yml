@@ -159,6 +159,9 @@ ja:
         image_description: お知らせ詳細ページに表示する画像を下書きに添付できます。公開前に内容を確認してください。
         image_empty: 画像はまだ添付されていません。
         image_preview_alt: 現在の添付画像
+        image_validation:
+          invalid_type: JPEG / PNG / WebP形式の画像を選択してください。
+          file_too_large: 画像サイズは%{max_size}以下にしてください。
         image_policy:
           title: 画像アップロードの注意
           public_notice: 公開後はお知らせ詳細ページに表示されます。

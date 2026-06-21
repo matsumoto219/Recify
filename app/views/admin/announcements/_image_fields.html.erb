@@ -3,6 +3,18 @@
   image_max_file_size = Announcement.image_max_file_size
   image_min_dimension = Announcement.image_min_dimension
   image_max_dimension = Announcement.image_max_dimension
+  image_preview_attributes = {
+    alt: announcement.image_alt_text.presence || t("admin.announcements.form.image_preview_alt"),
+    class: [
+      "max-h-full max-w-full rounded-lg object-contain",
+      ("hidden" unless image_attached)
+    ].compact.join(" "),
+    data: {
+      attachment_preview_target: "image",
+      persisted_url: (url_for(announcement.image) if image_attached)
+    }.compact
+  }
+  image_preview_attributes[:src] = url_for(announcement.image) if image_attached
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0" do %>
@@ -11,16 +23,24 @@
     <p class="mt-1 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= t("admin.announcements.form.image_description") %></p>
   </div>
 
-  <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+  <div
+    class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+    data-controller="attachment-preview"
+    data-attachment-preview-invalid-type-message-value="<%= t("admin.announcements.form.image_validation.invalid_type") %>"
+    data-attachment-preview-file-too-large-message-value="<%= t("admin.announcements.form.image_validation.file_too_large", max_size: number_to_human_size(image_max_file_size)) %>"
+    data-attachment-preview-max-file-size-bytes-value="<%= image_max_file_size %>">
     <div class="min-w-0 space-y-3">
-      <% if image_attached %>
-        <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
-          <div class="flex aspect-video items-center justify-center p-3">
-            <%= image_tag announcement.image,
-                  alt: announcement.image_alt_text.presence || t("admin.announcements.form.image_preview_alt"),
-                  class: "max-h-full max-w-full rounded-lg object-contain" %>
+      <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
+        <div class="flex aspect-video items-center justify-center p-3">
+          <%= tag.img(**image_preview_attributes) %>
+          <div class="<%= image_attached ? "hidden" : "flex" %> min-w-0 flex-col items-center justify-center text-center" data-attachment-preview-target="fallback">
+            <span class="material-symbols-outlined text-4xl token-text-muted" aria-hidden="true">image</span>
+            <p class="mt-2 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= t("admin.announcements.form.image_empty") %></p>
           </div>
         </div>
+      </div>
+
+      <% if image_attached %>
         <dl class="grid min-w-0 gap-2 text-xs token-text-muted sm:grid-cols-2">
           <div class="min-w-0">
             <dt class="font-semibold"><%= t("admin.announcements.form.image_metadata.filename") %></dt>
@@ -31,13 +51,6 @@
             <dd><%= number_to_human_size(announcement.image.blob.byte_size) %></dd>
           </div>
         </dl>
-      <% else %>
-        <div class="flex aspect-square items-center justify-center rounded-xl border border-dashed token-border-soft token-bg-input p-8 text-center">
-          <div class="min-w-0">
-            <span class="material-symbols-outlined text-4xl token-text-muted" aria-hidden="true">image</span>
-            <p class="mt-2 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= t("admin.announcements.form.image_empty") %></p>
-          </div>
-        </div>
       <% end %>
     </div>
 
@@ -46,10 +59,17 @@
         <%= form.label :image, t("admin.announcements.form.labels.image"), class: label_class %>
         <%= form.file_field :image,
               accept: Announcement::ALLOWED_IMAGE_CONTENT_TYPES.join(","),
-              class: "block w-full min-w-0 cursor-pointer rounded-lg border token-border-soft token-bg-input px-4 py-3 text-sm token-text-base file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold" %>
+              class: "block w-full min-w-0 cursor-pointer rounded-lg border token-border-soft token-bg-input px-4 py-3 text-sm token-text-base file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
+              data: {
+                attachment_preview_target: "input",
+                action: "change->attachment-preview#preview"
+              } %>
         <% if announcement.errors[:image].any? %>
           <p class="px-1 text-xs token-text-error leading-relaxed"><%= announcement.errors.full_messages_for(:image).first %></p>
         <% end %>
+        <p class="hidden px-1 text-xs token-text-error leading-relaxed" data-attachment-preview-target="error">
+          <span data-attachment-preview-target="errorText"></span>
+        </p>
       </div>
 
       <%= render "shared/ui/form/text_field",
@@ -71,7 +91,13 @@
               hint: t("admin.announcements.form.hints.remove_image"),
               wrapper_class: "rounded-lg border token-border-soft token-bg-card-subtle px-3 py-3 text-left cursor-pointer select-none",
               content_class: "space-y-1",
-              label_class: "text-sm font-medium token-text-base" %>
+              label_class: "text-sm font-medium token-text-base",
+              html_options: {
+                data: {
+                  attachment_preview_target: "removeCheckbox",
+                  action: "change->attachment-preview#toggleRemove"
+                }
+              } %>
       <% end %>
 
       <div class="space-y-2 rounded-lg border token-border-soft token-bg-card-subtle p-3 text-xs token-text-muted">
