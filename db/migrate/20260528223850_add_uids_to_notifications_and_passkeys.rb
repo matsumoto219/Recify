@@ -1,6 +1,6 @@
 require "set"
 
-class AddUidsToNotificationsAndPasskeys < ActiveRecord::Migration[8.0]
+class AddUidsToNotificationsAndPasskeys < ActiveRecord::Migration[8.1]
   UID_RANDOM_LENGTH = 16
   UID_RETRY_LIMIT = 20
 

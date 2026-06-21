@@ -1,4 +1,4 @@
-class CreateContactRequests < ActiveRecord::Migration[8.0]
+class CreateContactRequests < ActiveRecord::Migration[8.1]
   def change
     create_table :contact_requests do |t|
       t.references :user, null: true, foreign_key: { on_delete: :nullify }
