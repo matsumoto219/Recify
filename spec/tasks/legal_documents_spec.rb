@@ -6,6 +6,11 @@ RSpec.describe "legal_documents tasks" do
     Rails.application.load_tasks unless Rake::Task.task_defined?("legal_documents:verify_files")
   end
 
+  before do
+    LegalAcceptance.delete_all
+    LegalDocument.delete_all
+  end
+
   describe "legal_documents:verify_files" do
     let(:task) { Rake::Task["legal_documents:verify_files"] }
 

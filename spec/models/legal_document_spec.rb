@@ -1,6 +1,11 @@
 require "rails_helper"
 
 RSpec.describe LegalDocument, type: :model do
+  before do
+    LegalAcceptance.delete_all
+    LegalDocument.delete_all
+  end
+
   it "validates document type" do
     document = build(:legal_document, document_type: "notice")
 

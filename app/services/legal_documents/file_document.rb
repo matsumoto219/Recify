@@ -54,7 +54,7 @@ module LegalDocuments
       @last_updated_on = date_value("last_updated_on")
       @reconsent_required = boolean_value("reconsent_required")
       @status = string_value("status")
-      @sections = data.fetch("sections")
+      @sections = @data.fetch("sections")
 
       validate!
     end

@@ -1,6 +1,11 @@
 require "rails_helper"
 
 RSpec.describe LegalDocuments::Sync do
+  before do
+    LegalAcceptance.delete_all
+    LegalDocument.delete_all
+  end
+
   it "synchronizes YAML legal documents into the database idempotently" do
     expect do
       described_class.call

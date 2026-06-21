@@ -1,6 +1,10 @@
 require 'rails_helper'
 
 RSpec.describe 'Public readiness', type: :request do
+  before do
+    LegalDocuments::Sync.call
+  end
+
   PUBLIC_ENTRYPOINTS = [
     [ :root_path, 'GET /' ],
     [ :terms_path, 'GET /terms' ],

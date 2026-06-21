@@ -1,6 +1,11 @@
 require "rails_helper"
 
 RSpec.describe LegalAcceptance, type: :model do
+  before do
+    LegalAcceptance.delete_all
+    LegalDocument.delete_all
+  end
+
   it "is valid with a matching legal document snapshot" do
     acceptance = build(:legal_acceptance)
 

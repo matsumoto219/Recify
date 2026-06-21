@@ -3,6 +3,10 @@
 require "rails_helper"
 
 RSpec.describe "Production-like public smoke", type: :request do
+  before do
+    LegalDocuments::Sync.call
+  end
+
   SMOKE_INTERNAL_MARKERS = [
     "SECRET_KEY_BASE",
     "RAILS_MASTER_KEY",

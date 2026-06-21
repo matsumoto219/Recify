@@ -1,9 +1,36 @@
 require 'rails_helper'
 
 RSpec.describe 'Legal pages', type: :request do
+  before do
+    LegalDocuments::Sync.call
+  end
+
+  def legal_repository
+    @legal_repository ||= LegalDocuments::Repository.new
+  end
+
+  def file_document(document_type)
+    legal_repository.current!(document_type: document_type, locale: :ja)
+  end
+
+  def db_document(document_type)
+    LegalDocument.current!(document_type, locale: :ja)
+  end
+
+  def formatted_legal_date(date)
+    "#{date.year}年#{date.month}月#{date.day}日"
+  end
+
+  def last_updated_text(document_type)
+    I18n.t(
+      'legal.common.last_updated',
+      date: formatted_legal_date(db_document(document_type).last_updated_on)
+    )
+  end
+
   describe 'GET /terms' do
     def terms_section_titles
-      I18n.t('legal.terms.sections').map { |section| section.fetch(:title) }
+      file_document(:terms).sections.map { |section| section.fetch('title') }
     end
 
     it '未ログインで利用規約shellを表示する' do
@@ -18,10 +45,11 @@ RSpec.describe 'Legal pages', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
-        expect(response.body).to include(I18n.t('legal.terms.title'))
+        expect(response.body).to include(file_document(:terms).title)
+        expect(response.body).to include(file_document(:terms).lead)
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(response.body).not_to include('公開ページの導線と表示枠を確認するための仮ページ')
-        expect(response.body).to include(I18n.t('legal.common.last_updated', date: I18n.t('legal.terms.last_updated_on')))
+        expect(response.body).to include(last_updated_text(:terms))
         expect(headings).to include(*terms_section_titles)
         expect(response.body).to include('本サービスの内容')
         expect(response.body).to include('ゲスト利用')
@@ -68,7 +96,7 @@ RSpec.describe 'Legal pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:ok)
         expect(response).not_to redirect_to(receipts_path)
-        expect(response.body).to include(I18n.t('legal.terms.title'))
+        expect(response.body).to include(file_document(:terms).title)
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(public_header).to be_present
         expect(receipts_link).to be_present
@@ -83,11 +111,25 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response.body).not_to include('translation missing')
       end
     end
+
+    it 'DB current documentがない場合は明確に失敗する' do
+      LegalDocument.where(document_type: 'terms', locale: 'ja').delete_all
+
+      get terms_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'DBとYAMLのdigestがずれている場合は明確に失敗する' do
+      db_document(:terms).update!(content_digest: 'stale-digest')
+
+      expect { get terms_path }.to raise_error(LegalDocuments::ValidationError, /not synchronized/)
+    end
   end
 
   describe 'GET /privacy' do
     def privacy_section_titles
-      I18n.t('legal.privacy.sections').map { |section| section.fetch(:title) }
+      file_document(:privacy).sections.map { |section| section.fetch('title') }
     end
 
     it '未ログインでプライバシーポリシーshellを表示する' do
@@ -102,10 +144,11 @@ RSpec.describe 'Legal pages', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
-        expect(response.body).to include(I18n.t('legal.privacy.title'))
+        expect(response.body).to include(file_document(:privacy).title)
+        expect(response.body).to include(file_document(:privacy).lead)
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(response.body).not_to include('公開ページの導線と表示枠を確認するための仮ページ')
-        expect(response.body).to include(I18n.t('legal.common.last_updated', date: I18n.t('legal.privacy.last_updated_on')))
+        expect(response.body).to include(last_updated_text(:privacy))
         expect(headings).to include(*privacy_section_titles)
         expect(response.body).to include('レシート画像')
         expect(response.body).to include('OCR処理')
@@ -142,7 +185,7 @@ RSpec.describe 'Legal pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:ok)
         expect(response).not_to redirect_to(receipts_path)
-        expect(response.body).to include(I18n.t('legal.privacy.title'))
+        expect(response.body).to include(file_document(:privacy).title)
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(public_header).to be_present
         expect(receipts_link).to be_present

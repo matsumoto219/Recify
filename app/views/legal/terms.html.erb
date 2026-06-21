@@ -1,43 +1,6 @@
-<% content_for :title, t("legal.terms.title") %>
-<% content_for :meta_description, t("legal.terms.meta_description", default: t("legal.terms.lead")) %>
+<% content_for :title, @legal_file_document.title %>
+<% content_for :meta_description, @legal_file_document.meta_description %>
 
-<%= render "shared/ui/layout/ambient_background" %>
-
-<section class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
-  <%= render "shared/ui/layout/section_header",
-        title: t("legal.terms.title"),
-        subtitle: t("legal.terms.lead"),
-        title_size: "text-2xl md:text-3xl",
-        subtitle_size: "text-sm md:text-base",
-        align: :center %>
-
-  <p class="text-center text-xs font-semibold uppercase tracking-wider token-text-muted">
-    <%= t("legal.common.last_updated", date: t("legal.terms.last_updated_on")) %>
-  </p>
-
-  <div class="space-y-4">
-    <% t("legal.terms.sections").each do |section| %>
-      <%= render "shared/ui/layout/surface_card", padding: :md do %>
-        <section class="space-y-4">
-          <h2 class="text-lg font-bold token-text-base"><%= section.fetch(:title) %></h2>
-
-          <% Array(section[:paragraphs]).each do |paragraph| %>
-            <p class="text-sm leading-7 token-text-muted"><%= paragraph %></p>
-          <% end %>
-
-          <% if section[:items].present? %>
-            <ul class="space-y-2 pl-5 text-sm leading-7 token-text-muted">
-              <% section.fetch(:items).each do |item| %>
-                <li class="list-disc"><%= item %></li>
-              <% end %>
-            </ul>
-          <% end %>
-
-          <% Array(section[:paragraphs_after]).each do |paragraph| %>
-            <p class="text-sm leading-7 token-text-muted"><%= paragraph %></p>
-          <% end %>
-        </section>
-      <% end %>
-    <% end %>
-  </div>
-</section>
+<%= render "document",
+      legal_document: @legal_document,
+      file_document: @legal_file_document %>

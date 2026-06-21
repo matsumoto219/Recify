@@ -3,6 +3,10 @@
 require 'rails_helper'
 
 RSpec.describe 'Deploy-prep security hardening', type: :request do
+  before do
+    LegalDocuments::Sync.call
+  end
+
   PUBLIC_HTML_ENTRYPOINTS = [
     :root_path,
     :terms_path,

@@ -3,6 +3,10 @@
 require "rails_helper"
 
 RSpec.describe "Public meta tags", type: :request do
+  before do
+    LegalDocuments::Sync.call
+  end
+
   around do |example|
     original_routes_options = Rails.application.routes.default_url_options.dup
     original_mailer_options = Rails.application.config.action_mailer.default_url_options.dup
@@ -98,7 +102,7 @@ RSpec.describe "Public meta tags", type: :request do
 
     include_examples "public OGP meta",
                      expected_title: "利用規約 | Recify",
-                     expected_description: I18n.t("legal.terms.meta_description"),
+                     expected_description: LegalDocuments::Repository.new.current!(document_type: :terms, locale: :ja).meta_description,
                      expected_path: "/terms"
   end
 
@@ -109,7 +113,7 @@ RSpec.describe "Public meta tags", type: :request do
 
     include_examples "public OGP meta",
                      expected_title: "プライバシーポリシー | Recify",
-                     expected_description: I18n.t("legal.privacy.meta_description"),
+                     expected_description: LegalDocuments::Repository.new.current!(document_type: :privacy, locale: :ja).meta_description,
                      expected_path: "/privacy"
   end
 

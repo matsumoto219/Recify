@@ -1,6 +1,11 @@
 require "rails_helper"
 
 RSpec.describe LegalDocuments::Verifier do
+  before do
+    LegalAcceptance.delete_all
+    LegalDocument.delete_all
+  end
+
   it "fails database verification before sync" do
     expect do
       described_class.verify_database!
