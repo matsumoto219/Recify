@@ -1,3 +1,10 @@
+<%
+  versions_path = local_assigns[:versions_path]
+  current_document_path = local_assigns[:current_document_path]
+  show_version_notice = local_assigns.fetch(:show_version_notice, false)
+  document_is_current = local_assigns.fetch(:document_is_current, legal_document.current?)
+%>
+
 <%= render "shared/ui/layout/ambient_background" %>
 
 <section class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
@@ -11,6 +18,38 @@
   <p class="text-center text-xs font-semibold uppercase tracking-wider token-text-muted">
     <%= legal_document_last_updated_text(legal_document) %>
   </p>
+
+  <% if show_version_notice || versions_path.present? || current_document_path.present? %>
+    <div class="space-y-4">
+      <% if show_version_notice %>
+        <%= render "shared/ui/layout/surface_card",
+              padding: :sm,
+              surface_variant: :bg_elevated,
+              class: "border token-border-soft" do %>
+          <div class="flex flex-col gap-3 text-sm leading-7 token-text-muted sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              <%= document_is_current ? t("legal.version_navigation.current_notice") :
+                    t("legal.version_navigation.past_notice") %>
+            </p>
+
+            <% if current_document_path.present? && !document_is_current %>
+              <%= link_to legal_document_current_link_text(legal_document.document_type),
+                    current_document_path,
+                    class: "inline-flex items-center justify-center rounded-lg border token-border-soft px-3 py-2 text-sm font-bold token-text-brand transition-opacity hover:opacity-80" %>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+
+      <% if versions_path.present? %>
+        <div class="flex justify-center">
+          <%= link_to t("legal.version_navigation.view_versions"),
+                versions_path,
+                class: "inline-flex items-center justify-center rounded-lg border token-border-soft px-4 py-2 text-sm font-bold token-text-brand transition-opacity hover:opacity-80" %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
 
   <div class="space-y-4">
     <% file_document.sections.each do |section| %>

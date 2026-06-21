@@ -2,6 +2,36 @@ ja:
   legal:
     common:
       last_updated: "最終更新日: %{date}"
+    document_types:
+      terms: 利用規約
+      privacy: プライバシーポリシー
+    version:
+      title: "%{title} %{version}バージョン"
+    version_navigation:
+      view_versions: 更新履歴を見る
+      current_terms: 現在の利用規約を見る
+      current_privacy: 現在のプライバシーポリシーを見る
+      current_notice: これは現在のバージョンです。
+      past_notice: これは過去のバージョンです。現在公開されている内容は現在のバージョンで確認してください。
+    versions:
+      terms:
+        title: 利用規約の更新履歴
+        meta_description: Recifyの利用規約の現在のバージョンと過去のバージョンを確認できます。
+        lead: 利用規約の現在公開されている内容と過去のバージョンを確認できます。
+      privacy:
+        title: プライバシーポリシーの更新履歴
+        meta_description: Recifyのプライバシーポリシーの現在のバージョンと過去のバージョンを確認できます。
+        lead: プライバシーポリシーの現在公開されている内容と過去のバージョンを確認できます。
+      current_section: 公開中のバージョン
+      current_description: "%{document}の現在公開されている内容を表示しています。"
+      no_past_versions: 現時点で過去のバージョンはありません。
+      view_detail: このバージョンを開く
+      published_on: 公開日
+      effective_on: 施行日
+      last_updated_on: 最終更新日
+      badges:
+        current: 現在のバージョン
+        reconsent_required: 再同意対象
     dialog:
       close: 閉じる
       summary_label: 要約

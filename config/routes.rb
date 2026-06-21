@@ -70,7 +70,17 @@ Rails.application.routes.draw do
   post "/contact", to: "contact_requests#create"
   resource :legal_consent, only: %i[show create], path: "legal/consent"
   get "/terms", to: "legal#terms", as: :terms
+  get "/terms/versions", to: "legal#terms_versions", as: :terms_versions
+  get "/terms/versions/:version",
+      to: "legal#terms_version",
+      as: :terms_version,
+      constraints: { version: /\d{4}-\d{2}-\d{2}/ }
   get "/privacy", to: "legal#privacy", as: :privacy
+  get "/privacy/versions", to: "legal#privacy_versions", as: :privacy_versions
+  get "/privacy/versions/:version",
+      to: "legal#privacy_version",
+      as: :privacy_version,
+      constraints: { version: /\d{4}-\d{2}-\d{2}/ }
   get "/sitemap.xml", to: "sitemap#show", defaults: { format: :xml }, as: :sitemap
   resources :announcements, only: %i[index show], param: :public_id
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

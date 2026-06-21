@@ -106,6 +106,32 @@ RSpec.describe "Public meta tags", type: :request do
                      expected_path: "/terms"
   end
 
+  describe "GET /terms/versions" do
+    def perform_request
+      get terms_versions_path
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "利用規約の更新履歴 | Recify",
+                     expected_description: I18n.t("legal.versions.terms.meta_description"),
+                     expected_path: "/terms/versions"
+  end
+
+  describe "GET /terms/versions/:version" do
+    def perform_request
+      get terms_version_path("2026-06-21")
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "利用規約 2026-06-21バージョン | Recify",
+                     expected_description: LegalDocuments::Repository.new.find!(
+                       document_type: :terms,
+                       version: "2026-06-21",
+                       locale: :ja
+                     ).meta_description,
+                     expected_path: "/terms/versions/2026-06-21"
+  end
+
   describe "GET /privacy" do
     def perform_request
       get privacy_path
@@ -115,6 +141,32 @@ RSpec.describe "Public meta tags", type: :request do
                      expected_title: "プライバシーポリシー | Recify",
                      expected_description: LegalDocuments::Repository.new.current!(document_type: :privacy, locale: :ja).meta_description,
                      expected_path: "/privacy"
+  end
+
+  describe "GET /privacy/versions" do
+    def perform_request
+      get privacy_versions_path
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "プライバシーポリシーの更新履歴 | Recify",
+                     expected_description: I18n.t("legal.versions.privacy.meta_description"),
+                     expected_path: "/privacy/versions"
+  end
+
+  describe "GET /privacy/versions/:version" do
+    def perform_request
+      get privacy_version_path("2026-06-21")
+    end
+
+    include_examples "public OGP meta",
+                     expected_title: "プライバシーポリシー 2026-06-21バージョン | Recify",
+                     expected_description: LegalDocuments::Repository.new.find!(
+                       document_type: :privacy,
+                       version: "2026-06-21",
+                       locale: :ja
+                     ).meta_description,
+                     expected_path: "/privacy/versions/2026-06-21"
   end
 
   it "設定済みhostを優先し、Host headerをOGP URLへ反映しない" do

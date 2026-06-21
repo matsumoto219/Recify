@@ -7,7 +7,14 @@ class ApplicationController < ActionController::Base
   PUBLIC_LAYOUT_ACTIONS = {
     "announcements" => %w[index show],
     "home" => %w[index],
-    "legal" => %w[terms privacy]
+    "legal" => %w[
+      terms
+      terms_versions
+      terms_version
+      privacy
+      privacy_versions
+      privacy_version
+    ]
   }.freeze
   AUTH_HEADER_ACTIONS = {
     "contact_requests" => %w[new create],

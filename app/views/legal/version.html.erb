@@ -1,0 +1,10 @@
+<% content_for :title, t("legal.version.title", title: @legal_file_document.title, version: @legal_document.version) %>
+<% content_for :meta_description, @legal_file_document.meta_description %>
+
+<%= render "document",
+      legal_document: @legal_document,
+      file_document: @legal_file_document,
+      versions_path: legal_document_versions_path(@legal_document.document_type),
+      current_document_path: legal_document_current_path(@legal_document.document_type),
+      show_version_notice: true,
+      document_is_current: @legal_document.current? %>

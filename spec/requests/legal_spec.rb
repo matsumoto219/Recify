@@ -13,6 +13,10 @@ RSpec.describe 'Legal pages', type: :request do
     legal_repository.current!(document_type: document_type, locale: :ja)
   end
 
+  def file_document_version(document_type, version)
+    legal_repository.find!(document_type: document_type, version: version, locale: :ja)
+  end
+
   def db_document(document_type)
     LegalDocument.current!(document_type, locale: :ja)
   end
@@ -47,6 +51,7 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include(file_document(:terms).title)
         expect(response.body).to include(file_document(:terms).lead)
+        expect(document.at_css("a[href='#{terms_versions_path}']")).to be_present
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(response.body).not_to include('公開ページの導線と表示枠を確認するための仮ページ')
         expect(response.body).to include(last_updated_text(:terms))
@@ -146,6 +151,7 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include(file_document(:privacy).title)
         expect(response.body).to include(file_document(:privacy).lead)
+        expect(document.at_css("a[href='#{privacy_versions_path}']")).to be_present
         expect(response.body).not_to include('現在作成中の仮ページです')
         expect(response.body).not_to include('公開ページの導線と表示枠を確認するための仮ページ')
         expect(response.body).to include(last_updated_text(:privacy))
@@ -196,6 +202,137 @@ RSpec.describe 'Legal pages', type: :request do
         expect(response.body).not_to include('data-controller="home-reveal"')
         expect(response.body).not_to include('id="desktop-sidebar"')
         expect(response.body).not_to include('translation missing')
+      end
+    end
+  end
+
+  describe 'GET /terms/versions' do
+    it '利用規約の更新履歴を表示する' do
+      get terms_versions_path
+      document = Nokogiri::HTML(response.body)
+      current_document = db_document(:terms)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('legal.versions.terms.title'))
+        expect(response.body).to include(current_document.version)
+        expect(response.body).to include(current_document.title)
+        expect(response.body).to include(I18n.t('legal.versions.badges.current'))
+        expect(response.body).to include(I18n.t('legal.versions.no_past_versions'))
+        expect(document.at_css("a[href='#{terms_path}']")).to be_present
+        expect(document.at_css("a[href='#{terms_version_path(current_document.version)}']")).to be_present
+        expect(response.body).not_to include('translation missing')
+      end
+    end
+
+    it 'draftバージョンは一覧にも詳細にも出さない' do
+      draft = create(
+        :legal_document,
+        document_type: 'terms',
+        version: '2026-07-01',
+        status: 'draft',
+        source_path: 'config/legal_documents/terms/2026-07-01.ja.yml'
+      )
+
+      get terms_versions_path
+      expect(response.body).not_to include(draft.version)
+
+      get terms_version_path(draft.version)
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe 'GET /privacy/versions' do
+    it 'プライバシーポリシーの更新履歴を表示する' do
+      get privacy_versions_path
+      document = Nokogiri::HTML(response.body)
+      current_document = db_document(:privacy)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(I18n.t('legal.versions.privacy.title'))
+        expect(response.body).to include(current_document.version)
+        expect(response.body).to include(current_document.title)
+        expect(response.body).to include(I18n.t('legal.versions.badges.current'))
+        expect(response.body).to include(I18n.t('legal.versions.no_past_versions'))
+        expect(document.at_css("a[href='#{privacy_path}']")).to be_present
+        expect(document.at_css("a[href='#{privacy_version_path(current_document.version)}']")).to be_present
+        expect(response.body).not_to include('translation missing')
+      end
+    end
+  end
+
+  describe 'GET /terms/versions/:version' do
+    it '利用規約の指定バージョン本文を表示する' do
+      current_document = db_document(:terms)
+      file_document = file_document_version(:terms, current_document.version)
+
+      get terms_version_path(current_document.version)
+      document = Nokogiri::HTML(response.body)
+      headings = document.css('h2').map { |heading| heading.text.squish }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(file_document.title)
+        expect(response.body).to include(file_document.lead)
+        expect(response.body).to include(current_document.version)
+        expect(response.body).to include(I18n.t('legal.version_navigation.current_notice'))
+        expect(response.body).to include(last_updated_text(:terms))
+        expect(headings).to include('本サービスの内容')
+        expect(document.at_css("a[href='#{terms_versions_path}']")).to be_present
+        expect(response.body).not_to include('translation missing')
+      end
+    end
+
+    it '存在しないバージョンとpath traversal風のバージョンは404にする' do
+      get terms_version_path('2026-01-01')
+      expect(response).to have_http_status(:not_found)
+
+      get '/terms/versions/2026-06-21..'
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe 'GET /privacy/versions/:version' do
+    it 'プライバシーポリシーの指定バージョン本文を表示する' do
+      current_document = db_document(:privacy)
+      file_document = file_document_version(:privacy, current_document.version)
+
+      get privacy_version_path(current_document.version)
+      document = Nokogiri::HTML(response.body)
+      headings = document.css('h2').map { |heading| heading.text.squish }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include(file_document.title)
+        expect(response.body).to include(file_document.lead)
+        expect(response.body).to include(current_document.version)
+        expect(response.body).to include(I18n.t('legal.version_navigation.current_notice'))
+        expect(response.body).to include(last_updated_text(:privacy))
+        expect(headings).to include('取得する情報')
+        expect(document.at_css("a[href='#{privacy_versions_path}']")).to be_present
+        expect(response.body).not_to include('translation missing')
+      end
+    end
+  end
+
+  describe '再同意前のlegal version pages' do
+    it '再同意未完了ユーザーでも閲覧できる' do
+      user = create(:user)
+      sign_in_without_legal_acceptance user
+
+      aggregate_failures do
+        get terms_versions_path
+        expect(response).to have_http_status(:ok)
+
+        get terms_version_path(db_document(:terms).version)
+        expect(response).to have_http_status(:ok)
+
+        get privacy_versions_path
+        expect(response).to have_http_status(:ok)
+
+        get privacy_version_path(db_document(:privacy).version)
+        expect(response).to have_http_status(:ok)
       end
     end
   end

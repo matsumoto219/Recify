@@ -1,0 +1,86 @@
+<%
+  current_path = legal_document_current_path(@document_type)
+  past_documents = @legal_documents.reject(&:current?)
+%>
+
+<% content_for :title, t("legal.versions.#{@document_type}.title") %>
+<% content_for :meta_description, t("legal.versions.#{@document_type}.meta_description") %>
+
+<%= render "shared/ui/layout/ambient_background" %>
+
+<section class="mx-auto max-w-4xl space-y-8 px-4 py-10 pb-28 md:px-2 md:py-14 md:pb-12">
+  <%= render "shared/ui/layout/section_header",
+        title: t("legal.versions.#{@document_type}.title"),
+        subtitle: t("legal.versions.#{@document_type}.lead"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base",
+        align: :center %>
+
+  <div class="flex justify-center">
+    <%= link_to legal_document_current_link_text(@document_type),
+          current_path,
+          class: "inline-flex items-center justify-center rounded-lg border token-border-soft px-4 py-2 text-sm font-bold token-text-brand transition-opacity hover:opacity-80" %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="space-y-6">
+      <div class="space-y-2">
+        <h2 class="text-lg font-bold token-text-base"><%= t("legal.versions.current_section") %></h2>
+        <p class="text-sm leading-7 token-text-muted">
+          <%= t("legal.versions.current_description", document: legal_document_type_label(@document_type)) %>
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <% @legal_documents.each do |document| %>
+          <article class="rounded-xl border token-border-soft p-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-base font-bold token-text-base"><%= document.version %></h3>
+
+                  <% if document.current? %>
+                    <span class="inline-flex items-center rounded-full token-bg-elevated px-2.5 py-1 text-xs font-bold token-text-brand">
+                      <%= t("legal.versions.badges.current") %>
+                    </span>
+                  <% end %>
+
+                  <% if document.reconsent_required? %>
+                    <span class="inline-flex items-center rounded-full token-bg-elevated px-2.5 py-1 text-xs font-bold token-text-muted">
+                      <%= t("legal.versions.badges.reconsent_required") %>
+                    </span>
+                  <% end %>
+                </div>
+
+                <p class="text-sm font-semibold token-text-base"><%= document.title %></p>
+              </div>
+
+              <%= link_to t("legal.versions.view_detail"),
+                    legal_document_version_path(document),
+                    class: "inline-flex items-center justify-center rounded-lg border token-border-soft px-3 py-2 text-sm font-bold token-text-brand transition-opacity hover:opacity-80" %>
+            </div>
+
+            <dl class="mt-4 grid gap-3 text-sm token-text-muted sm:grid-cols-3">
+              <div>
+                <dt class="text-xs font-bold uppercase tracking-wider"><%= t("legal.versions.published_on") %></dt>
+                <dd class="mt-1"><%= legal_document_date(document.published_on) %></dd>
+              </div>
+              <div>
+                <dt class="text-xs font-bold uppercase tracking-wider"><%= t("legal.versions.effective_on") %></dt>
+                <dd class="mt-1"><%= legal_document_date(document.effective_on) %></dd>
+              </div>
+              <div>
+                <dt class="text-xs font-bold uppercase tracking-wider"><%= t("legal.versions.last_updated_on") %></dt>
+                <dd class="mt-1"><%= legal_document_date(document.last_updated_on) %></dd>
+              </div>
+            </dl>
+          </article>
+        <% end %>
+      </div>
+
+      <% if past_documents.empty? %>
+        <p class="text-sm leading-7 token-text-muted"><%= t("legal.versions.no_past_versions") %></p>
+      <% end %>
+    </div>
+  <% end %>
+</section>

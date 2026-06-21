@@ -5,7 +5,14 @@ module MetaTagsHelper
     "announcements" => %w[index show],
     "contact_requests" => %w[new create],
     "home" => %w[index],
-    "legal" => %w[terms privacy]
+    "legal" => %w[
+      terms
+      terms_versions
+      terms_version
+      privacy
+      privacy_versions
+      privacy_version
+    ]
   }.freeze
   DEFAULT_OG_IMAGE_PATH = "brand/recify-ogp.png"
   DEFAULT_TWITTER_CARD = "summary_large_image"
