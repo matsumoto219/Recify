@@ -9,6 +9,7 @@ RSpec.describe 'Settings', type: :request do
 
   before do
     ActionMailer::Base.deliveries.clear
+    LegalDocuments::Sync.call
     sign_in user
   end
 
@@ -53,6 +54,37 @@ RSpec.describe 'Settings', type: :request do
 
   def current_password_input_for(document, update_context)
     form_for_update_context(document, update_context).at_css('input[name="user[current_password]"]')
+  end
+
+  def current_legal_document(document_type)
+    LegalDocument.current!(document_type, locale: :ja)
+  end
+
+  def legal_acceptances_by_type(user)
+    user.legal_acceptances.index_by(&:document_type)
+  end
+
+  def expect_current_legal_acceptances(user, context:, accepted_at: nil)
+    acceptances = legal_acceptances_by_type(user.reload)
+    terms_document = current_legal_document(:terms)
+    privacy_document = current_legal_document(:privacy)
+
+    aggregate_failures do
+      expect(acceptances.keys).to contain_exactly("terms", "privacy")
+      expect(acceptances.fetch("terms")).to have_attributes(
+        legal_document: terms_document,
+        version: terms_document.version,
+        locale: terms_document.locale,
+        acceptance_context: context
+      )
+      expect(acceptances.fetch("privacy")).to have_attributes(
+        legal_document: privacy_document,
+        version: privacy_document.version,
+        locale: privacy_document.locale,
+        acceptance_context: context
+      )
+      expect(acceptances.values).to all(have_attributes(accepted_at: accepted_at || be_present))
+    end
   end
 
   describe 'GET /settings' do
@@ -1072,7 +1104,7 @@ RSpec.describe 'Settings', type: :request do
         expect(guest.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to eq('guest-upgrade@example.com')
         expect(guest).to be_valid_password('password123')
-        expect(guest.legal_acceptances).to be_empty
+        expect_current_legal_acceptances(guest, context: "guest_conversion", accepted_at: accepted_at)
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(delivered_recipients).to include('guest-upgrade@example.com')
         expect(delivered_recipients).not_to include(fake_email)
@@ -1285,27 +1317,38 @@ RSpec.describe 'Settings', type: :request do
       sign_out user
       guest = User.guest!
       sign_in guest
+      accepted_at = Time.zone.parse('2026-06-22 12:30:00')
 
-      patch user_registration_path,
-            params: {
-              update_context: 'guest_registration',
-              user: {
-                email: 'guest-spoofed-legal@example.com',
-                password: 'password123',
-                password_confirmation: 'password123',
-                legal_agreement: '1',
-                terms_accepted_at: 1.year.ago,
-                terms_version: 'client-version',
-                privacy_accepted_at: 1.year.ago,
-                privacy_version: 'client-version'
+      travel_to(accepted_at) do
+        patch user_registration_path,
+              params: {
+                update_context: 'guest_registration',
+                user: {
+                  email: 'guest-spoofed-legal@example.com',
+                  password: 'password123',
+                  password_confirmation: 'password123',
+                  legal_agreement: '1',
+                  terms_accepted_at: 1.year.ago,
+                  terms_version: 'client-version',
+                  privacy_accepted_at: 1.year.ago,
+                  privacy_version: 'client-version'
+                }
+              },
+              headers: {
+                "User-Agent" => "RSpec Guest Conversion Agent",
+                "X-Request-Id" => "guest-conversion-request-id"
               }
-            }
+      end
 
       guest.reload
+      acceptances = legal_acceptances_by_type(guest)
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
-        expect(guest.legal_acceptances).to be_empty
+        expect_current_legal_acceptances(guest, context: "guest_conversion", accepted_at: accepted_at)
+        expect(acceptances.values.map(&:version)).not_to include('client-version')
+        expect(acceptances.values).to all(have_attributes(user_agent: "RSpec Guest Conversion Agent"))
+        expect(acceptances.values).to all(have_attributes(request_id: "guest-conversion-request-id"))
       end
     end
 

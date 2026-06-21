@@ -5,6 +5,7 @@ RSpec.describe 'Auth pages', type: :request do
 
   before do
     ActionMailer::Base.deliveries.clear
+    LegalDocuments::Sync.call
   end
 
   after do
@@ -100,6 +101,37 @@ RSpec.describe 'Auth pages', type: :request do
     end
 
     public_header
+  end
+
+  def current_legal_document(document_type)
+    LegalDocument.current!(document_type, locale: :ja)
+  end
+
+  def legal_acceptances_by_type(user)
+    user.legal_acceptances.index_by(&:document_type)
+  end
+
+  def expect_current_legal_acceptances(user, context:)
+    acceptances = legal_acceptances_by_type(user.reload)
+    terms_document = current_legal_document(:terms)
+    privacy_document = current_legal_document(:privacy)
+
+    aggregate_failures do
+      expect(acceptances.keys).to contain_exactly("terms", "privacy")
+      expect(acceptances.fetch("terms")).to have_attributes(
+        legal_document: terms_document,
+        version: terms_document.version,
+        locale: terms_document.locale,
+        acceptance_context: context
+      )
+      expect(acceptances.fetch("privacy")).to have_attributes(
+        legal_document: privacy_document,
+        version: privacy_document.version,
+        locale: privacy_document.locale,
+        acceptance_context: context
+      )
+      expect(acceptances.values).to all(have_attributes(accepted_at: be_present))
+    end
   end
 
   def enable_login_restricted_maintenance(title: '臨時メンテナンス', body: "1行目\n2行目")
@@ -500,7 +532,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(flash[:notice]).not_to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(user).not_to be_confirmed
         expect(user.confirmation_token).to be_present
-        expect(user.legal_acceptances).to be_empty
+        expect_current_legal_acceptances(user, context: "signup")
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
@@ -639,6 +671,8 @@ RSpec.describe 'Auth pages', type: :request do
     end
 
     it 'registration without legal agreement is rejected' do
+      legal_acceptance_count = LegalAcceptance.count
+
       expect do
         post user_registration_path,
           params: {
@@ -654,11 +688,14 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(LegalAcceptance.count).to eq(legal_acceptance_count)
         expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
 
     it 'registration without legal agreement param is rejected' do
+      legal_acceptance_count = LegalAcceptance.count
+
       expect do
         post user_registration_path,
           params: {
@@ -673,32 +710,45 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.legal_agreement.accepted'))
+        expect(LegalAcceptance.count).to eq(legal_acceptance_count)
         expect(ActionMailer::Base.deliveries).to be_empty
       end
     end
 
     it 'registration ignores spoofed legal acceptance params' do
       email = 'spoofed-legal-acceptance@example.com'
+      accepted_at = Time.zone.parse('2026-06-22 12:00:00')
 
-      post user_registration_path,
-        params: {
-          user: {
-            email: email,
-            password: 'password',
-            password_confirmation: 'password',
-            legal_agreement: '1',
-            terms_accepted_at: 1.year.ago,
-            terms_version: 'client-version',
-            privacy_accepted_at: 1.year.ago,
-            privacy_version: 'client-version'
+      travel_to(accepted_at) do
+        post user_registration_path,
+          params: {
+            user: {
+              email: email,
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1',
+              terms_accepted_at: 1.year.ago,
+              terms_version: 'client-version',
+              privacy_accepted_at: 1.year.ago,
+              privacy_version: 'client-version'
+            }
+          },
+          headers: {
+            "User-Agent" => "RSpec Signup Agent",
+            "X-Request-Id" => "signup-request-id"
           }
-        }
+      end
 
       user = User.find_by!(email: email)
+      acceptances = legal_acceptances_by_type(user)
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(user.legal_acceptances).to be_empty
+        expect_current_legal_acceptances(user, context: "signup")
+        expect(acceptances.values.map(&:version)).not_to include('client-version')
+        expect(acceptances.values).to all(have_attributes(accepted_at: accepted_at))
+        expect(acceptances.values).to all(have_attributes(user_agent: "RSpec Signup Agent"))
+        expect(acceptances.values).to all(have_attributes(request_id: "signup-request-id"))
       end
     end
 

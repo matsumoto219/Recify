@@ -28,6 +28,7 @@ RSpec.describe 'GuestSessions', type: :request do
         expect(user.display_name).to eq(I18n.t('users.display.guest_name'))
         expect(user.display_email).to eq(I18n.t('users.display.email_unregistered'))
         expect(user.last_sign_in_at).to be_present
+        expect(user.legal_acceptances).to be_empty
       end
     end
 

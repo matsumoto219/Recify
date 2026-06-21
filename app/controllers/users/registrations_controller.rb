@@ -33,8 +33,31 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   # POST /resource
   def create
-    super do |resource|
-      set_flash_from_resource_errors(resource) if resource.errors.any?
+    build_resource(sign_up_params)
+
+    resource_saved = resource_class.transaction do
+      saved = resource.save
+      record_current_legal_acceptances!(resource, "signup") if saved
+      saved
+    end
+
+    yield resource if block_given?
+
+    if resource_saved
+      if resource.active_for_authentication?
+        set_flash_message! :notice, :signed_up
+        sign_up(resource_name, resource)
+        respond_with resource, location: after_sign_up_path_for(resource)
+      else
+        set_flash_message! :notice, :"signed_up_but_#{resource.inactive_message}"
+        expire_data_after_sign_in!
+        respond_with resource, location: after_inactive_sign_up_path_for(resource)
+      end
+    else
+      clean_up_passwords resource
+      set_minimum_password_length
+      set_flash_from_resource_errors(resource)
+      respond_with resource
     end
   end
 
@@ -202,7 +225,13 @@ class Users::RegistrationsController < Devise::RegistrationsController
       return
     end
 
-    if resource.start_guest_registration(guest_registration_params)
+    guest_registration_started = resource_class.transaction do
+      started = resource.start_guest_registration(guest_registration_params)
+      record_current_legal_acceptances!(resource, "guest_conversion") if started
+      started
+    end
+
+    if guest_registration_started
       flash[:notice] = t("flash.users.guest_registration.confirmation_sent")
       bypass_sign_in resource, scope: resource_name
       redirect_to settings_security_path(anchor: "guest-registration")
@@ -278,6 +307,15 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def prepare_settings_security_presenter
     @security_presenter = Settings::SecurityPresenter.new(user: resource)
+  end
+
+  def record_current_legal_acceptances!(user, acceptance_context)
+    LegalAcceptances::Recorder.record_current_documents!(
+      user: user,
+      acceptance_context: acceptance_context,
+      request: request,
+      locale: I18n.locale
+    )
   end
 
   # If you have extra params to permit, append them to the sanitizer.
