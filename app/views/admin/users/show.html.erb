@@ -4,7 +4,7 @@
   record = @record
   active_sessions = record[:active_sessions] || { count: 0, recent: [] }
   usage_limits = record[:usage_limits] || { storage: {}, limits: [] }
-  boolean_label = ->(value) { value ? t("admin.users.common.yes") : t("admin.users.common.no") }
+  boolean_label = ->(value) { admin_user_boolean_label(value) }
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
   limit_value_label = ->(row) { row[:storage] ? format_storage_size(row[:limit_value]) : number_with_delimiter(row[:limit_value]) }
   used_value_label = ->(row) { row[:storage] ? format_storage_size(row[:used_bytes]) : number_with_delimiter(row[:used_count]) }

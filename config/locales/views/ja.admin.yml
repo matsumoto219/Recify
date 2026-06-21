@@ -854,8 +854,8 @@ ja:
           amount_limit_relationship: 金額上限の大小関係を維持してください。receipt_total_amount_max は明細合計、調整額、支払い額、税額以上にし、receipt_item_line_total_max は receipt_item_price_max 以上にしてください。
     users:
       common:
-        yes: はい
-        no: いいえ
+        yes_label: はい
+        no_label: いいえ
         all: すべて
         limit_unit: "%{count}件"
       index:

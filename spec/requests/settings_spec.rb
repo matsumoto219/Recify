@@ -351,6 +351,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(avatar_images).to be_present
         expect(avatar_images.map { |image| image['alt'] }).to all(eq(I18n.t('shared.avatar.default_alt')))
+        expect(avatar_images.map { |image| image['src'] }).to all(include('/rails/active_storage/blobs/'))
+        expect(avatar_images.map { |image| image['src'] }.join("\n")).not_to include('/rails/active_storage/representations/')
       end
     end
 

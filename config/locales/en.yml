@@ -84,3 +84,12 @@ en:
     display:
       guest_name: "Guest user"
       email_unregistered: "Email not registered"
+  admin:
+    users:
+      common:
+        yes_label: "Yes"
+        no_label: "No"
+        all: "All"
+        limit_unit:
+          one: "%{count} item"
+          other: "%{count} items"

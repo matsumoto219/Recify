@@ -23,9 +23,7 @@
   display_name = user.respond_to?(:display_name) ? user.display_name.to_s : user&.name.to_s
   fallback_text = display_name[0, 1]&.upcase || "U"
   avatar_attached = user.respond_to?(:avatar) && user.avatar.attached? && user.avatar.blob&.persisted?
-  variant_size = size <= 64 ? 64 : 160
-  avatar_source = avatar_attached ? user.avatar.variant(resize_to_fill: [ variant_size, variant_size ]) : nil
-  avatar_url = avatar_source ? url_for(avatar_source) : ""
+  avatar_url = avatar_attached ? url_for(user.avatar) : ""
 
   font_size_class =
     if size <= 40
@@ -56,16 +54,16 @@
       data-avatar-preview-target="image"
       data-persisted-url="<%= avatar_url %>"
       data-avatar-image>
-  <% elsif avatar_source.present? %>
-    <%= image_tag avatar_source,
+  <% elsif avatar_attached %>
+    <%= image_tag user.avatar,
           alt: alt,
           class: "w-full h-full object-cover",
           data: { avatar_image: true } %>
   <% end %>
 
-  <% if preview || avatar_source.blank? %>
+  <% if preview || !avatar_attached %>
     <span
-      class="<%= avatar_source.present? ? 'hidden' : '' %>"
+      class="<%= avatar_attached ? 'hidden' : '' %>"
       data-avatar-fallback
       <% if preview %> data-avatar-preview-target="fallback" data-default-text="<%= fallback_text %>"<% end %>><%= fallback_text %></span>
   <% end %>

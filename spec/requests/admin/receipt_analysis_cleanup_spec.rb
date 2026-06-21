@@ -391,13 +391,17 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
            },
            headers: { 'HTTP_USER_AGENT' => 'Cleanup Request Spec' }
 
-      audit_log = AuditLog.order(:created_at).last
+      audit_log = AuditLog
+        .where(action: 'receipt_analysis_runs.cleanup_stale.execute', reason: 'actual stale cleanup')
+        .order(:created_at, :id)
+        .last
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: '2026-05-23T04:00', stale_limit: '10'))
         expect(stale_run.reload.status).to eq('failed')
         expect(stale_run.receipt.reload.status).to eq('failed')
         expect(AuditLog.count).to eq(audit_count + 1)
+        expect(audit_log).to be_present
         expect(audit_log).to have_attributes(
           actor_user: admin,
           action: 'receipt_analysis_runs.cleanup_stale.execute',

@@ -103,15 +103,15 @@ module Admin
       {
         booleans: [
           [ t("admin.users.common.all"), "" ],
-          [ t("admin.users.common.yes"), "true" ],
-          [ t("admin.users.common.no"), "false" ]
+          [ t("admin.users.common.yes_label"), "true" ],
+          [ t("admin.users.common.no_label"), "false" ]
         ],
         limits: admin_limit_options("admin.users.common.limit_unit")
       }
     end
 
     def admin_user_boolean_label(value)
-      value ? t("admin.users.common.yes") : t("admin.users.common.no")
+      value ? t("admin.users.common.yes_label") : t("admin.users.common.no_label")
     end
 
     def admin_short_timestamp_label(value)
