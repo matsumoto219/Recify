@@ -2,7 +2,7 @@ ja:
   legal_consents:
     flash:
       required: 利用規約またはプライバシーポリシーの更新への同意が必要です。
-      accepted: 利用規約とプライバシーポリシーへの同意を記録しました。
+      accepted: 利用規約とプライバシーポリシーへの同意を確認しました。
       already_current: すでに最新の利用規約とプライバシーポリシーに同意済みです。
     errors:
       agreement_required: 続行するには利用規約とプライバシーポリシーへの同意が必要です。
