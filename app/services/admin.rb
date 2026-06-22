@@ -98,6 +98,10 @@ module Admin
       UsersQuery.find(id: id)
     end
 
+    def legal_acceptance_status(user_id:, locale: I18n.locale)
+      LegalAcceptanceStatus.call(user_id: user_id, locale: locale)
+    end
+
     def receipt_analysis_cleanup_preview(**params)
       ReceiptAnalysisCleanupPreview.call(**params)
     end

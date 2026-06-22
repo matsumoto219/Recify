@@ -191,6 +191,22 @@ RSpec.describe 'Admin users', type: :request do
         sign_in_count: 3,
         failed_attempts: 1
       )
+      LegalDocuments::Sync.call
+      accepted_at = Time.zone.local(2026, 6, 22, 10, 0, 0)
+      create(
+        :legal_acceptance,
+        user: user,
+        legal_document: LegalDocument.current!(:terms, locale: :ja),
+        accepted_at: accepted_at,
+        acceptance_context: "signup"
+      )
+      create(
+        :legal_acceptance,
+        user: user,
+        legal_document: LegalDocument.current!(:privacy, locale: :ja),
+        accepted_at: accepted_at,
+        acceptance_context: "signup"
+      )
       create(:passkey, user: user, credential_id: 'hidden-credential-id', public_key: 'HIDDEN PUBLIC KEY', last_used_at: 30.minutes.ago)
       receipt = create(:receipt, user: user, store_name: 'ユーザー詳細レシート')
       quarantined_receipt = create(:receipt, :quarantined, user: user, store_name: '隔離中レシート')
@@ -225,6 +241,7 @@ RSpec.describe 'Admin users', type: :request do
       document = Nokogiri::HTML(response.body)
       copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
       copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
+      legal_acceptances_card = document.at_css('#admin-user-legal-acceptances')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -244,6 +261,12 @@ RSpec.describe 'Admin users', type: :request do
         expect(document.at_css('[data-admin-user-passkeys-count]').text).to eq('1')
         expect(document.at_css('[data-admin-user-receipts-count]').text).to eq('2')
         expect(document.at_css('[data-admin-user-active-sessions-count]').text).to eq('1')
+        expect(legal_acceptances_card.text).to include('法務同意')
+        expect(legal_acceptances_card.text).to include('利用規約')
+        expect(legal_acceptances_card.text).to include('プライバシーポリシー')
+        expect(legal_acceptances_card.text).to include('現行版同意済み')
+        expect(legal_acceptances_card.text).to include(LegalDocument.current!(:terms, locale: :ja).version)
+        expect(legal_acceptances_card.text).to include('signup')
         expect(response.body).to include('利用量と上限')
         expect(response.body).to include('min-w-[52rem] text-left text-sm')
         expect(response.body).to include('min-w-[8rem] whitespace-nowrap px-3 py-2 font-semibold')
@@ -273,6 +296,8 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).not_to include('cookie')
         expect(response.body).not_to include('remember_token')
         expect(response.body).not_to include('raw_response')
+        expect(response.body).not_to include('RSpec')
+        expect(response.body).not_to include('request_id')
         expect(response.body).not_to include('FULL PROMPT')
         expect(response.body).not_to include('SECRET')
         expect(UserSession.count).to eq(previous_user_session_count)
@@ -290,6 +315,57 @@ RSpec.describe 'Admin users', type: :request do
         expect(response).to have_http_status(:not_found)
         expect(response.content_type).to eq('text/html; charset=utf-8')
         expect(response.body).to include(I18n.t('errors.not_found.title'))
+      end
+    end
+
+    it 'adminユーザーは法務同意の過去版のみ/未同意状態を確認できる' do
+      admin = create(:user, :admin)
+      user = create(:user, email: 'legal-target@example.com')
+      LegalDocuments::Sync.call
+      old_terms = create(:legal_document, document_type: "terms", version: "2026-01-01", current: false)
+      create(
+        :legal_acceptance,
+        user: user,
+        legal_document: old_terms,
+        accepted_at: Time.zone.local(2026, 1, 2, 9, 0, 0),
+        acceptance_context: "signup"
+      )
+      sign_in admin
+
+      get admin_user_path(user)
+      document = Nokogiri::HTML(response.body)
+      legal_acceptances_card = document.at_css('#admin-user-legal-acceptances')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(legal_acceptances_card.text).to include('法務同意')
+        expect(legal_acceptances_card.text).to include('利用規約')
+        expect(legal_acceptances_card.text).to include('過去版のみ')
+        expect(legal_acceptances_card.text).to include('2026-01-01')
+        expect(legal_acceptances_card.text).to include('プライバシーポリシー')
+        expect(legal_acceptances_card.text).to include('未同意')
+        expect(legal_acceptances_card.text).to include('再同意必要')
+      end
+    end
+
+    it '一般ユーザーにはshowも既存404と同じbody/headerを返す' do
+      user = create(:user)
+      target = create(:user)
+      sign_in user
+
+      get '/__recify_missing_route__'
+      expected_body = response.body
+      expected_headers = comparable_headers
+
+      sign_in user
+      get admin_user_path(target)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.content_type).to eq('text/html; charset=utf-8')
+        expect(response.body).to eq(expected_body)
+        expect(comparable_headers).to eq(expected_headers)
+        expect(response.body).not_to include('法務同意')
       end
     end
 

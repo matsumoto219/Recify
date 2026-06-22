@@ -1300,6 +1300,26 @@ ja:
           passkeys: passkeys
           latest_passkey_use: latest passkey use
           receipts: receipts
+        legal_acceptances:
+          title: 法務同意
+          description: 現在の利用規約・プライバシーポリシーに対する同意状態
+          document_types:
+            terms: 利用規約
+            privacy: プライバシーポリシー
+          statuses:
+            current_accepted: 現行版同意済み
+            outdated: 過去版のみ
+            missing: 未同意
+          columns:
+            document: 文書
+            status: 状態
+            current_version: current version
+            accepted_version: 同意済みversion
+            accepted_at: 同意日時
+            context: context
+            locale: locale
+            current_accepted: 現行版同意
+            reconsent_required: 再同意必要
         receipts:
           title: 最近のレシート
           description: 所有レシートの直近状態を確認します。隔離中のレシートも管理者向けには表示します。

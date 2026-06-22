@@ -4,10 +4,21 @@
   record = @record
   active_sessions = record[:active_sessions] || { count: 0, recent: [] }
   usage_limits = record[:usage_limits] || { storage: {}, limits: [] }
+  legal_acceptance_status = @legal_acceptance_status || { records: [] }
   boolean_label = ->(value) { admin_user_boolean_label(value) }
   timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
   limit_value_label = ->(row) { row[:storage] ? format_storage_size(row[:limit_value]) : number_with_delimiter(row[:limit_value]) }
   used_value_label = ->(row) { row[:storage] ? format_storage_size(row[:used_bytes]) : number_with_delimiter(row[:used_count]) }
+  legal_status_class = lambda do |status|
+    case status
+    when "current_accepted"
+      "token-bg-success-soft token-text-success"
+    when "outdated"
+      "token-bg-warning-soft token-text-warning"
+    else
+      "token-bg-error-soft token-text-error"
+    end
+  end
   admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
   admin_control_class = "rounded-lg text-sm"
   admin_textarea_class = "#{admin_control_class} py-2 leading-6"
@@ -109,6 +120,48 @@
       </dl>
     <% end %>
   </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, id: "admin-user-legal-acceptances", class: "min-w-0 max-w-full" do %>
+    <div class="mb-4">
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.legal_acceptances.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.users.show.legal_acceptances.description") %></p>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :lg do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.document") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.status") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.current_version") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.accepted_version") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.users.show.legal_acceptances.columns.accepted_at") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.context") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.locale") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.current_accepted") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.columns.reconsent_required") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% legal_acceptance_status[:records].each do |legal_record| %>
+          <tr class="border-b token-border-soft" data-admin-user-legal-document="<%= legal_record[:document_type] %>">
+            <td class="px-3 py-3 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.legal_acceptances.document_types.#{legal_record[:document_type]}") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
+              <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold <%= legal_status_class.call(legal_record[:status]) %>">
+                <%= t("admin.users.show.legal_acceptances.statuses.#{legal_record[:status]}") %>
+              </span>
+            </td>
+            <td class="px-3 py-3 font-mono <%= admin_table_cell_classes(type: :status) %>"><%= legal_record[:current_version].presence || "-" %></td>
+            <td class="px-3 py-3 font-mono <%= admin_table_cell_classes(type: :status) %>"><%= legal_record[:latest_accepted_version].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= timestamp_label.call(legal_record[:latest_accepted_at]) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= legal_record[:accepted_context].presence || "-" %></td>
+            <td class="px-3 py-3 font-mono <%= admin_table_cell_classes(type: :status) %>"><%= legal_record[:accepted_locale].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= boolean_label.call(legal_record[:current_version_accepted]) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= boolean_label.call(legal_record[:reconsent_required]) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
 
   <div class="grid gap-6 lg:grid-cols-2">
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
