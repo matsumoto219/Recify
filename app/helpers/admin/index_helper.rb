@@ -64,6 +64,13 @@ module Admin
       }
     end
 
+    def admin_ip_block_filter_options(values)
+      {
+        states: admin_localized_value_options(values[:states], "admin.ip_blocks.states"),
+        limits: admin_limit_options("admin.ip_blocks.index.filters.limit_unit")
+      }
+    end
+
     def admin_contact_request_filter_options(values)
       {
         statuses: admin_localized_value_options(values[:statuses], "admin.contact_requests.statuses"),

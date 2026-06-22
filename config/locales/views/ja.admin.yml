@@ -6,6 +6,7 @@ ja:
       receipt_analysis_runs: 解析run管理
       audit_logs: 監査ログ
       security_events: セキュリティイベント
+      ip_blocks: IP制限
       announcements: お知らせ
       contact_requests: 問い合わせ
       users: ユーザー管理
@@ -13,6 +14,104 @@ ja:
       system_operations: システム運用
       system_settings: システム設定
       back_to_app: 通常画面へ戻る
+    ip_blocks:
+      common:
+        never_expires: 無期限
+        automatic_active: 制限中
+        not_restricted: 制限なし
+      states:
+        active: 制限中
+        revoked: 解除済み
+        expired: 期限切れ
+      messages:
+        unblocked: IP制限を解除しました。
+        not_unblockable: このIP制限は解除対象ではありません。
+      index:
+        title: IP制限
+        description: 手動で追加されたIP制限の状態を確認します。新しい制限はセキュリティイベント詳細から行います。
+        filters:
+          title: フィルター
+          description: 空欄の条件は検索に使いません。
+          reset: リセット
+          all: すべて
+          limit_unit: "%{count}件"
+          labels:
+            status: 状態
+            ip_address: IP
+            created_by_id: 作成者ID
+            source_security_event_id: SecurityEvent ID
+            expires_after: 期限 from
+            expires_before: 期限 to
+            created_from: 作成日時 from
+            created_to: 作成日時 to
+            limit: 表示件数
+          submit: 絞り込む
+          clear: クリア
+        results:
+          title: IP制限一覧
+          count_summary: "%{total}件中 %{start}-%{end}件を表示"
+          previous: 前へ
+          next: 次へ
+          empty: 該当するIP制限はありません。
+        table:
+          ip_address: IP
+          status: 状態
+          expires_at: 期限
+          created_by: 作成者
+          revoked_by: 解除者
+          source_security_event: SecurityEvent
+          reason: 理由
+          revoked_reason: 解除理由
+          recent_events: 関連イベント
+          automatic_status: 自動制限
+          detail: 詳細
+          detail_link: 詳細
+      show:
+        title: IP制限詳細
+        sections:
+          summary: 状態
+          manual_block: 手動制限
+          revocation: 解除情報
+          snapshot: 現在のIP制限状態
+          unblock: 手動制限解除
+          related_security_events: 関連セキュリティイベント
+        labels:
+          ip_address: IP
+          status: 状態
+          automatic_status: 自動制限
+          created_at: 作成日時
+          expires_at: 期限
+          created_by: 作成者
+          revoked_at: 解除日時
+          revoked_by: 解除者
+          source_security_event: SecurityEvent
+          reason: 理由
+          revoked_reason: 解除理由
+        snapshot:
+          description: 現在の手動制限、自動制限、直近イベントを確認します。
+          manual_status: 手動制限
+          automatic_status: 自動制限
+          recent_events: 直近24時間のイベント
+          rack_attack_targets: 自動制限対象
+          audit_link: 関連監査ログ
+        unblock:
+          reason_label: 解除理由
+          confirmation_label: 確認文字列 UNBLOCK IP
+          submit: 手動制限を解除
+          reauthentication_required: この操作にはパスキー再認証が必要です。
+          reauthentication_link: パスキーで再認証
+          not_available: 制限中ではない、または期限切れのため解除操作はできません。
+        related_security_events:
+          description: 同じIPで記録された最近のイベント
+          link: すべて見る
+          last_seen: last seen
+          severity: severity
+          event_type: event type
+          rule: rule
+          count: count
+          detail: detail
+          detail_link: 詳細
+          empty: 該当するセキュリティイベントはありません。
     announcements:
       common:
         all: すべて

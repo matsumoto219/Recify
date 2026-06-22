@@ -32,6 +32,18 @@ module Admin
       SecurityEventsQuery.find(id: id)
     end
 
+    def ip_blocks(**filters)
+      IpBlocksQuery.call(**filters)
+    end
+
+    def ip_block_filter_options
+      IpBlocksQuery.filter_options
+    end
+
+    def ip_block(id:)
+      IpBlocksQuery.find(id: id)
+    end
+
     def update_security_event_status(security_event:, status:, actor:, request:)
       SecurityEventStatusUpdater.call(
         security_event: security_event,

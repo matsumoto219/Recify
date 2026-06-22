@@ -1,0 +1,213 @@
+<% content_for :title, t("admin.ip_blocks.index.title") %>
+
+<%
+  filters = @filters || {}
+  pagination = admin_index_pagination(@result, filters: filters)
+  filter_options = admin_ip_block_filter_options(@filter_options || {})
+  filter_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  filter_wrapper_class = "space-y-1"
+  filter_control_class = "rounded-lg text-sm"
+%>
+
+<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.ip_blocks.index.title"),
+        subtitle: t("admin.ip_blocks.index.description"),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.index.filters.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.ip_blocks.index.filters.description") %></p>
+      </div>
+
+      <%= link_to t("admin.ip_blocks.index.filters.reset"), admin_ip_blocks_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= form_with url: admin_ip_blocks_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :status,
+            label: t("admin.ip_blocks.index.filters.labels.status"),
+            options: [[ t("admin.ip_blocks.index.filters.all"), "" ]] + filter_options[:states],
+            selected: filters[:status],
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :ip_address,
+            label: t("admin.ip_blocks.index.filters.labels.ip_address"),
+            value: filters[:ip_address],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :created_by_id,
+            label: t("admin.ip_blocks.index.filters.labels.created_by_id"),
+            value: filters[:created_by_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
+
+      <%= render "shared/ui/form/text_field",
+            f: form,
+            attribute: :source_security_event_id,
+            label: t("admin.ip_blocks.index.filters.labels.source_security_event_id"),
+            value: filters[:source_security_event_id],
+            with_icon: false,
+            size: :dense,
+            input_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            input_class: filter_control_class,
+            html_options: { inputmode: "numeric" } %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :expires_after,
+            id: :expires_after,
+            type: "datetime-local",
+            label: t("admin.ip_blocks.index.filters.labels.expires_after"),
+            value: filters[:expires_after],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :expires_before,
+            id: :expires_before,
+            type: "datetime-local",
+            label: t("admin.ip_blocks.index.filters.labels.expires_before"),
+            value: filters[:expires_before],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_from,
+            id: :created_from,
+            type: "datetime-local",
+            label: t("admin.ip_blocks.index.filters.labels.created_from"),
+            value: filters[:created_from],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/datetime_field",
+            name: :created_to,
+            id: :created_to,
+            type: "datetime-local",
+            label: t("admin.ip_blocks.index.filters.labels.created_to"),
+            value: filters[:created_to],
+            field_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            field_class: "h-10 min-h-10 rounded-lg py-2 text-sm" %>
+
+      <%= render "shared/ui/form/select_field",
+            f: form,
+            attribute: :limit,
+            label: t("admin.ip_blocks.index.filters.labels.limit"),
+            options: filter_options[:limits],
+            selected: filters[:limit].presence || pagination.limit.to_s,
+            with_icon: false,
+            size: :dense,
+            select_wrapper_class: filter_wrapper_class,
+            label_class: filter_label_class,
+            select_class: filter_control_class %>
+
+      <div class="flex items-end gap-3 md:col-span-2">
+        <%= render "shared/ui/actions/button",
+              label: t("admin.ip_blocks.index.filters.submit"),
+              type: "submit",
+              size: :compact,
+              icon: "filter_alt" %>
+
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_ip_blocks_path,
+              label: t("admin.ip_blocks.index.filters.clear"),
+              variant: :secondary,
+              size: :compact,
+              icon: "restart_alt" %>
+      </div>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.index.results.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.ip_blocks.index.results.count_summary", total: pagination.total_count, start: pagination.start_number, end: pagination.end_number) %></p>
+      </div>
+
+      <%= render "admin/shared/index_pagination",
+            pagination: pagination,
+            path_method: :admin_ip_blocks_path,
+            previous_label: t("admin.ip_blocks.index.results.previous"),
+            next_label: t("admin.ip_blocks.index.results.next") %>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :xxl do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.ip_blocks.index.table.ip_address") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.index.table.status") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.ip_blocks.index.table.expires_at") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.ip_blocks.index.table.created_by") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :id) %>"><%= t("admin.ip_blocks.index.table.revoked_by") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.ip_blocks.index.table.source_security_event") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.ip_blocks.index.table.reason") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.ip_blocks.index.table.revoked_reason") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.index.table.recent_events") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.index.table.automatic_status") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.ip_blocks.index.table.detail") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @result.records.each do |record| %>
+          <tr class="border-b token-border-soft">
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record[:ip_address] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.states.#{record[:state]}") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : t("admin.ip_blocks.common.never_expires") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record.dig(:created_by, :id).present? ? "##{record.dig(:created_by, :id)}" : "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :id) %>"><%= record.dig(:revoked_by, :id).present? ? "##{record.dig(:revoked_by, :id)}" : "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
+              <% if record[:source_security_event].present? %>
+                <%= link_to "##{record.dig(:source_security_event, :id)}", admin_security_event_path(record.dig(:source_security_event, :id)), class: "token-text-brand hover:underline" %>
+                <div class="text-xs token-text-muted"><%= record.dig(:source_security_event, :matched_rule).presence || record.dig(:source_security_event, :event_type) %></div>
+              <% else %>
+                -
+              <% end %>
+            </td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= truncate(record[:reason].to_s, length: 48) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= truncate(record[:revoked_reason].to_s.presence || "-", length: 48) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:recent_security_events_count] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
+              <%= record.dig(:rack_attack, :any_banned) ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
+            </td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.ip_blocks.index.table.detail_link"), admin_ip_block_path(record[:id]), class: "token-text-brand hover:underline" %></td>
+          </tr>
+        <% end %>
+
+        <% if @result.records.empty? %>
+          <tr>
+            <td colspan="11" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.ip_blocks.index.results.empty") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
+</section>

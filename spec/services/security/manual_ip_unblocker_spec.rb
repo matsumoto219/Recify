@@ -41,6 +41,18 @@ RSpec.describe Security::ManualIpUnblocker do
     expect(result).to have_attributes(success: false, error_code: 'no_active_manual_block')
   end
 
+  it '期限切れの手動IP制限は解除対象にしない' do
+    create(:security_ip_block, ip_address: '8.8.8.8', expires_at: 1.minute.ago)
+
+    result = described_class.call(
+      ip_address: '8.8.8.8',
+      reason: 'false positive',
+      revoked_by: admin
+    )
+
+    expect(result).to have_attributes(success: false, error_code: 'no_active_manual_block')
+  end
+
   it 'reason必須' do
     create(:security_ip_block, ip_address: '8.8.8.8')
 

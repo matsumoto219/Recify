@@ -1,0 +1,237 @@
+<% content_for :title, t("admin.ip_blocks.show.title") %>
+
+<%
+  record = @record
+  snapshot = @ip_access_snapshot || {}
+  manual_block = snapshot.dig(:manual_block, :block)
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_textarea_class = "rounded-lg text-sm py-2 leading-6"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
+%>
+
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.ip_blocks.show.title"),
+        subtitle: record[:ip_address],
+        breadcrumb_label: t("admin.ip_blocks.index.title"),
+        breadcrumb_path: admin_ip_blocks_path,
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.summary") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.ip_address") %></dt>
+            <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record[:ip_address] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.status") %></dt>
+            <dd class="token-text-base"><%= t("admin.ip_blocks.states.#{record[:state]}") %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.automatic_status") %></dt>
+            <dd class="token-text-base">
+              <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.manual_block") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.created_at") %></dt>
+            <dd class="token-text-base"><%= l(record[:created_at], format: :short) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.expires_at") %></dt>
+            <dd class="token-text-base"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : t("admin.ip_blocks.common.never_expires") %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.created_by") %></dt>
+            <dd class="token-text-base"><%= record.dig(:created_by, :id).present? ? "##{record.dig(:created_by, :id)} #{record.dig(:created_by, :email)}" : "-" %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="min-w-0 max-w-full space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.revocation") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.revoked_at") %></dt>
+            <dd class="token-text-base"><%= record[:revoked_at].present? ? l(record[:revoked_at], format: :short) : "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.revoked_by") %></dt>
+            <dd class="token-text-base"><%= record.dig(:revoked_by, :id).present? ? "##{record.dig(:revoked_by, :id)} #{record.dig(:revoked_by, :email)}" : "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.source_security_event") %></dt>
+            <dd class="token-text-base">
+              <% if record[:source_security_event].present? %>
+                <%= link_to "##{record.dig(:source_security_event, :id)}", admin_security_event_path(record.dig(:source_security_event, :id)), class: "token-text-brand hover:underline" %>
+              <% else %>
+                -
+              <% end %>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+
+    <div class="mt-6 grid gap-4 lg:grid-cols-2">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.labels.reason") %></h3>
+        <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= record[:reason] %></p>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.labels.revoked_reason") %></h3>
+        <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= record[:revoked_reason].presence || "-" %></p>
+      </div>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.snapshot") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.ip_blocks.show.snapshot.description") %></p>
+      </div>
+      <%= link_to t("admin.ip_blocks.show.snapshot.audit_link"),
+            admin_audit_logs_path(target_uid: record[:audit_target_uid]),
+            class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.manual_status") %></dt>
+        <dd class="mt-1 text-base font-bold token-text-base">
+          <%= snapshot.dig(:manual_block, :active) ? t("admin.ip_blocks.states.active") : t("admin.ip_blocks.common.not_restricted") %>
+        </dd>
+        <% if manual_block.present? %>
+          <p class="mt-2 text-xs token-text-muted">#<%= manual_block[:id] %></p>
+        <% end %>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.automatic_status") %></dt>
+        <dd class="mt-1 text-base font-bold token-text-base">
+          <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
+        </dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.recent_events") %></dt>
+        <dd class="mt-1 font-mono text-base font-bold token-text-base"><%= snapshot[:recent_security_events_count].to_i %></dd>
+      </div>
+    </div>
+
+    <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.snapshot.rack_attack_targets") %></h3>
+      <dl class="grid gap-3 text-sm md:grid-cols-3">
+        <% (snapshot.dig(:rack_attack, :targets) || {}).each do |target, banned| %>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="font-mono text-xs token-text-muted"><%= t("admin.security_events.show.ip_access.automatic.targets.#{target}", default: target) %></dt>
+            <dd class="text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %>">
+              <%= banned ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
+            </dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-3 text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.unblock") %></h2>
+    <% if record[:unblockable] %>
+      <% if !admin_passkey_reauthenticated? %>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <p class="mb-3 text-sm token-text-muted"><%= t("admin.ip_blocks.show.unblock.reauthentication_required") %></p>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: new_admin_passkey_reauthentication_path(return_to: admin_ip_block_path(record[:id])),
+                label: t("admin.ip_blocks.show.unblock.reauthentication_link"),
+                size: :compact,
+                icon: "passkey" %>
+        </div>
+      <% else %>
+        <%= form_with url: unblock_admin_ip_block_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+          <%= render "shared/ui/form/textarea_field",
+                f: form,
+                attribute: :reason,
+                label: t("admin.ip_blocks.show.unblock.reason_label"),
+                rows: 3,
+                required: true,
+                with_icon: false,
+                label_class: admin_label_class,
+                textarea_class: admin_textarea_class %>
+          <%= render "shared/ui/form/text_field",
+                f: form,
+                attribute: :confirmation,
+                label: t("admin.ip_blocks.show.unblock.confirmation_label"),
+                required: true,
+                with_icon: false,
+                size: :dense,
+                label_class: admin_label_class,
+                input_class: admin_mono_control_class %>
+          <%= render "shared/ui/actions/button",
+                label: t("admin.ip_blocks.show.unblock.submit"),
+                type: "submit",
+                size: :compact,
+                icon: "lock_open" %>
+        <% end %>
+      <% end %>
+    <% else %>
+      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        <%= t("admin.ip_blocks.show.unblock.not_available") %>
+      </p>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.related_security_events") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.ip_blocks.show.related_security_events.description") %></p>
+      </div>
+      <%= link_to t("admin.ip_blocks.show.related_security_events.link"),
+            admin_security_events_path(ip_address: record[:ip_address]),
+            class: "text-sm font-semibold token-text-brand hover:underline" %>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :lg do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.ip_blocks.show.related_security_events.last_seen") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.show.related_security_events.severity") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.ip_blocks.show.related_security_events.event_type") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.show.related_security_events.rule") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_blocks.show.related_security_events.count") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.ip_blocks.show.related_security_events.detail") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @related_security_events.records.each do |event| %>
+          <tr class="border-b token-border-soft">
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(event[:last_seen_at], format: :short) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= event[:severity] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= event[:event_type] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= event[:matched_rule].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= event[:count] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.ip_blocks.show.related_security_events.detail_link"), admin_security_event_path(event[:id]), class: "token-text-brand hover:underline" %></td>
+          </tr>
+        <% end %>
+
+        <% if @related_security_events.records.empty? %>
+          <tr>
+            <td colspan="6" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.ip_blocks.show.related_security_events.empty") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
+</section>

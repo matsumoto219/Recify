@@ -14,6 +14,9 @@ Rails.application.routes.draw do
           to: "system_settings#update",
           constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
+    resources :ip_blocks, only: %i[index show] do
+      post :unblock, on: :member
+    end
     resources :security_events, only: %i[index show] do
       patch :resolve, on: :member
       patch :ignore, on: :member

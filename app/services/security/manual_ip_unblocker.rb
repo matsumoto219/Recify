@@ -56,7 +56,7 @@ module Security
     end
 
     def block
-      @block ||= SecurityIpBlock.active_status_for_ip(ip_address).order(created_at: :desc).first
+      @block ||= SecurityIpBlock.currently_effective_for_ip(ip_address).order(created_at: :desc).first
     end
 
     def source_security_event_ip_mismatch?
