@@ -11,6 +11,7 @@
   - breadcrumb_label: パンくずの戻り先ラベル
   - breadcrumb_path: パンくずの戻り先パス
   - icon: 表示する Material Symbols アイコン名
+  - heading_tag: 見出しタグ。:h1 / :h2 / :h3 / :h4 / :h5 / :h6。未指定時は :h2
   - variant: 表示トーン。:default / :danger。未指定時は :default
   - align: 水平方向の揃え。:left / :center。未指定時は :left
   - responsive_align: md 以上での揃え。:left / :center
@@ -33,6 +34,8 @@
   breadcrumb_label = local_assigns[:breadcrumb_label]
   breadcrumb_path = local_assigns[:breadcrumb_path]
   icon = local_assigns[:icon]
+  heading_tag = local_assigns.fetch(:heading_tag, :h2).to_s
+  heading_tag = "h2" unless %w[h1 h2 h3 h4 h5 h6].include?(heading_tag)
   variant = local_assigns.fetch(:variant, :default).to_sym
   align = local_assigns.fetch(:align, :left).to_sym
   responsive_align = local_assigns[:responsive_align]&.to_sym
@@ -129,6 +132,8 @@
   ].compact.join(" ")
   header_classes = ["min-w-0 max-w-full", spacing_class, align_class, responsive_align_class, wrapper_class].compact.join(" ")
   title_row_class = ["flex min-w-0 max-w-full flex-wrap items-center gap-2", title_row_align_class, responsive_title_row_align_class].compact.join(" ")
+  heading_attributes = { class: title_class }
+  heading_attributes[:id] = title_id if title_id.present?
 %>
 
 <div class="<%= header_classes %>">
@@ -150,11 +155,7 @@
       <span class="material-symbols-outlined <%= resolved_icon_class %>" aria-hidden="true"><%= icon %></span>
     <% end %>
 
-    <h2
-      <% if title_id.present? %> id="<%= title_id %>"<% end %>
-      class="<%= title_class %>">
-      <%= title %>
-    </h2>
+    <%= content_tag heading_tag, title, heading_attributes %>
 
     <% if title_suffix.present? %>
       <span class="<%= resolved_title_suffix_class %>"><%= title_suffix %></span>
