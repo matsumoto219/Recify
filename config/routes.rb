@@ -4,6 +4,9 @@ Rails.application.routes.draw do
   namespace :admin do
     root "dashboard#show"
     get "external_services/status", to: "external_services#status", as: :external_services_status
+    namespace :security do
+      get "ip_diagnostics", to: "ip_diagnostics#show", as: :ip_diagnostics
+    end
     resource :system_operations, only: %i[show]
     get "system_settings", to: "system_settings#index", as: :system_settings
     get "system_settings/:key",

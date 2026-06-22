@@ -33,6 +33,7 @@ ja:
           title: フィルター
           description: 空欄の条件は検索に使いません。
           reset: リセット
+          ip_diagnostics: IP診断
           all: すべて
           limit_unit: "%{count}件"
           labels:
@@ -112,6 +113,79 @@ ja:
           detail: detail
           detail_link: 詳細
           empty: 該当するセキュリティイベントはありません。
+    ip_diagnostics:
+      title: IP診断
+      description: Cloudflare / proxy 配下で実クライアントIPを取得できているか確認します。表示のみで、制限操作や監査ログ記録は行いません。
+      sections:
+        result: 診断結果
+        current_request: 現在のリクエスト
+        cloudflare: Cloudflare関連
+        forwarded: Forwarded概要
+        headers: Header概要
+        checks: チェック
+        no_go: 本番公開前の確認事項
+      labels:
+        status: status
+        request_ip: request.ip
+        remote_ip: request.remote_ip
+        rack_attack_ip: Rack::Attack想定IP
+        trusted_proxy: trusted proxy
+        cloudflare_likely: Cloudflare経由らしさ
+        cloudflare_headers: 検出header
+        cf_connecting_ip: CF-Connecting-IP
+        true_client_ip: True-Client-IP
+        x_forwarded_for_present: X-Forwarded-For
+        forwarded_count: IP数
+        forwarded_values: 値
+      values:
+        "yes": あり
+        "no": なし
+        omitted: "ほか%{count}件"
+        custom_configured: 明示設定あり
+        rails_default: Rails既定
+      trusted_proxy_modes:
+        custom: 明示設定
+        rails_default: Rails既定
+      statuses:
+        ok: OK
+        warning: Warning
+        danger: Danger
+        unknown: Unknown
+      status_messages:
+        ok: request.ip / request.remote_ip が Cloudflare の実クライアントIPとして扱われている可能性が高いです。本番Cloudflare経路で同じ結果になることを確認してください。
+        warning: Cloudflare関連headerが確認できない、またはCloudflare経路か判断できません。ローカル/直アクセスでは正常ですが、本番Cloudflare配下で再確認してください。
+        danger: proxy / forwarded header の状態から、Cloudflare edge IP や proxy IP を制限対象にする可能性があります。本番IP制限運用は停止してください。
+        unknown: リクエストIP情報を判定できません。本番IP制限運用は停止し、trusted proxy と Rack::Attack key を確認してください。
+      rack_attack_source: "Rack::Attack は %{source} を使います"
+      headers_table:
+        header: header
+        present: 有無
+        count: 数
+        values: 値
+      checks:
+        no_request: リクエスト情報を取得できません。
+        rack_attack_ip_missing: Rack::Attackが使うIPを取得できません。
+        rack_attack_ip_mismatch: Rack::Attackが使うIPがCloudflareの実クライアントIPと一致していません。
+        rack_attack_ip_matches_cloudflare: Rack::Attackが使うIPはCloudflareの実クライアントIPと一致しています。
+        rack_attack_ip_unverified: Rack::Attackが使うIPは取得できていますが、Cloudflare経路での一致は未確認です。
+        remote_ip_missing: request.remote_ipを取得できません。
+        remote_ip_mismatch: request.remote_ipがCloudflareの実クライアントIPと一致していません。
+        remote_ip_matches_cloudflare: request.remote_ipはCloudflareの実クライアントIPと一致しています。
+        remote_ip_unverified: request.remote_ipは取得できていますが、Cloudflare経路での一致は未確認です。
+        cloudflare_headers_present: Cloudflare関連headerを検出しています。
+        cloudflare_headers_missing: Cloudflare関連headerを検出していません。
+        direct_origin_must_be_restricted: Cloudflare関連headerがあっても、origin直アクセスを制限するまではheader spoofingの余地があります。
+        direct_origin_unverified: origin直アクセスの制限状態はこの画面だけでは確認できません。
+      direct_origin:
+        reasons:
+          no_request: リクエスト情報を取得できません。
+          cloudflare_headers_do_not_prove_origin_lock: Cloudflare関連headerだけではorigin直アクセスが制限されているとは判断できません。
+          no_cloudflare_headers: Cloudflare関連headerがないため、ローカル/直アクセスまたはCloudflare未経由の可能性があります。
+      no_go:
+        cloudflare_path: Cloudflare proxy配下の本番経路で request.ip / request.remote_ip / CF-Connecting-IP / X-Forwarded-For を再確認してください。
+        origin_lock: origin direct access はFirewall、Cloudflare Tunnel、Authenticated Origin Pulls等で制限してください。
+        edge_ip: Cloudflare edge IP や proxy IP を手動IP制限・Rack::Attack keyの対象にしないでください。
+        production_gate: 実クライアントIPで分離できない場合、本番IP制限運用を開始しないでください。
     announcements:
       common:
         all: すべて
@@ -426,6 +500,7 @@ ja:
         expired: 期限切れ
         passkey_settings: パスキー設定
         reauthenticate: 再認証する
+        ip_diagnostics: IP診断
       system_operations:
         title: システム運用
         description: queue / recurring の運用詳細は専用ページで確認します。

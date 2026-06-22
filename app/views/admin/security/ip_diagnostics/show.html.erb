@@ -1,0 +1,163 @@
+<% content_for :title, t("admin.ip_diagnostics.title") %>
+
+<%
+  snapshot = @snapshot || {}
+  status = snapshot[:status].presence || "unknown"
+  status_class =
+    case status
+    when "ok"
+      "token-text-success"
+    when "danger"
+      "token-text-error"
+    else
+      "token-text-warning"
+    end
+%>
+
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.ip_diagnostics.title"),
+        subtitle: t("admin.ip_diagnostics.description"),
+        breadcrumb_label: t("admin.ip_blocks.index.title"),
+        breadcrumb_path: admin_ip_blocks_path,
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm md:text-base" %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.result") %></h2>
+        <p class="mt-1 text-sm token-text-muted"><%= t(snapshot[:status_message_key]) %></p>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle px-4 py-3">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.status") %></dt>
+        <dd class="mt-1 text-xl font-bold <%= status_class %>"><%= t("admin.ip_diagnostics.statuses.#{status}") %></dd>
+      </div>
+    </div>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.current_request") %></h2>
+    <dl class="grid gap-4 text-sm md:grid-cols-4">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.request_ip") %></dt>
+        <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:request_ip].presence || "-" %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.remote_ip") %></dt>
+        <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:remote_ip].presence || "-" %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.rack_attack_ip") %></dt>
+        <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:rack_attack_ip].presence || "-" %></dd>
+        <dd class="mt-1 text-xs token-text-muted"><%= t("admin.ip_diagnostics.rack_attack_source", source: snapshot[:rack_attack_source]) %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.trusted_proxy") %></dt>
+        <dd class="mt-1 token-text-base"><%= t("admin.ip_diagnostics.trusted_proxy_modes.#{snapshot.dig(:trusted_proxy, :mode)}") %></dd>
+        <dd class="mt-1 text-xs token-text-muted"><%= snapshot.dig(:trusted_proxy, :custom_configured) ? t("admin.ip_diagnostics.values.custom_configured") : t("admin.ip_diagnostics.values.rails_default") %></dd>
+      </div>
+    </dl>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.cloudflare") %></h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.cloudflare_likely") %></dt>
+          <dd class="token-text-base"><%= snapshot.dig(:cloudflare, :likely) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.cloudflare_headers") %></dt>
+          <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= Array(snapshot.dig(:cloudflare, :header_keys)).presence&.join(", ") || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.cf_connecting_ip") %></dt>
+          <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot.dig(:cloudflare, :connecting_ip).presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.true_client_ip") %></dt>
+          <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot.dig(:cloudflare, :true_client_ip).presence || "-" %></dd>
+        </div>
+      </dl>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.forwarded") %></h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.x_forwarded_for_present") %></dt>
+          <dd class="token-text-base"><%= snapshot.dig(:forwarded, :present) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.forwarded_count") %></dt>
+          <dd class="font-mono token-text-base"><%= snapshot.dig(:forwarded, :count).to_i %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.forwarded_values") %></dt>
+          <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]">
+            <%= Array(snapshot.dig(:forwarded, :values)).presence&.join(" / ") || "-" %>
+            <% if snapshot.dig(:forwarded, :omitted_count).to_i.positive? %>
+              <span class="token-text-muted"><%= t("admin.ip_diagnostics.values.omitted", count: snapshot.dig(:forwarded, :omitted_count)) %></span>
+            <% end %>
+          </dd>
+        </div>
+      </dl>
+    <% end %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.headers") %></h2>
+    <%= render "admin/shared/table_frame", size: :lg do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_diagnostics.headers_table.header") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_diagnostics.headers_table.present") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_diagnostics.headers_table.count") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.ip_diagnostics.headers_table.values") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% snapshot.fetch(:headers, {}).each do |header_name, details| %>
+          <tr class="border-b token-border-soft">
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= header_name %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= details[:present] ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= details[:count].to_i %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>">
+              <%= Array(details[:values]).presence&.join(" / ") || "-" %>
+              <% if details[:omitted_count].to_i.positive? %>
+                <span class="token-text-muted"><%= t("admin.ip_diagnostics.values.omitted", count: details[:omitted_count]) %></span>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.checks") %></h2>
+    <ul class="space-y-3">
+      <% Array(snapshot[:checks]).each do |check| %>
+        <% level_class = check[:level] == "danger" ? "token-text-error" : (check[:level] == "ok" ? "token-text-success" : "token-text-warning") %>
+        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm">
+          <span class="font-bold <%= level_class %>"><%= t("admin.ip_diagnostics.statuses.#{check[:level]}") %></span>
+          <span class="ml-2 token-text-base"><%= t(check[:message_key]) %></span>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.no_go") %></h2>
+    <ul class="list-disc space-y-2 pl-5 text-sm token-text-base">
+      <li><%= t("admin.ip_diagnostics.no_go.cloudflare_path") %></li>
+      <li><%= t("admin.ip_diagnostics.no_go.origin_lock") %></li>
+      <li><%= t("admin.ip_diagnostics.no_go.edge_ip") %></li>
+      <li><%= t("admin.ip_diagnostics.no_go.production_gate") %></li>
+    </ul>
+  <% end %>
+</section>

@@ -9,7 +9,7 @@ class Admin::IpBlocksController < Admin::BaseController
     @record = Admin.ip_block(id: params[:id])
     raise_not_found if @record.blank?
 
-    @ip_access_snapshot = Security.ip_access_snapshot(ip_address: @record[:ip_address])
+    @ip_access_snapshot = ::Security.ip_access_snapshot(ip_address: @record[:ip_address])
     @related_security_events = Admin.security_events(ip_address: @record[:ip_address], limit: 10)
   end
 

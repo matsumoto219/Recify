@@ -220,6 +220,12 @@
               label: t("admin.dashboard.security.reauthenticate"),
               variant: :secondary,
               size: :sm %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_security_ip_diagnostics_path,
+              label: t("admin.dashboard.security.ip_diagnostics"),
+              variant: :secondary,
+              size: :sm %>
       </div>
     <% end %>
   </div>

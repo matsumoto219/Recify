@@ -9,6 +9,10 @@ module Security
       IpAccessSnapshot.call(...)
     end
 
+    def request_ip_snapshot(...)
+      RequestIpSnapshot.call(...)
+    end
+
     def manual_ip_block(...)
       ManualIpBlocker.call(...)
     end

@@ -25,7 +25,10 @@
         <p class="text-sm token-text-muted"><%= t("admin.ip_blocks.index.filters.description") %></p>
       </div>
 
-      <%= link_to t("admin.ip_blocks.index.filters.reset"), admin_ip_blocks_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      <div class="flex flex-wrap items-center gap-3">
+        <%= link_to t("admin.ip_blocks.index.filters.ip_diagnostics"), admin_security_ip_diagnostics_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+        <%= link_to t("admin.ip_blocks.index.filters.reset"), admin_ip_blocks_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
     </div>
 
     <%= form_with url: admin_ip_blocks_path, method: :get, local: true, class: "grid gap-4 md:grid-cols-4" do |form| %>
