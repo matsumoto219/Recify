@@ -880,7 +880,7 @@ RSpec.describe Ocr::Client do
         let(:headers) do
           {
             'retry-after' => '1748518',
-            'apim-request-id' => 'b70a8dd4-8e95-459c-b6bc-6610f1ee52b7',
+            'apim-request-id' => 'req-1',
             'x-ms-region' => 'Japan East'
           }
         end
@@ -901,7 +901,7 @@ RSpec.describe Ocr::Client do
               phase: 'submit',
               http_status: 403,
               provider_error_code: '403',
-              request_id: 'b70a8dd4-8e95-459c-b6bc-6610f1ee52b7',
+              request_id: 'req-1',
               region: 'Japan East',
               retry_after: 1_748_518.0,
               quota_exceeded: true

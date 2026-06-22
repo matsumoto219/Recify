@@ -21,27 +21,35 @@ RSpec.describe Admin::PasskeyReauthWindow do
 
   describe '.fresh?' do
     it 'default window内のpasskey再認証をfreshにする' do
-      context = { method: 'passkey', reauthenticated_at: 4.minutes.ago }
+      moment = 4.minutes.ago
+      context = { method: 'passkey' }
+      context[:reauthenticated_at] = moment
 
       expect(described_class.fresh?(context)).to be(true)
     end
 
     it 'default windowを超えたpasskey再認証をfreshにしない' do
-      context = { method: 'passkey', reauthenticated_at: 6.minutes.ago }
+      moment = 6.minutes.ago
+      context = { method: 'passkey' }
+      context[:reauthenticated_at] = moment
 
       expect(described_class.fresh?(context)).to be(false)
     end
 
     it 'SystemSettingsが1分なら2分前の再認証をfreshにしない' do
       create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(1))
-      context = { method: 'passkey', reauthenticated_at: 2.minutes.ago }
+      moment = 2.minutes.ago
+      context = { method: 'passkey' }
+      context[:reauthenticated_at] = moment
 
       expect(described_class.fresh?(context)).to be(false)
     end
 
     it 'SystemSettingsが15分なら10分前の再認証をfreshにする' do
       create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(15))
-      context = { method: 'passkey', reauthenticated_at: 10.minutes.ago }
+      moment = 10.minutes.ago
+      context = { method: 'passkey' }
+      context[:reauthenticated_at] = moment
 
       expect(described_class.fresh?(context)).to be(true)
     end

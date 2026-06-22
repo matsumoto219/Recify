@@ -177,8 +177,8 @@ RSpec.describe 'User TOTP step-up', type: :request do
     it '他ユーザーのTOTP codeを拒否する' do
       user = create(:user)
       other_user = create(:user)
-      credential = create_confirmed_totp(user, secret: 'JBSWY3DPEHPK3PXP')
-      other_credential = create_confirmed_totp(other_user, secret: 'JBSWY3DPEHPK3PXQ')
+      credential = create_confirmed_totp(user)
+      other_credential = create_confirmed_totp(other_user)
       start_pending_totp(user)
 
       post users_two_factor_totp_create_path, params: { code: totp_code(other_credential) }
