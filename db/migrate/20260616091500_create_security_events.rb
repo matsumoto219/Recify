@@ -34,5 +34,25 @@ class CreateSecurityEvents < ActiveRecord::Migration[8.1]
     add_index :security_events,
               [ :event_type, :ip_address, :path, :payload_sha256 ],
               name: "index_security_events_on_aggregation_key"
+
+    create_table :security_ip_blocks do |t|
+      t.inet :ip_address, null: false
+      t.string :status, null: false, default: "active"
+      t.text :reason, null: false
+      t.datetime :expires_at
+      t.references :created_by, null: false, foreign_key: { to_table: :users }
+      t.references :revoked_by, foreign_key: { to_table: :users }
+      t.text :revoked_reason
+      t.datetime :revoked_at
+      t.references :source_security_event, foreign_key: { to_table: :security_events }
+      t.jsonb :metadata, null: false, default: {}
+
+      t.timestamps
+    end
+
+    add_index :security_ip_blocks, :ip_address
+    add_index :security_ip_blocks, [ :ip_address, :status ], name: "index_security_ip_blocks_on_ip_and_status"
+    add_index :security_ip_blocks, :status
+    add_index :security_ip_blocks, :expires_at
   end
 end

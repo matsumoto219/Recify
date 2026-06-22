@@ -17,6 +17,9 @@ Rails.application.routes.draw do
     resources :security_events, only: %i[index show] do
       patch :resolve, on: :member
       patch :ignore, on: :member
+      post "ip_access/manual_block", to: "security_events#manual_ip_block", as: :manual_ip_block, on: :member
+      post "ip_access/manual_unblock", to: "security_events#manual_ip_unblock", as: :manual_ip_unblock, on: :member
+      post "ip_access/rack_attack_ban_reset", to: "security_events#rack_attack_ban_reset", as: :rack_attack_ban_reset, on: :member
     end
     resources :announcements, only: %i[index show new create edit update] do
       patch :publish, on: :member

@@ -415,6 +415,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.index ["severity"], name: "index_security_events_on_severity"
   end
 
+  create_table "security_ip_blocks", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "created_by_id", null: false
+    t.datetime "expires_at"
+    t.inet "ip_address", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.text "reason", null: false
+    t.datetime "revoked_at"
+    t.bigint "revoked_by_id"
+    t.text "revoked_reason"
+    t.bigint "source_security_event_id"
+    t.string "status", default: "active", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_security_ip_blocks_on_created_by_id"
+    t.index ["expires_at"], name: "index_security_ip_blocks_on_expires_at"
+    t.index ["ip_address", "status"], name: "index_security_ip_blocks_on_ip_and_status"
+    t.index ["ip_address"], name: "index_security_ip_blocks_on_ip_address"
+    t.index ["revoked_by_id"], name: "index_security_ip_blocks_on_revoked_by_id"
+    t.index ["source_security_event_id"], name: "index_security_ip_blocks_on_source_security_event_id"
+    t.index ["status"], name: "index_security_ip_blocks_on_status"
+  end
+
   create_table "system_settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -557,6 +579,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
   add_foreign_key "receipts", "users"
   add_foreign_key "recovery_codes", "users"
   add_foreign_key "security_events", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "security_ip_blocks", "security_events", column: "source_security_event_id"
+  add_foreign_key "security_ip_blocks", "users", column: "created_by_id"
+  add_foreign_key "security_ip_blocks", "users", column: "revoked_by_id"
   add_foreign_key "system_settings", "users", column: "updated_by_user_id", on_delete: :nullify
   add_foreign_key "totp_credentials", "users"
   add_foreign_key "usage_counters", "users"

@@ -122,6 +122,10 @@ class Rack::Attack
     end
   end
 
+  blocklist("manual/ip_blocks") do |request|
+    Security::IpAccessRules.blocked?(request.ip)
+  end
+
   blocklist("fail2ban/scanner_paths") do |request|
     Rack::Attack::Fail2Ban.filter("scanner:#{request.ip}", maxretry: 3, findtime: 10.minutes, bantime: 30.minutes) do
       Rack::Attack.scanner_request?(request)

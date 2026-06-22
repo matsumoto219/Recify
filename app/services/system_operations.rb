@@ -12,6 +12,8 @@ module SystemOperations
     :after_state,
     :audit_log,
     :user_limit_override,
+    :ip_access_result,
+    :security_ip_block,
     :error_code,
     :error_message,
     keyword_init: true
@@ -74,6 +76,21 @@ module SystemOperations
         request: request,
         reauthentication: reauthentication,
         confirmation: confirmation
+      )
+    end
+
+    def execute_ip_access_operation(operation:, ip_address:, actor:, reason:, request:, reauthentication:, confirmation:, source_security_event: nil, expires_at: nil, rack_attack_target: nil)
+      IpAccessOperationExecutor.call(
+        operation: operation,
+        ip_address: ip_address,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation,
+        source_security_event: source_security_event,
+        expires_at: expires_at,
+        rack_attack_target: rack_attack_target
       )
     end
 

@@ -10,6 +10,9 @@ module AuditLogs
       admin.users.force_passkey_reset
       admin.users.force_two_factor_reset
       admin.users.session_revoke
+      admin.ip_access.manual_block
+      admin.ip_access.manual_unblock
+      admin.ip_access.rack_attack_ban_reset
       receipt_analysis.full_reanalyze
       receipt_analysis.ocr_retry
       receipt_analysis.ai_retry

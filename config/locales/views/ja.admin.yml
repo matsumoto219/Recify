@@ -679,6 +679,78 @@ ja:
         actions:
           resolve: 対応済みにする
           ignore: 無視する
+        ip_access:
+          title: IP制限状態
+          description: このイベントのIPについて、手動制限と自動制限の状態を確認します。イベントの対応状態とは別に管理します。
+          invalid_ip: このイベントには操作可能なIPアドレスがありません。
+          reauthentication_required: 操作にはパスキー再認証が必要です。再認証後、実行理由と確認文字列をもう一度入力してください。
+          reauthentication_link: パスキー再認証
+          reason_label: 実行理由
+          never_expires: 無期限
+          labels:
+            ip_address: IP
+            manual_status: 手動制限
+            automatic_status: 自動制限
+            expires_at: 期限
+            created_at: 作成日時
+          status:
+            manual_active: 手動制限中
+            automatic_active: 制限中
+            not_restricted: 制限なし
+          non_blockable_reasons:
+            invalid_ip: IPアドレスを確認してください。
+            private_ip: プライベートIPは誤操作防止のため手動制限できません。
+            loopback_ip: ループバックIPは誤操作防止のため手動制限できません。
+            link_local_ip: リンクローカルIPは誤操作防止のため手動制限できません。
+            reserved_ip: 予約済みIPは誤操作防止のため手動制限できません。
+          manual:
+            title: 手動IP制限
+            block_description: このIPからのアクセスを期限付きで制限します。
+            expires_at_label: 制限期限
+            block_confirmation_label: 確認文字列 BLOCK IP
+            unblock_confirmation_label: 確認文字列 UNBLOCK IP
+            block_submit: このIPを手動制限
+            unblock_submit: 手動制限を解除
+          automatic:
+            title: 自動制限
+            empty: 現在このIPに対する自動制限はありません。
+            reset_confirmation_label: 確認文字列 RESET IP BAN
+            reset_submit: 自動制限を解除
+            targets:
+              scanner: スキャナー検知
+              admin_probe: 管理画面探索
+              direct_upload_probe: direct upload探索
+          recent:
+            title: 関連イベント
+            count: "直近24時間: %{count}件"
+    ip_access_operations:
+      messages:
+        reauthentication_required: この操作にはパスキー再認証が必要です。
+        reason_required: 実行理由を入力してください。
+        confirmation_required: 確認文字列を入力してください。
+        success:
+          manual_ip_block: IP制限を追加しました。
+          manual_ip_unblock: IP制限を解除しました。
+          rack_attack_ip_ban_reset: 自動制限を解除しました。
+          default: IP制限操作を実行しました。
+        failure:
+          invalid_ip: IPアドレスを確認してください。
+          private_ip: プライベートIPは制限対象にできません。
+          loopback_ip: ループバックIPは制限対象にできません。
+          link_local_ip: リンクローカルIPは制限対象にできません。
+          reserved_ip: 予約済みIPは制限対象にできません。
+          already_blocked: このIPはすでに手動制限中です。
+          no_active_manual_block: 解除対象の手動制限がありません。
+          expires_at_invalid: 期限の形式を確認してください。
+          expires_at_in_past: 期限は現在より後にしてください。
+          current_ip_block_forbidden: 現在の管理者アクセス元IPは制限できません。
+          source_security_event_ip_mismatch: セキュリティイベントのIPと操作対象IPが一致しません。
+          rack_attack_target_invalid: 自動制限の対象を確認してください。
+          reauthentication_required: パスキー再認証が必要です。
+          reason_required: 実行理由を入力してください。
+          confirmation_required: 確認文字列が一致しません。
+          permanent_confirmation_required: 無期限制限の確認文字列が一致しません。
+          default: IP制限操作を実行できませんでした。
     receipt_analysis_cleanup:
       title: Cleanup確認
       description: stale / retention cleanup の対象候補を確認します

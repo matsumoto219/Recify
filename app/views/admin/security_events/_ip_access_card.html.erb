@@ -1,0 +1,207 @@
+<%
+  record = local_assigns.fetch(:record)
+  snapshot = local_assigns[:snapshot]
+  default_expires_at = local_assigns[:default_expires_at] || 24.hours.from_now
+  reauthenticated = local_assigns.fetch(:reauthenticated, false)
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_control_class = "rounded-lg text-sm"
+  admin_textarea_class = "#{admin_control_class} py-2 leading-6"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
+%>
+
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+  <div class="mb-4">
+    <h2 class="text-lg font-bold token-text-base"><%= t("admin.security_events.show.ip_access.title") %></h2>
+    <p class="text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.description") %></p>
+  </div>
+
+  <% if snapshot.blank? || !snapshot[:valid] %>
+    <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+      <%= t("admin.security_events.show.ip_access.invalid_ip") %>
+    </p>
+  <% else %>
+    <div class="grid gap-4 lg:grid-cols-3">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.ip_address") %></dt>
+        <dd class="mt-1 break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere]"><%= snapshot[:ip_address] %></dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.manual_status") %></dt>
+        <dd class="mt-1 text-base font-bold token-text-base">
+          <%= snapshot.dig(:manual_block, :active) ? t("admin.security_events.show.ip_access.status.manual_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
+        </dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.automatic_status") %></dt>
+        <dd class="mt-1 text-base font-bold token-text-base">
+          <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.security_events.show.ip_access.status.automatic_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
+        </dd>
+      </div>
+    </div>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.manual.title") %></h3>
+        <% if snapshot.dig(:manual_block, :active) %>
+          <% block = snapshot.dig(:manual_block, :block) %>
+          <dl class="mb-4 space-y-2 text-sm">
+            <div>
+              <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.expires_at") %></dt>
+              <dd class="token-text-base"><%= block[:expires_at].present? ? l(block[:expires_at], format: :short) : t("admin.security_events.show.ip_access.never_expires") %></dd>
+            </div>
+            <div>
+              <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.created_at") %></dt>
+              <dd class="token-text-base"><%= l(block[:created_at], format: :short) %></dd>
+            </div>
+          </dl>
+        <% elsif snapshot[:blockable] %>
+          <p class="mb-4 text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.manual.block_description") %></p>
+        <% else %>
+          <p class="mb-4 rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted">
+            <%= t("admin.security_events.show.ip_access.non_blockable_reasons.#{snapshot[:non_blockable_reason]}", default: snapshot[:non_blockable_reason]) %>
+          </p>
+        <% end %>
+
+        <% if !reauthenticated %>
+          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+            <p class="mb-3 text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.reauthentication_required") %></p>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: new_admin_passkey_reauthentication_path(return_to: admin_security_event_path(record[:id])),
+                  label: t("admin.security_events.show.ip_access.reauthentication_link"),
+                  size: :compact,
+                  icon: "passkey" %>
+          </div>
+        <% elsif snapshot.dig(:manual_block, :active) %>
+          <%= form_with url: manual_ip_unblock_admin_security_event_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+            <%= render "shared/ui/form/textarea_field",
+                  f: form,
+                  attribute: :reason,
+                  label: t("admin.security_events.show.ip_access.reason_label"),
+                  rows: 3,
+                  required: true,
+                  with_icon: false,
+                  label_class: admin_label_class,
+                  textarea_class: admin_textarea_class %>
+            <%= render "shared/ui/form/text_field",
+                  f: form,
+                  attribute: :confirmation,
+                  label: t("admin.security_events.show.ip_access.manual.unblock_confirmation_label"),
+                  required: true,
+                  with_icon: false,
+                  size: :dense,
+                  label_class: admin_label_class,
+                  input_class: admin_mono_control_class %>
+            <%= render "shared/ui/actions/button",
+                  label: t("admin.security_events.show.ip_access.manual.unblock_submit"),
+                  type: "submit",
+                  size: :compact,
+                  icon: "lock_open" %>
+          <% end %>
+        <% elsif snapshot[:blockable] %>
+          <%= form_with url: manual_ip_block_admin_security_event_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+            <%= render "shared/ui/form/datetime_field",
+                  name: "expires_at",
+                  id: "manual_ip_block_expires_at",
+                  type: "datetime-local",
+                  label: t("admin.security_events.show.ip_access.manual.expires_at_label"),
+                  value: default_expires_at.strftime("%Y-%m-%dT%H:%M"),
+                  required: false,
+                  with_icon: false,
+                  size: :dense,
+                  label_class: admin_label_class,
+                  field_class: admin_mono_control_class %>
+            <%= render "shared/ui/form/textarea_field",
+                  f: form,
+                  attribute: :reason,
+                  label: t("admin.security_events.show.ip_access.reason_label"),
+                  rows: 3,
+                  required: true,
+                  with_icon: false,
+                  label_class: admin_label_class,
+                  textarea_class: admin_textarea_class %>
+            <%= render "shared/ui/form/text_field",
+                  f: form,
+                  attribute: :confirmation,
+                  label: t("admin.security_events.show.ip_access.manual.block_confirmation_label"),
+                  required: true,
+                  with_icon: false,
+                  size: :dense,
+                  label_class: admin_label_class,
+                  input_class: admin_mono_control_class %>
+            <%= render "shared/ui/actions/button",
+                  label: t("admin.security_events.show.ip_access.manual.block_submit"),
+                  type: "submit",
+                  size: :compact,
+                  icon: "block" %>
+          <% end %>
+        <% end %>
+      </div>
+
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.automatic.title") %></h3>
+        <dl class="mb-4 space-y-2 text-sm">
+          <% snapshot.dig(:rack_attack, :targets).each do |target, banned| %>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="font-mono text-xs token-text-muted"><%= t("admin.security_events.show.ip_access.automatic.targets.#{target}", default: target) %></dt>
+              <dd class="text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %>">
+                <%= banned ? t("admin.security_events.show.ip_access.status.automatic_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
+              </dd>
+            </div>
+          <% end %>
+        </dl>
+
+        <% if snapshot.dig(:rack_attack, :any_banned) %>
+          <% if !reauthenticated %>
+            <p class="text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.reauthentication_required") %></p>
+          <% else %>
+            <%= form_with url: rack_attack_ban_reset_admin_security_event_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
+              <%= hidden_field_tag :rack_attack_target, "all" %>
+              <%= render "shared/ui/form/textarea_field",
+                    f: form,
+                    attribute: :reason,
+                    label: t("admin.security_events.show.ip_access.reason_label"),
+                    rows: 3,
+                    required: true,
+                    with_icon: false,
+                    label_class: admin_label_class,
+                    textarea_class: admin_textarea_class %>
+              <%= render "shared/ui/form/text_field",
+                    f: form,
+                    attribute: :confirmation,
+                    label: t("admin.security_events.show.ip_access.automatic.reset_confirmation_label"),
+                    required: true,
+                    with_icon: false,
+                    size: :dense,
+                    label_class: admin_label_class,
+                    input_class: admin_mono_control_class %>
+              <%= render "shared/ui/actions/button",
+                    label: t("admin.security_events.show.ip_access.automatic.reset_submit"),
+                    type: "submit",
+                    size: :compact,
+                    icon: "restart_alt" %>
+            <% end %>
+          <% end %>
+        <% else %>
+          <p class="text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.automatic.empty") %></p>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.recent.title") %></h3>
+      <p class="text-sm token-text-muted">
+        <%= t("admin.security_events.show.ip_access.recent.count", count: snapshot[:recent_security_events_count]) %>
+      </p>
+      <% if snapshot[:matched_rules].present? %>
+        <ul class="mt-3 flex flex-wrap gap-2 text-xs">
+          <% snapshot[:matched_rules].each do |rule| %>
+            <li class="rounded-full border token-border-soft token-bg-input px-3 py-1 font-mono token-text-base">
+              <%= rule[:matched_rule] %> x <%= rule[:count] %>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

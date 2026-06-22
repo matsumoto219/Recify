@@ -277,6 +277,22 @@ RSpec.describe 'Rack::Attack', type: :request do
     expect_blocklisted_html_response
   end
 
+  it 'blocks manually restricted IP addresses from the database' do
+    ip = '8.8.8.8'
+    create(:security_ip_block, ip_address: ip)
+
+    get root_path, headers: remote_addr(ip)
+
+    aggregate_failures do
+      expect_blocklisted_html_response
+      expect(SecurityEvent.last).to have_attributes(
+        event_type: 'rate_limit_triggered',
+        matched_rule: 'manual/ip_blocks'
+      )
+      expect(SecurityEvent.last.ip_address.to_s).to eq(ip)
+    end
+  end
+
   it 'treats Rails and secret file probes as scanner requests' do
     paths = [
       '/.git/config',
