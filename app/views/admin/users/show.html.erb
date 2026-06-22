@@ -157,6 +157,60 @@
   </div>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.receipts.title") %></h2>
+        <p class="text-sm token-text-muted"><%= t("admin.users.show.receipts.description") %></p>
+      </div>
+      <%= render "shared/ui/actions/button",
+            as: :link,
+            href: admin_receipt_analysis_runs_path(user_id: record[:id]),
+            label: t("admin.users.show.receipts.analysis_runs_link"),
+            variant: :secondary,
+            size: :sm %>
+    </div>
+
+    <%= render "admin/shared/table_frame", size: :lg do %>
+      <thead class="token-text-muted">
+        <tr class="border-b token-border-soft">
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.users.show.receipts.columns.receipt") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.receipts.columns.status") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.receipts.columns.moderation_status") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.users.show.receipts.columns.store") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.users.show.receipts.columns.total") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.users.show.receipts.columns.created") %></th>
+          <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :action) %>"><%= t("admin.users.show.receipts.columns.detail") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @receipts_result.records.each do |receipt_record| %>
+          <tr class="border-b token-border-soft">
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
+              <div class="font-semibold token-text-base"><%= receipt_record[:display_id] %></div>
+              <div class="mt-1 break-words font-mono text-xs token-text-muted [overflow-wrap:anywhere]"><%= receipt_record[:public_id] %></div>
+            </td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= receipt_record[:status] %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.states.#{receipt_record[:moderation_status]}") %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= receipt_record[:store_name].presence || "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= receipt_record[:total_amount].present? ? receipt_total_amount_display(receipt_record[:total_amount]) : "-" %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= timestamp_label.call(receipt_record.dig(:timestamps, :created_at)) %></td>
+            <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>">
+              <%= link_to t("admin.users.show.receipts.detail_link"),
+                    admin_receipt_path(receipt_record[:public_id]),
+                    class: "font-semibold token-text-brand hover:underline" %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @receipts_result.records.empty? %>
+          <tr>
+            <td colspan="7" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.users.show.receipts.empty") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    <% end %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <div class="mb-4">
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.users.show.limits.title") %></h2>
       <p class="text-sm token-text-muted"><%= t("admin.users.show.limits.description") %></p>

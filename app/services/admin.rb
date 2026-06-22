@@ -8,6 +8,14 @@ module Admin
       ReceiptAnalysisRunsQuery.filter_options
     end
 
+    def receipts(**filters)
+      ReceiptsQuery.call(**filters)
+    end
+
+    def receipt(public_id:)
+      ReceiptsQuery.find(public_id: public_id)
+    end
+
     def dashboard(admin_user:)
       Dashboard.call(admin_user: admin_user)
     end

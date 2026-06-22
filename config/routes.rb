@@ -52,6 +52,10 @@ Rails.application.routes.draw do
     resources :receipt_analysis_runs, only: %i[index show], param: :run_key do
       post :retry, on: :member
     end
+    resources :receipts, only: %i[show], param: :public_id do
+      post :quarantine, on: :member
+      post :release, on: :member
+    end
   end
 
   if Rails.env.development? && defined?(LetterOpenerWeb::Engine)

@@ -125,6 +125,39 @@ RSpec.describe SystemOperations do
     end
   end
 
+  describe '.execute_receipt_moderation_operation' do
+    it 'ReceiptModerationExecutorへ委譲する親入口である' do
+      allow(SystemOperations::ReceiptModerationExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))
+      receipt = build_stubbed(:receipt)
+      security_event = build_stubbed(:security_event)
+
+      result = described_class.execute_receipt_moderation_operation(
+        operation: 'quarantine',
+        receipt: receipt,
+        actor: build_stubbed(:user, :admin),
+        reason: 'policy violation',
+        request: nil,
+        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        confirmation: 'QUARANTINE RECEIPT',
+        source_security_event: security_event
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::ReceiptModerationExecutor).to have_received(:call).with(
+          operation: 'quarantine',
+          receipt: receipt,
+          actor: kind_of(User),
+          reason: 'policy violation',
+          request: nil,
+          reauthentication: hash_including(method: 'passkey'),
+          confirmation: 'QUARANTINE RECEIPT',
+          source_security_event: security_event
+        )
+      end
+    end
+  end
+
   describe '.user_limit_update_confirmation_text' do
     it 'UserLimitUpdateExecutorの確認文言を親入口から公開する' do
       expect(described_class.user_limit_update_confirmation_text).to eq('UPDATE USER LIMIT')

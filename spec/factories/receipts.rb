@@ -24,6 +24,13 @@ FactoryBot.define do
       processing_error_code { "ocr_api_error" }
     end
 
+    trait :quarantined do
+      moderation_status { Receipt::MODERATION_STATUS_QUARANTINED }
+      quarantined_at { Time.current }
+      association :quarantined_by, factory: %i[user admin]
+      quarantine_reason { "policy violation" }
+    end
+
     trait :with_image do
       after(:build) do |receipt|
         receipt.image.attach(

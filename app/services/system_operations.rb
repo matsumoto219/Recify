@@ -14,6 +14,8 @@ module SystemOperations
     :user_limit_override,
     :ip_access_result,
     :security_ip_block,
+    :receipt,
+    :receipt_moderation_result,
     :error_code,
     :error_message,
     keyword_init: true
@@ -91,6 +93,19 @@ module SystemOperations
         source_security_event: source_security_event,
         expires_at: expires_at,
         rack_attack_target: rack_attack_target
+      )
+    end
+
+    def execute_receipt_moderation_operation(operation:, receipt:, actor:, reason:, request:, reauthentication:, confirmation:, source_security_event: nil)
+      ReceiptModerationExecutor.call(
+        operation: operation,
+        receipt: receipt,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation,
+        source_security_event: source_security_event
       )
     end
 

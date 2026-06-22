@@ -511,6 +511,124 @@ ja:
       locked_operations:
         title: 管理トップでは直接実行しない操作
         description: 以下の操作は、専用画面または運用手順で扱います。管理トップでは実行しません。
+    receipts:
+      common:
+        "yes": はい
+        "no": いいえ
+      states:
+        active: 通常表示
+        quarantined: 隔離中
+      messages:
+        not_available: このレシートは現在の状態では操作できません。
+        reauthentication_required: レシート隔離操作にはパスキーによる再認証が必要です。
+        reason_required: 操作理由を入力してください。
+        confirmation_required: 確認文字列を入力してください。
+        success:
+          quarantine: レシートを隔離しました。
+          release: レシートの隔離を解除しました。
+          default: レシートの状態を更新しました。
+        failure:
+          target_receipt_required: 対象レシートを確認できませんでした。
+          actor_required: 操作者を確認できませんでした。
+          reason_required: 操作理由を入力してください。
+          reauthentication_required: レシート隔離操作にはパスキーによる再認証が必要です。
+          confirmation_required: 確認文字列が一致しません。
+          receipt_already_quarantined: このレシートはすでに隔離中です。
+          receipt_not_quarantined: このレシートは隔離中ではありません。
+          receipt_moderation_operation_failed: レシートの状態を更新できませんでした。
+          default: レシートの状態を更新できませんでした。
+      show:
+        title: レシート詳細
+        links:
+          owner: 所有ユーザー
+          analysis_runs: 解析run
+          audit_logs: 監査ログ
+        sections:
+          receipt: Receipt
+          purchase: 購入情報
+          owner: 所有者
+          original_image: オリジナル画像
+          image: 画像メタ情報
+          contents: 内容サマリ
+          items: 明細
+          adjustments: 調整行
+          analysis_runs: 解析run
+          notifications: 通知
+        labels:
+          display_id: display id
+          public_id: public id
+          status: receipt status
+          moderation_status: 表示状態
+          store_name: 店舗名
+          purchased_at: 購入日時
+          total_amount: 合計金額
+          payment_method: 支払方法
+          owner_id: owner id
+          owner_email: owner email
+          created_at: 作成日時
+          updated_at: 更新日時
+          quarantined_at: 隔離日時
+          released_at: 解除日時
+          quarantine_reason: 隔離理由
+          release_reason: 解除理由
+          source_security_event: 関連SecurityEvent
+        image:
+          empty: 画像はありません
+          attached: 添付
+          filename: filename
+          content_type: content type
+          byte_size: byte size
+          keep_image: keep image
+          purged_at: purge済み日時
+          purged_reason: purge理由
+          purge_eligible_at: purge対象日時
+        counts:
+          items: 明細
+          adjustments: 調整行
+          payments: 支払い
+          tax_details: 税内訳
+          analysis_runs: 解析run
+          notifications: 通知
+        items:
+          name: 品名
+          amount: 金額
+          review: 要確認
+          empty: 明細はありません。
+        adjustments:
+          label: ラベル
+          kind: 種別
+          amount: 金額
+          empty: 調整行はありません。
+        analysis_runs:
+          description: このレシートに紐づく最近の解析run
+          link: すべて見る
+          run_key: run key
+          status: status
+          created_at: created
+          empty: 解析runはありません。
+        notifications:
+          kind: 種別
+          title: タイトル
+          created_at: created
+          empty: 通知はありません。
+        moderation:
+          title: レシート隔離
+          description: 不適切または規約違反の疑いがあるレシートを、ユーザー画面から非表示にします。画像や関連データは削除しません。
+          reauthentication_required: この操作にはパスキー再認証が必要です。
+          reauthentication_link: パスキーで再認証
+          reason_label: 操作理由
+          not_available: 現在の状態で実行できる操作はありません。
+          no_purge_note: この操作ではレシート、明細、解析履歴、添付画像を削除しません。ユーザー画面では隔離中のレシートを表示しません。
+          quarantine:
+            title: レシートを隔離
+            description: レシートをユーザー画面から非表示にし、管理者確認中として扱います。誤操作時は解除できます。
+            confirmation_label: 確認文字列 QUARANTINE RECEIPT
+            submit: 隔離する
+          release:
+            title: 隔離を解除
+            description: 隔離中のレシートを通常表示に戻します。解除理由は監査ログに残ります。
+            confirmation_label: 確認文字列 RELEASE RECEIPT
+            submit: 隔離を解除
     receipt_analysis_runs:
       index:
         title: 解析run管理
@@ -556,6 +674,8 @@ ja:
           registered: registered
       show:
         title: 解析run詳細
+        links:
+          receipt_detail: レシート詳細
         sections:
           run: Run
           receipt: Receipt
@@ -1180,6 +1300,20 @@ ja:
           passkeys: passkeys
           latest_passkey_use: latest passkey use
           receipts: receipts
+        receipts:
+          title: 最近のレシート
+          description: 所有レシートの直近状態を確認します。隔離中のレシートも管理者向けには表示します。
+          analysis_runs_link: 関連する解析run
+          columns:
+            receipt: receipt
+            status: receipt status
+            moderation_status: 表示状態
+            store: 店舗
+            total: 合計
+            created: created
+            detail: detail
+          detail_link: 詳細
+          empty: レシートはありません。
         limits:
           title: 利用量と上限
           description: 現在の利用量、全体設定、ユーザー別上限の適用状況

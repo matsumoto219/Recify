@@ -29,6 +29,13 @@ class CreateReceipts < ActiveRecord::Migration[8.1]
       t.datetime :image_purge_eligible_at
       t.datetime :image_purged_at
       t.string :image_purged_reason
+      t.string :moderation_status, null: false, default: "active"
+      t.datetime :quarantined_at
+      t.references :quarantined_by, foreign_key: { to_table: :users }, type: :bigint
+      t.text :quarantine_reason
+      t.datetime :quarantine_released_at
+      t.references :quarantine_released_by, foreign_key: { to_table: :users }, type: :bigint
+      t.text :quarantine_released_reason
 
       t.timestamps
     end
@@ -42,6 +49,11 @@ class CreateReceipts < ActiveRecord::Migration[8.1]
               name: "index_receipts_on_user_id_and_status"
     add_index :receipts, [ :user_id, :status, :purchased_at ],
               name: "index_receipts_on_user_status_purchased_at"
+    add_index :receipts, [ :user_id, :moderation_status, :created_at ],
+              order: { created_at: :desc },
+              name: "index_receipts_on_user_moderation_created_at"
+    add_index :receipts, [ :moderation_status, :quarantined_at ],
+              name: "index_receipts_on_moderation_status_quarantined_at"
     add_index :receipts,
               [ :image_purge_eligible_at, :id ],
               name: "index_receipts_on_image_purge_eligible_at",
@@ -49,5 +61,8 @@ class CreateReceipts < ActiveRecord::Migration[8.1]
     add_check_constraint :receipts,
                          "image_purged_reason IS NULL OR image_purged_reason IN ('manual_delete', 'system_purge')",
                          name: "check_receipts_image_purged_reason"
+    add_check_constraint :receipts,
+                         "moderation_status IN ('active', 'quarantined')",
+                         name: "check_receipts_moderation_status"
   end
 end

@@ -441,6 +441,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('解析run詳細')
         expect(response.body).to include(run.run_key)
         expect(response.body).to include(run.receipt.display_id)
+        expect(response.body).to include(admin_receipt_path(receipt))
         expect(response.body).to include('Retry options')
         expect(response.body).to include('Snapshot presence')
         expect(response.body).to include('ai_normalized_result_snapshot')

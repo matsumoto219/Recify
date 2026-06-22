@@ -1,0 +1,294 @@
+<% content_for :title, t("admin.receipts.show.title") %>
+
+<%
+  record = @record
+  receipt = @receipt
+  image = record[:image]
+  timestamp_label = ->(value) { value.present? ? l(value, format: :short) : "-" }
+  amount_label = ->(value) { value.nil? ? "-" : receipt_total_amount_display(value) }
+  boolean_label = ->(value) { value ? t("admin.receipts.common.yes") : t("admin.receipts.common.no") }
+%>
+
+<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+  <%= render "admin/shared/navigation" %>
+
+  <%= render "shared/ui/layout/section_header",
+        title: t("admin.receipts.show.title"),
+        subtitle: "#{record[:display_id]} / #{record[:public_id]}",
+        breadcrumb_label: t("admin.users.show.title"),
+        breadcrumb_path: admin_user_path(record.dig(:owner, :id)),
+        title_size: "text-2xl md:text-3xl",
+        subtitle_size: "text-sm" %>
+
+  <div class="flex flex-wrap gap-2 text-sm">
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_user_path(record.dig(:owner, :id)),
+          label: t("admin.receipts.show.links.owner"),
+          variant: :secondary,
+          size: :sm %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_receipt_analysis_runs_path(receipt_public_id: record[:public_id]),
+          label: t("admin.receipts.show.links.analysis_runs"),
+          variant: :secondary,
+          size: :sm %>
+    <%= render "shared/ui/actions/button",
+          as: :link,
+          href: admin_audit_logs_path(target_uid: record[:audit_target_uid]),
+          label: t("admin.receipts.show.links.audit_logs"),
+          variant: :secondary,
+          size: :sm %>
+  </div>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <div class="grid gap-6 lg:grid-cols-3">
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.receipt") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.display_id") %></dt>
+            <dd class="font-mono token-text-base"><%= record[:display_id] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.public_id") %></dt>
+            <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= record[:public_id] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.status") %></dt>
+            <dd class="token-text-base"><%= record[:status] %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.moderation_status") %></dt>
+            <dd class="font-semibold token-text-base"><%= t("admin.receipts.states.#{record[:moderation_status]}") %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.purchase") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.store_name") %></dt>
+            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= record[:store_name].presence || "-" %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.purchased_at") %></dt>
+            <dd class="token-text-base"><%= timestamp_label.call(record[:purchased_at]) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.total_amount") %></dt>
+            <dd class="font-mono token-text-base"><%= amount_label.call(record[:total_amount]) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.payment_method") %></dt>
+            <dd class="token-text-base"><%= record[:payment_method].presence || "-" %></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.owner") %></h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.owner_id") %></dt>
+            <dd class="font-mono token-text-base">#<%= record.dig(:owner, :id) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.owner_email") %></dt>
+            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:owner, :email) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.created_at") %></dt>
+            <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.updated_at") %></dt>
+            <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/card/receipt_image_card",
+          receipt: receipt,
+          title: t("admin.receipts.show.sections.original_image"),
+          show_toggle: true,
+          show_modal: true,
+          show_download: false,
+          initially_open: false,
+          collapse_on_mobile: true,
+          keep_image_enabled: receipt.keep_image?,
+          wrapper_class: "h-full",
+          card_class: "h-full flex flex-col",
+          preview_width_class: "w-full max-w-[320px]",
+          preview_height_class: "h-[420px]",
+          empty_message: t("admin.receipts.show.image.empty") %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.image") %></h2>
+      <dl class="grid gap-4 text-sm md:grid-cols-2">
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.attached") %></dt>
+          <dd class="token-text-base"><%= boolean_label.call(image[:attached]) %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.filename") %></dt>
+          <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= image[:filename].presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.content_type") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= image[:content_type].presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.byte_size") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= image[:byte_size].present? ? number_to_human_size(image[:byte_size]) : "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.keep_image") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= boolean_label.call(image[:keep_image]) %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purged_at") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= timestamp_label.call(image[:purged_at]) %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purged_reason") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= image[:purged_reason].presence || "-" %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purge_eligible_at") %></dt>
+          <dd class="font-mono text-xs token-text-base"><%= timestamp_label.call(image[:purge_eligible_at]) %></dd>
+        </div>
+      </dl>
+    <% end %>
+  </div>
+
+  <%= render "admin/receipts/moderation_card", record: record, receipt: receipt %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+    <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.contents") %></h2>
+    <dl class="mb-5 grid gap-3 text-sm md:grid-cols-5">
+      <% record[:counts].each do |key, value| %>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.counts.#{key}") %></dt>
+          <dd class="font-mono text-xl font-bold token-text-base"><%= value %></dd>
+        </div>
+      <% end %>
+    </dl>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <section>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.receipts.show.sections.items") %></h3>
+        <%= render "admin/shared/table_frame", size: :lg do %>
+          <thead class="token-text-muted">
+            <tr class="border-b token-border-soft">
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.receipts.show.items.name") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.items.amount") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.items.review") %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% record[:recent_items].each do |item| %>
+              <tr class="border-b token-border-soft">
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= item[:name].presence || "-" %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= amount_label.call(item[:line_total]) %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= boolean_label.call(item[:needs_review]) %></td>
+              </tr>
+            <% end %>
+            <% if record[:recent_items].empty? %>
+              <tr><td colspan="3" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.items.empty") %></td></tr>
+            <% end %>
+          </tbody>
+        <% end %>
+      </section>
+
+      <section>
+        <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.receipts.show.sections.adjustments") %></h3>
+        <%= render "admin/shared/table_frame", size: :lg do %>
+          <thead class="token-text-muted">
+            <tr class="border-b token-border-soft">
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.receipts.show.adjustments.label") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.adjustments.kind") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.adjustments.amount") %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% record[:recent_adjustments].each do |adjustment| %>
+              <tr class="border-b token-border-soft">
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= adjustment[:label].presence || "-" %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= adjustment[:kind].presence || "-" %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= amount_label.call(adjustment[:amount]) %></td>
+              </tr>
+            <% end %>
+            <% if record[:recent_adjustments].empty? %>
+              <tr><td colspan="3" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.adjustments.empty") %></td></tr>
+            <% end %>
+          </tbody>
+        <% end %>
+      </section>
+    </div>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.analysis_runs") %></h2>
+          <p class="text-sm token-text-muted"><%= t("admin.receipts.show.analysis_runs.description") %></p>
+        </div>
+        <%= link_to t("admin.receipts.show.analysis_runs.link"),
+              admin_receipt_analysis_runs_path(receipt_public_id: record[:public_id]),
+              class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+      <%= render "admin/shared/table_frame", size: :lg do %>
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_id) %>"><%= t("admin.receipts.show.analysis_runs.run_key") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.analysis_runs.status") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.receipts.show.analysis_runs.created_at") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% record[:recent_analysis_runs].each do |run| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>"><%= link_to run[:run_key], admin_receipt_analysis_run_path(run[:run_key]), class: "token-text-brand hover:underline" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= run[:stage] %> / <%= run[:status] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= timestamp_label.call(run[:created_at]) %></td>
+            </tr>
+          <% end %>
+          <% if record[:recent_analysis_runs].empty? %>
+            <tr><td colspan="3" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.analysis_runs.empty") %></td></tr>
+          <% end %>
+        </tbody>
+      <% end %>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+      <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.notifications") %></h2>
+      <%= render "admin/shared/table_frame", size: :lg do %>
+        <thead class="token-text-muted">
+          <tr class="border-b token-border-soft">
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.notifications.kind") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.receipts.show.notifications.title") %></th>
+            <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.receipts.show.notifications.created_at") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% record[:recent_notifications].each do |notification| %>
+            <tr class="border-b token-border-soft">
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= notification[:kind] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= notification[:title].presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= timestamp_label.call(notification[:created_at]) %></td>
+            </tr>
+          <% end %>
+          <% if record[:recent_notifications].empty? %>
+            <tr><td colspan="3" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.notifications.empty") %></td></tr>
+          <% end %>
+        </tbody>
+      <% end %>
+    <% end %>
+  </div>
+</section>

@@ -192,7 +192,8 @@ RSpec.describe 'Admin users', type: :request do
         failed_attempts: 1
       )
       create(:passkey, user: user, credential_id: 'hidden-credential-id', public_key: 'HIDDEN PUBLIC KEY', last_used_at: 30.minutes.ago)
-      create_list(:receipt, 2, user: user)
+      receipt = create(:receipt, user: user, store_name: 'ユーザー詳細レシート')
+      quarantined_receipt = create(:receipt, :quarantined, user: user, store_name: '隔離中レシート')
       create(:user_limit_override, user: user, key: 'receipt_uploads_per_day', value: { 'value' => 75 })
       create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 3)
       active_session = UserSession.create!(
@@ -230,6 +231,12 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('ユーザー詳細')
         expect(response.body).to include('show-user@example.com')
         expect(response.body).not_to include('translation missing')
+        expect(response.body).to include('最近のレシート')
+        expect(response.body).to include('ユーザー詳細レシート')
+        expect(response.body).to include('隔離中レシート')
+        expect(response.body).to include(admin_receipt_path(receipt))
+        expect(response.body).to include(admin_receipt_path(quarantined_receipt))
+        expect(response.body).to include('隔離中')
         expect(response.body).to include('203.0.113.20')
         expect(response.body).to include('203.0.113.21')
         expect(response.body).to include('receipt_analysis.ai_retry')

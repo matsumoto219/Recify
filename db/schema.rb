@@ -281,7 +281,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
     t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
     t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
-    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text]))"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
     t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
     t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
     t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
@@ -342,12 +342,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.string "image_purged_reason"
     t.boolean "keep_image", default: true, null: false
     t.text "memo"
+    t.string "moderation_status", default: "active", null: false
     t.datetime "ocr_completed_at"
     t.string "payment_method"
     t.string "processing_error_code"
     t.text "processing_error_message"
     t.string "public_id", limit: 32, null: false
     t.datetime "purchased_at"
+    t.text "quarantine_reason"
+    t.datetime "quarantine_released_at"
+    t.bigint "quarantine_released_by_id"
+    t.text "quarantine_released_reason"
+    t.bigint "quarantine_source_security_event_id"
+    t.datetime "quarantined_at"
+    t.bigint "quarantined_by_id"
     t.string "receipt_type"
     t.jsonb "review_reasons", default: [], null: false
     t.string "status"
@@ -363,13 +371,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["image_purge_eligible_at", "id"], name: "index_receipts_on_image_purge_eligible_at", where: "((keep_image = false) AND (image_purged_at IS NULL) AND (image_purge_eligible_at IS NOT NULL))"
+    t.index ["moderation_status", "quarantined_at"], name: "index_receipts_on_moderation_status_quarantined_at"
     t.index ["public_id"], name: "index_receipts_on_public_id", unique: true
+    t.index ["quarantine_released_by_id"], name: "index_receipts_on_quarantine_released_by_id"
+    t.index ["quarantine_source_security_event_id"], name: "index_receipts_on_quarantine_source_security_event_id"
+    t.index ["quarantined_by_id"], name: "index_receipts_on_quarantined_by_id"
     t.index ["user_id", "created_at"], name: "index_receipts_on_user_id_and_created_at_desc", order: { created_at: :desc }
     t.index ["user_id", "display_id"], name: "index_receipts_on_user_id_and_display_id", unique: true
+    t.index ["user_id", "moderation_status", "created_at"], name: "index_receipts_on_user_moderation_created_at", order: { created_at: :desc }
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"
-    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying::text, 'system_purge'::character varying::text]))", name: "check_receipts_image_purged_reason"
+    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying, 'system_purge'::character varying]::text[]))", name: "check_receipts_image_purged_reason"
+    t.check_constraint "moderation_status::text = ANY (ARRAY['active'::character varying, 'quarantined'::character varying]::text[])", name: "check_receipts_moderation_status"
   end
 
   create_table "recovery_codes", force: :cascade do |t|
@@ -576,7 +590,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
   add_foreign_key "receipt_items", "receipts"
   add_foreign_key "receipt_payments", "receipts"
   add_foreign_key "receipt_tax_details", "receipts"
+  add_foreign_key "receipts", "security_events", column: "quarantine_source_security_event_id"
   add_foreign_key "receipts", "users"
+  add_foreign_key "receipts", "users", column: "quarantine_released_by_id"
+  add_foreign_key "receipts", "users", column: "quarantined_by_id"
   add_foreign_key "recovery_codes", "users"
   add_foreign_key "security_events", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "security_ip_blocks", "security_events", column: "source_security_event_id"

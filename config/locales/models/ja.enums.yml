@@ -16,6 +16,10 @@ ja:
         completed: 完了
         failed: 失敗
 
+      moderation_status:
+        active: 通常表示
+        quarantined: 隔離中
+
     receipt_item:
       category:
         food: 食品

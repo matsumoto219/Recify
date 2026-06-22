@@ -54,5 +54,11 @@ class CreateSecurityEvents < ActiveRecord::Migration[8.1]
     add_index :security_ip_blocks, [ :ip_address, :status ], name: "index_security_ip_blocks_on_ip_and_status"
     add_index :security_ip_blocks, :status
     add_index :security_ip_blocks, :expires_at
+
+    add_reference :receipts,
+                  :quarantine_source_security_event,
+                  foreign_key: { to_table: :security_events },
+                  type: :bigint,
+                  index: { name: "index_receipts_on_quarantine_source_security_event_id" }
   end
 end

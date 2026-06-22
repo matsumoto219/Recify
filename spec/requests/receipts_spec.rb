@@ -274,6 +274,19 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '隔離中のレシートは一覧に表示しない' do
+      quarantined_receipt = create(:receipt, :quarantined, user: user, store_name: '隔離中のレシート', status: 'completed')
+
+      get receipts_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('自分のレシート')
+        expect(response.body).not_to include('隔離中のレシート')
+        expect(receipt_card_ids(Nokogiri::HTML(response.body))).not_to include("receipt_#{quarantined_receipt.public_id}")
+      end
+    end
+
     it 'リアルタイム追加用のreceipts-list-gridを持つ' do
       get receipts_path
 
@@ -4401,6 +4414,14 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
+    it '隔離中のレシートは404扱いにする' do
+      quarantined_receipt = create(:receipt, :quarantined, user: user, status: 'completed')
+
+      get receipt_path(quarantined_receipt)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it '詳細画面の主要文言をlocale経由で描画する' do
       get receipt_path(receipt)
 
@@ -5335,6 +5356,14 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       expect(response).to have_http_status(:success)
+    end
+
+    it '隔離中のレシートは編集できない' do
+      quarantined_receipt = create(:receipt, :quarantined, user: user, status: 'review_needed')
+
+      get edit_receipt_path(quarantined_receipt)
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it '編集画面の主要文言をlocale経由で描画しJS用文言をform data属性へ渡す' do
@@ -6294,6 +6323,22 @@ RSpec.describe 'Receipts', type: :request do
           'context' => 'edit_save',
           'resolved' => include('total_amount' => 2000)
         )
+      end
+    end
+
+    it '隔離中のレシートは更新できず、画像削除も実行しない' do
+      quarantined_receipt = create(:receipt, :quarantined, :with_image, user: user, status: 'review_needed')
+      blob_id = quarantined_receipt.image.blob.id
+
+      expect do
+        patch receipt_path(quarantined_receipt),
+              params: { receipt: { store_name: '更新されない', remove_image: '1' } }
+      end.not_to change { quarantined_receipt.reload.store_name }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(quarantined_receipt.image).to be_attached
+        expect(ActiveStorage::Blob.exists?(blob_id)).to be(true)
       end
     end
 
@@ -8231,6 +8276,16 @@ RSpec.describe 'Receipts', type: :request do
       end.to change(Receipt, :count).by(-1)
 
       expect(response).to redirect_to(receipts_path)
+    end
+
+    it '隔離中のレシートは削除できない' do
+      quarantined_receipt = create(:receipt, :quarantined, user: user, status: 'completed')
+
+      expect do
+        delete receipt_path(quarantined_receipt)
+      end.not_to change(Receipt, :count)
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it 'stuck processing cleanupでfailed化されたレシートを削除できる' do

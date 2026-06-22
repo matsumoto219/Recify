@@ -24,7 +24,7 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    prepare_receipt_index_query(current_user.receipts)
+    prepare_receipt_index_query(current_user.receipts.active_for_user)
     receipts_scope = @receipt_index_query.scope
 
     @pagy, @receipts = pagy(:offset, receipts_scope, limit: @per_page)
@@ -280,7 +280,7 @@ class ReceiptsController < ApplicationController
   private
 
   def set_receipt
-    @receipt = current_user.receipts.find_by!(public_id: params[:public_id])
+    @receipt = current_user.receipts.active_for_user.find_by!(public_id: params[:public_id])
   end
 
   def prepare_receipt_form_presenter
@@ -1414,7 +1414,7 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    prepare_receipt_index_query(current_user.receipts.none)
+    prepare_receipt_index_query(current_user.receipts.active_for_user.none)
     receipts_scope = @receipt_index_query.scope
     @pagy, @receipts = pagy(:offset, receipts_scope, limit: @per_page)
     assign_receipts_index_summary(receipts_scope)

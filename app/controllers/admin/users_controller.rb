@@ -12,6 +12,7 @@ class Admin::UsersController < Admin::BaseController
     @record = Admin.user(id: params[:id])
     raise_not_found if @record.blank?
 
+    @receipts_result = Admin.receipts(user_id: @record[:id], limit: 10)
     @audit_result = Admin.audit_logs(actor_user_id: @record[:id], limit: 10)
     @security_events_result = Admin.security_events(actor_user_id: @record[:id], limit: 10)
   end

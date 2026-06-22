@@ -40,6 +40,12 @@ class Receipt < ApplicationRecord
     "review_needed" => "receipt_review_needed",
     "failed" => "receipt_failed"
   }.freeze
+  MODERATION_STATUS_ACTIVE = "active".freeze
+  MODERATION_STATUS_QUARANTINED = "quarantined".freeze
+  MODERATION_STATUSES = [
+    MODERATION_STATUS_ACTIVE,
+    MODERATION_STATUS_QUARANTINED
+  ].freeze
   PUBLIC_ID_PREFIX = "rcpt_"
   PUBLIC_ID_RANDOM_LENGTH = 16
   PUBLIC_ID_FORMAT = /\A#{PUBLIC_ID_PREFIX}[A-Za-z0-9]{#{PUBLIC_ID_RANDOM_LENGTH}}\z/
@@ -73,6 +79,7 @@ class Receipt < ApplicationRecord
     completed: "completed",
     failed: "failed"
   }
+  enum :moderation_status, MODERATION_STATUSES.index_with { |value| value }, prefix: :moderation
 
   def self.image_max_file_size
     SystemSettings.limit_for("limits.receipt_image_max_file_size_bytes")
@@ -93,6 +100,15 @@ class Receipt < ApplicationRecord
   end
 
   belongs_to :user
+  belongs_to :quarantined_by,
+             class_name: "User",
+             optional: true
+  belongs_to :quarantine_released_by,
+             class_name: "User",
+             optional: true
+  belongs_to :quarantine_source_security_event,
+             class_name: "SecurityEvent",
+             optional: true
   has_many :notifications, as: :notifiable, dependent: :destroy
   has_many :receipt_analysis_runs, dependent: :destroy, inverse_of: :receipt
   has_many :receipt_adjustments, dependent: :destroy
@@ -108,6 +124,7 @@ class Receipt < ApplicationRecord
 
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }
+  validates :moderation_status, presence: true, inclusion: { in: moderation_statuses.keys }
   validates :image_purged_reason, inclusion: { in: IMAGE_PURGED_REASONS }, allow_nil: true
   validates :public_id,
             presence: true,
@@ -172,6 +189,7 @@ class Receipt < ApplicationRecord
   validate :validate_receipt_adjustments_count_within_limit
   validate :validate_receipt_payments_count_within_limit
   validate :validate_receipt_tax_details_count_within_limit
+  validate :validate_quarantine_state
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
@@ -387,6 +405,7 @@ class Receipt < ApplicationRecord
 
     scope
   }
+  scope :active_for_user, -> { where(moderation_status: MODERATION_STATUS_ACTIVE) }
 
   # UI表示用電話番号
   # 日本の場合:
@@ -406,6 +425,40 @@ class Receipt < ApplicationRecord
     else
       normalized
     end
+  end
+
+  def quarantined?
+    moderation_quarantined?
+  end
+
+  def active_for_user?
+    moderation_active?
+  end
+
+  def quarantine!(actor:, reason:, source_security_event: nil, at: Time.current)
+    raise ActiveRecord::RecordInvalid, self unless moderation_active?
+
+    update!(
+      moderation_status: MODERATION_STATUS_QUARANTINED,
+      quarantined_at: at,
+      quarantined_by: actor,
+      quarantine_reason: reason,
+      quarantine_source_security_event: source_security_event,
+      quarantine_released_at: nil,
+      quarantine_released_by: nil,
+      quarantine_released_reason: nil
+    )
+  end
+
+  def release_quarantine!(actor:, reason:, at: Time.current)
+    raise ActiveRecord::RecordInvalid, self unless moderation_quarantined?
+
+    update!(
+      moderation_status: MODERATION_STATUS_ACTIVE,
+      quarantine_released_at: at,
+      quarantine_released_by: actor,
+      quarantine_released_reason: reason
+    )
   end
 
   private
@@ -503,6 +556,14 @@ class Receipt < ApplicationRecord
       ReceiptTaxDetail.per_receipt_limit,
       :too_many
     )
+  end
+
+  def validate_quarantine_state
+    return unless moderation_quarantined?
+
+    errors.add(:quarantined_at, :blank) if quarantined_at.blank?
+    errors.add(:quarantined_by, :blank) if quarantined_by.blank?
+    errors.add(:quarantine_reason, :blank) if quarantine_reason.blank?
   end
 
   def validate_child_records_count_within_limit(association_name, limit, error)

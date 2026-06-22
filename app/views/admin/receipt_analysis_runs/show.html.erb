@@ -130,6 +130,14 @@
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.review_reasons") %></dt>
             <dd class="break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= Array(@record.dig(:receipt_info, :review_reasons)).presence&.join(", ") || "-" %></dd>
           </div>
+          <div>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: admin_receipt_path(receipt),
+                  label: t("admin.receipt_analysis_runs.show.links.receipt_detail"),
+                  variant: :secondary,
+                  size: :sm %>
+          </div>
         </dl>
       </section>
 

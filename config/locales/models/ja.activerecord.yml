@@ -45,6 +45,14 @@ ja:
         review_reasons: 確認理由
         processing_error_code: 処理エラーコード
         processing_error_message: 処理エラーメッセージ
+        moderation_status: モデレーション状態
+        quarantined_at: 隔離日時
+        quarantined_by: 隔離実行者
+        quarantine_reason: 隔離理由
+        quarantine_released_at: 隔離解除日時
+        quarantine_released_by: 隔離解除者
+        quarantine_released_reason: 隔離解除理由
+        quarantine_source_security_event: 関連SecurityEvent
         receipt_items: 明細
         receipt_adjustments: 調整行
         receipt_payments: 支払い行

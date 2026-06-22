@@ -59,6 +59,70 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe 'moderation status' do
+    it 'defaultは通常表示でユーザー画面の対象になる' do
+      receipt = create(:receipt)
+
+      aggregate_failures do
+        expect(receipt).to be_moderation_active
+        expect(receipt).to be_active_for_user
+        expect(described_class.active_for_user).to include(receipt)
+      end
+    end
+
+    it '隔離中のreceiptをユーザー画面scopeから除外する' do
+      active = create(:receipt)
+      quarantined = create(:receipt, :quarantined)
+
+      aggregate_failures do
+        expect(quarantined).to be_quarantined
+        expect(described_class.active_for_user).to include(active)
+        expect(described_class.active_for_user).not_to include(quarantined)
+      end
+    end
+
+    it 'quarantine!で隔離情報を保存し、release_quarantine!で通常表示に戻す' do
+      actor = create(:user, :admin)
+      receipt = create(:receipt)
+      event = create(:security_event)
+
+      travel_to(Time.zone.parse('2026-06-23 12:00:00')) do
+        receipt.quarantine!(actor: actor, reason: 'policy violation', source_security_event: event)
+
+        aggregate_failures 'quarantine' do
+          expect(receipt).to be_quarantined
+          expect(receipt.quarantined_by).to eq(actor)
+          expect(receipt.quarantine_reason).to eq('policy violation')
+          expect(receipt.quarantine_source_security_event).to eq(event)
+          expect(receipt.quarantine_released_at).to be_nil
+        end
+      end
+
+      travel_to(Time.zone.parse('2026-06-23 13:00:00')) do
+        receipt.release_quarantine!(actor: actor, reason: 'false positive')
+
+        aggregate_failures 'release' do
+          expect(receipt).to be_moderation_active
+          expect(receipt.quarantine_released_by).to eq(actor)
+          expect(receipt.quarantine_released_reason).to eq('false positive')
+          expect(receipt.quarantined_at).to be_present
+          expect(receipt.quarantine_reason).to eq('policy violation')
+        end
+      end
+    end
+
+    it '隔離状態には隔離理由と実行者が必要' do
+      receipt = build(:receipt, moderation_status: Receipt::MODERATION_STATUS_QUARANTINED)
+
+      aggregate_failures do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors[:quarantined_at]).to be_present
+        expect(receipt.errors[:quarantined_by]).to be_present
+        expect(receipt.errors[:quarantine_reason]).to be_present
+      end
+    end
+  end
+
   describe 'amount limit validation' do
     def configure_amount_limits(total:, item_price:, item_line_total:, tax:, adjustment:, payment:)
       create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(item_price))

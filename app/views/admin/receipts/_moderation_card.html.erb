@@ -1,0 +1,138 @@
+<%
+  record = local_assigns.fetch(:record)
+  moderation = record[:moderation]
+  admin_label_class = "text-xs font-semibold token-text-muted normal-case tracking-normal px-0"
+  admin_textarea_class = "rounded-lg text-sm py-2 leading-6"
+  admin_mono_control_class = "rounded-lg font-mono text-sm"
+  receipt_path = admin_receipt_path(record[:public_id])
+%>
+
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+  <div class="mb-4">
+    <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.moderation.title") %></h2>
+    <p class="text-sm token-text-muted"><%= t("admin.receipts.show.moderation.description") %></p>
+  </div>
+
+  <dl class="mb-5 grid gap-3 text-sm md:grid-cols-3">
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.moderation_status") %></dt>
+      <dd class="mt-1 font-semibold token-text-base"><%= t("admin.receipts.states.#{moderation[:status]}") %></dd>
+    </div>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.quarantined_at") %></dt>
+      <dd class="mt-1 token-text-base"><%= moderation[:quarantined_at].present? ? l(moderation[:quarantined_at], format: :short) : "-" %></dd>
+    </div>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.released_at") %></dt>
+      <dd class="mt-1 token-text-base"><%= moderation[:released_at].present? ? l(moderation[:released_at], format: :short) : "-" %></dd>
+    </div>
+  </dl>
+
+  <div class="mb-5 grid gap-4 lg:grid-cols-2">
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.labels.quarantine_reason") %></h3>
+      <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= moderation[:quarantine_reason].presence || "-" %></p>
+      <p class="mt-2 text-xs token-text-muted">
+        <%= moderation.dig(:quarantined_by, :id).present? ? "##{moderation.dig(:quarantined_by, :id)} #{moderation.dig(:quarantined_by, :email)}" : "-" %>
+      </p>
+    </div>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.labels.release_reason") %></h3>
+      <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= moderation[:released_reason].presence || "-" %></p>
+      <p class="mt-2 text-xs token-text-muted">
+        <%= moderation.dig(:released_by, :id).present? ? "##{moderation.dig(:released_by, :id)} #{moderation.dig(:released_by, :email)}" : "-" %>
+      </p>
+    </div>
+  </div>
+
+  <% if moderation[:source_security_event].present? %>
+    <p class="mb-5 text-sm token-text-muted">
+      <%= t("admin.receipts.show.labels.source_security_event") %>:
+      <%= link_to "##{moderation.dig(:source_security_event, :id)}",
+            admin_security_event_path(moderation.dig(:source_security_event, :id)),
+            class: "font-semibold token-text-brand hover:underline" %>
+    </p>
+  <% end %>
+
+  <% if !admin_passkey_reauthenticated? %>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <p class="mb-3 text-sm token-text-muted"><%= t("admin.receipts.show.moderation.reauthentication_required") %></p>
+      <%= render "shared/ui/actions/button",
+            as: :link,
+            href: new_admin_passkey_reauthentication_path(return_to: receipt_path),
+            label: t("admin.receipts.show.moderation.reauthentication_link"),
+            size: :compact,
+            icon: "passkey" %>
+    </div>
+  <% elsif moderation[:quarantine_allowed] %>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.moderation.quarantine.title") %></h3>
+      <p class="mb-4 text-sm token-text-muted"><%= t("admin.receipts.show.moderation.quarantine.description") %></p>
+      <%= form_with url: quarantine_admin_receipt_path(record[:public_id]), method: :post, local: true, class: "space-y-3" do |form| %>
+        <%= render "shared/ui/form/textarea_field",
+              f: form,
+              attribute: :reason,
+              label: t("admin.receipts.show.moderation.reason_label"),
+              rows: 3,
+              required: true,
+              with_icon: false,
+              label_class: admin_label_class,
+              textarea_class: admin_textarea_class %>
+        <%= render "shared/ui/form/text_field",
+              f: form,
+              attribute: :confirmation,
+              label: t("admin.receipts.show.moderation.quarantine.confirmation_label"),
+              required: true,
+              autocomplete: "off",
+              with_icon: false,
+              size: :dense,
+              label_class: admin_label_class,
+              input_class: admin_mono_control_class %>
+        <%= render "shared/ui/actions/button",
+              label: t("admin.receipts.show.moderation.quarantine.submit"),
+              type: "submit",
+              size: :compact,
+              icon: "visibility_off" %>
+      <% end %>
+    </div>
+  <% elsif moderation[:release_allowed] %>
+    <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.moderation.release.title") %></h3>
+      <p class="mb-4 text-sm token-text-muted"><%= t("admin.receipts.show.moderation.release.description") %></p>
+      <%= form_with url: release_admin_receipt_path(record[:public_id]), method: :post, local: true, class: "space-y-3" do |form| %>
+        <%= render "shared/ui/form/textarea_field",
+              f: form,
+              attribute: :reason,
+              label: t("admin.receipts.show.moderation.reason_label"),
+              rows: 3,
+              required: true,
+              with_icon: false,
+              label_class: admin_label_class,
+              textarea_class: admin_textarea_class %>
+        <%= render "shared/ui/form/text_field",
+              f: form,
+              attribute: :confirmation,
+              label: t("admin.receipts.show.moderation.release.confirmation_label"),
+              required: true,
+              autocomplete: "off",
+              with_icon: false,
+              size: :dense,
+              label_class: admin_label_class,
+              input_class: admin_mono_control_class %>
+        <%= render "shared/ui/actions/button",
+              label: t("admin.receipts.show.moderation.release.submit"),
+              type: "submit",
+              size: :compact,
+              icon: "visibility" %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+      <%= t("admin.receipts.show.moderation.not_available") %>
+    </p>
+  <% end %>
+
+  <p class="mt-4 text-xs token-text-muted">
+    <%= t("admin.receipts.show.moderation.no_purge_note") %>
+  </p>
+<% end %>
