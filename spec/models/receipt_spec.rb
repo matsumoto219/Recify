@@ -83,7 +83,7 @@ RSpec.describe Receipt, type: :model do
 
     it 'quarantine!で隔離情報を保存し、release_quarantine!で通常表示に戻す' do
       actor = create(:user, :admin)
-      receipt = create(:receipt)
+      receipt = create(:receipt, purchased_at: Time.zone.parse('2026-06-23 11:00:00'))
       event = create(:security_event)
 
       travel_to(Time.zone.parse('2026-06-23 12:00:00')) do

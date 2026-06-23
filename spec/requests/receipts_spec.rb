@@ -8279,13 +8279,18 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '隔離中のレシートは削除できない' do
-      quarantined_receipt = create(:receipt, :quarantined, user: user, status: 'completed')
+      quarantined_receipt = create(:receipt, :quarantined, :with_image, user: user, status: 'completed')
+      blob_id = quarantined_receipt.image.blob.id
 
       expect do
         delete receipt_path(quarantined_receipt)
       end.not_to change(Receipt, :count)
 
-      expect(response).to have_http_status(:not_found)
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(quarantined_receipt.reload.image).to be_attached
+        expect(ActiveStorage::Blob.exists?(blob_id)).to be(true)
+      end
     end
 
     it 'stuck processing cleanupでfailed化されたレシートを削除できる' do

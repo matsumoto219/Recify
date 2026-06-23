@@ -82,16 +82,23 @@ RSpec.describe 'Admin IP diagnostics', type: :request do
     it '表示のみでDB更新やAuditLog作成を行わない' do
       admin = create(:user, :admin)
       sign_in admin
-      audit_log_count = AuditLog.count
-      security_event_count = SecurityEvent.count
-      security_ip_block_count = SecurityIpBlock.count
 
-      get admin_security_ip_diagnostics_path
+      expect do
+        get admin_security_ip_diagnostics_path
+      end.not_to change {
+        [
+          AuditLog.count,
+          SecurityEvent.count,
+          SecurityIpBlock.count,
+          ContactRequest.count,
+          SystemSetting.count,
+          User.count
+        ]
+      }
 
       aggregate_failures do
-        expect(AuditLog.count).to eq(audit_log_count)
-        expect(SecurityEvent.count).to eq(security_event_count)
-        expect(SecurityIpBlock.count).to eq(security_ip_block_count)
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('IP診断')
       end
     end
 
