@@ -6,23 +6,58 @@
 
   任意:
   - flash_messages: 表示対象の flash Hash。未指定時は Rails の flash
+  - auto_dismiss: 各メッセージのデフォルト自動消去。未指定時は true
+
+  flash message は以下のどちらでも渡せる:
+  - "保存しました"
+  - { message: "確認メールを送信しました", auto_dismiss: false }
 %>
 
 <%
   flash_source = local_assigns.fetch(:flash_messages, flash.to_hash)
+  default_auto_dismiss = local_assigns.fetch(:auto_dismiss, true)
 
-  grouped_messages = flash_source.each_with_object([]) do |(type, value), result|
-    messages = Array(value).reject(&:blank?)
-    next if messages.empty?
+  message_entries = flash_source.each_with_object([]) do |(type, value), result|
+    raw_messages =
+      if value.is_a?(Hash) && (value.key?("message") || value.key?(:message))
+        [value]
+      else
+        Array(value)
+      end
 
-    result << [type.to_s, messages]
+    raw_messages.each do |raw_message|
+      message = raw_message
+      auto_dismiss = default_auto_dismiss
+
+      if raw_message.is_a?(Hash) && (raw_message.key?("message") || raw_message.key?(:message))
+        message = raw_message["message"] || raw_message[:message]
+        auto_dismiss_value =
+          if raw_message.key?("auto_dismiss")
+            raw_message["auto_dismiss"]
+          elsif raw_message.key?(:auto_dismiss)
+            raw_message[:auto_dismiss]
+          else
+            default_auto_dismiss
+          end
+        auto_dismiss = ActiveModel::Type::Boolean.new.cast(auto_dismiss_value)
+      end
+
+      next if message.blank?
+
+      result << [type.to_s, auto_dismiss, message]
+    end
   end
+
+  grouped_messages =
+    message_entries
+      .group_by { |type, auto_dismiss, _message| [type, auto_dismiss] }
+      .map { |(type, auto_dismiss), entries| [type, auto_dismiss, entries.map { |entry| entry[2] }] }
 %>
 
 <% if grouped_messages.any? %>
   <%# トーストコンテナ %>
   <div class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm">
-    <% grouped_messages.each_with_index do |(type, messages), i| %>
+    <% grouped_messages.each_with_index do |(type, auto_dismiss, messages), i| %>
       <% body_content = nil %>
       <% if messages.many? %>
         <% body_content = capture do %>
@@ -44,7 +79,8 @@
                  dismissible: true,
                  animated: true,
                  animation_name: "slide_right",
-                 auto_dismiss: true,
+                 auto_dismiss: auto_dismiss,
+                 remove_before_cache: true,
                  max_visible: 3,
                  surface_id: "toast-#{i}",
                  align: :center %>

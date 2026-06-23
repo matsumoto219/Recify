@@ -25,6 +25,13 @@ RSpec.describe 'Settings', type: :request do
     message.html_part&.body&.decoded || message.body.decoded
   end
 
+  def flash_message(type)
+    value = flash[type]
+    return value unless value.is_a?(Hash)
+
+    value["message"] || value[:message]
+  end
+
   def expect_common_mail_layout(message)
     body = mail_html_body(message)
 
@@ -1099,7 +1106,7 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
-        expect(flash[:notice]).to eq(I18n.t('flash.users.guest_registration.confirmation_sent'))
+        expect(flash_message(:notice)).to eq(I18n.t('flash.users.guest_registration.confirmation_sent'))
         expect(guest).to be_guest
         expect(guest.email).to eq(fake_email)
         expect(guest.unconfirmed_email).to eq('guest-upgrade@example.com')
@@ -1111,6 +1118,18 @@ RSpec.describe 'Settings', type: :request do
         expect(delivered_body).to include('guest-upgrade@example.com')
         expect(delivered_body).not_to include(fake_email)
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('flash.users.guest_registration.confirmation_sent'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
     end
 
@@ -1440,7 +1459,7 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'email'))
-        expect(flash[:notice]).to eq(I18n.t('flash.users.email_change.confirmation_sent'))
+        expect(flash_message(:notice)).to eq(I18n.t('flash.users.email_change.confirmation_sent'))
         expect(user.email).to eq(old_email)
         expect(user.unconfirmed_email).to eq('reconfirmable-new@example.com')
         expect(delivered_recipients).to include('reconfirmable-new@example.com')
@@ -1450,6 +1469,18 @@ RSpec.describe 'Settings', type: :request do
         expect_common_mail_layout(email_changed_mail)
         expect(mail_html_body(email_changed_mail)).to include(I18n.t('auth.mailer.email_changed.title'))
         expect(mail_html_body(email_changed_mail)).not_to include(I18n.t('auth.mailer.common.fallback_url'))
+      end
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('flash.users.email_change.confirmation_sent'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
 
       token = confirmation_token_from(confirmation_mail)

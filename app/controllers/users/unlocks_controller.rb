@@ -16,9 +16,10 @@ class Users::UnlocksController < Devise::UnlocksController
   # end
 
   # POST /resource/unlock
-  # def create
-  #   super
-  # end
+  def create
+    super
+    keep_flash_until_manual_dismiss(:notice)
+  end
 
   # GET /resource/unlock?unlock_token=abcdef
   # def show

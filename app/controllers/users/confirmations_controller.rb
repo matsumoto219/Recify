@@ -19,9 +19,10 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
   # end
 
   # POST /resource/confirmation
-  # def create
-  #   super
-  # end
+  def create
+    super
+    keep_flash_until_manual_dismiss(:notice)
+  end
 
   # GET /resource/confirmation?confirmation_token=abcdef
   # def show

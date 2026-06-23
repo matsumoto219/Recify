@@ -6,10 +6,17 @@ export default class extends Controller {
     animation: String,
     autoDismiss: Boolean,
     autoDismissDelay: Number,
-    maxVisible: Number
+    maxVisible: Number,
+    removeBeforeCache: Boolean
   }
 
   connect () {
+    this.handleBeforeCache = this.handleBeforeCache.bind(this)
+
+    if (this.removeBeforeCacheValue) {
+      document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+    }
+
     if (this.element.dataset.noticeInitialized === 'true') return
     this.element.dataset.noticeInitialized = 'true'
 
@@ -53,7 +60,16 @@ export default class extends Controller {
   }
 
   disconnect () {
+    if (this.removeBeforeCacheValue) {
+      document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
+    }
+
     this.clearTimers()
+  }
+
+  handleBeforeCache () {
+    this.clearTimers()
+    this.element.remove()
   }
 
   clearTimers () {

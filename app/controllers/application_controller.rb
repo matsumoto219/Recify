@@ -88,6 +88,17 @@ class ApplicationController < ActionController::Base
     session.delete(USER_SESSION_VERSION_SESSION_KEY)
   end
 
+  def keep_flash_until_manual_dismiss(type)
+    message = flash[type]
+    return if message.blank?
+
+    flash[type] = manual_dismiss_flash_message(message)
+  end
+
+  def manual_dismiss_flash_message(message)
+    { message: message, auto_dismiss: false }
+  end
+
   def public_layout_page?
     PUBLIC_LAYOUT_ACTIONS.fetch(controller_path, []).include?(action_name)
   end

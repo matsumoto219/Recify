@@ -16,6 +16,7 @@
   - animation_name: アニメーション名。slide_down / slide_right。未指定時は "slide_down"
   - auto_dismiss: 自動で閉じる場合は true。未指定時は false
   - auto_dismiss_delay: 自動で閉じるまでのミリ秒
+  - remove_before_cache: Turbo のページキャッシュ前にDOMから外す場合は true。未指定時は false
   - max_visible: 同時表示上限。未指定時は 1
   - align: 内容の縦位置。:start / :center。未指定時は :start
   - class: 追加CSSクラス
@@ -72,6 +73,7 @@
   animation_name = local_assigns.fetch(:animation_name, "slide_down")
   auto_dismiss = local_assigns.fetch(:auto_dismiss, false)
   auto_dismiss_delay = local_assigns[:auto_dismiss_delay]
+  remove_before_cache = local_assigns.fetch(:remove_before_cache, false)
   max_visible = local_assigns.fetch(:max_visible, 1)
   align = local_assigns.fetch(:align, :start).to_sym
   extra_classes = local_assigns[:class]
@@ -127,6 +129,7 @@
   data-notice-surface-animation-value="<%= animation_name %>"
   data-notice-surface-auto-dismiss-value="<%= auto_dismiss %>"
   data-notice-surface-auto-dismiss-delay-value="<%= resolved_auto_dismiss_delay %>"
+  data-notice-surface-remove-before-cache-value="<%= remove_before_cache %>"
   data-notice-surface-max-visible-value="<%= max_visible %>">
   <div class="flex-shrink-0 w-8 h-8 rounded-lg <%= tone[:icon_class] %> flex items-center justify-center">
     <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;" aria-hidden="true"><%= tone[:icon] %></span>

@@ -23,6 +23,7 @@ class Users::PasswordsController < Devise::PasswordsController
     super do |resource|
       set_flash_from_resource_errors(resource) if resource.errors.any?
     end
+    keep_flash_until_manual_dismiss(:notice)
   end
 
   # GET /resource/password/edit?reset_password_token=abcdef

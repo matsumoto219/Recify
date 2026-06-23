@@ -55,6 +55,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
         respond_with resource, location: after_sign_up_path_for(resource)
       else
         set_flash_message! :notice, :"signed_up_but_#{resource.inactive_message}"
+        keep_flash_until_manual_dismiss(:notice) if resource.inactive_message.to_s == "unconfirmed"
         expire_data_after_sign_in!
         respond_with resource, location: after_inactive_sign_up_path_for(resource)
       end
@@ -212,7 +213,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     end
 
     if update_resource(resource, email_update_params)
-      flash[:notice] = t("flash.users.email_change.confirmation_sent")
+      flash[:notice] = manual_dismiss_flash_message(t("flash.users.email_change.confirmation_sent"))
       bypass_sign_in resource, scope: resource_name if sign_in_after_change_password?
       redirect_to settings_security_path(anchor: "email")
     else
@@ -242,7 +243,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     end
 
     if guest_registration_started
-      flash[:notice] = t("flash.users.guest_registration.confirmation_sent")
+      flash[:notice] = manual_dismiss_flash_message(t("flash.users.guest_registration.confirmation_sent"))
       bypass_sign_in resource, scope: resource_name
       redirect_to settings_security_path(anchor: "guest-registration")
     else

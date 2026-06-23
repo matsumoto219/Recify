@@ -37,6 +37,13 @@ RSpec.describe 'Auth pages', type: :request do
     message.html_part&.body&.decoded || message.body.decoded
   end
 
+  def flash_message(type)
+    value = flash[type]
+    return value unless value.is_a?(Hash)
+
+    value["message"] || value[:message]
+  end
+
   def expect_common_mail_layout(message)
     body = mail_html_body(message)
 
@@ -528,14 +535,41 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
-        expect(flash[:notice]).not_to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(flash_message(:notice)).not_to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(user).not_to be_confirmed
         expect(user.confirmation_token).to be_present
         expect_current_legal_acceptances(user, context: "signup")
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+
+    it 'confirmationが次アクションになる登録完了flashは自動で閉じない' do
+      email = 'manual-dismiss-confirmable-user@example.com'
+
+      post user_registration_path,
+        params: {
+          user: {
+            email: email,
+            password: 'password',
+            password_confirmation: 'password',
+            legal_agreement: '1'
+          }
+        }
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
+        expect(notice_surface.at_css('button[data-action="click->notice-surface#close"]')).to be_present
       end
     end
 
@@ -672,7 +706,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(flash[:notice]).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.registrations.signed_up_but_unconfirmed'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
       end
     end
@@ -1251,10 +1285,34 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
+      end
+    end
+
+    it 'confirmation resend後の確認メール送信flashは自動で閉じない' do
+      user = create(:user, :unconfirmed)
+      ActionMailer::Base.deliveries.clear
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('devise.confirmations.send_instructions'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
     end
 
@@ -1376,7 +1434,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
-        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-confirmation@example.com')
       end
@@ -1398,7 +1456,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'email'))
-        expect(flash[:notice]).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('normal-resend-confirmation@example.com')
       end
@@ -1448,6 +1506,31 @@ RSpec.describe 'Auth pages', type: :request do
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.unlock_instructions.action'))
       end
     end
+
+    it 'unlock resend後の復旧メール送信flashは自動で閉じない' do
+      user = create(:user)
+      user.lock_access!(send_instructions: false)
+      ActionMailer::Base.deliveries.clear
+
+      post user_unlock_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('devise.unlocks.send_instructions'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
+      end
+    end
   end
 
   describe 'POST /users/password' do
@@ -1470,6 +1553,29 @@ RSpec.describe 'Auth pages', type: :request do
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.reset_password_instructions.action'))
+      end
+    end
+
+    it 'password reset後の再設定メール送信flashは自動で閉じない' do
+      user = create(:user)
+
+      post user_password_path,
+        params: {
+          user: {
+            email: user.email
+          }
+        }
+
+      follow_redirect!
+
+      document = Nokogiri::HTML(response.body)
+      notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(notice_surface).to be_present
+        expect(notice_surface.text).to include(I18n.t('devise.passwords.send_instructions'))
+        expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
     end
 
