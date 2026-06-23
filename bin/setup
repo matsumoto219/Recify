@@ -24,6 +24,15 @@ FileUtils.chdir APP_ROOT do
   system! "bin/rails db:prepare"
   system! "bin/rails db:reset" if ARGV.include?("--reset")
 
+  if ENV.fetch("RAILS_ENV", "development") == "production"
+    puts "\n== Skipping legal document sync in production =="
+  else
+    puts "\n== Synchronizing legal documents =="
+    system! "bin/rails legal_documents:verify_files"
+    system! "bin/rails legal_documents:sync"
+    system! "bin/rails legal_documents:verify"
+  end
+
   puts "\n== Removing old logs and tempfiles =="
   system! "bin/rails log:clear tmp:clear"
 
