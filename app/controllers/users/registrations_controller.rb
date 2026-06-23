@@ -187,7 +187,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     clean_up_passwords resource
     set_minimum_password_length
     flash.now[:alert] = maintenance_restriction_message
-    render :new, status: :unprocessable_content
+    render_new_registration_failure
   end
 
   def verify_turnstile!
@@ -202,7 +202,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     clean_up_passwords resource
     set_minimum_password_length
     flash.now[:alert] = t("flash.bot_protection.verification_failed")
-    render :new, status: :unprocessable_content
+    render_new_registration_failure
   end
 
   def update_email
@@ -269,7 +269,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
     clean_up_passwords resource
     set_minimum_password_length
     flash.now[:alert] = message
-    render :new, status: :unprocessable_content
+    render_new_registration_failure
+  end
+
+  def render_new_registration_failure
+    render :new,
+           formats: :html,
+           content_type: Mime[:html],
+           status: :unprocessable_content
   end
 
   def redirect_unsupported_update_context

@@ -561,6 +561,35 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'Turbo送信でもcurrent法務文書未同期時はHTMLの案内画面を返す' do
+      LegalDocument.delete_all
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'turbo-legal-documents-missing@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          },
+          headers: {
+            'ACCEPT' => "#{Mime[:turbo_stream]}, #{Mime[:html]}, application/xhtml+xml"
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.media_type).to eq(Mime[:html].to_s)
+        expect(response.body).to include(I18n.t('flash.legal_documents.unavailable'))
+        expect(response.body).to include('registration-form-title')
+        expect(response.body).to include(I18n.t('auth.registrations.new.submit'))
+        expect(response.body).not_to include('<turbo-stream')
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'login_restricted中は通常登録を拒否し、user作成と確認メール送信をしない' do
       create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
       expect(BotProtection).not_to receive(:verify_turnstile)
