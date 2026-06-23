@@ -7,7 +7,7 @@ image: recify
 # Deploy to these servers.
 servers:
   web:
-    - 192.168.0.1
+    - <%= ENV.fetch("KAMAL_DEPLOY_HOST") %>
   # job:
   #   hosts:
   #     - 192.168.0.1
@@ -125,9 +125,10 @@ builder:
   #   - GITHUB_TOKEN
   #   - RAILS_MASTER_KEY
 
-# Use a different ssh user than root
-# ssh:
-#   user: app
+# Use the default Ubuntu user. Keep host IPs and key paths out of Git;
+# provide the host through KAMAL_DEPLOY_HOST and the key via ssh-agent or local SSH config.
+ssh:
+  user: ubuntu
 
 # Use accessory services (secrets come from .kamal/secrets).
 accessories:
