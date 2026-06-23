@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "legal_documents/error"
+require_relative "legal_documents/validation_error"
+require_relative "legal_documents/file_document"
+require_relative "legal_documents/repository"
+require_relative "legal_documents/verifier"
+
 class ProductionLegalDocumentsValidator
   ValidationError = Class.new(StandardError)
   Result = Struct.new(:missing_items, keyword_init: true) do

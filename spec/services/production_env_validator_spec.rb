@@ -27,6 +27,7 @@ RSpec.describe ProductionEnvValidator do
     {
       "RAILS_MASTER_KEY" => "master",
       "RECIFY_DATABASE_PASSWORD" => "database",
+      "DB_HOST" => "recify-db",
       "APP_HOST" => "recify-app.com",
       "WEBAUTHN_RP_ID" => "recify-app.com",
       "WEBAUTHN_ALLOWED_ORIGINS" => "https://recify-app.com",
@@ -115,6 +116,35 @@ RSpec.describe ProductionEnvValidator do
     end.to raise_error(described_class::ValidationError) { |error|
       expect(error.message).to include("APP_HOST")
     }
+  end
+
+  it "requires DB_HOST in production strict mode" do
+    env = required_env.except("DB_HOST")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("DB_HOST")
+    }
+  end
+
+  it "requires DB_PORT to be a valid TCP port when provided" do
+    env = required_env.merge("DB_PORT" => "not-a-port")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("DB_PORT.integer")
+      expect(error.message).not_to include("not-a-port")
+    }
+  end
+
+  it "allows DB_PORT to be omitted because database.yml defaults to PostgreSQL port" do
+    env = required_env.except("DB_PORT")
+
+    result = described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)
+
+    expect(result).to be_success
   end
 
   it "requires SUPPORT_NOTIFICATION_EMAIL in production strict mode" do

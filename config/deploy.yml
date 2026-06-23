@@ -40,7 +40,6 @@ registry:
 env:
   secret:
     - RAILS_MASTER_KEY
-    - RECIFY_DATABASE_PASSWORD
     - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
     - ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
     - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
@@ -49,7 +48,6 @@ env:
     - WEBAUTHN_ALLOWED_ORIGINS
     - SUPPORT_NOTIFICATION_EMAIL
     - SMTP_HOST
-    - SMTP_PORT
     - SMTP_USERNAME
     - SMTP_PASSWORD
     - SMTP_FROM
@@ -59,10 +57,21 @@ env:
     - OPENAI_AI_MODEL
     - TURNSTILE_SITE_KEY
     - TURNSTILE_SECRET_KEY
+    - SENTRY_DSN
+    - "RECIFY_DATABASE_PASSWORD:POSTGRES_PASSWORD"
   clear:
     APP_PROTOCOL: https
     FORCE_SSL: true
     ASSUME_SSL: true
+    DB_HOST: recify-db
+    DB_PORT: 5432
+    RECEIPT_OCR_ENABLED: true
+    RECEIPT_AI_ENABLED: true
+    TURNSTILE_ENABLED: true
+    SMTP_PORT: 587
+    SENTRY_ENVIRONMENT: production
+    SENTRY_SAMPLE_RATE: 1.0
+    SENTRY_TRACES_SAMPLE_RATE: 0.0
 
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     # When you start using multiple servers, you should split out job processing to a dedicated machine.
@@ -73,10 +82,6 @@ env:
 
     # Set number of cores available to the application on each server (default: 1).
     # WEB_CONCURRENCY: 2
-
-    # Match this to any external database server to configure Active Record correctly
-    # Use recify-db for a db accessory server on same machine via local kamal docker network.
-    # DB_HOST: 192.168.0.2
 
     # Log everything from Rails
     # RAILS_LOG_LEVEL: debug
@@ -125,25 +130,15 @@ builder:
 #   user: app
 
 # Use accessory services (secrets come from .kamal/secrets).
-# accessories:
-#   db:
-#     image: mysql:8.0
-#     host: 192.168.0.2
-#     # Change to 3306 to expose port to the world instead of just local network.
-#     port: "127.0.0.1:3306:3306"
-#     env:
-#       clear:
-#         MYSQL_ROOT_HOST: '%'
-#       secret:
-#         - MYSQL_ROOT_PASSWORD
-#     files:
-#       - config/mysql/production.cnf:/etc/mysql/my.cnf
-#       - db/production.sql:/docker-entrypoint-initdb.d/setup.sql
-#     directories:
-#       - data:/var/lib/mysql
-#   redis:
-#     image: valkey/valkey:8
-#     host: 192.168.0.2
-#     port: 6379
-#     directories:
-#       - data:/data
+accessories:
+  db:
+    image: postgres:16
+    role: web
+    env:
+      clear:
+        POSTGRES_USER: recify
+        POSTGRES_DB: recify_production
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      - data:/var/lib/postgresql/data

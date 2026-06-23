@@ -99,6 +99,8 @@ production:
     database: recify_production
     username: recify
     password: <%= ENV["RECIFY_DATABASE_PASSWORD"] %>
+    host: <%= ENV["DB_HOST"] %>
+    port: <%= ENV.fetch("DB_PORT", 5432) %>
   cache:
     <<: *primary_production
     database: recify_production_cache

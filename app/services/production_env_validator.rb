@@ -15,6 +15,7 @@ class ProductionEnvValidator
   ALWAYS_REQUIRED_ENV = %w[
     RAILS_MASTER_KEY
     RECIFY_DATABASE_PASSWORD
+    DB_HOST
     APP_HOST
     WEBAUTHN_RP_ID
     WEBAUTHN_ALLOWED_ORIGINS
@@ -107,6 +108,7 @@ class ProductionEnvValidator
     missing += missing_ocr_keys
     missing += missing_ai_keys
     missing += missing_turnstile_keys
+    missing += invalid_database_configuration_keys
     missing += missing_legal_document_file_items
     missing + missing_mail_configuration_keys
   end
@@ -141,6 +143,10 @@ class ProductionEnvValidator
     TURNSTILE_REQUIRED_ENV.reject { |key| present_env?(key) }
   end
 
+  def invalid_database_configuration_keys
+    invalid_tcp_port?("DB_PORT") ? [ "DB_PORT.integer" ] : []
+  end
+
   def missing_mail_configuration_keys
     return [] unless mail_delivery_enabled?
 
@@ -150,7 +156,7 @@ class ProductionEnvValidator
     missing << "devise.mailer_sender" if placeholder?(resolved_devise_mailer_sender)
     missing << "action_mailer.smtp_settings" if smtp_delivery? && smtp_settings.blank?
     missing += runtime_config.missing_smtp_env if smtp_delivery?
-    missing << "SMTP_PORT.integer" if smtp_delivery? && invalid_smtp_port?
+    missing << "SMTP_PORT.integer" if smtp_delivery? && invalid_tcp_port?("SMTP_PORT")
     missing
   end
 
@@ -171,8 +177,8 @@ class ProductionEnvValidator
     rails_config.action_mailer.smtp_settings
   end
 
-  def invalid_smtp_port?
-    raw_port = env["SMTP_PORT"].to_s.strip
+  def invalid_tcp_port?(key)
+    raw_port = env[key].to_s.strip
     return false if raw_port.blank?
 
     port = Integer(raw_port, 10)
