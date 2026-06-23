@@ -220,6 +220,25 @@ RSpec.describe ProductionEnvValidator do
     }
   end
 
+  it "requires SMTP_PORT to be a valid TCP port when SMTP delivery is enabled" do
+    env = required_env.merge("SMTP_PORT" => "not-a-port")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("SMTP_PORT.integer")
+      expect(error.message).not_to include("not-a-port")
+    }
+  end
+
+  it "rejects SMTP_PORT values outside the TCP port range" do
+    env = required_env.merge("SMTP_PORT" => "70000")
+
+    result = described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)
+
+    expect(result.missing_keys).to include("SMTP_PORT.integer")
+  end
+
   it "does not require SMTP settings when mail delivery is disabled" do
     rails_config.action_mailer.perform_deliveries = false
     rails_config.action_mailer.default_url_options = { host: "example.com" }

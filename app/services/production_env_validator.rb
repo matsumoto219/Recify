@@ -150,6 +150,7 @@ class ProductionEnvValidator
     missing << "devise.mailer_sender" if placeholder?(resolved_devise_mailer_sender)
     missing << "action_mailer.smtp_settings" if smtp_delivery? && smtp_settings.blank?
     missing += runtime_config.missing_smtp_env if smtp_delivery?
+    missing << "SMTP_PORT.integer" if smtp_delivery? && invalid_smtp_port?
     missing
   end
 
@@ -168,6 +169,16 @@ class ProductionEnvValidator
 
   def smtp_settings
     rails_config.action_mailer.smtp_settings
+  end
+
+  def invalid_smtp_port?
+    raw_port = env["SMTP_PORT"].to_s.strip
+    return false if raw_port.blank?
+
+    port = Integer(raw_port, 10)
+    port < 1 || port > 65_535
+  rescue ArgumentError
+    true
   end
 
   def runtime_config
