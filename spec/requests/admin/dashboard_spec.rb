@@ -326,6 +326,10 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).to include('unattached')
         expect(response.body).to include('24KB')
         expect(response.body).to include('4KB')
+        expect(response.body).to include('法務文書')
+        expect(response.body).to include('同期済み')
+        expect(response.body).to include('利用規約')
+        expect(response.body).to include('プライバシーポリシー')
         expect(response.body).to include('DB状態')
         expect(response.body).to include('データベース接続とschema状態')
         expect(response.body).to include('Primary DB')
@@ -370,6 +374,36 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(response.body).not_to include('Stale cleanupを実行')
         expect(response.body).not_to include('Retention cleanupを実行')
         expect_no_admin_execution
+      end
+    end
+
+    it 'current法務文書が未同期の場合もadmin dashboardに警告を表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(LegalDocuments::CurrentStatus).to receive(:call).and_return(
+        LegalDocuments::CurrentStatus::Result.new(
+          ready: false,
+          locale: 'ja',
+          documents: {
+            'terms' => { document_type: 'terms', locale: 'ja', present: false },
+            'privacy' => { document_type: 'privacy', locale: 'ja', present: false }
+          },
+          missing_types: [ 'terms', 'privacy' ],
+          checked_at: Time.zone.parse('2026-05-26 12:00:00')
+        )
+      )
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('法務文書')
+        expect(response.body).to include('不足あり')
+        expect(response.body).to include('currentなし')
+        expect(response.body).to include('DB同期が必要です')
+        expect(response.body).to include('bin/rails legal_documents:verify_files')
+        expect(response.body).to include('bin/rails legal_documents:sync')
+        expect(response.body).to include('bin/rails legal_documents:verify')
       end
     end
 

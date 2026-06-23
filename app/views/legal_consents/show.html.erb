@@ -13,74 +13,93 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :responsive do %>
     <div class="space-y-6">
-      <div class="space-y-3">
-        <p class="text-sm leading-7 token-text-muted"><%= t("legal_consents.show.description") %></p>
-        <p class="text-sm leading-7 token-text-muted"><%= t("legal_consents.show.restricted_notice") %></p>
-      </div>
-
-      <section class="space-y-3" aria-labelledby="legal-consent-required-documents">
-        <h2 id="legal-consent-required-documents" class="text-base font-bold token-text-base">
-          <%= t("legal_consents.show.required_documents") %>
-        </h2>
-
-        <div class="grid gap-3">
-          <% @requirement.required_documents.each do |document| %>
-            <% document_path = document.document_type == "terms" ? terms_path : privacy_path %>
-            <article class="rounded-xl border token-border-soft token-bg-card-subtle p-4">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="space-y-1">
-                  <h3 class="text-sm font-bold token-text-base"><%= document.title %></h3>
-                  <p class="text-xs font-semibold uppercase tracking-wider token-text-muted">
-                    <%= t("legal_consents.show.version", version: document.version) %>
-                  </p>
-                  <p class="text-xs token-text-muted"><%= legal_document_last_updated_text(document) %></p>
-                </div>
-
-                <%= render "shared/ui/actions/button",
-                      as: :link,
-                      href: document_path,
-                      label: t("legal_consents.show.open_document.#{document.document_type}"),
-                      variant: :secondary,
-                      size: :compact,
-                      trailing_icon: "open_in_new" %>
-              </div>
-            </article>
-          <% end %>
+      <% if @legal_documents_unavailable %>
+        <div class="space-y-3">
+          <h2 class="text-base font-bold token-text-base"><%= t("legal_consents.show.unavailable_title") %></h2>
+          <p class="text-sm leading-7 token-text-muted"><%= t("legal_consents.show.unavailable_description") %></p>
         </div>
-      </section>
-
-      <% if @legal_agreement_error.present? %>
-        <div class="rounded-xl border token-border-error-soft token-bg-error-soft px-4 py-3 text-sm font-semibold token-text-error" role="alert">
-          <%= @legal_agreement_error %>
-        </div>
-      <% end %>
-
-      <%= form_with url: legal_consent_path, method: :post, local: true, class: "space-y-5" do %>
-        <%= render "shared/ui/form/checkbox_field",
-              name: "legal_agreement",
-              label: t("legal_consents.show.agreement_label"),
-              hint: t("legal_consents.show.agreement_hint"),
-              required: true,
-              wrapper_class: "rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3" %>
 
         <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-          <%= render "shared/ui/actions/button",
-                label: t("legal_consents.show.submit"),
-                type: "submit",
-                icon: "check_circle",
-                full_width: true,
-                disable_with: t("legal_consents.show.submitting") %>
-
           <%= render "shared/ui/actions/button",
                 as: :link,
                 href: destroy_user_session_path,
                 label: t("legal_consents.show.logout"),
-                variant: :ghost,
+                variant: :secondary,
                 icon: "logout",
                 full_width: true,
                 class: "sm:w-auto",
                 data: { turbo_method: :delete } %>
         </div>
+      <% else %>
+        <div class="space-y-3">
+          <p class="text-sm leading-7 token-text-muted"><%= t("legal_consents.show.description") %></p>
+          <p class="text-sm leading-7 token-text-muted"><%= t("legal_consents.show.restricted_notice") %></p>
+        </div>
+
+        <section class="space-y-3" aria-labelledby="legal-consent-required-documents">
+          <h2 id="legal-consent-required-documents" class="text-base font-bold token-text-base">
+            <%= t("legal_consents.show.required_documents") %>
+          </h2>
+
+          <div class="grid gap-3">
+            <% @requirement.required_documents.each do |document| %>
+              <% document_path = document.document_type == "terms" ? terms_path : privacy_path %>
+              <article class="rounded-xl border token-border-soft token-bg-card-subtle p-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="space-y-1">
+                    <h3 class="text-sm font-bold token-text-base"><%= document.title %></h3>
+                    <p class="text-xs font-semibold uppercase tracking-wider token-text-muted">
+                      <%= t("legal_consents.show.version", version: document.version) %>
+                    </p>
+                    <p class="text-xs token-text-muted"><%= legal_document_last_updated_text(document) %></p>
+                  </div>
+
+                  <%= render "shared/ui/actions/button",
+                        as: :link,
+                        href: document_path,
+                        label: t("legal_consents.show.open_document.#{document.document_type}"),
+                        variant: :secondary,
+                        size: :compact,
+                        trailing_icon: "open_in_new" %>
+                </div>
+              </article>
+            <% end %>
+          </div>
+        </section>
+
+        <% if @legal_agreement_error.present? %>
+          <div class="rounded-xl border token-border-error-soft token-bg-error-soft px-4 py-3 text-sm font-semibold token-text-error" role="alert">
+            <%= @legal_agreement_error %>
+          </div>
+        <% end %>
+
+        <%= form_with url: legal_consent_path, method: :post, local: true, class: "space-y-5" do %>
+          <%= render "shared/ui/form/checkbox_field",
+                name: "legal_agreement",
+                label: t("legal_consents.show.agreement_label"),
+                hint: t("legal_consents.show.agreement_hint"),
+                required: true,
+                wrapper_class: "rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3" %>
+
+          <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <%= render "shared/ui/actions/button",
+                  label: t("legal_consents.show.submit"),
+                  type: "submit",
+                  icon: "check_circle",
+                  full_width: true,
+                  disable_with: t("legal_consents.show.submitting") %>
+
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: destroy_user_session_path,
+                  label: t("legal_consents.show.logout"),
+                  variant: :ghost,
+                  icon: "logout",
+                  full_width: true,
+                  class: "sm:w-auto",
+                  data: { turbo_method: :delete } %>
+          </div>
+        <% end %>
       <% end %>
     </div>
   <% end %>

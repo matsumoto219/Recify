@@ -32,10 +32,21 @@ RSpec.describe Admin::Dashboard do
         migration: "current",
         database_time: Time.zone.parse("2026-05-26 12:00:00")
       }
+      legal_documents_status = LegalDocuments::CurrentStatus::Result.new(
+        ready: true,
+        locale: 'ja',
+        documents: {
+          'terms' => { document_type: 'terms', locale: 'ja', present: true, version: '2026-06-21' },
+          'privacy' => { document_type: 'privacy', locale: 'ja', present: true, version: '2026-06-21' }
+        },
+        missing_types: [],
+        checked_at: Time.zone.parse("2026-05-26 12:00:00")
+      )
       allow(ExternalServices).to receive(:status_snapshot)
         .with(include_details: true)
         .and_return(external_services_snapshot)
       allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
+      allow(LegalDocuments::CurrentStatus).to receive(:call).with(locale: I18n.locale).and_return(legal_documents_status)
       allow(Admin).to receive(:database_status_snapshot).and_return(database_status_snapshot)
       create(:passkey, user: admin)
       active_run = create(:receipt_analysis_run, :running, updated_at: 7.hours.ago)
@@ -84,6 +95,7 @@ RSpec.describe Admin::Dashboard do
         expect(result.security).to include(admin_passkey_count: 1)
         expect(result.external_services).to eq(external_services_snapshot)
         expect(result.storage).to eq(storage_snapshot)
+        expect(result.legal_documents).to eq(legal_documents_status)
         expect(result.database_status).to eq(database_status_snapshot)
         expect(result.system_operations[:queues]).to contain_exactly(
           'default',

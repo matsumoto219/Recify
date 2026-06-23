@@ -65,6 +65,19 @@ RSpec.describe 'Legal consents', type: :request do
       expect(response).to redirect_to(legal_consent_path)
     end
 
+    it 'current法務文書が未同期の場合はprivate領域から案内画面へ誘導する' do
+      user = create(:user)
+      sign_in_without_legal_acceptance user
+      LegalDocument.delete_all
+
+      get receipts_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(legal_consent_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.legal_documents.unavailable'))
+      end
+    end
+
     it 'current文書に同意済みならprivate領域を表示する' do
       user = create(:user)
       accept_current_documents!(user)
@@ -108,6 +121,22 @@ RSpec.describe 'Legal consents', type: :request do
       get legal_consent_path
 
       expect(response).to redirect_to(receipts_path)
+    end
+
+    it 'current法務文書が未同期の場合は同意フォームを出さず案内を表示する' do
+      user = create(:user)
+      sign_in_without_legal_acceptance user
+      LegalDocument.delete_all
+
+      get legal_consent_path
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:service_unavailable)
+        expect(response.body).to include(I18n.t('flash.legal_documents.unavailable'))
+        expect(response.body).to include(I18n.t('legal_consents.show.unavailable_title'))
+        expect(document.at_css("input[name='legal_agreement']")).to be_nil
+      end
     end
   end
 

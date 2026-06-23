@@ -539,6 +539,28 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'current法務文書が未同期の場合はuserを作成せず案内を表示する' do
+      LegalDocument.delete_all
+
+      expect do
+        post user_registration_path,
+          params: {
+            user: {
+              email: 'legal-documents-missing@example.com',
+              password: 'password',
+              password_confirmation: 'password',
+              legal_agreement: '1'
+            }
+          }
+      end.not_to change(User, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.legal_documents.unavailable'))
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'login_restricted中は通常登録を拒否し、user作成と確認メール送信をしない' do
       create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
       expect(BotProtection).not_to receive(:verify_turnstile)

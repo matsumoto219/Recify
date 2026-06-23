@@ -8,6 +8,7 @@
   security = @dashboard.security
   external_services = @dashboard.external_services
   storage = @dashboard.storage
+  legal_documents = @dashboard.legal_documents
   database_status = @dashboard.database_status
   system_operations = @dashboard.system_operations
   reauth_context = admin_reauthentication_context
@@ -131,6 +132,8 @@
         <%= t("admin.dashboard.cleanup.execution_requirement") %>
       </p>
     <% end %>
+
+    <%= render "admin/dashboard/legal_documents_card", legal_documents: legal_documents %>
 
     <%= render "admin/dashboard/database_status_card", database_status: database_status %>
   </div>

@@ -35,6 +35,11 @@ class Users::RegistrationsController < Devise::RegistrationsController
   def create
     build_resource(sign_up_params)
 
+    unless current_legal_documents_ready?
+      reject_sign_up_for_unavailable_legal_documents
+      return
+    end
+
     resource_saved = resource_class.transaction do
       saved = resource.save
       record_current_legal_acceptances!(resource, "signup") if saved
@@ -225,6 +230,11 @@ class Users::RegistrationsController < Devise::RegistrationsController
       return
     end
 
+    unless current_legal_documents_ready?
+      reject_security_update(t("flash.legal_documents.unavailable"))
+      return
+    end
+
     guest_registration_started = resource_class.transaction do
       started = resource.start_guest_registration(guest_registration_params)
       record_current_legal_acceptances!(resource, "guest_conversion") if started
@@ -251,6 +261,15 @@ class Users::RegistrationsController < Devise::RegistrationsController
     set_flash_from_resource_errors(resource)
     prepare_settings_security_presenter
     render "settings/security", status: :unprocessable_content
+  end
+
+  def reject_sign_up_for_unavailable_legal_documents
+    message = t("flash.legal_documents.unavailable")
+    resource.errors.add(:base, message)
+    clean_up_passwords resource
+    set_minimum_password_length
+    flash.now[:alert] = message
+    render :new, status: :unprocessable_content
   end
 
   def redirect_unsupported_update_context

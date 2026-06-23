@@ -442,6 +442,24 @@ ja:
         user_count: users
         quota_usage: quota used / total
         readonly_note: このカードでは削除やcleanupは実行しません。
+      legal_documents:
+        title: 法務文書
+        description: 登録・再同意に必要なcurrent文書のDB同期状態です。
+        states:
+          ready: 同期済み
+          missing: 不足あり
+        document_types:
+          terms: 利用規約
+          privacy: プライバシーポリシー
+        present: currentあり
+        missing: currentなし
+        recovery_title: DB同期が必要です
+        recovery_description: DB再構築後はmigrationだけでは法務文書レコードが復元されません。復旧後にverifyまで確認してください。
+        recovery_commands:
+          - bin/rails legal_documents:verify_files
+          - bin/rails legal_documents:sync
+          - bin/rails legal_documents:verify
+        readonly_note: このカードでは文書同期や法務文書変更は実行しません。確認時刻：
       receipt_analysis:
         title: 解析状況
         description: レシート解析の現在状態

@@ -1114,6 +1114,37 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'current法務文書が未同期の場合はguest本登録申請を開始せず案内を表示する' do
+      sign_out user
+      guest = User.guest!
+      fake_email = guest.email
+      sign_in guest
+      LegalAcceptance.delete_all
+      LegalDocument.delete_all
+      ActionMailer::Base.deliveries.clear
+
+      expect do
+        patch user_registration_path,
+              params: {
+                update_context: 'guest_registration',
+                user: {
+                  email: 'guest-legal-documents-missing@example.com',
+                  password: 'password123',
+                  password_confirmation: 'password123',
+                  legal_agreement: '1'
+                }
+              }
+      end.not_to change(LegalAcceptance, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.legal_documents.unavailable'))
+        expect(guest.reload.email).to eq(fake_email)
+        expect(guest.unconfirmed_email).to be_nil
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'guest本登録申請はspoofed admin paramを無視する' do
       sign_out user
       guest = User.guest!

@@ -102,6 +102,16 @@ class ApplicationController < ActionController::Base
     return unless user_signed_in?
     return if current_user.guest?
 
+    unless current_legal_documents_ready?
+      return if current_user.admin? && controller_path.start_with?("admin/")
+
+      store_legal_consent_return_to
+      redirect_to legal_consent_path,
+                  flash: { alert: t("flash.legal_documents.unavailable") },
+                  status: :see_other
+      return
+    end
+
     requirement = LegalConsents::Requirement.new(user: current_user, locale: legal_consent_locale)
     return unless requirement.required?
 
@@ -153,6 +163,14 @@ class ApplicationController < ActionController::Base
 
   def legal_consent_locale
     LEGAL_CONSENT_LOCALE
+  end
+
+  def current_legal_documents_ready?
+    current_legal_documents_status.ready?
+  end
+
+  def current_legal_documents_status
+    @current_legal_documents_status ||= LegalDocuments::CurrentStatus.call(locale: legal_consent_locale)
   end
 
   def enforce_user_session_version!

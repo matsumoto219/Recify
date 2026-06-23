@@ -2,13 +2,24 @@
 
 class LegalConsentsController < ApplicationController
   before_action :authenticate_user!
-  before_action :set_requirement
+  before_action :set_legal_documents_status
+  before_action :set_requirement, if: :legal_documents_ready?
 
   def show
+    unless legal_documents_ready?
+      render_unavailable
+      return
+    end
+
     redirect_to after_legal_consent_path, notice: t("legal_consents.flash.already_current"), status: :see_other unless @requirement.required?
   end
 
   def create
+    unless legal_documents_ready?
+      render_unavailable
+      return
+    end
+
     unless @requirement.required?
       redirect_to after_legal_consent_path, notice: t("legal_consents.flash.already_current"), status: :see_other
       return
@@ -31,6 +42,20 @@ class LegalConsentsController < ApplicationController
   end
 
   private
+
+  def set_legal_documents_status
+    @legal_documents_status = current_legal_documents_status
+  end
+
+  def legal_documents_ready?
+    @legal_documents_status.ready?
+  end
+
+  def render_unavailable
+    @legal_documents_unavailable = true
+    flash.now[:alert] = t("flash.legal_documents.unavailable")
+    render :show, status: :service_unavailable
+  end
 
   def set_requirement
     @requirement = LegalConsents::Requirement.new(user: current_user, locale: legal_consent_locale)

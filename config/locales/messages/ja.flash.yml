@@ -5,6 +5,8 @@ ja:
     failure:
       invalid: "メールアドレスまたはパスワードを確認してください"
   flash:
+    legal_documents:
+      unavailable: 現在、登録・同意手続きの準備が完了していません。時間をおいて再度お試しください。
     bot_protection:
       verification_failed: 認証に失敗しました。時間をおいてもう一度お試しください。
     rate_limit:
