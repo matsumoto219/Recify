@@ -407,6 +407,35 @@ RSpec.describe 'Admin dashboard', type: :request do
       end
     end
 
+    it '問い合わせ通知先が未設定の場合はadmin dashboardに警告を表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(ContactRequestMailer).to receive(:admin_notification_enabled?).and_return(false)
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('管理通知先が未設定です')
+        expect(response.body).to include('問い合わせ受付と自動返信は継続します')
+        expect(response.body).to include('SUPPORT_NOTIFICATION_EMAIL')
+      end
+    end
+
+    it '問い合わせ通知先が設定済みの場合はadmin dashboardに通知先未設定警告を表示しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(ContactRequestMailer).to receive(:admin_notification_enabled?).and_return(true)
+
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include('管理通知先が未設定です')
+        expect(response.body).not_to include('SUPPORT_NOTIFICATION_EMAIL')
+      end
+    end
+
     it 'login_restricted中でもadminユーザーは総合トップを閲覧できる' do
       admin = create(:user, :admin)
       sign_in admin

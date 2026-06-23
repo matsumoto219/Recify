@@ -117,6 +117,17 @@ RSpec.describe ProductionEnvValidator do
     }
   end
 
+  it "requires SUPPORT_NOTIFICATION_EMAIL in production strict mode" do
+    env = required_env.except("SUPPORT_NOTIFICATION_EMAIL")
+
+    expect do
+      described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
+    end.to raise_error(described_class::ValidationError) { |error|
+      expect(error.message).to include("SUPPORT_NOTIFICATION_EMAIL")
+      expect(error.message).not_to include("support@example.test")
+    }
+  end
+
   it "does not fail outside strict mode" do
     result = nil
 

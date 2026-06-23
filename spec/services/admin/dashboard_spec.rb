@@ -48,6 +48,7 @@ RSpec.describe Admin::Dashboard do
       allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
       allow(LegalDocuments::CurrentStatus).to receive(:call).with(locale: I18n.locale).and_return(legal_documents_status)
       allow(Admin).to receive(:database_status_snapshot).and_return(database_status_snapshot)
+      allow(ContactRequestMailer).to receive(:admin_notification_enabled?).and_return(true)
       create(:passkey, user: admin)
       active_run = create(:receipt_analysis_run, :running, updated_at: 7.hours.ago)
       failed_run = create(:receipt_analysis_run, :failed, created_at: 1.hour.ago)
@@ -90,7 +91,8 @@ RSpec.describe Admin::Dashboard do
           unresolved_count: 2,
           open_count: 1,
           in_progress_count: 1,
-          security_open_count: 1
+          security_open_count: 1,
+          admin_notification_enabled: true
         )
         expect(result.security).to include(admin_passkey_count: 1)
         expect(result.external_services).to eq(external_services_snapshot)

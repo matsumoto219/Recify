@@ -96,7 +96,8 @@ module Admin
         open_count: ContactRequest.where(status: "open").count,
         in_progress_count: ContactRequest.where(status: "in_progress").count,
         security_open_count: ContactRequest.where(status: %w[open in_progress], category: "security").count,
-        latest_created_at: ContactRequest.order(created_at: :desc).pick(:created_at)
+        latest_created_at: ContactRequest.order(created_at: :desc).pick(:created_at),
+        admin_notification_enabled: ContactRequestMailer.admin_notification_enabled?
       }
     end
 

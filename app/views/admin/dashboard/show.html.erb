@@ -98,6 +98,13 @@
         </div>
       </dl>
 
+      <% unless contact_requests[:admin_notification_enabled] %>
+        <div class="mt-4 rounded-lg border token-border-soft token-bg-warning-soft px-4 py-3 text-sm token-text-base">
+          <p class="font-semibold token-text-warning"><%= t("admin.dashboard.contact_requests.notification_missing_title") %></p>
+          <p class="mt-1 leading-relaxed"><%= t("admin.dashboard.contact_requests.notification_missing_description") %></p>
+        </div>
+      <% end %>
+
       <p class="mt-auto pt-4 text-sm token-text-muted">
         <%= t("admin.dashboard.contact_requests.latest") %>:
         <span class="font-mono token-text-base">

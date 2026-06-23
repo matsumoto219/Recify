@@ -506,6 +506,8 @@ ja:
         open: 未対応
         security: セキュリティ
         latest: 最新受付
+        notification_missing_title: 管理通知先が未設定です
+        notification_missing_description: 問い合わせ受付と自動返信は継続しますが、サポート通知メールは送信されません。本番公開前に SUPPORT_NOTIFICATION_EMAIL または credentials の通知先を設定してください。
       security:
         title: セキュリティ
         description: 不審な操作と高リスク操作前の本人確認状態

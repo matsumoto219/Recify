@@ -175,6 +175,7 @@ RSpec.describe ContactRequests do
 
     it 'SUPPORT_NOTIFICATION_EMAIL未設定でも問い合わせ保存と自動返信enqueueは成功する' do
       result = nil
+      expect(Rails.logger).to receive(:warn).with(/\[ContactRequest\] support_notification_email_missing request_uid=/)
 
       expect {
         result = described_class.create(user: nil, params: valid_params(email: 'no-mail@example.com'), request: request)
