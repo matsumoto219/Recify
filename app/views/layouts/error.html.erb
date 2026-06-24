@@ -29,9 +29,11 @@
 
       <footer class="px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-4 md:px-12">
         <div class="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left">
-          <p class="text-sm tracking-[0.2em] token-text-base">
-            <%= t("common.app_name") %>
-          </p>
+          <%= render "shared/brand/logo",
+                href: root_path,
+                variant: :compact,
+                size: :sm,
+                class_name: "error-footer-brand-logo" %>
           <p class="text-xs token-text-muted">
             <%= t("errors.layout.copyright", year: Time.current.year) %>
           </p>

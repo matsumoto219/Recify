@@ -505,7 +505,8 @@ RSpec.describe 'Admin user operations', type: :request do
 
       audit_log = AuditLog.last
       audit_payload = audit_log.attributes.to_json
-      mail_body = ActionMailer::Base.deliveries.last.parts.map { |part| part.body.decoded }.join("\n")
+      reset_mail = ActionMailer::Base.deliveries.last
+      mail_body = [ reset_mail.text_part&.body&.decoded, reset_mail.html_part&.body&.decoded ].compact.join("\n")
       raw_token = mail_body[/reset_password_token=([^\s]+)/, 1]
 
       aggregate_failures do
@@ -657,7 +658,7 @@ RSpec.describe 'Admin user operations', type: :request do
       audit_payload = audit_log.attributes.to_json
       delivered_recipients = ActionMailer::Base.deliveries.flat_map(&:to)
       confirmation_mail = ActionMailer::Base.deliveries.find { |mail| mail.to.include?('recovery-new@example.com') }
-      confirmation_body = confirmation_mail.parts.map { |part| part.body.decoded }.join("\n")
+      confirmation_body = [ confirmation_mail.text_part&.body&.decoded, confirmation_mail.html_part&.body&.decoded ].compact.join("\n")
       confirmation_token = confirmation_body[/confirmation_token=([^\s]+)/, 1]
 
       aggregate_failures do

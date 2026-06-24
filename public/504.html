@@ -132,7 +132,11 @@
         border-radius: 9999px;
         background: var(--bg-card-subtle);
         color: var(--brand-primary);
-        font-size: 2.5rem;
+      }
+
+      .icon svg {
+        width: 2.5rem;
+        height: 2.5rem;
       }
 
       h1 {
@@ -166,8 +170,20 @@
       }
 
       .brand {
-        color: var(--text-base);
-        letter-spacing: 0.2em;
+        color: var(--brand-primary);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+        .brand {
+          background-image: linear-gradient(135deg, var(--brand-gradient-start), var(--brand-gradient-end));
+          background-clip: text;
+          -webkit-background-clip: text;
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+        }
       }
 
       @media (max-width: 40rem) {
@@ -190,7 +206,14 @@
       <main>
         <div class="wrap">
           <section class="card" aria-labelledby="error-title">
-            <div class="icon" aria-hidden="true">504</div>
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                <circle cx="12" cy="12" r="8.5"></circle>
+                <path d="M12 7.5V12l3.2 2"></path>
+                <path d="M7 3.5 4.5 6"></path>
+                <path d="m17 3.5 2.5 2.5"></path>
+              </svg>
+            </div>
             <h1 id="error-title" data-i18n-key="heading">Gateway Timeout</h1>
             <p data-i18n-key="message">The server is taking longer than expected to respond. Please try again later.</p>
             <p class="code">Error Code: 504</p>

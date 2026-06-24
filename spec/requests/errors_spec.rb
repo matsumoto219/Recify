@@ -30,6 +30,7 @@ RSpec.describe 'Error pages', type: :request do
       expect(document.text).to include(secondary_cta) if secondary_cta.present?
       expect(document.text).to include('Recify')
       expect(document.text).to include("© #{Time.current.year} Recify")
+      expect(document.at_css('.brand-logo.error-footer-brand-logo')).to be_present
       expect(response.body).not_to match(/translation missing/i)
     end
   end
@@ -472,6 +473,20 @@ RSpec.describe 'Error pages', type: :request do
           expect(i18n_data.dig('ja', 'heading')).to eq(expected[:ja_heading])
           expect(i18n_data.dig('ja', 'message')).to be_present
           expect(html).to include("Error Code: #{expected[:code]}")
+          expect(html).to include('color: var(--brand-primary);')
+          expect(html).to include('background-image: linear-gradient(135deg, var(--brand-gradient-start), var(--brand-gradient-end));')
+          expect(html).to include('background-clip: text;')
+          expect(html).to include('color: var(--text-base);')
+          expect(html).not_to include('text-wrap: balance')
+          expect(document.at_css('footer .brand').text.squish).to eq('Recify')
+          expect(document.at_css('footer .brand-mark')).to be_nil
+
+          expect(html).to include('max-width: 36rem;') if filename == '406-unsupported-browser.html'
+
+          if %w[502.html 503.html 504.html].include?(filename)
+            expect(document.at_css('.icon svg')).to be_present
+            expect(document.at_css('.icon').text.squish).to be_empty
+          end
         end
       end
     end

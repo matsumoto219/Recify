@@ -1672,9 +1672,12 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(password_change_mail).to be_multipart
-        expect(password_change_mail.parts.map(&:mime_type)).to eq([ 'text/plain', 'text/html' ])
         expect(password_change_mail.text_part).to be_present
         expect(password_change_mail.html_part).to be_present
+        expect(password_change_mail.text_part.mime_type).to eq('text/plain')
+        expect(password_change_mail.html_part.mime_type).to eq('text/html')
+        expect(password_change_mail.attachments['recify-icon.png']).to be_present
+        expect(password_change_mail.attachments['recify-icon.png'].content_disposition).to include('inline')
         expect(mail_html_body(password_change_mail)).to include(I18n.t('auth.mailer.password_change.title'))
         expect(decoded_body).to include(I18n.t('auth.mailer.password_change.body'))
         expect(decoded_body).not_to include('new-password123')

@@ -132,7 +132,11 @@
         border-radius: 9999px;
         background: var(--bg-card-subtle);
         color: var(--brand-primary);
-        font-size: 2.5rem;
+      }
+
+      .icon svg {
+        width: 2.5rem;
+        height: 2.5rem;
       }
 
       h1 {
@@ -166,8 +170,20 @@
       }
 
       .brand {
-        color: var(--text-base);
-        letter-spacing: 0.2em;
+        color: var(--brand-primary);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+        .brand {
+          background-image: linear-gradient(135deg, var(--brand-gradient-start), var(--brand-gradient-end));
+          background-clip: text;
+          -webkit-background-clip: text;
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+        }
       }
 
       @media (max-width: 40rem) {
@@ -190,7 +206,12 @@
       <main>
         <div class="wrap">
           <section class="card" aria-labelledby="error-title">
-            <div class="icon" aria-hidden="true">502</div>
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                <path d="M17.5 18H8a5 5 0 0 1-.8-9.94A6.5 6.5 0 0 1 19.6 10.8 3.75 3.75 0 0 1 17.5 18Z"></path>
+                <path d="M4 4l16 16"></path>
+              </svg>
+            </div>
             <h1 id="error-title" data-i18n-key="heading">Connection Problem</h1>
             <p data-i18n-key="message">The connection to the server is temporarily unstable. Please try again later.</p>
             <p class="code">Error Code: 502</p>

@@ -1,23 +1,23 @@
 require 'rails_helper'
 
 RSpec.describe ApplicationMailer, type: :mailer do
-  describe 'mailer assets' do
-    around do |example|
-      original_default_url_options = described_class.default_url_options.dup
+  describe 'mailer brand icon' do
+    it 'CID添付用アイコンは透明背景のグラデーションPNGにする' do
+      require 'chunky_png'
 
-      example.run
-    ensure
-      described_class.default_url_options = original_default_url_options
-    end
-
-    it 'メール内画像URLはmailerのhost/protocol設定から絶対URLにする' do
-      described_class.default_url_options = { host: 'mail.recify.test', protocol: 'https' }
-
-      asset_url = described_class.new.send(:mailer_asset_url, 'brand/recify-logo-wordmark.png')
+      icon = ChunkyPNG::Image.from_file(described_class::BRAND_ICON_PATH.to_s)
+      top_sample = icon[40, 28]
+      bottom_sample = icon[80, 150]
 
       aggregate_failures do
-        expect(asset_url).to start_with('https://mail.recify.test/assets/brand/recify-logo-wordmark')
-        expect(asset_url).to end_with('.png')
+        expect(described_class::BRAND_ICON_PATH).to exist
+        expect(icon.dimension.width).to eq(192)
+        expect(icon.dimension.height).to eq(192)
+        expect(ChunkyPNG::Color.a(icon[0, 0])).to eq(0)
+        expect(ChunkyPNG::Color.a(icon[191, 191])).to eq(0)
+        expect(ChunkyPNG::Color.a(top_sample)).to be > 0
+        expect(ChunkyPNG::Color.a(bottom_sample)).to be > 0
+        expect(top_sample).not_to eq(bottom_sample)
       end
     end
   end

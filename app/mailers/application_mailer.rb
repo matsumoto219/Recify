@@ -1,9 +1,13 @@
 class ApplicationMailer < ActionMailer::Base
+  BRAND_ICON_ATTACHMENT_NAME = "recify-icon.png"
+  BRAND_ICON_PATH = Rails.root.join("app/assets/images/brand/recify-mail-icon.png")
+
   default from: ENV["SMTP_FROM"].presence || "from@example.com"
   layout "mailer"
+  before_action :attach_mailer_brand_icon
 
   helper_method :mailer_duration_text,
-                :mailer_asset_url,
+                :mailer_brand_icon_url,
                 :contact_request_recipient_name,
                 :devise_recipient_name
 
@@ -32,18 +36,16 @@ class ApplicationMailer < ActionMailer::Base
     t("auth.mailer.common.duration.#{unit}", count: seconds / divisor)
   end
 
-  def mailer_asset_url(asset_name)
-    asset_path = ActionController::Base.helpers.asset_path(asset_name)
-    return asset_path if asset_path.match?(%r{\Ahttps?://})
+  def attach_mailer_brand_icon
+    return unless BRAND_ICON_PATH.file?
 
-    options = self.class.default_url_options.to_h.symbolize_keys
-    host = options[:host].presence || Rails.application.routes.default_url_options[:host].presence
-    return asset_path if host.blank?
+    attachments.inline[BRAND_ICON_ATTACHMENT_NAME] = {
+      mime_type: "image/png",
+      content: BRAND_ICON_PATH.binread
+    }
+  end
 
-    protocol = options[:protocol].presence || Rails.application.routes.default_url_options[:protocol].presence || "http"
-    port = options[:port].presence
-    authority = port.present? ? "#{host}:#{port}" : host
-
-    "#{protocol.to_s.delete_suffix('://')}://#{authority}#{asset_path}"
+  def mailer_brand_icon_url
+    attachments[BRAND_ICON_ATTACHMENT_NAME]&.url
   end
 end

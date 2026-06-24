@@ -13,8 +13,8 @@
       img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
       a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
       @media screen and (max-width: 600px) {
-        .mailer-shell { padding: 28px 12px !important; }
-        .mailer-brand { padding: 0 0 20px !important; }
+        .mailer-shell { padding: 22px 12px !important; }
+        .mailer-brand { padding: 0 0 14px !important; }
         .mailer-panel-content { padding: 34px 24px !important; }
       }
     </style>
@@ -23,19 +23,34 @@
   <body bgcolor="#f5f7fb" style="margin: 0; padding: 0; width: 100%; background-color: #f5f7fb; color: #4d4b5f; color-scheme: light; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;">
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#f5f7fb" style="width: 100%; background-color: #f5f7fb; color: #4d4b5f; color-scheme: light;">
       <tr>
-        <td class="mailer-shell" align="center" style="padding: 40px 16px;">
+        <td class="mailer-shell" align="center" style="padding: 28px 16px;">
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="width: 100%; max-width: 600px;">
             <tr>
-              <td class="mailer-brand" align="left" style="padding: 0 0 22px;">
-                <%= image_tag mailer_asset_url("brand/recify-logo-wordmark.png"),
-                              alt: "#{t("auth.mailer.layout.app_name")} - #{t("auth.mailer.layout.tagline")}",
-                              width: 220,
-                              height: 48,
-                              class: "mailer-brand-logo",
-                              style: "display: block; width: 220px; height: auto; max-width: 100%; margin-left: -14px; border: 0; color: #4b4dd8; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.2; text-decoration: none;" %>
-                <p style="margin: -6px 0 0 40px; color: #777184; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.5;">
-                  <%= t("auth.mailer.layout.tagline") %>
-                </p>
+              <td class="mailer-brand" align="left" style="padding: 0 0 16px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td valign="middle" width="32" style="width: 32px; padding: 0 4px 0 0;">
+                      <% if mailer_brand_icon_url.present? %>
+                        <%= image_tag mailer_brand_icon_url,
+                                      alt: "",
+                                      width: 28,
+                                      height: 28,
+                                      class: "mailer-brand-icon",
+                                      style: "display: block; width: 28px; height: 28px; max-width: 28px; border: 0; outline: none; text-decoration: none;" %>
+                      <% else %>
+                        <span class="mailer-brand-icon-fallback" aria-hidden="true" style="display: inline-block; width: 28px; height: 28px; border-radius: 8px; background-color: #4b4dd8; color: #ffffff; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 16px; font-weight: 700; line-height: 28px; text-align: center;">R</span>
+                      <% end %>
+                    </td>
+                    <td valign="middle" style="padding: 0;">
+                      <p style="margin: 0; color: #4b4dd8; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.1;">
+                        <%= t("auth.mailer.layout.app_name") %>
+                      </p>
+                      <p style="margin: 3px 0 0; color: #777184; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; font-weight: 700; line-height: 1.4;">
+                        <%= t("auth.mailer.layout.tagline") %>
+                      </p>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
 
