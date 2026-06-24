@@ -50,11 +50,15 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect(html).to include(I18n.t('auth.mailer.layout.footer_notice'))
       expect(html).to include(I18n.t('auth.mailer.layout.copyright', year: Time.current.year))
       expect(html).to include('class="mailer-brand-icon"')
-      expect(html).to include('src="cid:')
+      expect(html).to include('src="https://example.com/assets/brand/recify-mail-icon-')
       expect(html).to include('width="28"')
       expect(html).to include('height="28"')
+      expect(html).to include('background: linear-gradient(135deg, #6b5cff 0%, #8f8aff 52%, #4b4dd8 100%)')
+      expect(html).to include('-webkit-background-clip: text')
+      expect(html).to include('-webkit-text-fill-color: transparent')
+      expect(html).not_to include('src="cid:')
       expect(html).not_to include('src="/icon.png"')
-      expect(html).not_to include('src="http')
+      expect(html).not_to include('src="http://')
       expect(html).not_to include('brand/recify-logo-wordmark')
       expect(html).not_to include('mailer_asset_url')
       expect(html).not_to include('width="220"')
@@ -79,9 +83,7 @@ RSpec.describe 'Mailer layout', type: :mailer do
       expect(mail.html_part).to be_present
       expect(mail.text_part.mime_type).to eq("text/plain")
       expect(mail.html_part.mime_type).to eq("text/html")
-      expect(mail.attachments["recify-icon.png"]).to be_present
-      expect(mail.attachments["recify-icon.png"].mime_type).to eq("image/png")
-      expect(mail.attachments["recify-icon.png"].content_disposition).to include("inline")
+      expect(mail.attachments).to be_empty
       expect(text_body(mail)).not_to match(/<\/?[a-z][^>]*>/i)
       expect(html_body(mail)).to include("<!DOCTYPE html>")
     end

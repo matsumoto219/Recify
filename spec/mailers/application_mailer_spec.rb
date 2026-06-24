@@ -2,7 +2,7 @@ require 'rails_helper'
 
 RSpec.describe ApplicationMailer, type: :mailer do
   describe 'mailer brand icon' do
-    it 'CID添付用アイコンは透明背景のグラデーションPNGにする' do
+    it 'メール用アイコンは透明背景のグラデーションPNGにする' do
       require 'chunky_png'
 
       icon = ChunkyPNG::Image.from_file(described_class::BRAND_ICON_PATH.to_s)
@@ -19,6 +19,12 @@ RSpec.describe ApplicationMailer, type: :mailer do
         expect(ChunkyPNG::Color.a(bottom_sample)).to be > 0
         expect(top_sample).not_to eq(bottom_sample)
       end
+    end
+
+    it 'メール用アイコンURLは公開assetの絶対URLにする' do
+      mailer = described_class.new
+
+      expect(mailer.send(:mailer_brand_icon_url)).to match(%r{\Ahttps://example\.com/assets/brand/recify-mail-icon-[a-f0-9]+\.png\z})
     end
   end
 
