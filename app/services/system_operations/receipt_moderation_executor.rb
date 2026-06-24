@@ -10,6 +10,10 @@ module SystemOperations
       "release" => {
         action: "admin.receipts.release",
         confirmation: "RELEASE RECEIPT"
+      },
+      "hard_delete" => {
+        action: "admin.receipts.hard_delete",
+        confirmation: "HARD DELETE RECEIPT"
       }
     }.freeze
 
@@ -39,8 +43,8 @@ module SystemOperations
 
       Receipt.transaction do
         execute_operation!
-        receipt.reload
-        after_state = receipt_state
+        before_state = @hard_delete_summary if operation == "hard_delete"
+        after_state = after_state_for_operation
         audit_log = record_success_audit!(before_state: before_state, after_state: after_state)
       end
 
@@ -98,6 +102,9 @@ module SystemOperations
           actor: actor,
           reason: reason
         )
+      when "hard_delete"
+        @hard_delete_summary = receipt_deletion_summary
+        receipt.destroy!
       end
     end
 
@@ -136,7 +143,9 @@ module SystemOperations
       base_audit_metadata.merge(
         before_status: before_state[:moderation_status],
         after_status: after_state[:moderation_status],
-        source_security_event_id: source_security_event&.id
+        source_security_event_id: source_security_event&.id,
+        deleted: after_state[:deleted] == true,
+        related_records: before_state[:related_records]
       ).compact
     end
 
@@ -182,8 +191,30 @@ module SystemOperations
 
       receipt.reload if receipt.persisted?
       receipt_state
-    rescue StandardError
+    rescue ActiveRecord::RecordNotFound
       {}
+    end
+
+    def after_state_for_operation
+      return { deleted: true } if operation == "hard_delete"
+
+      receipt.reload
+      receipt_state
+    end
+
+    def receipt_deletion_summary
+      receipt_state.merge(
+        related_records: {
+          analysis_runs: receipt.receipt_analysis_runs.count,
+          items: receipt.receipt_items.count,
+          adjustments: receipt.receipt_adjustments.count,
+          payments: receipt.receipt_payments.count,
+          tax_details: receipt.receipt_tax_details.count,
+          notifications: receipt.notifications.count
+        },
+        image_blob_id: receipt.image.attached? ? receipt.image.blob.id : nil,
+        image_byte_size: receipt.image.attached? ? receipt.image.blob.byte_size : nil
+      )
     end
 
     def moderation_result(before_state:, after_state:)
@@ -192,7 +223,8 @@ module SystemOperations
         receipt_id: receipt.id,
         receipt_public_id: receipt.public_id,
         before_status: before_state[:moderation_status],
-        after_status: after_state[:moderation_status]
+        after_status: after_state[:moderation_status],
+        deleted: after_state[:deleted] == true
       }
     end
 

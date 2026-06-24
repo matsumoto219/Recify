@@ -84,7 +84,10 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response.body).to include('通常表示')
         expect(response.body).to include('レシートを隔離')
         expect(response.body).to include('確認文字列 QUARANTINE RECEIPT')
+        expect(response.body).to include('レシートを完全削除')
+        expect(response.body).to include('確認文字列 HARD DELETE RECEIPT')
         expect(response.body).to include(quarantine_admin_receipt_path(receipt))
+        expect(response.body).to include(hard_delete_admin_receipt_path(receipt))
         expect(response.body).to include(admin_user_path(receipt.user))
         expect(response.body).to include(admin_receipt_analysis_runs_path(receipt_public_id: receipt.public_id))
         expect(response.body).to include(admin_audit_logs_path(target_uid: "receipt:#{receipt.public_id}"))
@@ -246,6 +249,78 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response).to redirect_to(admin_receipt_path(receipt))
         expect(SystemOperations).not_to have_received(:execute_receipt_moderation_operation)
         expect(receipt.reload).to be_moderation_active
+      end
+    end
+  end
+
+  describe 'POST /admin/receipts/:public_id/hard_delete' do
+    it 'fresh reauthなしではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt, :with_image, :processing)
+      sign_in admin
+      allow(SystemOperations).to receive(:execute_receipt_moderation_operation)
+
+      post hard_delete_admin_receipt_path(receipt),
+           params: { reason: 'stuck processing cleanup', confirmation: 'HARD DELETE RECEIPT' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_path(receipt)))
+        expect(SystemOperations).not_to have_received(:execute_receipt_moderation_operation)
+        expect(receipt.reload).to be_present
+      end
+    end
+
+    it 'reason blankではSystemOperationsを呼ばない' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt, :failed)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(SystemOperations).to receive(:execute_receipt_moderation_operation)
+
+      post hard_delete_admin_receipt_path(receipt),
+           params: { reason: ' ', confirmation: 'HARD DELETE RECEIPT' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_path(receipt))
+        expect(SystemOperations).not_to have_received(:execute_receipt_moderation_operation)
+      end
+    end
+
+    it 'processing状態でも強制削除し、owner詳細へ戻し、AuditLogを残す' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt, :with_image, :processing)
+      create(:receipt_analysis_run, :running, receipt: receipt)
+      receipt.receipt_items.create!(confirmed_name: 'テスト品', line_total: 100, position_index: 1)
+      owner = receipt.user
+      public_id = receipt.public_id
+      receipt_id = receipt.id
+      attachment_id = receipt.image.attachment.id
+      sign_in admin
+      stub_fresh_admin_reauthentication
+
+      expect do
+        post hard_delete_admin_receipt_path(receipt),
+             params: { reason: 'stuck processing cleanup', confirmation: 'HARD DELETE RECEIPT' }
+      end.to change(AuditLog.where(action: 'admin.receipts.hard_delete', outcome: 'succeeded'), :count).by(1)
+        .and change(Receipt, :count).by(-1)
+        .and change(ReceiptAnalysisRun, :count).by(-1)
+        .and change(ReceiptItem, :count).by(-1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_user_path(owner))
+        expect(Receipt.exists?(receipt_id)).to be(false)
+        expect(ActiveStorage::Attachment.exists?(attachment_id)).to be(false)
+        expect(AuditLog.last).to have_attributes(target_uid: "receipt:#{public_id}", reason: 'stuck processing cleanup')
+        expect(AuditLog.last.before_state).to include(
+          'receipt_id' => receipt_id,
+          'receipt_public_id' => public_id,
+          'receipt_status' => 'processing',
+          'image_attached' => true,
+          'related_records' => include('analysis_runs' => 1, 'items' => 1)
+        )
+        expect(AuditLog.last.after_state).to eq('deleted' => true)
+        expect(AuditLog.last.metadata).to include('operation' => 'hard_delete', 'deleted' => true)
+        expect(AuditLog.last.attributes.to_json).not_to include('テスト品', 'raw_text', 'ocr_result_snapshot', 'ai_result_summary')
       end
     end
   end

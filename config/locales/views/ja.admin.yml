@@ -540,18 +540,19 @@ ja:
         quarantined: 隔離中
       messages:
         not_available: このレシートは現在の状態では操作できません。
-        reauthentication_required: レシート隔離操作にはパスキーによる再認証が必要です。
+        reauthentication_required: レシート操作にはパスキーによる再認証が必要です。
         reason_required: 操作理由を入力してください。
         confirmation_required: 確認文字列を入力してください。
         success:
           quarantine: レシートを隔離しました。
           release: レシートの隔離を解除しました。
+          hard_delete: レシートを完全削除しました。
           default: レシートの状態を更新しました。
         failure:
           target_receipt_required: 対象レシートを確認できませんでした。
           actor_required: 操作者を確認できませんでした。
           reason_required: 操作理由を入力してください。
-          reauthentication_required: レシート隔離操作にはパスキーによる再認証が必要です。
+          reauthentication_required: レシート操作にはパスキーによる再認証が必要です。
           confirmation_required: 確認文字列が一致しません。
           receipt_already_quarantined: このレシートはすでに隔離中です。
           receipt_not_quarantined: このレシートは隔離中ではありません。
@@ -632,13 +633,13 @@ ja:
           created_at: created
           empty: 通知はありません。
         moderation:
-          title: レシート隔離
-          description: 不適切または規約違反の疑いがあるレシートを、ユーザー画面から非表示にします。画像や関連データは削除しません。
+          title: レシート操作
+          description: 隔離・解除・完全削除を監査ログ付きで実行します。完全削除は処理中や不整合状態の復旧用に限定してください。
           reauthentication_required: この操作にはパスキー再認証が必要です。
           reauthentication_link: パスキーで再認証
           reason_label: 操作理由
           not_available: 現在の状態で実行できる操作はありません。
-          no_purge_note: この操作ではレシート、明細、解析履歴、添付画像を削除しません。ユーザー画面では隔離中のレシートを表示しません。
+          no_purge_note: 隔離と解除ではレシート、明細、解析履歴、添付画像を削除しません。完全削除は状態に関係なく関連データと画像添付を削除します。
           quarantine:
             title: レシートを隔離
             description: レシートをユーザー画面から非表示にし、管理者確認中として扱います。誤操作時は解除できます。
@@ -649,6 +650,11 @@ ja:
             description: 隔離中のレシートを通常表示に戻します。解除理由は監査ログに残ります。
             confirmation_label: 確認文字列 RELEASE RECEIPT
             submit: 隔離を解除
+          hard_delete:
+            title: レシートを完全削除
+            description: 処理中・失敗・不整合状態を含め、どの状態でもレシートと関連データを強制削除します。復元できないため、削除理由と確認文字列を監査ログに残します。
+            confirmation_label: 確認文字列 HARD DELETE RECEIPT
+            submit: 完全削除する
     receipt_analysis_runs:
       index:
         title: 解析run管理

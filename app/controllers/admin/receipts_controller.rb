@@ -12,6 +12,10 @@ class Admin::ReceiptsController < Admin::BaseController
     execute_receipt_moderation("release")
   end
 
+  def hard_delete
+    execute_receipt_moderation("hard_delete")
+  end
+
   private
 
   def set_receipt_record
@@ -56,7 +60,7 @@ class Admin::ReceiptsController < Admin::BaseController
     )
 
     if result.success?
-      redirect_to admin_receipt_path(@receipt), notice: success_message(operation), status: :see_other
+      redirect_to success_redirect_path(operation), notice: success_message(operation), status: :see_other
     else
       redirect_to admin_receipt_path(@receipt), alert: failure_message(result), status: :see_other
     end
@@ -72,6 +76,8 @@ class Admin::ReceiptsController < Admin::BaseController
       @receipt.moderation_active?
     when "release"
       @receipt.moderation_quarantined?
+    when "hard_delete"
+      @receipt.persisted?
     else
       false
     end
@@ -86,6 +92,12 @@ class Admin::ReceiptsController < Admin::BaseController
 
   def success_message(operation)
     t("admin.receipts.messages.success.#{operation}", default: t("admin.receipts.messages.success.default"))
+  end
+
+  def success_redirect_path(operation)
+    return admin_user_path(@record.dig(:owner, :id)) if operation == "hard_delete" && @record.dig(:owner, :id).present?
+
+    admin_receipt_path(@receipt)
   end
 
   def failure_message(result)

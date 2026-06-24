@@ -108,6 +108,75 @@ RSpec.describe SystemOperations::ReceiptModerationExecutor do
     end
   end
 
+  it 'hard_deleteはprocessing状態でもレシートと関連データを強制削除し、最小限のAuditLogを残す' do
+    receipt = create(:receipt, :with_image, :processing, total_amount: nil, store_name: nil)
+    create(:receipt_analysis_run, :running, receipt: receipt)
+    receipt.receipt_items.create!(confirmed_name: '削除対象明細', raw_text: 'raw secret line', line_total: 120, position_index: 1)
+    receipt.receipt_payments.create!(method: 'cash', amount: 120)
+    receipt.receipt_tax_details.create!(rate: 0.1, amount: 10, net_amount: 110, description: 'tax')
+    public_id = receipt.public_id
+    receipt_id = receipt.id
+    attachment_id = receipt.image.attachment.id
+
+    result = described_class.call(
+      operation: 'hard_delete',
+      receipt: receipt,
+      actor: actor,
+      reason: 'stuck processing cleanup',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'HARD DELETE RECEIPT'
+    )
+
+    audit_log = AuditLog.last
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(Receipt.exists?(receipt_id)).to be(false)
+      expect(ReceiptAnalysisRun.where(receipt_id: receipt_id)).to be_empty
+      expect(ReceiptItem.where(receipt_id: receipt_id)).to be_empty
+      expect(ReceiptPayment.where(receipt_id: receipt_id)).to be_empty
+      expect(ReceiptTaxDetail.where(receipt_id: receipt_id)).to be_empty
+      expect(ActiveStorage::Attachment.exists?(attachment_id)).to be(false)
+      expect(audit_log).to have_attributes(
+        actor_user: actor,
+        action: 'admin.receipts.hard_delete',
+        outcome: 'succeeded',
+        target_type: 'Receipt',
+        target_id: receipt_id,
+        target_uid: "receipt:#{public_id}",
+        reason: 'stuck processing cleanup'
+      )
+      expect(audit_log.before_state).to include(
+        'receipt_id' => receipt_id,
+        'receipt_public_id' => public_id,
+        'receipt_status' => 'processing',
+        'image_attached' => true,
+        'related_records' => include(
+          'analysis_runs' => 1,
+          'items' => 1,
+          'payments' => 1,
+          'tax_details' => 1
+        )
+      )
+      expect(audit_log.after_state).to eq('deleted' => true)
+      expect(audit_log.metadata).to include(
+        'operation' => 'hard_delete',
+        'deleted' => true,
+        'related_records' => include('analysis_runs' => 1, 'items' => 1)
+      )
+      expect(audit_log.attributes.to_json).not_to include(
+        'credential-secret',
+        'challenge-secret',
+        '削除対象明細',
+        'raw secret line',
+        'raw_text',
+        'ocr_result_snapshot',
+        'ai_result_summary'
+      )
+    end
+  end
+
   it 'fresh passkey reauthentication必須' do
     receipt = create(:receipt)
 
@@ -183,6 +252,26 @@ RSpec.describe SystemOperations::ReceiptModerationExecutor do
     aggregate_failures do
       expect(quarantine_again).to have_attributes(success: false, error_code: 'receipt_already_quarantined')
       expect(release_active).to have_attributes(success: false, error_code: 'receipt_not_quarantined')
+    end
+  end
+
+  it 'hard_deleteのconfirmation phrase不一致を拒否してレシートを残す' do
+    receipt = create(:receipt, :with_image, :processing)
+
+    result = described_class.call(
+      operation: 'hard_delete',
+      receipt: receipt,
+      actor: actor,
+      reason: 'stuck processing cleanup',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'WRONG'
+    )
+
+    aggregate_failures do
+      expect(result).to have_attributes(success: false, error_code: 'confirmation_required')
+      expect(receipt.reload).to be_processing
+      expect(AuditLog.last).to have_attributes(action: 'admin.receipts.hard_delete', outcome: 'failed')
     end
   end
 end

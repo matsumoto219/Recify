@@ -55,6 +55,7 @@ Rails.application.routes.draw do
     resources :receipts, only: %i[show], param: :public_id do
       post :quarantine, on: :member
       post :release, on: :member
+      post :hard_delete, on: :member
     end
   end
 
