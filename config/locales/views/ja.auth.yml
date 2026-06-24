@@ -224,5 +224,11 @@ ja:
         changed: "メールアドレスが %{email} に変更されました。"
   devise:
     mailer:
+      confirmation_instructions:
+        subject: Recifyのメールアドレス確認
+      reset_password_instructions:
+        subject: Recifyのパスワード再設定
+      unlock_instructions:
+        subject: Recifyアカウントのロック解除
       email_changed:
         subject: メールアドレス変更のお知らせ

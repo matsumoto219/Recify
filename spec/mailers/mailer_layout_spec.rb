@@ -121,6 +121,7 @@ RSpec.describe 'Mailer layout', type: :mailer do
 
     aggregate_failures do
       expect_devise_multipart(mail)
+      expect(mail.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
       expect(text_body(mail)).to include('confirm-multipart@example.com')
       expect(text_body(mail)).to include('confirmation_token=confirmation-token')
       expect(text_body(mail)).to include(
@@ -174,6 +175,7 @@ RSpec.describe 'Mailer layout', type: :mailer do
 
     aggregate_failures do
       expect_devise_multipart(mail)
+      expect(mail.subject).to eq(I18n.t('devise.mailer.reset_password_instructions.subject'))
       expect(text_body(mail)).to include('reset-multipart@example.com')
       expect(text_body(mail)).to include('reset_password_token=reset-token')
       expect(text_body(mail)).to include(
@@ -196,6 +198,7 @@ RSpec.describe 'Mailer layout', type: :mailer do
 
     aggregate_failures do
       expect_devise_multipart(mail)
+      expect(mail.subject).to eq(I18n.t('devise.mailer.unlock_instructions.subject'))
       expect(text_body(mail)).to include('unlock-multipart@example.com')
       expect(text_body(mail)).to include('unlock_token=unlock-token')
       expect(text_body(mail)).to include(

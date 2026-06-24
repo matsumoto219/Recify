@@ -67,7 +67,8 @@ RSpec.describe ContactRequestMailer, type: :mailer do
 
       aggregate_failures do
         expect(mail.to).to eq([ 'sender@example.com' ])
-        expect(mail.subject).to include(contact_request.request_uid)
+        expect(mail.subject).to eq(I18n.t('contact_requests.mailer.auto_reply.subject'))
+        expect(mail.subject).not_to include(contact_request.request_uid)
         expect(body).to include(I18n.t('auth.mailer.greeting', email: '入力 太郎'))
         expect(body).to include(contact_request.request_uid)
         expect(body).to include(I18n.t("contact_requests.categories.#{contact_request.category}"))

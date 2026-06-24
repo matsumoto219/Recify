@@ -63,7 +63,7 @@ ja:
         body_notice: 本文は個人情報を含む可能性があるため、この通知メールには全文を載せていません。
         open_admin: 管理画面で確認する
       auto_reply:
-        subject: "[Recify %{request_uid}] お問い合わせを受け付けました"
+        subject: Recifyへのお問い合わせを受け付けました
         title: お問い合わせを受け付けました
         description: |
           お問い合わせありがとうございます。
