@@ -990,6 +990,25 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '全体storage hard stop超過時はavatarを保存しない' do
+      allow(Storage).to receive(:global_quota_can_add?).and_return(false)
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: user.name,
+                avatar: avatar_upload
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.avatar).not_to be_attached
+        expect(response.body).to include(I18n.t('flash.storage.global_hard_stop'))
+      end
+    end
+
     it 'avatar差し替え時は既存blob分を差し引いて容量判定する' do
       user.avatar.attach(avatar_upload)
       user.update!(storage_limit_bytes: user.avatar.blob.byte_size)

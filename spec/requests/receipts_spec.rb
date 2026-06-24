@@ -2055,6 +2055,23 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '全体storage hard stop超過時はreceiptを作成せず解析jobもenqueueしない' do
+      allow(Storage).to receive(:global_quota_can_add?).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+
+      expect do
+        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.storage.global_hard_stop'))
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
     it '単一uploadの日次上限到達時はreceiptを作成せず解析jobもenqueueしない' do
       create(:usage_counter, user: user, key: 'receipt_uploads_per_day', used_count: 50)
       allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
@@ -6990,6 +7007,25 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('flash.storage.quota_exceeded'))
+        expect(receipt.reload.store_name).to eq('更新前')
+      end
+    end
+
+    it '画像差し替え時に全体storage hard stopを超える場合は更新しない' do
+      allow(Storage).to receive(:global_quota_can_add?).and_return(false)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '画像差し替え全体容量NG',
+          total_amount: 2200,
+          payment_method: 'cash',
+          image: uploaded_image
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('flash.storage.global_hard_stop'))
         expect(receipt.reload.store_name).to eq('更新前')
       end
     end

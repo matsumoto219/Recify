@@ -33,6 +33,9 @@ RSpec.describe SystemSettings do
         'storage.warning_remaining_bytes',
         'storage.error_remaining_bytes',
         'storage.remaining_warning_limit_bytes',
+        'storage.global_hard_stop_bytes',
+        'storage.global_usage_warning_percentage',
+        'storage.global_usage_critical_percentage',
         'limits.receipt_upload_soft_limit',
         'limits.receipt_uploads_per_day',
         'limits.manual_receipts_per_day',
@@ -436,6 +439,9 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.max_ocr_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_ai_per_day')).to eq(1000)
         expect(described_class.limit_for('limits.max_storage_bytes')).to eq(100.gigabytes)
+        expect(described_class.limit_for('storage.global_hard_stop_bytes')).to eq(20.gigabytes)
+        expect(described_class.limit_for('storage.global_usage_warning_percentage')).to eq(75)
+        expect(described_class.limit_for('storage.global_usage_critical_percentage')).to eq(90)
         expect(described_class.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.snapshot_ai_normalized_items_max')).to eq(1000)
         expect(described_class.limit_for('limits.snapshot_ocr_lines_max')).to eq(150)
@@ -627,6 +633,12 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('storage.error_remaining_bytes', 199.megabytes.to_s)).to eq(199.megabytes)
         expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 10.megabytes.to_s)).to eq(10.megabytes)
         expect(described_class.cast_update_value('storage.remaining_warning_limit_bytes', 100.gigabytes.to_s)).to eq(100.gigabytes)
+        expect(described_class.cast_update_value('storage.global_hard_stop_bytes', 1.gigabyte.to_s)).to eq(1.gigabyte)
+        expect(described_class.cast_update_value('storage.global_hard_stop_bytes', 20.terabytes.to_s)).to eq(20.terabytes)
+        expect(described_class.cast_update_value('storage.global_usage_warning_percentage', '1')).to eq(1)
+        expect(described_class.cast_update_value('storage.global_usage_warning_percentage', '89')).to eq(89)
+        expect(described_class.cast_update_value('storage.global_usage_critical_percentage', '76')).to eq(76)
+        expect(described_class.cast_update_value('storage.global_usage_critical_percentage', '100')).to eq(100)
         expect(described_class.cast_update_value('security_events.max_detections_per_request', '1')).to eq(1)
         expect(described_class.cast_update_value('security_events.max_detections_per_request', '50')).to eq(50)
         expect(described_class.cast_update_value('security_events.aggregation_window_minutes', '5')).to eq(5)
@@ -989,6 +1001,24 @@ RSpec.describe SystemSettings do
           described_class.cast_update_value('storage.remaining_warning_limit_bytes', (100.gigabytes + 1).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
+          described_class.cast_update_value('storage.global_hard_stop_bytes', (1.gigabyte - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.global_hard_stop_bytes', (20.terabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.global_usage_warning_percentage', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.global_usage_warning_percentage', '100')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('storage.global_usage_critical_percentage', '1')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('storage.global_usage_critical_percentage', '101')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
           described_class.cast_update_value('security_events.max_detections_per_request', '0')
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
@@ -1167,6 +1197,39 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('storage.error_remaining_bytes', 499.megabytes.to_s)).to eq(499.megabytes)
         expect {
           described_class.cast_update_value('storage.error_remaining_bytes', 500.megabytes.to_s)
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('storage.global_usage_warning_percentage', '89')).to eq(89)
+        expect {
+          described_class.cast_update_value('storage.global_usage_warning_percentage', '90')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.global_usage_critical_percentage', '76')).to eq(76)
+        expect {
+          described_class.cast_update_value('storage.global_usage_critical_percentage', '75')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(
+        :system_setting,
+        key: 'storage.global_usage_warning_percentage',
+        value: described_class.stored_value(60)
+      )
+      create(
+        :system_setting,
+        key: 'storage.global_usage_critical_percentage',
+        value: described_class.stored_value(90)
+      )
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('storage.global_usage_warning_percentage', '89')).to eq(89)
+        expect {
+          described_class.cast_update_value('storage.global_usage_warning_percentage', '90')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('storage.global_usage_critical_percentage', '61')).to eq(61)
+        expect {
+          described_class.cast_update_value('storage.global_usage_critical_percentage', '60')
         }.to raise_error(SystemSettings::ValidationError, error_message)
       end
     end
@@ -1759,7 +1822,7 @@ RSpec.describe SystemSettings do
       end
     end
 
-    it 'ストレージ警告閾値はmedium risk設定として扱う' do
+    it 'ストレージ警告閾値と全体上限はrisk設定として扱う' do
       aggregate_failures do
         expect(described_class.definition_for('storage.usage_warning_percentage')).to have_attributes(
           category: 'storage_warning',
@@ -1795,6 +1858,27 @@ RSpec.describe SystemSettings do
           min: 10.megabytes,
           max: 100.gigabytes,
           default: 1.gigabyte
+        )
+        expect(described_class.definition_for('storage.global_hard_stop_bytes')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'high',
+          min: 1.gigabyte,
+          max: 20.terabytes,
+          default: 20.gigabytes
+        )
+        expect(described_class.definition_for('storage.global_usage_warning_percentage')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'medium',
+          min: 1,
+          max: 99,
+          default: 75
+        )
+        expect(described_class.definition_for('storage.global_usage_critical_percentage')).to have_attributes(
+          category: 'storage_warning',
+          risk_level: 'high',
+          min: 2,
+          max: 100,
+          default: 90
         )
       end
     end

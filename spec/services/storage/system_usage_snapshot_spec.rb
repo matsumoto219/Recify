@@ -46,6 +46,15 @@ RSpec.describe Storage::SystemUsageSnapshot do
         expect(snapshot[:user_count]).to eq(2)
         expect(snapshot[:quota_total_bytes]).to eq(3.gigabytes)
         expect(snapshot[:quota_used_bytes]).to eq(20.kilobytes)
+        expect(snapshot[:global_quota]).to include(
+          used_bytes: 24.kilobytes,
+          hard_stop_bytes: 20.gigabytes,
+          warning_percentage: 75,
+          critical_percentage: 90,
+          warning_bytes: 15.gigabytes,
+          critical_bytes: 18.gigabytes,
+          state: :normal
+        )
         expect(ActiveStorage::Blob.exists?(orphan_blob.id)).to eq(true)
       end
     end

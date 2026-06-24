@@ -256,6 +256,23 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it '全体storage hard stop超過時はall-or-nothingで拒否する' do
+    files = [
+      uploaded_receipt_fixture,
+      uploaded_receipt_fixture
+    ]
+    allow(Storage).to receive(:global_quota_can_add?).and_return(false)
+
+    result = described_class.call(user:, files:)
+
+    aggregate_failures do
+      expect(result).not_to be_success
+      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.global_hard_stop'))
+      expect(user.receipts.count).to eq(0)
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
+    end
+  end
+
   it 'batch_files_per_day上限到達時はall-or-nothingで拒否する' do
     files = [
       uploaded_receipt_fixture,

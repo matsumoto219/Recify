@@ -8,6 +8,14 @@ module Storage
       SystemUsageSnapshot.call
     end
 
+    def global_quota
+      GlobalQuota.call
+    end
+
+    def global_quota_can_add?(...)
+      GlobalQuota.can_add?(...)
+    end
+
     def orphan_blob_scan(...)
       OrphanBlobScanner.call(...)
     end

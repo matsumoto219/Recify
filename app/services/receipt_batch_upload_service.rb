@@ -32,7 +32,7 @@ class ReceiptBatchUploadService
     return failure(I18n.t("receipts.batch_upload.errors.empty")) if files.blank?
     return failure(I18n.t("receipts.batch_upload.errors.too_many", max: max_files)) if files.size > max_files
     return failure(I18n.t("flash.receipts.ocr_unavailable")) if ExternalServices.down?(:ocr)
-    return failure(I18n.t("receipts.batch_upload.errors.quota_exceeded")) unless storage_quota_available?
+    return failure(storage_quota_error_message) unless storage_quota_available?
 
     create_receipts
   rescue Usage::LimitExceeded
@@ -77,9 +77,19 @@ class ReceiptBatchUploadService
   end
 
   def storage_quota_available?
-    total_size = files.sum { |file| file.respond_to?(:size) ? file.size.to_i : 0 }
+    user.storage_can_add?(total_upload_size) && Storage.global_quota_can_add?(total_upload_size)
+  end
 
-    user.storage_can_add?(total_size)
+  def total_upload_size
+    @total_upload_size ||= files.sum { |file| file.respond_to?(:size) ? file.size.to_i : 0 }
+  end
+
+  def storage_quota_error_message
+    if !Storage.global_quota_can_add?(total_upload_size)
+      I18n.t("receipts.batch_upload.errors.global_hard_stop")
+    else
+      I18n.t("receipts.batch_upload.errors.quota_exceeded")
+    end
   end
 
   def consume_batch_upload_limits!

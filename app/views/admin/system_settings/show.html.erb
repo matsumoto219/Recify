@@ -29,6 +29,11 @@
     limits.max_ai_per_day
     limits.max_storage_bytes
   ]
+  global_storage_limit_keys = %w[
+    storage.global_hard_stop_bytes
+    storage.global_usage_warning_percentage
+    storage.global_usage_critical_percentage
+  ]
   setting_notice_key =
     if snapshot_limit_keys.include?(@record[:key].to_s)
       "snapshot_limit_note"
@@ -40,6 +45,8 @@
       "amount_limit_note"
     elsif usage_limit_safety_keys.include?(@record[:key].to_s)
       "usage_limit_safety_note"
+    elsif global_storage_limit_keys.include?(@record[:key].to_s)
+      "global_storage_limit_note"
     elsif @record[:key].to_s == "limits.receipt_adjustments_per_receipt"
       "receipt_adjustments_limit_note"
     elsif @record[:key].to_s == "limits.receipt_payments_per_receipt"

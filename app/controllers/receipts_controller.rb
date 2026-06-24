@@ -73,7 +73,7 @@ class ReceiptsController < ApplicationController
     if storage_quota_exceeded_for?(uploaded_receipt_image)
       @receipt = current_user.receipts.new
       @receipt.errors.add(:image, :storage_quota_exceeded)
-      flash.now[:alert] = t("flash.storage.quota_exceeded")
+      flash.now[:alert] = storage_quota_exceeded_message_for(uploaded_receipt_image)
       render :new_upload, status: :unprocessable_content, formats: :html
       return
     end
@@ -208,7 +208,10 @@ class ReceiptsController < ApplicationController
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
       @receipt.errors.add(:image, :storage_quota_exceeded)
       prepare_receipt_form_presenter
-      flash.now[:alert] = t("flash.storage.quota_exceeded")
+      flash.now[:alert] = storage_quota_exceeded_message_for(
+        uploaded_receipt_image,
+        excluding_blob: existing_receipt_image_blob
+      )
       render :edit, status: :unprocessable_content, formats: :html
       return
     end
@@ -436,7 +439,19 @@ class ReceiptsController < ApplicationController
 
   def storage_quota_exceeded_for?(uploaded_file, excluding_blob: nil)
     uploaded_file.present? &&
-      !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+      (
+        !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob) ||
+        !Storage.global_quota_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+      )
+  end
+
+  def storage_quota_exceeded_message_for(uploaded_file, excluding_blob: nil)
+    if uploaded_file.present? &&
+       !Storage.global_quota_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+      t("flash.storage.global_hard_stop")
+    else
+      t("flash.storage.quota_exceeded")
+    end
   end
 
   def record_invalid_receipt_upload_security_event(file, errors)

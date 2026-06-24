@@ -48,6 +48,10 @@ module SystemSettings
     storage.warning_remaining_bytes
     storage.error_remaining_bytes
   ].freeze
+  GLOBAL_STORAGE_USAGE_PERCENTAGE_KEYS = %w[
+    storage.global_usage_warning_percentage
+    storage.global_usage_critical_percentage
+  ].freeze
   EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS = %w[
     external_services.degraded_failure_threshold
     external_services.down_failure_threshold
@@ -517,6 +521,8 @@ module SystemSettings
         validate_storage_usage_percentage_relationship!(definition, value)
       elsif STORAGE_REMAINING_BYTES_KEYS.include?(definition.key)
         validate_storage_remaining_bytes_relationship!(definition, value)
+      elsif GLOBAL_STORAGE_USAGE_PERCENTAGE_KEYS.include?(definition.key)
+        validate_global_storage_usage_percentage_relationship!(definition, value)
       end
     end
 
@@ -532,6 +538,16 @@ module SystemSettings
       values = limits_for(STORAGE_REMAINING_BYTES_KEYS)
       values[definition.key] = Integer(value)
       return if values.fetch("storage.warning_remaining_bytes") > values.fetch("storage.error_remaining_bytes")
+
+      raise ValidationError, STORAGE_WARNING_THRESHOLD_RELATION_ERROR
+    end
+
+    def validate_global_storage_usage_percentage_relationship!(definition, value)
+      values = limits_for(GLOBAL_STORAGE_USAGE_PERCENTAGE_KEYS)
+      values[definition.key] = Integer(value)
+      warning_percentage = values.fetch("storage.global_usage_warning_percentage")
+      critical_percentage = values.fetch("storage.global_usage_critical_percentage")
+      return if warning_percentage < critical_percentage
 
       raise ValidationError, STORAGE_WARNING_THRESHOLD_RELATION_ERROR
     end

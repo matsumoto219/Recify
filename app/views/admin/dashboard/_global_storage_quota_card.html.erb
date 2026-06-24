@@ -1,0 +1,75 @@
+<%
+  quota = (global_quota || {}).with_indifferent_access
+  state = quota[:state].to_s.presence || "normal"
+  usage_percentage = quota[:usage_percentage].to_f
+  used_marker_percentage = usage_percentage.clamp(0, 100)
+  warning_marker_percentage = quota[:warning_percentage].to_f.clamp(0, 100)
+  critical_marker_percentage = quota[:critical_percentage].to_f.clamp(0, 100)
+  state_classes = {
+    "normal" => "token-bg-success-soft token-text-success",
+    "warning" => "token-bg-warning-soft token-text-warning",
+    "critical" => "token-bg-warning-soft token-text-warning",
+    "hard_stop" => "token-bg-error-soft token-text-error"
+  }
+%>
+
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
+  <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div>
+      <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.global_storage.title") %></h2>
+      <p class="text-sm token-text-muted"><%= t("admin.dashboard.global_storage.description") %></p>
+    </div>
+    <span class="inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-bold <%= state_classes.fetch(state, state_classes.fetch("normal")) %>">
+      <%= t("admin.dashboard.global_storage.states.#{state}", default: state) %>
+    </span>
+  </div>
+
+  <div class="space-y-2">
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <p class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.global_storage.current_usage") %></p>
+        <p class="font-mono text-2xl font-bold token-text-base">
+          <%= format_storage_size(quota[:used_bytes]) %>
+        </p>
+      </div>
+      <p class="shrink-0 font-mono text-sm font-semibold token-text-muted">
+        <%= number_to_percentage(usage_percentage, precision: 1) %>
+      </p>
+    </div>
+
+    <div class="relative h-4 overflow-hidden rounded-full border token-border-soft token-bg-card-subtle" aria-hidden="true">
+      <div
+        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-indigo-500 to-violet-400"
+        style="width: <%= used_marker_percentage %>%"></div>
+      <div
+        class="absolute -top-1 bottom-[-0.25rem] w-0.5 token-bg-warning-soft"
+        style="left: <%= warning_marker_percentage %>%"></div>
+      <div
+        class="absolute -top-1 bottom-[-0.25rem] w-0.5 token-bg-error-soft"
+        style="left: <%= critical_marker_percentage %>%"></div>
+    </div>
+
+    <dl class="grid gap-2 text-xs md:grid-cols-3">
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-2">
+        <dt class="font-semibold token-text-muted"><%= t("admin.dashboard.global_storage.warning") %></dt>
+        <dd class="font-mono font-bold token-text-base">
+          <%= format_storage_size(quota[:warning_bytes]) %>
+          <span class="font-sans font-semibold token-text-muted">(<%= quota[:warning_percentage] %>%)</span>
+        </dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-2">
+        <dt class="font-semibold token-text-muted"><%= t("admin.dashboard.global_storage.critical") %></dt>
+        <dd class="font-mono font-bold token-text-base">
+          <%= format_storage_size(quota[:critical_bytes]) %>
+          <span class="font-sans font-semibold token-text-muted">(<%= quota[:critical_percentage] %>%)</span>
+        </dd>
+      </div>
+      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-2">
+        <dt class="font-semibold token-text-muted"><%= t("admin.dashboard.global_storage.hard_stop") %></dt>
+        <dd class="font-mono font-bold token-text-base"><%= format_storage_size(quota[:hard_stop_bytes]) %></dd>
+      </div>
+    </dl>
+  </div>
+
+  <p class="mt-auto pt-4 text-sm token-text-muted"><%= t("admin.dashboard.global_storage.readonly_note") %></p>
+<% end %>

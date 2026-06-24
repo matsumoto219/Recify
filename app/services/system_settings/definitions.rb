@@ -277,6 +277,36 @@ module SystemSettings
         max: 100.gigabytes
       ),
       Definition.new(
+        key: "storage.global_hard_stop_bytes",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 20.gigabytes,
+        editable: true,
+        risk_level: "high",
+        min: 1.gigabyte,
+        max: 20.terabytes
+      ),
+      Definition.new(
+        key: "storage.global_usage_warning_percentage",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 75,
+        editable: true,
+        risk_level: "medium",
+        min: 1,
+        max: 99
+      ),
+      Definition.new(
+        key: "storage.global_usage_critical_percentage",
+        category: "storage_warning",
+        value_type: "integer",
+        default: 90,
+        editable: true,
+        risk_level: "high",
+        min: 2,
+        max: 100
+      ),
+      Definition.new(
         key: "limits.receipt_upload_soft_limit",
         category: "soft_limit",
         value_type: "integer",

@@ -16,7 +16,8 @@ module Storage
         orphan_blob_bytes: orphan_blobs.sum(:byte_size),
         user_count: User.count,
         quota_total_bytes: User.sum(:storage_limit_bytes),
-        quota_used_bytes: quota_used_bytes
+        quota_used_bytes: quota_used_bytes,
+        global_quota: Storage.global_quota.to_h
       }
     end
 

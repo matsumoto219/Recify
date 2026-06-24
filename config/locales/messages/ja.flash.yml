@@ -34,6 +34,7 @@ ja:
         not_allowed: 本登録済みユーザーはゲスト本登録化を利用できません。
     storage:
       quota_exceeded: ストレージ容量の上限を超えるため、この画像はアップロードできません。
+      global_hard_stop: 現在、保存容量の上限に達しているため、新しい画像をアップロードできません。時間をおいて再度お試しください。
     usage_limits:
       uploads_exceeded: |-
         本日のアップロード上限に達しました。

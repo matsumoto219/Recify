@@ -115,7 +115,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
         profile_params = account_update_params.except(:current_password, :password, :password_confirmation)
         if avatar_storage_quota_exceeded?(resource, profile_params[:avatar])
           resource.errors.add(:avatar, :storage_quota_exceeded)
-          flash.now[:alert] = t("flash.storage.quota_exceeded")
+          flash.now[:alert] = avatar_storage_quota_exceeded_message(resource, profile_params[:avatar])
           render failure_template, status: :unprocessable_content
           return
         end
@@ -304,7 +304,19 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
     excluding_blob = resource.avatar.blob if resource.avatar.attached?
 
-    !resource.storage_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
+    !resource.storage_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob) ||
+      !Storage.global_quota_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
+  end
+
+  def avatar_storage_quota_exceeded_message(resource, uploaded_avatar)
+    excluding_blob = resource.avatar.blob if resource.avatar.attached?
+
+    if uploaded_avatar.present? &&
+       !Storage.global_quota_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
+      t("flash.storage.global_hard_stop")
+    else
+      t("flash.storage.quota_exceeded")
+    end
   end
 
   def remove_avatar_requested?

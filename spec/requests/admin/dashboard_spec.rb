@@ -245,7 +245,18 @@ RSpec.describe 'Admin dashboard', type: :request do
         orphan_blob_bytes: 4.kilobytes,
         user_count: 1,
         quota_total_bytes: 1.gigabyte,
-        quota_used_bytes: 20.kilobytes
+        quota_used_bytes: 20.kilobytes,
+        global_quota: {
+          used_bytes: 24.kilobytes,
+          hard_stop_bytes: 20.gigabytes,
+          warning_percentage: 75,
+          critical_percentage: 90,
+          warning_bytes: 15.gigabytes,
+          critical_bytes: 18.gigabytes,
+          remaining_bytes: 20.gigabytes - 24.kilobytes,
+          usage_percentage: 0.00012,
+          state: :normal
+        }
       )
       allow(Admin).to receive(:database_status_snapshot).and_return(
         primary: 'ok',
@@ -322,10 +333,14 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(height_matched_cards.size).to be >= 7
         expect(response.body).to include('更新')
         expect(response.body).to include('ストレージ状態')
+        expect(response.body).to include('全体ストレージ上限')
         expect(response.body).to include('total blobs')
         expect(response.body).to include('unattached')
         expect(response.body).to include('24KB')
         expect(response.body).to include('4KB')
+        expect(response.body).to include('15GB')
+        expect(response.body).to include('18GB')
+        expect(response.body).to include('20GB')
         expect(response.body).to include('法務文書')
         expect(response.body).to include('同期済み')
         expect(response.body).to include('利用規約')
@@ -457,7 +472,18 @@ RSpec.describe 'Admin dashboard', type: :request do
         orphan_blob_bytes: 0,
         user_count: 0,
         quota_total_bytes: 1.gigabyte,
-        quota_used_bytes: 0
+        quota_used_bytes: 0,
+        global_quota: {
+          used_bytes: 0,
+          hard_stop_bytes: 20.gigabytes,
+          warning_percentage: 75,
+          critical_percentage: 90,
+          warning_bytes: 15.gigabytes,
+          critical_bytes: 18.gigabytes,
+          remaining_bytes: 20.gigabytes,
+          usage_percentage: 0.0,
+          state: :normal
+        }
       )
       allow(Admin).to receive(:database_status_snapshot).and_return(
         primary: 'ok',
