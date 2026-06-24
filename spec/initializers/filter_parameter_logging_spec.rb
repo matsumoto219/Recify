@@ -185,4 +185,28 @@ RSpec.describe 'filter_parameter_logging' do
       expect(filtered.fetch('q')).to eq('receipt')
     end
   end
+
+  it 'filters bot challenge response parameters' do
+    params = {
+      "cf-turnstile-response" => "raw-turnstile-response",
+      "cf_turnstile_response" => "raw-underscore-turnstile-response",
+      "g-recaptcha-response" => "raw-recaptcha-response",
+      safe_field: "signup"
+    }
+
+    filtered = filter.filter(params)
+    payload = filtered.to_json
+
+    aggregate_failures do
+      expect(payload).not_to include(
+        "raw-turnstile-response",
+        "raw-underscore-turnstile-response",
+        "raw-recaptcha-response"
+      )
+      expect(filtered.fetch("cf-turnstile-response")).to eq("[FILTERED]")
+      expect(filtered.fetch("cf_turnstile_response")).to eq("[FILTERED]")
+      expect(filtered.fetch("g-recaptcha-response")).to eq("[FILTERED]")
+      expect(filtered.fetch(:safe_field)).to eq("signup")
+    end
+  end
 end
