@@ -1,5 +1,6 @@
 require "active_support/core_ext/integer/time"
 require Rails.root.join("app/services/production_runtime_config")
+require Rails.root.join("config/cloudflare_trusted_proxies")
 
 Rails.application.configure do
   runtime_config = ProductionRuntimeConfig.new
@@ -35,6 +36,16 @@ Rails.application.configure do
 
   # Skip http-to-https redirect for the default health check endpoint.
   config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } } if config.force_ssl
+
+  # Cloudflare proxy traffic reaches Rails through Cloudflare edge IPs and the
+  # Kamal/Docker network. Keep Rails' default private proxy ranges and add the
+  # official Cloudflare ranges so request.remote_ip resolves to the visitor.
+  config.action_dispatch.trusted_proxies = Recify::CloudflareTrustedProxies.action_dispatch_trusted_proxies
+
+  # Rack::Attack keys use request.ip, which is calculated by Rack rather than
+  # ActionDispatch::RemoteIp. Keep Rack's default private proxy filter and add
+  # the same Cloudflare ranges so Rack::Attack does not group users by edge IP.
+  Rack::Request.ip_filter = Recify::CloudflareTrustedProxies.rack_ip_filter
 
   # Log to STDOUT with the current request id as a default log tag.
   config.log_tags = [ :request_id ]
