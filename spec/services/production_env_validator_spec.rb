@@ -58,6 +58,19 @@ RSpec.describe ProductionEnvValidator do
     expect(result.missing_keys).to be_empty
   end
 
+  it "uses SMTP_FROM when mailer defaults are not loaded during boot validation" do
+    result = described_class.call(
+      env: required_env,
+      rails_config: rails_config,
+      strict: true,
+      application_mailer_from: nil,
+      devise_mailer_sender: nil
+    )
+
+    expect(result).to be_success
+    expect(result.missing_keys).to be_empty
+  end
+
   it "production strict mode includes legal document file validation" do
     legal_documents_validator = class_double(
       ProductionLegalDocumentsValidator,

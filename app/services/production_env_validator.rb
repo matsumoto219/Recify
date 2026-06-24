@@ -207,6 +207,10 @@ class ProductionEnvValidator
     env[key].to_s.strip.present?
   end
 
+  def env_value(key)
+    env[key].to_s.strip.presence
+  end
+
   def blank_value?(value)
     value.to_s.strip.blank?
   end
@@ -217,11 +221,12 @@ class ProductionEnvValidator
   end
 
   def resolved_application_mailer_from
-    application_mailer_from || "ApplicationMailer".safe_constantize&.default&.[](:from)
+    application_mailer_from || env_value("SMTP_FROM") || "ApplicationMailer".safe_constantize&.default&.[](:from)
   end
 
   def resolved_devise_mailer_sender
     return devise_mailer_sender if devise_mailer_sender.present?
+    return env_value("SMTP_FROM") if env_value("SMTP_FROM").present?
     return unless defined?(Devise)
 
     Devise.mailer_sender
