@@ -14,8 +14,8 @@ RSpec.describe LegalDocuments::Sync do
     aggregate_failures do
       expect(LegalDocument.current.pluck(:document_type, :version, :locale)).to match_array(
         [
-          [ "privacy", "2026-06-21", "ja" ],
-          [ "terms", "2026-06-21", "ja" ]
+          [ "privacy", "2026-06-24", "ja" ],
+          [ "terms", "2026-06-24", "ja" ]
         ]
       )
       expect(LegalDocuments::Verifier.verify_database!).to be(true)

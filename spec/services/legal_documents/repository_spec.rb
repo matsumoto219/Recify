@@ -4,8 +4,8 @@ RSpec.describe LegalDocuments::Repository do
   subject(:repository) { described_class.new }
 
   it "loads current legal document versions from YAML" do
-    expect(repository.current!(document_type: :terms, locale: :ja).version).to eq("2026-06-21")
-    expect(repository.current!(document_type: :privacy, locale: :ja).version).to eq("2026-06-21")
+    expect(repository.current!(document_type: :terms, locale: :ja).version).to eq("2026-06-24")
+    expect(repository.current!(document_type: :privacy, locale: :ja).version).to eq("2026-06-24")
   end
 
   it "verifies the versioned YAML files" do

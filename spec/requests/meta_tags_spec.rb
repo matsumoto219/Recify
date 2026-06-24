@@ -119,17 +119,17 @@ RSpec.describe "Public meta tags", type: :request do
 
   describe "GET /terms/versions/:version" do
     def perform_request
-      get terms_version_path("2026-06-21")
+      get terms_version_path("2026-06-24")
     end
 
     include_examples "public OGP meta",
-                     expected_title: "利用規約 2026-06-21バージョン | Recify",
+                     expected_title: "利用規約 2026-06-24バージョン | Recify",
                      expected_description: LegalDocuments::Repository.new.find!(
                        document_type: :terms,
-                       version: "2026-06-21",
+                       version: "2026-06-24",
                        locale: :ja
                      ).meta_description,
-                     expected_path: "/terms/versions/2026-06-21"
+                     expected_path: "/terms/versions/2026-06-24"
   end
 
   describe "GET /privacy" do
@@ -156,17 +156,17 @@ RSpec.describe "Public meta tags", type: :request do
 
   describe "GET /privacy/versions/:version" do
     def perform_request
-      get privacy_version_path("2026-06-21")
+      get privacy_version_path("2026-06-24")
     end
 
     include_examples "public OGP meta",
-                     expected_title: "プライバシーポリシー 2026-06-21バージョン | Recify",
+                     expected_title: "プライバシーポリシー 2026-06-24バージョン | Recify",
                      expected_description: LegalDocuments::Repository.new.find!(
                        document_type: :privacy,
-                       version: "2026-06-21",
+                       version: "2026-06-24",
                        locale: :ja
                      ).meta_description,
-                     expected_path: "/privacy/versions/2026-06-21"
+                     expected_path: "/privacy/versions/2026-06-24"
   end
 
   it "設定済みhostを優先し、Host headerをOGP URLへ反映しない" do
