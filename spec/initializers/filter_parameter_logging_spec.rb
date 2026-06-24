@@ -153,4 +153,36 @@ RSpec.describe 'filter_parameter_logging' do
       expect(filtered[:safe_label]).to eq('receipt image')
     end
   end
+
+  it 'filters authentication and recovery token query parameters' do
+    query = Rack::Utils.parse_nested_query(
+      [
+        'confirmation_token=raw-confirmation-token',
+        'reset_password_token=raw-reset-token',
+        'unlock_token=raw-unlock-token',
+        'invitation_token=raw-invitation-token',
+        'token=raw-generic-token',
+        'q=receipt'
+      ].join('&')
+    )
+
+    filtered = filter.filter(query)
+    payload = filtered.to_json
+
+    aggregate_failures do
+      expect(payload).not_to include(
+        'raw-confirmation-token',
+        'raw-reset-token',
+        'raw-unlock-token',
+        'raw-invitation-token',
+        'raw-generic-token'
+      )
+      expect(filtered.fetch('confirmation_token')).to eq('[FILTERED]')
+      expect(filtered.fetch('reset_password_token')).to eq('[FILTERED]')
+      expect(filtered.fetch('unlock_token')).to eq('[FILTERED]')
+      expect(filtered.fetch('invitation_token')).to eq('[FILTERED]')
+      expect(filtered.fetch('token')).to eq('[FILTERED]')
+      expect(filtered.fetch('q')).to eq('receipt')
+    end
+  end
 end
