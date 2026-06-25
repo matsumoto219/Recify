@@ -1,8 +1,8 @@
 ja:
   home:
     meta:
-      title: Recify
-      description: レシート画像の自動解析で明細整理をサポート
+      title: Recify - レシート整理を、もっと簡単に。
+      description: Recifyは、レシート画像をアップロードするだけで支出記録や明細整理をサポートするレシート管理アプリです。
     hero:
       badge: 自動解析で、レシート整理をスムーズに
       heading_lines:

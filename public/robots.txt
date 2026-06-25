@@ -4,5 +4,8 @@ Disallow: /receipts
 Disallow: /settings
 Disallow: /notifications
 Disallow: /users
+Disallow: /legal/consent
+Disallow: /up
 Disallow: /rails/active_storage/
 Allow: /
+Sitemap: /sitemap.xml

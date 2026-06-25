@@ -1,24 +1,18 @@
 # frozen_string_literal: true
 
 module MetaTagsHelper
-  PUBLIC_META_ACTIONS = {
-    "announcements" => %w[index show],
-    "contact_requests" => %w[new create],
+  INDEXABLE_META_ACTIONS = {
     "home" => %w[index],
     "legal" => %w[
       terms
-      terms_versions
-      terms_version
       privacy
-      privacy_versions
-      privacy_version
     ]
   }.freeze
   DEFAULT_OG_IMAGE_PATH = "brand/recify-ogp.png"
   DEFAULT_TWITTER_CARD = "summary_large_image"
 
   def public_meta_page?
-    PUBLIC_META_ACTIONS.fetch(controller_path, []).include?(action_name)
+    INDEXABLE_META_ACTIONS.fetch(controller_path, []).include?(action_name)
   end
 
   def page_meta_title
@@ -26,6 +20,7 @@ module MetaTagsHelper
     title = title.to_s.strip.presence || meta_site_name
 
     return title if title == meta_site_name
+    return title if title.start_with?("#{meta_site_name} ")
     return title if title.end_with?(" | #{meta_site_name}")
 
     t("meta.title_format", title: title, site: meta_site_name)
@@ -75,6 +70,10 @@ module MetaTagsHelper
       ],
       "\n"
     )
+  end
+
+  def render_robots_meta_tags
+    tag.meta(name: "robots", content: public_meta_page? ? "index, follow" : "noindex, nofollow")
   end
 
   def absolute_public_url(path_or_url)

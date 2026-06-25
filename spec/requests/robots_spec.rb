@@ -15,7 +15,10 @@ RSpec.describe 'Robots policy', type: :request do
         expect(response.body).to include("Disallow: /settings\n")
         expect(response.body).to include("Disallow: /notifications\n")
         expect(response.body).to include("Disallow: /users\n")
+        expect(response.body).to include("Disallow: /legal/consent\n")
+        expect(response.body).to include("Disallow: /up\n")
         expect(response.body).to include("Disallow: /rails/active_storage/\n")
+        expect(response.body).to include("Sitemap: /sitemap.xml\n")
         expect(response.body).not_to include('/admin/security_events')
         expect(response.body).not_to include('/admin/system_settings')
       end

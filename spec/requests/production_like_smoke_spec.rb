@@ -62,12 +62,14 @@ RSpec.describe "Production-like public smoke", type: :request do
 
   it "public HTML entrypoints are ready for production-like smoke" do
     announcement = create(:announcement, :published, title: "公開お知らせ", body: "公開本文")
-    paths = [
+    indexable_paths = [
       root_path,
       terms_path,
+      privacy_path
+    ]
+    noindex_paths = [
       terms_versions_path,
       current_legal_version_path(:terms),
-      privacy_path,
       privacy_versions_path,
       current_legal_version_path(:privacy),
       contact_path,
@@ -75,18 +77,35 @@ RSpec.describe "Production-like public smoke", type: :request do
       announcement_path(announcement)
     ]
 
-    paths.each do |path|
+    indexable_paths.each do |path|
       get path
 
       aggregate_failures path do
         expect(response).to have_http_status(:ok)
         expect(response.media_type).to eq("text/html")
         expect(html_document.at_css("main")).to be_present
+        expect(html_document.at_css('meta[name="robots"]')&.[]("content")).to eq("index, follow")
         expect(html_document.at_css('meta[property="og:image"]')&.[]("content")).to match(%r{\Ahttps?://.+recify-ogp.+\.png\z})
         expect(html_document.at_css('meta[name="twitter:image"]')&.[]("content")).to eq(
           html_document.at_css('meta[property="og:image"]')&.[]("content")
         )
         expect(html_document.at_css('link[rel="canonical"]')&.[]("href")).to match(%r{\Ahttps?://})
+        expect(response.body).not_to include('href="#"')
+        expect_no_internal_markers(response.body)
+      end
+    end
+
+    noindex_paths.each do |path|
+      get path
+
+      aggregate_failures path do
+        expect(response).to have_http_status(:ok)
+        expect(response.media_type).to eq("text/html")
+        expect(html_document.at_css("main")).to be_present
+        expect(html_document.at_css('meta[name="robots"]')&.[]("content")).to eq("noindex, nofollow")
+        expect(html_document.at_css('meta[property="og:image"]')).to be_nil
+        expect(html_document.at_css('meta[name="twitter:image"]')).to be_nil
+        expect(html_document.at_css('link[rel="canonical"]')).to be_nil
         expect(response.body).not_to include('href="#"')
         expect_no_internal_markers(response.body)
       end
@@ -116,7 +135,7 @@ RSpec.describe "Production-like public smoke", type: :request do
     end
   end
 
-  it "sitemap public URLs are not contradicted by robots exclusions" do
+  it "sitemap index URLs are not contradicted by robots exclusions" do
     create(:announcement, :published, title: "公開お知らせ")
     create(:announcement, title: "下書き")
 
@@ -128,6 +147,9 @@ RSpec.describe "Production-like public smoke", type: :request do
     end
 
     aggregate_failures "legal version URLs are intentionally omitted from sitemap" do
+      expect(sitemap_paths).to contain_exactly(root_path, terms_path, privacy_path)
+      expect(sitemap_paths).not_to include(contact_path)
+      expect(sitemap_paths).not_to include(announcements_path)
       expect(sitemap_paths).not_to include(terms_versions_path)
       expect(sitemap_paths).not_to include(current_legal_version_path(:terms))
       expect(sitemap_paths).not_to include(privacy_versions_path)

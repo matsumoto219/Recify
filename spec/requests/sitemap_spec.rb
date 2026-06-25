@@ -23,12 +23,9 @@ RSpec.describe "Sitemap", type: :request do
   end
 
   describe "GET /sitemap.xml" do
-    it "公開ページと公開中のお知らせだけをXMLで返す" do
+    it "index対象の公開ページだけをXMLで返す" do
       visible = create(:announcement, :published, title: "公開お知らせ")
       draft = create(:announcement, title: "下書き")
-      archived = create(:announcement, :archived, title: "アーカイブ")
-      scheduled = create(:announcement, :scheduled, title: "予約")
-      expired = create(:announcement, :expired, title: "終了")
 
       get sitemap_path
 
@@ -37,18 +34,15 @@ RSpec.describe "Sitemap", type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:ok)
         expect(response.media_type).to eq("application/xml")
-        expect(locs).to include(
+        expect(locs).to contain_exactly(
           "http://example.com/",
           "http://example.com/terms",
-          "http://example.com/privacy",
-          "http://example.com/contact",
-          "http://example.com/announcements",
-          "http://example.com#{announcement_path(visible)}"
+          "http://example.com/privacy"
         )
+        expect(locs).not_to include("http://example.com/contact")
+        expect(locs).not_to include("http://example.com/announcements")
+        expect(locs).not_to include("http://example.com#{announcement_path(visible)}")
         expect(locs).not_to include("http://example.com#{announcement_path(draft)}")
-        expect(locs).not_to include("http://example.com#{announcement_path(archived)}")
-        expect(locs).not_to include("http://example.com#{announcement_path(scheduled)}")
-        expect(locs).not_to include("http://example.com#{announcement_path(expired)}")
         expect(locs).not_to include("http://example.com#{terms_versions_path}")
         expect(locs).not_to include("http://example.com#{terms_version_path('2026-06-24')}")
         expect(locs).not_to include("http://example.com#{privacy_versions_path}")

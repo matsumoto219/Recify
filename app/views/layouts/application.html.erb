@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html
+  lang="<%= I18n.locale %>"
   data-theme="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
   <head>
     <title><%= public_meta_page? ? page_meta_title : (content_for(:title) || t("meta.site_name", default: "Recify")) %></title>
@@ -20,6 +21,7 @@
     <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#C0C1FF">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+    <%= render_robots_meta_tags %>
     <%= render_public_meta_tags %>
 
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>

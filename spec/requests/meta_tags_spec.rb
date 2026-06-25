@@ -37,13 +37,26 @@ RSpec.describe "Public meta tags", type: :request do
     document.at_css('link[rel="canonical"]')&.[]("href")
   end
 
-  shared_examples "public OGP meta" do |expected_title:, expected_description:, expected_path:, expected_type: "website"|
-    it "公開ページ用のOGP/Twitter/canonical metaを出す" do
+  def accept_current_legal_documents_for(user)
+    %i[terms privacy].each do |document_type|
+      create(
+        :legal_acceptance,
+        user: user,
+        legal_document: LegalDocument.current!(document_type, locale: :ja),
+        document_type: document_type
+      )
+    end
+  end
+
+  shared_examples "indexable OGP meta" do |expected_title:, expected_description:, expected_path:, expected_type: "website"|
+    it "index対象ページ用のOGP/Twitter/canonical metaを出す" do
       perform_request
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
+        expect(document.at_css("html")["lang"]).to eq("ja")
         expect(document.at_css("title").text).to eq(expected_title)
+        expect(meta_name("robots")).to eq("index, follow")
         expect(meta_name("description")).to eq(expected_description)
         expect(canonical_href).to eq("http://example.com#{expected_path}")
         expect(meta_property("og:site_name")).to eq("Recify")
@@ -62,37 +75,32 @@ RSpec.describe "Public meta tags", type: :request do
     end
   end
 
+  shared_examples "noindex page" do
+    it "noindexを明示し、canonical/OGP/Twitter metaを出さない" do
+      perform_request
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(meta_name("robots")).to eq("noindex, nofollow")
+        expect(meta_name("description")).to be_nil
+        expect(meta_property("og:title")).to be_nil
+        expect(meta_property("og:url")).to be_nil
+        expect(meta_name("twitter:card")).to be_nil
+        expect(canonical_href).to be_nil
+        expect(response.body).not_to include("translation missing")
+      end
+    end
+  end
+
   describe "GET /" do
     def perform_request
       get root_path
     end
 
-    include_examples "public OGP meta",
-                     expected_title: "Recify",
+    include_examples "indexable OGP meta",
+                     expected_title: I18n.t("home.meta.title"),
                      expected_description: I18n.t("home.meta.description"),
                      expected_path: "/"
-  end
-
-  describe "GET /announcements" do
-    def perform_request
-      get announcements_path
-    end
-
-    include_examples "public OGP meta",
-                     expected_title: "お知らせ一覧 | Recify",
-                     expected_description: I18n.t("announcements.index.meta_description"),
-                     expected_path: "/announcements"
-  end
-
-  describe "GET /contact" do
-    def perform_request
-      get contact_path
-    end
-
-    include_examples "public OGP meta",
-                     expected_title: "お問い合わせ | Recify",
-                     expected_description: I18n.t("contact_requests.new.meta_description"),
-                     expected_path: "/contact"
   end
 
   describe "GET /terms" do
@@ -100,36 +108,10 @@ RSpec.describe "Public meta tags", type: :request do
       get terms_path
     end
 
-    include_examples "public OGP meta",
+    include_examples "indexable OGP meta",
                      expected_title: "利用規約 | Recify",
                      expected_description: LegalDocuments::Repository.new.current!(document_type: :terms, locale: :ja).meta_description,
                      expected_path: "/terms"
-  end
-
-  describe "GET /terms/versions" do
-    def perform_request
-      get terms_versions_path
-    end
-
-    include_examples "public OGP meta",
-                     expected_title: "利用規約の更新履歴 | Recify",
-                     expected_description: I18n.t("legal.versions.terms.meta_description"),
-                     expected_path: "/terms/versions"
-  end
-
-  describe "GET /terms/versions/:version" do
-    def perform_request
-      get terms_version_path("2026-06-24")
-    end
-
-    include_examples "public OGP meta",
-                     expected_title: "利用規約 2026-06-24バージョン | Recify",
-                     expected_description: LegalDocuments::Repository.new.find!(
-                       document_type: :terms,
-                       version: "2026-06-24",
-                       locale: :ja
-                     ).meta_description,
-                     expected_path: "/terms/versions/2026-06-24"
   end
 
   describe "GET /privacy" do
@@ -137,10 +119,42 @@ RSpec.describe "Public meta tags", type: :request do
       get privacy_path
     end
 
-    include_examples "public OGP meta",
+    include_examples "indexable OGP meta",
                      expected_title: "プライバシーポリシー | Recify",
                      expected_description: LegalDocuments::Repository.new.current!(document_type: :privacy, locale: :ja).meta_description,
                      expected_path: "/privacy"
+  end
+
+  describe "GET /announcements" do
+    def perform_request
+      get announcements_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /contact" do
+    def perform_request
+      get contact_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /terms/versions" do
+    def perform_request
+      get terms_versions_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /terms/versions/:version" do
+    def perform_request
+      get terms_version_path("2026-06-24")
+    end
+
+    include_examples "noindex page"
   end
 
   describe "GET /privacy/versions" do
@@ -148,10 +162,7 @@ RSpec.describe "Public meta tags", type: :request do
       get privacy_versions_path
     end
 
-    include_examples "public OGP meta",
-                     expected_title: "プライバシーポリシーの更新履歴 | Recify",
-                     expected_description: I18n.t("legal.versions.privacy.meta_description"),
-                     expected_path: "/privacy/versions"
+    include_examples "noindex page"
   end
 
   describe "GET /privacy/versions/:version" do
@@ -159,14 +170,54 @@ RSpec.describe "Public meta tags", type: :request do
       get privacy_version_path("2026-06-24")
     end
 
-    include_examples "public OGP meta",
-                     expected_title: "プライバシーポリシー 2026-06-24バージョン | Recify",
-                     expected_description: LegalDocuments::Repository.new.find!(
-                       document_type: :privacy,
-                       version: "2026-06-24",
-                       locale: :ja
-                     ).meta_description,
-                     expected_path: "/privacy/versions/2026-06-24"
+    include_examples "noindex page"
+  end
+
+  describe "GET /users/sign_in" do
+    def perform_request
+      get new_user_session_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /users/sign_up" do
+    def perform_request
+      get new_user_registration_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /users/password/new" do
+    def perform_request
+      get new_user_password_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  describe "GET /users/confirmation/new" do
+    def perform_request
+      get new_user_confirmation_path
+    end
+
+    include_examples "noindex page"
+  end
+
+  it "ログイン後のアプリ画面にはnoindexを出す" do
+    user = create(:user)
+    accept_current_legal_documents_for(user)
+    sign_in user
+
+    get receipts_path
+
+    aggregate_failures do
+      expect(response).to have_http_status(:ok)
+      expect(meta_name("robots")).to eq("noindex, nofollow")
+      expect(canonical_href).to be_nil
+      expect(meta_property("og:title")).to be_nil
+    end
   end
 
   it "設定済みhostを優先し、Host headerをOGP URLへ反映しない" do
@@ -183,7 +234,7 @@ RSpec.describe "Public meta tags", type: :request do
     end
   end
 
-  it "お知らせ詳細のHTML風文字列をmeta属性内でescapeし、descriptionからタグ風部分を落とす" do
+  it "お知らせ詳細のHTML風文字列をescapeし、検索対象metaを出さない" do
     announcement = create(
       :announcement,
       :published,
@@ -193,28 +244,25 @@ RSpec.describe "Public meta tags", type: :request do
 
     get announcement_path(announcement)
 
-    expected_title = "#{ERB::Util.html_escape(announcement.title)} | Recify"
-
     aggregate_failures do
       expect(response).to have_http_status(:ok)
-      expect(document.at_css("title").text).to eq(expected_title)
-      expect(meta_property("og:title")).to eq(expected_title)
-      expect(meta_property("og:type")).to eq("article")
-      expect(meta_name("description")).to eq("bold 本文です")
-      expect(meta_property("og:description")).to eq("bold 本文です")
+      expect(meta_name("robots")).to eq("noindex, nofollow")
+      expect(meta_property("og:title")).to be_nil
+      expect(meta_name("description")).to be_nil
       expect(response.body).to include("&lt;script&gt;alert")
       expect(response.body).not_to include("<script>alert(\"title\")</script>")
       expect(response.body).not_to include("<script>alert('body')</script>")
     end
   end
 
-  it "admin画面にはpublic OGP metaを出さない" do
+  it "admin画面にはnoindexを出し、public OGP metaを出さない" do
     sign_in create(:user, admin: true)
 
     get admin_root_path
 
     aggregate_failures do
       expect(response).to have_http_status(:ok)
+      expect(meta_name("robots")).to eq("noindex, nofollow")
       expect(meta_property("og:title")).to be_nil
       expect(meta_name("twitter:card")).to be_nil
       expect(canonical_href).to be_nil

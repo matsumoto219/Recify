@@ -47,7 +47,7 @@ RSpec.describe "App icons", type: :request do
       expect(Rails.root.join("public/apple-touch-icon.png")).to exist
       expect(Rails.root.join("public/icon-192.png")).to exist
       expect(Rails.root.join("public/icon-512.png")).to exist
-      expect(icon_svg).to include("#4B4DD8")
+      expect(icon_svg).to include("#C0C1FF")
       expect(icon_svg).not_to include('fill="red"')
       expect(icon_svg).not_to match(/<script|<style|<image|foreignObject|\b(?:href|xlink:href)=["']https?:/i)
     end

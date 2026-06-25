@@ -5,10 +5,4 @@ xml.urlset xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9" do
       xml.loc absolute_public_url(path)
     end
   end
-
-  @announcements.each do |announcement|
-    xml.url do
-      xml.loc absolute_public_url(announcement_path(announcement))
-    end
-  end
 end
