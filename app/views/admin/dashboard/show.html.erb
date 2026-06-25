@@ -115,6 +115,9 @@
       </p>
     <% end %>
 
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-3">
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
@@ -124,7 +127,7 @@
         <%= link_to t("admin.dashboard.cleanup.link"), admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
-      <dl class="grid gap-3 text-sm md:grid-cols-2">
+      <dl class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.cleanup.stale_candidates") %></dt>
           <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:stale_dry_run_count] %></dd>
@@ -148,46 +151,6 @@
   </div>
 
   <div class="grid gap-6 lg:grid-cols-2">
-    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
-      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.audit.title") %></h2>
-          <p class="text-sm token-text-muted"><%= t("admin.dashboard.audit.description") %></p>
-        </div>
-        <%= link_to t("admin.dashboard.audit.link"), admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
-      </div>
-
-      <dl class="grid gap-3 text-sm md:grid-cols-3">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.failed_admin_actions") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_failed_admin_actions_count] %></dd>
-        </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.retry_actions") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_retry_actions_count] %></dd>
-        </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.cleanup_execute") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_cleanup_execute_count] %></dd>
-        </div>
-      </dl>
-
-      <div class="mt-auto flex flex-wrap gap-2 pt-4 text-sm">
-        <%= render "shared/ui/actions/button",
-              as: :link,
-              href: admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"),
-              label: t("admin.dashboard.audit.retry_logs"),
-              variant: :secondary,
-              size: :sm %>
-        <%= render "shared/ui/actions/button",
-              as: :link,
-              href: admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"),
-              label: t("admin.dashboard.audit.cleanup_logs"),
-              variant: :secondary,
-              size: :sm %>
-      </div>
-    <% end %>
-
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
@@ -236,6 +199,46 @@
               as: :link,
               href: admin_security_ip_diagnostics_path,
               label: t("admin.dashboard.security.ip_diagnostics"),
+              variant: :secondary,
+              size: :sm %>
+      </div>
+    <% end %>
+
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.audit.title") %></h2>
+          <p class="text-sm token-text-muted"><%= t("admin.dashboard.audit.description") %></p>
+        </div>
+        <%= link_to t("admin.dashboard.audit.link"), admin_audit_logs_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+      </div>
+
+      <dl class="grid gap-3 text-sm md:grid-cols-3">
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.failed_admin_actions") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_failed_admin_actions_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.retry_actions") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_retry_actions_count] %></dd>
+        </div>
+        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+          <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.cleanup_execute") %></dt>
+          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_cleanup_execute_count] %></dd>
+        </div>
+      </dl>
+
+      <div class="mt-auto flex flex-wrap gap-2 pt-4 text-sm">
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_audit_logs_path(audit_action: "receipt_analysis.full_reanalyze"),
+              label: t("admin.dashboard.audit.retry_logs"),
+              variant: :secondary,
+              size: :sm %>
+        <%= render "shared/ui/actions/button",
+              as: :link,
+              href: admin_audit_logs_path(audit_action: "receipt_analysis_runs.cleanup_stale.execute"),
+              label: t("admin.dashboard.audit.cleanup_logs"),
               variant: :secondary,
               size: :sm %>
       </div>
