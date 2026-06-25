@@ -46,6 +46,13 @@ class ProductionRuntimeConfig
     boolean_env("ASSUME_SSL", default: true)
   end
 
+  def ssl_options
+    {
+      hsts: { expires: 0, subdomains: false, preload: false },
+      redirect: { exclude: ->(request) { request.path == "/up" } }
+    }
+  end
+
   def routes_default_url_options
     url_options_for(app_host, app_protocol)
   end

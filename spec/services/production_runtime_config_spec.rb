@@ -71,6 +71,18 @@ RSpec.describe ProductionRuntimeConfig do
         expect(config.assume_ssl?).to be(false)
       end
     end
+
+    it "HTTPS強制を維持しつつHSTS本導入を抑制するssl_optionsを返す" do
+      config = described_class.new(env: {})
+      health_check_request = Struct.new(:path).new("/up")
+      regular_request = Struct.new(:path).new("/")
+
+      aggregate_failures do
+        expect(config.ssl_options[:hsts]).to eq(expires: 0, subdomains: false, preload: false)
+        expect(config.ssl_options[:redirect][:exclude].call(health_check_request)).to be(true)
+        expect(config.ssl_options[:redirect][:exclude].call(regular_request)).to be(false)
+      end
+    end
   end
 
   describe "#smtp_settings" do

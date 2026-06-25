@@ -1,6 +1,7 @@
 require "active_support/core_ext/integer/time"
 require Rails.root.join("app/services/production_runtime_config")
 require Rails.root.join("config/cloudflare_trusted_proxies")
+require Rails.root.join("lib/middleware/suppress_strict_transport_security_header")
 
 Rails.application.configure do
   runtime_config = ProductionRuntimeConfig.new
@@ -31,11 +32,13 @@ Rails.application.configure do
   # Assume SSL-terminating reverse proxy access by default. Override only for controlled smoke checks.
   config.assume_ssl = runtime_config.assume_ssl?
 
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
+  # Force SSL/secure cookies, but keep HSTS rollout disabled until the final public-release decision.
   config.force_ssl = runtime_config.force_ssl?
 
-  # Skip http-to-https redirect for the default health check endpoint.
-  config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } } if config.force_ssl
+  if config.force_ssl
+    config.ssl_options = runtime_config.ssl_options
+    config.middleware.insert_before 0, Middleware::SuppressStrictTransportSecurityHeader
+  end
 
   # Cloudflare proxy traffic reaches Rails through Cloudflare edge IPs and the
   # Kamal/Docker network. Keep Rails' default private proxy ranges and add the
