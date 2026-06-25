@@ -56,9 +56,14 @@ RSpec.describe 'filter_parameter_logging' do
     params = {
       id: 'ordinary-id',
       code: '123456',
+      authentication_code: 'authentication-secret',
+      verification_code: 'verification-secret',
+      auth_code: 'auth-secret',
       totp: '123456',
       otp_attempt: '123456',
+      otp_code: '123456',
       totp_code: '123456',
+      two_factor_code: '123456',
       totp_secret: 'totp-secret',
       encrypted_totp_secret: 'encrypted-secret',
       recovery_code: 'recovery-secret',
@@ -73,17 +78,28 @@ RSpec.describe 'filter_parameter_logging' do
       second_factor: { recovery_code: 'nested-recovery-secret' },
       one_time_password: '654321',
       error_code: 'validation_failed',
+      postal_code: '100-0001',
       quantity_unit_code: 'each',
       safe_count: 2
     }
 
     filtered = filter.filter(params)
+    payload = filtered.to_json
 
     aggregate_failures do
-      expect(filtered.except(:id, :safe_count, :recovery_codes_count, :backup_codes_count, :error_code, :quantity_unit_code).values).to all(eq('[FILTERED]'))
+      expect(payload).not_to include(
+        'authentication-secret',
+        'verification-secret',
+        'auth-secret'
+      )
+      expect(filtered.except(:id, :safe_count, :recovery_codes_count, :backup_codes_count, :error_code, :postal_code, :quantity_unit_code).values).to all(eq('[FILTERED]'))
       expect(filtered[:id]).to eq('ordinary-id')
       expect(filtered[:code]).to eq('[FILTERED]')
+      expect(filtered[:authentication_code]).to eq('[FILTERED]')
+      expect(filtered[:verification_code]).to eq('[FILTERED]')
+      expect(filtered[:auth_code]).to eq('[FILTERED]')
       expect(filtered[:error_code]).to eq('validation_failed')
+      expect(filtered[:postal_code]).to eq('100-0001')
       expect(filtered[:quantity_unit_code]).to eq('each')
       expect(filtered[:safe_count]).to eq(2)
       expect(filtered[:recovery_codes_count]).to eq(2)
@@ -168,6 +184,8 @@ RSpec.describe 'filter_parameter_logging' do
         'unlock_token=raw-unlock-token',
         'invitation_token=raw-invitation-token',
         'token=raw-generic-token',
+        'authentication_code=raw-authentication-code',
+        'verification_code=raw-verification-code',
         'q=receipt'
       ].join('&')
     )
@@ -181,13 +199,17 @@ RSpec.describe 'filter_parameter_logging' do
         'raw-reset-token',
         'raw-unlock-token',
         'raw-invitation-token',
-        'raw-generic-token'
+        'raw-generic-token',
+        'raw-authentication-code',
+        'raw-verification-code'
       )
       expect(filtered.fetch('confirmation_token')).to eq('[FILTERED]')
       expect(filtered.fetch('reset_password_token')).to eq('[FILTERED]')
       expect(filtered.fetch('unlock_token')).to eq('[FILTERED]')
       expect(filtered.fetch('invitation_token')).to eq('[FILTERED]')
       expect(filtered.fetch('token')).to eq('[FILTERED]')
+      expect(filtered.fetch('authentication_code')).to eq('[FILTERED]')
+      expect(filtered.fetch('verification_code')).to eq('[FILTERED]')
       expect(filtered.fetch('q')).to eq('receipt')
     end
   end

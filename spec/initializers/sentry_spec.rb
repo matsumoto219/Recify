@@ -131,8 +131,17 @@ RSpec.describe Recify::SentrySanitizer do
         session_uid: 'raw-session-uid',
         session_uid_digest: 'session-digest',
         code: '123456',
+        authentication_code: 'authentication-secret',
+        verification_code: 'verification-secret',
+        auth_code: 'auth-secret',
+        otp_code: 'otp-secret',
+        otp_attempt: 'otp-attempt-secret',
+        totp_code: 'totp-code-secret',
+        two_factor_code: 'two-factor-secret',
+        one_time_password: 'one-time-password-secret',
         code_digest: 'code-digest',
         error_code: 'validation_failed',
+        postal_code: '100-0001',
         quantity_unit_code: 'each',
         recovery_code: 'recovery-code',
         recovery_codes_count: 2,
@@ -161,15 +170,35 @@ RSpec.describe Recify::SentrySanitizer do
     )
 
     described_class.sanitize_event(event)
+    payload = event.to_h.to_json
 
     aggregate_failures do
+      expect(payload).not_to include(
+        'authentication-secret',
+        'verification-secret',
+        'auth-secret',
+        'otp-secret',
+        'otp-attempt-secret',
+        'totp-code-secret',
+        'two-factor-secret',
+        'one-time-password-secret'
+      )
       expect(event.extra[:credential_id]).to eq(described_class::FILTERED)
       expect(event.extra[:challenge]).to eq(described_class::FILTERED)
       expect(event.extra[:session_uid]).to eq(described_class::FILTERED)
       expect(event.extra[:session_uid_digest]).to eq(described_class::FILTERED)
       expect(event.extra[:code]).to eq(described_class::FILTERED)
+      expect(event.extra[:authentication_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:verification_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:auth_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:otp_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:otp_attempt]).to eq(described_class::FILTERED)
+      expect(event.extra[:totp_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:two_factor_code]).to eq(described_class::FILTERED)
+      expect(event.extra[:one_time_password]).to eq(described_class::FILTERED)
       expect(event.extra[:code_digest]).to eq(described_class::FILTERED)
       expect(event.extra[:error_code]).to eq('validation_failed')
+      expect(event.extra[:postal_code]).to eq('100-0001')
       expect(event.extra[:quantity_unit_code]).to eq('each')
       expect(event.extra[:recovery_code]).to eq(described_class::FILTERED)
       expect(event.extra[:recovery_codes_count]).to eq(2)
