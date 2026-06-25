@@ -95,6 +95,7 @@ Rails.application.routes.draw do
       to: "legal#privacy_version",
       as: :privacy_version,
       constraints: { version: /\d{4}-\d{2}-\d{2}/ }
+  get "/robots.txt", to: "robots#show", defaults: { format: :text }
   get "/sitemap.xml", to: "sitemap#show", defaults: { format: :xml }, as: :sitemap
   resources :announcements, only: %i[index show], param: :public_id
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
