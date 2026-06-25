@@ -22,7 +22,7 @@ module Recify
       signed_id|blob_key|active_storage_key|raw_text|\Alines\z|ocr_result|filtered_content|
       ai_raw_response|\Aprompt\z|messages|response_body|receipt_image|image|attachment|
       active_storage|blob|file|upload|arguments|credential_id|challenge|session_uid|
-      session_uid_digest|code_digest|recovery_code|recovery_codes|backup_code|backup_codes|
+      session_uid_digest|\Acode\z|code_digest|recovery_code|recovery_codes|backup_code|backup_codes|
       totp_secret|encrypted_totp_secret|provisioning_uri|otpauth|raw_response|public_key
     /ix
 

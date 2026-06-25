@@ -130,7 +130,10 @@ RSpec.describe Recify::SentrySanitizer do
         challenge: 'challenge',
         session_uid: 'raw-session-uid',
         session_uid_digest: 'session-digest',
+        code: '123456',
         code_digest: 'code-digest',
+        error_code: 'validation_failed',
+        quantity_unit_code: 'each',
         recovery_code: 'recovery-code',
         recovery_codes_count: 2,
         backup_codes_count: 1,
@@ -164,7 +167,10 @@ RSpec.describe Recify::SentrySanitizer do
       expect(event.extra[:challenge]).to eq(described_class::FILTERED)
       expect(event.extra[:session_uid]).to eq(described_class::FILTERED)
       expect(event.extra[:session_uid_digest]).to eq(described_class::FILTERED)
+      expect(event.extra[:code]).to eq(described_class::FILTERED)
       expect(event.extra[:code_digest]).to eq(described_class::FILTERED)
+      expect(event.extra[:error_code]).to eq('validation_failed')
+      expect(event.extra[:quantity_unit_code]).to eq('each')
       expect(event.extra[:recovery_code]).to eq(described_class::FILTERED)
       expect(event.extra[:recovery_codes_count]).to eq(2)
       expect(event.extra[:backup_codes_count]).to eq(1)

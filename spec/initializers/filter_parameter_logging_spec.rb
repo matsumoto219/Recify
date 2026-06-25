@@ -55,6 +55,7 @@ RSpec.describe 'filter_parameter_logging' do
   it 'filters TOTP and recovery code material recursively without filtering ordinary ids' do
     params = {
       id: 'ordinary-id',
+      code: '123456',
       totp: '123456',
       otp_attempt: '123456',
       totp_code: '123456',
@@ -71,14 +72,19 @@ RSpec.describe 'filter_parameter_logging' do
       two_factor: { enabled: true, totp_secret: 'nested-totp-secret' },
       second_factor: { recovery_code: 'nested-recovery-secret' },
       one_time_password: '654321',
+      error_code: 'validation_failed',
+      quantity_unit_code: 'each',
       safe_count: 2
     }
 
     filtered = filter.filter(params)
 
     aggregate_failures do
-      expect(filtered.except(:id, :safe_count, :recovery_codes_count, :backup_codes_count).values).to all(eq('[FILTERED]'))
+      expect(filtered.except(:id, :safe_count, :recovery_codes_count, :backup_codes_count, :error_code, :quantity_unit_code).values).to all(eq('[FILTERED]'))
       expect(filtered[:id]).to eq('ordinary-id')
+      expect(filtered[:code]).to eq('[FILTERED]')
+      expect(filtered[:error_code]).to eq('validation_failed')
+      expect(filtered[:quantity_unit_code]).to eq('each')
       expect(filtered[:safe_count]).to eq(2)
       expect(filtered[:recovery_codes_count]).to eq(2)
       expect(filtered[:backup_codes_count]).to eq(1)
