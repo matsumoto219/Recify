@@ -19,20 +19,20 @@
     </span>
   </div>
 
-  <dl class="grid gap-3 text-sm md:grid-cols-2">
+  <dl class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
     <% LegalDocument::DOCUMENT_TYPES.each do |document_type| %>
       <% document = (documents[document_type] || {}).with_indifferent_access %>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
-        <dt class="text-xs font-semibold token-text-muted">
+      <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <dt class="break-words text-xs font-semibold token-text-muted [overflow-wrap:anywhere]">
           <%= t("admin.dashboard.legal_documents.document_types.#{document_type}") %>
         </dt>
         <dd class="mt-1 font-semibold <%= document[:present] ? "token-text-success" : "token-text-warning" %>">
           <%= document[:present] ? t("admin.dashboard.legal_documents.present") : t("admin.dashboard.legal_documents.missing") %>
         </dd>
-        <dd class="mt-1 font-mono text-xs token-text-base">
+        <dd class="mt-1 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]">
           <%= document[:version].presence || t("admin.dashboard.common.not_available") %>
         </dd>
-        <dd class="mt-1 text-xs token-text-muted">
+        <dd class="mt-1 break-words text-xs token-text-muted [overflow-wrap:anywhere]">
           <%= document[:updated_at].present? ? l(document[:updated_at], format: :short) : t("admin.dashboard.common.not_available") %>
         </dd>
       </div>
@@ -54,7 +54,7 @@
   <p class="mt-auto pt-4 text-sm token-text-muted">
     <%= t("admin.dashboard.legal_documents.readonly_note") %>
     <% if status&.checked_at.present? %>
-      <span class="font-mono token-text-base"><%= l(status.checked_at, format: :short) %></span>
+      <span class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= l(status.checked_at, format: :short) %></span>
     <% end %>
   </p>
 <% end %>
