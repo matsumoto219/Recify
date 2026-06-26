@@ -24,7 +24,7 @@
 
   <dl class="grid gap-3 text-sm md:grid-cols-2">
     <% storage_metrics.each do |label, value| %>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
         <dd class="break-words font-mono text-xl font-bold token-text-base [overflow-wrap:anywhere] md:text-2xl"><%= value %></dd>
       </div>

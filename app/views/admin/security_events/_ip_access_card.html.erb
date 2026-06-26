@@ -16,54 +16,54 @@
   </div>
 
   <% if snapshot.blank? || !snapshot[:valid] %>
-    <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+    <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
       <%= t("admin.security_events.show.ip_access.invalid_ip") %>
     </p>
   <% else %>
     <div class="grid gap-4 lg:grid-cols-3">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.ip_address") %></dt>
         <dd class="mt-1 break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere]"><%= snapshot[:ip_address] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.manual_status") %></dt>
-        <dd class="mt-1 text-base font-bold token-text-base">
+        <dd class="min-w-0 max-w-full break-words mt-1 text-base font-bold token-text-base [overflow-wrap:anywhere]">
           <%= snapshot.dig(:manual_block, :active) ? t("admin.security_events.show.ip_access.status.manual_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
         </dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.automatic_status") %></dt>
-        <dd class="mt-1 text-base font-bold token-text-base">
+        <dd class="min-w-0 max-w-full break-words mt-1 text-base font-bold token-text-base [overflow-wrap:anywhere]">
           <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.security_events.show.ip_access.status.automatic_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
         </dd>
       </div>
     </div>
 
     <div class="mt-4 grid gap-4 lg:grid-cols-2">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.manual.title") %></h3>
         <% if snapshot.dig(:manual_block, :active) %>
           <% block = snapshot.dig(:manual_block, :block) %>
           <dl class="mb-4 space-y-2 text-sm">
             <div>
               <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.expires_at") %></dt>
-              <dd class="token-text-base"><%= block[:expires_at].present? ? l(block[:expires_at], format: :short) : t("admin.security_events.show.ip_access.never_expires") %></dd>
+              <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= block[:expires_at].present? ? l(block[:expires_at], format: :short) : t("admin.security_events.show.ip_access.never_expires") %></dd>
             </div>
             <div>
               <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.ip_access.labels.created_at") %></dt>
-              <dd class="token-text-base"><%= l(block[:created_at], format: :short) %></dd>
+              <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(block[:created_at], format: :short) %></dd>
             </div>
           </dl>
         <% elsif snapshot[:blockable] %>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.manual.block_description") %></p>
         <% else %>
-          <p class="mb-4 rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted">
+          <p class="mb-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-muted">
             <%= t("admin.security_events.show.ip_access.non_blockable_reasons.#{snapshot[:non_blockable_reason]}", default: snapshot[:non_blockable_reason]) %>
           </p>
         <% end %>
 
         <% if !reauthenticated %>
-          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
             <p class="mb-3 text-sm token-text-muted"><%= t("admin.security_events.show.ip_access.reauthentication_required") %></p>
             <%= render "shared/ui/actions/button",
                   as: :link,
@@ -138,13 +138,13 @@
         <% end %>
       </div>
 
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.automatic.title") %></h3>
         <dl class="mb-4 space-y-2 text-sm">
           <% snapshot.dig(:rack_attack, :targets).each do |target, banned| %>
             <div class="flex items-center justify-between gap-3">
               <dt class="font-mono text-xs token-text-muted"><%= t("admin.security_events.show.ip_access.automatic.targets.#{target}", default: target) %></dt>
-              <dd class="text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %>">
+              <dd class="min-w-0 max-w-full break-words text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %> [overflow-wrap:anywhere]">
                 <%= banned ? t("admin.security_events.show.ip_access.status.automatic_active") : t("admin.security_events.show.ip_access.status.not_restricted") %>
               </dd>
             </div>
@@ -188,7 +188,7 @@
       </div>
     </div>
 
-    <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+    <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.security_events.show.ip_access.recent.title") %></h3>
       <p class="text-sm token-text-muted">
         <%= t("admin.security_events.show.ip_access.recent.count", count: snapshot[:recent_security_events_count]) %>

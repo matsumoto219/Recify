@@ -31,11 +31,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.status") %></dt>
-            <dd class="token-text-base"><%= t("admin.ip_blocks.states.#{record[:state]}") %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.ip_blocks.states.#{record[:state]}") %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.automatic_status") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
             </dd>
           </div>
@@ -47,15 +47,15 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.created_at") %></dt>
-            <dd class="token-text-base"><%= l(record[:created_at], format: :short) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(record[:created_at], format: :short) %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.expires_at") %></dt>
-            <dd class="token-text-base"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : t("admin.ip_blocks.common.never_expires") %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record[:expires_at].present? ? l(record[:expires_at], format: :short) : t("admin.ip_blocks.common.never_expires") %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.created_by") %></dt>
-            <dd class="token-text-base"><%= record.dig(:created_by, :id).present? ? "##{record.dig(:created_by, :id)} #{record.dig(:created_by, :email)}" : "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:created_by, :id).present? ? "##{record.dig(:created_by, :id)} #{record.dig(:created_by, :email)}" : "-" %></dd>
           </div>
         </dl>
       </section>
@@ -65,15 +65,15 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.revoked_at") %></dt>
-            <dd class="token-text-base"><%= record[:revoked_at].present? ? l(record[:revoked_at], format: :short) : "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record[:revoked_at].present? ? l(record[:revoked_at], format: :short) : "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.revoked_by") %></dt>
-            <dd class="token-text-base"><%= record.dig(:revoked_by, :id).present? ? "##{record.dig(:revoked_by, :id)} #{record.dig(:revoked_by, :email)}" : "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:revoked_by, :id).present? ? "##{record.dig(:revoked_by, :id)} #{record.dig(:revoked_by, :email)}" : "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.source_security_event") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <% if record[:source_security_event].present? %>
                 <%= link_to "##{record.dig(:source_security_event, :id)}", admin_security_event_path(record.dig(:source_security_event, :id)), class: "token-text-brand hover:underline" %>
               <% else %>
@@ -86,11 +86,11 @@
     </div>
 
     <div class="mt-6 grid gap-4 lg:grid-cols-2">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.labels.reason") %></h3>
         <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= record[:reason] %></p>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.labels.revoked_reason") %></h3>
         <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= record[:revoked_reason].presence || "-" %></p>
       </div>
@@ -109,34 +109,34 @@
     </div>
 
     <div class="grid gap-4 lg:grid-cols-3">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.manual_status") %></dt>
-        <dd class="mt-1 text-base font-bold token-text-base">
+        <dd class="min-w-0 max-w-full break-words mt-1 text-base font-bold token-text-base [overflow-wrap:anywhere]">
           <%= snapshot.dig(:manual_block, :active) ? t("admin.ip_blocks.states.active") : t("admin.ip_blocks.common.not_restricted") %>
         </dd>
         <% if manual_block.present? %>
           <p class="mt-2 text-xs token-text-muted">#<%= manual_block[:id] %></p>
         <% end %>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.automatic_status") %></dt>
-        <dd class="mt-1 text-base font-bold token-text-base">
+        <dd class="min-w-0 max-w-full break-words mt-1 text-base font-bold token-text-base [overflow-wrap:anywhere]">
           <%= snapshot.dig(:rack_attack, :any_banned) ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
         </dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.snapshot.recent_events") %></dt>
-        <dd class="mt-1 font-mono text-base font-bold token-text-base"><%= snapshot[:recent_security_events_count].to_i %></dd>
+        <dd class="min-w-0 max-w-full break-words mt-1 font-mono text-base font-bold token-text-base [overflow-wrap:anywhere]"><%= snapshot[:recent_security_events_count].to_i %></dd>
       </div>
     </div>
 
-    <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+    <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.ip_blocks.show.snapshot.rack_attack_targets") %></h3>
       <dl class="grid gap-3 text-sm md:grid-cols-3">
         <% (snapshot.dig(:rack_attack, :targets) || {}).each do |target, banned| %>
           <div class="flex items-center justify-between gap-3">
             <dt class="font-mono text-xs token-text-muted"><%= t("admin.security_events.show.ip_access.automatic.targets.#{target}", default: target) %></dt>
-            <dd class="text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %>">
+            <dd class="min-w-0 max-w-full break-words text-sm font-semibold <%= banned ? 'token-text-error' : 'token-text-muted' %> [overflow-wrap:anywhere]">
               <%= banned ? t("admin.ip_blocks.common.automatic_active") : t("admin.ip_blocks.common.not_restricted") %>
             </dd>
           </div>
@@ -149,7 +149,7 @@
     <h2 class="mb-3 text-lg font-bold token-text-base"><%= t("admin.ip_blocks.show.sections.unblock") %></h2>
     <% if record[:unblockable] %>
       <% if !admin_passkey_reauthenticated? %>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <p class="mb-3 text-sm token-text-muted"><%= t("admin.ip_blocks.show.unblock.reauthentication_required") %></p>
           <%= render "shared/ui/actions/button",
                 as: :link,
@@ -186,7 +186,7 @@
         <% end %>
       <% end %>
     <% else %>
-      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+      <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
         <%= t("admin.ip_blocks.show.unblock.not_available") %>
       </p>
     <% end %>

@@ -61,7 +61,7 @@
     <dl class="grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_uid") %></dt>
-        <dd class="min-w-0 max-w-full">
+        <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
           <%= render "shared/ui/actions/copyable_value",
                 value: @record[:request_uid],
                 label: t("admin.contact_requests.show.labels.request_uid"),
@@ -70,19 +70,19 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.status") %></dt>
-        <dd class="token-text-base"><%= t("admin.contact_requests.statuses.#{@record[:status]}") %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.contact_requests.statuses.#{@record[:status]}") %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.category") %></dt>
-        <dd class="token-text-base"><%= t("admin.contact_requests.categories.#{@record[:category]}") %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.contact_requests.categories.#{@record[:category]}") %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.source") %></dt>
-        <dd class="token-text-base"><%= t("admin.contact_requests.sources.#{@record[:source]}") %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.contact_requests.sources.#{@record[:source]}") %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user") %></dt>
-        <dd class="min-w-0 max-w-full">
+        <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
           <%
             user_id_display =
               if @record[:user_id].present?
@@ -108,7 +108,7 @@
       </div>
       <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_digest") %></dt>
-        <dd class="min-w-0 max-w-full">
+        <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
           <%= render "shared/ui/actions/copyable_value",
                 value: @record[:email_digest],
                 label: t("admin.contact_requests.show.labels.email_digest"),
@@ -117,11 +117,11 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.created_at") %></dt>
-        <dd class="token-text-base"><%= l(@record[:created_at], format: :short) %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@record[:created_at], format: :short) %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_by") %></dt>
-        <dd class="min-w-0 max-w-full">
+        <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
           <%= render "shared/ui/actions/copyable_value",
                 value: @record[:handled_by_user_id].presence || "-",
                 display: @record[:handled_by_user_id].present? ? "##{@record[:handled_by_user_id]}" : "-",
@@ -131,11 +131,11 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.handled_at") %></dt>
-        <dd class="token-text-base"><%= @record[:handled_at].present? ? l(@record[:handled_at], format: :short) : "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:handled_at].present? ? l(@record[:handled_at], format: :short) : "-" %></dd>
       </div>
       <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.request_id") %></dt>
-        <dd class="min-w-0 max-w-full">
+        <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
           <%= render "shared/ui/actions/copyable_value",
                 value: @record[:request_id].presence || "-",
                 label: t("admin.contact_requests.show.labels.request_id"),
@@ -144,7 +144,7 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.ip_address") %></dt>
-        <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:ip_address].presence || "-" %></dd>
       </div>
       <div class="min-w-0 max-w-full md:col-span-2 lg:col-span-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.user_agent") %></dt>

@@ -18,7 +18,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.id") %></dt>
-            <dd class="font-mono token-text-base">#<%= @record[:id] %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]">#<%= @record[:id] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.event_type") %></dt>
@@ -26,15 +26,15 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.severity") %></dt>
-            <dd class="token-text-base"><%= @record[:severity] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:severity] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.state") %></dt>
-            <dd class="token-text-base"><%= t("admin.security_events.states.#{@record[:state]}") %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.security_events.states.#{@record[:state]}") %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.count") %></dt>
-            <dd class="font-mono token-text-base"><%= @record[:count] %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:count] %></dd>
           </div>
         </dl>
       </section>
@@ -44,15 +44,15 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.actor_user_id") %></dt>
-            <dd class="font-mono token-text-base"><%= @record[:actor_user_id].present? ? "##{@record[:actor_user_id]}" : "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:actor_user_id].present? ? "##{@record[:actor_user_id]}" : "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.ip_address") %></dt>
-            <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:ip_address].presence || "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.request_id") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record[:request_id].presence || "-",
                     label: t("admin.security_events.show.labels.request_id"),
@@ -71,7 +71,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.method") %></dt>
-            <dd class="font-mono token-text-base"><%= @record[:method].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:method].presence || "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.path") %></dt>
@@ -118,19 +118,19 @@
       <dl class="space-y-3 text-sm">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.first_seen_at") %></dt>
-          <dd class="token-text-base"><%= l(@record[:first_seen_at], format: :short) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@record[:first_seen_at], format: :short) %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.last_seen_at") %></dt>
-          <dd class="token-text-base"><%= l(@record[:last_seen_at], format: :short) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@record[:last_seen_at], format: :short) %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.resolved_at") %></dt>
-          <dd class="token-text-base"><%= @record[:resolved_at].present? ? l(@record[:resolved_at], format: :short) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:resolved_at].present? ? l(@record[:resolved_at], format: :short) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.security_events.show.labels.ignored_at") %></dt>
-          <dd class="token-text-base"><%= @record[:ignored_at].present? ? l(@record[:ignored_at], format: :short) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:ignored_at].present? ? l(@record[:ignored_at], format: :short) : "-" %></dd>
         </div>
       </dl>
     <% end %>

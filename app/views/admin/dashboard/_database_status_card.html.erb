@@ -29,21 +29,21 @@
   </div>
 
   <dl class="grid gap-3 text-sm sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-    <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+    <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
       <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.database_status.primary") %></dt>
-      <dd class="mt-1 font-semibold <%= state_class.call(snapshot[:primary]) %>">
+      <dd class="min-w-0 max-w-full break-words mt-1 font-semibold <%= state_class.call(snapshot[:primary]) %> [overflow-wrap:anywhere]">
         <%= state_text.call(snapshot[:primary]) %>
       </dd>
     </div>
 
-    <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+    <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
       <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.database_status.migration") %></dt>
-      <dd class="mt-1 font-semibold <%= state_class.call(snapshot[:migration]) %>">
+      <dd class="min-w-0 max-w-full break-words mt-1 font-semibold <%= state_class.call(snapshot[:migration]) %> [overflow-wrap:anywhere]">
         <%= state_text.call(snapshot[:migration]) %>
       </dd>
     </div>
 
-    <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+    <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
       <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.database_status.database_time") %></dt>
       <dd class="mt-1 break-words font-mono font-semibold token-text-base [overflow-wrap:anywhere]">
         <%= database_time.present? ? l(database_time, format: :short) : t("admin.dashboard.common.not_available") %>

@@ -114,7 +114,7 @@
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.system_operations.audit_logs.retention_policy") %></h3>
         <div class="grid gap-2 text-sm md:grid-cols-2">
           <% @dashboard.audit_log_retention_policies.each do |policy| %>
-            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
               <div class="font-semibold token-text-base"><%= policy[:label] %></div>
               <div class="mt-1 text-xs token-text-muted">
                 <%= t("admin.system_operations.audit_logs.policy_detail", category: policy[:category], retention: policy[:retention], actions_count: policy[:actions_count]) %>

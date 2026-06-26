@@ -50,21 +50,21 @@
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.receipt_analysis.active_runs") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:active_runs_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= receipt_analysis[:active_runs_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.receipt_analysis.failed_runs") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:failed_runs_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= receipt_analysis[:failed_runs_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.receipt_analysis.review_needed_receipts") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:review_needed_receipts_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= receipt_analysis[:review_needed_receipts_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.receipt_analysis.needs_attention") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= receipt_analysis[:needs_attention_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= receipt_analysis[:needs_attention_count] %></dd>
         </div>
       </dl>
 
@@ -86,17 +86,17 @@
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-3">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.unresolved") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-contact-requests-unresolved-count><%= contact_requests[:unresolved_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]" data-admin-contact-requests-unresolved-count><%= contact_requests[:unresolved_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.open") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= contact_requests[:open_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= contact_requests[:open_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.contact_requests.security") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= contact_requests[:security_open_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= contact_requests[:security_open_count] %></dd>
         </div>
       </dl>
 
@@ -120,23 +120,23 @@
   <div class="grid gap-6 xl:grid-cols-3">
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div class="min-w-0">
           <h2 class="text-lg font-bold token-text-base"><%= t("admin.dashboard.cleanup.title") %></h2>
           <p class="text-sm token-text-muted"><%= t("admin.dashboard.cleanup.description") %></p>
         </div>
-        <%= link_to t("admin.dashboard.cleanup.link"), admin_receipt_analysis_cleanup_path, class: "text-sm font-semibold token-text-brand hover:underline" %>
+        <%= link_to t("admin.dashboard.cleanup.link"), admin_receipt_analysis_cleanup_path, class: "inline-flex min-w-[6rem] shrink-0 justify-end whitespace-nowrap text-sm font-semibold token-text-brand hover:underline" %>
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.cleanup.stale_candidates") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:stale_dry_run_count] %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:stale_cutoff], format: :short) %> <%= t("admin.dashboard.cleanup.cutoff_suffix") %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= cleanup[:stale_dry_run_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= l(cleanup[:stale_cutoff], format: :short) %> <%= t("admin.dashboard.cleanup.cutoff_suffix") %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.cleanup.expired_candidates") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= cleanup[:expired_dry_run_count] %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= l(cleanup[:retention_cutoff], format: :short) %> <%= t("admin.dashboard.cleanup.cutoff_suffix") %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= cleanup[:expired_dry_run_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= l(cleanup[:retention_cutoff], format: :short) %> <%= t("admin.dashboard.cleanup.cutoff_suffix") %></dd>
         </div>
       </dl>
 
@@ -161,22 +161,22 @@
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.admin_passkeys") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:admin_passkey_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= security[:admin_passkey_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.open_security_events") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:open_security_events_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= security[:open_security_events_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.high_security_events") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= security[:high_security_events_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= security[:high_security_events_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.security.reauthentication_status") %></dt>
-          <dd class="font-semibold <%= reauth_active ? "token-text-success" : "token-text-muted" %>"><%= reauth_active ? t("admin.dashboard.security.active") : t("admin.dashboard.security.expired") %></dd>
-          <dd class="mt-1 text-xs token-text-muted">
+          <dd class="min-w-0 max-w-full break-words font-semibold <%= reauth_active ? "token-text-success" : "token-text-muted" %> [overflow-wrap:anywhere]"><%= reauth_active ? t("admin.dashboard.security.active") : t("admin.dashboard.security.expired") %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]">
             <%= reauth_context[:reauthenticated_at].present? ? l(reauth_context[:reauthenticated_at], format: :short) : "-" %>
           </dd>
         </div>
@@ -214,17 +214,17 @@
       </div>
 
       <dl class="grid gap-3 text-sm md:grid-cols-3">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.failed_admin_actions") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_failed_admin_actions_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= audit[:recent_failed_admin_actions_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.retry_actions") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_retry_actions_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= audit[:recent_retry_actions_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.dashboard.audit.cleanup_execute") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base"><%= audit[:recent_cleanup_execute_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]"><%= audit[:recent_cleanup_execute_count] %></dd>
         </div>
       </dl>
 
@@ -266,7 +266,7 @@
 
       <div class="min-w-0 max-w-full overflow-hidden">
         <h3 class="mb-3 text-base font-bold token-text-base"><%= t("admin.dashboard.system_operations.recurring_summary") %></h3>
-        <p class="rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-base">
+        <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3 text-sm token-text-base">
           <%= t("admin.dashboard.system_operations.recurring_tasks") %>:
           <span class="font-mono font-bold"><%= system_operations[:recurring_dry_run_count] %></span>
         </p>

@@ -18,7 +18,7 @@
         <dl class="space-y-3 text-sm">
           <div class="min-w-0 max-w-full">
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.id") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record[:id],
                     display: "##{@record[:id]}",
@@ -32,15 +32,15 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.outcome") %></dt>
-            <dd class="token-text-base"><%= @record[:outcome] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:outcome] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.error_code") %></dt>
-            <dd class="token-text-base"><%= @record[:error_code].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:error_code].presence || "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.created_at") %></dt>
-            <dd class="token-text-base"><%= l(@record[:created_at], format: :short) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@record[:created_at], format: :short) %></dd>
           </div>
         </dl>
       </section>
@@ -50,21 +50,21 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.actor") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <%= @record.dig(:actor, :kind) %>
               <span class="font-mono text-xs token-text-muted"><%= @record.dig(:actor, :user_id).present? ? "##{@record.dig(:actor, :user_id)}" : "-" %></span>
             </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.target") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <%= @record[:target_type].presence || "-" %>
               <span class="font-mono text-xs token-text-muted"><%= @record[:target_id].present? ? "##{@record[:target_id]}" : "-" %></span>
             </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.target_uid") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record[:target_uid].presence || "-",
                     label: t("admin.audit_logs.show.labels.target_uid"),
@@ -79,7 +79,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.request_id") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record[:request_id].presence || "-",
                     label: t("admin.audit_logs.show.labels.request_id"),
@@ -88,7 +88,7 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.ip_address") %></dt>
-            <dd class="font-mono token-text-base"><%= @record[:ip_address].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:ip_address].presence || "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.audit_logs.show.labels.user_agent") %></dt>

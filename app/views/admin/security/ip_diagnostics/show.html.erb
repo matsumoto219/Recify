@@ -27,13 +27,13 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
     <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-      <div>
+      <div class="min-w-0">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.result") %></h2>
         <p class="mt-1 text-sm token-text-muted"><%= t(snapshot[:status_message_key]) %></p>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle px-4 py-3">
+      <div class="min-w-[9rem] max-w-full shrink-0 rounded-lg border token-border-soft token-bg-card-subtle px-4 py-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.status") %></dt>
-        <dd class="mt-1 text-xl font-bold <%= status_class %>"><%= t("admin.ip_diagnostics.statuses.#{status}") %></dd>
+        <dd class="mt-1 whitespace-nowrap text-xl font-bold <%= status_class %>"><%= t("admin.ip_diagnostics.statuses.#{status}") %></dd>
       </div>
     </div>
   <% end %>
@@ -41,23 +41,23 @@
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.ip_diagnostics.sections.current_request") %></h2>
     <dl class="grid gap-4 text-sm md:grid-cols-4">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.request_ip") %></dt>
         <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:request_ip].presence || "-" %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.remote_ip") %></dt>
         <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:remote_ip].presence || "-" %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.rack_attack_ip") %></dt>
         <dd class="mt-1 break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot[:rack_attack_ip].presence || "-" %></dd>
-        <dd class="mt-1 text-xs token-text-muted"><%= t("admin.ip_diagnostics.rack_attack_source", source: snapshot[:rack_attack_source]) %></dd>
+        <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= t("admin.ip_diagnostics.rack_attack_source", source: snapshot[:rack_attack_source]) %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.trusted_proxy") %></dt>
-        <dd class="mt-1 token-text-base"><%= t("admin.ip_diagnostics.trusted_proxy_modes.#{snapshot.dig(:trusted_proxy, :mode)}") %></dd>
-        <dd class="mt-1 text-xs token-text-muted"><%= snapshot.dig(:trusted_proxy, :custom_configured) ? t("admin.ip_diagnostics.values.custom_configured") : t("admin.ip_diagnostics.values.rails_default") %></dd>
+        <dd class="min-w-0 max-w-full break-words mt-1 token-text-base [overflow-wrap:anywhere]"><%= t("admin.ip_diagnostics.trusted_proxy_modes.#{snapshot.dig(:trusted_proxy, :mode)}") %></dd>
+        <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= snapshot.dig(:trusted_proxy, :custom_configured) ? t("admin.ip_diagnostics.values.custom_configured") : t("admin.ip_diagnostics.values.rails_default") %></dd>
       </div>
     </dl>
   <% end %>
@@ -68,7 +68,7 @@
       <dl class="space-y-3 text-sm">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.cloudflare_likely") %></dt>
-          <dd class="token-text-base"><%= snapshot.dig(:cloudflare, :likely) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= snapshot.dig(:cloudflare, :likely) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.cloudflare_headers") %></dt>
@@ -90,11 +90,11 @@
       <dl class="space-y-3 text-sm">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.x_forwarded_for_present") %></dt>
-          <dd class="token-text-base"><%= snapshot.dig(:forwarded, :present) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= snapshot.dig(:forwarded, :present) ? t("admin.ip_diagnostics.values.yes") : t("admin.ip_diagnostics.values.no") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.forwarded_count") %></dt>
-          <dd class="font-mono token-text-base"><%= snapshot.dig(:forwarded, :count).to_i %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= snapshot.dig(:forwarded, :count).to_i %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_diagnostics.labels.forwarded_values") %></dt>
@@ -143,7 +143,7 @@
     <ul class="space-y-3">
       <% Array(snapshot[:checks]).each do |check| %>
         <% level_class = check[:level] == "danger" ? "token-text-error" : (check[:level] == "ok" ? "token-text-success" : "token-text-warning") %>
-        <li class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm">
+        <li class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm">
           <span class="font-bold <%= level_class %>"><%= t("admin.ip_diagnostics.statuses.#{check[:level]}") %></span>
           <span class="ml-2 token-text-base"><%= t(check[:message_key]) %></span>
         </li>

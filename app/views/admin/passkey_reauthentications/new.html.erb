@@ -13,7 +13,7 @@
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <% if admin_passkey_reauthenticated? %>
-      <div class="mb-5 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-success">
+      <div class="mb-5 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-success">
         <%= t("admin.passkey_reauthentications.messages.succeeded") %>
       </div>
     <% end %>

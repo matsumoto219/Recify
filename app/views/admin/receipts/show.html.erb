@@ -48,7 +48,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.display_id") %></dt>
-            <dd class="font-mono token-text-base"><%= record[:display_id] %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record[:display_id] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.public_id") %></dt>
@@ -56,11 +56,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.status") %></dt>
-            <dd class="token-text-base"><%= record[:status] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record[:status] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.moderation_status") %></dt>
-            <dd class="font-semibold token-text-base"><%= t("admin.receipts.states.#{record[:moderation_status]}") %></dd>
+            <dd class="min-w-0 max-w-full break-words font-semibold token-text-base [overflow-wrap:anywhere]"><%= t("admin.receipts.states.#{record[:moderation_status]}") %></dd>
           </div>
         </dl>
       </section>
@@ -74,15 +74,15 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.purchased_at") %></dt>
-            <dd class="token-text-base"><%= timestamp_label.call(record[:purchased_at]) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record[:purchased_at]) %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.total_amount") %></dt>
-            <dd class="font-mono token-text-base"><%= amount_label.call(record[:total_amount]) %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= amount_label.call(record[:total_amount]) %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.payment_method") %></dt>
-            <dd class="token-text-base"><%= record[:payment_method].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record[:payment_method].presence || "-" %></dd>
           </div>
         </dl>
       </section>
@@ -92,7 +92,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.owner_id") %></dt>
-            <dd class="font-mono token-text-base">#<%= record.dig(:owner, :id) %></dd>
+            <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]">#<%= record.dig(:owner, :id) %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.owner_email") %></dt>
@@ -100,11 +100,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.created_at") %></dt>
-            <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.updated_at") %></dt>
-            <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
           </div>
         </dl>
       </section>
@@ -132,7 +132,7 @@
       <dl class="grid gap-4 text-sm md:grid-cols-2">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.attached") %></dt>
-          <dd class="token-text-base"><%= boolean_label.call(image[:attached]) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(image[:attached]) %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.filename") %></dt>
@@ -140,27 +140,27 @@
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.content_type") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= image[:content_type].presence || "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= image[:content_type].presence || "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.byte_size") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= image[:byte_size].present? ? number_to_human_size(image[:byte_size]) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= image[:byte_size].present? ? number_to_human_size(image[:byte_size]) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.keep_image") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= boolean_label.call(image[:keep_image]) %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(image[:keep_image]) %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purged_at") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= timestamp_label.call(image[:purged_at]) %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(image[:purged_at]) %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purged_reason") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= image[:purged_reason].presence || "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= image[:purged_reason].presence || "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.purge_eligible_at") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= timestamp_label.call(image[:purge_eligible_at]) %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(image[:purge_eligible_at]) %></dd>
         </div>
       </dl>
     <% end %>
@@ -172,9 +172,9 @@
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.contents") %></h2>
     <dl class="mb-5 grid gap-3 text-sm md:grid-cols-5">
       <% record[:counts].each do |key, value| %>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.counts.#{key}") %></dt>
-          <dd class="font-mono text-xl font-bold token-text-base"><%= value %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xl font-bold token-text-base [overflow-wrap:anywhere]"><%= value %></dd>
         </div>
       <% end %>
     </dl>

@@ -117,45 +117,45 @@
     </div>
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.no_updates_label") %></dt>
-        <dd class="font-mono token-text-base"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.limit") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:limit] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:limit] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stale_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:stale_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:stale_count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.skipped_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:skipped_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:skipped_count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.failed_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:failed_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:failed_count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.canceled_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:canceled_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:canceled_count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_count].to_i %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:stuck_processing_count].to_i %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_failed_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_failed_count].to_i %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:stuck_processing_failed_count].to_i %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.stuck_processing_skipped_count") %></dt>
-        <dd class="font-mono token-text-base"><%= stale[:stuck_processing_skipped_count].to_i %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= stale[:stuck_processing_skipped_count].to_i %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3 md:col-span-2">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3 md:col-span-2">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.stale.errors") %></dt>
-        <dd class="font-mono token-text-base"><%= Array(stale[:errors]).size %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= Array(stale[:errors]).size %></dd>
       </div>
     </dl>
 
@@ -185,12 +185,12 @@
           </tbody>
       <% end %>
     <% else %>
-      <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
         <%= t("admin.receipt_analysis_cleanup.stale.empty") %>
       </div>
     <% end %>
 
-    <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+    <div class="mt-6 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.stale.execute_title") %></h3>
       <p class="mb-4 text-sm token-text-muted">
         <%= t("admin.receipt_analysis_cleanup.stale.execute_description") %>
@@ -247,21 +247,21 @@
     </div>
 
     <dl class="mb-6 grid gap-3 text-sm md:grid-cols-4">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.no_updates_label") %></dt>
-        <dd class="font-mono token-text-base"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= t("admin.receipt_analysis_cleanup.common.no_updates_value") %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.common.limit") %></dt>
-        <dd class="font-mono token-text-base"><%= retention[:limit] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= retention[:limit] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.expired_count") %></dt>
-        <dd class="font-mono token-text-base"><%= retention[:expired_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= retention[:expired_count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_cleanup.retention.deleted_count") %></dt>
-        <dd class="font-mono token-text-base"><%= retention[:deleted_count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= retention[:deleted_count] %></dd>
       </div>
     </dl>
 
@@ -289,12 +289,12 @@
           </tbody>
       <% end %>
     <% else %>
-      <div class="max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-4 py-8 text-center text-sm token-text-muted break-words [overflow-wrap:anywhere]">
         <%= t("admin.receipt_analysis_cleanup.retention.empty") %>
       </div>
     <% end %>
 
-    <div class="mt-6 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+    <div class="mt-6 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipt_analysis_cleanup.retention.execute_title") %></h3>
       <p class="mb-4 text-sm token-text-muted">
         <%= t("admin.receipt_analysis_cleanup.retention.execute_description") %>

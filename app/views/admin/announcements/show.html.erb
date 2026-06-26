@@ -128,19 +128,19 @@
       <dl class="space-y-4 text-sm">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.status") %></dt>
-          <dd class="token-text-base"><%= t("admin.announcements.statuses.#{@announcement.status}") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("admin.announcements.statuses.#{@announcement.status}") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.kind") %></dt>
-          <dd class="token-text-base"><%= t("announcements.kinds.#{@announcement.kind}") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= t("announcements.kinds.#{@announcement.kind}") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.pinned") %></dt>
-          <dd class="token-text-base"><%= @announcement.pinned? ? t("admin.announcements.common.yes") : t("admin.announcements.common.no") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.pinned? ? t("admin.announcements.common.yes") : t("admin.announcements.common.no") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.priority") %></dt>
-          <dd class="token-text-base"><%= @announcement.priority %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.priority %></dd>
         </div>
       </dl>
     <% end %>
@@ -169,11 +169,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_content_type") %></dt>
-            <dd class="token-text-base"><%= @announcement.image.blob.content_type %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.image.blob.content_type %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.image_file_size") %></dt>
-            <dd class="token-text-base"><%= number_to_human_size(@announcement.image.blob.byte_size) %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= number_to_human_size(@announcement.image.blob.byte_size) %></dd>
           </div>
         </dl>
       </div>
@@ -215,15 +215,15 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.published_at") %></dt>
-        <dd class="token-text-base"><%= @announcement.published_at.present? ? l(@announcement.published_at, format: :short) : "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.published_at.present? ? l(@announcement.published_at, format: :short) : "-" %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.starts_at") %></dt>
-        <dd class="token-text-base"><%= @announcement.starts_at.present? ? l(@announcement.starts_at, format: :short) : "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.starts_at.present? ? l(@announcement.starts_at, format: :short) : "-" %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.ends_at") %></dt>
-        <dd class="token-text-base"><%= @announcement.ends_at.present? ? l(@announcement.ends_at, format: :short) : "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.ends_at.present? ? l(@announcement.ends_at, format: :short) : "-" %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.created_by") %></dt>
@@ -235,11 +235,11 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.created_at") %></dt>
-        <dd class="token-text-base"><%= l(@announcement.created_at, format: :short) %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@announcement.created_at, format: :short) %></dd>
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.updated_at") %></dt>
-        <dd class="token-text-base"><%= l(@announcement.updated_at, format: :short) %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= l(@announcement.updated_at, format: :short) %></dd>
       </div>
     </dl>
   <% end %>

@@ -68,7 +68,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.run_key") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record[:run_key],
                     label: t("admin.receipt_analysis_runs.show.labels.run_key"),
@@ -77,15 +77,15 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.stage_status") %></dt>
-            <dd class="token-text-base"><%= @record[:stage] %> / <%= @record[:status] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:stage] %> / <%= @record[:status] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.source") %></dt>
-            <dd class="token-text-base"><%= @record[:source] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:source] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.error") %></dt>
-            <dd class="token-text-base"><%= @record[:error_code].presence || "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:error_code].presence || "-" %></dd>
           </div>
         </dl>
       </section>
@@ -95,7 +95,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.display_public_id") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record.dig(:receipt_info, :display_id),
                     label: t("admin.receipt_analysis_runs.show.labels.display_public_id"),
@@ -112,11 +112,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.receipt_status") %></dt>
-            <dd class="token-text-base"><%= @record[:receipt_status] %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:receipt_status] %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.store_total") %></dt>
-            <dd class="token-text-base">
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]">
               <%= @record.dig(:receipt_info, :store_name).presence || "-" %>
               /
               <%= @record.dig(:receipt_info, :total_amount).presence || "-" %>
@@ -124,7 +124,7 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.purchased_at") %></dt>
-            <dd class="token-text-base"><%= @record.dig(:receipt_info, :purchased_at).present? ? l(@record.dig(:receipt_info, :purchased_at), format: :short) : "-" %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record.dig(:receipt_info, :purchased_at).present? ? l(@record.dig(:receipt_info, :purchased_at), format: :short) : "-" %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.review_reasons") %></dt>
@@ -146,7 +146,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.user_id") %></dt>
-            <dd class="min-w-0 max-w-full">
+            <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               <%= render "shared/ui/actions/copyable_value",
                     value: @record.dig(:user_info, :id),
                     display: "##{@record.dig(:user_info, :id)}",
@@ -156,11 +156,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.kind") %></dt>
-            <dd class="token-text-base"><%= @record.dig(:user_info, :guest) ? t("admin.receipt_analysis_runs.show.user_kind.guest") : t("admin.receipt_analysis_runs.show.user_kind.registered") %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record.dig(:user_info, :guest) ? t("admin.receipt_analysis_runs.show.user_kind.guest") : t("admin.receipt_analysis_runs.show.user_kind.registered") %></dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.labels.admin") %></dt>
-            <dd class="token-text-base"><%= @record.dig(:user_info, :admin) ? t("admin.receipt_analysis_runs.show.boolean.true") : t("admin.receipt_analysis_runs.show.boolean.false") %></dd>
+            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @record.dig(:user_info, :admin) ? t("admin.receipt_analysis_runs.show.boolean.true") : t("admin.receipt_analysis_runs.show.boolean.false") %></dd>
           </div>
         </dl>
       </section>
@@ -192,39 +192,39 @@
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.content_type") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt_image_blob&.content_type.presence || "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt_image_blob&.content_type.presence || "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.byte_size") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt_image_blob.present? ? number_to_human_size(receipt_image_blob.byte_size) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt_image_blob.present? ? number_to_human_size(receipt_image_blob.byte_size) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.dimensions") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt_image_dimensions %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt_image_dimensions %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.attached_at") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt_image_attachment&.created_at.present? ? l(receipt_image_attachment.created_at, format: :short) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt_image_attachment&.created_at.present? ? l(receipt_image_attachment.created_at, format: :short) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.keep_image") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt.keep_image? ? t("admin.receipt_analysis_runs.show.boolean.true") : t("admin.receipt_analysis_runs.show.boolean.false") %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt.keep_image? ? t("admin.receipt_analysis_runs.show.boolean.true") : t("admin.receipt_analysis_runs.show.boolean.false") %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purge_eligible_at") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purge_eligible_at.present? ? l(receipt.image_purge_eligible_at, format: :short) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt.image_purge_eligible_at.present? ? l(receipt.image_purge_eligible_at, format: :short) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purged_at") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purged_at.present? ? l(receipt.image_purged_at, format: :short) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt.image_purged_at.present? ? l(receipt.image_purged_at, format: :short) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.purged_reason") %></dt>
-          <dd class="font-mono text-xs token-text-base"><%= receipt.image_purged_reason.present? ? t("admin.receipt_analysis_runs.show.image_metadata.purged_reasons.#{receipt.image_purged_reason}", default: receipt.image_purged_reason) : "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= receipt.image_purged_reason.present? ? t("admin.receipt_analysis_runs.show.image_metadata.purged_reasons.#{receipt.image_purged_reason}", default: receipt.image_purged_reason) : "-" %></dd>
         </div>
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image") %></dt>
-          <dd class="text-xs token-text-muted"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image_not_implemented") %></dd>
+          <dd class="min-w-0 max-w-full break-words text-xs token-text-muted [overflow-wrap:anywhere]"><%= t("admin.receipt_analysis_runs.show.image_metadata.ocr_input_image_not_implemented") %></dd>
         </div>
       </dl>
     <% end %>
@@ -319,7 +319,7 @@
           <% ai_metric_rows.each do |label, value, copy_label| %>
             <div class="min-w-0">
               <dt class="text-xs font-semibold token-text-muted"><%= label %></dt>
-              <dd class="min-w-0 max-w-full">
+              <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
                 <% if copy_label.present? %>
                   <%= render "shared/ui/actions/copyable_value",
                         value: value,
@@ -372,7 +372,7 @@
                   <% rows.each do |field_label, value, copy_label| %>
                     <div class="min-w-0">
                       <dt class="text-xs font-semibold token-text-muted"><%= field_label %></dt>
-                      <dd class="min-w-0 max-w-full">
+                      <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
                         <% if copy_label.present? %>
                           <%= render "shared/ui/actions/copyable_value",
                                 value: value,
@@ -405,7 +405,7 @@
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.snapshot_presence") %></h2>
       <div class="grid gap-2 md:grid-cols-2">
         <% @record[:snapshot_presence].each do |name, present| %>
-          <div class="flex min-w-0 items-center justify-between gap-3 rounded-lg border token-border-soft token-bg-card-subtle px-3 py-2 text-sm">
+          <div class="flex min-w-0 items-center justify-between gap-3 max-w-full rounded-lg border token-border-soft token-bg-card-subtle px-3 py-2 text-sm">
             <span class="min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= name %></span>
             <span class="shrink-0 whitespace-nowrap <%= present ? "token-text-success" : "token-text-muted" %>"><%= present ? t("admin.receipt_analysis_runs.show.snapshot.present") : t("admin.receipt_analysis_runs.show.snapshot.missing") %></span>
           </div>
@@ -508,22 +508,22 @@
     <section class="space-y-4" data-admin-correction-summary>
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.correction_summary.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.purchased_at_fallback") %></dt>
-          <dd class="mt-1 token-text-base">
+          <dd class="min-w-0 max-w-full break-words mt-1 token-text-base [overflow-wrap:anywhere]">
             <%= purchased_at_fallback[:applied] ? t("admin.receipt_analysis_runs.show.correction_summary.applied") : t("admin.receipt_analysis_runs.show.correction_summary.not_applied") %>
           </dd>
           <p class="mt-1 text-xs token-text-muted">
             <%= [ purchased_at_fallback[:result], purchased_at_fallback[:source] ].compact.presence&.join(" / ") || t("admin.receipt_analysis_runs.show.correction_summary.empty") %>
           </p>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.tax_rate_corrections") %></dt>
-          <dd class="mt-1 font-mono token-text-base"><%= correction_summary[:tax_rate_corrections_count] || 0 %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 font-mono token-text-base [overflow-wrap:anywhere]"><%= correction_summary[:tax_rate_corrections_count] || 0 %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.adjustments") %></dt>
-          <dd class="mt-1 font-mono token-text-base">
+          <dd class="min-w-0 max-w-full break-words mt-1 font-mono token-text-base [overflow-wrap:anywhere]">
             <%= t(
               "admin.receipt_analysis_runs.show.correction_summary.adjustment_counts",
               count: correction_summary[:adjustment_count] || 0,
@@ -531,17 +531,17 @@
             ) %>
           </dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.amount_warnings") %></dt>
-          <dd class="mt-1 font-mono token-text-base"><%= correction_summary[:amount_warnings_count] || 0 %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 font-mono token-text-base [overflow-wrap:anywhere]"><%= correction_summary[:amount_warnings_count] || 0 %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.amount_blocking") %></dt>
-          <dd class="mt-1 font-mono token-text-base"><%= correction_summary[:amount_blocking_count] || 0 %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 font-mono token-text-base [overflow-wrap:anywhere]"><%= correction_summary[:amount_blocking_count] || 0 %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.correction_summary.tax_detail_amount_basis") %></dt>
-          <dd class="mt-1 font-mono token-text-base"><%= correction_summary[:tax_detail_amount_basis].presence || t("admin.receipt_analysis_runs.show.correction_summary.empty") %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 font-mono token-text-base [overflow-wrap:anywhere]"><%= correction_summary[:tax_detail_amount_basis].presence || t("admin.receipt_analysis_runs.show.correction_summary.empty") %></dd>
         </div>
       </dl>
     </section>
@@ -578,7 +578,7 @@
     <% if admin_retry_enabled? %>
       <p class="mb-4 text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.show.retry.authenticated_guidance") %></p>
     <% else %>
-      <div class="mb-4 space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="mb-4 space-y-3 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="text-sm token-text-muted"><%= t("admin.receipt_analysis_runs.show.retry.reauthentication_guidance") %></p>
         <%= render "shared/ui/actions/button",
               as: :link,
@@ -590,7 +590,7 @@
     <% end %>
     <div class="grid gap-3 md:grid-cols-2">
       <% @record[:retry_options].each do |option| %>
-        <div class="space-y-3 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="space-y-3 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <div class="font-semibold token-text-base"><%= option[:type] %></div>
           <div class="mt-1 text-sm <%= option[:possible] ? "token-text-success" : "token-text-muted" %>">
             <%= option[:possible] ? t("admin.receipt_analysis_runs.show.retry.available") : t("admin.receipt_analysis_runs.show.retry.disabled", reason: option[:disabled_reason]) %>

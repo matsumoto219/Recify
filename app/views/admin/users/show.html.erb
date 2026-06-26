@@ -59,9 +59,9 @@
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.basic.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.user_id") %></dt>
-          <dd class="min-w-0 max-w-full">
+          <dd class="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
             <%= render "shared/ui/actions/copyable_value",
                   value: record[:id],
                   display: "##{record[:id]}",
@@ -69,25 +69,25 @@
                   value_class: "min-w-0 break-words font-mono token-text-base [overflow-wrap:anywhere]" %>
           </dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.email") %></dt>
           <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= record[:email] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.admin") %></dt>
-          <dd class="token-text-base"><%= boolean_label.call(record[:admin]) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(record[:admin]) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.guest") %></dt>
-          <dd class="token-text-base"><%= boolean_label.call(record[:guest]) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(record[:guest]) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.created") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:timestamps, :created_at)) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.basic.updated") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:timestamps, :updated_at)) %></dd>
         </div>
       </dl>
     <% end %>
@@ -95,27 +95,27 @@
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.security.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.security.confirmed") %></dt>
-          <dd class="token-text-base"><%= boolean_label.call(record[:confirmed]) %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= timestamp_label.call(record.dig(:security, :confirmed_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(record[:confirmed]) %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:security, :confirmed_at)) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.security.unconfirmed_email") %></dt>
-          <dd class="token-text-base"><%= record.dig(:security, :unconfirmed_email_present) ? t("admin.users.show.security.present") : t("admin.users.show.security.absent") %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:security, :unconfirmed_email_present) ? t("admin.users.show.security.present") : t("admin.users.show.security.absent") %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.security.locked") %></dt>
-          <dd class="token-text-base"><%= boolean_label.call(record[:locked]) %></dd>
-          <dd class="mt-1 text-xs token-text-muted"><%= timestamp_label.call(record.dig(:security, :locked_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(record[:locked]) %></dd>
+          <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:security, :locked_at)) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.security.failed_attempts") %></dt>
-          <dd class="font-mono token-text-base"><%= record.dig(:security, :failed_attempts) %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record.dig(:security, :failed_attempts) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.security.unlock_sent") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:security, :unlock_sent_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:security, :unlock_sent_at)) %></dd>
         </div>
       </dl>
     <% end %>
@@ -167,25 +167,25 @@
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.sign_in.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sign_in.sign_in_count") %></dt>
-          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :sign_in_count) %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record.dig(:sign_in, :sign_in_count) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sign_in.current_sign_in") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:sign_in, :current_sign_in_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:sign_in, :current_sign_in_at)) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sign_in.last_sign_in") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record.dig(:sign_in, :last_sign_in_at)) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record.dig(:sign_in, :last_sign_in_at)) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sign_in.current_ip") %></dt>
-          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :current_sign_in_ip).presence || "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record.dig(:sign_in, :current_sign_in_ip).presence || "-" %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sign_in.last_ip") %></dt>
-          <dd class="font-mono token-text-base"><%= record.dig(:sign_in, :last_sign_in_ip).presence || "-" %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= record.dig(:sign_in, :last_sign_in_ip).presence || "-" %></dd>
         </div>
       </dl>
     <% end %>
@@ -193,17 +193,17 @@
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.users.show.usage.title") %></h2>
       <dl class="grid gap-3 text-sm md:grid-cols-2">
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.usage.passkeys") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-passkeys-count><%= record[:passkeys_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]" data-admin-user-passkeys-count><%= record[:passkeys_count] %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.usage.latest_passkey_use") %></dt>
-          <dd class="token-text-base"><%= timestamp_label.call(record[:latest_passkey_last_used_at]) %></dd>
+          <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(record[:latest_passkey_last_used_at]) %></dd>
         </div>
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.usage.receipts") %></dt>
-          <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-receipts-count><%= record[:receipts_count] %></dd>
+          <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]" data-admin-user-receipts-count><%= record[:receipts_count] %></dd>
         </div>
       </dl>
     <% end %>
@@ -270,18 +270,18 @@
     </div>
 
     <dl class="mb-5 grid gap-3 text-sm md:grid-cols-3">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_used") %></dt>
-        <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-storage-used><%= format_storage_size(usage_limits.dig(:storage, :used_bytes)) %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]" data-admin-user-storage-used><%= format_storage_size(usage_limits.dig(:storage, :used_bytes)) %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_base") %></dt>
-        <dd class="font-mono token-text-base"><%= format_storage_size(usage_limits.dig(:storage, :base_limit_bytes)) %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= format_storage_size(usage_limits.dig(:storage, :base_limit_bytes)) %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.limits.storage_effective") %></dt>
-        <dd class="font-mono token-text-base" data-admin-user-storage-effective><%= format_storage_size(usage_limits.dig(:storage, :effective_limit_bytes)) %></dd>
-        <dd class="mt-1 text-xs token-text-muted"><%= t("admin.users.show.limits.sources.#{usage_limits.dig(:storage, :source)}", default: usage_limits.dig(:storage, :source).to_s) %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]" data-admin-user-storage-effective><%= format_storage_size(usage_limits.dig(:storage, :effective_limit_bytes)) %></dd>
+        <dd class="min-w-0 max-w-full break-words mt-1 text-xs token-text-muted [overflow-wrap:anywhere]"><%= t("admin.users.show.limits.sources.#{usage_limits.dig(:storage, :source)}", default: usage_limits.dig(:storage, :source).to_s) %></dd>
       </div>
     </dl>
 
@@ -321,15 +321,15 @@
       <p class="mt-1 text-sm token-text-muted"><%= t("admin.users.show.limits.form.description") %></p>
 
       <% if record[:admin] && record[:id] != current_user.id %>
-        <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        <p class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
           <%= t("admin.users.show.limits.form.admin_forbidden") %>
         </p>
       <% elsif record[:id] == current_user.id && !current_user.admin? %>
-        <p class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+        <p class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
           <%= t("admin.users.show.limits.form.self_forbidden") %>
         </p>
       <% elsif !admin_passkey_reauthenticated? %>
-        <div class="mt-4 rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="mt-4 min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <p class="mb-3 text-sm token-text-muted"><%= t("admin.users.show.limits.form.reauthentication_required") %></p>
           <%= render "shared/ui/actions/button",
                 as: :link,
@@ -415,21 +415,21 @@
     </div>
 
     <dl class="mb-5 grid gap-3 text-sm md:grid-cols-4">
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sessions.active_sessions") %></dt>
-        <dd class="font-mono text-2xl font-bold token-text-base" data-admin-user-active-sessions-count><%= active_sessions[:count] %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono text-2xl font-bold token-text-base [overflow-wrap:anywhere]" data-admin-user-active-sessions-count><%= active_sessions[:count] %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sessions.latest_seen") %></dt>
-        <dd class="token-text-base"><%= timestamp_label.call(active_sessions[:latest_seen_at]) %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= timestamp_label.call(active_sessions[:latest_seen_at]) %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sessions.latest_method") %></dt>
-        <dd class="token-text-base"><%= active_sessions[:latest_sign_in_method].presence || "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= active_sessions[:latest_sign_in_method].presence || "-" %></dd>
       </div>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-3">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-3">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.users.show.sessions.latest_ip") %></dt>
-        <dd class="font-mono token-text-base"><%= active_sessions[:latest_ip].presence || "-" %></dd>
+        <dd class="min-w-0 max-w-full break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= active_sessions[:latest_ip].presence || "-" %></dd>
       </div>
     </dl>
 
@@ -451,7 +451,7 @@
               <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(session_record[:started_at]) %></td>
               <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= timestamp_label.call(session_record[:last_seen_at]) %></td>
               <td class="min-w-[8rem] whitespace-nowrap px-3 py-3"><%= session_record[:sign_in_method].presence || "-" %></td>
-              <td class="min-w-[9rem] whitespace-nowrap px-3 py-3 font-mono"><%= session_record[:ip_address].presence || "-" %></td>
+              <td class="min-w-[14rem] max-w-xs break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]"><%= session_record[:ip_address].presence || "-" %></td>
               <td class="min-w-[20rem] max-w-md truncate px-3 py-3" title="<%= session_record[:user_agent].presence || "-" %>"><%= session_record[:user_agent].presence || "-" %></td>
               <td class="min-w-[7rem] whitespace-nowrap px-3 py-3 font-mono"><%= session_record[:session_version] %></td>
             </tr>
@@ -474,15 +474,15 @@
     </div>
 
     <% if record[:admin] %>
-      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+      <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
         <%= t("admin.users.show.operations.admin_forbidden") %>
       </p>
     <% elsif record[:id] == current_user.id %>
-      <p class="rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
+      <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 text-sm token-text-muted">
         <%= t("admin.users.show.operations.self_forbidden") %>
       </p>
     <% elsif !admin_passkey_reauthenticated? %>
-      <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
         <p class="mb-3 text-sm token-text-muted"><%= t("admin.users.show.operations.reauthentication_required") %></p>
         <%= render "shared/ui/actions/button",
               as: :link,
@@ -494,7 +494,7 @@
     <% else %>
       <div class="grid gap-4 lg:grid-cols-2">
         <% if record[:locked] %>
-          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
             <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.unlock.title") %></h3>
             <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.unlock.description") %></p>
             <%= form_with url: unlock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
@@ -524,7 +524,7 @@
             <% end %>
           </div>
         <% else %>
-          <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+          <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
             <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.lock.title") %></h3>
             <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.lock.description") %></p>
             <%= form_with url: lock_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
@@ -555,7 +555,7 @@
           </div>
         <% end %>
 
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.passkey_reset.title") %></h3>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.passkey_reset.description") %></p>
 
@@ -590,7 +590,7 @@
           <% end %>
         </div>
 
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.two_factor_reset.title") %></h3>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.two_factor_reset.description") %></p>
 
@@ -625,7 +625,7 @@
           <% end %>
         </div>
 
-        <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+        <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
           <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.revoke_sessions.title") %></h3>
           <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.revoke_sessions.description") %></p>
           <%= form_with url: revoke_sessions_operation_admin_user_path(record[:id]), method: :post, local: true, class: "space-y-3" do |form| %>
@@ -655,7 +655,7 @@
           <% end %>
         </div>
 
-        <details class="group rounded-lg border token-border-soft token-bg-card-subtle p-4 lg:col-span-2" data-admin-user-emergency-recovery>
+        <details class="group min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4 lg:col-span-2" data-admin-user-emergency-recovery>
           <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
             <span>
               <span class="block text-base font-bold token-text-base"><%= t("admin.users.show.operations.emergency_recovery.title") %></span>
@@ -665,7 +665,7 @@
           </summary>
 
           <div class="mt-5 grid gap-4 lg:grid-cols-2">
-            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+            <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
               <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.password_reset_instruction.title") %></h3>
               <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.password_reset_instruction.description") %></p>
 
@@ -702,7 +702,7 @@
               <% end %>
             </div>
 
-            <div class="rounded-lg border token-border-soft token-bg-card-subtle p-4">
+            <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
               <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.users.show.operations.email_change_recovery.title") %></h3>
               <p class="mb-4 text-sm token-text-muted"><%= t("admin.users.show.operations.email_change_recovery.description") %></p>
 
@@ -753,7 +753,7 @@
           </div>
         </details>
 
-        <div class="rounded-lg border surface-card-danger p-4 lg:col-span-2">
+        <div class="min-w-0 max-w-full rounded-lg border surface-card-danger p-4 lg:col-span-2">
           <h3 class="mb-2 text-base font-bold token-text-error"><%= t("admin.users.show.operations.delete.title") %></h3>
           <p class="mb-4 text-sm token-text-error-muted">
             <%= t("admin.users.show.operations.delete.description") %>

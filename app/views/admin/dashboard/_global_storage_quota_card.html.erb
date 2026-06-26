@@ -50,21 +50,21 @@
     </div>
 
     <dl class="grid gap-2 text-xs md:grid-cols-3">
-      <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-2">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-2">
         <dt class="break-words font-semibold token-text-muted [overflow-wrap:anywhere]"><%= t("admin.dashboard.global_storage.warning") %></dt>
         <dd class="break-words font-mono font-bold token-text-base [overflow-wrap:anywhere]">
           <%= format_storage_size(quota[:warning_bytes]) %>
           <span class="font-sans font-semibold token-text-muted">(<%= quota[:warning_percentage] %>%)</span>
         </dd>
       </div>
-      <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-2">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-2">
         <dt class="break-words font-semibold token-text-muted [overflow-wrap:anywhere]"><%= t("admin.dashboard.global_storage.critical") %></dt>
         <dd class="break-words font-mono font-bold token-text-base [overflow-wrap:anywhere]">
           <%= format_storage_size(quota[:critical_bytes]) %>
           <span class="font-sans font-semibold token-text-muted">(<%= quota[:critical_percentage] %>%)</span>
         </dd>
       </div>
-      <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-2">
+      <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-2">
         <dt class="break-words font-semibold token-text-muted [overflow-wrap:anywhere]"><%= t("admin.dashboard.global_storage.hard_stop") %></dt>
         <dd class="break-words font-mono font-bold token-text-base [overflow-wrap:anywhere]"><%= format_storage_size(quota[:hard_stop_bytes]) %></dd>
       </div>
