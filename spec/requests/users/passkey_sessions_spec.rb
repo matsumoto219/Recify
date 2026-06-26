@@ -298,6 +298,30 @@ RSpec.describe 'User passkey sessions', type: :request do
       end
     end
 
+    it 'iOS Safari向けに手動ログイン前へoptionsを準備する' do
+      source = Rails.root.join('app/javascript/controllers/passkey_session_controller.js').read
+
+      aggregate_failures do
+        expect(source).to include('this.prepareRequestOptions()')
+        expect(source).to include('prepareRequestOptions')
+        expect(source).to include('consumePreparedRequestOptions')
+        expect(source).to include('preparedOptionsFresh')
+        expect(source).to include('await this.consumePreparedRequestOptions()')
+      end
+    end
+
+    it 'iOS Safari向けにパスキー登録前へoptionsを準備する' do
+      source = Rails.root.join('app/javascript/controllers/passkey_controller.js').read
+
+      aggregate_failures do
+        expect(source).to include('this.prepareCreationOptions()')
+        expect(source).to include('prepareCreationOptions')
+        expect(source).to include('consumePreparedCreationOptions')
+        expect(source).to include('preparedOptionsFresh')
+        expect(source).to include('await this.consumePreparedCreationOptions()')
+      end
+    end
+
     it 'ブラウザ例外messageを画面へ直接表示しない' do
       session_source = Rails.root.join('app/javascript/controllers/passkey_session_controller.js').read
       registration_source = Rails.root.join('app/javascript/controllers/passkey_controller.js').read

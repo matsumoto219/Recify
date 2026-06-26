@@ -177,7 +177,8 @@ class Users::RegistrationsController < Devise::RegistrationsController
   end
 
   def set_flash_from_resource_errors(resource)
-    flash.now[:alert] = resource.errors.full_messages
+    base_messages = resource.errors.full_messages_for(:base).uniq
+    flash.now[:alert] = base_messages if base_messages.any?
   end
 
   def enforce_maintenance_sign_up_restriction!

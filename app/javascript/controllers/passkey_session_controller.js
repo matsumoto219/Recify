@@ -21,11 +21,16 @@ export default class extends Controller {
 
   connect () {
     this.conditionalAbortController = null
+    this.optionsPromise = null
+    this.optionsPreparedAt = null
+    this.prepareRequestOptions()
     if (this.conditionalValue) this.startConditionalLogin()
   }
 
   disconnect () {
     this.abortConditionalLogin()
+    this.optionsPromise = null
+    this.optionsPreparedAt = null
   }
 
   async login (event) {
@@ -41,10 +46,7 @@ export default class extends Controller {
     this.setLoading(true)
 
     try {
-      const optionsResponse = await this.fetchJson(this.optionsUrlValue, {
-        method: 'POST'
-      })
-      const publicKey = this.decodeRequestOptions(optionsResponse.publicKey)
+      const publicKey = await this.consumePreparedRequestOptions()
       const credential = await navigator.credentials.get({ publicKey })
 
       if (!credential) {
@@ -57,6 +59,7 @@ export default class extends Controller {
       this.showError(this.userFacingErrorMessage(error))
     } finally {
       this.setLoading(false)
+      this.prepareRequestOptions()
     }
   }
 
@@ -73,12 +76,10 @@ export default class extends Controller {
       abortController = new AbortController()
       this.conditionalAbortController = abortController
 
-      const optionsResponse = await this.fetchJson(this.optionsUrlValue, {
-        method: 'POST'
-      })
+      const publicKey = await this.prepareRequestOptions()
       if (abortController.signal.aborted) return
+      if (!publicKey) return
 
-      const publicKey = this.decodeRequestOptions(optionsResponse.publicKey)
       const credential = await navigator.credentials.get({
         publicKey,
         mediation: 'conditional',
@@ -94,6 +95,45 @@ export default class extends Controller {
         this.conditionalAbortController = null
       }
     }
+  }
+
+  prepareRequestOptions (force = false) {
+    if (!window.PublicKeyCredential || !navigator.credentials?.get) return null
+    if (this.hasButtonTarget && this.buttonTarget.disabled) return null
+    if (!force && this.optionsPromise && this.preparedOptionsFresh()) return this.optionsPromise
+
+    this.optionsPreparedAt = Date.now()
+    this.optionsPromise = this.fetchJson(this.optionsUrlValue, {
+      method: 'POST'
+    }).then((optionsResponse) => this.decodeRequestOptions(optionsResponse.publicKey))
+      .catch((error) => {
+        this.optionsPromise = null
+        this.optionsPreparedAt = null
+        throw error
+      })
+
+    this.optionsPromise.catch(() => {})
+
+    return this.optionsPromise
+  }
+
+  async consumePreparedRequestOptions () {
+    const optionsPromise = this.prepareRequestOptions()
+
+    if (!optionsPromise) {
+      throw new PasskeyRequestError(this.requestFailedMessageValue)
+    }
+
+    try {
+      return await optionsPromise
+    } finally {
+      this.optionsPromise = null
+      this.optionsPreparedAt = null
+    }
+  }
+
+  preparedOptionsFresh () {
+    return this.optionsPreparedAt && Date.now() - this.optionsPreparedAt < 4 * 60 * 1000
   }
 
   supportsConditionalMediation () {

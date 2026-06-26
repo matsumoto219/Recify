@@ -168,16 +168,14 @@ RSpec.describe User, type: :model do
   end
 
   describe 'unconfirmed_email uniqueness' do
-    it 'case insensitiveに確認待ちメールアドレスの重複を不正にする' do
+    it 'case insensitiveに確認待ちメールアドレスの重複をメールアドレス衝突として不正にする' do
       create(:user, unconfirmed_email: 'Pending-Duplicate@example.com')
       user = build(:user, unconfirmed_email: 'pending-duplicate@example.com')
 
       expect(user).not_to be_valid
 
       aggregate_failures do
-        expect(user.errors.full_messages_for(:unconfirmed_email)).to include(
-          "#{I18n.t('activerecord.attributes.user.unconfirmed_email')}#{I18n.t('activerecord.errors.models.user.attributes.unconfirmed_email.taken')}"
-        )
+        expect(user.errors.full_messages_for(:unconfirmed_email)).to be_empty
         expect(user.errors.full_messages_for(:email)).to include(
           "#{I18n.t('activerecord.attributes.user.email')}#{I18n.t('activerecord.errors.models.user.attributes.email.taken')}"
         )

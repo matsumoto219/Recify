@@ -19,6 +19,17 @@ export default class extends Controller {
     requestFailedMessage: String
   }
 
+  connect () {
+    this.optionsPromise = null
+    this.optionsPreparedAt = null
+    this.prepareCreationOptions()
+  }
+
+  disconnect () {
+    this.optionsPromise = null
+    this.optionsPreparedAt = null
+  }
+
   async register (event) {
     event.preventDefault()
     this.hideMessages()
@@ -31,10 +42,7 @@ export default class extends Controller {
     this.setLoading(true)
 
     try {
-      const optionsResponse = await this.fetchJson(this.optionsUrlValue, {
-        method: 'POST'
-      })
-      const publicKey = this.decodeCreationOptions(optionsResponse.publicKey)
+      const publicKey = await this.consumePreparedCreationOptions()
       const credential = await navigator.credentials.create({ publicKey })
 
       if (!credential) {
@@ -56,7 +64,47 @@ export default class extends Controller {
       this.showError(this.userFacingErrorMessage(error))
     } finally {
       this.setLoading(false)
+      this.prepareCreationOptions()
     }
+  }
+
+  prepareCreationOptions (force = false) {
+    if (!window.PublicKeyCredential || !navigator.credentials?.create) return null
+    if (this.hasButtonTarget && this.buttonTarget.disabled) return null
+    if (!force && this.optionsPromise && this.preparedOptionsFresh()) return this.optionsPromise
+
+    this.optionsPreparedAt = Date.now()
+    this.optionsPromise = this.fetchJson(this.optionsUrlValue, {
+      method: 'POST'
+    }).then((optionsResponse) => this.decodeCreationOptions(optionsResponse.publicKey))
+      .catch((error) => {
+        this.optionsPromise = null
+        this.optionsPreparedAt = null
+        throw error
+      })
+
+    this.optionsPromise.catch(() => {})
+
+    return this.optionsPromise
+  }
+
+  async consumePreparedCreationOptions () {
+    const optionsPromise = this.prepareCreationOptions()
+
+    if (!optionsPromise) {
+      throw new PasskeyRequestError(this.requestFailedMessageValue)
+    }
+
+    try {
+      return await optionsPromise
+    } finally {
+      this.optionsPromise = null
+      this.optionsPreparedAt = null
+    }
+  }
+
+  preparedOptionsFresh () {
+    return this.optionsPreparedAt && Date.now() - this.optionsPreparedAt < 4 * 60 * 1000
   }
 
   async fetchJson (url, options = {}) {

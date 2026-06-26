@@ -1239,6 +1239,37 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'guest本登録申請で登録済みメールアドレスのエラーを1文にまとめる' do
+      sign_out user
+      registered_user = create(:user, email: 'guest-registered-conflict@example.com')
+      guest = User.guest!
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: registered_user.email,
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '1'
+              }
+            }
+
+      email_taken_message = I18n.t('activerecord.errors.models.user.attributes.email.taken')
+      unconfirmed_taken_message = I18n.t('activerecord.errors.models.user.attributes.unconfirmed_email.taken')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body.scan(email_taken_message).size).to eq(1)
+        expect(response.body).not_to include(unconfirmed_taken_message)
+        expect(guest.reload.unconfirmed_email).to be_nil
+        expect(registered_user.reload.email).to eq('guest-registered-conflict@example.com')
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'guest本登録はconfirmation完了で本登録ユーザーにする' do
       sign_out user
       guest = User.guest!

@@ -178,8 +178,11 @@ class User < ApplicationRecord
 
     return unless pending_relation.exists? || registered_relation.exists?
 
-    errors.add(:unconfirmed_email, :taken)
-    errors.add(:email, :taken)
+    add_unique_error(:email, :taken)
+  end
+
+  def add_unique_error(attribute, type)
+    errors.add(attribute, type) unless errors.added?(attribute, type)
   end
 
   def send_devise_notification(notification, *args)

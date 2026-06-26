@@ -22,6 +22,8 @@ ja:
       update_failure: 設定の保存に失敗しました
     users:
       unsupported_update_context: アカウント情報の変更は設定画面から行ってください。
+      confirmation_resend:
+        email_mismatch: 現在確認待ちのメールアドレスへ確認メールを再送してください。
       email_change:
         confirmation_sent: |-
           確認メールを送信しました。

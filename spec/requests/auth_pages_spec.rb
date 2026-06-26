@@ -1255,6 +1255,74 @@ RSpec.describe 'Auth pages', type: :request do
       end
     end
 
+    it 'guest本登録中のconfirmation resendは現在の確認待ちメール以外へ送らない' do
+      guest = User.guest!
+      guest.start_guest_registration(
+        email: 'guest-resend-target@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      confirmed_user = create(:user, email: 'guest-resend-confirmed@example.com')
+      unconfirmed_user = create(:user, :unconfirmed, email: 'guest-resend-unconfirmed@example.com')
+      original_confirmed_at = confirmed_user.confirmed_at
+      original_unconfirmed_sent_at = unconfirmed_user.confirmation_sent_at
+      sign_in guest
+
+      [
+        confirmed_user.email,
+        unconfirmed_user.email,
+        'guest-resend-unused@example.com'
+      ].each do |requested_email|
+        ActionMailer::Base.deliveries.clear
+
+        post user_confirmation_path,
+          params: {
+            user: {
+              email: requested_email
+            }
+          }
+
+        aggregate_failures "requested #{requested_email}" do
+          expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+          expect(flash[:alert]).to eq(I18n.t('flash.users.confirmation_resend.email_mismatch'))
+          expect(ActionMailer::Base.deliveries).to be_empty
+          expect(guest.reload).to be_guest
+          expect(guest.unconfirmed_email).to eq('guest-resend-target@example.com')
+          expect(confirmed_user.reload.confirmed_at).to eq(original_confirmed_at)
+          expect(confirmed_user.unconfirmed_email).to be_nil
+          expect(unconfirmed_user.reload.confirmation_sent_at).to eq(original_unconfirmed_sent_at)
+          expect(unconfirmed_user.confirmed_at).to be_nil
+        end
+      end
+    end
+
+    it 'guest本登録中のconfirmation resendは現在の確認待ちメールへだけ送る' do
+      guest = User.guest!
+      guest.start_guest_registration(
+        email: 'guest-resend-current@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      sign_in guest
+      ActionMailer::Base.deliveries.clear
+
+      post user_confirmation_path,
+        params: {
+          user: {
+            email: 'guest-resend-current@example.com'
+          }
+        }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(ActionMailer::Base.deliveries.size).to eq(1)
+        expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-current@example.com')
+      end
+    end
+
     it 'ログイン中でpendingがない場合はセキュリティ設定へ戻す' do
       user = create(:user)
       sign_in user
