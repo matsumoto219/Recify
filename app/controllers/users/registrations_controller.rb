@@ -176,9 +176,16 @@ class Users::RegistrationsController < Devise::RegistrationsController
     resource
   end
 
-  def set_flash_from_resource_errors(resource)
-    base_messages = resource.errors.full_messages_for(:base).uniq
-    flash.now[:alert] = base_messages if base_messages.any?
+  def set_flash_from_resource_errors(resource, base_only: true)
+    messages =
+      if base_only
+        resource.errors.full_messages_for(:base)
+      else
+        resource.errors.full_messages
+      end
+
+    messages = messages.uniq
+    flash.now[:alert] = messages if messages.any?
   end
 
   def enforce_maintenance_sign_up_restriction!
@@ -250,7 +257,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     else
       clean_up_passwords resource
       set_minimum_password_length
-      set_flash_from_resource_errors(resource)
+      set_flash_from_resource_errors(resource, base_only: false)
       prepare_settings_security_presenter
       render "settings/security", status: :unprocessable_content
     end

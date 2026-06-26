@@ -1231,9 +1231,13 @@ RSpec.describe 'Settings', type: :request do
               }
             }
 
+      email_taken_message = I18n.t('activerecord.errors.models.user.attributes.email.taken')
+      email_taken_full_message = "#{I18n.t('activerecord.attributes.user.email')}#{email_taken_message}"
+
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include(I18n.t('activerecord.errors.models.user.attributes.email.taken'))
+        expect(response.body).to include(email_taken_message)
+        expect(flash[:alert]).to include(email_taken_full_message)
         expect(second_guest.reload.unconfirmed_email).to be_nil
         expect(ActionMailer::Base.deliveries).to be_empty
       end
@@ -1258,11 +1262,17 @@ RSpec.describe 'Settings', type: :request do
             }
 
       email_taken_message = I18n.t('activerecord.errors.models.user.attributes.email.taken')
+      email_taken_full_message = "#{I18n.t('activerecord.attributes.user.email')}#{email_taken_message}"
       unconfirmed_taken_message = I18n.t('activerecord.errors.models.user.attributes.unconfirmed_email.taken')
+      document = Nokogiri::HTML(response.body)
+      guest_registration_card = document.at_css('#guest-registration')
+      flash_surface = document.at_css('#flash [data-controller~="notice-surface"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body.scan(email_taken_message).size).to eq(1)
+        expect(guest_registration_card.text.scan(email_taken_message).size).to eq(1)
+        expect(flash[:alert]).to include(email_taken_full_message)
+        expect(flash_surface.text).to include(email_taken_full_message)
         expect(response.body).not_to include(unconfirmed_taken_message)
         expect(guest.reload.unconfirmed_email).to be_nil
         expect(registered_user.reload.email).to eq('guest-registered-conflict@example.com')
