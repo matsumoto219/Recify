@@ -99,8 +99,8 @@ export default class extends Controller {
 
   prepareRequestOptions (force = false) {
     if (!window.PublicKeyCredential || !navigator.credentials?.get) return null
-    if (this.hasButtonTarget && this.buttonTarget.disabled) return null
     if (!force && this.optionsPromise && this.preparedOptionsFresh()) return this.optionsPromise
+    if (this.hasButtonTarget && this.buttonTarget.disabled) return null
 
     this.optionsPreparedAt = Date.now()
     this.optionsPromise = this.fetchJson(this.optionsUrlValue, {

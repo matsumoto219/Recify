@@ -310,6 +310,13 @@ RSpec.describe 'User passkey sessions', type: :request do
       end
     end
 
+    it '手動ログイン中のdisabled状態でも準備済みoptionsを使える' do
+      source = Rails.root.join('app/javascript/controllers/passkey_session_controller.js').read
+
+      expect(source.index('if (!force && this.optionsPromise && this.preparedOptionsFresh())')).to be <
+        source.index('if (this.hasButtonTarget && this.buttonTarget.disabled) return null')
+    end
+
     it 'iOS Safari向けにパスキー登録前へoptionsを準備する' do
       source = Rails.root.join('app/javascript/controllers/passkey_controller.js').read
 
@@ -320,6 +327,13 @@ RSpec.describe 'User passkey sessions', type: :request do
         expect(source).to include('preparedOptionsFresh')
         expect(source).to include('await this.consumePreparedCreationOptions()')
       end
+    end
+
+    it '登録中のdisabled状態でも準備済みoptionsを使える' do
+      source = Rails.root.join('app/javascript/controllers/passkey_controller.js').read
+
+      expect(source.index('if (!force && this.optionsPromise && this.preparedOptionsFresh())')).to be <
+        source.index('if (this.hasButtonTarget && this.buttonTarget.disabled) return null')
     end
 
     it 'ブラウザ例外messageを画面へ直接表示しない' do
