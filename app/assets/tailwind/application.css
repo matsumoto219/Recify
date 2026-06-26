@@ -276,6 +276,13 @@ body {
   box-shadow: var(--neutral-glass-shadow);
 }
 
+/* ===== Auth Layout ===== */
+.auth-page-shell-standalone {
+  --auth-page-footer-shadow-buffer: clamp(2.5rem, 6vh, 4rem);
+
+  min-height: calc(100vh + var(--auth-page-footer-shadow-buffer));
+}
+
 /* ===== Public Layout ===== */
 .public-header-shell {
   --public-header-gradient-start: var(--browser-chrome-bg);
