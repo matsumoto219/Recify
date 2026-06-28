@@ -58,7 +58,7 @@ ja:
           label: 削除確認
           description: レシート明細や通知を削除する前に確認ダイアログを表示します
         product_name_ai_completion:
-          label: AI補完
+          label: 商品名の自動補正
           description: |-
             商品名をAIが補完します
             補完内容は正確でない可能性があるため、必ず内容を確認してください
