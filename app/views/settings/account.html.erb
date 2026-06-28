@@ -38,7 +38,7 @@
             <h2 class="truncate text-lg font-semibold token-text-base mb-1" title="<%= t("settings.account.avatar.title") %>"><%= t("settings.account.avatar.title") %></h2>
             <p class="text-xs token-text-muted mb-4 break-words"><%= t("settings.account.avatar.description", max_size: avatar_max_file_size_label) %></p>
             <%= f.file_field :avatar,
-                  class: "block w-full text-sm avatar-file-input file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
+                  class: "ui-touch-control block w-full text-sm avatar-file-input file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
                   accept: "image/png,image/jpeg,image/webp",
                   data: {
                     avatar_preview_target: "input",

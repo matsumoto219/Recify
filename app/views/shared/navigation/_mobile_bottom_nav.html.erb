@@ -39,7 +39,7 @@
         aria_options[:current] = "page" if item[:active]
       %>
       <%= link_to item[:path],
-        class: "mobile-bottom-nav-link flex flex-col items-center gap-2 #{item[:active] ? 'token-text-brand' : 'token-text-muted'}",
+        class: "ui-touch-control mobile-bottom-nav-link flex flex-col items-center gap-2 #{item[:active] ? 'token-text-brand' : 'token-text-muted'}",
         aria: aria_options do %>
         <span class="material-symbols-outlined mobile-bottom-nav-icon" aria-hidden="true"><%= item[:icon] %></span>
         <span class="mobile-bottom-nav-label text-xs"><%= item[:label] %></span>

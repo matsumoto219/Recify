@@ -103,8 +103,8 @@
         <span class="token-text-subtle cursor-not-allowed"><%= t("receipt_cards.actions.show") %></span>
         <span class="receipt-card-disabled-brand cursor-not-allowed"><%= t("receipt_cards.actions.edit") %></span>
       <% else %>
-        <%= link_to t("receipt_cards.actions.show"), receipt_path(receipt, from: "index"), class: "token-text-muted receipt-card-link-hover transition-colors" %>
-        <%= link_to t("receipt_cards.actions.edit"), edit_receipt_path(receipt, from: "index"), class: "token-text-brand hover:opacity-80 transition-opacity" %>
+        <%= link_to t("receipt_cards.actions.show"), receipt_path(receipt, from: "index"), class: "ui-touch-control token-text-muted receipt-card-link-hover transition-colors" %>
+        <%= link_to t("receipt_cards.actions.edit"), edit_receipt_path(receipt, from: "index"), class: "ui-touch-control token-text-brand hover:opacity-80 transition-opacity" %>
       <% end %>
     </div>
   </div>
@@ -117,7 +117,7 @@
       data-receipt-processing-phase="<%= phase_presenter.key %>">
       <button
         type="button"
-        class="receipt-processing-trigger"
+        class="ui-touch-control receipt-processing-trigger"
         data-receipt-processing-popover-target="trigger"
         data-action="click->receipt-processing-popover#toggle"
         aria-expanded="false"
@@ -158,7 +158,7 @@
           </div>
           <button
             type="button"
-            class="receipt-processing-popover-close"
+            class="ui-touch-control receipt-processing-popover-close"
             data-receipt-processing-popover-close
             aria-label="<%= t("receipt_cards.processing_phase.close") %>">
             <span class="material-symbols-outlined" aria-hidden="true">close</span>

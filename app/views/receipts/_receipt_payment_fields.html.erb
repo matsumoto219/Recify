@@ -18,7 +18,7 @@
      data-controller="swipe-action">
   <div class="swipe-action-background md:hidden" aria-hidden="true">
     <button type="button"
-            class="flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
+            class="ui-touch-control flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
             data-action="click->receipt-form#removePayment click->swipe-action#close"
             data-swipe-action-target="action"
             data-swipe-ignore
@@ -88,7 +88,7 @@
 
       <div class="hidden md:col-span-1 md:flex md:justify-end">
         <button type="button"
-                class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
+                class="ui-touch-control flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
                 data-action="click->receipt-form#removePayment"
                 aria-label="<%= t("receipts.payment_fields.remove_aria") %>">
           <span class="material-symbols-outlined">delete</span>
@@ -100,7 +100,7 @@
 
         <div class="flex items-center justify-end">
           <button type="button"
-                  class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
+                  class="ui-touch-control flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg receipt-form-delete-button transition-colors"
                   data-action="click->receipt-form#removePayment"
                   aria-label="<%= t("receipts.payment_fields.remove_aria") %>">
             <span class="material-symbols-outlined">delete</span>

@@ -13,7 +13,7 @@
     { label: t("admin.navigation.system_settings"), path: admin_system_settings_path, icon: "settings" }
   ]
 
-  base_link_class = "admin-navigation-link inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 font-semibold transition-colors"
+  base_link_class = "ui-touch-control admin-navigation-link inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 font-semibold transition-colors"
 %>
 
 <nav class="admin-navigation rounded-lg border token-border-soft token-bg-card px-4 py-3" aria-label="<%= t("admin.navigation.aria_label") %>">
@@ -36,7 +36,7 @@
     </div>
 
     <%= link_to receipts_path,
-          class: "admin-navigation-link admin-navigation-back inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-sm font-semibold token-text-muted token-hover-text-base transition-colors",
+          class: "ui-touch-control admin-navigation-link admin-navigation-back inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-sm font-semibold token-text-muted token-hover-text-base transition-colors",
           aria: { label: t("admin.navigation.back_to_app") } do %>
       <span class="admin-navigation-icon material-symbols-outlined hidden text-base leading-none" aria-hidden="true">arrow_back</span>
       <span class="admin-navigation-label min-w-0 break-words [overflow-wrap:anywhere]"><%= t("admin.navigation.back_to_app") %></span>

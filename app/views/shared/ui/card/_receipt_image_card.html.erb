@@ -88,7 +88,7 @@
       <% if show_toggle %>
         <button
           type="button"
-          class="w-full cursor-pointer rounded-lg border image-preview-surface image-preview-surface-hover px-4 py-3 flex items-center justify-between transition-colors text-left"
+          class="ui-touch-control w-full cursor-pointer rounded-lg border image-preview-surface image-preview-surface-hover px-4 py-3 flex items-center justify-between transition-colors text-left"
           data-action="click->receipt-image-card#toggle"
           aria-expanded="false"
           data-receipt-image-card-target="toggleButton">
@@ -109,7 +109,7 @@
           <div class="mt-4 w-full flex justify-center">
             <% preview_tag = show_modal ? :button : :div %>
             <% preview_options = {
-              class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'cursor-zoom-in text-left' : ''}"
+              class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'ui-touch-control cursor-zoom-in text-left' : ''}"
             } %>
             <% if show_modal %>
               <% preview_options[:type] = "button" %>
@@ -134,7 +134,7 @@
             <div class="mt-3 flex justify-end">
               <%= link_to url_for(displayable_image),
                     download: displayable_image.filename.to_s,
-                    class: "inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
+                    class: "ui-touch-control inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
                 <span class="material-symbols-outlined text-sm">download</span>
                 <%= t("shared.receipt_image_card.download") %>
               <% end %>
@@ -193,7 +193,7 @@
               </p>
             </div>
 
-            <%= form_builder.label :image, class: "shrink-0 cursor-pointer" do %>
+            <%= form_builder.label :image, class: "ui-touch-control shrink-0 cursor-pointer" do %>
               <%= render "shared/ui/actions/button",
                          as: :content,
                          label: t("shared.receipt_image_card.select_image"),
@@ -256,7 +256,7 @@
           <div class="rounded-2xl overflow-hidden border image-modal-surface relative">
             <button
               type="button"
-              class="absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 cursor-pointer rounded-full floating-action-button transition-colors"
+              class="ui-touch-control absolute right-3 top-3 z-20 inline-flex items-center justify-center w-10 h-10 cursor-pointer rounded-full floating-action-button transition-colors"
               data-receipt-image-card-modal-part="close"
               data-action="click->receipt-image-card#closeModal"
               aria-label="<%= t("shared.receipt_image_card.close_preview_aria") %>">

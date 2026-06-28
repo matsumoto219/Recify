@@ -92,7 +92,7 @@
   justify_classes = trailing_icon.present? ? "justify-between" : "justify-center"
   width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
   weight_classes = weight == :bold ? "font-bold" : "font-medium"
-  state_classes = "group items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+  state_classes = "group ui-touch-control items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
   button_classes =
     if unstyled
       extra_classes.to_s

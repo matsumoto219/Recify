@@ -16,12 +16,12 @@
     <div class="mx-auto flex min-w-max items-center justify-center gap-1 sm:gap-2">
       <% if pagination.back_enabled? %>
         <%= link_to pagination.back_url,
-          class: "flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
+          class: "ui-touch-control flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
           aria: { label: pagination.back_label } do %>
           <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
         <% end %>
       <% else %>
-        <span class="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= pagination.back_label %>">
+        <span class="ui-touch-control flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= pagination.back_label %>">
           <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
         </span>
       <% end %>
@@ -29,17 +29,17 @@
       <div class="flex shrink-0 items-center gap-1">
         <% pagination.items.each do |item| %>
           <% if item.gap? %>
-            <span class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center token-text-subtle" aria-hidden="true">
+            <span class="ui-touch-control w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center token-text-subtle" aria-hidden="true">
               ...
             </span>
           <% elsif item.current? %>
-            <span class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-brand-strong token-text-on-brand font-bold shadow-[var(--shadow-card)] flex items-center justify-center" aria-current="page">
+            <span class="ui-touch-control w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-brand-strong token-text-on-brand font-bold shadow-[var(--shadow-card)] flex items-center justify-center" aria-current="page">
               <%= item.page %>
             </span>
           <% else %>
             <%= link_to item.page,
               item.url,
-              class: "w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors font-medium border token-border-soft flex items-center justify-center",
+              class: "ui-touch-control w-9 h-9 sm:w-10 sm:h-10 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors font-medium border token-border-soft flex items-center justify-center",
               aria: { label: t("common.pagination.page", page: item.page) } %>
           <% end %>
         <% end %>
@@ -47,12 +47,12 @@
 
       <% if pagination.forward_enabled? %>
         <%= link_to pagination.forward_url,
-          class: "flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
+          class: "ui-touch-control flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-muted hover:bg-[var(--bg-elevated)] hover:text-[var(--text-base)] transition-colors shadow-sm border token-border-soft",
           aria: { label: pagination.forward_label } do %>
           <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
         <% end %>
       <% else %>
-        <span class="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= pagination.forward_label %>">
+        <span class="ui-touch-control flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-lg token-bg-card-subtle token-text-subtle shadow-sm border token-border-soft cursor-not-allowed opacity-60" aria-disabled="true" aria-label="<%= pagination.forward_label %>">
           <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
         </span>
       <% end %>

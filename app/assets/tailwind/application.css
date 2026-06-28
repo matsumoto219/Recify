@@ -31,6 +31,17 @@ body {
   background: color-mix(in srgb, var(--brand-primary) 32%, transparent);
 }
 
+/* ===== Interaction Utilities ===== */
+.ui-touch-control {
+  user-select: none;
+  touch-action: manipulation;
+
+  /* stylelint-disable property-no-vendor-prefix -- iOS Safari needs prefixed selection/callout controls for long-press UI. */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* stylelint-enable property-no-vendor-prefix */
+}
+
 /* ===== Shared Token Utilities ===== */
 .token-text-base {
   color: var(--text-base);

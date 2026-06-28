@@ -59,7 +59,7 @@
         <%= form.label :image, t("admin.announcements.form.labels.image"), class: label_class %>
         <%= form.file_field :image,
               accept: Announcement::ALLOWED_IMAGE_CONTENT_TYPES.join(","),
-              class: "block w-full min-w-0 cursor-pointer rounded-lg border token-border-soft token-bg-input px-4 py-3 text-sm token-text-base file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
+              class: "ui-touch-control block w-full min-w-0 cursor-pointer rounded-lg border token-border-soft token-bg-input px-4 py-3 text-sm token-text-base file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold",
               data: {
                 attachment_preview_target: "input",
                 action: "change->attachment-preview#preview"

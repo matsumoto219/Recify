@@ -98,11 +98,11 @@
       <%= button_to t("admin.security_events.show.actions.resolve"),
             resolve_admin_security_event_path(@record[:id]),
             method: :patch,
-            class: "btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
+            class: "ui-touch-control btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
       <%= button_to t("admin.security_events.show.actions.ignore"),
             ignore_admin_security_event_path(@record[:id]),
             method: :patch,
-            class: "btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
+            class: "ui-touch-control btn-secondary border inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer transition-all" %>
     </div>
   <% end %>
 

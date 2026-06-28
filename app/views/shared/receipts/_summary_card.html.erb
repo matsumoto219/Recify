@@ -62,7 +62,7 @@
 
     <% if action_label.present? %>
       <button type="button"
-        class="cursor-pointer text-[0.6875rem] font-bold token-text-brand summary-card-link-hover transition-colors shrink-0"
+        class="ui-touch-control cursor-pointer text-[0.6875rem] font-bold token-text-brand summary-card-link-hover transition-colors shrink-0"
         <% action_data.each do |key, data_value| %>
           data-<%= key.to_s.dasherize %>="<%= data_value %>"
         <% end %>
