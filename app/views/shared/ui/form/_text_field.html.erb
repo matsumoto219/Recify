@@ -27,6 +27,7 @@
     - error_message_class: エラーメッセージ用追加class
     - size: 入力欄サイズ（例: :dense, :regular, :prominent, :comfortable。default: :md）
     - html_options: inputへ渡す追加HTML属性（例: inputmode, pattern, data, aria）
+    - password_reveal: password入力の表示/非表示切り替えボタンを表示する場合は true（default: false）
 %>
 <%
   f = local_assigns[:f] || local_assigns[:form]
@@ -51,6 +52,11 @@
   error_message_class = local_assigns[:error_message_class]
   size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
+  password_reveal = local_assigns.fetch(:password_reveal, false)
+  truthy_html_attribute = ->(value) { value == true || %w[true disabled readonly].include?(value.to_s) }
+  input_disabled = truthy_html_attribute.call(html_options[:disabled] || html_options["disabled"])
+  input_readonly = truthy_html_attribute.call(html_options[:readonly] || html_options["readonly"] || html_options[:read_only] || html_options["read_only"])
+  password_reveal_enabled = password_reveal && field_type.to_sym == :password_field && !input_disabled && !input_readonly
 
   attribute_errors =
     if show_error_state && f.present? && attribute.present?
@@ -91,15 +97,35 @@
   input_spacing_class =
     case size
     when :comfortable
-      with_icon ? "px-4 py-3 pl-12" : "px-4 py-3"
+      if password_reveal_enabled
+        with_icon ? "py-3 pl-12 pr-12" : "py-3 pl-4 pr-12"
+      else
+        with_icon ? "px-4 py-3 pl-12" : "px-4 py-3"
+      end
     when :prominent
-      with_icon ? "py-3.5 pl-12 pr-4" : "px-4 py-3.5"
+      if password_reveal_enabled
+        with_icon ? "py-3.5 pl-12 pr-12" : "py-3.5 pl-4 pr-12"
+      else
+        with_icon ? "py-3.5 pl-12 pr-4" : "px-4 py-3.5"
+      end
     when :regular
-      with_icon ? "h-11 pl-11 pr-4" : "h-11 px-4"
+      if password_reveal_enabled
+        with_icon ? "h-11 pl-11 pr-12" : "h-11 pl-4 pr-12"
+      else
+        with_icon ? "h-11 pl-11 pr-4" : "h-11 px-4"
+      end
     when :dense
-      with_icon ? "h-10 pl-11 pr-4 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+      if password_reveal_enabled
+        with_icon ? "h-10 pl-11 pr-11 py-2 rounded-md" : "h-10 pl-3 pr-11 py-2 rounded-md"
+      else
+        with_icon ? "h-10 pl-11 pr-4 py-2 rounded-md" : "h-10 px-3 py-2 rounded-md"
+      end
     else
-      with_icon ? "pl-11 pr-4" : "px-4"
+      if password_reveal_enabled
+        with_icon ? "pl-11 pr-12" : "pl-4 pr-12"
+      else
+        with_icon ? "pl-11 pr-4" : "px-4"
+      end
     end
   merged_input_class = [base_input_class, highlight_classes, input_spacing_class, input_class].compact.join(" ")
   field_options = {
@@ -110,6 +136,19 @@
     required: required,
     class: merged_input_class
   }.compact.merge(html_options)
+  if password_reveal_enabled
+    field_options[:data] = (field_options[:data] || {}).merge(password_reveal_target: "input")
+  end
+  password_reveal_data =
+    if password_reveal_enabled
+      {
+        controller: "password-reveal",
+        password_reveal_show_label_value: t("shared.password_reveal.show"),
+        password_reveal_hide_label_value: t("shared.password_reveal.hide")
+      }
+    else
+      {}
+    end
 %>
 
 <div class="space-y-2">
@@ -120,7 +159,7 @@
       <%= tag.label(label, for: input_id || name, class: label_classes) %>
     <% end %>
   <% end %>
-  <div class="<%= wrapper_classes %>">
+  <div class="<%= wrapper_classes %>" <%= tag.attributes(data: password_reveal_data) if password_reveal_enabled %>>
     <% if with_icon %>
       <span class="<%= icon_classes %>" aria-hidden="true"><%= icon %></span>
     <% end %>
@@ -144,6 +183,17 @@
         standalone_options = field_options.merge(type: standalone_type, name: name, id: input_id).compact
       %>
       <%= tag.input(**standalone_options) %>
+    <% end %>
+    <% if password_reveal_enabled %>
+      <button
+        type="button"
+        class="ui-touch-control absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md token-text-muted transition-colors hover:token-text-base focus:outline-none focus:ring-2 token-focus-ring-brand"
+        data-action="password-reveal#toggle"
+        data-password-reveal-target="button"
+        aria-label="<%= t("shared.password_reveal.show") %>"
+        aria-pressed="false">
+        <span class="material-symbols-outlined text-[20px]" data-password-reveal-target="icon" aria-hidden="true">visibility</span>
+      </button>
     <% end %>
   </div>
 

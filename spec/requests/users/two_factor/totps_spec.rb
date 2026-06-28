@@ -40,12 +40,16 @@ RSpec.describe 'User TOTP step-up', type: :request do
 
       document = Nokogiri::HTML(response.body)
       code_input = document.at_css("input[name='code']")
+      password_reveal_wrapper = code_input.ancestors.find do |node|
+        node['data-controller'].to_s.split.include?('password-reveal')
+      end
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.two_factor.totp.title'))
         expect(response.body).to include(I18n.t('auth.two_factor.totp.button'))
         expect(code_input['placeholder']).to eq(I18n.t('auth.two_factor.totp.code_placeholder'))
+        expect(password_reveal_wrapper).to be_nil
         expect(response.body).not_to include(credential.totp_secret)
         expect(response.body).not_to include('recovery_code=')
       end

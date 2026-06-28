@@ -110,6 +110,28 @@ RSpec.describe 'Auth pages', type: :request do
     public_header
   end
 
+  def password_reveal_wrapper_for(input)
+    input&.ancestors&.find do |node|
+      node['data-controller'].to_s.split.include?('password-reveal')
+    end
+  end
+
+  def expect_password_reveal_for(input)
+    wrapper = password_reveal_wrapper_for(input)
+    button = wrapper&.at_css('button[data-action="password-reveal#toggle"]')
+    icon = button&.at_css('[data-password-reveal-target="icon"]')
+
+    aggregate_failures do
+      expect(wrapper).to be_present
+      expect(input['data-password-reveal-target']).to eq('input')
+      expect(button).to be_present
+      expect(button['type']).to eq('button')
+      expect(button['aria-label']).to eq(I18n.t('shared.password_reveal.show'))
+      expect(button['aria-pressed']).to eq('false')
+      expect(icon&.text&.strip).to eq('visibility')
+    end
+  end
+
   def current_legal_document(document_type)
     LegalDocument.current!(document_type, locale: :ja)
   end
@@ -205,6 +227,7 @@ RSpec.describe 'Auth pages', type: :request do
         expect(email_input['autocomplete']).to eq('username webauthn')
         expect(email_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present
+        expect_password_reveal_for(password_input)
         expect(passkey_controller).to be_present
         expect(passkey_button).to be_present
         expect(guest_form).to be_present
@@ -487,6 +510,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(email_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present
         expect(password_confirmation_input.attribute('required')).to be_present
+        expect_password_reveal_for(password_input)
+        expect_password_reveal_for(password_confirmation_input)
         expect(login_link).to be_present
       end
     end
@@ -1143,6 +1168,8 @@ RSpec.describe 'Auth pages', type: :request do
         expect(password_input.attribute('required')).to be_present
         expect(password_confirmation_input).to be_present
         expect(password_confirmation_input.attribute('required')).to be_present
+        expect_password_reveal_for(password_input)
+        expect_password_reveal_for(password_confirmation_input)
         expect(login_link).to be_present
       end
     end

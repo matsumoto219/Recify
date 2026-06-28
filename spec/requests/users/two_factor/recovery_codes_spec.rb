@@ -32,6 +32,9 @@ RSpec.describe 'User recovery codes', type: :request do
       get users_two_factor_recovery_code_path
       document = Nokogiri::HTML(response.body)
       code_input = document.at_css("input[name='code']")
+      password_reveal_wrapper = code_input.ancestors.find do |node|
+        node['data-controller'].to_s.split.include?('password-reveal')
+      end
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -40,6 +43,7 @@ RSpec.describe 'User recovery codes', type: :request do
         expect(response.body).to include('リカバリーコード')
         expect(response.body).not_to include('回復コード')
         expect(code_input['placeholder']).to eq(I18n.t('auth.two_factor.recovery_code.code_placeholder'))
+        expect(password_reveal_wrapper).to be_nil
         codes.each { |code| expect(response.body).not_to include(code) }
       end
     end

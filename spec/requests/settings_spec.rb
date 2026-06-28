@@ -63,6 +63,29 @@ RSpec.describe 'Settings', type: :request do
     form_for_update_context(document, update_context).at_css('input[name="user[current_password]"]')
   end
 
+  def password_reveal_wrapper_for(input)
+    input&.ancestors&.find do |node|
+      node['data-controller'].to_s.split.include?('password-reveal')
+    end
+  end
+
+  def expect_password_reveal_for(input)
+    wrapper = password_reveal_wrapper_for(input)
+    button = wrapper&.at_css('button[data-action="password-reveal#toggle"]')
+
+    aggregate_failures do
+      expect(wrapper).to be_present
+      expect(input['data-password-reveal-target']).to eq('input')
+      expect(button).to be_present
+      expect(button['aria-label']).to eq(I18n.t('shared.password_reveal.show'))
+      expect(button['aria-pressed']).to eq('false')
+    end
+  end
+
+  def expect_no_password_reveal_for(input)
+    expect(password_reveal_wrapper_for(input)).to be_nil
+  end
+
   def current_legal_document(document_type)
     LegalDocument.current!(document_type, locale: :ja)
   end
@@ -580,6 +603,9 @@ RSpec.describe 'Settings', type: :request do
         expect(current_password_input.attribute('required')).to be_present
         expect(password_input.attribute('required')).to be_present
         expect(password_confirmation_input.attribute('required')).to be_present
+        expect_no_password_reveal_for(current_password_input)
+        expect_password_reveal_for(password_input)
+        expect_password_reveal_for(password_confirmation_input)
       end
     end
 
@@ -601,6 +627,8 @@ RSpec.describe 'Settings', type: :request do
       privacy_full_link = privacy_dialog.at_css("a[href='#{privacy_path}']")
       terms_close_button = terms_dialog.at_css("button[data-action='legal-dialog#close']")
       privacy_close_button = privacy_dialog.at_css("button[data-action='legal-dialog#close']")
+      password_input = guest_registration_card.at_css('input[name="user[password]"]')
+      password_confirmation_input = guest_registration_card.at_css('input[name="user[password_confirmation]"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -640,6 +668,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).not_to include(I18n.t('settings.security.auth.passkey.title'))
         expect(response.body).not_to include(guest.email)
         expect(update_context_values).to eq([ 'guest_registration' ])
+        expect_password_reveal_for(password_input)
+        expect_password_reveal_for(password_confirmation_input)
       end
     end
 

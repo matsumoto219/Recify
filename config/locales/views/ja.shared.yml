@@ -31,6 +31,9 @@ ja:
       increment_aria: "%{label}を増やす"
     quantity_unit_number_field:
       unit_aria: "%{label}の単位"
+    password_reveal:
+      show: パスワードを表示
+      hide: パスワードを非表示
     storage_usage:
       title: ストレージ使用量
       amount: "%{used} / %{limit}"

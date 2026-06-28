@@ -55,6 +55,9 @@ RSpec.describe 'User TOTP settings', type: :request do
       qr_path = qr_svg&.at_css('path')
       copy_button = document.at_css('[data-action="click->clipboard#copy"]')
       code_input = document.at_css("input[name='code']")
+      password_reveal_wrapper = code_input.ancestors.find do |node|
+        node['data-controller'].to_s.split.include?('password-reveal')
+      end
 
       aggregate_failures do
         expect(response.body).to include('<svg')
@@ -67,6 +70,7 @@ RSpec.describe 'User TOTP settings', type: :request do
         expect(response.body).to include(secret)
         expect(response.body).not_to include('otpauth://')
         expect(code_input['placeholder']).to eq(I18n.t('settings.security.auth.two_factor.setup.code_placeholder'))
+        expect(password_reveal_wrapper).to be_nil
         expect(response.body).to include(I18n.t('settings.security.auth.clipboard.copy'))
         expect(copy_button['class']).to include('whitespace-nowrap')
         expect(copy_button['class']).to include('shrink-0')
