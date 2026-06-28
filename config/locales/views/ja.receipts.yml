@@ -30,6 +30,7 @@ ja:
         per_page_options:
           count: "%{count}件"
     new:
+      meta_title: レシート手動登録
       title: レシート登録
     edit:
       title: レシート編集
@@ -177,6 +178,7 @@ ja:
     warning_notes_card:
       title: 確認情報
     select_input_method:
+      meta_title: レシート登録方法
       title: 登録方法を選択してください
       subtitle: 新しいレシートをどの方法で登録しますか？
       ai_down: AI補完は一時停止中です。OCR結果をもとに確認・修正できます。

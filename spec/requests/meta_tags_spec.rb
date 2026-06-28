@@ -37,6 +37,14 @@ RSpec.describe "Public meta tags", type: :request do
     document.at_css('link[rel="canonical"]')&.[]("href")
   end
 
+  def page_title
+    document.at_css("title")&.text
+  end
+
+  def formatted_title(title)
+    I18n.t("meta.title_format", title: title, site: I18n.t("meta.site_name"))
+  end
+
   def accept_current_legal_documents_for(user)
     %i[terms privacy].each do |document_type|
       create(
@@ -205,6 +213,63 @@ RSpec.describe "Public meta tags", type: :request do
     include_examples "noindex page"
   end
 
+  describe "noindex一般画面のブラウザタイトル" do
+    it "認証画面を固定titleで識別できる" do
+      auth_pages = {
+        new_user_session_path => "ログイン",
+        new_user_registration_path => "新規登録",
+        new_user_password_path => "パスワード再設定",
+        edit_user_password_path(reset_password_token: "dummy-token") => "パスワード変更",
+        new_user_confirmation_path => "確認メール再送",
+        new_user_unlock_path => "アカウントロック解除"
+      }
+
+      auth_pages.each do |path, expected_title|
+        get path
+
+        aggregate_failures(path) do
+          expect(response).to have_http_status(:ok)
+          expect(page_title).to eq(formatted_title(expected_title))
+          expect(meta_name("robots")).to eq("noindex, nofollow")
+        end
+      end
+    end
+
+    it "ログイン後の主要画面を固定titleで識別できる" do
+      user = create(:user)
+      receipt = create(:receipt, user: user, store_name: "Titleに出さない店舗名", total_amount: 12_345)
+      accept_current_legal_documents_for(user)
+      sign_in user
+
+      app_pages = {
+        settings_path => "設定",
+        settings_account_path => "プロフィール設定",
+        settings_security_path => "セキュリティ設定",
+        new_settings_security_totp_path => "認証アプリ設定",
+        receipts_path => "レシート一覧",
+        select_input_method_receipts_path => "レシート登録方法",
+        new_upload_receipts_path => "レシート画像をアップロード",
+        new_receipt_path => "レシート手動登録",
+        edit_receipt_path(receipt) => "レシート編集",
+        receipt_path(receipt) => "レシート詳細",
+        notifications_path => "通知"
+      }
+
+      app_pages.each do |path, expected_title|
+        get path
+
+        aggregate_failures(path) do
+          expect(response).to have_http_status(:ok)
+          expect(page_title).to eq(formatted_title(expected_title))
+          expect(page_title).not_to include(receipt.store_name)
+          expect(page_title).not_to include(receipt.display_id)
+          expect(page_title).not_to include(user.email)
+          expect(meta_name("robots")).to eq("noindex, nofollow")
+        end
+      end
+    end
+  end
+
   it "ログイン後のアプリ画面にはnoindexを出す" do
     user = create(:user)
     accept_current_legal_documents_for(user)
@@ -262,6 +327,7 @@ RSpec.describe "Public meta tags", type: :request do
 
     aggregate_failures do
       expect(response).to have_http_status(:ok)
+      expect(page_title).to eq("管理トップ")
       expect(meta_name("robots")).to eq("noindex, nofollow")
       expect(meta_property("og:title")).to be_nil
       expect(meta_name("twitter:card")).to be_nil

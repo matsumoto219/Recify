@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("receipts.index.title"), site: t("meta.site_name")) %>
+
 <%= turbo_stream_from [current_user, :receipts] %>
 <%
   searching = @query.present?

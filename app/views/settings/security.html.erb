@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("settings.security.meta_title"), site: t("meta.site_name")) %>
+
 <%
   form_resource = defined?(resource) && resource.present? ? resource : current_user
   form_resource_name = defined?(resource_name) && resource_name.present? ? resource_name : :user

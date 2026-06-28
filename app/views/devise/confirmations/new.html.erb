@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("auth.confirmations.new.title"), site: t("meta.site_name")) %>
+
 <%
   confirmation_email_value =
     if params.dig(:user, :email).present?

@@ -84,6 +84,7 @@ ja:
           本当にアカウントを削除してもよろしいですか？
         hint: 退会するとアカウントに紐づくデータが削除されます。この操作は取り消すことができませんのでご注意ください。
     account:
+      meta_title: プロフィール設定
       title: プロフィール
       subtitle: ユーザー情報を編集できます
       avatar:
@@ -103,6 +104,7 @@ ja:
         save: 変更を保存
         saving: 保存中...
     security:
+      meta_title: セキュリティ設定
       title: セキュリティ
       subtitle: アカウントの安全性を管理します
       email:
@@ -168,6 +170,7 @@ ja:
           disable_confirm_title: 認証アプリを無効化しますか？
           disable_confirm: 認証アプリとリカバリーコードを無効化しますか？
           setup:
+            meta_title: 認証アプリ設定
             title: 認証アプリを設定
             subtitle: 認証アプリでQRコードを読み取り、表示された6桁のコードを入力してください。
             scan_title: QRコードを読み取る
@@ -187,6 +190,7 @@ ja:
             not_enabled: 認証アプリを先に有効化してください。
             disabled: 認証アプリとリカバリーコードを無効化しました。
         recovery_codes:
+          meta_title: リカバリーコード
           title: リカバリーコード
           subtitle: 認証アプリが使えない時のために、コードは安全な場所に保管してください。
           notice_title: この画面でのみ表示されます

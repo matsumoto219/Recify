@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("auth.registrations.edit.title"), site: t("meta.site_name")) %>
+
 <%
   guest_user = resource.respond_to?(:guest?) && resource.guest?
   primary_href = guest_user ? settings_security_path(anchor: "guest-registration") : settings_security_path

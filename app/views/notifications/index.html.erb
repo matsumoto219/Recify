@@ -1,2 +1,4 @@
+<% content_for :title, t("meta.title_format", title: t("notifications.index.title"), site: t("meta.site_name")) %>
+
 <%= render "notifications/header", unread_count: @unread_count %>
 <%= render "notifications/list", notifications: @notifications %>

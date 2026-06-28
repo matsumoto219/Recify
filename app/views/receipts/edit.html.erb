@@ -1,1 +1,3 @@
+<% content_for :title, t("meta.title_format", title: t("receipts.edit.title"), site: t("meta.site_name")) %>
+
 <%= render "form", receipt: @receipt, presenter: @receipt_form_presenter %>

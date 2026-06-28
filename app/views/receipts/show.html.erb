@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("receipts.show.title"), site: t("meta.site_name")) %>
+
 <section class="w-full min-w-0 max-w-7xl mx-auto px-0 md:px-2 py-2">
   <%
     tax_rate_summary = receipt_tax_rate_summary(@receipt)

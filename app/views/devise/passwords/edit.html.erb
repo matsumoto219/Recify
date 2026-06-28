@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("auth.passwords.edit.title"), site: t("meta.site_name")) %>
+
 <div class="<%= auth_page_shell_class %>">
   <%= render "shared/ui/layout/ambient_background" unless user_signed_in? %>
 

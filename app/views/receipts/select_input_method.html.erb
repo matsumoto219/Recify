@@ -1,3 +1,5 @@
+<% content_for :title, t("meta.title_format", title: t("receipts.select_input_method.meta_title"), site: t("meta.site_name")) %>
+
 <%
   ocr_state = (@ocr_state || {}).with_indifferent_access[:state].to_s
   ai_state = (@ai_state || {}).with_indifferent_access[:state].to_s

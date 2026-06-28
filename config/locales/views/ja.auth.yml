@@ -43,6 +43,7 @@ ja:
         totp: 認証アプリのコードを使う
         recovery_code: リカバリーコードを使う
       passkey:
+        meta_title: パスキー追加認証
         title: 追加認証
         subtitle: パスキーでログインを完了してください
         card_title: パスキー追加認証
@@ -56,6 +57,7 @@ ja:
           failure_with_fallback: パスキー認証に失敗しました。下の別の方法も利用できます。
           request_failed: リクエストに失敗しました。
       totp:
+        meta_title: 認証アプリ追加認証
         title: 追加認証
         subtitle: 認証アプリのコードでログインを完了してください
         card_title: 認証アプリで追加認証
@@ -69,6 +71,7 @@ ja:
           success: ログインしました。
           failure: コードが一致しませんでした。もう一度入力してください。
       recovery_code:
+        meta_title: リカバリーコード追加認証
         title: 追加認証
         subtitle: 保存したリカバリーコードでログインを完了してください
         card_title: リカバリーコード追加認証
@@ -158,6 +161,7 @@ ja:
         back_to_guest_registration: 本登録設定へ戻る
     unlocks:
       new:
+        meta_title: アカウントロック解除
         title: ロック解除メール再送
         subtitle: 登録したメールアドレスへロック解除メールを再送します
         form_title: ロック解除メール再送フォーム
