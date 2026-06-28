@@ -1630,21 +1630,37 @@ body {
   color: var(--text-subtle);
 }
 
-.search-icon-button:hover {
-  color: var(--text-base);
-}
-
 .search-close-button {
   color: var(--text-muted);
 }
 
-.search-close-button:hover {
+.search-icon-button:focus-visible {
+  color: var(--text-base);
+}
+
+.search-close-button:focus-visible,
+.search-close-button:active {
   background: color-mix(
     in srgb,
     var(--text-base) 10%,
     transparent
   );
   color: var(--text-base);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .search-icon-button:hover {
+    color: var(--text-base);
+  }
+
+  .search-close-button:hover {
+    background: color-mix(
+      in srgb,
+      var(--text-base) 10%,
+      transparent
+    );
+    color: var(--text-base);
+  }
 }
 
 /* ===== Receipt Image Utilities ===== */
@@ -2284,9 +2300,15 @@ body {
   color: var(--text-base);
 }
 
-.field-stepper-button:hover,
-.field-stepper-button:focus {
+.field-stepper-button:focus-visible,
+.field-stepper-button:not(:disabled):active {
   background: var(--bg-elevated);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .field-stepper-button:not(:disabled):hover {
+    background: var(--bg-elevated);
+  }
 }
 
 /* ===== Toggle Switch Utilities ===== */
