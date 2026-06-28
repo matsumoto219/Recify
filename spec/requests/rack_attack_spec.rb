@@ -296,9 +296,39 @@ RSpec.describe 'Rack::Attack', type: :request do
   it 'treats Rails and secret file probes as scanner requests' do
     paths = [
       '/.git/config',
+      '/.env.local',
+      '/.env.production',
       '/config/master.key',
       '/backup.sql',
+      '/dump-20260628.sql',
+      '/backup-20260628.tar.gz',
       '/assets/application.css.bak'
+    ]
+
+    aggregate_failures do
+      paths.each do |path|
+        expect(Rack::Attack.scanner_request?(scanner_request_for(path))).to be(true), "#{path} should be a scanner path"
+      end
+    end
+  end
+
+  it 'treats PHP, WordPress, package, and framework config probes as scanner requests' do
+    paths = [
+      '/ccc.php',
+      '/miru.php',
+      '/adminer.php',
+      '/wp-content/plugins/example/readme.txt',
+      '/wp-includes/js/wp-emoji-release.min.js',
+      '/composer.json',
+      '/composer.lock',
+      '/package.json',
+      '/yarn.lock',
+      '/pnpm-lock.yaml',
+      '/vite.config.js',
+      '/next.config.mjs',
+      '/nuxt.config.ts',
+      '/firebase.json',
+      '/amplify.yml'
     ]
 
     aggregate_failures do
@@ -344,8 +374,20 @@ RSpec.describe 'Rack::Attack', type: :request do
 
   it 'does not treat normal application paths as scanner requests' do
     paths = [
+      '/admin',
+      '/admin/security_events',
+      '/.well-known/security.txt',
+      '/cable',
+      '/robots.txt',
+      '/sitemap.xml',
+      '/up',
+      '/terms',
+      '/privacy',
+      '/users/sign_in',
+      '/contact',
       '/receipts',
-      '/users/sign_in'
+      '/settings',
+      '/notifications'
     ]
 
     aggregate_failures do

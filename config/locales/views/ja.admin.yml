@@ -929,7 +929,7 @@ ja:
           target_uid: target_uid
           request_id: request_id
           ip_address: ip_address
-          user_agent: user_agent
+          user_agent: User-Agent文字列
           reason: reason
     security_events:
       states:
@@ -999,7 +999,7 @@ ja:
           actor_user_id: ユーザーID
           ip_address: IP
           request_id: リクエストID
-          user_agent: ユーザーエージェント
+          user_agent: User-Agent文字列
           method: メソッド
           path: パス
           field_name: フィールド
@@ -1430,7 +1430,7 @@ ja:
           last_seen: last seen
           method: method
           ip: IP
-          user_agent: user agent
+          user_agent: User-Agent文字列
           version: version
           empty: 有効なログインセッションはありません。
         operations:
@@ -1642,7 +1642,7 @@ ja:
           body: 本文
           request_id: リクエストID
           ip_address: IPアドレス
-          user_agent: ユーザーエージェント
+          user_agent: User-Agent文字列
           created_at: 受付日時
           handled_by: 更新者
           handled_at: 更新日時

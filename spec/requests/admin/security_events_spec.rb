@@ -134,6 +134,7 @@ RSpec.describe 'Admin security events', type: :request do
         event_type: 'xss_attempt',
         matched_rule: 'script_tag',
         payload_excerpt: '<script>alert(1)</script>',
+        user_agent: 'https://scanner.example.test/<script>alert(1)</script>',
         request_id: 'req-security-event-xss',
         metadata: { 'field' => 'q', 'sample' => '<img src=x onerror=alert(1)>' }
       )
@@ -146,10 +147,14 @@ RSpec.describe 'Admin security events', type: :request do
         expect(response.body).to include('セキュリティイベント詳細')
         expect(response.body).to include('安全な抜粋')
         expect(response.body).to include('検知ルール')
+        expect(response.body).to include('User-Agent文字列')
+        expect(response.body).to include('https://scanner.example.test/&lt;script&gt;alert(1)&lt;/script&gt;')
         expect(response.body).to include('&lt;script&gt;alert(1)&lt;/script&gt;')
         expect(response.body).not_to include('<script>alert(1)</script>')
+        expect(response.body).not_to include('<a href="https://scanner.example.test/')
         expect(response.body).to include('&lt;img src=x onerror=alert(1)&gt;')
         expect(response.body).not_to include('<img src=x onerror=alert(1)>')
+        expect(response.body).to include('[overflow-wrap:anywhere]')
         expect(response.body).to include('script_tag')
         expect(response.body).to include('data-controller="clipboard"')
         expect(response.body).to include('req-security-event-xss')

@@ -29,12 +29,16 @@ class Rack::Attack
   ADMIN_SERVICE_STATUS_PATH = %r{\A/admin/external_services/status(?:\z|[/?#])}.freeze
   ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
   SCANNER_PATH = %r{
-    (?:\A|/)(?:\.env|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
-    |(?:\A|/)(?:wp-admin|phpmyadmin|pma|vendor/phpunit|cgi-bin)(?:\z|[/?#])
+    (?:\A|/)(?:\.env|\.env\.[^/?#]+|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
+    |\A/[^/?#\/]+\.php(?:\z|[?#])
+    |(?:\A|/)(?:wp-admin|wp-content|wp-includes|phpmyadmin|pma|vendor/phpunit|cgi-bin)(?:\z|[/?#])
     |(?:\A|/)(?:config/(?:master\.key|credentials\.yml\.enc|database\.yml)|db/(?:production|development)\.sqlite3|backup\.sql|dump\.sql)(?:\z|[/?#])
+    |(?:\A|/)(?:composer\.(?:json|lock)|package\.json|yarn\.lock|pnpm-lock\.yaml|firebase\.json|amplify\.yml)(?:\z|[/?#])
+    |(?:\A|/)(?:vite|next|nuxt)\.config\.[^/?#]+(?:\z|[/?#])
+    |\A/(?:backup|dump)[^/?#]*(?:\z|[?#])
     |(?:\A|/)rails/(?:info/(?:routes|properties)|mailers|conductor)(?:\z|[/?#])
     |(?:\A|/)(?:sidekiq|admin/sidekiq|solid_queue|admin/solid_queue)(?:\z|[/?#])
-    |\.(?:bak|old|backup|orig|save|swp)(?:\z|[/?#])
+    |\.(?:sql|bak|old|backup|orig|save|swp)(?:\z|[/?#])
     |\.\.(?:/|\\|%2f|%5c)
     |%(?:25)?2e%(?:25)?2e(?:/|\\|%(?:25)?2f|%(?:25)?5c)
     |\.\.%(?:25)?2f
