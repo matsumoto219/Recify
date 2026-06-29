@@ -107,7 +107,7 @@ class User < ApplicationRecord
   end
 
   def complete_guest_registration!
-    update!(guest: false)
+    update!(guest: false, session_version: session_version.to_i + 1)
   end
 
   def display_name

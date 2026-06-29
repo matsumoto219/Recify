@@ -1313,6 +1313,7 @@ RSpec.describe 'Settings', type: :request do
     it 'guest本登録はconfirmation完了で本登録ユーザーにする' do
       sign_out user
       guest = User.guest!
+      session_version_before_confirmation = guest.session_version
       sign_in guest
       ActionMailer::Base.deliveries.clear
 
@@ -1335,6 +1336,14 @@ RSpec.describe 'Settings', type: :request do
         expect(guest.reload).not_to be_guest
         expect(guest.email).to eq('guest-confirmed@example.com')
         expect(guest.unconfirmed_email).to be_nil
+        expect(guest.session_version).to eq(session_version_before_confirmation + 1)
+      end
+
+      get settings_security_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:user_session_version]).to be_blank
       end
     end
 

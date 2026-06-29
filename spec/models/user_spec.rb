@@ -306,6 +306,7 @@ RSpec.describe User, type: :model do
       expect do
         guest.confirm
       end.to change { guest.reload.guest? }.from(true).to(false)
+        .and change { guest.reload.session_version }.by(1)
 
       aggregate_failures do
         expect(guest.email).to eq('complete-guest@example.com')
@@ -319,7 +320,7 @@ RSpec.describe User, type: :model do
 
       expect do
         user.confirm
-      end.not_to change { user.reload.guest? }
+      end.not_to change { [ user.reload.guest?, user.session_version ] }
 
       aggregate_failures do
         expect(user.email).to eq('normal-reconfirm@example.com')
