@@ -48,6 +48,8 @@ RSpec.describe 'GuestSessions', type: :request do
 
     it 'locale経由の失敗flashでログイン画面へ戻す' do
       allow(User).to receive(:guest!).and_raise(StandardError, 'guest unavailable')
+      expect(Rails.logger).to receive(:warn)
+        .with("[GuestSessionsController] guest_session_create_failed error_class=StandardError")
 
       post guest_sign_in_path
 
