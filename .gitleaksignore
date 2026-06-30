@@ -1,0 +1,16 @@
+# Known false positives in historical commits.
+# Values are test-only request IDs, test timestamps/TOTP secrets, or an unused
+# commented Devise example key. Current tree scans pass without these entries.
+ca26fa5c71cf5fbb4a7d24174ef6a9034d0e2311:spec/services/ocr/client_spec.rb:generic-api-key:739
+e0b45038b4b08204a06eb4413b78328590ffe5bb:spec/services/ocr/client_spec.rb:generic-api-key:739
+f33048481872ad5e823bbc3d0a634eb544b3171d:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:24
+f33048481872ad5e823bbc3d0a634eb544b3171d:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:30
+f33048481872ad5e823bbc3d0a634eb544b3171d:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:37
+f33048481872ad5e823bbc3d0a634eb544b3171d:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:44
+fa01033095c338987cd8a097447adccc6060b3f2:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:24
+fa01033095c338987cd8a097447adccc6060b3f2:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:30
+fa01033095c338987cd8a097447adccc6060b3f2:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:37
+fa01033095c338987cd8a097447adccc6060b3f2:spec/services/admin/passkey_reauth_window_spec.rb:generic-api-key:44
+b30b426888b27b5ff5617a9cacaf758e353eb736:spec/requests/users/two_factor/totps_spec.rb:generic-api-key:156
+fa42840be771c83a92c153da9947361981daab52:spec/requests/users/two_factor/totps_spec.rb:generic-api-key:156
+1ede91962c7f9ccf2485123e6af2df7798773af0:config/initializers/devise.rb:generic-api-key:17
