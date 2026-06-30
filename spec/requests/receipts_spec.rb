@@ -409,7 +409,7 @@ RSpec.describe 'Receipts', type: :request do
       mobile_new_receipt_link = document.at_css("#mobile-bottom-nav a[href='#{select_input_method_receipts_path}']")
       mobile_nav_labels = document.css('#mobile-bottom-nav .mobile-bottom-nav-label')
       search_prefixes = header.css('#desktop-search-help [data-search-prefix-param]').map { |node| node['data-search-prefix-param'] }
-      tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
+      tailwind_css = expanded_tailwind_source
       sidebar_full_slot = document.at_css('#desktop-sidebar [data-brand-logo-slot="sidebar-full"]')
       sidebar_narrow_slot = document.at_css('#desktop-sidebar [data-brand-logo-slot="sidebar-narrow"]')
       header_logo_slot = document.at_css('#dashboard-header [data-brand-logo-slot="mobile-header"]')
@@ -1355,7 +1355,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'mobile detailのfocus ringとdesktop hover重なり対策CSSを持つ' do
-      css = Rails.root.join('app/assets/tailwind/application.css').read
+      css = expanded_tailwind_source
 
       aggregate_failures do
         expect(css).to include('.receipt-form-item-details-open .collapsible-grid-inner')

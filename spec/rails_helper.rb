@@ -34,6 +34,25 @@ begin
 rescue ActiveRecord::PendingMigrationError => e
   abort e.to_s.strip
 end
+
+module StylesheetSourceHelpers
+  def expanded_tailwind_source
+    root = Rails.root.join('app/assets/tailwind')
+    seen = {}
+    read_stylesheet = lambda do |path|
+      expanded_path = Pathname(path).expand_path
+      return "" if seen[expanded_path.to_s]
+
+      seen[expanded_path.to_s] = true
+      expanded_path.read.gsub(%r{^@import "\./([^"]+)";}) do
+        read_stylesheet.call(root.join(Regexp.last_match(1)))
+      end
+    end
+
+    read_stylesheet.call(root.join('application.css'))
+  end
+end
+
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
@@ -47,6 +66,7 @@ RSpec.configure do |config|
 
   config.include FactoryBot::Syntax::Methods
   config.include Devise::Test::IntegrationHelpers, type: :request
+  config.include StylesheetSourceHelpers
 
   module LegalConsentRequestHelpers
     def sign_in(resource, scope: nil)

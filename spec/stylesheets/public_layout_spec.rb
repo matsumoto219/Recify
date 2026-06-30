@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe 'Public layout stylesheet' do
-  let(:source) { Rails.root.join('app/assets/tailwind/application.css').read }
+  let(:source) { expanded_tailwind_source }
 
   it '認証ページ本体を実ビューポート基準の高さに保つ' do
     aggregate_failures do

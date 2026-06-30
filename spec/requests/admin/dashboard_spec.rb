@@ -275,7 +275,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       announcements_admin_navigation_link = admin_navigation_links.find { |link| link['href'] == admin_announcements_path }
       ip_blocks_admin_navigation_link = admin_navigation_links.find { |link| link['href'] == admin_ip_blocks_path }
       back_admin_navigation_link = admin_navigation.at_css('a.admin-navigation-back')
-      tailwind_css = Rails.root.join('app/assets/tailwind/application.css').read
+      tailwind_css = expanded_tailwind_source
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
