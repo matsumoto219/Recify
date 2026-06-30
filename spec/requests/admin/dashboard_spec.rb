@@ -227,14 +227,14 @@ RSpec.describe 'Admin dashboard', type: :request do
           message: 'https://status.example.test/providers/ocr/service-status?incident=very-long-provider-message'
         },
         ai: {
-          state: 'ok',
-          text: I18n.t('shared.service_status.ok'),
+          state: 'down',
+          text: I18n.t('shared.service_status.down'),
           monitoring: false,
           checked_at: '2026-05-26T12:00:00+09:00',
           next_check_at: nil
         },
         upload: { allowed: false, ocr_available: false },
-        notices: { ocr_down: true, ai_down: false }
+        notices: { ocr_down: true, ai_down: true }
       )
       allow(Storage).to receive(:system_usage_snapshot).and_return(
         total_blob_count: 3,
@@ -602,6 +602,7 @@ RSpec.describe 'Admin dashboard', type: :request do
         expect(html).to include('azure-request-id')
         expect(html).to include('invalid key')
         expect(html).to include('OCR停止中のため停止')
+        expect(html).not_to include(I18n.t('admin.dashboard.external_services.ocr_only_fallback'))
         expect(html).to include('data-action="service-status-polling#pollNow"')
         expect(document.at_css('section.surface-card-blur.h-full.flex.flex-col')).to be_present
       end

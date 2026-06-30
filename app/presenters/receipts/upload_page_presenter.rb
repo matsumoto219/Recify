@@ -22,6 +22,14 @@ module Receipts
       ai_state == "degraded"
     end
 
+    def ai_down_notice?
+      ocr_available? && ai_down?
+    end
+
+    def ai_degraded_notice?
+      ocr_available? && ai_degraded?
+    end
+
     def ocr_available?
       !ocr_down?
     end

@@ -88,7 +88,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       expect(admin_snapshot.dig(:ai, :source)).to eq('system_setting')
       expect(snapshot.dig(:upload, :allowed)).to eq(false)
       expect(snapshot.dig(:notices, :ocr_down)).to eq(true)
-      expect(snapshot.dig(:notices, :ai_down)).to eq(true)
+      expect(snapshot.dig(:notices, :ai_down)).to eq(false)
     end
   end
 

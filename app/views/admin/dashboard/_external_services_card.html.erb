@@ -129,7 +129,7 @@
           <%= upload_allowed ? t("admin.dashboard.external_services.upload_allowed") : t("admin.dashboard.external_services.upload_blocked") %>
         </span>
       </div>
-      <% if snapshot.dig(:notices, :ai_down) == true %>
+      <% if upload_allowed && snapshot.dig(:notices, :ai_down) == true %>
         <p class="mt-2 text-xs leading-relaxed token-text-muted"><%= t("admin.dashboard.external_services.ocr_only_fallback") %></p>
       <% end %>
     </div>

@@ -1468,6 +1468,22 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'SystemSettingsでOCRとAIが停止中でもOCR結果前提のAI停止noticeは表示しない' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+
+      get select_input_method_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(document.at_css('[data-service-notice-key="ai_down"]')['class']).to include('hidden')
+        expect(document.at_css('[data-service-disabled="ocr"]')).to be_present
+      end
+    end
+
     it 'SystemSettingsでAI停止中は画像アップロード導線を維持して注意を表示する' do
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
 
@@ -1594,6 +1610,38 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.css('button[disabled]').map(&:text).join).to include('ファイルを選択')
         expect(document.css('button[disabled]').map(&:text).join).to include('アップロードして登録')
         expect(document.at_css('a[href="' + new_receipt_path + '"]')).to be_present
+      end
+    end
+
+    it 'OCR down / AI down時はアップロード画面でOCR結果前提のAI停止noticeを表示しない' do
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(document.at_css('[data-service-notice-key="ai_down"]')['class']).to include('hidden')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="false"]')).to be_present
+      end
+    end
+
+    it 'OCR down / AI degraded時もアップロード画面でAI degraded noticeを表示しない' do
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'down' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'degraded' })
+
+      get new_upload_receipts_path
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(document.at_css('[data-service-notice-key="ai_degraded"]')['class']).to include('hidden')
+        expect(document.at_css('[data-receipt-upload-ocr-available-value="false"]')).to be_present
       end
     end
 

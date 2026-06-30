@@ -5,6 +5,7 @@
   ai_state = (@ai_state || {}).with_indifferent_access[:state].to_s
   ocr_down = ocr_state == "down"
   ai_down = ai_state == "down"
+  ai_down_notice = !ocr_down && ai_down
 %>
 
 <section
@@ -30,7 +31,7 @@
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_down %>"
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless ai_down_notice %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ai_down">
       <%= t("receipts.select_input_method.ai_down") %>

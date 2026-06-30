@@ -97,9 +97,10 @@ RSpec.describe 'External services status', type: :request do
         expect(json.dig('ai', 'source')).to be_nil
         expect(json.dig('ai', 'reason')).to be_nil
         expect(json.dig('ai', 'setting_key')).to be_nil
+        expect(json.dig('ai', 'message')).to be_nil
         expect(json.dig('upload', 'allowed')).to eq(false)
         expect(json.dig('notices', 'ocr_down')).to eq(true)
-        expect(json.dig('notices', 'ai_down')).to eq(true)
+        expect(json.dig('notices', 'ai_down')).to eq(false)
       end
     end
 

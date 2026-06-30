@@ -18,19 +18,20 @@ module ExternalServices
       states = snapshots.transform_values { |snapshot| service_state(snapshot) }
       ocr_state = states.fetch(:ocr)
       ai_state = states.fetch(:ai)
+      ocr_available = ocr_state != "down"
 
       {
-        ocr: service_payload(:ocr, snapshots.fetch(:ocr), ocr_state),
-        ai: service_payload(:ai, snapshots.fetch(:ai), ai_state),
+        ocr: service_payload(:ocr, snapshots.fetch(:ocr), ocr_state, ocr_available: ocr_available),
+        ai: service_payload(:ai, snapshots.fetch(:ai), ai_state, ocr_available: ocr_available),
         upload: {
-          allowed: ocr_state != "down",
-          ocr_available: ocr_state != "down"
+          allowed: ocr_available,
+          ocr_available: ocr_available
         },
         notices: {
           ocr_down: ocr_state == "down",
           ocr_degraded: ocr_state == "degraded",
-          ai_down: ai_state == "down",
-          ai_degraded: ai_state == "degraded"
+          ai_down: ocr_available && ai_state == "down",
+          ai_degraded: ocr_available && ai_state == "degraded"
         }
       }
     end
@@ -43,7 +44,7 @@ module ExternalServices
       @include_details
     end
 
-    def service_payload(service, snapshot, state)
+    def service_payload(service, snapshot, state, ocr_available: true)
       normalized = snapshot.with_indifferent_access
       detail = normalized_hash(normalized[:last_error_detail])
 
@@ -57,7 +58,7 @@ module ExternalServices
         consecutive_successes: normalized[:consecutive_successes],
         disabled: normalized[:disabled] == true,
         text: service_status_text(state),
-        message: service_status_message(service, state),
+        message: service_status_message(service, state, ocr_available: ocr_available),
         badge_html: service_status_badge_html(service, state)
       }
 
@@ -102,15 +103,19 @@ module ExternalServices
       translate("shared.service_status.#{state}", default: translate("shared.service_status.unknown"))
     end
 
-    def service_status_message(service, state)
+    def service_status_message(service, state, ocr_available: true)
       case [ service, state ]
       when [ :ocr, "down" ]
         translate("flash.receipts.ocr_unavailable")
       when [ :ocr, "degraded" ]
         translate("receipts.new_upload.ocr_degraded")
       when [ :ai, "down" ]
+        return unless ocr_available
+
         translate("receipts.new_upload.ai_down")
       when [ :ai, "degraded" ]
+        return unless ocr_available
+
         translate("receipts.new_upload.ai_degraded")
       end
     end

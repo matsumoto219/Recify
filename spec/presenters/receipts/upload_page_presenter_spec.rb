@@ -14,7 +14,37 @@ RSpec.describe Receipts::UploadPagePresenter do
         expect(presenter).to be_ocr_degraded
         expect(presenter).to be_ocr_available
         expect(presenter).to be_ai_down
+        expect(presenter).to be_ai_down_notice
         expect(presenter).not_to be_ai_degraded
+        expect(presenter).not_to be_ai_degraded_notice
+      end
+    end
+
+    it 'OCR停止中はAIのOCR結果前提noticeを表示対象にしない' do
+      presenter = described_class.new(
+        user: double('user', storage_usage: double('storage_usage', used_bytes: 0, limit_bytes: 100)),
+        ocr_state: { state: 'down' },
+        ai_state: { state: 'down' }
+      )
+
+      aggregate_failures do
+        expect(presenter).to be_ocr_down
+        expect(presenter).to be_ai_down
+        expect(presenter).not_to be_ai_down_notice
+      end
+    end
+
+    it 'OCR停止中はAI degraded noticeも表示対象にしない' do
+      presenter = described_class.new(
+        user: double('user', storage_usage: double('storage_usage', used_bytes: 0, limit_bytes: 100)),
+        ocr_state: { state: 'down' },
+        ai_state: { state: 'degraded' }
+      )
+
+      aggregate_failures do
+        expect(presenter).to be_ocr_down
+        expect(presenter).to be_ai_degraded
+        expect(presenter).not_to be_ai_degraded_notice
       end
     end
   end

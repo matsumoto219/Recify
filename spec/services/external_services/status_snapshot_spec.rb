@@ -126,6 +126,22 @@ RSpec.describe ExternalServices::StatusSnapshot do
       end
     end
 
+    it 'OCR down / AI down時はOCR停止noticeだけを返す' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
+
+      payload = described_class.call
+
+      aggregate_failures do
+        expect(payload.dig(:ocr, :state)).to eq('down')
+        expect(payload.dig(:ai, :state)).to eq('down')
+        expect(payload.dig(:upload, :allowed)).to eq(false)
+        expect(payload.dig(:notices, :ocr_down)).to eq(true)
+        expect(payload.dig(:notices, :ai_down)).to eq(false)
+        expect(payload.dig(:ai, :message)).to be_nil
+      end
+    end
+
     it 'include_details指定時はadmin向けのsafeなprovider詳細を返す' do
       travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
         3.times do
@@ -200,6 +216,24 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:upload, :allowed)).to eq(true)
         expect(payload.dig(:upload, :ocr_available)).to eq(true)
         expect(payload.dig(:notices, :ai_down)).to eq(true)
+      end
+    end
+
+    it 'OCR down / AI degraded時もAI側のOCR前提noticeは返さない' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
+      travel_to(Time.zone.parse('2026-05-23 10:00:00')) do
+        2.times { ExternalServices::StatusStore.mark_failure!(:ai, error_code: 'external_service_unavailable') }
+      end
+
+      payload = described_class.call
+
+      aggregate_failures do
+        expect(payload.dig(:ocr, :state)).to eq('down')
+        expect(payload.dig(:ai, :state)).to eq('degraded')
+        expect(payload.dig(:upload, :allowed)).to eq(false)
+        expect(payload.dig(:notices, :ocr_down)).to eq(true)
+        expect(payload.dig(:notices, :ai_degraded)).to eq(false)
+        expect(payload.dig(:ai, :message)).to be_nil
       end
     end
   end

@@ -33,14 +33,14 @@
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_down? %>"
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_down_notice? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ai_down">
       <%= t("receipts.new_upload.ai_down") %>
     </div>
 
     <div
-      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_degraded? %>"
+      class="rounded-xl border token-border-soft token-bg-info-soft px-4 py-3 text-sm token-text-base <%= "hidden" unless upload_page.ai_degraded_notice? %>"
       data-service-status-polling-target="serviceNotice"
       data-service-notice-key="ai_degraded">
       <%= t("receipts.new_upload.ai_degraded") %>
