@@ -33,6 +33,30 @@
   @apply backdrop-blur-sm;
 }
 
+.legal-dialog-shell,
+.legal-dialog-overlay,
+.legal-dialog-viewport {
+  min-height: 100vh;
+}
+
+.legal-dialog-shell,
+.legal-dialog-overlay {
+  height: 100vh;
+}
+
+@supports (height: 100lvh) {
+  .legal-dialog-shell,
+  .legal-dialog-overlay,
+  .legal-dialog-viewport {
+    min-height: 100lvh;
+  }
+
+  .legal-dialog-shell,
+  .legal-dialog-overlay {
+    height: 100lvh;
+  }
+}
+
 .confirm-dialog-shell {
   --confirm-dialog-overlay-bg: color-mix(in srgb, var(--bg-overlay) 64%, transparent);
   --confirm-dialog-panel-bg: color-mix(in srgb, var(--neutral-glass-bg) 68%, transparent);

@@ -462,6 +462,8 @@ RSpec.describe 'Auth pages', type: :request do
       legal_dialog_root = document.at_css('[data-controller~="legal-dialog"]')
       terms_dialog = document.at_css('dialog#registration-terms-dialog')
       privacy_dialog = document.at_css('dialog#registration-privacy-dialog')
+      terms_dialog_overlay = terms_dialog.at_css('.legal-dialog-overlay')
+      terms_dialog_viewport = terms_dialog.at_css('.legal-dialog-viewport')
       terms_full_link = terms_dialog.at_css("a[href='#{terms_path}']")
       privacy_full_link = privacy_dialog.at_css("a[href='#{privacy_path}']")
       terms_close_button = terms_dialog.at_css("button[data-action='legal-dialog#close']")
@@ -491,6 +493,9 @@ RSpec.describe 'Auth pages', type: :request do
         expect(privacy_link['data-action']).to include('legal-dialog#open')
         expect(privacy_link['data-legal-dialog-dialog-param']).to eq('privacy')
         expect(legal_dialog_root).to be_present
+        expect(terms_dialog['class'].split).to include('legal-dialog-shell')
+        expect(terms_dialog_overlay['class'].split).to include('legal-dialog-overlay')
+        expect(terms_dialog_viewport['class'].split).to include('legal-dialog-viewport')
         expect(terms_dialog['data-legal-dialog-target']).to eq('dialog')
         expect(terms_dialog['aria-modal']).to eq('true')
         expect(terms_dialog['aria-labelledby']).to eq('registration-terms-dialog-title')

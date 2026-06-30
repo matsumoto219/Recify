@@ -18,4 +18,15 @@ RSpec.describe 'Public layout stylesheet' do
       expect(source).to include('.public-footer-shell')
     end
   end
+
+  it '法務モーダルの背景をiOS Safariの大きいビューポートまで広げる' do
+    aggregate_failures do
+      expect(source).to include('.legal-dialog-shell,')
+      expect(source).to include('.legal-dialog-overlay,')
+      expect(source).to include('.legal-dialog-viewport')
+      expect(source).to include('@supports (height: 100lvh)')
+      expect(source).to include('min-height: 100lvh;')
+      expect(source).to include('height: 100lvh;')
+    end
+  end
 end
