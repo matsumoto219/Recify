@@ -127,9 +127,14 @@ RSpec.describe 'Auth pages', type: :request do
       expect(input['data-password-reveal-target']).to eq('input')
       expect(button).to be_present
       expect(button['type']).to eq('button')
+      expect(button['class']).to include('password-reveal-button')
       expect(button['aria-label']).to eq(I18n.t('shared.password_reveal.show'))
       expect(button['aria-pressed']).to eq('false')
-      expect(icon&.text&.strip).to eq('visibility')
+      expect(icon&.name).to eq('svg')
+      expect(icon['data-animated']).to eq('true')
+      expect(icon['data-revealed']).to eq('false')
+      expect(icon.at_css('.password-visibility-icon-slash')).to be_present
+      expect(button.at_css('.material-symbols-outlined')).to be_nil
     end
   end
 

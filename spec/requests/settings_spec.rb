@@ -77,8 +77,11 @@ RSpec.describe 'Settings', type: :request do
       expect(wrapper).to be_present
       expect(input['data-password-reveal-target']).to eq('input')
       expect(button).to be_present
+      expect(button['class']).to include('password-reveal-button')
       expect(button['aria-label']).to eq(I18n.t('shared.password_reveal.show'))
       expect(button['aria-pressed']).to eq('false')
+      expect(button.at_css('svg.password-visibility-icon[data-animated="true"]')).to be_present
+      expect(button.at_css('.material-symbols-outlined')).to be_nil
     end
   end
 

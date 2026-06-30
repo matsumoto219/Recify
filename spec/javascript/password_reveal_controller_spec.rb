@@ -12,8 +12,13 @@ RSpec.describe "Password reveal Stimulus controller" do
       expect(source).to include("aria-label")
       expect(source).to include("visibility_off")
       expect(source).to include("visibility")
+      expect(source).to include("dataset.animated === 'true'")
+      expect(source).to include("dataset.revealed = String(revealed)")
+      expect(source).to include("if (!this.hasInputTarget) return")
       expect(source).not_to include("dataset.password")
       expect(source).not_to include("console.")
+      expect(source).not_to include("innerHTML")
+      expect(source).not_to include("insertAdjacentHTML")
     end
   end
 

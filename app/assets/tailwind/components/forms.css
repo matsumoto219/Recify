@@ -149,3 +149,61 @@
     background: var(--bg-elevated);
   }
 }
+
+/* ===== Password Reveal Utilities ===== */
+.password-reveal-button {
+  color: var(--text-muted);
+  transition: color 140ms ease;
+}
+
+.password-reveal-button:focus-visible {
+  color: var(--text-base);
+}
+
+.password-reveal-button:active {
+  color: var(--brand-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .password-reveal-button:hover {
+    color: var(--brand-primary);
+  }
+}
+
+.password-visibility-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  overflow: visible;
+  color: currentcolor;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.password-visibility-icon-eye,
+.password-visibility-icon-pupil {
+  vector-effect: non-scaling-stroke;
+}
+
+.password-visibility-icon-slash {
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition:
+    stroke-dashoffset 240ms ease-out,
+    opacity 180ms ease-out;
+}
+
+.password-visibility-icon[data-revealed="true"] .password-visibility-icon-slash {
+  stroke-dashoffset: 22;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .password-visibility-icon-slash {
+    transition: none;
+  }
+}

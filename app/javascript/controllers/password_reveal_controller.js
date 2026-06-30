@@ -19,6 +19,8 @@ export default class extends Controller {
   }
 
   toggle () {
+    if (!this.hasInputTarget) return
+
     this.setRevealed(this.inputTarget.type !== 'text')
   }
 
@@ -39,7 +41,11 @@ export default class extends Controller {
     }
 
     if (this.hasIconTarget) {
-      this.iconTarget.textContent = revealed ? 'visibility_off' : 'visibility'
+      if (this.iconTarget.dataset.animated === 'true') {
+        this.iconTarget.dataset.revealed = String(revealed)
+      } else {
+        this.iconTarget.textContent = revealed ? 'visibility_off' : 'visibility'
+      }
     }
   }
 }

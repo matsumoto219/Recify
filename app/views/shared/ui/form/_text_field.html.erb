@@ -28,6 +28,7 @@
     - size: 入力欄サイズ（例: :dense, :regular, :prominent, :comfortable。default: :md）
     - html_options: inputへ渡す追加HTML属性（例: inputmode, pattern, data, aria）
     - password_reveal: password入力の表示/非表示切り替えボタンを表示する場合は true（default: false）
+    - password_reveal_animation: password_revealボタンのアイコンをアニメーションSVGにする場合は true（default: false）
 %>
 <%
   f = local_assigns[:f] || local_assigns[:form]
@@ -53,10 +54,12 @@
   size = local_assigns.fetch(:size, :md).to_sym
   html_options = local_assigns.fetch(:html_options, {})
   password_reveal = local_assigns.fetch(:password_reveal, false)
+  password_reveal_animation = local_assigns.fetch(:password_reveal_animation, false)
   truthy_html_attribute = ->(value) { value == true || %w[true disabled readonly].include?(value.to_s) }
   input_disabled = truthy_html_attribute.call(html_options[:disabled] || html_options["disabled"])
   input_readonly = truthy_html_attribute.call(html_options[:readonly] || html_options["readonly"] || html_options[:read_only] || html_options["read_only"])
   password_reveal_enabled = password_reveal && field_type.to_sym == :password_field && !input_disabled && !input_readonly
+  password_reveal_animation_enabled = password_reveal_enabled && password_reveal_animation
 
   attribute_errors =
     if show_error_state && f.present? && attribute.present?
@@ -187,12 +190,16 @@
     <% if password_reveal_enabled %>
       <button
         type="button"
-        class="ui-touch-control absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md token-text-muted transition-colors hover:token-text-base focus:outline-none focus:ring-2 token-focus-ring-brand"
+        class="password-reveal-button ui-touch-control absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md focus:outline-none focus:ring-2 token-focus-ring-brand"
         data-action="password-reveal#toggle"
         data-password-reveal-target="button"
         aria-label="<%= t("shared.password_reveal.show") %>"
         aria-pressed="false">
-        <span class="material-symbols-outlined text-[20px]" data-password-reveal-target="icon" aria-hidden="true">visibility</span>
+        <% if password_reveal_animation_enabled %>
+          <%= render "shared/ui/icons/password_visibility_icon" %>
+        <% else %>
+          <span class="material-symbols-outlined text-[20px]" data-password-reveal-target="icon" aria-hidden="true">visibility</span>
+        <% end %>
       </button>
     <% end %>
   </div>
