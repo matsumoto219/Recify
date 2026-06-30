@@ -257,7 +257,6 @@
             class: "mb-6" %>
 
       <div class="space-y-6">
-        <%# TODO: Web Push通知は未実装。現在は画面内通知/通知DB/トースト表示の利用設定を提供する %>
         <%= render "shared/ui/form/toggle_switch",
               label: t("settings.index.usage.push_notification.label"),
               description: t("settings.index.usage.push_notification.description"),
@@ -292,8 +291,6 @@
               url: settings_path,
               remote: true %>
 
-        <%# TODO: OCR前処理と保存容量削減は別タスクとしてroadmapで扱う。
-            feature.receipt_image_preprocess は予約済みだが、現時点では設定UIへ出さない %>
       </div>
     <% end %>
 

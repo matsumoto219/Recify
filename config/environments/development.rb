@@ -44,8 +44,7 @@ Rails.application.configure do
   # Set localhost to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
 
-  # TODO: 開発環境の実機確認用。productionではHost Authorizationを有効にし、
-  # deploy checklistに沿って公開前に見直す。
+  # 開発環境の実機確認用。productionではHost Authorizationを有効にする。
   config.hosts.clear
 
   # Print deprecation notices to the Rails logger.

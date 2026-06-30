@@ -463,7 +463,7 @@ class Receipt < ApplicationRecord
 
   private
 
-  # TODO: v1.0で libphonenumber 等を導入予定
+  # 将来、国/地域ごとの住所・電話番号解析を強化する場合は libphonenumber 等の導入を検討する。
   # 手動登録など country_region が空のレシートを日本扱いにする
   def normalize_country_region
     self.country_region = country_region.to_s.strip.upcase.presence if country_region.present?
