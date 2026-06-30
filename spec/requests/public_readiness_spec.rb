@@ -66,7 +66,8 @@ RSpec.describe 'Public readiness', type: :request do
 
     aggregate_failures do
       expect(response).to have_http_status(:ok)
-      expect(response.body.bytesize).to be <= 512
+      expect(response.body.bytesize).to be <= 8.kilobytes
+      expect(response.body).to include("Service is available.")
     end
   end
 end

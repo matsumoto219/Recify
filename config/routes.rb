@@ -100,9 +100,8 @@ Rails.application.routes.draw do
   resources :announcements, only: %i[index show], param: :public_id
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
-  get "up" => "rails/health#show", as: :rails_health_check
+  # Lightweight public health check for load balancers, uptime monitors, and deploy smoke.
+  get "up" => "health#show", as: :rails_health_check
 
   get "/404", to: "errors#not_found"
   get "/403", to: "errors#forbidden"

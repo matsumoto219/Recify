@@ -7,7 +7,12 @@ RSpec.describe 'Health check', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
-        expect(response.body.bytesize).to be <= 512
+        expect(response.media_type).to eq("text/html")
+        expect(response.headers["Cache-Control"]).to include("no-store")
+        expect(response.headers["X-Robots-Tag"]).to eq("noindex, nofollow")
+        expect(response.body.bytesize).to be <= 8.kilobytes
+        expect(response.body).to include("Service is available.")
+        expect(Nokogiri::HTML(response.body).at_css('meta[name="robots"]')&.[]("content")).to eq("noindex, nofollow")
         expect(response.body).not_to include('SECRET_KEY_BASE')
         expect(response.body).not_to include('RAILS_MASTER_KEY')
         expect(response.body).not_to include('DATABASE_URL')
