@@ -1,0 +1,99 @@
+/* ===== Brand Logo ===== */
+:where(.brand-logo) {
+  --brand-logo-mark-size: 1.75rem;
+  --brand-logo-font-size: 1.25rem;
+  --brand-logo-gap: 0.5rem;
+  --brand-logo-mark-gradient: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+  --brand-logo-text-gradient: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--brand-logo-gap);
+  width: fit-content;
+  min-width: 0;
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+.brand-logo-sm {
+  --brand-logo-mark-size: 1.25rem;
+  --brand-logo-font-size: 1rem;
+  --brand-logo-gap: 0.375rem;
+}
+
+.brand-logo-md {
+  --brand-logo-mark-size: 1.75rem;
+  --brand-logo-font-size: 1.25rem;
+}
+
+.brand-logo-lg {
+  --brand-logo-mark-size: 2.5rem;
+  --brand-logo-font-size: 1.875rem;
+  --brand-logo-gap: 0.625rem;
+}
+
+.brand-logo-compact {
+  --brand-logo-mark-size: 1.5rem;
+  --brand-logo-font-size: 1.125rem;
+  --brand-logo-gap: 0.375rem;
+}
+
+.brand-logo-icon {
+  --brand-logo-gap: 0;
+}
+
+.brand-logo-mark {
+  display: inline-block;
+  width: var(--brand-logo-mark-size);
+  height: var(--brand-logo-mark-size);
+  flex: 0 0 auto;
+  background-image: var(--brand-icon-url);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.brand-logo-text {
+  min-width: 0;
+  font-size: var(--brand-logo-font-size);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--brand-primary);
+}
+
+@supports ((mask-image: url("")) or (-webkit-mask-image: url(""))) {
+  .brand-logo-mark {
+    background-image: var(--brand-logo-mark-gradient);
+    mask-image: var(--brand-icon-url);
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+
+    /* stylelint-disable property-no-vendor-prefix -- Safari still requires prefixed CSS mask properties. */
+    -webkit-mask-image: var(--brand-icon-url);
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    /* stylelint-enable property-no-vendor-prefix */
+  }
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .brand-logo-text {
+    background-image: var(--brand-logo-text-gradient);
+    background-clip: text;
+
+    /* stylelint-disable-next-line property-no-vendor-prefix -- Safari still requires prefixed background clipping for text. */
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}

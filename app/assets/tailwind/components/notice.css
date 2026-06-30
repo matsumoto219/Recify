@@ -1,0 +1,47 @@
+/* ===== Notice Glass ===== */
+.notice-glass {
+  background: var(--neutral-glass-bg);
+
+  /* Notice border */
+  border: 1px solid var(--neutral-glass-border);
+
+  /* Notice radius */
+  border-radius: 0.75rem;
+
+  /* Floating shadow */
+  box-shadow: var(--neutral-glass-shadow);
+
+  /* Notice blur */
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}
+
+/* ===== Notice Surface ===== */
+.notice-surface {
+  color: var(--text-base);
+}
+
+/* Success notice */
+.notice-surface-success {
+  border-color: color-mix(in srgb, var(--state-success) 20%, transparent);
+}
+
+/* Warning notice */
+.notice-surface-warning {
+  border-color: color-mix(in srgb, var(--state-warning) 20%, transparent);
+}
+
+/* Error notice */
+.notice-surface-error {
+  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
+}
+
+/* Info notice */
+.notice-surface-info {
+  border-color: var(--border-default);
+}
+
+/* ===== Notice Content Utilities ===== */
+.notice-icon-info {
+  background: var(--bg-info-soft);
+  color: var(--text-info);
+}

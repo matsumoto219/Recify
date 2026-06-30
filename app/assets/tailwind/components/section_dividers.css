@@ -1,0 +1,29 @@
+/* ===== Section Divider Utilities ===== */
+.section-divider-line {
+  border-color: color-mix(
+    in srgb,
+    var(--text-base) 20%,
+    transparent
+  );
+}
+
+.section-divider-line-gradient {
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    color-mix(
+      in srgb,
+      var(--text-base) 10%,
+      transparent
+    ),
+    transparent
+  );
+}
+
+.section-divider-label {
+  color: color-mix(
+    in srgb,
+    var(--text-muted) 40%,
+    transparent
+  );
+}

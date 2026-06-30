@@ -1,0 +1,33 @@
+/* ===== Auth Icon Utilities ===== */
+.auth-icon-surface {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+
+  /* Auth icon glow */
+  box-shadow: 0 10px 15px color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.auth-icon-surface .brand-logo {
+  --brand-logo-mark-gradient: linear-gradient(
+    to bottom right,
+    var(--btn-primary-text),
+    color-mix(
+      in srgb,
+      var(--btn-primary-text) 84%,
+      var(--brand-gradient-start)
+    )
+  );
+
+  color: var(--btn-primary-text);
+}
+
+.auth-icon-symbol {
+  color: var(--btn-primary-text);
+}

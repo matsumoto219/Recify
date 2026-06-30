@@ -1,0 +1,8 @@
+/* ===== Navigation Link Utilities ===== */
+.navigation-link {
+  color: var(--brand-primary);
+}
+
+.navigation-link:hover {
+  color: var(--text-base);
+}

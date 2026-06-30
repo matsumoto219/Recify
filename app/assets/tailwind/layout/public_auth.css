@@ -1,0 +1,103 @@
+/* ===== Auth Layout ===== */
+.auth-page-shell-standalone {
+  min-height: 100svh;
+}
+
+@supports (min-height: 100dvh) {
+  .auth-page-shell-standalone {
+    min-height: 100dvh;
+  }
+}
+
+/* ===== Public Layout ===== */
+.public-header-shell {
+  --public-header-gradient-start: var(--browser-chrome-bg);
+  --public-header-gradient-end: transparent;
+
+  background-color: var(--bg-page);
+  background-image: linear-gradient(
+    to bottom,
+    var(--public-header-gradient-start) 0%,
+    var(--public-header-gradient-end) 100%
+  );
+}
+
+.public-footer-shell {
+  --public-footer-gradient-start: transparent;
+  --public-footer-gradient-end: var(--browser-chrome-bg);
+
+  background-color: var(--bg-page);
+  background-image: linear-gradient(
+    to bottom,
+    var(--public-footer-gradient-start) 0%,
+    var(--public-footer-gradient-end) 100%
+  );
+}
+
+.public-header-text-link:hover,
+.public-footer-link:hover {
+  color: var(--brand-primary);
+}
+
+.token-border-brand-soft {
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.token-brand-soft-bg {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+}
+
+.token-hover-bg-card-subtle:hover {
+  background: var(--bg-card-subtle);
+}
+
+.token-hover-bg-elevated:hover {
+  background: var(--bg-elevated);
+}
+
+.token-hover-text-error:hover {
+  color: var(--text-error);
+}
+
+.token-hover-text-base:hover {
+  color: var(--text-base);
+}
+
+.token-hover-text-brand:hover {
+  color: var(--brand-primary);
+}
+
+.token-hover-border-brand:hover {
+  border-color: var(--brand-primary);
+}
+
+.empty-state-icon {
+  color: color-mix(
+    in srgb,
+    var(--text-muted) 30%,
+    transparent
+  );
+}
+
+.token-state-success-soft {
+  background: var(--bg-success-soft);
+  color: var(--text-success);
+}
+
+.token-state-warning-soft {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+}
+
+.token-state-error-soft {
+  background: var(--bg-error-soft);
+  color: var(--text-error);
+}

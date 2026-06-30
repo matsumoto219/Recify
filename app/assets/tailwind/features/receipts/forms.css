@@ -1,0 +1,133 @@
+/* ===== Receipt Form Utilities ===== */
+.receipt-form-item-row,
+.receipt-form-adjustment-row {
+  background: var(--bg-card-subtle);
+}
+
+.receipt-form-item-row:hover,
+.receipt-form-adjustment-row:hover {
+  background: var(--bg-elevated);
+}
+
+.receipt-form-adjustment-row:hover {
+  border-color: var(--border-soft);
+}
+
+@media (width <= 767px) {
+  .quantity-unit-number-field-mobile-center {
+    position: relative;
+  }
+
+  .quantity-unit-number-field-mobile-center input {
+    padding-left: 5rem;
+    padding-right: 5rem;
+  }
+
+  .quantity-unit-number-field-mobile-center select {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 5rem;
+  }
+
+  .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-mobile-detail {
+    display: none;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail {
+    display: block;
+  }
+
+  .receipt-form-item-details-open .collapsible-grid-inner,
+  .receipt-form-adjustment-details-open .collapsible-grid-inner {
+    padding: 0.125rem;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail-field > div {
+    display: block;
+  }
+
+  .receipt-form-item-details-open .receipt-form-item-mobile-detail-field > div > span,
+  .receipt-form-adjustment-details-open .receipt-form-adjustment-mobile-detail-field > div > span {
+    display: block;
+    width: auto;
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (width >= 768px) {
+  .receipt-form-item-mobile-detail,
+  .receipt-form-adjustment-mobile-detail {
+    display: block;
+  }
+}
+
+.receipt-form-item-review-row {
+  background: color-mix(
+    in srgb,
+    var(--state-error) 12%,
+    var(--bg-card-subtle)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 40%,
+    transparent
+  );
+}
+
+.receipt-form-item-review-row:hover {
+  background: color-mix(
+    in srgb,
+    var(--state-error) 18%,
+    var(--bg-card-subtle)
+  );
+}
+
+.receipt-form-delete-button {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.receipt-form-delete-button:hover {
+  color: var(--text-error);
+  background: color-mix(
+    in srgb,
+    var(--state-error) 16%,
+    var(--bg-elevated)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 40%,
+    transparent
+  );
+}
+
+.receipt-form-payment-summary.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.receipt-form-line-total-tooltip {
+  box-shadow: var(--neutral-glass-shadow);
+}
+
+/* ===== Amount Summary Card Utilities ===== */
+.amount-summary-surface {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-primary-strong),
+    var(--amount-summary-gradient-end)
+  );
+  color: var(--text-on-brand);
+}
+
+.amount-summary-detail-surface {
+  background: color-mix(
+    in srgb,
+    var(--text-on-brand) 10%,
+    transparent
+  );
+}

@@ -1,0 +1,73 @@
+/* ===== Button Utilities ===== */
+.btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  box-shadow: var(--shadow-button-primary, var(--shadow-card));
+}
+
+.btn-primary:hover {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-gradient-start) 88%, var(--text-on-brand) 12%),
+    color-mix(in srgb, var(--brand-gradient-end) 90%, var(--text-on-brand) 10%)
+  );
+  box-shadow:
+    0 16px 34px color-mix(in srgb, var(--brand-primary) 24%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 24%, transparent);
+  translate: 0 -1px;
+}
+
+.btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border-color: var(--btn-secondary-border);
+}
+
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--btn-secondary-bg) 88%, var(--text-on-brand) 12%);
+  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border-strong));
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--brand-primary) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 20%, transparent);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-base);
+  border-color: var(--border-default);
+}
+
+.btn-ghost:hover {
+  background: color-mix(in srgb, var(--bg-elevated) 86%, var(--text-on-brand) 14%);
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-strong));
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--brand-primary) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 18%, transparent);
+}
+
+.btn-danger {
+  background: var(--state-error);
+  color: var(--text-on-danger);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--state-error) 88%, var(--text-on-brand) 12%);
+  border-color: color-mix(in srgb, var(--state-error) 72%, var(--text-on-brand) 28%);
+  box-shadow:
+    0 14px 28px color-mix(in srgb, var(--state-error) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 20%, transparent);
+  translate: 0 -1px;
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-ghost:focus-visible,
+.btn-danger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+
+.btn-danger:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-error) 18%, transparent);
+}

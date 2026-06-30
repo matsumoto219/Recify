@@ -1,0 +1,13 @@
+/* ===== Utility Tweaks ===== */
+.card {
+  background-color: var(--bg-card);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: var(--shadow-card);
+}
+
+.section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

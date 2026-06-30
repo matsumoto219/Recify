@@ -1,0 +1,7 @@
+.token-shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.token-shadow-glass {
+  box-shadow: var(--neutral-glass-shadow);
+}

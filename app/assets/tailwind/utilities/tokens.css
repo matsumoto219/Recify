@@ -1,0 +1,136 @@
+/* ===== Shared Token Utilities ===== */
+.token-text-base {
+  color: var(--text-base);
+}
+
+.token-text-muted {
+  color: var(--text-muted);
+}
+
+.token-text-subtle {
+  color: var(--text-subtle);
+}
+
+.token-text-brand {
+  color: var(--brand-primary);
+}
+
+.token-text-on-brand {
+  color: var(--text-on-brand);
+}
+
+.token-text-link {
+  color: var(--text-link);
+}
+
+.token-text-success {
+  color: var(--text-success);
+}
+
+.token-text-warning {
+  color: var(--text-warning);
+}
+
+.token-text-error {
+  color: var(--text-error);
+}
+
+.token-text-error-muted {
+  color: color-mix(
+    in srgb,
+    var(--text-error) 80%,
+    transparent
+  );
+}
+
+.token-bg-page {
+  background: var(--bg-page);
+}
+
+.token-bg-card {
+  background: var(--bg-card);
+}
+
+.token-bg-card-subtle {
+  background: var(--bg-card-subtle);
+}
+
+.token-bg-elevated {
+  background: var(--bg-elevated);
+}
+
+.token-bg-input {
+  background: var(--bg-input);
+}
+
+.token-bg-floating {
+  background: var(--bg-floating);
+}
+
+.token-bg-brand-strong {
+  background: var(--brand-primary-strong);
+}
+
+.token-bg-success-soft {
+  background: var(--bg-success-soft);
+}
+
+.token-bg-warning-soft {
+  background: var(--bg-warning-soft);
+}
+
+.token-bg-error-soft {
+  background: var(--bg-error-soft);
+}
+
+.token-bg-info-soft {
+  background: var(--bg-info-soft);
+}
+
+.token-border-default {
+  border-color: var(--border-default);
+}
+
+.token-border-soft {
+  border-color: var(--border-soft);
+}
+
+.token-border-strong {
+  border-color: var(--border-strong);
+}
+
+.token-border-glass {
+  border-color: var(--neutral-glass-border);
+}
+
+.token-border-focus {
+  border-color: var(--border-focus);
+}
+
+.token-border-error-soft {
+  border-color: color-mix(in srgb, var(--state-error) 20%, transparent);
+}
+
+.token-focus-ring-brand:focus {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 40%,
+    transparent
+  );
+}
+
+.token-brand-gradient {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}
+
+.token-brand-gradient-horizontal {
+  background-image: linear-gradient(
+    to right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+}

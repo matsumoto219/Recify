@@ -1,0 +1,151 @@
+/* ===== Checkbox Utilities ===== */
+.token-checkbox {
+  background-color: var(--bg-input);
+  color: var(--brand-primary-strong);
+  border-color: var(--border-strong);
+}
+
+.token-checkbox:focus {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 50%,
+    transparent
+  );
+}
+
+/* ===== Input Field ===== */
+.input-field {
+  background-color: var(--bg-input);
+  color: var(--text-base);
+
+  /* Input border */
+  border: 1px solid var(--border-soft);
+
+  /* Input radius */
+  border-radius: 0.5rem;
+
+  /* Input transition */
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+@media (width <= 639px) {
+  .input-field,
+  .field-stepper-input {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+.input-field-datetime {
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1;
+}
+
+.input-field-datetime::-webkit-date-and-time-value {
+  min-height: 1.5rem;
+  line-height: 1.5rem;
+}
+
+.input-field-datetime-regular {
+  height: 2.75rem;
+  min-height: 2.75rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+.input-field-datetime-dense {
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.input-field::placeholder {
+  color: var(--text-subtle);
+}
+
+.input-field:focus {
+  outline: none;
+
+  /* Focus border */
+  border-color: transparent;
+
+  /* Focus glow */
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-focus) 35%, transparent);
+}
+
+.input-field-error {
+  border-color: var(--state-error);
+}
+
+.input-field-error:focus {
+  border-color: var(--state-error);
+
+  /* Error focus glow */
+  box-shadow:
+    0 0 0 2px color-mix(
+      in srgb,
+      var(--state-error) 35%,
+      transparent
+    );
+}
+
+/* ===== Field Utilities ===== */
+.group:focus-within .field-icon-focus {
+  color: var(--border-focus);
+}
+
+.group:focus-within .field-icon-error-focus {
+  color: var(--text-error);
+}
+
+.field-control-wrapper {
+  background: var(--bg-input);
+  border-color: var(--border-soft);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.field-control-wrapper:focus-within {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--border-focus) 35%,
+    transparent
+  );
+}
+
+.field-control-wrapper-error {
+  border-color: var(--state-error);
+}
+
+.field-control-wrapper-error:focus-within {
+  border-color: var(--state-error);
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--state-error) 35%,
+    transparent
+  );
+}
+
+.field-stepper-button {
+  color: var(--text-base);
+}
+
+.field-stepper-button:focus-visible,
+.field-stepper-button:not(:disabled):active {
+  background: var(--bg-elevated);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .field-stepper-button:not(:disabled):hover {
+    background: var(--bg-elevated);
+  }
+}

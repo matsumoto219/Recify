@@ -1,0 +1,530 @@
+/* ===== Receipt Card Utilities ===== */
+.receipt-card-surface {
+  background: var(--receipt-card-bg);
+}
+
+.receipt-card-icon-box {
+  background: var(--bg-page);
+  color: var(--brand-primary);
+}
+
+.group:hover .receipt-card-title-hover {
+  color: var(--brand-primary);
+}
+
+.receipt-card-skeleton {
+  background: var(--bg-floating);
+}
+
+.receipt-card-disabled-brand {
+  color: color-mix(
+    in srgb,
+    var(--brand-primary) 50%,
+    transparent
+  );
+}
+
+.receipt-card-link-hover:hover {
+  color: var(--text-base);
+}
+
+.receipt-processing-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.receipt-processing-icon-box {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  color: var(--brand-primary);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand-primary) 12%, transparent),
+    0 8px 18px color-mix(in srgb, var(--brand-primary) 10%, transparent);
+}
+
+.receipt-processing-icon-box::after {
+  content: "";
+  position: absolute;
+  inset: 0.125rem;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 26%, transparent);
+  opacity: 0.55;
+  animation: receipt-processing-icon-glow 1.9s ease-in-out infinite;
+}
+
+.receipt-processing-card-icon {
+  position: relative;
+  z-index: 1;
+  font-size: 1.25rem;
+}
+
+.receipt-processing-popover {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  pointer-events: none;
+}
+
+.receipt-processing-trigger {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  place-items: center;
+  border: 0;
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--bg-card) 38%, transparent),
+      color-mix(in srgb, var(--brand-primary) 6%, transparent)
+    );
+  padding: 1.25rem;
+  pointer-events: auto;
+  text-align: center;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+
+  @apply backdrop-blur-md backdrop-saturate-[var(--glass-saturate)];
+}
+
+.receipt-processing-trigger::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--brand-primary) 7%, transparent),
+      transparent 58%
+    );
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.receipt-processing-trigger:hover,
+.receipt-processing-trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-primary) 34%, transparent) inset;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--bg-card) 34%, transparent),
+      color-mix(in srgb, var(--brand-primary) 8%, transparent)
+    );
+}
+
+.receipt-processing-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 70%, transparent);
+  outline-offset: -4px;
+}
+
+.receipt-processing-trigger::after {
+  content: "expand_more";
+  position: absolute;
+  right: 0.875rem;
+  bottom: 0.875rem;
+  z-index: 1;
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.receipt-processing-trigger[aria-expanded="true"]::after {
+  color: var(--brand-primary);
+  transform: rotate(180deg);
+}
+
+.receipt-processing-trigger-content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  max-width: min(18rem, 100%);
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 20%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 42%, transparent);
+  box-shadow:
+    0 10px 26px color-mix(in srgb, var(--brand-primary) 12%, transparent),
+    0 1px 0 color-mix(in srgb, var(--text-on-brand) 10%, transparent) inset;
+  padding: 0.75rem 1rem;
+}
+
+.receipt-processing-trigger-icon {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--brand-primary) 11%, transparent);
+  color: var(--brand-primary);
+  font-size: 1.125rem;
+}
+
+.receipt-processing-trigger-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.receipt-processing-trigger-hint {
+  display: block;
+  margin-top: 0.1875rem;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-processing-popover-panel {
+  position: fixed;
+  z-index: 70;
+  box-sizing: border-box;
+  width: min(22rem, calc(100dvw - 1rem));
+  max-width: calc(100dvw - 1rem);
+  max-height: min(72dvh, 28rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--floating-glass-border);
+  border-radius: 1rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--floating-glass-bg) 82%, transparent),
+      color-mix(in srgb, var(--bg-card) 58%, transparent)
+    );
+  box-shadow:
+    var(--floating-glass-shadow),
+    0 18px 48px color-mix(in srgb, var(--brand-primary) 18%, transparent),
+    0 1px 0 color-mix(in srgb, var(--text-on-brand) 18%, transparent) inset;
+  opacity: 0;
+  transform: translateY(0.25rem) scale(0.98);
+  transition: opacity 160ms ease, transform 180ms ease;
+
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}
+
+.receipt-processing-popover-panel[hidden] {
+  display: none;
+}
+
+.receipt-processing-popover-panel.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.receipt-processing-popover-panel:focus {
+  outline: none;
+}
+
+.receipt-processing-popover-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+}
+
+.receipt-processing-popover-eyebrow {
+  margin-bottom: 0.125rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.receipt-processing-popover-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.receipt-processing-popover-close:hover,
+.receipt-processing-popover-close:focus-visible {
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  color: var(--brand-primary);
+}
+
+.receipt-processing-popover-content {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 1rem 1rem;
+}
+
+.receipt-processing-ai-dots {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.5rem;
+}
+
+.receipt-processing-ai-dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  opacity: 0.35;
+  animation: receipt-processing-ai-dot 1.4s ease-in-out infinite;
+}
+
+.receipt-processing-ai-dots span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.receipt-processing-ai-dots span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.receipt-processing-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.receipt-processing-step {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-subtle);
+}
+
+.receipt-processing-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 0.375rem;
+  left: calc(50% + 0.45rem);
+  width: calc(100% - 0.9rem);
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.receipt-processing-step-done:not(:last-child)::after,
+.receipt-processing-step-active:not(:last-child)::after {
+  background: color-mix(in srgb, var(--brand-primary) 52%, transparent);
+}
+
+.receipt-processing-step-dot {
+  position: relative;
+  z-index: 1;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid color-mix(in srgb, var(--text-muted) 36%, transparent);
+  border-radius: 999px;
+  background: var(--bg-card);
+}
+
+.receipt-processing-step-done .receipt-processing-step-dot,
+.receipt-processing-step-active .receipt-processing-step-dot {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 12%, transparent);
+}
+
+.receipt-processing-step-active .receipt-processing-step-dot {
+  animation: receipt-processing-step-pulse 1.8s ease-in-out infinite;
+}
+
+.receipt-processing-step-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.receipt-processing-step-done,
+.receipt-processing-step-active {
+  color: var(--brand-primary);
+}
+
+@media (width <= 380px) {
+  .receipt-processing-steps {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .receipt-processing-step {
+    min-height: 1.75rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.625rem;
+  }
+
+  .receipt-processing-step:not(:last-child)::after {
+    top: calc(50% + 0.5rem);
+    left: 0.375rem;
+    width: 2px;
+    height: calc(100% + 0.25rem);
+  }
+
+  .receipt-processing-step-dot {
+    flex: 0 0 auto;
+  }
+
+  .receipt-processing-step-label {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    font-size: 0.6875rem;
+    line-height: 1.35;
+  }
+}
+
+@keyframes receipt-processing-ai-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+
+  40% {
+    transform: translateY(-0.125rem);
+    opacity: 1;
+  }
+}
+
+@keyframes receipt-processing-step-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--brand-primary) 5%, transparent);
+  }
+}
+
+@keyframes receipt-processing-icon-glow {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.35;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 0.78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt-processing-card,
+  .receipt-processing-icon-box::after,
+  .receipt-processing-trigger,
+  .receipt-processing-trigger::after,
+  .receipt-processing-popover-panel,
+  .receipt-processing-popover-close,
+  .receipt-processing-ai-dots span,
+  .receipt-processing-step-active .receipt-processing-step-dot {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ===== Receipt Status Badge Utilities ===== */
+.receipt-status-processing {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+  color: var(--brand-primary);
+}
+
+.receipt-status-default {
+  background: color-mix(
+    in srgb,
+    var(--text-base) 5%,
+    transparent
+  );
+  color: var(--text-muted);
+}
+
+.receipt-status-dot-completed {
+  background: var(--state-success);
+}
+
+.receipt-status-dot-review-needed {
+  background: var(--state-warning);
+}
+
+.receipt-status-dot-failed {
+  background: var(--state-error);
+}
+
+.receipt-status-dot-default {
+  background: var(--state-info);
+}
+
+.receipt-status-text-completed {
+  color: var(--text-success);
+}
+
+.receipt-status-text-review-needed {
+  color: var(--text-warning);
+}
+
+.receipt-status-text-failed {
+  color: var(--text-error);
+}
+
+.receipt-status-text-default {
+  color: var(--text-info);
+}
+
+.receipt-status-border-completed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-success) 20%,
+    transparent
+  );
+}
+
+.receipt-status-border-review-needed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-warning) 20%,
+    transparent
+  );
+}
+
+.receipt-status-border-failed {
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 20%,
+    transparent
+  );
+}

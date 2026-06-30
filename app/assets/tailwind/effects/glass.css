@@ -1,0 +1,34 @@
+/* ===== Glass Panel Effect ===== */
+
+/* Backdrop filter guidance:
+ * Direct `backdrop-filter: var(...)` declarations are dropped during
+ * Tailwind v4 build output in this project environment.
+ * Use Tailwind backdrop utilities instead.
+ *
+ * Overlay/popover/dropdown glass surfaces should not be rendered as
+ * descendants of another backdrop-filter surface such as `.header-glass`.
+ * Put them in a layout sibling/fixed overlay layer so browsers can sample
+ * the page behind the panel reliably.
+ */
+
+.glass-panel {
+  background: var(--floating-glass-bg);
+
+  /* Glass border */
+  border: 1px solid var(--floating-glass-border);
+
+  /* Glass shadow */
+  box-shadow: var(--floating-glass-shadow);
+
+  /* Glass blur */
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}
+
+.notification-dropdown-panel {
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+}
+
+.notification-dropdown-motion {
+  transition-property: opacity, transform, translate;
+  will-change: opacity, transform, translate;
+}

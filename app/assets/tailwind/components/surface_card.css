@@ -1,0 +1,54 @@
+/* ===== Surface Card Utilities ===== */
+.surface-card-bg-card {
+  background: var(--bg-card);
+}
+
+.surface-card-bg-card-subtle {
+  background: var(--bg-card-subtle);
+}
+
+.surface-card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
+.surface-card-shadow-indigo {
+  box-shadow: var(--surface-card-indigo-shadow);
+}
+
+.surface-card-shadow-danger {
+  box-shadow: var(--surface-card-danger-shadow);
+}
+
+.surface-card-shadow-warning {
+  box-shadow: var(--surface-card-warning-shadow);
+}
+
+.surface-card-danger {
+  background: var(--surface-card-danger-bg);
+
+  /* Danger surface border */
+  border-color: var(--surface-card-danger-border);
+}
+
+.surface-card-warning {
+  background: var(--surface-card-warning-bg);
+
+  /* Warning surface border */
+  border-color: var(--surface-card-warning-border);
+}
+
+.surface-card-hover:hover {
+  background: var(--surface-card-hover-bg);
+}
+
+.surface-card-danger-hover:hover {
+  background: var(--surface-card-danger-hover-bg);
+}
+
+.surface-card-warning-hover:hover {
+  background: var(--surface-card-warning-hover-bg);
+}
+
+.surface-card-blur {
+  @apply backdrop-blur-[var(--glass-blur-radius)] backdrop-saturate-[var(--glass-saturate)];
+}

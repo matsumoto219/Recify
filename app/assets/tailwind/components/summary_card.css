@@ -1,0 +1,4 @@
+/* ===== Summary Card Utilities ===== */
+.summary-card-link-hover:hover {
+  color: var(--text-base);
+}

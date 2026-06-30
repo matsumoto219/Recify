@@ -1,0 +1,41 @@
+/* ===== Base Styles ===== */
+body {
+  background-color: var(--browser-chrome-bg);
+  color: var(--text-base);
+  font-family: Inter, 'Noto Sans JP', sans-serif;
+}
+
+/* ===== Scrollbar (hide for UI polish) ===== */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.token-scrollbar-brand {
+  scrollbar-color: color-mix(in srgb, var(--brand-primary) 36%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar {
+  width: 0.375rem;
+  height: 0.375rem;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.token-scrollbar-brand::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-primary) 32%, transparent);
+}
+
+/* ===== Interaction Utilities ===== */
+.ui-touch-control {
+  user-select: none;
+  touch-action: manipulation;
+
+  /* stylelint-disable property-no-vendor-prefix -- iOS Safari needs prefixed selection/callout controls for long-press UI. */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* stylelint-enable property-no-vendor-prefix */
+}

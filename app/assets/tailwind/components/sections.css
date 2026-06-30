@@ -1,0 +1,21 @@
+/* ===== Section Header Utilities ===== */
+.section-header-title {
+  color: var(--text-base);
+}
+
+.section-header-danger-subtitle {
+  color: color-mix(
+    in srgb,
+    var(--text-error) 80%,
+    transparent
+  );
+}
+
+.section-header-breadcrumb-link:hover {
+  color: var(--brand-primary);
+}
+
+.section-header-title-suffix {
+  background: var(--bg-floating);
+  color: var(--text-muted);
+}

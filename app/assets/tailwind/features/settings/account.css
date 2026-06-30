@@ -1,0 +1,88 @@
+/* ===== Account Settings Utilities ===== */
+.account-form-footer {
+  background: color-mix(
+    in srgb,
+    var(--bg-elevated) 50%,
+    transparent
+  );
+}
+
+.avatar-file-input {
+  color: var(--text-muted);
+}
+
+.avatar-preview-surface {
+  box-shadow: var(--shadow-card);
+}
+
+.avatar-file-input::file-selector-button {
+  background: var(--bg-floating);
+  color: var(--brand-primary);
+}
+
+.avatar-file-input::file-selector-button:hover {
+  background: var(--bg-elevated);
+}
+
+/* ===== Setting Status Badge Utilities ===== */
+.setting-status-active {
+  background: var(--bg-success-soft);
+  color: var(--text-success);
+  border-color: color-mix(
+    in srgb,
+    var(--state-success) 20%,
+    transparent
+  );
+}
+
+.setting-status-inactive {
+  background: var(--bg-floating);
+  color: var(--text-error);
+  border-color: var(--neutral-glass-border);
+}
+
+.setting-status-pending {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+  border-color: color-mix(
+    in srgb,
+    var(--state-warning) 20%,
+    transparent
+  );
+}
+
+.setting-status-warning {
+  background: var(--bg-error-soft);
+  color: var(--text-error);
+  border-color: color-mix(
+    in srgb,
+    var(--state-error) 20%,
+    transparent
+  );
+}
+
+.setting-status-default {
+  background: color-mix(
+    in srgb,
+    var(--text-base) 5%,
+    transparent
+  );
+  color: var(--text-muted);
+  border-color: var(--neutral-glass-border);
+}
+
+.setting-status-text-active {
+  color: var(--text-success);
+}
+
+.setting-status-text-inactive {
+  color: var(--text-muted);
+}
+
+.setting-status-text-pending {
+  color: var(--text-warning);
+}
+
+.setting-status-text-default {
+  color: var(--text-muted);
+}

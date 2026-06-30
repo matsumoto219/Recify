@@ -1,0 +1,24 @@
+/* ===== Ambient Background Utilities ===== */
+.ambient-background {
+  display: none;
+}
+
+[data-theme="dark"] .ambient-background {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .ambient-background {
+    display: block;
+  }
+}
+
+.ambient-glow {
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  opacity: 0.1;
+
+  /* Ambient glow blur */
+  @apply blur-[120px];
+}

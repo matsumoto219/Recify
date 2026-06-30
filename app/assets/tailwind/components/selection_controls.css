@@ -1,0 +1,103 @@
+/* ===== Selection Card Utilities ===== */
+.selection-card {
+  background: var(--selection-card-bg);
+}
+
+.selection-card:hover {
+  background: var(--selection-card-hover-bg);
+}
+
+.selection-card-secondary {
+  border-color: var(--border-soft);
+}
+
+.selection-card-secondary:hover {
+  border-color: var(--border-strong);
+}
+
+.selection-card-primary {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.selection-card-primary:hover {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--brand-primary) 40%,
+    transparent
+  );
+}
+
+.selection-card-primary-overlay {
+  background-image: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--brand-primary) 10%, transparent),
+    transparent,
+    transparent
+  );
+}
+
+.selection-card-primary-icon {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-gradient-start),
+    var(--brand-gradient-end)
+  );
+  color: var(--text-on-primary);
+  box-shadow: 0 10px 15px color-mix(
+    in srgb,
+    var(--brand-primary) 20%,
+    transparent
+  );
+}
+
+.selection-card-secondary-icon {
+  background: var(--bg-floating);
+  color: var(--brand-primary);
+}
+
+.selection-card-badge-primary {
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  );
+  color: var(--brand-primary);
+}
+
+.selection-card-badge-secondary {
+  border-color: var(--border-soft);
+  color: var(--text-muted);
+}
+
+.selection-card-title {
+  color: var(--text-base);
+}
+
+/* ===== Segmented Control Utilities ===== */
+.segmented-control-indicator-surface {
+  border-color: var(--btn-secondary-border);
+  background: var(--brand-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.segmented-control-option {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+
+.segmented-control-option:hover {
+  color: var(--text-base);
+}
+
+.peer:checked + .segmented-control-option {
+  color: var(--text-on-primary);
+  text-shadow: none;
+}
+
+.peer:focus-visible + .segmented-control-option {
+  outline-color: var(--border-focus);
+}
