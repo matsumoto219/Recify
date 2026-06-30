@@ -320,6 +320,8 @@
       transparent
     ) center 2.2rem / 8.4rem 9.2rem no-repeat,
     color-mix(in srgb, var(--bg-card) 64%, transparent);
+
+  padding-bottom: clamp(4.75rem, 7vw, 7rem);
 }
 
 #home-final-cta {
@@ -350,6 +352,18 @@
       transparent 52% 100%
     ) 12.65rem 5.45rem / 1.4rem 0.9rem no-repeat,
     color-mix(in srgb, var(--bg-card) 66%, transparent);
+
+  padding-top: clamp(4.75rem, 7vw, 7rem);
+}
+
+@media (width >= 1024px) {
+  #home-trust {
+    padding-bottom: clamp(5.5rem, 7vw, 7.5rem);
+  }
+
+  #home-final-cta {
+    padding-top: clamp(6rem, 8vw, 8rem);
+  }
 }
 
 .home-section-nav {
