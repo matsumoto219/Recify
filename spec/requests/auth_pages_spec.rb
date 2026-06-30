@@ -94,7 +94,8 @@ RSpec.describe 'Auth pages', type: :request do
       expect(shell).to be_present
       expect(shell['class']).to include('auth-page-shell-standalone')
       expect(shell['class']).to include('min-h-screen')
-      expect(shell['class']).to include('items-center')
+      expect(shell['class']).to include('items-start')
+      expect(shell['class']).not_to include('items-center')
       expect(document.at_css('.auth-icon-surface .brand-logo-icon')).to be_present
     end
   end

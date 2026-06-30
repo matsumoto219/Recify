@@ -19,7 +19,7 @@ module ApplicationHelper
     if dashboard_auth_page?
       "auth-page-shell auth-page-shell-dashboard w-full flex justify-center px-0 py-4 md:py-6 relative overflow-hidden"
     else
-      "auth-page-shell auth-page-shell-standalone min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden"
+      "auth-page-shell auth-page-shell-standalone min-h-screen w-full flex items-start justify-center px-6 pb-8 pt-10 md:px-8 md:pb-10 md:pt-14 lg:pt-16 relative overflow-hidden"
     end
   end
 

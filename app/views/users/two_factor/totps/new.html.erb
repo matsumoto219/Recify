@@ -1,6 +1,6 @@
 <% content_for :title, t("meta.title_format", title: t("auth.two_factor.totp.meta_title"), site: t("meta.site_name")) %>
 
-<div class="min-h-screen flex items-center justify-center p-6 md:p-8 relative overflow-hidden">
+<div class="auth-page-shell auth-page-shell-standalone min-h-screen w-full flex items-start justify-center px-6 pb-8 pt-10 md:px-8 md:pb-10 md:pt-14 lg:pt-16 relative overflow-hidden">
   <%= render "shared/ui/layout/ambient_background" %>
 
   <div class="w-full max-w-[440px] z-10 space-y-8">

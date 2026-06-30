@@ -289,9 +289,13 @@ body {
 
 /* ===== Auth Layout ===== */
 .auth-page-shell-standalone {
-  --auth-page-footer-shadow-buffer: clamp(2.5rem, 6vh, 4rem);
+  min-height: 100svh;
+}
 
-  min-height: calc(100vh + var(--auth-page-footer-shadow-buffer));
+@supports (min-height: 100dvh) {
+  .auth-page-shell-standalone {
+    min-height: 100dvh;
+  }
 }
 
 /* ===== Public Layout ===== */
