@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_30_195605) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -281,7 +281,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.index ["parent_run_id"], name: "index_receipt_analysis_runs_on_parent_run_id"
     t.index ["receipt_id", "created_at"], name: "index_receipt_analysis_runs_on_receipt_id_and_created_at"
     t.index ["receipt_id"], name: "index_receipt_analysis_runs_on_receipt_id"
-    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[]))"
+    t.index ["receipt_id"], name: "index_receipt_analysis_runs_one_active_per_receipt", unique: true, where: "((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text]))"
     t.index ["requested_by_user_id"], name: "index_receipt_analysis_runs_on_requested_by_user_id"
     t.index ["run_key"], name: "index_receipt_analysis_runs_on_run_key", unique: true
     t.index ["status", "stage"], name: "index_receipt_analysis_runs_on_status_and_stage"
@@ -382,8 +382,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"
-    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying, 'system_purge'::character varying]::text[]))", name: "check_receipts_image_purged_reason"
-    t.check_constraint "moderation_status::text = ANY (ARRAY['active'::character varying, 'quarantined'::character varying]::text[])", name: "check_receipts_moderation_status"
+    t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying::text, 'system_purge'::character varying::text]))", name: "check_receipts_image_purged_reason"
+    t.check_constraint "moderation_status::text = ANY (ARRAY['active'::character varying::text, 'quarantined'::character varying::text])", name: "check_receipts_moderation_status"
   end
 
   create_table "recovery_codes", force: :cascade do |t|
@@ -427,6 +427,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
     t.index ["request_id"], name: "index_security_events_on_request_id"
     t.index ["resolved_at"], name: "index_security_events_on_resolved_at", where: "(resolved_at IS NULL)"
     t.index ["severity"], name: "index_security_events_on_severity"
+  end
+
+  create_table "security_ip_actions", force: :cascade do |t|
+    t.string "action_type", null: false
+    t.bigint "actor_user_id"
+    t.integer "count", default: 1, null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at"
+    t.datetime "first_seen_at", null: false
+    t.inet "ip_address", null: false
+    t.datetime "last_seen_at", null: false
+    t.string "matched_rule"
+    t.jsonb "metadata", default: {}, null: false
+    t.text "reason"
+    t.bigint "security_ip_block_id"
+    t.string "source", null: false
+    t.bigint "source_security_event_id"
+    t.string "status", default: "observed", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action_type"], name: "index_security_ip_actions_on_action_type"
+    t.index ["actor_user_id"], name: "index_security_ip_actions_on_actor_user_id"
+    t.index ["expires_at"], name: "index_security_ip_actions_on_expires_at"
+    t.index ["ip_address", "action_type", "matched_rule", "status", "last_seen_at"], name: "index_security_ip_actions_on_aggregation_key"
+    t.index ["ip_address", "last_seen_at"], name: "index_security_ip_actions_on_ip_and_last_seen"
+    t.index ["ip_address"], name: "index_security_ip_actions_on_ip_address"
+    t.index ["matched_rule"], name: "index_security_ip_actions_on_matched_rule"
+    t.index ["security_ip_block_id"], name: "index_security_ip_actions_on_security_ip_block_id"
+    t.index ["source"], name: "index_security_ip_actions_on_source"
+    t.index ["source_security_event_id"], name: "index_security_ip_actions_on_source_security_event_id"
+    t.index ["status"], name: "index_security_ip_actions_on_status"
   end
 
   create_table "security_ip_blocks", force: :cascade do |t|
@@ -596,6 +626,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_233457) do
   add_foreign_key "receipts", "users", column: "quarantined_by_id"
   add_foreign_key "recovery_codes", "users"
   add_foreign_key "security_events", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "security_ip_actions", "security_events", column: "source_security_event_id"
+  add_foreign_key "security_ip_actions", "security_ip_blocks"
+  add_foreign_key "security_ip_actions", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "security_ip_blocks", "security_events", column: "source_security_event_id"
   add_foreign_key "security_ip_blocks", "users", column: "created_by_id"
   add_foreign_key "security_ip_blocks", "users", column: "revoked_by_id"

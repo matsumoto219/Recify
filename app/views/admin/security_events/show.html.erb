@@ -112,6 +112,10 @@
         default_expires_at: @default_ip_block_expires_at,
         reauthenticated: admin_passkey_reauthenticated? %>
 
+  <% if @ip_action_history.present? %>
+    <%= render "admin/shared/ip_action_history", history: @ip_action_history %>
+  <% end %>
+
   <div class="grid gap-6 lg:grid-cols-2">
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.security_events.show.sections.timeline") %></h2>

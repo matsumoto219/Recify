@@ -46,7 +46,7 @@ module SecurityEvents
     end
 
     def record_rate_limit!(request:, matched_rule: nil, retry_after: nil, metadata: {})
-      record!(
+      event = record!(
         event_type: "rate_limit_triggered",
         severity: "medium",
         request: request,
@@ -61,6 +61,14 @@ module SecurityEvents
           filtered_rate_limit_metadata(metadata).merge(retry_after: retry_after).compact
         )
       )
+      Security.record_ip_rate_limit_action(
+        request: request,
+        matched_rule: matched_rule.presence || "rate_limit",
+        security_event: event,
+        retry_after: retry_after,
+        metadata: metadata
+      )
+      event
     rescue StandardError => e
       Rails.logger.warn("[SecurityEvents] rate_limit_record_failed class=#{e.class.name}")
     end

@@ -1,0 +1,68 @@
+<%
+  history = local_assigns[:history]
+  records = history&.records || []
+  title = local_assigns[:title] || t("admin.ip_actions.title")
+  description = local_assigns[:description] || t("admin.ip_actions.description")
+  empty_message = local_assigns[:empty_message] || t("admin.ip_actions.empty")
+%>
+
+<%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
+  <div class="mb-4">
+    <h2 class="text-lg font-bold token-text-base"><%= title %></h2>
+    <p class="text-sm token-text-muted"><%= description %></p>
+  </div>
+
+  <%= render "admin/shared/table_frame", size: :lg do %>
+    <thead class="token-text-muted">
+      <tr class="border-b token-border-soft">
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.ip_actions.table.last_seen") %></th>
+        <th class="px-3 py-2 font-semibold min-w-[12rem]"><%= t("admin.ip_actions.table.action") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.table.status") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.table.source") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.table.rule") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.table.count") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :datetime) %>"><%= t("admin.ip_actions.table.expires_at") %></th>
+        <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.ip_actions.table.related") %></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% records.each do |action| %>
+        <tr class="border-b token-border-soft">
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(action[:last_seen_at], format: :short) %></td>
+          <td class="px-3 py-3 min-w-[12rem]"><%= t("admin.ip_actions.action_types.#{action[:action_type]}", default: action[:action_type]) %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.statuses.#{action[:status]}", default: action[:status]) %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.ip_actions.sources.#{action[:source]}", default: action[:source]) %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= action[:matched_rule].presence || "-" %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= action[:count] %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= action[:expires_at].present? ? l(action[:expires_at], format: :short) : "-" %></td>
+          <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>">
+            <div class="flex min-w-0 flex-wrap gap-2">
+              <% if action.dig(:source_security_event, :id).present? %>
+                <%= link_to t("admin.ip_actions.related.security_event", id: action.dig(:source_security_event, :id)),
+                      admin_security_event_path(action.dig(:source_security_event, :id)),
+                      class: "token-text-brand hover:underline" %>
+              <% end %>
+              <% if action.dig(:security_ip_block, :id).present? %>
+                <%= link_to t("admin.ip_actions.related.ip_block", id: action.dig(:security_ip_block, :id)),
+                      admin_ip_block_path(action.dig(:security_ip_block, :id)),
+                      class: "token-text-brand hover:underline" %>
+              <% end %>
+              <% if action.dig(:actor_user, :id).present? %>
+                <span class="token-text-muted"><%= t("admin.ip_actions.related.actor", id: action.dig(:actor_user, :id)) %></span>
+              <% end %>
+              <% if action.dig(:source_security_event, :id).blank? && action.dig(:security_ip_block, :id).blank? && action.dig(:actor_user, :id).blank? %>
+                <span class="token-text-muted">-</span>
+              <% end %>
+            </div>
+          </td>
+        </tr>
+      <% end %>
+
+      <% if records.empty? %>
+        <tr>
+          <td colspan="8" class="px-3 py-10 text-center text-sm token-text-muted"><%= empty_message %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  <% end %>
+<% end %>

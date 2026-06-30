@@ -7,7 +7,10 @@ class Admin::SecurityEventsController < Admin::BaseController
 
   def show
     @record = Admin.security_event(id: params[:id])
-    @ip_access_snapshot = ::Security.ip_access_snapshot(ip_address: @record[:ip_address]) if @record.present? && @record[:ip_address].present?
+    if @record.present? && @record[:ip_address].present?
+      @ip_access_snapshot = ::Security.ip_access_snapshot(ip_address: @record[:ip_address])
+      @ip_action_history = Admin.ip_actions(ip_address: @record[:ip_address], limit: 10)
+    end
     @default_ip_block_expires_at = 24.hours.from_now
     return if @record.present?
 

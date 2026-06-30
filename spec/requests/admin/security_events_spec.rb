@@ -165,6 +165,7 @@ RSpec.describe 'Admin security events', type: :request do
       admin = create(:user, :admin)
       event = create(:security_event, ip_address: '8.8.8.8', matched_rule: 'fail2ban/scanner_paths')
       create(:security_event, ip_address: '8.8.8.8', matched_rule: 'auth/sign_in/ip')
+      create(:security_ip_action, ip_address: '8.8.8.8', source_security_event: event)
       sign_in admin
 
       get admin_security_event_path(event)
@@ -176,6 +177,8 @@ RSpec.describe 'Admin security events', type: :request do
         expect(response.body).to include('手動制限')
         expect(response.body).to include('自動制限')
         expect(response.body).to include('関連イベント')
+        expect(response.body).to include('IPアクション履歴')
+        expect(response.body).to include('scanner自動制限')
         expect(response.body).to include(new_admin_passkey_reauthentication_path)
       end
     end

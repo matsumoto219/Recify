@@ -113,6 +113,40 @@ ja:
           detail: detail
           detail_link: 詳細
           empty: 該当するセキュリティイベントはありません。
+    ip_actions:
+      title: IPアクション履歴
+      description: このIPに対してRails側で記録した自動制限・手動操作の履歴です。
+      empty: このIPのアクション履歴はありません。
+      action_types:
+        rate_limit_triggered: Rate limit発火
+        scanner_restriction: scanner自動制限
+        admin_probe_restriction: admin probe自動制限
+        direct_upload_probe_restriction: direct upload probe自動制限
+        manual_ip_block: 手動IP制限
+        manual_ip_unblock: 手動IP制限解除
+        rack_attack_ban_reset: 自動制限解除
+      sources:
+        rack_attack: Rack::Attack
+        manual_admin: admin操作
+      statuses:
+        observed: 観測
+        active: 制限中
+        expired: 期限切れ
+        revoked: 解除済み
+        reset: reset済み
+      table:
+        last_seen: last seen
+        action: action
+        status: status
+        source: source
+        rule: rule
+        count: count
+        expires_at: 期限
+        related: 関連
+      related:
+        security_event: "SecurityEvent #%{id}"
+        ip_block: "IP制限 #%{id}"
+        actor: "actor #%{id}"
     ip_diagnostics:
       title: IP診断
       description: Cloudflare / proxy 配下で実クライアントIPを取得できているか確認します。表示のみで、制限操作や監査ログ記録は行いません。

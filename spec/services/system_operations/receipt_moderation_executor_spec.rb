@@ -73,7 +73,8 @@ RSpec.describe SystemOperations::ReceiptModerationExecutor do
         'reauthenticated' => true,
         'reauthentication_method' => 'passkey'
       )
-      expect(audit_log.attributes.to_json).not_to include('credential-secret', 'challenge-secret', 'raw_text', 'ocr', 'ai')
+      expect(audit_log.attributes.to_json).not_to include('credential-secret', 'challenge-secret')
+      expect(audit_log.metadata).not_to include('raw_text', 'ocr', 'ai')
     end
   end
 

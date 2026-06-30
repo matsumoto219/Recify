@@ -147,6 +147,13 @@ RSpec.describe 'Rack::Attack', type: :request do
       expect(event.ip_address.to_s).to eq(ip)
       expect(event.payload_excerpt).to be_blank
       expect(event.metadata.to_json).not_to include('wrong-password', 'missing@example.com')
+      expect(SecurityIpAction.last).to have_attributes(
+        ip_address: IPAddr.new(ip),
+        action_type: 'rate_limit_triggered',
+        source: 'rack_attack',
+        status: 'observed',
+        matched_rule: 'auth/sign_in/ip'
+      )
     end
   end
 
@@ -274,7 +281,11 @@ RSpec.describe 'Rack::Attack', type: :request do
 
     get root_path, headers: remote_addr(ip)
 
-    expect_blocklisted_html_response
+    aggregate_failures do
+      expect_blocklisted_html_response
+      expect(SecurityIpAction.where(ip_address: ip, action_type: 'scanner_restriction')).to exist
+      expect(SecurityIpAction.where(ip_address: ip, matched_rule: 'fail2ban/scanner_paths').sum(:count)).to be >= 3
+    end
   end
 
   it 'blocks manually restricted IP addresses from the database' do
@@ -290,6 +301,7 @@ RSpec.describe 'Rack::Attack', type: :request do
         matched_rule: 'manual/ip_blocks'
       )
       expect(SecurityEvent.last.ip_address.to_s).to eq(ip)
+      expect(SecurityIpAction.where(ip_address: ip, matched_rule: 'manual/ip_blocks')).not_to exist
     end
   end
 

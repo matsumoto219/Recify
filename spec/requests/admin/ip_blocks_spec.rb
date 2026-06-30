@@ -129,6 +129,7 @@ RSpec.describe 'Admin IP blocks', type: :request do
       source = create(:security_event, ip_address: '8.8.8.8', matched_rule: 'manual-review')
       block = create(:security_ip_block, ip_address: '8.8.8.8', source_security_event: source, reason: 'scanner abuse')
       create(:security_event, ip_address: '8.8.8.8', event_type: 'xss_attempt', matched_rule: 'script_tag')
+      create(:security_ip_action, ip_address: '8.8.8.8', action_type: 'manual_ip_block', source: 'manual_admin', status: 'active', security_ip_block: block, source_security_event: source)
       sign_in admin
 
       get admin_ip_block_path(block)
@@ -141,6 +142,8 @@ RSpec.describe 'Admin IP blocks', type: :request do
         expect(response.body).to include(admin_security_event_path(source))
         expect(response.body).to include(admin_audit_logs_path(target_uid: 'ip:8.8.8.8'))
         expect(response.body).to include('関連セキュリティイベント')
+        expect(response.body).to include('IPアクション履歴')
+        expect(response.body).to include('手動IP制限')
         expect(response.body).to include('xss_attempt')
         expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_ip_block_path(block)))
       end

@@ -11,6 +11,7 @@ class Admin::IpBlocksController < Admin::BaseController
 
     @ip_access_snapshot = ::Security.ip_access_snapshot(ip_address: @record[:ip_address])
     @related_security_events = Admin.security_events(ip_address: @record[:ip_address], limit: 10)
+    @ip_action_history = Admin.ip_actions(ip_address: @record[:ip_address], limit: 10)
   end
 
   def unblock

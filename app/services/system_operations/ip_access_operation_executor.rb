@@ -61,6 +61,14 @@ module SystemOperations
         before_state: before_state,
         after_state: after_state
       )
+      Security.record_ip_access_operation(
+        operation: operation,
+        result: ip_access_result,
+        actor: actor,
+        reason: reason,
+        source_security_event: source_security_event,
+        audit_log: audit_log
+      )
 
       Result.new(
         success: true,

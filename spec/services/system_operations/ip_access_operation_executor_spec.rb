@@ -66,6 +66,13 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
         'source_security_event_id' => security_event.id
       )
       expect(audit_log.attributes.to_json).not_to include('credential-secret', 'challenge-secret')
+      expect(SecurityIpAction.last).to have_attributes(
+        action_type: 'manual_ip_block',
+        source: 'manual_admin',
+        status: 'active',
+        security_ip_block: result.security_ip_block,
+        actor_user: actor
+      )
     end
   end
 
@@ -92,6 +99,13 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
         target_type: 'SecurityIpBlock',
         target_id: block.id,
         target_uid: 'ip:8.8.8.8'
+      )
+      expect(SecurityIpAction.last).to have_attributes(
+        action_type: 'manual_ip_unblock',
+        source: 'manual_admin',
+        status: 'revoked',
+        security_ip_block: block,
+        actor_user: actor
       )
     end
   end
@@ -120,6 +134,12 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
         target_uid: 'ip:8.8.8.8'
       )
       expect(AuditLog.last.metadata).to include('reset_targets' => [ 'scanner', 'admin_probe', 'direct_upload_probe' ])
+      expect(SecurityIpAction.last).to have_attributes(
+        action_type: 'rack_attack_ban_reset',
+        source: 'manual_admin',
+        status: 'reset',
+        actor_user: actor
+      )
     end
   end
 

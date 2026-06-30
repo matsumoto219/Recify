@@ -24,5 +24,17 @@ module Security
     def rack_attack_ban_reset(...)
       RackAttackBanResetter.call(...)
     end
+
+    def record_ip_action(...)
+      IpActionRecorder.call(...)
+    end
+
+    def record_ip_rate_limit_action(...)
+      IpActionRecorder.record_rate_limit(...)
+    end
+
+    def record_ip_access_operation(...)
+      IpActionRecorder.record_operation(...)
+    end
   end
 end
