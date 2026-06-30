@@ -190,8 +190,8 @@
     <% if password_reveal_enabled %>
       <button
         type="button"
-        class="password-reveal-button ui-touch-control absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md focus:outline-none focus:ring-2 token-focus-ring-brand"
-        data-action="password-reveal#toggle"
+        class="password-reveal-button ui-touch-control absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 token-focus-ring-brand"
+        data-action="mousedown->password-reveal#preserveInputFocus password-reveal#toggle"
         data-password-reveal-target="button"
         aria-label="<%= t("shared.password_reveal.show") %>"
         aria-pressed="false">

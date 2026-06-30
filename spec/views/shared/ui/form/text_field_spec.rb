@@ -28,12 +28,16 @@ RSpec.describe 'shared/ui/form/_text_field', type: :view do
 
   it '既定では既存のMaterial Symbolsアイコンを使う' do
     document = render_text_field
-    button = document.at_css('button[data-action="password-reveal#toggle"]')
+    button = document.at_css('button.password-reveal-button')
     icon = button.at_css('[data-password-reveal-target="icon"]')
 
     aggregate_failures do
       expect(button['class']).to include('password-reveal-button')
       expect(button['class']).not_to include('hover:')
+      expect(button['class']).to include('focus-visible:ring-2')
+      expect(button['class']).not_to include('focus:ring-2')
+      expect(button['data-action']).to include('mousedown->password-reveal#preserveInputFocus')
+      expect(button['data-action']).to include('password-reveal#toggle')
       expect(icon['class']).to include('material-symbols-outlined')
       expect(icon.text.strip).to eq('visibility')
       expect(document.at_css('svg.password-visibility-icon')).to be_nil
@@ -42,7 +46,7 @@ RSpec.describe 'shared/ui/form/_text_field', type: :view do
 
   it 'オプション指定時だけアニメーションSVGアイコンを使う' do
     document = render_text_field(password_reveal_animation: true)
-    button = document.at_css('button[data-action="password-reveal#toggle"]')
+    button = document.at_css('button.password-reveal-button')
     icon = button.at_css('[data-password-reveal-target="icon"]')
 
     aggregate_failures do
@@ -62,7 +66,7 @@ RSpec.describe 'shared/ui/form/_text_field', type: :view do
     document = render_text_field(password_reveal: false, password_reveal_animation: true)
 
     aggregate_failures do
-      expect(document.at_css('button[data-action="password-reveal#toggle"]')).to be_nil
+      expect(document.at_css('button.password-reveal-button')).to be_nil
       expect(document.at_css('svg.password-visibility-icon')).to be_nil
     end
   end

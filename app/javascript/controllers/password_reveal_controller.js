@@ -18,10 +18,17 @@ export default class extends Controller {
     this.reset()
   }
 
-  toggle () {
+  toggle (event) {
     if (!this.hasInputTarget) return
 
     this.setRevealed(this.inputTarget.type !== 'text')
+    this.restoreInputFocusForPointerActivation(event)
+  }
+
+  preserveInputFocus (event) {
+    if (!this.hasInputTarget || !event.cancelable) return
+
+    event.preventDefault()
   }
 
   reset () {
@@ -46,6 +53,16 @@ export default class extends Controller {
       } else {
         this.iconTarget.textContent = revealed ? 'visibility_off' : 'visibility'
       }
+    }
+  }
+
+  restoreInputFocusForPointerActivation (event) {
+    if (!event || event.type !== 'click' || event.detail === 0) return
+
+    try {
+      this.inputTarget.focus({ preventScroll: true })
+    } catch (_error) {
+      this.inputTarget.focus()
     }
   }
 }
