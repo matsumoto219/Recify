@@ -29,7 +29,7 @@
   aria-labelledby="<%= title_id %>"
   aria-describedby="<%= message_id %>"
   aria-modal="true">
-  <div class="confirm-dialog-overlay modal-overlay" data-confirm-dialog-cancel aria-hidden="true"></div>
+  <div class="ui-no-select confirm-dialog-overlay modal-overlay" data-confirm-dialog-cancel aria-hidden="true"></div>
 
   <div class="confirm-dialog-viewport">
     <%= render "shared/ui/layout/surface_card",
@@ -38,10 +38,10 @@
           padding: :md,
           title_id: title_id,
           class: panel_class do %>
-      <span class="confirm-dialog-accent" aria-hidden="true"></span>
+      <span class="ui-no-select confirm-dialog-accent" aria-hidden="true"></span>
 
       <div class="confirm-dialog-content">
-        <div class="confirm-dialog-icon-shell" aria-hidden="true">
+        <div class="ui-no-select confirm-dialog-icon-shell" aria-hidden="true">
           <span class="material-symbols-outlined confirm-dialog-icon" data-confirm-dialog-icon>help</span>
         </div>
 

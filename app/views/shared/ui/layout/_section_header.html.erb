@@ -56,7 +56,7 @@
   ].compact.join(" ")
   breadcrumb_link_class = "token-text-muted section-header-breadcrumb-link transition-colors"
   breadcrumb_current_class = "min-w-0 token-text-brand font-medium break-words [overflow-wrap:anywhere]"
-  breadcrumb_separator_class = "text-xs token-text-muted"
+  breadcrumb_separator_class = "ui-no-select text-xs token-text-muted"
 
   align_class =
     case align
@@ -100,13 +100,13 @@
       {
         title: "token-text-error",
         subtitle: "section-header-danger-subtitle",
-        icon: "token-text-error"
+        icon: "ui-no-select token-text-error"
       }
     else
       {
         title: "section-header-title",
         subtitle: "token-text-muted",
-        icon: "token-text-brand"
+        icon: "ui-no-select token-text-brand"
       }
     end
 

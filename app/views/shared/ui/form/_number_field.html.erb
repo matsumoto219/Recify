@@ -103,7 +103,7 @@
     (show_stepper_buttons ? "flex items-stretch overflow-hidden rounded-lg border field-control-wrapper #{highlight_variant == :error || has_error ? 'field-control-wrapper-error' : nil}" : nil),
     input_wrapper_class
   ].compact.join(" ")
-  affix_base_class = "absolute top-1/2 -translate-y-1/2 text-xs token-text-muted pointer-events-none transition-colors field-icon-focus"
+  affix_base_class = "ui-no-select absolute top-1/2 -translate-y-1/2 text-xs token-text-muted pointer-events-none transition-colors field-icon-focus"
   prefix_classes = [affix_base_class, "left-3"].join(" ")
   suffix_classes = [affix_base_class, "right-3"].join(" ")
   error_classes = ["px-1 text-xs token-text-error leading-relaxed", error_message_class].compact.join(" ")

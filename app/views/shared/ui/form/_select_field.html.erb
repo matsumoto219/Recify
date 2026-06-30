@@ -77,7 +77,7 @@
 
   <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
+      <span class="ui-no-select material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
     <% end %>
 
     <%= f.select attribute,
@@ -86,7 +86,7 @@
                  { class: merged_select_class,
                    required: required }.merge(html_options) %>
 
-    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>">expand_more</span>
+    <span class="ui-no-select material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>">expand_more</span>
   </div>
 
   <% if show_error_message && has_error %>

@@ -80,7 +80,7 @@
 
   <div class="group relative">
     <% if with_icon && icon.present? %>
-      <span class="material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
+      <span class="ui-no-select material-symbols-outlined absolute left-3 top-3 text-sm pointer-events-none transition-colors <%= has_error || highlight_variant == :error ? 'token-text-error field-icon-error-focus' : 'token-text-muted field-icon-focus' %>"><%= icon %></span>
     <% end %>
 
     <%= f.text_area attribute, **field_options %>

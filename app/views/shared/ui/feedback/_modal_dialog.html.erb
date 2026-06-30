@@ -29,7 +29,7 @@
   aria-modal="true"
   data-action="cancel->legal-dialog#handleCancel close->legal-dialog#handleClose keydown->legal-dialog#handleKeydown">
   <div
-    class="legal-dialog-overlay fixed inset-0 modal-overlay"
+    class="ui-no-select legal-dialog-overlay fixed inset-0 modal-overlay"
     aria-hidden="true"
     data-action="click->legal-dialog#close"></div>
 
@@ -47,7 +47,7 @@
           class="ui-touch-control floating-action-button inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors"
           aria-label="<%= close_label %>"
           data-action="legal-dialog#close">
-          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
+          <span class="ui-no-select material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
         </button>
       </div>
 

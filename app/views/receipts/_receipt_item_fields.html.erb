@@ -26,7 +26,7 @@
 
 <div class="swipe-action rounded-lg"
      data-controller="swipe-action">
-  <div class="swipe-action-background md:hidden" aria-hidden="true">
+  <div class="ui-no-select swipe-action-background md:hidden" aria-hidden="true">
     <button type="button"
             class="ui-touch-control flex w-[88px] shrink-0 cursor-pointer items-center justify-center token-bg-error-soft token-text-error"
             data-action="click->receipt-form#removeItem click->swipe-action#close"
@@ -34,7 +34,7 @@
             data-swipe-ignore
             tabindex="-1"
             aria-label="<%= t("receipts.item_fields.remove_aria") %>">
-      <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+      <span class="ui-no-select material-symbols-outlined" aria-hidden="true">delete</span>
     </button>
   </div>
 
@@ -261,7 +261,7 @@
       <% if item_warning_reason_labels.any? %>
         <div class="receipt-form-item-warning-notes mt-3 rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
           <div class="flex items-start gap-2">
-            <span class="material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
+            <span class="ui-no-select material-symbols-outlined mt-0.5 text-base token-text-warning" aria-hidden="true">info</span>
             <div class="min-w-0">
               <p class="text-sm font-bold token-text-warning"><%= t("receipts.item_fields.warning_title") %></p>
               <ul class="mt-1 list-disc space-y-1 pl-5 text-sm token-text-base">

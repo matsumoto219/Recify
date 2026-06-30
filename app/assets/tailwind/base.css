@@ -39,3 +39,12 @@ body {
   -webkit-touch-callout: none;
   /* stylelint-enable property-no-vendor-prefix */
 }
+
+.ui-no-select {
+  user-select: none;
+
+  /* stylelint-disable property-no-vendor-prefix -- iOS Safari needs prefixed selection/callout controls for decorative UI. */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* stylelint-enable property-no-vendor-prefix */
+}

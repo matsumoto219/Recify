@@ -48,7 +48,7 @@
     </div>
   <% end %>
 
-  <div class="h-1.5 w-full token-bg-page rounded-full overflow-hidden" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= percentage.round %>" aria-label="<%= title %>">
+  <div class="ui-no-select h-1.5 w-full token-bg-page rounded-full overflow-hidden" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= percentage.round %>" aria-label="<%= title %>">
     <div
       class="h-full rounded-full transition-[width]"
       style="width: <%= percentage %>%; background: <%= fill_color %>;"></div>
