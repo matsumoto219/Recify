@@ -6,6 +6,12 @@ RSpec.describe Ocr::Client do
   let(:provider) { 'azure_document_intelligence' }
   let(:before_provider_call) { nil }
   let(:client) { described_class.new(image: image, provider: provider, before_provider_call: before_provider_call) }
+  let(:configured_env) do
+    {
+      'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
+      'AZURE_OCR_API_KEY' => 'test-key'
+    }
+  end
   let(:operational_env_keys) do
     %w[
       AZURE_OCR_TIMEOUT
@@ -89,7 +95,7 @@ RSpec.describe Ocr::Client do
   end
 
   around do |example|
-    with_env(operational_env_keys.to_h { |key| [ key, nil ] }) do
+    with_env(configured_env.merge(operational_env_keys.to_h { |key| [ key, nil ] })) do
       example.run
     end
   end

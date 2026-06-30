@@ -71,7 +71,9 @@ RSpec.describe 'Settings', type: :request do
 
   def expect_password_reveal_for(input)
     wrapper = password_reveal_wrapper_for(input)
-    button = wrapper&.at_css('button[data-action="password-reveal#toggle"]')
+    button = wrapper&.css('button.password-reveal-button')&.find do |node|
+      node['data-action'].to_s.split.include?('password-reveal#toggle')
+    end
 
     aggregate_failures do
       expect(wrapper).to be_present

@@ -119,7 +119,9 @@ RSpec.describe 'Auth pages', type: :request do
 
   def expect_password_reveal_for(input)
     wrapper = password_reveal_wrapper_for(input)
-    button = wrapper&.at_css('button[data-action="password-reveal#toggle"]')
+    button = wrapper&.css('button.password-reveal-button')&.find do |node|
+      node['data-action'].to_s.split.include?('password-reveal#toggle')
+    end
     icon = button&.at_css('[data-password-reveal-target="icon"]')
 
     aggregate_failures do

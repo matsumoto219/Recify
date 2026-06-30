@@ -5,6 +5,12 @@ RSpec.describe Ai::Providers::Openai::Client do
   let(:client) { described_class.new }
   let(:request_body) { { model: 'gpt-test', input: 'payload' } }
   let(:backoff_policy) { Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.0 }) }
+  let(:configured_env) do
+    {
+      'OPENAI_API_KEY' => 'test-openai-key',
+      'OPENAI_AI_MODEL' => 'gpt-test'
+    }
+  end
   let(:operational_env_keys) do
     %w[
       OPENAI_TIMEOUT
@@ -76,7 +82,7 @@ RSpec.describe Ai::Providers::Openai::Client do
   end
 
   around do |example|
-    with_env(operational_env_keys.to_h { |key| [ key, nil ] }) do
+    with_env(configured_env.merge(operational_env_keys.to_h { |key| [ key, nil ] })) do
       example.run
     end
   end
