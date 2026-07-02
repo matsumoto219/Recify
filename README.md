@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/readme/recify-logo-full.png" alt="Recify" width="320">
+</p>
+
 # Recify
 
 Recifyは、レシート画像をアップロードし、OCR解析とAI補完によって店舗名・日付・金額・明細・カテゴリ整理を支援するレシート管理アプリです。
@@ -7,6 +11,18 @@ Recifyは、レシート画像をアップロードし、OCR解析とAI補完に
 ## URL
 
 - URL: https://recify-app.com
+
+## 開発背景
+
+レシートは紙のままだと保管・検索・集計がしづらく、手入力にも負担がかかります。Recifyは、レシート画像や手動入力から支出データを半自動で記録し、日々の入力・整理の手間を減らすことを目的に開発しました。
+
+## 設計上のポイント
+
+- OCR/AIは確定値ではなく入力補助として扱い、OCR原文、AI候補、ユーザー確定値を分けて保持します。
+- 税率、割引、支払調整、丸めを考慮し、OCR/AIの候補値を保存前に金額整合性チェックへ通します。
+- 画像解析はバックグラウンドで処理し、解析完了までブラウザ上で待機しなくてもよい設計にしています。
+- AIが利用できない場合でも、OCR結果をもとに最低限の確認・編集を進められるようにしています。
+- ゲスト利用から本登録へ移行できる導線を用意し、メール確認や規約同意を組み合わせています。
 
 ## 主な機能
 
@@ -33,45 +49,57 @@ Recifyは、レシート画像をアップロードし、OCR解析とAI補完に
 
 ## 使用技術
 
-### Application
+**アプリケーション**
 
-- Ruby 4.0.5
-- Ruby on Rails 8.1.3
-- PostgreSQL
-- Turbo / Stimulus
-- Tailwind CSS
-- Devise
-- WebAuthn
-- Active Storage
-- Solid Queue / Solid Cache / Solid Cable
-- RSpec
+| 使用技術 | 詳細 |
+| --- | --- |
+| Ruby 4.0.5 | アプリケーション実行環境 |
+| Ruby on Rails 8.1.3 | Webアプリケーションフレームワーク |
+| PostgreSQL | レシート、ユーザー、管理・監査データの保存 |
+| Turbo / Stimulus | 画面遷移、フォーム操作、UI制御 |
+| Tailwind CSS | UIスタイリング |
+| Devise | ユーザー認証、メール確認、パスワード再設定 |
+| WebAuthn | パスキー登録・ログイン |
+| Active Storage | レシート画像の添付管理 |
+| Solid Queue / Solid Cache / Solid Cable | 非同期ジョブ、キャッシュ、リアルタイム更新 |
 
-### OCR / AI / External Services
+<br>
 
-- Azure Document Intelligence
-- OpenAI API
-- Resend
-- Sentry
-- Cloudflare Turnstile
+**OCR / AI / 外部サービス**
 
-### Infrastructure / Operations
+| 使用技術 | 詳細 |
+| --- | --- |
+| Azure Document Intelligence | レシート画像から店舗名、日付、金額、明細候補を抽出 |
+| OpenAI API | カテゴリ分類や商品名整理などのAI補完 |
+| Resend | 認証メールや問い合わせ関連メールの送信 |
+| Sentry | エラー監視 |
+| Cloudflare Turnstile | bot対策 |
 
-- AWS Lightsail
-- Docker
-- Kamal
-- Cloudflare
-- Abuse protection
-- snapshots / metrics alarms
+<br>
 
-### Quality
+**インフラ / 運用**
 
-- RuboCop
-- ERB Lint
-- StandardJS
-- Stylelint
-- gitleaks
-- bundler-audit
-- brakeman
+| 使用技術 | 詳細 |
+| --- | --- |
+| AWS Lightsail | アプリケーション実行基盤 |
+| Docker | アプリケーション実行環境のコンテナ化 |
+| Kamal | コンテナデプロイ |
+| Cloudflare | DNS/CDN、入口保護、Abuse protection |
+| Lightsail snapshots / metrics alarms | バックアップとメトリクス通知 |
+
+<br>
+
+**品質確認**
+
+| 使用技術 | 詳細 |
+| --- | --- |
+| RSpec | モデル、リクエスト、サービス、ジョブなどのテスト |
+| RuboCop | Rubyコードの静的解析 |
+| ERB Lint | ERBテンプレートのLint |
+| StandardJS | JavaScriptのLint |
+| Stylelint | CSSのLint |
+| gitleaks | secret混入検知 |
+| bundler-audit / brakeman | 依存GemとRailsアプリのセキュリティチェック |
 
 ## OCR / AI補完
 
@@ -158,10 +186,19 @@ flowchart TB
     runs["receipt_analysis_runs<br/>provider / phase / status"]
   end
 
-  subgraph support["Legal / Support"]
+  subgraph legal["Legal documents"]
     direction TB
     legal_documents["legal_documents"]
-    support_records["legal_acceptances<br/>contact_requests<br/>announcements<br/>notifications"]
+  end
+
+  subgraph content["Public content"]
+    direction TB
+    public_content["announcements<br/>announcement_links"]
+  end
+
+  subgraph support["User support records"]
+    direction TB
+    support_records["legal_acceptances<br/>contact_requests<br/>notifications"]
   end
 
   subgraph ops["Admin / Audit"]
@@ -171,14 +208,15 @@ flowchart TB
 
   users --> auth_records
   users --> receipts
+  users --> support_records
+  users -.-> public_content
+  users -.-> ops_records
   receipts --> receipt_details
   receipts --> runs
   receipts --> attachments
-  users --> support_records
+  receipts -.-> ops_records
   legal_documents --> support_records
   ops_records -.-> runs
-  users -.-> ops_records
-  receipts -.-> ops_records
 
   classDef account fill:#eef2ff,stroke:#6366f1,color:#111827;
   classDef receipt fill:#ecfdf5,stroke:#10b981,color:#111827;
@@ -189,7 +227,7 @@ flowchart TB
   class users,auth_records account;
   class receipts,receipt_details,attachments receipt;
   class runs analysis;
-  class legal_documents,support_records support;
+  class legal_documents,public_content,support_records support;
   class ops_records ops;
 ```
 
@@ -197,60 +235,7 @@ flowchart TB
 
 以下は、Recifyの本番運用で利用している主要サービスのインフラ構成図です。
 
-```mermaid
-flowchart TB
-  user["User / Browser"]
-
-  subgraph edge["Cloudflare"]
-    direction LR
-    dns["DNS / CDN"]
-    protection["入口保護<br/>Abuse protection"]
-    turnstile["Turnstile"]
-  end
-
-  subgraph aws["AWS Lightsail"]
-    direction LR
-    app["Rails app<br/>Puma / Thruster"]
-    solid["Solid Queue<br/>Solid Cache<br/>Solid Cable"]
-    data["PostgreSQL<br/>Active Storage"]
-    monitoring["Snapshots<br/>metrics alarms"]
-  end
-
-  subgraph external["External services"]
-    direction LR
-    azure["Azure Document Intelligence"]
-    openai["OpenAI API"]
-    resend["Resend"]
-    sentry["Sentry"]
-  end
-
-  user --> dns
-  dns --> protection
-  protection --> app
-  turnstile -.-> app
-  app --> solid
-  app --> data
-  solid --> azure
-  solid --> openai
-  app --> resend
-  app --> sentry
-  monitoring -.-> app
-  monitoring -.-> data
-
-  classDef user fill:#ffffff,stroke:#111827,stroke-width:2px,color:#111827;
-  classDef edge fill:#eff6ff,stroke:#2563eb,color:#111827;
-  classDef aws fill:#f0fdf4,stroke:#16a34a,color:#111827;
-  classDef host fill:#fff7ed,stroke:#f97316,color:#111827;
-  classDef data fill:#ecfdf5,stroke:#10b981,color:#111827;
-  classDef external fill:#f8fafc,stroke:#64748b,color:#111827;
-
-  class user user;
-  class dns,protection,turnstile edge;
-  class app,solid host;
-  class data data;
-  class monitoring aws;
-  class azure,openai,resend,sentry external;
-```
+![Recify infrastructure diagram](.github/readme/infrastructure.png)
 
 ## 今後の改善予定
 
