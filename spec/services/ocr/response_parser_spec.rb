@@ -359,6 +359,91 @@ RSpec.describe Ocr::ResponseParser do
       )
     end
 
+    it '購入日時の構造化fieldと日付/時刻分離行の現行fallbackを固定する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+
+      structured_result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      date_only_response = fixture_response.deep_dup
+      date_only_response.dig('analyzeResult', 'documents', 0, 'fields').delete('TransactionTime')
+      date_only_result = described_class.new(response: date_only_response, provider: :fixture).call
+
+      time_only_response = fixture_response.deep_dup
+      time_only_response.dig('analyzeResult', 'documents', 0, 'fields').delete('TransactionDate')
+      time_only_result = described_class.new(response: time_only_response, provider: :fixture).call
+
+      line_fallback_response = fixture_response.deep_dup
+      line_fallback_fields = line_fallback_response.dig('analyzeResult', 'documents', 0, 'fields')
+      line_fallback_fields.delete('TransactionDate')
+      line_fallback_fields.delete('TransactionTime')
+      line_fallback_result = described_class.new(response: line_fallback_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(structured_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20')
+        expect(time_only_result.dig(:candidates, :purchased_at_text)).to eq('18:42')
+        # 現行fallbackは近接する時刻行を結合せず、最初に一致した日付行を返す。
+        expect(line_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
+      end
+    end
+
+    it 'お預かり/お釣りだけではpayment_method_textへ昇格しない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        合計
+        ¥1,900
+        お預かり
+        ¥2,000
+        お釣り
+        ¥100
+      TEXT
+      fixture_response.dig('analyzeResult', 'documents', 0, 'fields').delete('Payments')
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :payment_method_text)).to be_nil
+        expect(result.dig(:candidates, :total_amount)).to eq(1_900)
+      end
+    end
+
+    it 'point/coupon/cashless/payment discountを含むOCR境界fixtureの現行adjustment候補を固定する' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      candidates = result[:candidates]
+      adjustment_candidates = candidates[:adjustment_candidates]
+
+      aggregate_failures do
+        expect(candidates[:payment_method_text]).to eq('クレジット')
+        expect(candidates[:payments]).to contain_exactly(hash_including(method: 'CreditCard', amount: 1_510))
+        expect(candidates[:total_amount]).to eq(1_900)
+        expect(candidates[:subtotal_amount]).to eq(2_000)
+        expect(candidates[:tax_amount]).to eq(154)
+        expect(candidates[:tax_details]).to contain_exactly(
+          hash_including(description: '8%消費税等', rate: 8, net_amount: 1_080, amount: 80),
+          hash_including(description: '10%消費税等', rate: 10, net_amount: 820, amount: 74)
+        )
+        expect(adjustment_candidates).to include(
+          hash_including(
+            source_text: 'クーポン値引き',
+            amount: 100,
+            sign_hint: 'discount',
+            tax_rate_hint: BigDecimal('0.08'),
+            candidate_reason: 'label_signed_neighbor_amount'
+          ),
+          hash_including(
+            source_text: 'キャッシュレス還元額 -50',
+            amount: 50,
+            sign_hint: 'discount',
+            candidate_reason: 'label_same_line_amount'
+          )
+        )
+        expect(adjustment_candidates.map { |candidate| candidate[:source_text] }).not_to include('ポイント利用', 'payment discount -40')
+      end
+    end
+
     it 'Azure Totalがお預かり金額を指す場合は会計合計候補を優先する' do
       deposit_response = raw_response.deep_dup
       deposit_response['analyzeResult']['content'] = <<~TEXT

@@ -1,0 +1,100 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "content": "OCR境界ストア\n2026年05月20日\n18:42\n対象商品A\n¥1,000\n対象商品B\n¥1,000\n小計\n¥2,000\nクーポン値引き\n-100\nポイント利用\n-300\nキャッシュレス還元額 -50\npayment discount -40\n8%対象額\n¥1,080\n8%消費税等\n¥80\n10%対象額\n¥820\n10%消費税等\n¥74\n合計\n¥1,900\nお預かり\n¥2,000\nお釣り\n¥100\nクレジット支払\n¥1,510\n",
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "fields": {
+          "MerchantName": {
+            "valueString": "OCR境界ストア",
+            "confidence": 0.99
+          },
+          "TransactionDate": {
+            "valueDate": "2026-05-20",
+            "confidence": 0.96
+          },
+          "TransactionTime": {
+            "valueTime": "18:42",
+            "confidence": 0.95
+          },
+          "Total": {
+            "valueCurrency": {
+              "amount": 1900,
+              "currencyCode": "JPY"
+            },
+            "confidence": 0.98
+          },
+          "Subtotal": {
+            "valueCurrency": {
+              "amount": 2000,
+              "currencyCode": "JPY"
+            },
+            "confidence": 0.94
+          },
+          "TotalTax": {
+            "valueCurrency": {
+              "amount": 154,
+              "currencyCode": "JPY"
+            },
+            "confidence": 0.93
+          },
+          "Payments": {
+            "valueArray": [
+              {
+                "valueObject": {
+                  "Method": {
+                    "valueString": "CreditCard"
+                  },
+                  "Amount": {
+                    "valueCurrency": {
+                      "amount": 1510,
+                      "currencyCode": "JPY"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "TaxDetails": {
+            "valueArray": [
+              {
+                "valueObject": {
+                  "Description": {
+                    "valueString": "8%消費税等"
+                  },
+                  "Amount": {
+                    "valueCurrency": {
+                      "amount": 80,
+                      "currencyCode": "JPY"
+                    }
+                  },
+                  "Rate": {
+                    "valueNumber": 8
+                  }
+                }
+              },
+              {
+                "valueObject": {
+                  "Description": {
+                    "valueString": "10%消費税等"
+                  },
+                  "Amount": {
+                    "valueCurrency": {
+                      "amount": 74,
+                      "currencyCode": "JPY"
+                    }
+                  },
+                  "Rate": {
+                    "valueNumber": 10
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "confidence": 0.97
+      }
+    ]
+  }
+}
