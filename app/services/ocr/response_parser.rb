@@ -845,7 +845,7 @@ class Ocr::ResponseParser
     return nil if label_index.nil?
 
     label = lines[label_index].to_s
-    return nil if adjustment_excluded_line?(label) && !explicit_payment_adjustment_discount_label?(label)
+    return nil if adjustment_excluded_line?(label) && !explicit_payment_adjustment_label?(label)
     return nil if item_line_candidate?(label, items) && !known_adjustment_label?(label)
 
     amount = adjustment_amounts_in_line(line).first
@@ -869,7 +869,7 @@ class Ocr::ResponseParser
   def label_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil if amount_only_line?(line)
-    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_discount_line?(line)
+    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_line?(line)
     return nil if line.match?(/\d{4}[\/\-年]\s*\d{1,2}|\d{1,2}[:：]\d{2}/)
 
     known_label = known_adjustment_label?(line)
@@ -984,13 +984,22 @@ class Ocr::ResponseParser
     text.match?(profile.ocr_adjustment_discount_label_pattern) || text.match?(profile.ocr_adjustment_surcharge_label_pattern)
   end
 
+  def explicit_payment_adjustment_label?(line)
+    explicit_payment_adjustment_discount_label?(line) || explicit_point_usage_adjustment_label?(line)
+  end
+
+  def explicit_payment_adjustment_line?(line)
+    text = line.to_s
+    text.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN) && explicit_payment_adjustment_label?(text)
+  end
+
   def explicit_payment_adjustment_discount_label?(line)
     line.to_s.match?(profile.ocr_payment_adjustment_discount_label_pattern)
   end
 
-  def explicit_payment_adjustment_discount_line?(line)
+  def explicit_point_usage_adjustment_label?(line)
     text = line.to_s
-    text.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN) && explicit_payment_adjustment_discount_label?(text)
+    text.match?(profile.ocr_point_usage_adjustment_label_pattern) && !text.match?(profile.ocr_point_display_line_pattern)
   end
 
   def adjustment_zone_label?(lines, index)

@@ -78,6 +78,28 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JP profile OCR point usage adjustment labels' do
+    it 'OCRポイント利用ラベルと表示用ポイント行をprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+      usage_pattern = profile.ocr_point_usage_adjustment_label_pattern
+      display_pattern = profile.ocr_point_display_line_pattern
+
+      aggregate_failures do
+        expect('ポイント利用 -100').to match(usage_pattern)
+        expect('ポイント支払 ▲100').to match(usage_pattern)
+        expect('point usage -100').to match(usage_pattern)
+        expect('ポイント付与 10P').not_to match(usage_pattern)
+        expect('獲得予定ポイント 20P').not_to match(usage_pattern)
+        expect('保有ポイント 300P').not_to match(usage_pattern)
+        expect('利用可能ポイント 200P').not_to match(usage_pattern)
+        expect('ポイント付与 10P').to match(display_pattern)
+        expect('獲得予定ポイント 20P').to match(display_pattern)
+        expect('保有ポイント 300P').to match(display_pattern)
+        expect('利用可能ポイント 200P').to match(display_pattern)
+      end
+    end
+  end
+
   describe 'JP profile quantity unit aliases' do
     it 'ReceiptQuantityUnitの保存codeへ正規化できるaliasだけを持つ' do
       aliases = described_class.fetch('JPN').quantity_unit_aliases

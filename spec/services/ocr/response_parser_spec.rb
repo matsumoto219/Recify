@@ -528,6 +528,51 @@ RSpec.describe Ocr::ResponseParser do
       )
     end
 
+    it 'ポイント利用はsigned amountがある場合だけpayment adjustment candidateにする' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        小計
+        ¥1,000
+        ポイント利用 -100
+        ポイント支払 ▲100
+        point usage -100
+        ポイント付与 10P
+        獲得予定ポイント 20P
+        保有ポイント 300P
+        利用可能ポイント 200P
+        クレジット支払 ¥700
+        お預かり
+        ¥1,000
+        お釣り
+        ¥300
+        合計 ¥900
+      TEXT
+      fixture_response.dig('analyzeResult', 'documents', 0, 'fields').delete('Total')
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      adjustment_candidates = result.dig(:candidates, :adjustment_candidates)
+      source_texts = adjustment_candidates.map { |candidate| candidate[:source_text] }
+
+      aggregate_failures do
+        expect(adjustment_candidates).to include(
+          hash_including(source_text: 'ポイント利用 -100', amount: 100, sign_hint: 'discount', candidate_reason: 'label_same_line_amount'),
+          hash_including(source_text: 'ポイント支払 ▲100', amount: 100, sign_hint: 'discount', candidate_reason: 'label_same_line_amount'),
+          hash_including(source_text: 'point usage -100', amount: 100, sign_hint: 'discount', candidate_reason: 'label_same_line_amount')
+        )
+        expect(source_texts).not_to include(
+          'ポイント付与 10P',
+          '獲得予定ポイント 20P',
+          '保有ポイント 300P',
+          '利用可能ポイント 200P',
+          'クレジット支払 ¥700',
+          'お預かり',
+          'お釣り'
+        )
+        expect(result.dig(:candidates, :total_amount)).to eq(900)
+      end
+    end
+
     it 'point/coupon/cashless/payment discountを含むOCR境界fixtureのadjustment候補を固定する' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
 
@@ -546,6 +591,12 @@ RSpec.describe Ocr::ResponseParser do
           hash_including(description: '10%消費税等', rate: 10, net_amount: 820, amount: 74)
         )
         expect(adjustment_candidates).to include(
+          hash_including(
+            source_text: 'ポイント利用',
+            amount: 300,
+            sign_hint: 'discount',
+            candidate_reason: 'signed_amount_neighbor_label'
+          ),
           hash_including(
             source_text: 'クーポン値引き',
             amount: 100,
@@ -566,7 +617,6 @@ RSpec.describe Ocr::ResponseParser do
             candidate_reason: 'label_same_line_amount'
           )
         )
-        expect(adjustment_candidates.map { |candidate| candidate[:source_text] }).not_to include('ポイント利用')
       end
     end
 
