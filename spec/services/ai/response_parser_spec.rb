@@ -349,6 +349,75 @@ RSpec.describe Ai::ResponseParser do
           'ocr_low_confidence'
         ])
       end
+
+      it 'ReviewReasonsでAI応答許可しているreview_reasonsを保持する' do
+        payload['review_reasons'] = ReviewReasons::AI_OUTPUT_REASONS
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:review_reasons]).to eq(ReviewReasons::AI_OUTPUT_REASONS)
+      end
+
+      it '未知review_reasonsを例外にせず除外する' do
+        payload['review_reasons'] = [
+          'item_name_uncertain',
+          'unknown_reason',
+          'ai_api_error',
+          'payment_amount_mismatch',
+          nil,
+          ' '
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:review_reasons]).to eq([ 'item_name_uncertain' ])
+      end
+
+      it 'receipt_adjustmentsの未知review_reasonsも除外する' do
+        payload['receipt_adjustments'] = [
+          {
+            'kind' => 'coupon',
+            'label' => 'クーポン',
+            'amount' => 100,
+            'sign' => 'discount',
+            'source_text' => 'クーポン -100',
+            'source_line_index' => 6,
+            'needs_review' => true,
+            'review_reasons' => [
+              'adjustment_uncertain',
+              'unknown_adjustment_reason',
+              'ai_timeout',
+              nil,
+              ' '
+            ]
+          }
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:receipt_adjustments_attributes]).to include(
+          include(review_reasons: [ 'adjustment_uncertain' ])
+        )
+      end
+
+      it 'receipt_adjustmentsの未知kind/sign補正理由と許可済み理由を重複なしで保持する' do
+        payload['receipt_adjustments'] = [
+          {
+            'kind' => 'unknown_charge',
+            'amount' => 120,
+            'sign' => 'unknown',
+            'source_text' => '謎の割引 -120',
+            'source_line_index' => 4,
+            'review_reasons' => [ 'adjustment_uncertain', 'unknown_reason' ]
+          }
+        ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        expect(result[:receipt_adjustments_attributes]).to include(
+          include(review_reasons: [ 'adjustment_uncertain' ])
+        )
+      end
     end
 
     describe 'review reason definitions' do
@@ -360,8 +429,11 @@ RSpec.describe Ai::ResponseParser do
         I18n.t('enums.receipt_item.review_reason').keys.map(&:to_s)
       end
 
-      it 'keeps parser and prompt allowed review reasons in sync' do
-        expect(described_class::ALLOWED_REVIEW_REASONS).to match_array(prompt_allowed_review_reasons)
+      it 'keeps ReviewReasons, parser, and prompt allowed review reasons in sync' do
+        aggregate_failures do
+          expect(described_class::ALLOWED_REVIEW_REASONS).to match_array(ReviewReasons::AI_OUTPUT_REASONS)
+          expect(prompt_allowed_review_reasons).to match_array(ReviewReasons::AI_OUTPUT_REASONS)
+        end
       end
 
       it 'has locale translations for parser allowed review reasons' do

@@ -13,26 +13,7 @@ module Ai
       review_reasons
     ].freeze
 
-    ALLOWED_REVIEW_REASONS = %w[
-      store_name_missing
-      store_name_uncertain
-      store_address_missing
-      store_address_uncertain
-      store_phone_number_missing
-      store_phone_number_uncertain
-      purchased_at_missing
-      purchased_at_uncertain
-      purchased_at_conflicted
-      payment_method_missing
-      payment_method_uncertain
-      items_missing
-      item_name_uncertain
-      item_category_uncertain
-      item_tax_rate_uncertain
-      adjustment_uncertain
-      ocr_unreadable
-      ocr_low_confidence
-    ].freeze
+    ALLOWED_REVIEW_REASONS = ReviewReasons::AI_OUTPUT_REASONS
 
     ALLOWED_REJECTION_REASONS = %w[
       no_text
@@ -300,11 +281,7 @@ module Ai
     end
 
     def normalize_review_reasons(reasons)
-      Array(reasons)
-        .map(&:to_s)
-        .map(&:strip)
-        .select { |r| ALLOWED_REVIEW_REASONS.include?(r) }
-        .uniq
+      ReviewReasons.normalize_ai_output_reasons(reasons)
     end
 
     def normalize_receipt_adjustments(adjustments)
@@ -400,10 +377,7 @@ module Ai
     end
 
     def normalize_adjustment_review_reasons(reasons)
-      Array(reasons).filter_map do |reason|
-        normalized = reason.to_s.strip
-        normalized.presence
-      end
+      normalize_review_reasons(reasons)
     end
   end
 end

@@ -820,7 +820,7 @@ class Receipt < ApplicationRecord
   end
 
   def review_reason_labels_for(codes)
-    Array(codes).map do |code|
+    ReviewReasons.review_reasons_for_user(codes).map do |code|
       I18n.t("enums.receipt_item.review_reason.#{code}", default: code)
     end
   end

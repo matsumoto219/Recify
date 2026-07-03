@@ -120,6 +120,26 @@ RSpec.describe ReceiptItem, type: :model do
     end
   end
 
+  describe '#review_reason_labels' do
+    it 'ユーザー向けに許可されたreview_reasonだけを表示する' do
+      item = build(:receipt).receipt_items.build(
+        confirmed_name: '確認商品',
+        price: 100,
+        quantity: 1,
+        line_total: 100,
+        review_reasons: [
+          'item_tax_rate_uncertain',
+          'ai_timeout',
+          'unknown_reason'
+        ]
+      )
+
+      expect(item.review_reason_labels).to eq([
+        I18n.t('enums.receipt_item.review_reason.item_tax_rate_uncertain')
+      ])
+    end
+  end
+
   describe 'amount limit validation' do
     it 'SystemSettingsの明細単価/合計上限を参照する' do
       create(:system_setting, key: 'limits.receipt_item_price_max', value: SystemSettings.stored_value(500))

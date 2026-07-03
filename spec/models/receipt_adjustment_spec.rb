@@ -49,6 +49,21 @@ RSpec.describe ReceiptAdjustment do
     expect(adjustment).not_to be_valid
   end
 
+  it 'ユーザー向けに許可されたreview_reasonだけを表示する' do
+    adjustment = build(
+      :receipt_adjustment,
+      review_reasons: [
+        'adjustment_uncertain',
+        'ai_timeout',
+        'unknown_reason'
+      ]
+    )
+
+    expect(adjustment.review_reason_labels).to eq([
+      I18n.t('enums.receipt_adjustment.review_reason.adjustment_uncertain')
+    ])
+  end
+
   it '1レシートあたりの調整行数を設定上限までにする' do
     create(:system_setting, key: 'limits.receipt_adjustments_per_receipt', value: SystemSettings.stored_value(1))
     receipt = create(:receipt)

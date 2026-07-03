@@ -100,7 +100,10 @@ module Ai
           "needs_review" => nullable_boolean,
           "review_reasons" => {
             "type" => "array",
-            "items" => { "type" => "string" }
+            "items" => {
+              "type" => "string",
+              "enum" => Ai::ResponseParser::ALLOWED_REVIEW_REASONS
+            }
           }
         )
       end

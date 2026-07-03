@@ -36,7 +36,12 @@ RSpec.describe ReviewReasons do
     it 'classifies system reasons' do
       aggregate_failures do
         expect(described_class.source_for('ai_api_error')).to eq(:system)
+        expect(described_class.source_for('ai_auth_error')).to eq(:system)
+        expect(described_class.source_for('ai_invalid_request')).to eq(:system)
         expect(described_class.source_for(:ai_timeout)).to eq(:system)
+        expect(described_class.source_for('ai_unavailable')).to eq(:system)
+        expect(described_class.source_for('ai_quota_exceeded')).to eq(:system)
+        expect(described_class.source_for('ai_rate_limited')).to eq(:system)
         expect(described_class.source_for('unexpected_error')).to eq(:system)
         expect(described_class.source_for('analysis_missing_keys')).to eq(:system)
       end
@@ -89,7 +94,8 @@ RSpec.describe ReviewReasons do
         'ocr_low_confidence',
         'tax_detail_mismatch',
         'analysis_missing_keys',
-        'unexpected_error'
+        'unexpected_error',
+        'custom_reason'
       ])
 
       expect(result).to eq([
@@ -136,7 +142,8 @@ RSpec.describe ReviewReasons do
         'item_tax_rate_uncertain',
         'item_name_uncertain',
         'tax_detail_mismatch',
-        'analysis_missing_keys'
+        'analysis_missing_keys',
+        'custom_reason'
       ])
 
       expect(result).to eq([
@@ -144,6 +151,51 @@ RSpec.describe ReviewReasons do
         'item_name_uncertain',
         'tax_detail_mismatch'
       ])
+    end
+  end
+
+  describe '.normalize_ai_output_reasons' do
+    it 'keeps only review reasons allowed in AI responses' do
+      result = described_class.normalize_ai_output_reasons([
+        'item_name_uncertain',
+        :adjustment_uncertain,
+        'ocr_low_confidence',
+        'payment_amount_mismatch',
+        'ai_timeout',
+        'custom_reason',
+        nil,
+        ' '
+      ])
+
+      expect(result).to eq([
+        'item_name_uncertain',
+        'adjustment_uncertain',
+        'ocr_low_confidence'
+      ])
+    end
+  end
+
+  describe 'definitions' do
+    it 'has no duplicate reason codes in formal allowlists' do
+      aggregate_failures do
+        expect(described_class::USER_FACING_REASONS).to eq(described_class::USER_FACING_REASONS.uniq)
+        expect(described_class::ALL_REASONS).to eq(described_class::ALL_REASONS.uniq)
+        expect(described_class::AI_OUTPUT_REASONS).to eq(described_class::AI_OUTPUT_REASONS.uniq)
+      end
+    end
+
+    it 'keeps AI output reasons inside the formal reason list' do
+      expect(described_class::AI_OUTPUT_REASONS - described_class::ALL_REASONS).to eq([])
+    end
+
+    it 'keeps docs/specs/review_reasons.md in sync with formal reason list' do
+      doc_path = Rails.root.join('docs/specs/review_reasons.md')
+      skip 'docs/specs/review_reasons.md is not present in this checkout' unless doc_path.exist?
+
+      doc = doc_path.read
+      doc_codes = doc.scan(/^- ([a-z0-9_]+)$/).flatten
+
+      expect(doc_codes).to match_array(described_class::ALL_REASONS)
     end
   end
 

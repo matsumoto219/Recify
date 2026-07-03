@@ -51,17 +51,41 @@ module ReviewReasons
 
   SYSTEM_REASONS = %w[
     ai_api_error
+    ai_auth_error
+    ai_config_error
+    ai_invalid_request
     ai_timeout
+    ai_unavailable
+    ai_quota_exceeded
+    ai_rate_limited
     unexpected_error
     response_parse_failed
     analysis_missing_keys
     analysis_items_invalid
     analysis_value_invalid
     ai_invalid_response
-    ai_config_error
     ai_primary_failed
     ai_fallback_failed
   ].freeze
+
+  USER_FACING_REASONS = (
+    AI_REASONS +
+    OCR_REASONS +
+    AMOUNT_REASONS
+  ).uniq.freeze
+
+  ALL_REASONS = (
+    USER_FACING_REASONS +
+    SYSTEM_REASONS
+  ).uniq.freeze
+
+  AI_OUTPUT_REASONS = (
+    AI_REASONS +
+    OCR_REASONS +
+    %w[
+      adjustment_uncertain
+    ]
+  ).uniq.freeze
 
   WARNING_REASONS = (
     ReceiptAmountService.warning_mismatch_codes.map(&:to_s) +
@@ -104,20 +128,22 @@ module ReviewReasons
     Array(reasons).filter_map do |reason|
       normalized = normalize(reason)
       next if normalized.blank?
-      next if source_for(normalized) == :system
+      next unless user_facing_reason?(normalized)
 
       normalized
     end.uniq
   end
 
   def warning_reason?(reason)
-    WARNING_REASONS.include?(normalize(reason))
+    normalized = normalize(reason)
+
+    user_facing_reason?(normalized) && WARNING_REASONS.include?(normalized)
   end
 
   def blocking_reason?(reason)
     normalized = normalize(reason)
     normalized.present? &&
-      source_for(normalized) != :system &&
+      user_facing_reason?(normalized) &&
       !warning_reason?(normalized)
   end
 
@@ -139,7 +165,29 @@ module ReviewReasons
     end.uniq
   end
 
+  def normalize_ai_output_reasons(reasons)
+    normalize_allowed_reasons(reasons, AI_OUTPUT_REASONS)
+  end
+
+  def known_reason?(reason)
+    ALL_REASONS.include?(normalize(reason))
+  end
+
+  def user_facing_reason?(reason)
+    USER_FACING_REASONS.include?(normalize(reason))
+  end
+
   def normalize(reason)
     reason.to_s.strip
+  end
+
+  def normalize_allowed_reasons(reasons, allowed_reasons)
+    Array(reasons).filter_map do |reason|
+      normalized = normalize(reason)
+      next if normalized.blank?
+      next unless allowed_reasons.include?(normalized)
+
+      normalized
+    end.uniq
   end
 end

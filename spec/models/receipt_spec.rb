@@ -148,6 +148,23 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe '#review_reason_labels' do
+    it 'ユーザー向けに許可されたreview_reasonだけを表示する' do
+      receipt = build(
+        :receipt,
+        review_reasons: [
+          'item_name_uncertain',
+          'ai_timeout',
+          'unknown_reason'
+        ]
+      )
+
+      expect(receipt.review_reason_labels).to eq([
+        I18n.t('enums.receipt_item.review_reason.item_name_uncertain')
+      ])
+    end
+  end
+
   describe '.summary_for' do
     it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)

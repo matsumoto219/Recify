@@ -44,6 +44,7 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
 
     it 'payment_method / item category / review_reasons のenumを定義する' do
       item_schema = schema.dig('properties', 'items', 'items')
+      adjustment_schema = schema.dig('properties', 'receipt_adjustments', 'items')
 
       aggregate_failures do
         expect(schema.dig('properties', 'payment', 'properties', 'payment_method', 'enum')).to match_array(
@@ -51,6 +52,9 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
         )
         expect(item_schema.dig('properties', 'category', 'enum')).to match_array(ReceiptItem::CATEGORIES + [ nil ])
         expect(schema.dig('properties', 'review_reasons', 'items', 'enum')).to match_array(
+          Ai::ResponseParser::ALLOWED_REVIEW_REASONS
+        )
+        expect(adjustment_schema.dig('properties', 'review_reasons', 'items', 'enum')).to match_array(
           Ai::ResponseParser::ALLOWED_REVIEW_REASONS
         )
       end
