@@ -62,6 +62,12 @@ RSpec.describe 'Amount Engine integration' do
         include(rate: BigDecimal('0.08'), net_amount: 270, amount: 21),
         include(rate: BigDecimal('0.10'), net_amount: 746, amount: 74)
       )
+      expect(result.dig(:computed, :item_amount_basis)).to eq(:mixed_by_tax_rate_group)
+      expect(result.dig(:computed, :tax_rate_groups).map { |group| group[:rate] }).to contain_exactly(
+        BigDecimal('0.08'),
+        BigDecimal('0.10'),
+        BigDecimal('0')
+      )
       expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
       expect(result[:blocking_inconsistencies]).to be_empty
       expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
@@ -366,6 +372,39 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-100)
       expect(result.dig(:computed, :payment_adjustment_total)).to eq(-200)
       expect(result.dig(:computed, :final_payment_total)).to eq(1_450)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'ポイント・クーポン・キャッシュレス還元・payment discountの符号を崩さずfinal_payment_totalへ反映する' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_900 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') },
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source: 'ocr' },
+        { kind: 'point_usage', sign: 'discount', amount: 300, source: 'ocr' },
+        { kind: 'receipt_discount', label: 'キャッシュレス還元額', sign: 'discount', amount: 50, source: 'ocr' },
+        { kind: 'receipt_discount', label: 'payment discount', sign: 'discount', amount: 40, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 1_510 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 商品合計2,000、クーポン -100 は購入調整なので購入合計1,900。
+      # ポイント -300、キャッシュレス還元 -50、payment discount -40 は支払調整なので実支払額1,510。
+      expect(result[:resolved]).to include(subtotal: 1_900, tax: 0, total: 1_900)
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-390)
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_510)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_510)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:review_reasons]).to be_empty
       expect(result[:needs_review]).to be(false)
     end
   end
@@ -469,7 +508,29 @@ RSpec.describe 'Amount Engine integration' do
     )
 
     expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+    expect(result[:review_reasons]).to include('payment_amount_mismatch')
     expect(result[:needs_review]).to be(true)
+  end
+
+  it 'analysisでは支払合計がfinal_payment_totalを上回るだけならpayment_amount_mismatchにしない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000 }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: analysisではお預かり等が支払行に入った可能性を考慮し、過払いだけではreview理由にしない。
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+      expect(result[:blocking_inconsistencies]).not_to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).not_to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(false)
+    end
   end
 
   it '支払合計がfinal_payment_totalを上回る過払いもblocking reviewにする' do

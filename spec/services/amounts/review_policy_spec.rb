@@ -1,0 +1,95 @@
+require 'rails_helper'
+
+RSpec.describe Amounts::ReviewPolicy do
+  def candidate(**attributes)
+    Amounts::Candidate.new(
+      candidate_id: 'spec/floor',
+      basis: 'items_as_tax_included',
+      subtotal: 1_000,
+      tax: 100,
+      purchase_total: 1_100,
+      score_breakdown: {},
+      **attributes
+    )
+  end
+
+  def apply_policy(candidate, existing_inconsistencies: [])
+    described_class.new(candidate: candidate, existing_inconsistencies: existing_inconsistencies).call
+  end
+
+  it 'blocking inconsistencyをreview reasonにする' do
+    result = apply_policy(candidate(warnings: [ :payment_amount_mismatch ]))
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '通常warningのみならdiagnosticとして残しreview reasonにしない' do
+    result = apply_policy(candidate(warnings: [ :calculation_profile_uncertain ]))
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:calculation_profile_uncertain)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'price_tax_inclusion_uncertainは非blockingの確認対象としてreview reasonにする' do
+    result = apply_policy(candidate(warnings: [ :price_tax_inclusion_uncertain ]))
+
+    aggregate_failures do
+      expect(Amounts::MismatchSeverity.severity(:price_tax_inclusion_uncertain)).to eq(:warning)
+      expect(result[:review_reasons]).to eq([ 'price_tax_inclusion_uncertain' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '印字税抜tax detailsが候補金額と一致する場合はprice_tax_inclusion_uncertainをwarning-onlyに留める' do
+    result = apply_policy(
+      candidate(
+        basis: 'printed_tax_details_net',
+        warnings: [ :price_tax_inclusion_uncertain ],
+        tax_details: [
+          { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100 }
+        ],
+        score_breakdown: {
+          receipt_total_delta: 0
+        }
+      )
+    )
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:price_tax_inclusion_uncertain)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'incomplete_tax_details_receipt_taxのtax_detail_incompleteはreview reasonに昇格する' do
+    result = apply_policy(
+      candidate(
+        basis: 'incomplete_tax_details_receipt_tax',
+        warnings: [ :tax_detail_incomplete ]
+      )
+    )
+
+    aggregate_failures do
+      expect(Amounts::MismatchSeverity.severity(:tax_detail_incomplete)).to eq(:warning)
+      expect(result[:review_reasons]).to eq([ 'tax_detail_incomplete' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'unknown inconsistencyはblockingとして扱う' do
+    result = apply_policy(candidate(warnings: [ :unexpected_amount_boundary ]))
+
+    aggregate_failures do
+      expect(Amounts::MismatchSeverity.severity(:unexpected_amount_boundary)).to eq(:blocking)
+      expect(result[:review_reasons]).to eq([ 'unexpected_amount_boundary' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+end
