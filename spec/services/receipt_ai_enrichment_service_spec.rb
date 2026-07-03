@@ -210,6 +210,48 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'AI provider timeout例外をai_timeoutの失敗結果へ正規化する' do
+        error = Ai::Errors::TimeoutError.new(
+          message: 'read timeout for prompt sk-test',
+          provider: 'openai',
+          request_id: 'req_timeout',
+          retry_after: 10,
+          phase: 'ai_request',
+          metrics: {
+            model: 'gpt-test',
+            elapsed_ms: 30_000
+          }
+        )
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_raise(error)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(false)
+          expect(result[:error_code]).to eq('ai_timeout')
+          expect(result[:needs_review]).to eq(true)
+          expect(result[:review_reasons]).to eq([ 'ai_timeout' ])
+          expect(result.dig(:meta, :final_error_detail)).to include(
+            service: 'ai',
+            provider: 'openai',
+            phase: 'ai_request',
+            request_id: 'req_timeout',
+            retry_after: 10,
+            model: 'gpt-test'
+          )
+          expect(result.to_s).not_to include('sk-test')
+          expect(ExternalServices).to have_received(:mark_failure!).with(
+            :ai,
+            error_code: 'ai_timeout',
+            detail: hash_including(
+              provider: 'openai',
+              request_id: 'req_timeout'
+            )
+          )
+        end
+      end
+
       it 'AIがnot receiptと正常判定した場合はfailureを記録しない' do
         not_receipt_result = {
           success: false,
