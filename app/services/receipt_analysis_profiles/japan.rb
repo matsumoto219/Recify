@@ -264,6 +264,12 @@ module ReceiptAnalysisProfiles
     OCR_CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
     OCR_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
     OCR_SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
+    OCR_PURCHASED_AT_DATE_PATTERNS = [
+      /\d{4}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,2}/,
+      /\A\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,4}/,
+      /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/
+    ].freeze
+    OCR_PAYMENT_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /payment\s*discount|cashless\s*(?:reward|discount)|(?:支払(?:時|い)?|お支払(?:い)?|決済|キャッシュレス(?:決済)?)\s*(?:割引|還元)/i.freeze
     OCR_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /返品|返金|取消|キャンセル|値引|割引|クーポン|coupon|discount|refund|return/i.freeze
     OCR_ADJUSTMENT_SURCHARGE_LABEL_PATTERN = /深夜|サービス料|配送料|送料|レジ袋|袋代|手数料|チャージ|fee|charge|surcharge|delivery|shipping|bag|handling/i.freeze
     OCR_ADJUSTMENT_EXCLUDED_LINE_PATTERN = /小計|商品小計|合計|総合計|税抜合計|税込合計|対象|消費税|税額|税率|内税|外税|お預かり|お預り|預り|釣銭|お釣り|つり銭|支払|お支払|決済|現金|カード|au\s*pay|paypay|楽天ペイ|ポイント|獲得|利用可能|残高|カード番号|取引番号|レシート|領収|tel|電話|住所|登録番号|返品はお受け|返品.*(?:不可|致しかね)|お受け致しかね|barcode|qr|total|subtotal|tax|payment|change|point/i.freeze
@@ -641,6 +647,14 @@ module ReceiptAnalysisProfiles
 
       def ocr_settlement_line_pattern
         OCR_SETTLEMENT_LINE_PATTERN
+      end
+
+      def ocr_purchased_at_date_patterns
+        OCR_PURCHASED_AT_DATE_PATTERNS
+      end
+
+      def ocr_payment_adjustment_discount_label_pattern
+        OCR_PAYMENT_ADJUSTMENT_DISCOUNT_LABEL_PATTERN
       end
 
       def ocr_adjustment_discount_label_pattern

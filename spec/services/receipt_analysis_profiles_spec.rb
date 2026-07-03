@@ -51,6 +51,33 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JP profile OCR date patterns' do
+    it 'OCR購入日のfallback表記をprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026年05月20日'.match?(pattern) }).to be(true)
+        expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026-05-20'.match?(pattern) }).to be(true)
+      end
+    end
+  end
+
+  describe 'JP profile OCR payment adjustment discount labels' do
+    it 'OCR支払時割引ラベルをprofile側で定義する' do
+      pattern = described_class.fetch('JPN').ocr_payment_adjustment_discount_label_pattern
+
+      aggregate_failures do
+        expect('payment discount -40').to match(pattern)
+        expect('cashless reward -40').to match(pattern)
+        expect('支払時割引 -40').to match(pattern)
+        expect('決済割引 -40').to match(pattern)
+        expect('キャッシュレス決済還元 -40').to match(pattern)
+        expect('クレジット支払 -1,900').not_to match(pattern)
+        expect('お預かり -2,000').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JP profile quantity unit aliases' do
     it 'ReceiptQuantityUnitの保存codeへ正規化できるaliasだけを持つ' do
       aliases = described_class.fetch('JPN').quantity_unit_aliases

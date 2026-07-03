@@ -6,6 +6,8 @@ class Ocr::ResponseParser
   MULTIPLE_RECEIPTS_VERTICAL_GAP_RATIO = 0.1
   MULTIPLE_RECEIPTS_MIN_ANCHOR_LINES = 4
   MULTIPLE_RECEIPTS_MIN_ANCHOR_CATEGORIES = 4
+  PURCHASED_AT_NEARBY_TIME_OFFSETS = [ 1, -1, 2, -2 ].freeze
+  PURCHASED_AT_TIME_PATTERN = /(?<!\d)(\d{1,2})\s*[:：]\s*(\d{2})(?!\d)/.freeze
   ADJUSTMENT_MONEY_PATTERN = /[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_SIGNED_MONEY_PATTERN = /(?:\A|[\s　])(?:[▲△]|[\-−]\s*)[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_AMOUNT_ONLY_PATTERN = /\A\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?\s*\z/.freeze
@@ -429,11 +431,54 @@ class Ocr::ResponseParser
     time = fields.dig("TransactionTime", "valueTime")
     return [ date, time ].compact.join(" ") if date.present? || time.present?
 
-    lines.find do |line|
-      line.match?(/\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?(\s+\d{1,2}:\d{2})?/) ||
-        line.match?(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}(\s+\d{1,2}:\d{2})?/) ||
-        line.match?(/\d{1,2}:\d{2}/)
+    extract_purchased_at_text_from_lines(lines)
+  end
+
+  def extract_purchased_at_text_from_lines(lines)
+    normalized_lines = Array(lines)
+    date_entry = normalized_lines.each_with_index.filter_map do |line, index|
+      date_text = extract_purchased_at_date_text(line)
+      { date_text: date_text, line: line, index: index } if date_text.present?
+    end.first
+
+    if date_entry.present?
+      time_text = extract_purchased_at_time_text(date_entry[:line]) ||
+        nearby_purchased_at_time_text(normalized_lines, date_entry[:index])
+      return [ date_entry[:date_text], time_text ].compact.join(" ")
     end
+
+    normalized_lines.lazy.filter_map { |line| extract_purchased_at_time_text(line) }.first
+  end
+
+  def extract_purchased_at_date_text(line)
+    text = line.to_s
+    pattern = profile.ocr_purchased_at_date_patterns.find { |candidate| text.match?(candidate) }
+    return if pattern.blank?
+
+    text.match(pattern).to_s.gsub(/[[:space:]　]+/, "")
+  end
+
+  def nearby_purchased_at_time_text(lines, date_index)
+    PURCHASED_AT_NEARBY_TIME_OFFSETS.each do |offset|
+      index = date_index + offset
+      next if index.negative? || index >= lines.size
+
+      time_text = extract_purchased_at_time_text(lines[index])
+      return time_text if time_text.present?
+    end
+
+    nil
+  end
+
+  def extract_purchased_at_time_text(line)
+    match = line.to_s.match(PURCHASED_AT_TIME_PATTERN)
+    return if match.blank?
+
+    hour = match[1].to_i
+    minute = match[2].to_i
+    return if hour > 23 || minute > 59
+
+    "#{match[1]}:#{match[2]}"
   end
 
   def normalize_purchased_at_text(text)
@@ -800,7 +845,7 @@ class Ocr::ResponseParser
     return nil if label_index.nil?
 
     label = lines[label_index].to_s
-    return nil if adjustment_excluded_line?(label)
+    return nil if adjustment_excluded_line?(label) && !explicit_payment_adjustment_discount_label?(label)
     return nil if item_line_candidate?(label, items) && !known_adjustment_label?(label)
 
     amount = adjustment_amounts_in_line(line).first
@@ -824,7 +869,7 @@ class Ocr::ResponseParser
   def label_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil if amount_only_line?(line)
-    return nil if adjustment_excluded_line?(line)
+    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_discount_line?(line)
     return nil if line.match?(/\d{4}[\/\-年]\s*\d{1,2}|\d{1,2}[:：]\d{2}/)
 
     known_label = known_adjustment_label?(line)
@@ -937,6 +982,15 @@ class Ocr::ResponseParser
   def known_adjustment_label?(line)
     text = line.to_s
     text.match?(profile.ocr_adjustment_discount_label_pattern) || text.match?(profile.ocr_adjustment_surcharge_label_pattern)
+  end
+
+  def explicit_payment_adjustment_discount_label?(line)
+    line.to_s.match?(profile.ocr_payment_adjustment_discount_label_pattern)
+  end
+
+  def explicit_payment_adjustment_discount_line?(line)
+    text = line.to_s
+    text.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN) && explicit_payment_adjustment_discount_label?(text)
   end
 
   def adjustment_zone_label?(lines, index)

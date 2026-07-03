@@ -359,7 +359,7 @@ RSpec.describe Ocr::ResponseParser do
       )
     end
 
-    it '購入日時の構造化fieldと日付/時刻分離行の現行fallbackを固定する' do
+    it '購入日時の構造化fieldと日付/時刻分離行のfallbackを固定する' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
 
       structured_result = described_class.new(response: fixture_response, provider: :fixture).call
@@ -378,12 +378,82 @@ RSpec.describe Ocr::ResponseParser do
       line_fallback_fields.delete('TransactionTime')
       line_fallback_result = described_class.new(response: line_fallback_response, provider: :fixture).call
 
+      nearby_fallback_response = fixture_response.deep_dup
+      nearby_fallback_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        2026年05月20日
+        レジ 02
+        18:42
+        合計
+        ¥1,900
+      TEXT
+      nearby_fallback_fields = nearby_fallback_response.dig('analyzeResult', 'documents', 0, 'fields')
+      nearby_fallback_fields.delete('TransactionDate')
+      nearby_fallback_fields.delete('TransactionTime')
+      nearby_fallback_result = described_class.new(response: nearby_fallback_response, provider: :fixture).call
+
+      fallback_date_only_response = fixture_response.deep_dup
+      fallback_date_only_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        2026年05月20日
+        合計
+        ¥1,900
+      TEXT
+      fallback_date_only_fields = fallback_date_only_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fallback_date_only_fields.delete('TransactionDate')
+      fallback_date_only_fields.delete('TransactionTime')
+      fallback_date_only_result = described_class.new(response: fallback_date_only_response, provider: :fixture).call
+
+      fallback_time_only_response = fixture_response.deep_dup
+      fallback_time_only_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        18:42
+        合計
+        ¥1,900
+      TEXT
+      fallback_time_only_fields = fallback_time_only_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fallback_time_only_fields.delete('TransactionDate')
+      fallback_time_only_fields.delete('TransactionTime')
+      fallback_time_only_result = described_class.new(response: fallback_time_only_response, provider: :fixture).call
+
+      noisy_fallback_response = fixture_response.deep_dup
+      noisy_fallback_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        2026 年 05 月 20 日(水)
+        18 ： 42
+        合計
+        ¥1,900
+      TEXT
+      noisy_fallback_fields = noisy_fallback_response.dig('analyzeResult', 'documents', 0, 'fields')
+      noisy_fallback_fields.delete('TransactionDate')
+      noisy_fallback_fields.delete('TransactionTime')
+      noisy_fallback_result = described_class.new(response: noisy_fallback_response, provider: :fixture).call
+
+      distant_time_response = fixture_response.deep_dup
+      distant_time_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        2026年05月20日
+        商品A
+        ¥1,000
+        合計
+        ¥1,900
+        18:42
+      TEXT
+      distant_time_fields = distant_time_response.dig('analyzeResult', 'documents', 0, 'fields')
+      distant_time_fields.delete('TransactionDate')
+      distant_time_fields.delete('TransactionTime')
+      distant_time_result = described_class.new(response: distant_time_response, provider: :fixture).call
+
       aggregate_failures do
         expect(structured_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
         expect(date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20')
         expect(time_only_result.dig(:candidates, :purchased_at_text)).to eq('18:42')
-        # 現行fallbackは近接する時刻行を結合せず、最初に一致した日付行を返す。
-        expect(line_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
+        expect(line_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
+        expect(nearby_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
+        expect(fallback_date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
+        expect(fallback_time_only_result.dig(:candidates, :purchased_at_text)).to eq('18:42')
+        expect(noisy_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
+        expect(distant_time_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
       end
     end
 
@@ -405,10 +475,60 @@ RSpec.describe Ocr::ResponseParser do
       aggregate_failures do
         expect(result.dig(:candidates, :payment_method_text)).to be_nil
         expect(result.dig(:candidates, :total_amount)).to eq(1_900)
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
       end
     end
 
-    it 'point/coupon/cashless/payment discountを含むOCR境界fixtureの現行adjustment候補を固定する' do
+    it '支払方法行だけではadjustment candidateにしない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        合計
+        ¥1,900
+        クレジット支払 ¥1,900
+      TEXT
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :payment_method_text)).to eq('クレジット')
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+      end
+    end
+
+    it '日本語の支払時割引はsigned amountがある場合だけadjustment candidateにする' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        小計
+        ¥2,000
+        支払時割引 -40
+        決済割引
+        -30
+        合計
+        ¥1,930
+      TEXT
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      adjustment_candidates = result.dig(:candidates, :adjustment_candidates)
+
+      expect(adjustment_candidates).to include(
+        hash_including(
+          source_text: '支払時割引 -40',
+          amount: 40,
+          sign_hint: 'discount',
+          candidate_reason: 'label_same_line_amount'
+        ),
+        hash_including(
+          source_text: '決済割引',
+          amount: 30,
+          sign_hint: 'discount',
+          candidate_reason: 'signed_amount_neighbor_label'
+        )
+      )
+    end
+
+    it 'point/coupon/cashless/payment discountを含むOCR境界fixtureのadjustment候補を固定する' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
 
       result = described_class.new(response: fixture_response, provider: :fixture).call
@@ -438,9 +558,15 @@ RSpec.describe Ocr::ResponseParser do
             amount: 50,
             sign_hint: 'discount',
             candidate_reason: 'label_same_line_amount'
+          ),
+          hash_including(
+            source_text: 'payment discount -40',
+            amount: 40,
+            sign_hint: 'discount',
+            candidate_reason: 'label_same_line_amount'
           )
         )
-        expect(adjustment_candidates.map { |candidate| candidate[:source_text] }).not_to include('ポイント利用', 'payment discount -40')
+        expect(adjustment_candidates.map { |candidate| candidate[:source_text] }).not_to include('ポイント利用')
       end
     end
 
