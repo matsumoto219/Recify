@@ -35,6 +35,22 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
       end
     end
 
+    it 'Pipeline Resultのsuccess?ではなくnext_stepで後続Jobをenqueueする' do
+      run = create(:receipt_analysis_run)
+      result = ReceiptAnalysisPipeline::Result.new(
+        ai_result: { success: false },
+        next_step: :finalize
+      )
+      allow(ReceiptAnalysisPipeline).to receive(:run_ai).and_return(result)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(result).not_to be_success
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
+
     it 'skippedなら後続Jobをenqueueしない' do
       run = create(:receipt_analysis_run)
       allow(ReceiptAnalysisPipeline).to receive(:run_ai).and_return(pipeline_result(:skipped, skip_reason: :terminal_run))

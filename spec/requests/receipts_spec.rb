@@ -1743,6 +1743,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(receipt).to be_processing
         expect(receipt.image).to be_attached
+        expect(receipt.processing_error_code).to be_nil
+        expect(receipt.processing_error_message).to be_nil
+        expect(receipt.review_reasons).to eq([])
         expect(run.source).to eq('upload')
         expect(run.requested_by_user).to eq(user)
         expect(run.status).to eq('queued')
@@ -1838,6 +1841,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipts_path)
         expect(created_receipts).to all(be_processing)
         expect(created_receipts).to all(satisfy { |receipt| receipt.image.attached? })
+        expect(created_receipts).to all(have_attributes(
+          processing_error_code: nil,
+          processing_error_message: nil,
+          review_reasons: []
+        ))
         created_receipts.each do |receipt|
           run = receipt.receipt_analysis_runs.sole
           expect(run.source).to eq('batch_upload')

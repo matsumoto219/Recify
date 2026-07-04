@@ -21,7 +21,7 @@ class ReceiptAnalysisPipeline
 
       ai_result =
         if ai_unavailable?
-          Ai::ResultTemplate.error(
+          ReceiptAiEnrichmentService.error_result(
             error_code: "ai_unavailable",
             review_reasons: [ "ai_unavailable" ],
             meta: {

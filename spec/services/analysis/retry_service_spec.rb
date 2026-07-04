@@ -606,6 +606,73 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'finalize_retryはocr_only strategyならAI snapshotなしでもenqueueする' do
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: parent_ocr_snapshot,
+        ai_normalized_result_snapshot: {},
+        metadata: { 'finalize_decision' => parent_finalize_decision_snapshot(strategy: 'ocr_only') }
+      )
+
+      result = described_class.call(
+        receipt: receipt,
+        parent_run: parent_run,
+        actor: actor,
+        retry_type: :finalize_retry,
+        reason: 'OCR only finalize retry',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
+      )
+
+      run = result.run.reload
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(run.ocr_result_snapshot).to include('schema_version' => 'receipt_analysis_run_ocr_result_v1')
+        expect(run.ai_normalized_result_snapshot).to eq({})
+        expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('ocr_only')
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
+
+    it 'finalize_retryはfail_receipt strategyならOCR/AI snapshotなしでもenqueueする' do
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: {},
+        ai_normalized_result_snapshot: {},
+        metadata: {
+          'finalize_decision' => parent_finalize_decision_snapshot(strategy: 'fail_receipt').merge(
+            error_code: 'unsupported_country',
+            receipt_attributes: { country_region: 'USA' }
+          )
+        }
+      )
+
+      result = described_class.call(
+        receipt: receipt,
+        parent_run: parent_run,
+        actor: actor,
+        retry_type: :finalize_retry,
+        reason: 'failure finalize retry',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
+      )
+
+      run = result.run.reload
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(run.ocr_result_snapshot).to eq({})
+        expect(run.ai_normalized_result_snapshot).to eq({})
+        expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('fail_receipt')
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id)
+      end
+    end
+
     it 'active runがある場合は失敗し、enqueueしない' do
       active_run = create(:receipt_analysis_run, :running, receipt: receipt)
 
@@ -1029,12 +1096,30 @@ RSpec.describe Analysis::RetryService do
         ai_normalized_result_snapshot: parent_ai_snapshot,
         metadata: { 'finalize_decision' => parent_finalize_decision_snapshot }
       )
+      ocr_only_no_ai_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: parent_ocr_snapshot,
+        ai_normalized_result_snapshot: {},
+        metadata: { 'finalize_decision' => parent_finalize_decision_snapshot(strategy: 'ocr_only') }
+      )
+      fail_receipt_no_snapshots_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: receipt,
+        ocr_result_snapshot: {},
+        ai_normalized_result_snapshot: {},
+        metadata: { 'finalize_decision' => parent_finalize_decision_snapshot(strategy: 'fail_receipt') }
+      )
 
       aggregate_failures do
         expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_ocr_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ocr_snapshot_missing')
         expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_ai_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ai_snapshot_missing')
         expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_decision_run))['finalize_retry']).to include(possible: false, disabled_reason: 'finalize_decision_missing')
         expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: ready_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: ocr_only_no_ai_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: fail_receipt_no_snapshots_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
       end
     end
   end
@@ -1112,10 +1197,10 @@ RSpec.describe Analysis::RetryService do
     }
   end
 
-  def parent_finalize_decision_snapshot
+  def parent_finalize_decision_snapshot(strategy: 'ai_success')
     {
       schema_version: 'receipt_analysis_run_finalize_decision_v1',
-      strategy: 'ai_success',
+      strategy: strategy,
       receipt_attributes: {},
       metadata: { reason: 'manual retry' },
       recorded_at: Time.current.iso8601

@@ -37,4 +37,18 @@ RSpec.describe Analysis do
       expect(described_class.detect_category('バナナ 1袋')).to eq('food')
     end
   end
+
+  describe 'store name candidate facade' do
+    it '店舗名候補判定をAnalysis parent facadeから公開する' do
+      lines = [ 'サンプルストア', '株式会社サンプル' ]
+
+      aggregate_failures do
+        expect(described_class.store_name_customer_facing_heading_candidates(lines)).to include('サンプルストア')
+        expect(described_class.store_name_operator_candidates(lines)).to include('株式会社サンプル')
+        expect(described_class.store_name_legal_entity_name?('株式会社サンプル')).to eq(true)
+        expect(described_class.normalize_store_name_candidate(' サンプル  ストア ')).to eq('サンプル ストア')
+        expect(described_class.normalize_compact_store_name_candidate('サンプル ストア')).to eq('サンプルストア')
+      end
+    end
+  end
 end

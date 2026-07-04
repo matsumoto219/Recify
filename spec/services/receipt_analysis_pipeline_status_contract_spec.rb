@@ -367,6 +367,80 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
         expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
       end
     end
+
+    it 'amount resultのneeds_reviewがfalseでもblocking review reasonが残ればreview_neededにする' do
+      %w[
+        payment_amount_mismatch
+        tax_detail_mismatch
+        purchase_adjustment_tax_allocation_uncertain
+      ].each do |reason|
+        amount_result = no_amount_mismatch_result.deep_merge(
+          blocking_inconsistencies: [],
+          review_reasons: [ reason ],
+          needs_review: false
+        )
+
+        receipt, run, _ai_stage, finalize_stage = run_ai_and_finalize(successful_ai_result, amount_result: amount_result)
+
+        aggregate_failures(reason) do
+          expect(finalize_stage.next_step).to eq(:done)
+          expect(receipt.status).to eq('review_needed')
+          expect(receipt.review_reasons).to include(reason)
+          expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
+        end
+      end
+    end
+
+    it 'adjustment detail側のblocking review reasonだけでもreview_neededにする' do
+      build_params = {
+        receipt_attributes: {
+          store_name: 'AI契約テストストア',
+          total_amount: 180,
+          payment_method: 'cash'
+        },
+        receipt_items_attributes: [
+          {
+            raw_text: 'コーヒー',
+            suggested_name: 'AI補正コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: false,
+            review_reasons: []
+          }
+        ],
+        receipt_payments_attributes: [
+          { method: 'cash', amount: 180 }
+        ],
+        receipt_tax_details_attributes: [],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'coupon',
+            label: 'クーポン',
+            amount: 10,
+            sign: 'discount',
+            source: 'ai',
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain' ]
+          }
+        ],
+        review_reasons: []
+      }
+
+      allow(Analysis).to receive(:build_receipt_params).and_return(build_params.deep_dup)
+
+      receipt, run, _ai_stage, finalize_stage = run_ai_and_finalize(successful_ai_result)
+
+      aggregate_failures do
+        expect(finalize_stage.next_step).to eq(:done)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.receipt_adjustments.sole).to have_attributes(
+          needs_review: true,
+          review_reasons: include('adjustment_uncertain')
+        )
+        expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
+      end
+    end
   end
 
   describe 'OCR status contract' do

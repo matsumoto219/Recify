@@ -43,5 +43,53 @@ module Analysis
     def retry_confirmation_text
       RetryService::CONFIRMATION_TEXT
     end
+
+    def store_name_customer_facing_heading_candidates(...)
+      StoreNameCandidateClassifier.customer_facing_heading_candidates(...)
+    end
+
+    def store_name_operator_candidates(...)
+      StoreNameCandidateClassifier.operator_candidates(...)
+    end
+
+    def store_name_brand_candidate_from_legal_entity(...)
+      StoreNameCandidateClassifier.brand_candidate_from_legal_entity(...)
+    end
+
+    def store_name_legal_entity_name?(...)
+      StoreNameCandidateClassifier.legal_entity_name?(...)
+    end
+
+    def store_name_operator_context_line?(...)
+      StoreNameCandidateClassifier.operator_context_line?(...)
+    end
+
+    def store_name_descriptive_heading_line?(...)
+      StoreNameCandidateClassifier.descriptive_heading_line?(...)
+    end
+
+    def store_name_message_line?(...)
+      StoreNameCandidateClassifier.store_message_line?(...)
+    end
+
+    def store_name_isolated_logo_fragment?(...)
+      StoreNameCandidateClassifier.isolated_logo_fragment?(...)
+    end
+
+    def store_name_operator_legal_entity_candidate?(...)
+      StoreNameCandidateClassifier.operator_legal_entity_candidate?(...)
+    end
+
+    def normalize_store_name_candidate(...)
+      StoreNameCandidateClassifier.normalize_name(...)
+    end
+
+    def normalize_compact_store_name_candidate(...)
+      StoreNameCandidateClassifier.normalize_compact_name(...)
+    end
+
+    def store_name_latin_logo_prefix_duplicate?(...)
+      StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(...)
+    end
   end
 end

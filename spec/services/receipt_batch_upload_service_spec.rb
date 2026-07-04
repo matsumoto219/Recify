@@ -60,6 +60,11 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     aggregate_failures do
       expect(created_receipts).to all(be_processing)
       expect(created_receipts).to all(satisfy { |receipt| receipt.image.attached? })
+      expect(created_receipts).to all(have_attributes(
+        processing_error_code: nil,
+        processing_error_message: nil,
+        review_reasons: []
+      ))
       created_receipts.each do |receipt|
         run = receipt.receipt_analysis_runs.sole
         expect(run.source).to eq('batch_upload')

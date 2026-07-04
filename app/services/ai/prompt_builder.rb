@@ -298,7 +298,7 @@ module Ai
         next if profile[:payment_context_line]
         next if profile[:purchase_context_line]
         if customer_facing_store_candidates.present? &&
-            Analysis::StoreNameCandidateClassifier.legal_entity_name?(text) &&
+            Analysis.store_name_legal_entity_name?(text) &&
             !operator_derived_customer_facing_candidate?(text)
           next
         end
@@ -318,19 +318,19 @@ module Ai
         operator_brand_with_branch_candidates +
           operator_brand_candidates_with_branch_context +
           store_name_with_branch_candidates +
-          Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines)
+          Analysis.store_name_customer_facing_heading_candidates(lines)
       ).uniq
     end
 
     def operator_candidates
-      @operator_candidates ||= Analysis::StoreNameCandidateClassifier.operator_candidates(
+      @operator_candidates ||= Analysis.store_name_operator_candidates(
         lines,
         merchant_name: candidate_value(:store_name)
       )
     end
 
     def operator_store_name_candidate?
-      Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(candidate_value(:store_name), lines)
+      Analysis.store_name_operator_legal_entity_candidate?(candidate_value(:store_name), lines)
     end
 
     def customer_facing_store_name_extends_ocr_store_name?
@@ -361,20 +361,20 @@ module Ai
     end
 
     def local_complete_store_name_replacement_candidate?
-      ocr_store_name = Analysis::StoreNameCandidateClassifier.normalize_name(candidate_value(:store_name))
+      ocr_store_name = Analysis.normalize_store_name_candidate(candidate_value(:store_name))
       return false if ocr_store_name.blank?
 
       customer_facing_store_candidates.any? do |candidate|
-        Analysis::StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(ocr_store_name, candidate)
+        Analysis.store_name_latin_logo_prefix_duplicate?(ocr_store_name, candidate)
       end
     end
 
     def store_name_with_branch_candidates
-      ocr_store_name = Analysis::StoreNameCandidateClassifier.normalize_name(candidate_value(:store_name))
+      ocr_store_name = Analysis.normalize_store_name_candidate(candidate_value(:store_name))
       return [] if ocr_store_name.blank? || operator_store_name_candidate?
 
       branch_name_candidates.filter_map do |branch_name|
-        branch = Analysis::StoreNameCandidateClassifier.normalize_name(branch_name)
+        branch = Analysis.normalize_store_name_candidate(branch_name)
         next if branch.blank?
         next if normalized_store_name(branch) == normalized_store_name(ocr_store_name)
         next if normalized_store_name(ocr_store_name).include?(normalized_store_name(branch))
@@ -404,7 +404,7 @@ module Ai
 
     def operator_brand_branch_pairs
       @operator_brand_branch_pairs ||= lines.first(8).each_with_index.filter_map do |line, index|
-        brand = Analysis::StoreNameCandidateClassifier.brand_candidate_from_legal_entity(line)
+        brand = Analysis.store_name_brand_candidate_from_legal_entity(line)
         next if brand.blank?
 
         branch = following_branch_line(index)
@@ -421,16 +421,16 @@ module Ai
     end
 
     def operator_reference_line?(text)
-      Analysis::StoreNameCandidateClassifier.operator_context_line?(text) ||
-        Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(text, lines)
+      Analysis.store_name_operator_context_line?(text) ||
+        Analysis.store_name_operator_legal_entity_candidate?(text, lines)
     end
 
     def store_name_candidate_noise_line?(text)
       normalized = text.to_s.strip
       compact_text = normalized.gsub(/[[:space:]]+/, "")
-      return true if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
-      return true if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
-      return true if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
+      return true if Analysis.store_name_isolated_logo_fragment?(normalized)
+      return true if Analysis.store_name_descriptive_heading_line?(normalized)
+      return true if Analysis.store_name_message_line?(normalized)
       return true if compact_text.match?(analysis_profile.store_context_compact_noise_pattern)
       return true if normalized.match?(/ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i)
       return true if normalized.match?(analysis_profile.store_building_or_floor_pattern)
@@ -460,7 +460,7 @@ module Ai
     end
 
     def normalized_store_name(value)
-      Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
+      Analysis.normalize_compact_store_name_candidate(value).to_s.downcase
     end
 
     def purchase_context_line?(line)
@@ -611,7 +611,7 @@ module Ai
       return false if profile[:date_time_line]
       return false if profile[:payment_context_line]
       return false if store_name_candidate_noise_line?(text)
-      return false if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(text)
+      return false if Analysis.store_name_descriptive_heading_line?(text)
       # item OCR原文と近い行は支店名候補から除外する。
       # ただし店舗名と商品名が同一になる特殊ケースはあり得るため、最終判定は filtered_content も参照する AI に委ねる。
       return false if item_like_line?(text)
@@ -638,7 +638,7 @@ module Ai
       ocr_store_name = normalized_store_name(candidate_value(:store_name))
       return false if ocr_store_name.blank?
 
-      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines).any? do |candidate|
+      Analysis.store_name_customer_facing_heading_candidates(lines).any? do |candidate|
         normalized_candidate = normalized_store_name(candidate)
         normalized_candidate.present? &&
           normalized_candidate != ocr_store_name &&
@@ -652,7 +652,7 @@ module Ai
       return false if normalized_text.blank? || ocr_store_name.blank?
       return false if normalized_text == ocr_store_name
 
-      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(lines).any? do |candidate|
+      Analysis.store_name_customer_facing_heading_candidates(lines).any? do |candidate|
         normalized_candidate = normalized_store_name(candidate)
         normalized_candidate.present? &&
           normalized_candidate.include?(normalized_text) &&

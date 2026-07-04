@@ -292,14 +292,14 @@ class Ocr::ResponseParser
   def extract_store_name_candidates(lines, merchant_name)
     normalized_lines = Array(lines).filter_map { |line| normalize_store_name_candidate(line) }
     normalized_merchant_name = normalize_store_name_candidate(merchant_name)
-    heading_candidates = Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(normalized_lines)
-    operator_merchant_name = Analysis::StoreNameCandidateClassifier.operator_legal_entity_candidate?(
+    heading_candidates = Analysis.store_name_customer_facing_heading_candidates(normalized_lines)
+    operator_merchant_name = Analysis.store_name_operator_legal_entity_candidate?(
       normalized_merchant_name,
       normalized_lines
     )
     branch_name = extract_branch_like_store_name(normalized_lines, merchant_name)
     if branch_like_store_name?(normalized_merchant_name) &&
-        !Analysis::StoreNameCandidateClassifier.legal_entity_name?(normalized_merchant_name)
+        !Analysis.store_name_legal_entity_name?(normalized_merchant_name)
       branch_name ||= normalized_merchant_name
     end
     brand_name = extract_brand_like_store_name(normalized_lines, branch_name)

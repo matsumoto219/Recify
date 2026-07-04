@@ -36,6 +36,23 @@ RSpec.describe ReceiptOcrJob, type: :job do
       end
     end
 
+    it 'Pipeline Resultのsuccess?ではなくnext_stepで後続Jobをenqueueする' do
+      run = create(:receipt_analysis_run)
+      result = ReceiptAnalysisPipeline::Result.new(
+        ocr_result: { success: false },
+        next_step: :ai
+      )
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(result)
+
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(result).not_to be_success
+        expect(ReceiptAiEnrichmentJob).to have_been_enqueued.with(run_id: run.id)
+        expect(ReceiptFinalizeJob).not_to have_been_enqueued
+      end
+    end
+
     it 'finalizeが次ならFinalize Jobをenqueueする' do
       run = create(:receipt_analysis_run)
       allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:finalize))

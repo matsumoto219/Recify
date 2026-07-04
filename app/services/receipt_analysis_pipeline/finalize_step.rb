@@ -191,10 +191,12 @@ class ReceiptAnalysisPipeline
       ai_review_reasons = resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       ai_needs_review = ai_result[:needs_review] == true && ai_review_reasons.any?
       item_drift_review_reasons = item_total_drift_review_reasons(params, amount_result, ai_result:)
+      detail_reasons = detail_review_reasons_for(params)
 
       review_reasons = merge_review_reasons(
         ai_review_reasons,
         params[:review_reasons],
+        detail_reasons,
         item_drift_review_reasons,
         amount_review_reasons(amount_result),
         ocr_review_reasons
@@ -206,8 +208,9 @@ class ReceiptAnalysisPipeline
         items_attributes: params[:receipt_items_attributes],
         ai_needs_review: ai_needs_review,
         amount_needs_review: amount_result[:needs_review],
-        build_review_reasons: params[:review_reasons] + item_drift_review_reasons,
+        build_review_reasons: review_reasons,
         ocr_review_reasons: ocr_review_reasons,
+        detail_needs_review: detail_needs_review?(params),
         ocr_low_quality: ocr_low_quality
       )
       items_attributes = apply_amount_item_totals(
@@ -282,7 +285,12 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
-      review_reasons = merge_review_reasons(params[:review_reasons], amount_review_reasons(amount_result), ocr_review_reasons)
+      review_reasons = merge_review_reasons(
+        params[:review_reasons],
+        detail_review_reasons_for(params),
+        amount_review_reasons(amount_result),
+        ocr_review_reasons
+      )
 
       # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
       # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -669,9 +677,10 @@ class ReceiptAnalysisPipeline
       end
     end
 
-    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], ocr_low_quality: nil)
+    def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], detail_needs_review: nil, ocr_low_quality: nil)
       return "review_needed" if amount_needs_review
       return "review_needed" if ai_needs_review
+      return "review_needed" if detail_needs_review
       return "review_needed" if ReviewReasons.blocking_reasons_for_user(build_review_reasons).any?
       return "review_needed" if ReviewReasons.blocking_reasons_for_user(ocr_review_reasons).any?
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: receipt_attributes) if ocr_low_quality.nil?
@@ -706,6 +715,20 @@ class ReceiptAnalysisPipeline
         end
 
       (amount_reasons + Array(amount_result[:review_reasons])).uniq
+    end
+
+    def detail_review_reasons_for(params)
+      Array(params[:receipt_adjustments_attributes]).flat_map do |adjustment|
+        normalize_review_reasons(normalized_hash(adjustment)[:review_reasons])
+      end.uniq
+    end
+
+    def detail_needs_review?(params)
+      Array(params[:receipt_adjustments_attributes]).any? do |adjustment|
+        normalized = normalized_hash(adjustment)
+        normalized[:needs_review] == true ||
+          ReviewReasons.blocking_reasons_for_user(normalize_review_reasons(normalized[:review_reasons])).any?
+      end
     end
 
     def amount_result_with_receipt_amount_overrides(params, amount_result)
@@ -1287,20 +1310,20 @@ class ReceiptAnalysisPipeline
     end
 
     def resolved_store_name_supported_by_ocr?(params, ocr_result)
-      store_name = Analysis::StoreNameCandidateClassifier.normalize_name(
+      store_name = Analysis.normalize_store_name_candidate(
         params.dig(:receipt_attributes, :store_name)
       )
       return false unless resolved_customer_facing_store_name?(store_name)
 
       compact_store_name = compact_store_name_for_review(store_name)
       header_lines = Array(ocr_result[:lines]).first(8).filter_map do |line|
-        Analysis::StoreNameCandidateClassifier.normalize_name(line)
+        Analysis.normalize_store_name_candidate(line)
       end
       return true if header_lines.any? { |line| compact_store_name_for_review(line) == compact_store_name }
 
       return true if latin_logo_local_store_name_supported_by_ocr?(store_name, header_lines)
 
-      Analysis::StoreNameCandidateClassifier.customer_facing_heading_candidates(header_lines).any? do |candidate|
+      Analysis.store_name_customer_facing_heading_candidates(header_lines).any? do |candidate|
         compact_store_name_for_review(candidate) == compact_store_name
       end
     end
@@ -1369,12 +1392,12 @@ class ReceiptAnalysisPipeline
       normalized = store_name.to_s
       return false if normalized.blank?
       return false if normalized.length < 2 || normalized.length > 60
-      return false if Analysis::StoreNameCandidateClassifier.legal_entity_name?(normalized)
-      return false if Analysis::StoreNameCandidateClassifier.operator_context_line?(normalized)
-      return false if Analysis::StoreNameCandidateClassifier.descriptive_heading_line?(normalized)
-      return false if Analysis::StoreNameCandidateClassifier.store_message_line?(normalized)
-      return false if Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(normalized)
-      return false if normalized.split.any? { |part| Analysis::StoreNameCandidateClassifier.isolated_logo_fragment?(part) }
+      return false if Analysis.store_name_legal_entity_name?(normalized)
+      return false if Analysis.store_name_operator_context_line?(normalized)
+      return false if Analysis.store_name_descriptive_heading_line?(normalized)
+      return false if Analysis.store_name_message_line?(normalized)
+      return false if Analysis.store_name_isolated_logo_fragment?(normalized)
+      return false if normalized.split.any? { |part| Analysis.store_name_isolated_logo_fragment?(part) }
       return false if normalized.match?(/[¥￥$€£]|\b(?:receipt|invoice|total|subtotal|tax|payment)\b/i)
       return false if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?|\d{1,2}[:：]\d{2}/)
       return false if normalized.match?(profile.store_context_address_pattern)
@@ -1383,7 +1406,7 @@ class ReceiptAnalysisPipeline
     end
 
     def compact_store_name_for_review(value)
-      Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
+      Analysis.normalize_compact_store_name_candidate(value).to_s.downcase
     end
 
     def payment_method_resolved_after_build?(params, amount_result)

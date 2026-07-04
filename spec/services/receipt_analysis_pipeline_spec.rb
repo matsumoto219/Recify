@@ -543,6 +543,19 @@ RSpec.describe ReceiptAnalysisPipeline do
           successful_ocr_result.deep_merge(candidates: { country_region: 'USA' }),
           'unsupported_country'
         ],
+        unsupported_two_letter_country: [
+          successful_ocr_result.deep_merge(candidates: { country_region: 'JP' }),
+          'unsupported_country'
+        ],
+        low_confidence_unsupported_country: [
+          successful_ocr_result.deep_merge(
+            candidates: {
+              country_region: 'USA',
+              confidence_summary: { country_region: 0.1, overall: 0.95 }
+            }
+          ),
+          'unsupported_country'
+        ],
         no_text_detected: [
           successful_ocr_result.deep_merge(
             raw_text: '',
@@ -853,6 +866,62 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'AI provider call前の利用上限超過はprovider failure扱いにせずskipする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      quota_error = Usage::LimitExceeded.new(
+        key: 'ai_jobs_per_day',
+        limit: 1,
+        used: 1,
+        requested: 1
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(Usage).to receive(:ensure_ai_job_within_limit!).and_raise(quota_error)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+      allow(ExternalServices).to receive(:mark_failure!)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:usage_limit_exceeded)
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(ExternalServices).not_to have_received(:mark_failure!)
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+      end
+    end
+
+    it 'AI fallback経路の利用上限超過もpipelineへ届きprovider failure扱いにしない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      quota_error = Usage::LimitExceeded.new(
+        key: 'ai_jobs_per_day',
+        limit: 1,
+        used: 1,
+        requested: 1
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(quota_error)
+      allow(ExternalServices).to receive(:mark_failure!)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:usage_limit_exceeded)
+        expect(ExternalServices).not_to have_received(:mark_failure!)
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+      end
+    end
+
     it 'AI stepの予期しない例外ではrunとprocessing receiptをfailedにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -1110,6 +1179,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           warning_inconsistencies: []
         )
       )
+      expect(ReceiptAnalysisRuns).to receive(:record_final_result).once.and_call_original
 
       result = described_class.run_finalize(run)
 

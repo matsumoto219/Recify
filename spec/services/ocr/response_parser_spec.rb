@@ -1247,6 +1247,19 @@ RSpec.describe Ocr::ResponseParser do
       expect(result.dig(:candidates, :country_region)).to eq('JPN')
     end
 
+    it 'CountryRegion confidenceは現行parser contractに含めずcountry codeのみを返す' do
+      response = raw_response.deep_dup
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['CountryRegion'] = { 'valueCountryRegion' => ' usa ', 'confidence' => 0.1 }
+
+      result = described_class.new(response: response).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :country_region)).to eq('USA')
+        expect(result.dig(:candidates, :confidence_summary)).not_to have_key(:country_region)
+      end
+    end
+
     it '壊れたJSON文字列では ocr_api_error を返す' do
       result = described_class.new(response: '{invalid json}', provider: 'azure_document_intelligence').call
 

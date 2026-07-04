@@ -192,9 +192,10 @@ module Analysis
         return "ai_unavailable" if ExternalServices.down?(:ai)
       when "finalize_retry"
         return "parent_run_missing" if parent_run.blank?
-        return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
-        return "ai_snapshot_missing" if parent_run.ai_normalized_result_snapshot.blank?
         return "finalize_decision_missing" if parent_finalize_decision.blank?
+        requirements = finalize_retry_snapshot_requirements
+        return "ocr_snapshot_missing" if requirements[:ocr] && parent_run.ocr_result_snapshot.blank?
+        return "ai_snapshot_missing" if requirements[:ai] && parent_run.ai_normalized_result_snapshot.blank?
       end
 
       nil
@@ -243,13 +244,27 @@ module Analysis
       when "ai_retry"
         ReceiptAnalysisRuns.copy_retry_snapshots(run, parent_run: parent_run, include_ocr: true)
       when "finalize_retry"
+        requirements = finalize_retry_snapshot_requirements
         ReceiptAnalysisRuns.copy_retry_snapshots(
           run,
           parent_run: parent_run,
-          include_ocr: true,
-          include_ai: true,
+          include_ocr: requirements[:ocr],
+          include_ai: requirements[:ai],
           include_finalize_decision: true
         )
+      end
+    end
+
+    def finalize_retry_snapshot_requirements
+      case parent_finalize_decision&.finalize_strategy.to_s
+      when "ai_success"
+        { ocr: true, ai: true }
+      when "ai_fallback", "ocr_only"
+        { ocr: true, ai: false }
+      when "fail_receipt"
+        { ocr: false, ai: false }
+      else
+        { ocr: false, ai: false }
       end
     end
 
