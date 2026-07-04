@@ -206,6 +206,8 @@ module Amounts
             :final_payment_total,
             :payment_amount_sum,
             :payment_delta,
+            :payment_amount_mismatch_suppressed,
+            :suppressed_reason,
             :effect,
             :kind,
             :sign,

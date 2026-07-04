@@ -135,6 +135,11 @@ RSpec.describe Amounts::CandidateSnapshot do
           raw_text: '保存しないraw text',
           source_text: '保存しないsource text',
           description: '保存しないdescription',
+          label: '保存しないlabel',
+          raw_label: '保存しないraw label',
+          payment_label: '保存しないpayment label',
+          adjustment_label: '保存しないadjustment label',
+          source_label: '保存しないsource label',
           endpoint: 'https://example.invalid/ocr',
           provider_raw_response: { body: '保存しないprovider body' },
           store_metadata: { name: '保存しない店舗metadata' },
@@ -148,6 +153,7 @@ RSpec.describe Amounts::CandidateSnapshot do
           raw_text: '保存しない商品raw text',
           source_text: '保存しない商品source text',
           description: '保存しない商品description',
+          label: '保存しない商品label',
           metadata: { provider_raw_response: '保存しないnested provider' }
         }
       ]
@@ -169,6 +175,7 @@ RSpec.describe Amounts::CandidateSnapshot do
         'raw text',
         'source text',
         'description',
+        'label',
         'provider body',
         'example.invalid',
         '店舗metadata'
