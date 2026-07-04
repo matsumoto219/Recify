@@ -2,18 +2,22 @@
 
 one:
   user: one
+  public_id: rcpt_TestFixture00001
+  display_id: R-TEST01
   store_name: MyString
   purchased_at: 2026-03-30 15:23:37
   total_amount: 1
-  payment_method: MyString
-  status: MyString
+  payment_method: cash
+  status: uploaded
   memo: MyText
 
 two:
   user: two
+  public_id: rcpt_TestFixture00002
+  display_id: R-TEST02
   store_name: MyString
   purchased_at: 2026-03-30 15:23:37
   total_amount: 1
-  payment_method: MyString
-  status: MyString
+  payment_method: cash
+  status: uploaded
   memo: MyText

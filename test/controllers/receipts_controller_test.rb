@@ -1,23 +1,27 @@
 require "test_helper"
 
 class ReceiptsControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    sign_in_with_current_legal_acceptance users(:one)
+  end
+
   test "should get index" do
-    get receipts_index_url
+    get receipts_url
     assert_response :success
   end
 
   test "should get show" do
-    get receipts_show_url
+    get receipt_url(receipts(:one))
     assert_response :success
   end
 
   test "should get new" do
-    get receipts_new_url
+    get new_receipt_url
     assert_response :success
   end
 
   test "should get edit" do
-    get receipts_edit_url
+    get edit_receipt_url(receipts(:one))
     assert_response :success
   end
 end
