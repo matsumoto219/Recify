@@ -92,6 +92,9 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
         expect(snapshot.to_json).not_to include(
           'OCR全文を含む商品行',
           'ai_raw_response',
+          'raw_ocr_text',
+          'provider_raw_response',
+          'endpoint',
           '保存しない',
           'provider raw response',
           'example.invalid',
@@ -126,6 +129,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           computed: { total: 1_161, subtotal: 1_066, tax: 95 },
           resolved: { total: 1_161, subtotal: 1_066, tax: 95 },
           amount_engine: {
+            schema_version: 1,
             selected_candidate_id: 'mixed_by_tax_rate_group/floor',
             selected_basis: 'mixed_by_tax_rate_group',
             selected_candidate: {
@@ -137,6 +141,11 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               final_payment_total: 1_139,
               payment_adjustment_total: -22,
               payment_amount_sum: 1_139,
+              score_breakdown: {
+                receipt_total_delta: 0,
+                raw_text: '保存しないscore raw text',
+                metadata: { source_text: '保存しないscore nested source text' }
+              },
               computed_items: [
                 {
                   raw_text: '保存しない',
@@ -153,7 +162,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               evidence: [
                 { source: 'receipt_payments', payment_amount_sum: 1_139, final_payment_total: 1_139 },
                 {
-                  source: 'ocr_raw_text',
+                  source: 'receipt_payments',
                   raw_text: '保存しない',
                   source_text: '保存しないsource text',
                   description: '保存しないdescription',
@@ -172,6 +181,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
 
       aggregate_failures do
         # 検算: purchase_total 1,161 + payment_adjustment -22 = final_payment_total 1,139。
+        expect(snapshot.dig(:amount_engine, :schema_version)).to eq(1)
         expect(snapshot.dig(:amount_engine, :selected_candidate)).to include(
           candidate_id: 'mixed_by_tax_rate_group/floor',
           basis: 'mixed_by_tax_rate_group',
@@ -179,6 +189,9 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           final_payment_total: 1_139,
           payment_adjustment_total: -22,
           payment_amount_sum: 1_139
+        )
+        expect(snapshot.dig(:amount_engine, :selected_candidate, :score_breakdown)).to eq(
+          'receipt_total_delta' => 0
         )
         expect(snapshot.dig(:amount_engine, :selected_candidate, :computed_items)).to eq([
           {
@@ -194,6 +207,10 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           '保存しない',
           'source text',
           'description',
+          'raw_text',
+          'source_text',
+          'provider_raw_response',
+          'endpoint',
           'provider body',
           'example.invalid',
           '店舗電話'
@@ -219,6 +236,8 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
       snapshot = described_class.call(result)
 
       aggregate_failures do
+        expect(snapshot[:schema_version]).to eq(1)
+        expect(snapshot.dig(:amount_engine, :schema_version)).to eq(1)
         expect(result.dig(:amount_engine, :candidates).size).to eq(1)
         expect(snapshot.dig(:amount_engine, :selected_candidate)).to be_present
         expect(snapshot.dig(:amount_engine, :candidates).size).to eq(1)

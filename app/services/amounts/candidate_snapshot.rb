@@ -2,10 +2,23 @@
 
 module Amounts
   class CandidateSnapshot
+    SCHEMA_VERSION = 1
     SETTING_KEY = "amount_engine.max_candidate_snapshot_count"
     DEFAULT_CANDIDATE_COUNT = 3
     MIN_CANDIDATE_COUNT = 1
     MAX_CANDIDATE_COUNT = 20
+    SCORE_BREAKDOWN_KEYS = %i[
+      receipt_total_delta
+      receipt_subtotal_delta
+      receipt_tax_delta
+      payment_delta
+      receipt_input_item_delta
+      warning_penalty
+      hard_reject_penalty
+      rounding_mode_penalty
+      external_tax_exact_tax_bonus
+      basis_penalty
+    ].freeze
 
     class << self
       def call(selected:, candidates:, no_safe_candidate: nil)
@@ -21,6 +34,7 @@ module Amounts
 
     def call
       {
+        schema_version: SCHEMA_VERSION,
         selected_candidate_id: selected&.candidate_id,
         selected_basis: selected&.basis,
         selected_candidate_status: selected_candidate_status,
@@ -74,7 +88,7 @@ module Amounts
         rounding_mode: candidate.rounding_mode,
         rounding_scope: candidate.rounding_scope,
         score: candidate.score,
-        score_breakdown: candidate.score_breakdown,
+        score_breakdown: safe_score_breakdown(candidate.score_breakdown),
         warnings: candidate.warnings,
         hard_reject_reasons: candidate.hard_reject_reasons,
         evidence: safe_evidence(candidate.evidence),
@@ -101,6 +115,12 @@ module Amounts
           :amount_discount_amount_present
         ).compact
       end
+    end
+
+    def safe_score_breakdown(score_breakdown)
+      return nil unless score_breakdown.respond_to?(:to_h)
+
+      score_breakdown.to_h.symbolize_keys.slice(*SCORE_BREAKDOWN_KEYS).compact
     end
 
     def safe_evidence(evidence)

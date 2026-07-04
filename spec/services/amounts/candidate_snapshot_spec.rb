@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::CandidateSnapshot do
-  def candidate(id, score:, rejected: false)
+  def candidate(id, score:, rejected: false, **attributes)
     Amounts::Candidate.new(
       candidate_id: id,
       basis: id,
@@ -10,7 +10,8 @@ RSpec.describe Amounts::CandidateSnapshot do
       purchase_total: score,
       final_payment_total: score,
       score: score,
-      hard_reject_reasons: rejected ? [ :test_reject ] : []
+      hard_reject_reasons: rejected ? [ :test_reject ] : [],
+      **attributes
     )
   end
 
@@ -34,6 +35,7 @@ RSpec.describe Amounts::CandidateSnapshot do
     snapshot = described_class.call(selected: selected, candidates: candidates)
 
     aggregate_failures do
+      expect(snapshot[:schema_version]).to eq(1)
       expect(snapshot[:selected_candidate_id]).to eq('selected')
       expect(snapshot[:selected_candidate_status]).to eq('accepted')
       expect(snapshot[:no_safe_candidate]).to be(false)
@@ -113,6 +115,64 @@ RSpec.describe Amounts::CandidateSnapshot do
         expect(snapshot.dig(:selected_candidate, :candidate_id)).to eq('selected')
         expect(snapshot_candidate_ids(snapshot)).to eq(%w[selected])
       end
+    end
+  end
+
+  it 'raw textやprovider metadataをsnapshotへ含めない' do
+    leaky_candidate = candidate(
+      'leaky',
+      score: 100,
+      score_breakdown: {
+        receipt_total_delta: 0,
+        raw_text: '保存しないOCR全文',
+        provider_raw_response: { endpoint: 'https://example.invalid/ocr' },
+        metadata: { source_text: '保存しないnested source text' }
+      },
+      evidence: [
+        {
+          source: 'receipt_payments',
+          payment_amount_sum: 100,
+          raw_text: '保存しないraw text',
+          source_text: '保存しないsource text',
+          description: '保存しないdescription',
+          endpoint: 'https://example.invalid/ocr',
+          provider_raw_response: { body: '保存しないprovider body' },
+          store_metadata: { name: '保存しない店舗metadata' },
+          metadata: { raw_ocr_text: '保存しないnested raw OCR' }
+        }
+      ],
+      computed_items: [
+        {
+          price: 100,
+          line_total: 100,
+          raw_text: '保存しない商品raw text',
+          source_text: '保存しない商品source text',
+          description: '保存しない商品description',
+          metadata: { provider_raw_response: '保存しないnested provider' }
+        }
+      ]
+    )
+
+    snapshot = described_class.call(selected: leaky_candidate, candidates: [ leaky_candidate ])
+
+    aggregate_failures do
+      expect(snapshot[:schema_version]).to eq(1)
+      expect(snapshot.dig(:selected_candidate, :score_breakdown)).to eq(receipt_total_delta: 0)
+      expect(snapshot.dig(:selected_candidate, :evidence)).to eq([
+        { source: 'receipt_payments', payment_amount_sum: 100 }
+      ])
+      expect(snapshot.dig(:selected_candidate, :computed_items)).to eq([
+        { price: 100, line_total: 100 }
+      ])
+      expect(snapshot.to_json).not_to include(
+        '保存しない',
+        'raw text',
+        'source text',
+        'description',
+        'provider body',
+        'example.invalid',
+        '店舗metadata'
+      )
     end
   end
 end

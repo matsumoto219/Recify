@@ -2,6 +2,20 @@
 
 module Amounts
   class CalculationProfileSnapshot
+    SCHEMA_VERSION = 1
+    SCORE_BREAKDOWN_KEYS = %i[
+      receipt_total_delta
+      receipt_subtotal_delta
+      receipt_tax_delta
+      payment_delta
+      receipt_input_item_delta
+      warning_penalty
+      hard_reject_penalty
+      rounding_mode_penalty
+      external_tax_exact_tax_bonus
+      basis_penalty
+    ].freeze
+
     class << self
       def call(result, context: nil, rounding_mode: nil)
         new(result, context: context, rounding_mode: rounding_mode).call
@@ -16,6 +30,7 @@ module Amounts
 
     def call
       snapshot = {
+        schema_version: SCHEMA_VERSION,
         profile: sanitized_profile,
         score: result[:calculation_profile_score],
         warnings: normalized_array(result[:warnings].presence || result[:warning_reasons]),
@@ -98,6 +113,7 @@ module Amounts
 
       engine = value.with_indifferent_access
       {
+        schema_version: normalize_value(engine[:schema_version]),
         selected_candidate_id: normalize_scalar(engine[:selected_candidate_id]),
         selected_basis: normalize_scalar(engine[:selected_basis]),
         selected_candidate_status: normalize_scalar(engine[:selected_candidate_status]),
@@ -130,7 +146,7 @@ module Amounts
         rounding_mode: normalize_scalar(candidate[:rounding_mode]),
         rounding_scope: normalize_scalar(candidate[:rounding_scope]),
         score: normalize_value(candidate[:score]),
-        score_breakdown: normalize_value(candidate[:score_breakdown]),
+        score_breakdown: sanitized_score_breakdown(candidate[:score_breakdown]),
         warnings: normalized_array(candidate[:warnings]),
         hard_reject_reasons: normalized_array(candidate[:hard_reject_reasons]),
         evidence: sanitized_engine_evidence(candidate[:evidence]),
@@ -160,6 +176,12 @@ module Amounts
           )
         )
       end
+    end
+
+    def sanitized_score_breakdown(score_breakdown)
+      return nil unless score_breakdown.respond_to?(:with_indifferent_access)
+
+      normalize_value(score_breakdown.with_indifferent_access.slice(*SCORE_BREAKDOWN_KEYS))
     end
 
     def sanitized_engine_evidence(evidence)
