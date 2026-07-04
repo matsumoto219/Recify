@@ -4,6 +4,7 @@ module Amounts
   class ReviewPolicy
     REVIEW_REQUIRED_WARNINGS = %i[
       price_tax_inclusion_uncertain
+      competing_exact_basis_candidate
       payment_amount_mismatch
     ].freeze
     PURCHASE_ADJUSTMENT_TAX_ALLOCATION_REVIEW_REASON = :purchase_adjustment_tax_allocation_uncertain
@@ -41,7 +42,7 @@ module Amounts
     end
 
     def review_required_warnings
-      warnings = candidate.warnings & REVIEW_REQUIRED_WARNINGS
+      warnings = inconsistencies & REVIEW_REQUIRED_WARNINGS
       warnings |= incomplete_tax_details_receipt_tax_review_warnings
       warnings |= purchase_adjustment_tax_allocation_review_warnings
       return warnings unless tax_detail_net_price_tax_warning_only?
@@ -64,6 +65,8 @@ module Amounts
     end
 
     def tax_detail_net_price_tax_warning_only?
+      return false if inconsistencies.include?(:competing_exact_basis_candidate)
+
       candidate.basis == "printed_tax_details_net" &&
         candidate.hard_reject_reasons.blank? &&
         candidate.warnings.map(&:to_sym) == [ :price_tax_inclusion_uncertain ] &&

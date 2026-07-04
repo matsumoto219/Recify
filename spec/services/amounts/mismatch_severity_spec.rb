@@ -22,6 +22,7 @@ RSpec.describe Amounts::MismatchSeverity do
         expect(described_class.severity(:zero_amount_item_incomplete)).to eq(:warning)
         expect(described_class.severity(:discount_data_incomplete)).to eq(:warning)
         expect(described_class.severity(:price_tax_inclusion_uncertain)).to eq(:warning)
+        expect(described_class.severity(:competing_exact_basis_candidate)).to eq(:warning)
         expect(described_class.severity(:item_tax_rate_group_uncertain)).to eq(:warning)
         expect(described_class.severity(:adjustment_tax_rate_missing)).to eq(:warning)
       end

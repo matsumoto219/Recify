@@ -171,6 +171,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
         expect(helper.review_reason_target('payment_amount_mismatch')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_PAYMENTS)
         expect(helper.review_reason_target('tax_detail_mismatch')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
         expect(helper.review_reason_target('price_tax_inclusion_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
+        expect(helper.review_reason_target('competing_exact_basis_candidate')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
         expect(helper.review_reason_target('ocr_low_confidence')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
       end
     end

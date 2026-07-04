@@ -710,6 +710,69 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'printed tax details netが完全整合しても別basisのexact候補があれば税込税抜確認を残す' do
+    printed_net_candidate = Amounts::Candidate.new(
+      candidate_id: 'printed_tax_details_net/floor',
+      basis: 'printed_tax_details_net',
+      subtotal: 1_000,
+      tax: 100,
+      purchase_total: 1_100,
+      final_payment_total: 1_100,
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100 }
+      ],
+      tax_rate_groups: [
+        { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+      ],
+      warnings: [ :price_tax_inclusion_uncertain ],
+      computed_items: [
+        { price: 1_100, line_total: 1_100, quantity: BigDecimal('1'), tax_rate: BigDecimal('0.10') }
+      ],
+      source: :amount_engine
+    )
+    included_candidate = Amounts::Candidate.new(
+      candidate_id: 'items_as_tax_included/floor/per_receipt',
+      basis: 'items_as_tax_included',
+      subtotal: 1_000,
+      tax: 100,
+      purchase_total: 1_100,
+      final_payment_total: 1_100,
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100 }
+      ],
+      tax_rate_groups: [
+        { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+      ],
+      computed_items: [
+        { price: 1_100, line_total: 1_100, quantity: BigDecimal('1'), tax_rate: BigDecimal('0.10') }
+      ],
+      source: :amount_engine
+    )
+
+    generator = instance_double(Amounts::CandidateGenerator, call: [ printed_net_candidate, included_candidate ])
+    allow(Amounts::CandidateGenerator).to receive(:new).and_return(generator)
+
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 1_000, tax_amount: 100, total_amount: 1_100 },
+      items: [
+        { line_total: 1_100, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100, description: '外税10%' }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('printed_tax_details_net/floor')
+      expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain, :competing_exact_basis_candidate)
+      expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain', 'competing_exact_basis_candidate')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it '複数税率かつ印字tax detailsありの購入調整tax_rate nilは税配賦不確実としてreview対象にする' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 800, tax_amount: 78, total_amount: 878 },

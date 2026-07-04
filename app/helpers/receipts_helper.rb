@@ -51,6 +51,7 @@ module ReceiptsHelper
     "tax_detail_partial" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "ocr_total_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "price_tax_inclusion_uncertain" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "competing_exact_basis_candidate" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "calculation_profile_uncertain" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "invalid_amount_relation" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "tax_details_double_counted" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,

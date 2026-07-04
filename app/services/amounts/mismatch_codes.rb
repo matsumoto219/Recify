@@ -12,6 +12,7 @@ module Amounts
       item_tax_rate_group_uncertain: "ITEM_TAX_RATE_GROUP_UNCERTAIN",
       ocr_total_mismatch: "OCR_TOTAL_MISMATCH",
       price_tax_inclusion_uncertain: "PRICE_TAX_INCLUSION_UNCERTAIN",
+      competing_exact_basis_candidate: "COMPETING_EXACT_BASIS_CANDIDATE",
       calculation_profile_uncertain: "CALCULATION_PROFILE_UNCERTAIN",
       insufficient_data: "INSUFFICIENT_DATA",
       zero_amount_item_incomplete: "ZERO_AMOUNT_ITEM_INCOMPLETE",

@@ -27,6 +27,7 @@ module Amounts
       discount_data_incomplete
       adjustment_tax_rate_missing
       price_tax_inclusion_uncertain
+      competing_exact_basis_candidate
       calculation_profile_uncertain
     ].freeze
 

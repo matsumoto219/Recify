@@ -28,6 +28,7 @@ RSpec.describe ReviewReasons do
         expect(described_class.source_for(:tax_detail_partial)).to eq(:amount)
         expect(described_class.source_for('zero_amount_item_incomplete')).to eq(:amount)
         expect(described_class.source_for('price_tax_inclusion_uncertain')).to eq(:amount)
+        expect(described_class.source_for('competing_exact_basis_candidate')).to eq(:amount)
         expect(described_class.source_for('calculation_profile_uncertain')).to eq(:amount)
         expect(described_class.source_for('item_tax_rate_group_uncertain')).to eq(:amount)
         expect(described_class.source_for('purchase_adjustment_tax_allocation_uncertain')).to eq(:amount)
