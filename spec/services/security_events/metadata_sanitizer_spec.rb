@@ -17,6 +17,48 @@ RSpec.describe SecurityEvents::MetadataSanitizer do
     )
   end
 
+  it 'provider detail由来の危険keyをmetadataから除去する' do
+    metadata = described_class.call(
+      safe: 'value',
+      access_token: 'ACCESS_TOKEN',
+      refresh_token: 'REFRESH_TOKEN',
+      client_secret: 'CLIENT_SECRET',
+      api_key: 'API_KEY',
+      authorization: 'AUTHORIZATION',
+      provider_raw_response: 'RAW_RESPONSE',
+      prompt: 'PROMPT',
+      system_prompt: 'SYSTEM_PROMPT',
+      user_prompt: 'USER_PROMPT',
+      subscription_key: 'SUBSCRIPTION_KEY',
+      endpoint: 'https://provider.example.test',
+      'operation-location' => 'OPERATION_LOCATION',
+      nested: {
+        operation_location: 'NESTED_OPERATION_LOCATION',
+        endpoint_status: 'ok'
+      }
+    )
+
+    aggregate_failures do
+      expect(metadata).to include('safe' => 'value')
+      expect(metadata.dig('nested', 'endpoint_status')).to eq('ok')
+      expect(metadata.to_json).not_to include(
+        'ACCESS_TOKEN',
+        'REFRESH_TOKEN',
+        'CLIENT_SECRET',
+        'API_KEY',
+        'AUTHORIZATION',
+        'RAW_RESPONSE',
+        'PROMPT',
+        'SYSTEM_PROMPT',
+        'USER_PROMPT',
+        'SUBSCRIPTION_KEY',
+        'provider.example.test',
+        'OPERATION_LOCATION',
+        'NESTED_OPERATION_LOCATION'
+      )
+    end
+  end
+
   it '文字列内のPIIやsecret風値をredactする' do
     metadata = described_class.call(
       message: 'email=user@example.com Authorization: Bearer abcdefghijklmnopqrstuvwxyz token=secret-value'

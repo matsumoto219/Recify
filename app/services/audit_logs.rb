@@ -3,47 +3,59 @@ module AuditLogs
   MAX_ARRAY_ITEMS = 50
   DEFAULT_RETENTION_CLEANUP_LIMIT = 1000
 
-  BLOCKED_KEYS = %w[
-    api_key
-    attestation_object
-    authenticator_data
-    authorization
-    backup_code
-    backup_codes
-    blob_key
-    challenge
-    client_data_json
-    code_digest
-    cookie
-    credential_id
-    encrypted_totp_secret
-    messages
-    one_time_password
-    otp
-    otp_attempt
-    otpauth
-    password
-    prompt
-    provisioning_uri
-    public_key
-    raw_id
-    raw_response
-    raw_text
-    recovery_code
-    recovery_codes
-    response_body
-    secret
-    second_factor
-    session
-    signature
-    signed_id
-    token
-    totp
-    totp_code
-    totp_secret
-    two_factor
-    user_handle
-  ].freeze
+  BLOCKED_KEYS = (
+    %w[
+      access_token
+      access-token
+      api_key
+      attestation_object
+      authenticator_data
+      authorization
+      backup_code
+      backup_codes
+      blob_key
+      challenge
+      client_data_json
+      client_secret
+      code_digest
+      cookie
+      credential_id
+      encrypted_totp_secret
+      image
+      image-payload
+      image_payload
+      messages
+      one_time_password
+      otp
+      otp_attempt
+      otpauth
+      password
+      prompt
+      provisioning_uri
+      public_key
+      raw_id
+      raw_response
+      raw_text
+      recovery_code
+      recovery_codes
+      refresh_token
+      refresh-token
+      response_body
+      secret
+      second_factor
+      session
+      set-cookie
+      set_cookie
+      signature
+      signed_id
+      token
+      totp
+      totp_code
+      totp_secret
+      two_factor
+      user_handle
+    ] + SensitiveMetadataKeys::PROVIDER_DETAIL_KEYS
+  ).freeze
 
   BLOCKED_KEY_FRAGMENTS = %w[
     api_key

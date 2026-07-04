@@ -3,26 +3,36 @@ module Admin
     DEFAULT_LIMIT = 50
     MAX_LIMIT = 100
     ATTENTION_RECEIPT_STATUSES = %w[review_needed failed].freeze
-    FORBIDDEN_SUMMARY_KEYS = %w[
-      azure_raw_response
-      blob_key
-      image
-      openai_raw_response
-      prompt
-      prompt_text
-      api_key
-      ai_raw_response
-      full_prompt
-      image_payload
-      raw_response
-      raw_ai_response
-      provider_raw_response
-      response_body
-      signed_id
-      system_prompt
-      token
-      user_prompt
-    ].freeze
+    FORBIDDEN_SUMMARY_KEYS = (
+      %w[
+        access_token
+        access-token
+        api_key
+        azure_raw_response
+        blob_key
+        client_secret
+        image
+        image-payload
+        image_payload
+        openai_raw_response
+        prompt
+        prompt_text
+        ai_raw_response
+        full_prompt
+        raw_response
+        raw_ai_response
+        provider_raw_response
+        refresh_token
+        refresh-token
+        response_body
+        set-cookie
+        set_cookie
+        signed_id
+        system_prompt
+        token
+        user_prompt
+      ] + SensitiveMetadataKeys::PROVIDER_DETAIL_KEYS
+    ).freeze
     FORBIDDEN_SUMMARY_KEY_FRAGMENTS = %w[
       authorization
       password

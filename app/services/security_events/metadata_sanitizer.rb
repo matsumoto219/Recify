@@ -17,7 +17,11 @@ module SecurityEvents
       service[_-]?url|variant[_-]?url|rails[_-]?(?:blob|storage)[_-]?path
     /ix
     STORAGE_URL_PATTERN = %r{(?:/rails/active_storage/|/rails/active_storage/blobs/|/rails/active_storage/representations/)}i
-    SENSITIVE_KEY_PATTERN = Regexp.union(SecurityEvent::SENSITIVE_KEY_PATTERN, STORAGE_KEY_PATTERN)
+    SENSITIVE_KEY_PATTERN = Regexp.union(
+      SecurityEvent::SENSITIVE_KEY_PATTERN,
+      STORAGE_KEY_PATTERN,
+      SensitiveMetadataKeys::PROVIDER_DETAIL_KEY_PATTERN
+    )
 
     class << self
       def call(value)

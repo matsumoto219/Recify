@@ -34,31 +34,41 @@ module ReceiptAnalysisRuns
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
 
-    EXACT_FORBIDDEN_KEYS = %w[
-      api_key
-      authorization
-      azure_raw_response
-      blob_key
-      cookie
-      cookies
-      full_prompt
-      headers
-      image
-      image_payload
-      messages
-      openai_raw_response
-      prompt
-      prompt_text
-      provider_raw_response
-      raw_ai_response
-      raw_response
-      response_body
-      secret
-      signed_id
-      system_prompt
-      token
-      user_prompt
-    ].freeze
+    EXACT_FORBIDDEN_KEYS = (
+      %w[
+        access_token
+        access-token
+        api_key
+        authorization
+        azure_raw_response
+        blob_key
+        client_secret
+        cookie
+        cookies
+        full_prompt
+        headers
+        image
+        image-payload
+        image_payload
+        messages
+        openai_raw_response
+        prompt
+        prompt_text
+        provider_raw_response
+        raw_ai_response
+        raw_response
+        response_body
+        refresh_token
+        refresh-token
+        secret
+        set-cookie
+        set_cookie
+        signed_id
+        system_prompt
+        token
+        user_prompt
+      ] + SensitiveMetadataKeys::PROVIDER_DETAIL_KEYS
+    ).freeze
     FORBIDDEN_KEY_FRAGMENTS = %w[
       authorization
       password
@@ -888,7 +898,7 @@ module ReceiptAnalysisRuns
     end
 
     def sanitized_ai_metrics(value)
-      Ai::ProviderMetrics.build(value)
+      ReceiptAiEnrichmentService.provider_metrics(value)
     end
 
     def limited_hashes(value, max)
