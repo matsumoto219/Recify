@@ -39,6 +39,7 @@ module ReceiptsHelper
     "discount_data_incomplete" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
     "adjustment_uncertain" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
     "adjustment_tax_rate_missing" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
+    "purchase_adjustment_tax_allocation_uncertain" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
     "payment_method_missing" => RECEIPT_REVIEW_TARGET_PAYMENTS,
     "payment_method_uncertain" => RECEIPT_REVIEW_TARGET_PAYMENTS,
     "payment_amount_mismatch" => RECEIPT_REVIEW_TARGET_PAYMENTS,

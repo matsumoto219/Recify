@@ -37,6 +37,87 @@ RSpec.describe Amounts::ReviewPolicy do
     end
   end
 
+  it '単一税率のadjustment_tax_rate_missingはwarning-onlyに留める' do
+    result = apply_policy(
+      candidate(
+        warnings: [ :adjustment_tax_rate_missing ],
+        tax_rate_groups: [
+          { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+        ],
+        evidence: [
+          { source: 'receipt_adjustment', effect: :purchase_adjustment, amount: 100, tax_rate: BigDecimal('0') }
+        ]
+      )
+    )
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:adjustment_tax_rate_missing)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it '複数税率のpurchase adjustment税率欠落は税配賦不確実としてreview reasonにする' do
+    result = apply_policy(
+      candidate(
+        warnings: [ :adjustment_tax_rate_missing ],
+        tax_rate_groups: [
+          { rate: BigDecimal('0.08'), gross: 540, net: 500, tax: 40 },
+          { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+        ],
+        evidence: [
+          { source: 'receipt_adjustment', effect: :purchase_adjustment, amount: 100, tax_rate: BigDecimal('0') }
+        ]
+      )
+    )
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:adjustment_tax_rate_missing)
+      expect(result[:review_reasons]).to eq([ 'purchase_adjustment_tax_allocation_uncertain' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '印字tax detailsありのpurchase adjustment税率欠落は税配賦不確実としてreview reasonにする' do
+    result = apply_policy(
+      candidate(
+        warnings: [ :adjustment_tax_rate_missing ],
+        tax_rate_groups: [
+          { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+        ],
+        evidence: [
+          { source: 'receipt_tax_detail', rate: BigDecimal('0.10'), basis: :gross, amount: 100, net_amount: 1_000 },
+          { source: 'receipt_adjustment', effect: :purchase_adjustment, amount: 100, tax_rate: BigDecimal('0') }
+        ]
+      )
+    )
+
+    aggregate_failures do
+      expect(result[:review_reasons]).to eq([ 'purchase_adjustment_tax_allocation_uncertain' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'mixed basis候補のpurchase adjustment税率欠落は税配賦不確実としてreview reasonにする' do
+    result = apply_policy(
+      candidate(
+        basis: 'mixed_by_tax_rate_group',
+        warnings: [ :adjustment_tax_rate_missing ],
+        tax_rate_groups: [
+          { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 }
+        ],
+        evidence: [
+          { source: 'receipt_adjustment', effect: :purchase_adjustment, amount: 100, tax_rate: BigDecimal('0') }
+        ]
+      )
+    )
+
+    aggregate_failures do
+      expect(result[:review_reasons]).to eq([ 'purchase_adjustment_tax_allocation_uncertain' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it 'price_tax_inclusion_uncertainは非blockingの確認対象としてreview reasonにする' do
     result = apply_policy(candidate(warnings: [ :price_tax_inclusion_uncertain ]))
 

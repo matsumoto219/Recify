@@ -340,7 +340,8 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-50)
       expect(result.dig(:computed, :final_payment_total)).to eq(878)
       expect(result.dig(:computed, :payment_amount_sum)).to eq(878)
-      expect(result[:needs_review]).to be(false)
+      expect(result[:review_reasons]).to include('purchase_adjustment_tax_allocation_uncertain')
+      expect(result[:needs_review]).to be(true)
     end
   end
 
@@ -372,8 +373,8 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-100)
       expect(result.dig(:computed, :payment_adjustment_total)).to eq(-200)
       expect(result.dig(:computed, :final_payment_total)).to eq(1_450)
-      expect(result[:review_reasons]).to be_empty
-      expect(result[:needs_review]).to be(false)
+      expect(result[:review_reasons]).to include('purchase_adjustment_tax_allocation_uncertain')
+      expect(result[:needs_review]).to be(true)
     end
   end
 

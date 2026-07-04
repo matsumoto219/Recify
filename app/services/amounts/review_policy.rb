@@ -6,6 +6,7 @@ module Amounts
       price_tax_inclusion_uncertain
       payment_amount_mismatch
     ].freeze
+    PURCHASE_ADJUSTMENT_TAX_ALLOCATION_REVIEW_REASON = :purchase_adjustment_tax_allocation_uncertain
 
     def initialize(candidate:, existing_inconsistencies:)
       @candidate = candidate
@@ -42,9 +43,18 @@ module Amounts
     def review_required_warnings
       warnings = candidate.warnings & REVIEW_REQUIRED_WARNINGS
       warnings |= incomplete_tax_details_receipt_tax_review_warnings
+      warnings |= purchase_adjustment_tax_allocation_review_warnings
       return warnings unless tax_detail_net_price_tax_warning_only?
 
       warnings - [ :price_tax_inclusion_uncertain ]
+    end
+
+    def purchase_adjustment_tax_allocation_review_warnings
+      return [] unless candidate.warnings.include?(:adjustment_tax_rate_missing)
+      return [] unless tax_rate_missing_purchase_adjustment?
+      return [] unless purchase_adjustment_tax_allocation_uncertain?
+
+      [ PURCHASE_ADJUSTMENT_TAX_ALLOCATION_REVIEW_REASON ]
     end
 
     def incomplete_tax_details_receipt_tax_review_warnings
@@ -79,6 +89,54 @@ module Amounts
 
     def receipt_total_delta
       to_i(fetch_value(candidate.score_breakdown, :receipt_total_delta))
+    end
+
+    def tax_rate_missing_purchase_adjustment?
+      receipt_adjustment_evidence.any? do |evidence|
+        fetch_value(evidence, :effect).to_s == "purchase_adjustment" &&
+          to_i(fetch_value(evidence, :amount)).positive? &&
+          tax_rate_missing?(fetch_value(evidence, :tax_rate))
+      end
+    end
+
+    def purchase_adjustment_tax_allocation_uncertain?
+      candidate_positive_tax_rates.many? ||
+        printed_tax_detail_evidence? ||
+        mixed_basis_candidate?
+    end
+
+    def candidate_positive_tax_rates
+      Array(candidate.tax_rate_groups).filter_map do |group|
+        rate = fetch_value(group, :rate)
+        rate = BigDecimal(rate.to_s)
+        rate if rate.positive?
+      rescue ArgumentError
+        nil
+      end.uniq
+    end
+
+    def printed_tax_detail_evidence?
+      candidate.basis.to_s.start_with?("printed_tax_details", "external_tax_from_receipt") ||
+        Array(candidate.evidence).any? { |evidence| fetch_value(evidence, :source).to_s == "receipt_tax_detail" }
+    end
+
+    def mixed_basis_candidate?
+      candidate.basis.to_s == "mixed_by_tax_rate_group" ||
+        fetch_value(candidate.calculation_profile, :item_amount_basis).to_s == "mixed_by_tax_rate_group"
+    end
+
+    def receipt_adjustment_evidence
+      Array(candidate.evidence).select do |evidence|
+        fetch_value(evidence, :source).to_s == "receipt_adjustment"
+      end
+    end
+
+    def tax_rate_missing?(value)
+      return true if value.nil? || value == ""
+
+      BigDecimal(value.to_s).zero?
+    rescue ArgumentError
+      true
     end
 
     def fetch_value(hash, key)

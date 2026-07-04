@@ -80,6 +80,7 @@ ja:
         discount_data_incomplete: "割引情報が不完全です"
         adjustment_uncertain: "値引き・手数料などの調整行に確認が必要です"
         adjustment_tax_rate_missing: "値引き・手数料などの調整行の税率が不明です"
+        purchase_adjustment_tax_allocation_uncertain: "値引き・手数料などの調整行をどの税率に適用するか確認が必要です"
         ocr_total_mismatch: "OCRの合計金額と計算結果が一致していません"
         price_tax_inclusion_uncertain: "明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。"
         calculation_profile_uncertain: "計算方式を一意に推定できません"
@@ -119,3 +120,4 @@ ja:
       review_reason:
         adjustment_uncertain: 調整行の分類に確認が必要です
         adjustment_tax_rate_missing: 調整行の税率が不明です
+        purchase_adjustment_tax_allocation_uncertain: 調整行を適用する税率を確認してください

@@ -40,6 +40,7 @@ module ReviewReasons
     discount_data_incomplete
     adjustment_uncertain
     adjustment_tax_rate_missing
+    purchase_adjustment_tax_allocation_uncertain
     price_tax_inclusion_uncertain
     calculation_profile_uncertain
     invalid_amount_relation
