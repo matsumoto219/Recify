@@ -78,6 +78,32 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JP profile OCR payment method exclusion labels' do
+    it '支払方法へ昇格させない調整・精算行をprofile側で定義する' do
+      pattern = described_class.fetch('JPN').ocr_payment_method_excluded_line_pattern
+
+      aggregate_failures do
+        expect('お預かり cash 1,000').to match(pattern)
+        expect('お釣り cash 100').to match(pattern)
+        expect('change cash 100').to match(pattern)
+        expect('ポイント利用 -100').to match(pattern)
+        expect('ポイント付与 10P').to match(pattern)
+        expect('クーポン値引き -100').to match(pattern)
+        expect('coupon -100').to match(pattern)
+        expect('支払時割引 -40').to match(pattern)
+        expect('キャッシュレス還元額 -50').to match(pattern)
+        expect('cashless reward -50').to match(pattern)
+
+        expect('クレジット支払 ¥1,900').not_to match(pattern)
+        expect('現金').not_to match(pattern)
+        expect('電子マネー決済').not_to match(pattern)
+        expect('QR決済').not_to match(pattern)
+        expect('商品券支払 ¥1,000').not_to match(pattern)
+        expect('gift card ¥1,000').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JP profile OCR point usage adjustment labels' do
     it 'OCRポイント利用ラベルと表示用ポイント行をprofile側で定義する' do
       profile = described_class.fetch('JPN')

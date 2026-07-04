@@ -479,6 +479,52 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '精算・ポイント・クーポン・支払時割引系の行をpayment_method_textへ昇格しない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      parse_line = lambda do |line|
+        response = fixture_response.deep_dup
+        response['analyzeResult']['content'] = <<~TEXT
+          OCR境界ストア
+          合計
+          ¥1,900
+          #{line}
+        TEXT
+        response.dig('analyzeResult', 'documents', 0, 'fields').delete('Payments')
+
+        described_class.new(response: response, provider: :fixture).call
+      end
+
+      excluded_lines = [
+        'お預かり cash 2,000',
+        'お釣り cash 100',
+        'change cash 100',
+        'ポイント利用 -100',
+        'ポイント付与 10P',
+        'coupon -100',
+        'クーポン値引き -100',
+        '支払時割引 -40',
+        'キャッシュレス還元額 -50',
+        'cashless reward -50',
+        'cashless discount -50'
+      ]
+      accepted_lines = {
+        'クレジット支払 ¥1,900' => 'クレジット',
+        '現金' => '現金',
+        '電子マネー決済' => '電子マネー',
+        'QR決済' => 'qr決済'
+      }
+
+      aggregate_failures do
+        excluded_lines.each do |line|
+          expect(parse_line.call(line).dig(:candidates, :payment_method_text)).to be_nil, line
+        end
+
+        accepted_lines.each do |line, expected|
+          expect(parse_line.call(line).dig(:candidates, :payment_method_text)).to eq(expected), line
+        end
+      end
+    end
+
     it '支払方法行だけではadjustment candidateにしない' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
       fixture_response['analyzeResult']['content'] = <<~TEXT

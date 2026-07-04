@@ -263,12 +263,13 @@ module ReceiptAnalysisProfiles
     OCR_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i.freeze
     OCR_CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
     OCR_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
-    OCR_SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|釣銭|つり銭|返金/.freeze
+    OCR_SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|おつり|釣銭|つり銭|change|返金/i.freeze
     OCR_PURCHASED_AT_DATE_PATTERNS = [
       /\d{4}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,2}/,
       /\A\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,4}/,
       /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/
     ].freeze
+    OCR_PAYMENT_METHOD_EXCLUDED_LINE_PATTERN = /お預かり|お預り|預かり|預り|お釣り|おつり|釣銭|つり銭|change|ポイント|point|クーポン|coupon|値引|割引|還元|discount|cashless\s*(?:reward|discount|cashback)|cashback|payment\s*discount/i.freeze
     OCR_PAYMENT_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /payment\s*discount|cashless\s*(?:reward|discount)|(?:支払(?:時|い)?|お支払(?:い)?|決済|キャッシュレス(?:決済)?)\s*(?:割引|還元)/i.freeze
     OCR_POINT_USAGE_ADJUSTMENT_LABEL_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:usage|use|used|redemption|redeemed|payment)|points?\s*(?:used|redeemed|redemption|payment)/i.freeze
     OCR_POINT_DISPLAY_LINE_PATTERN = /ポイント\s*(?:付与|加算|獲得|残高)|(?:獲得予定|獲得|付与|保有|現在|利用可能|残高)\s*ポイント|earned\s*points?|current\s*points?|available\s*points?|points?\s*balance/i.freeze
@@ -649,6 +650,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_settlement_line_pattern
         OCR_SETTLEMENT_LINE_PATTERN
+      end
+
+      def ocr_payment_method_excluded_line_pattern
+        OCR_PAYMENT_METHOD_EXCLUDED_LINE_PATTERN
       end
 
       def ocr_purchased_at_date_patterns

@@ -590,6 +590,7 @@ class Ocr::ResponseParser
     normalized_raw_match = normalized_raw.to_s.match(payment_method_pattern)&.[](0)
     if normalized_raw_match.present? &&
         !point_or_membership_only_payment_text?(normalized_raw_match) &&
+        !payment_method_excluded_text?(normalized_raw) &&
         !support_only_payment_text?(normalized_raw)
       return normalized_raw_match
     end
@@ -647,6 +648,7 @@ class Ocr::ResponseParser
       focused_match = focused_profiles.find do |profile|
         next false if profile[:point_only]
         next false if profile[:support_only]
+        next false if profile[:payment_method_excluded]
 
         profile[:payment_match].present?
       end
@@ -656,6 +658,7 @@ class Ocr::ResponseParser
     payment_line = profiles.find do |profile|
       next false if profile[:point_only]
       next false if profile[:support_only]
+      next false if profile[:payment_method_excluded]
 
       profile[:payment_text].match?(analysis_profile.ocr_payment_result_context_pattern) && profile[:payment_match].present?
     end
@@ -664,6 +667,7 @@ class Ocr::ResponseParser
     general_match = profiles.find do |profile|
       next false if profile[:point_only]
       next false if profile[:support_only]
+      next false if profile[:payment_method_excluded]
 
       profile[:payment_match].present?
     end
@@ -701,6 +705,10 @@ class Ocr::ResponseParser
     normalized.match?(profile.ocr_payment_support_only_pattern) && !normalized.match?(profile.ocr_payment_transaction_context_pattern)
   end
 
+  def payment_method_excluded_text?(normalized)
+    normalized.to_s.match?(profile.ocr_payment_method_excluded_line_pattern)
+  end
+
   def payment_method_pattern
     profile.ocr_payment_method_pattern
   end
@@ -711,6 +719,7 @@ class Ocr::ResponseParser
 
     @payment_line_profiles[raw] ||= begin
       payment_text = normalize_payment_text(raw)
+      payment_method_excluded = payment_text.present? && payment_method_excluded_text?(payment_text)
 
       {
         raw: raw,
@@ -718,10 +727,11 @@ class Ocr::ResponseParser
         payment_text: payment_text,
         point_only: payment_text.present? && point_or_membership_only_payment_text?(payment_text),
         support_only: payment_text.present? && support_only_payment_text?(payment_text),
-        cash_total: payment_text.present? && payment_text.match?(profile.ocr_cash_total_pattern),
-        voucher: payment_text.present? && payment_text.match?(profile.ocr_voucher_payment_pattern),
+        payment_method_excluded: payment_method_excluded,
+        cash_total: payment_text.present? && !payment_method_excluded && payment_text.match?(profile.ocr_cash_total_pattern),
+        voucher: payment_text.present? && !payment_method_excluded && payment_text.match?(profile.ocr_voucher_payment_pattern),
         settlement: raw.match?(profile.ocr_settlement_line_pattern),
-        payment_match: payment_text.present? ? payment_text.match(payment_method_pattern)&.[](0) : nil
+        payment_match: payment_text.present? && !payment_method_excluded ? payment_text.match(payment_method_pattern)&.[](0) : nil
       }.freeze
     end
   end
