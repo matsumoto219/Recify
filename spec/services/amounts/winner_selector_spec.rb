@@ -49,6 +49,58 @@ RSpec.describe Amounts::WinnerSelector do
     end
   end
 
+  it '同scoreの場合はcandidate_id順ではなく明示したbasis優先順でwinnerを選ぶ' do
+    printed = candidate(
+      id: 'aaa_printed_tax_details_net/floor',
+      basis: 'printed_tax_details_net',
+      score: 10
+    )
+    external = candidate(
+      id: 'zzz_external_tax_from_receipt/floor',
+      basis: 'external_tax_from_receipt',
+      score: 10
+    )
+
+    result = described_class.new([ printed, external ]).call
+
+    expect(result.candidate_id).to eq('zzz_external_tax_from_receipt/floor')
+  end
+
+  it '同scoreの場合はcandidate_id順よりwarningの少ない候補を優先する' do
+    warning_candidate = candidate(
+      id: 'aaa_warning_candidate',
+      basis: 'items_as_tax_included',
+      score: 10,
+      warnings: [ :price_tax_inclusion_uncertain ]
+    )
+    clean_candidate = candidate(
+      id: 'zzz_clean_candidate',
+      basis: 'items_as_tax_included',
+      score: 10
+    )
+
+    result = described_class.new([ warning_candidate, clean_candidate ]).call
+
+    expect(result.candidate_id).to eq('zzz_clean_candidate')
+  end
+
+  it '同scoreの場合は保存済み入力候補をcandidate_id順より優先する' do
+    external = candidate(
+      id: 'aaa_external_tax_from_receipt/floor',
+      basis: 'external_tax_from_receipt',
+      score: 10
+    )
+    receipt_input = candidate(
+      id: 'zzz_receipt_input',
+      basis: 'receipt_input_preserved',
+      score: 10
+    )
+
+    result = described_class.new([ external, receipt_input ]).call
+
+    expect(result.candidate_id).to eq('zzz_receipt_input')
+  end
+
   it '別basisのexact候補がなければcompeting warningを付けない' do
     selected = candidate(
       id: 'printed_tax_details_net/floor',

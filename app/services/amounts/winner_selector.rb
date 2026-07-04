@@ -4,6 +4,26 @@ module Amounts
   class WinnerSelector
     COMPETING_EXACT_BASIS_WARNING = :competing_exact_basis_candidate
     MIXED_BASIS_SEARCH_TRUNCATED_WARNING = :mixed_basis_search_truncated
+    BASIS_TIE_BREAK_PRIORITY = {
+      "receipt_input_preserved" => 0,
+      "external_tax_from_receipt" => 10,
+      "items_as_tax_excluded" => 20,
+      "items_as_tax_included" => 30,
+      "mixed_by_tax_rate_group" => 40,
+      "printed_tax_details_gross" => 50,
+      "printed_tax_details_net" => 60,
+      "printed_tax_details_raw_sum" => 70,
+      "incomplete_tax_details_receipt_tax" => 80
+    }.freeze
+    ROUNDING_MODE_TIE_BREAK_PRIORITY = {
+      floor: 0,
+      round: 10,
+      ceil: 20
+    }.freeze
+    ROUNDING_SCOPE_TIE_BREAK_PRIORITY = {
+      per_item: 0,
+      per_receipt: 10
+    }.freeze
     EXACT_SCORE_BREAKDOWN_KEYS = %i[
       receipt_total_delta
       receipt_subtotal_delta
@@ -20,10 +40,7 @@ module Amounts
       pool = selectable_candidates
 
       selected = pool.min_by do |candidate|
-        [
-          candidate.score.to_i,
-          candidate.candidate_id
-        ]
+        tie_break_key(candidate)
       end
 
       selected = mark_competing_exact_basis(selected)
@@ -40,6 +57,40 @@ module Amounts
 
     def selectable_candidates
       candidates.reject(&:rejected?).presence || candidates
+    end
+
+    def tie_break_key(candidate)
+      [
+        candidate.score.to_i,
+        candidate.rejected? ? 1 : 0,
+        warning_priority(candidate),
+        evidence_priority(candidate),
+        basis_priority(candidate),
+        rounding_mode_priority(candidate),
+        rounding_scope_priority(candidate),
+        candidate.candidate_id
+      ]
+    end
+
+    def warning_priority(candidate)
+      Amounts::MismatchSeverity.blocking(candidate.warnings).size * 1_000 +
+        candidate.warnings.size
+    end
+
+    def evidence_priority(candidate)
+      candidate.evidence.present? ? 0 : 1
+    end
+
+    def basis_priority(candidate)
+      BASIS_TIE_BREAK_PRIORITY.fetch(candidate.basis.to_s, 999)
+    end
+
+    def rounding_mode_priority(candidate)
+      ROUNDING_MODE_TIE_BREAK_PRIORITY.fetch(candidate.rounding_mode, 999)
+    end
+
+    def rounding_scope_priority(candidate)
+      ROUNDING_SCOPE_TIE_BREAK_PRIORITY.fetch(candidate.rounding_scope, 999)
     end
 
     def mark_competing_exact_basis(selected)
