@@ -1563,7 +1563,7 @@ class ReceiptAnalysisPipeline
       amount = normalize_amount(normalized[:amount])
       text = [ normalized[:label], normalized[:source_text] ].compact.join(" ")
 
-      Amounts::AdjustmentClassifier.call(normalized)[:effect] == :payment_adjustment &&
+      ReceiptAmountService.adjustment_classification(normalized)[:effect] == :payment_adjustment &&
         normalized[:sign].to_s == "discount" &&
         amount&.positive? &&
         text.match?(profile.analysis_cashless_reward_adjustment_pattern)
@@ -1669,7 +1669,7 @@ class ReceiptAnalysisPipeline
     def amount_result_without_review_reasons(amount_result, reasons)
       result = amount_result.deep_dup
       reason_list = normalize_review_reasons(reasons)
-      reason_codes = reason_list.filter_map { |reason| Amounts::MismatchCodes.code(reason.to_sym) }
+      reason_codes = reason_list.filter_map { |reason| ReceiptAmountService.mismatch_code(reason) }
 
       %i[inconsistencies blocking_inconsistencies review_reasons warning_reasons].each do |key|
         result[key] = normalize_review_reasons(result[key]) - reason_list

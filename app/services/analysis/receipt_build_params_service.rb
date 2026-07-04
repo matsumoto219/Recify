@@ -1791,13 +1791,13 @@ module Analysis
 
       def included_tax_amount(gross_amount, rate)
         tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
-        Amounts::Rounding.apply_rounding(tax, :floor)
+        ReceiptAmountService.apply_rounding(tax, :floor)
       end
 
       def included_tax_amount_matches?(gross_amount, rate, amount)
         tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
         %i[floor round ceil].any? do |rounding_mode|
-          Amounts::Rounding.apply_rounding(tax, rounding_mode) == amount.to_i
+          ReceiptAmountService.apply_rounding(tax, rounding_mode) == amount.to_i
         end
       end
 
@@ -2100,7 +2100,7 @@ module Analysis
       def tax_amount_matches_inclusive_total?(total_amount, amount, rate)
         tax = BigDecimal(total_amount.to_s) * rate / (BigDecimal("1") + rate)
         %i[floor round ceil].any? do |rounding_mode|
-          Amounts::Rounding.apply_rounding(tax, rounding_mode) == amount.to_i
+          ReceiptAmountService.apply_rounding(tax, rounding_mode) == amount.to_i
         end
       end
 
@@ -2814,7 +2814,7 @@ module Analysis
         return false unless total&.positive?
 
         payment_adjustment_total = Array(adjustments).sum do |adjustment|
-          classification = Amounts::AdjustmentClassifier.call(adjustment)
+          classification = ReceiptAmountService.adjustment_classification(adjustment)
           classification[:effect] == :payment_adjustment ? classification[:signed_amount].to_i : 0
         end
         return false if payment_adjustment_total.zero?

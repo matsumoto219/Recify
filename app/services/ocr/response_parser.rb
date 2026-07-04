@@ -1347,7 +1347,7 @@ class Ocr::ResponseParser
 
   def included_tax_amount(gross_amount, rate)
     tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
-    Amounts::Rounding.apply_rounding(tax, :floor)
+    ReceiptAmountService.apply_rounding(tax, :floor)
   end
 
   def tax_detail_description(value_object, lines, rate:, amount:, net_amount:)

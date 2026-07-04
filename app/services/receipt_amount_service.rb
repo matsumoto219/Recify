@@ -75,6 +75,10 @@ class ReceiptAmountService
     Amounts::NumberParser.parse_quantity(value, default: default)
   end
 
+  def self.apply_rounding(value, rounding_mode)
+    Amounts::Rounding.apply_rounding(value, rounding_mode)
+  end
+
   def self.adjustment_classification(adjustment)
     Amounts::AdjustmentClassifier.call(adjustment)
   end
@@ -96,6 +100,10 @@ class ReceiptAmountService
 
   def self.warning_mismatch_codes
     Amounts::MismatchSeverity::WARNING
+  end
+
+  def self.mismatch_code(reason)
+    Amounts::MismatchCodes.code(reason.to_sym)
   end
 
   def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)

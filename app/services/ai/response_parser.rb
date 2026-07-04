@@ -334,7 +334,7 @@ module Ai
     end
 
     def normalize_adjustment_amount(value)
-      amount = Amounts::NumberParser.parse_amount_or_nil(value)
+      amount = ReceiptAmountService.parse_amount_or_nil(value)
       return nil if amount.nil?
 
       amount.abs
