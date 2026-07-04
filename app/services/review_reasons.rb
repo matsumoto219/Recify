@@ -43,6 +43,7 @@ module ReviewReasons
     purchase_adjustment_tax_allocation_uncertain
     price_tax_inclusion_uncertain
     competing_exact_basis_candidate
+    mixed_basis_search_truncated
     calculation_profile_uncertain
     invalid_amount_relation
     payment_amount_mismatch

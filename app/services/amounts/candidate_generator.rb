@@ -608,6 +608,7 @@ module Amounts
         unless assignment[:status] == :exact
           exact = false
           warnings << :price_tax_inclusion_uncertain
+          warnings << :mixed_basis_search_truncated if assignment[:status] == :search_limited
           indexed_items.each { |item, index| computed_items[index] = item_with_line_total(item, item_line_total(item)) }
           groups[rate] = target.slice(:rate, :gross, :net, :tax)
           next

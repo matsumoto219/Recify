@@ -86,4 +86,24 @@ RSpec.describe Amounts::WinnerSelector do
 
     expect(result.warnings).not_to include(:competing_exact_basis_candidate)
   end
+
+  it 'mixed basis探索打ち切りwarningをselected candidateへ引き継ぐ' do
+    selected = candidate(
+      id: 'printed_tax_details_net/floor',
+      basis: 'printed_tax_details_net',
+      score: 9,
+      warnings: [ :price_tax_inclusion_uncertain ]
+    )
+    truncated = candidate(
+      id: 'mixed_by_tax_rate_group/floor',
+      basis: 'mixed_by_tax_rate_group',
+      score: 1_000,
+      warnings: [ :price_tax_inclusion_uncertain, :mixed_basis_search_truncated ],
+      rejected: true
+    )
+
+    result = described_class.new([ selected, truncated ]).call
+
+    expect(result.warnings).to include(:mixed_basis_search_truncated)
+  end
 end

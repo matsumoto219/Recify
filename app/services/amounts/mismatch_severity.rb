@@ -28,6 +28,7 @@ module Amounts
       adjustment_tax_rate_missing
       price_tax_inclusion_uncertain
       competing_exact_basis_candidate
+      mixed_basis_search_truncated
       calculation_profile_uncertain
     ].freeze
 

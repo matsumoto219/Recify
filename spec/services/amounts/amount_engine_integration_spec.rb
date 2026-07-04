@@ -850,4 +850,26 @@ RSpec.describe 'Amount Engine integration' do
       end
     end
   end
+
+  it 'same-rate mixed探索がitem数上限に到達したらsilent completedにしない' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 200,
+        tax_amount: 20,
+        total_amount: 220
+      },
+      items: Array.new(21) do
+        { line_total: 10, tax_rate: BigDecimal('0.10') }
+      end,
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 200, amount: 20, description: '10%対象' }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:warning_inconsistencies]).to include(:mixed_basis_search_truncated)
+      expect(result[:review_reasons]).to include('mixed_basis_search_truncated')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
 end

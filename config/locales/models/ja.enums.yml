@@ -84,6 +84,7 @@ ja:
         ocr_total_mismatch: "OCRの合計金額と計算結果が一致していません"
         price_tax_inclusion_uncertain: "明細金額が税込か税抜かを一意に判定できない箇所があります。必要に応じて小計・税額をご確認ください。"
         competing_exact_basis_candidate: "複数の計算方法で金額が一致するため、明細金額や税内訳の確認が必要です"
+        mixed_basis_search_truncated: "明細金額の税込・税抜の判定が確定できませんでした。明細金額と税内訳をご確認ください。"
         calculation_profile_uncertain: "計算方式を一意に推定できません"
         invalid_amount_relation: "小計・税額・合計の整合性が取れていません"
         payment_amount_mismatch: "支払合計と計算上の支払額が一致していません"

@@ -5,6 +5,7 @@ module Amounts
     REVIEW_REQUIRED_WARNINGS = %i[
       price_tax_inclusion_uncertain
       competing_exact_basis_candidate
+      mixed_basis_search_truncated
       payment_amount_mismatch
     ].freeze
     PURCHASE_ADJUSTMENT_TAX_ALLOCATION_REVIEW_REASON = :purchase_adjustment_tax_allocation_uncertain

@@ -3,6 +3,7 @@
 module Amounts
   class WinnerSelector
     COMPETING_EXACT_BASIS_WARNING = :competing_exact_basis_candidate
+    MIXED_BASIS_SEARCH_TRUNCATED_WARNING = :mixed_basis_search_truncated
     EXACT_SCORE_BREAKDOWN_KEYS = %i[
       receipt_total_delta
       receipt_subtotal_delta
@@ -25,7 +26,8 @@ module Amounts
         ]
       end
 
-      mark_competing_exact_basis(selected)
+      selected = mark_competing_exact_basis(selected)
+      mark_mixed_basis_search_truncated(selected)
     end
 
     def no_safe_candidate?
@@ -44,6 +46,13 @@ module Amounts
       return selected unless competing_exact_basis_candidate?(selected)
 
       selected.with_warnings([ COMPETING_EXACT_BASIS_WARNING ])
+    end
+
+    def mark_mixed_basis_search_truncated(selected)
+      return selected unless selected
+      return selected unless candidates.any? { |candidate| candidate.warnings.include?(MIXED_BASIS_SEARCH_TRUNCATED_WARNING) }
+
+      selected.with_warnings([ MIXED_BASIS_SEARCH_TRUNCATED_WARNING ])
     end
 
     def competing_exact_basis_candidate?(selected)

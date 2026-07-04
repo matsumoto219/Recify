@@ -129,6 +129,16 @@ RSpec.describe Amounts::ReviewPolicy do
     end
   end
 
+  it 'mixed basis探索打ち切りはreview reasonにする' do
+    result = apply_policy(candidate(warnings: [ :mixed_basis_search_truncated ]))
+
+    aggregate_failures do
+      expect(Amounts::MismatchSeverity.severity(:mixed_basis_search_truncated)).to eq(:warning)
+      expect(result[:review_reasons]).to eq([ 'mixed_basis_search_truncated' ])
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it '印字税抜tax detailsが候補金額と一致する場合はprice_tax_inclusion_uncertainをwarning-onlyに留める' do
     result = apply_policy(
       candidate(
