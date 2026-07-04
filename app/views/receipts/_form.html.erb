@@ -130,7 +130,10 @@
                 description: t("receipts.form.review.warning_description") %>
         <% end %>
 
-        <%= render "shared/ui/layout/surface_card", padding: :md do %>
+        <%= render "shared/ui/layout/surface_card",
+              id: ReceiptsHelper::RECEIPT_REVIEW_TARGET_BASIC_INFO,
+              padding: :md,
+              class: "scroll-mt-24" do %>
           <%= render "shared/ui/layout/section_header",
                 title: t("receipts.form.sections.basic_info"),
                 icon: "info",
@@ -211,7 +214,9 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/layout/surface_card", class: "overflow-hidden" do %>
+        <%= render "shared/ui/layout/surface_card",
+              id: ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS,
+              class: "overflow-hidden scroll-mt-24" do %>
           <div class="p-6 border-b token-border-soft">
             <%= render "shared/ui/layout/section_header",
                   title: t("receipts.form.sections.items"),
@@ -261,7 +266,9 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/layout/surface_card", class: "overflow-hidden" do %>
+        <%= render "shared/ui/layout/surface_card",
+              id: ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
+              class: "overflow-hidden scroll-mt-24" do %>
           <div class="p-6 border-b token-border-soft">
             <%= render "shared/ui/layout/section_header",
                   title: t("receipts.form.sections.adjustments"),
@@ -312,7 +319,9 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/layout/surface_card", class: "overflow-hidden" do %>
+        <%= render "shared/ui/layout/surface_card",
+              id: ReceiptsHelper::RECEIPT_REVIEW_TARGET_PAYMENTS,
+              class: "overflow-hidden scroll-mt-24" do %>
           <div class="p-6 border-b token-border-soft">
             <%= render "shared/ui/layout/section_header",
                   title: t("receipts.form.sections.payments"),
@@ -432,36 +441,40 @@
       </div>
 
       <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start">
-        <%= render "shared/ui/card/amount_summary_card",
-              title: t("receipts.common.total_amount_title"),
-              amount: total_amount_value,
-              icon: "payments",
-              subtotal: subtotal_amount_value,
-              tax_amount: tax_amount_value,
-              tax_rate: receipt.tax_rate,
-              tax_rate_summary: tax_rate_summary,
-              payment_adjustment_total: payment_adjustment_summary&.payment_adjustment_total,
-              final_payment_total: payment_adjustment_summary&.final_payment_total,
-              subtotal_target: "subtotalAmount",
-              tax_amount_target: "taxAmount",
-              tax_rate_target: "taxRateSummary",
-              payment_adjustment_row_target: "paymentAdjustmentRow",
-              payment_adjustment_total_target: "paymentAdjustmentAmount",
-              final_payment_row_target: "finalPaymentRow",
-              final_payment_total_target: "finalPaymentAmount" %>
+        <div id="<%= ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY %>" class="scroll-mt-24">
+          <%= render "shared/ui/card/amount_summary_card",
+                title: t("receipts.common.total_amount_title"),
+                amount: total_amount_value,
+                icon: "payments",
+                subtotal: subtotal_amount_value,
+                tax_amount: tax_amount_value,
+                tax_rate: receipt.tax_rate,
+                tax_rate_summary: tax_rate_summary,
+                payment_adjustment_total: payment_adjustment_summary&.payment_adjustment_total,
+                final_payment_total: payment_adjustment_summary&.final_payment_total,
+                subtotal_target: "subtotalAmount",
+                tax_amount_target: "taxAmount",
+                tax_rate_target: "taxRateSummary",
+                payment_adjustment_row_target: "paymentAdjustmentRow",
+                payment_adjustment_total_target: "paymentAdjustmentAmount",
+                final_payment_row_target: "finalPaymentRow",
+                final_payment_total_target: "finalPaymentAmount" %>
+        </div>
 
-        <%= render "shared/ui/card/receipt_image_card",
-              receipt: receipt,
-              title: t("receipts.form.image.title"),
-              form_builder: f,
-              show_toggle: true,
-              show_upload: true,
-              show_modal: true,
-              keep_image_enabled: (receipt.persisted? ? receipt.keep_image? : current_user.effective_keep_receipt_images),
-              empty_message: t("receipts.form.image.empty"),
-              helper_text: t("receipts.form.image.helper"),
-              accept: receipt_image_accept,
-              storage_usage: current_user.storage_usage %>
+        <div id="<%= ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW %>" class="scroll-mt-24">
+          <%= render "shared/ui/card/receipt_image_card",
+                receipt: receipt,
+                title: t("receipts.form.image.title"),
+                form_builder: f,
+                show_toggle: true,
+                show_upload: true,
+                show_modal: true,
+                keep_image_enabled: (receipt.persisted? ? receipt.keep_image? : current_user.effective_keep_receipt_images),
+                empty_message: t("receipts.form.image.empty"),
+                helper_text: t("receipts.form.image.helper"),
+                accept: receipt_image_accept,
+                storage_usage: current_user.storage_usage %>
+        </div>
       </div>
     </div>
 

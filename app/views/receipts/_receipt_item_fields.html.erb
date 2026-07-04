@@ -22,6 +22,7 @@
   quantity_value = row_state.quantity_value
   quantity_step = row_state.quantity_step
   quantity_inputmode = row_state.quantity_inputmode
+  item_target_id = receipt_review_item_target_id(item)
 %>
 
 <div class="swipe-action rounded-lg"
@@ -42,6 +43,7 @@
        data-swipe-action-target="foreground"
        data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
     <div class="<%= row_class %>"
+         <% if item_target_id.present? %>id="<%= item_target_id %>" data-receipt-review-item-row="true"<% end %>
          data-receipt-form-target="itemRow"
          data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
   <div class="col-span-2 md:col-span-6 relative">

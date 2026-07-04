@@ -3,6 +3,9 @@ import { Controller } from '@hotwired/stimulus'
 const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
 const CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS = 150
+const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
+const REVIEW_REASON_ITEM_TARGET_PREFIX = 'receipt-item-'
+const RECEIPT_REVIEW_TARGET_ITEMS = 'receipt-section-items'
 
 export default class extends Controller {
   static targets = [
@@ -93,16 +96,23 @@ export default class extends Controller {
     this.lineTotalTooltipDelay = LINE_TOTAL_TOOLTIP_DELAY_MS
     this.continuousAmountUpdateThreshold = CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
+    this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
+    this.handleHashChange = this.handleHashChange.bind(this)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+    this.element.addEventListener('click', this.handleReviewTargetClick)
+    window.addEventListener('hashchange', this.handleHashChange)
     this.syncItemDetailsPanels()
     this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
     this.syncAdjustmentSigns()
     this.syncPaymentSummaryLayout()
+    this.expandItemDetailsFromHash()
   }
 
   disconnect () {
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
+    this.element.removeEventListener('click', this.handleReviewTargetClick)
+    window.removeEventListener('hashchange', this.handleHashChange)
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
     this.amountAnimationTargets().forEach((target) => this.cancelAmountAnimation(target))
   }
@@ -325,6 +335,132 @@ export default class extends Controller {
       confirmLabel: this.deleteConfirmLabelValue,
       backdrop: this.deleteConfirmBackdropValue,
       restoreFocusElement
+    })
+  }
+
+  handleReviewTargetClick (event) {
+    const link = event.target?.closest?.(REVIEW_REASON_TARGET_LINK_SELECTOR)
+    if (!link || !this.element.contains(link)) return
+
+    const url = this.reviewTargetUrl(link.getAttribute('href'))
+    if (!url || !this.samePageReviewTargetUrl(url)) return
+
+    const targetId = this.reviewTargetIdFromHash(url.hash)
+    if (!this.reviewItemTargetId(targetId)) return
+
+    event.preventDefault()
+
+    if (this.expandItemDetailsForReviewTarget(targetId, { scroll: true })) {
+      this.pushReviewTargetHash(targetId)
+      return
+    }
+
+    const fallbackTargetId = link.dataset.reviewReasonTarget || RECEIPT_REVIEW_TARGET_ITEMS
+    this.pushReviewTargetHash(fallbackTargetId)
+    this.scrollReviewTargetFallback(fallbackTargetId)
+  }
+
+  handleHashChange () {
+    this.expandItemDetailsFromHash({ scroll: true })
+  }
+
+  reviewTargetUrl (href) {
+    try {
+      return new URL(href || '', window.location.href)
+    } catch {
+      return null
+    }
+  }
+
+  samePageReviewTargetUrl (url) {
+    return url.origin === window.location.origin &&
+      url.pathname === window.location.pathname &&
+      url.search === window.location.search
+  }
+
+  currentReviewTargetId () {
+    return this.reviewTargetIdFromHash(window.location.hash)
+  }
+
+  reviewTargetIdFromHash (hash) {
+    const targetId = String(hash || '').replace(/^#/, '')
+    if (targetId === '') return null
+
+    try {
+      return decodeURIComponent(targetId)
+    } catch {
+      return targetId
+    }
+  }
+
+  reviewItemTargetId (targetId) {
+    return typeof targetId === 'string' && targetId.startsWith(REVIEW_REASON_ITEM_TARGET_PREFIX)
+  }
+
+  expandItemDetailsFromHash ({ scroll = true } = {}) {
+    const targetId = this.currentReviewTargetId()
+    if (!this.reviewItemTargetId(targetId)) return false
+
+    return this.expandItemDetailsForReviewTarget(targetId, { scroll })
+  }
+
+  expandItemDetailsForReviewTarget (targetId, { scroll = true } = {}) {
+    const row = this.reviewItemRowForTarget(targetId)
+    if (!this.reviewItemRowVisible(row)) {
+      if (scroll) this.scrollReviewTargetFallback()
+      return false
+    }
+
+    const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
+    const toggles = row.querySelectorAll('[data-receipt-form-target="itemDetailsToggle"]')
+    const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
+    if (!panel) return false
+
+    this.hideLineTotalTooltipFor(row)
+    this.setItemDetailsOpen({ row, panel, toggles, icons, open: true })
+    if (scroll) this.scrollReviewTargetIntoView(row)
+
+    return true
+  }
+
+  reviewItemRowForTarget (targetId) {
+    const row = document.getElementById(targetId)
+    if (!row || !this.element.contains(row)) return null
+    if (!row.matches('[data-receipt-form-target~="itemRow"]')) return null
+
+    return row
+  }
+
+  reviewItemRowVisible (row) {
+    if (!row?.isConnected) return false
+    if (row.style.display === 'none') return false
+
+    const rowContainer = this.itemRowContainer(row)
+    if (rowContainer !== row && rowContainer.style.display === 'none') return false
+
+    const destroyField = row.querySelector('[data-receipt-form-target="destroyField"]')
+    return destroyField?.value !== '1'
+  }
+
+  pushReviewTargetHash (targetId) {
+    if (!targetId || typeof window.history?.pushState !== 'function') return
+
+    const hash = `#${encodeURIComponent(targetId)}`
+    if (window.location.hash === hash) return
+
+    window.history.pushState(null, '', hash)
+  }
+
+  scrollReviewTargetFallback (targetId = RECEIPT_REVIEW_TARGET_ITEMS) {
+    const fallback = document.getElementById(targetId) || document.getElementById(RECEIPT_REVIEW_TARGET_ITEMS)
+    this.scrollReviewTargetIntoView(fallback, { block: 'start' })
+  }
+
+  scrollReviewTargetIntoView (target, { block = 'center' } = {}) {
+    if (!target || typeof target.scrollIntoView !== 'function') return
+
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block, inline: 'nearest' })
     })
   }
 

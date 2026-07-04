@@ -6,7 +6,7 @@
   - description: カード上部に表示する説明文
 
   任意:
-  - なし
+  - target_base_path: 確認リンクのベースパス。未指定時は同一ページ内アンカー。
 %>
 
 <%
@@ -14,6 +14,7 @@
   review_groups = review_notes_state.groups
   review_items = review_notes_state.items
   review_count = review_notes_state.count
+  target_base_path = local_assigns[:target_base_path]
 %>
 
 <%= render "shared/ui/layout/surface_card", variant: :warning, padding: :md, class: "min-w-0 max-w-full" do %>
@@ -47,8 +48,14 @@
             <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
               <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
               <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
-                <% receipt.review_reason_labels_for(reasons).each do |reason| %>
-                  <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+                <% reasons.each do |reason| %>
+                  <% reason_label = receipt.review_reason_labels_for([reason]).first %>
+                  <li class="break-words [overflow-wrap:anywhere]">
+                    <div class="flex min-w-0 max-w-full flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <span class="min-w-0"><%= reason_label %></span>
+                      <%= review_reason_target_link(reason, base_path: target_base_path, variant: :danger) %>
+                    </div>
+                  </li>
                 <% end %>
               </ul>
             </div>
@@ -62,10 +69,17 @@
                   <% review_item_name = review_item.confirmed_name.presence || review_item.suggested_name.presence || review_item.raw_text.presence || t("receipts.review_notes_card.item_name_missing") %>
                   <li class="min-w-0 max-w-full">
                     <div class="font-semibold truncate" title="<%= review_item_name %>"><%= review_item_name %></div>
-                    <% if review_item.review_reason_labels.any? %>
+                    <% item_reason_codes = ReviewReasons.review_reasons_for_user(review_item.review_reasons) %>
+                    <% if item_reason_codes.any? %>
                       <ul class="mt-1 min-w-0 max-w-full space-y-1 pl-5 text-xs token-text-muted list-disc break-words [overflow-wrap:anywhere]">
-                        <% review_item.review_reason_labels.each do |reason| %>
-                          <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+                        <% item_reason_codes.each do |reason| %>
+                          <% reason_label = receipt.review_reason_labels_for([reason]).first %>
+                          <li class="break-words [overflow-wrap:anywhere]">
+                            <div class="flex min-w-0 max-w-full flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                              <span class="min-w-0"><%= reason_label %></span>
+                              <%= review_reason_target_link(reason, base_path: target_base_path, variant: :danger, item: review_item) %>
+                            </div>
+                          </li>
                         <% end %>
                       </ul>
                     <% else %>

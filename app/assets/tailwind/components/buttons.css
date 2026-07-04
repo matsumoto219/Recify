@@ -51,6 +51,22 @@
   box-shadow: var(--shadow-card);
 }
 
+.btn-warning {
+  background: var(--bg-warning-soft);
+  color: var(--text-warning);
+  border-color: color-mix(in srgb, var(--state-warning) 30%, transparent);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-warning:hover {
+  background: color-mix(in srgb, var(--bg-warning-soft) 80%, var(--state-warning) 20%);
+  border-color: color-mix(in srgb, var(--state-warning) 48%, transparent);
+  box-shadow:
+    0 14px 28px color-mix(in srgb, var(--state-warning) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-on-brand) 20%, transparent);
+  translate: 0 -1px;
+}
+
 .btn-danger:hover {
   background: color-mix(in srgb, var(--state-error) 88%, var(--text-on-brand) 12%);
   border-color: color-mix(in srgb, var(--state-error) 72%, var(--text-on-brand) 28%);
@@ -63,11 +79,60 @@
 .btn-primary:focus-visible,
 .btn-secondary:focus-visible,
 .btn-ghost:focus-visible,
+.btn-warning:focus-visible,
 .btn-danger:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
 }
 
+.btn-warning:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-warning) 18%, transparent);
+}
+
 .btn-danger:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-error) 18%, transparent);
+}
+
+.btn-link-primary {
+  color: var(--brand-primary);
+}
+
+a.btn-link-primary:hover,
+a.btn-link-primary:hover *,
+.btn-link-primary:hover {
+  color: var(--text-base);
+}
+
+.btn-link-secondary,
+.btn-link-ghost {
+  color: var(--text-muted);
+}
+
+a.btn-link-secondary:hover,
+a.btn-link-secondary:hover *,
+a.btn-link-ghost:hover,
+a.btn-link-ghost:hover *,
+.btn-link-secondary:hover,
+.btn-link-ghost:hover {
+  color: var(--brand-primary);
+}
+
+.btn-link-danger {
+  color: var(--text-error);
+}
+
+.btn-link-warning {
+  color: var(--text-warning);
+}
+
+a.btn-link-danger:hover,
+a.btn-link-danger:hover *,
+.btn-link-danger:hover {
+  color: var(--text-base);
+}
+
+a.btn-link-warning:hover,
+a.btn-link-warning:hover *,
+.btn-link-warning:hover {
+  color: var(--text-base);
 }

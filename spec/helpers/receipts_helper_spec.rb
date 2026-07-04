@@ -160,4 +160,105 @@ RSpec.describe ReceiptsHelper, type: :helper do
       end
     end
   end
+
+  describe '#review_reason_target' do
+    it 'maps review reason codes to editable receipt sections' do
+      aggregate_failures do
+        expect(helper.review_reason_target('store_name_missing')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_BASIC_INFO)
+        expect(helper.review_reason_target('item_category_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
+        expect(helper.review_reason_target('adjustment_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
+        expect(helper.review_reason_target('payment_amount_mismatch')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_PAYMENTS)
+        expect(helper.review_reason_target('tax_detail_mismatch')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
+        expect(helper.review_reason_target('price_tax_inclusion_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
+        expect(helper.review_reason_target('ocr_low_confidence')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
+      end
+    end
+
+    it 'does not return targets for system or unknown reasons' do
+      aggregate_failures do
+        expect(helper.review_reason_target('analysis_missing_keys')).to be_nil
+        expect(helper.review_reason_target('unexpected_error')).to be_nil
+        expect(helper.review_reason_target('unknown_reason')).to be_nil
+      end
+    end
+
+    it 'keeps every user-facing reason mapped to a target section' do
+      unmapped_reasons = ReviewReasons::USER_FACING_REASONS.reject do |reason|
+        helper.review_reason_target(reason).present?
+      end
+
+      expect(unmapped_reasons).to be_empty
+    end
+  end
+
+  describe '#review_reason_target_path' do
+    it 'returns a same-page anchor when base path is omitted' do
+      expect(helper.review_reason_target_path('item_name_uncertain')).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS}")
+    end
+
+    it 'returns an item row anchor only when an item reason has an item target' do
+      item = instance_double(ReceiptItem, id: 42)
+
+      aggregate_failures do
+        expect(helper.review_reason_target_path('item_name_uncertain', item: item)).to eq('#receipt-item-42')
+        expect(helper.review_reason_target_path('tax_detail_mismatch', item: item)).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
+      end
+    end
+
+    it 'returns an edit path with anchor when base path is present' do
+      expect(helper.review_reason_target_path('ocr_low_confidence', base_path: '/receipts/rcpt_abc/edit')).to eq(
+        "/receipts/rcpt_abc/edit##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW}"
+      )
+    end
+
+    it 'returns nil for reasons that are not user-facing' do
+      expect(helper.review_reason_target_path('analysis_missing_keys', base_path: '/receipts/rcpt_abc/edit')).to be_nil
+    end
+  end
+
+  describe '#review_reason_target_link' do
+    it 'renders a confirmation link with target metadata' do
+      html = helper.review_reason_target_link('ocr_low_confidence', base_path: '/receipts/rcpt_abc/edit')
+      link = Nokogiri::HTML.fragment(html).at_css('a[data-review-reason-target-link]')
+
+      aggregate_failures do
+        expect(link.text.strip).to eq(I18n.t('receipts.review_notes_card.confirm_link'))
+        expect(link['href']).to eq("/receipts/rcpt_abc/edit##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW}")
+        expect(link['class']).to include('btn-link-primary')
+        expect(link['class']).not_to include('rounded-full')
+        expect(link['class']).not_to include('border')
+        expect(link['class']).not_to include('token-bg')
+        expect(link['data-turbo']).to eq('false')
+        expect(link['data-review-reason-code']).to eq('ocr_low_confidence')
+        expect(link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
+      end
+    end
+
+    it 'renders confirmation links with the requested color variant' do
+      html = helper.review_reason_target_link('ocr_low_confidence', base_path: '/receipts/rcpt_abc/edit', variant: :warning)
+      link = Nokogiri::HTML.fragment(html).at_css('a[data-review-reason-target-link]')
+
+      aggregate_failures do
+        expect(link['class']).to include('btn-link-warning')
+        expect(link['class']).not_to include('btn-link-primary')
+      end
+    end
+
+    it 'renders item review links with item row target metadata' do
+      item = instance_double(ReceiptItem, id: 42)
+      html = helper.review_reason_target_link('item_category_uncertain', base_path: '/receipts/rcpt_abc/edit', item: item)
+      link = Nokogiri::HTML.fragment(html).at_css('a[data-review-reason-target-link]')
+
+      aggregate_failures do
+        expect(link['href']).to eq('/receipts/rcpt_abc/edit#receipt-item-42')
+        expect(link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
+        expect(link['data-review-reason-anchor-target']).to eq('receipt-item-42')
+        expect(link['data-review-reason-target-item']).to eq('receipt-item-42')
+      end
+    end
+
+    it 'does not render a link for system reasons' do
+      expect(helper.review_reason_target_link('analysis_missing_keys', base_path: '/receipts/rcpt_abc/edit')).to be_nil
+    end
+  end
 end

@@ -6,13 +6,14 @@
   - description: カード上部に表示する説明文
 
   任意:
-  - なし
+  - target_base_path: 確認リンクのベースパス。未指定時は同一ページ内アンカー。
 %>
 
 <%
   warning_notes_state = receipt_warning_notes_state(receipt)
   warning_groups = warning_notes_state.groups
   warning_count = warning_notes_state.count
+  target_base_path = local_assigns[:target_base_path]
 %>
 
 <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
@@ -46,8 +47,14 @@
             <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
               <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-warning"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
               <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
-                <% receipt.review_reason_labels_for(reasons).each do |reason| %>
-                  <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+                <% reasons.each do |reason| %>
+                  <% reason_label = receipt.review_reason_labels_for([reason]).first %>
+                  <li class="break-words [overflow-wrap:anywhere]">
+                    <div class="flex min-w-0 max-w-full flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <span class="min-w-0"><%= reason_label %></span>
+                      <%= review_reason_target_link(reason, base_path: target_base_path, variant: :warning) %>
+                    </div>
+                  </li>
                 <% end %>
               </ul>
             </div>

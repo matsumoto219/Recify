@@ -21,6 +21,8 @@ const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
 ]
 
 const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'
+const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
+const IMAGE_PREVIEW_REVIEW_TARGET = 'receipt-section-image-preview'
 
 function isAllowedReceiptImageFile (file) {
   if (!file) return false
@@ -58,6 +60,8 @@ export default class extends Controller {
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleBreakpointChange = this.handleBreakpointChange.bind(this)
+    this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
+    this.handleReviewTargetHashChange = this.handleReviewTargetHashChange.bind(this)
     this.sync()
 
     this.initializeFileName()
@@ -67,8 +71,11 @@ export default class extends Controller {
     this.handleModalPanelClick = this.handleModalPanelClick.bind(this)
     document.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
+    document.addEventListener('click', this.handleReviewTargetClick)
+    window.addEventListener('hashchange', this.handleReviewTargetHashChange)
     this.addBreakpointListener()
     this.addModalEventListeners()
+    this.openFromReviewTargetHash()
   }
 
   disconnect () {
@@ -79,6 +86,8 @@ export default class extends Controller {
     this.revokeObjectUrl()
     document.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
+    document.removeEventListener('click', this.handleReviewTargetClick)
+    window.removeEventListener('hashchange', this.handleReviewTargetHashChange)
   }
 
   buildPreviewBreakpointMediaQuery () {
@@ -299,6 +308,138 @@ export default class extends Controller {
 
     const candidateUsedBytes = this.storageUsedBytesValue - this.storageExcludingBlobBytesValue + file.size
     return candidateUsedBytes > this.storageLimitBytesValue
+  }
+
+  handleReviewTargetClick (event) {
+    const link = event.target?.closest?.(REVIEW_REASON_TARGET_LINK_SELECTOR)
+    if (!link) return
+
+    const url = this.reviewTargetUrl(link.getAttribute('href'))
+    if (!url || !this.samePageReviewTargetUrl(url)) return
+
+    const targetId = this.reviewTargetIdFromHash(url.hash)
+    if (!this.imagePreviewReviewTargetId(targetId)) return
+    if (!this.containsImagePreviewReviewTarget(targetId)) return
+
+    if (window.location.hash !== this.reviewTargetHash(targetId)) {
+      this.openPreview({ userDirected: true })
+      return
+    }
+
+    event.preventDefault()
+    this.openPreview({ userDirected: true })
+    this.replaceReviewTargetHash(targetId)
+  }
+
+  handleReviewTargetHashChange () {
+    this.openFromReviewTargetHash({ scroll: true })
+  }
+
+  reviewTargetUrl (href) {
+    try {
+      return new URL(href || '', window.location.href)
+    } catch {
+      return null
+    }
+  }
+
+  samePageReviewTargetUrl (url) {
+    return url.origin === window.location.origin &&
+      url.pathname === window.location.pathname &&
+      url.search === window.location.search
+  }
+
+  reviewTargetIdFromHash (hash) {
+    const targetId = String(hash || '').replace(/^#/, '')
+    if (targetId === '') return null
+
+    try {
+      return decodeURIComponent(targetId)
+    } catch {
+      return targetId
+    }
+  }
+
+  imagePreviewReviewTargetId (targetId) {
+    return targetId === IMAGE_PREVIEW_REVIEW_TARGET
+  }
+
+  containsImagePreviewReviewTarget (targetId) {
+    const section = document.getElementById(targetId)
+    return Boolean(section?.contains(this.element))
+  }
+
+  openFromReviewTargetHash ({ scroll = true } = {}) {
+    const targetId = this.reviewTargetIdFromHash(window.location.hash)
+    if (!this.imagePreviewReviewTargetId(targetId)) return false
+    if (!this.containsImagePreviewReviewTarget(targetId)) return false
+
+    return this.openFromReviewTarget({ scroll })
+  }
+
+  openFromReviewTarget ({ scroll = true } = {}) {
+    this.openPreview({ userDirected: true })
+    if (scroll) this.scrollReviewTargetIntoView()
+
+    return true
+  }
+
+  openPreview ({ userDirected = false } = {}) {
+    if (userDirected) this.userHasToggled = true
+
+    this.isOpen = true
+    this.sync()
+  }
+
+  reviewTargetHash (targetId) {
+    return `#${encodeURIComponent(targetId)}`
+  }
+
+  replaceReviewTargetHash (targetId) {
+    if (typeof window.history?.replaceState !== 'function' || typeof window.location?.replace !== 'function') {
+      this.openFromReviewTarget({ scroll: true })
+      return
+    }
+
+    const path = `${window.location.pathname}${window.location.search}`
+    window.history.replaceState(null, '', path)
+    window.location.replace(`${path}${this.reviewTargetHash(targetId)}`)
+  }
+
+  scrollReviewTargetIntoView () {
+    const section = document.getElementById(IMAGE_PREVIEW_REVIEW_TARGET)
+    const target = this.reviewScrollTarget() || section
+    if (!target || typeof target.scrollIntoView !== 'function') return
+
+    window.requestAnimationFrame(() => {
+      if (target === section || !section) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+        return
+      }
+
+      section.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' })
+      window.requestAnimationFrame(() => {
+        this.centerReviewScrollTarget(target)
+      })
+    })
+  }
+
+  reviewScrollTarget () {
+    if (this.hasPreviewImageTarget && !this.previewImageTarget.classList.contains('hidden')) return this.previewImageTarget
+    if (this.hasContentTarget) return this.contentTarget
+
+    return null
+  }
+
+  centerReviewScrollTarget (target) {
+    if (!target || typeof window.scrollBy !== 'function') return
+
+    const rect = target.getBoundingClientRect()
+    const desiredTop = Math.max(24, (window.innerHeight - rect.height) / 2)
+    const delta = rect.top - desiredTop
+    if (Math.abs(delta) < 16) return
+
+    window.scrollBy({ top: delta, behavior: 'smooth' })
   }
 
   revokeObjectUrl () {

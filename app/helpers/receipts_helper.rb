@@ -9,6 +9,57 @@ module ReceiptsHelper
   )
   ReceiptIndexCountSummaryParts = Struct.new(:total_text, :range_text, :full_text, keyword_init: true)
 
+  RECEIPT_REVIEW_TARGET_BASIC_INFO = "receipt-section-basic-info".freeze
+  RECEIPT_REVIEW_TARGET_ITEMS = "receipt-section-items".freeze
+  RECEIPT_REVIEW_TARGET_ADJUSTMENTS = "receipt-section-adjustments".freeze
+  RECEIPT_REVIEW_TARGET_PAYMENTS = "receipt-section-payments".freeze
+  RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY = "receipt-section-amount-summary".freeze
+  RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW = "receipt-section-image-preview".freeze
+  RECEIPT_REVIEW_TARGET_ITEM_PREFIX = "receipt-item".freeze
+
+  REVIEW_REASON_TARGET_ANCHORS = {
+    "store_name_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "store_name_uncertain" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "store_address_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "store_address_uncertain" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "store_phone_number_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "store_phone_number_uncertain" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "purchased_at_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "purchased_at_uncertain" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "purchased_at_conflicted" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
+    "item_name_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_category_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_quantity_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_tax_rate_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "items_missing" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_total_mismatch" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_tax_rate_group_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "zero_amount_item_incomplete" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "discount_data_incomplete" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
+    "adjustment_uncertain" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
+    "adjustment_tax_rate_missing" => RECEIPT_REVIEW_TARGET_ADJUSTMENTS,
+    "payment_method_missing" => RECEIPT_REVIEW_TARGET_PAYMENTS,
+    "payment_method_uncertain" => RECEIPT_REVIEW_TARGET_PAYMENTS,
+    "payment_amount_mismatch" => RECEIPT_REVIEW_TARGET_PAYMENTS,
+    "total_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_amount_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_detail_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_detail_rate_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_detail_incomplete" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_detail_partial" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "ocr_total_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "price_tax_inclusion_uncertain" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "calculation_profile_uncertain" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "invalid_amount_relation" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_details_double_counted" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "tax_detail_gross_item_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "insufficient_data" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+    "ocr_unreadable" => RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW,
+    "ocr_low_confidence" => RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW,
+    "multiple_receipts_suspected" => RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW
+  }.freeze
+  REVIEW_REASON_TARGET_LINK_CLASS = "ui-touch-control inline-flex shrink-0 self-start text-xs font-bold transition-colors".freeze
+
   RECEIPT_INDEX_SORT_OPTIONS = %w[
     newest
     oldest
@@ -157,6 +208,64 @@ module ReceiptsHelper
     receipt_item_warning_reason_codes(item).map do |reason|
       t("enums.receipt_item.review_reason.#{reason}", default: reason.to_s.humanize)
     end
+  end
+
+  def review_reason_target(reason)
+    normalized = ReviewReasons.normalize(reason)
+    return nil unless ReviewReasons.user_facing_reason?(normalized)
+
+    REVIEW_REASON_TARGET_ANCHORS[normalized]
+  end
+
+  def receipt_review_item_target_id(item)
+    return nil unless item.respond_to?(:id) && item.id.present?
+
+    "#{RECEIPT_REVIEW_TARGET_ITEM_PREFIX}-#{item.id}"
+  end
+
+  def review_reason_target_anchor(reason, item: nil)
+    target = review_reason_target(reason)
+    return nil if target.blank?
+
+    item_target = receipt_review_item_target_id(item)
+    return item_target if target == RECEIPT_REVIEW_TARGET_ITEMS && item_target.present?
+
+    target
+  end
+
+  def review_reason_target_path(reason, base_path: nil, item: nil)
+    target = review_reason_target_anchor(reason, item: item)
+    return nil if target.blank?
+
+    base_path.present? ? "#{base_path}##{target}" : "##{target}"
+  end
+
+  def review_reason_target_link(reason, base_path: nil, variant: :primary, item: nil)
+    target_path = review_reason_target_path(reason, base_path: base_path, item: item)
+    return nil if target_path.blank?
+
+    target = review_reason_target(reason)
+    anchor_target = review_reason_target_anchor(reason, item: item)
+    item_target = receipt_review_item_target_id(item)
+    data = {
+      turbo: false,
+      review_reason_target_link: true,
+      review_reason_code: ReviewReasons.normalize(reason),
+      review_reason_target: target,
+      review_reason_anchor_target: anchor_target
+    }
+    data[:review_reason_target_item] = item_target if item_target.present? && anchor_target == item_target
+
+    render(
+      "shared/ui/actions/button",
+      as: :link,
+      href: target_path,
+      label: t("receipts.review_notes_card.confirm_link"),
+      variant: variant,
+      unstyled: true,
+      class: REVIEW_REASON_TARGET_LINK_CLASS,
+      data: data
+    )
   end
 
   def receipt_review_notes_state(receipt)

@@ -5,7 +5,7 @@
   - label: ボタンに表示するテキスト
 
   任意:
-  - variant: 見た目の種類。:primary / :secondary / :ghost / :danger。未指定時は :primary
+  - variant: 見た目の種類。:primary / :secondary / :ghost / :warning / :danger。未指定時は :primary
   - size: ボタンサイズ。:sm / :md / :compact / :lg。未指定時は :md
   - weight: 文字の太さ。:medium / :bold。未指定時は :medium
   - radius: 角丸サイズ。:lg / :xl
@@ -24,7 +24,7 @@
   - disable_with: 送信中に表示するテキスト
   - form: button 要素に付与する form 属性
   - html_options: button 要素に追加するHTML属性
-  - unstyled: 既定のボタンスタイルを使わない場合は true。未指定時は false
+  - unstyled: 既定のボタンスタイルを使わない場合は true。variant はリンク色として使う。未指定時は false
 %>
 
 <%
@@ -60,6 +60,9 @@
     # 透明背景のボタン
     when :ghost
       "btn-ghost border"
+    # 注意喚起用ボタン
+    when :warning
+      "btn-warning border border-transparent"
     # 危険操作用ボタン
     when :danger
       "btn-danger border border-transparent"
@@ -92,10 +95,23 @@
   justify_classes = trailing_icon.present? ? "justify-between" : "justify-center"
   width_classes = full_width ? "w-full flex #{justify_classes}" : "inline-flex #{justify_classes}"
   weight_classes = weight == :bold ? "font-bold" : "font-medium"
+  unstyled_variant_classes =
+    case variant
+    when :secondary
+      "btn-link-secondary"
+    when :ghost
+      "btn-link-ghost"
+    when :warning
+      "btn-link-warning"
+    when :danger
+      "btn-link-danger"
+    else
+      "btn-link-primary"
+    end
   state_classes = "group ui-touch-control items-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
   button_classes =
     if unstyled
-      extra_classes.to_s
+      [unstyled_variant_classes, extra_classes].compact.join(" ")
     else
       [width_classes, state_classes, weight_classes, variant_classes, size_classes, radius_classes, extra_classes].compact.join(" ")
     end

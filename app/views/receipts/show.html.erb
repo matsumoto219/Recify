@@ -56,13 +56,15 @@
         <% if @receipt.has_blocking_review_notes? %>
           <%= render "receipts/review_notes_card",
                 receipt: @receipt,
-                description: t("receipts.show.review_description") %>
+                description: t("receipts.show.review_description"),
+                target_base_path: edit_receipt_path(@receipt, from: edit_from) %>
         <% end %>
 
         <% if @receipt.has_warning_notes? %>
           <%= render "receipts/warning_notes_card",
                 receipt: @receipt,
-                description: t("receipts.show.warning_description") %>
+                description: t("receipts.show.warning_description"),
+                target_base_path: edit_receipt_path(@receipt, from: edit_from) %>
         <% end %>
       </div>
     <% end %>

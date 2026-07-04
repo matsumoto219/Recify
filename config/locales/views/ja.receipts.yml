@@ -172,6 +172,7 @@ ja:
       sync_to_final: 支払額を実支払額に合わせる
     review_notes_card:
       title: 要確認内容
+      confirm_link: 確認
       item_label: 明細
       item_name_missing: 名称未設定
       item_default_message: 明細内容を確認してください。
