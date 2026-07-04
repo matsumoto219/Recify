@@ -105,8 +105,13 @@ module Amounts
 
     def purchase_adjustment_tax_allocation_uncertain?
       candidate_positive_tax_rates.many? ||
+        taxable_and_non_taxable_groups? ||
         mixed_basis_candidate? ||
         printed_tax_detail_allocation_uncertain?
+    end
+
+    def taxable_and_non_taxable_groups?
+      candidate_positive_tax_rates.one? && candidate_zero_tax_rate_group?
     end
 
     def candidate_positive_tax_rates
@@ -117,6 +122,19 @@ module Amounts
       rescue ArgumentError
         nil
       end.uniq
+    end
+
+    def candidate_zero_tax_rate_group?
+      Array(candidate.tax_rate_groups).any? do |group|
+        rate = fetch_value(group, :rate)
+        rate = BigDecimal(rate.to_s)
+        rate.zero? && (
+          to_i(fetch_value(group, :gross)).positive? ||
+            to_i(fetch_value(group, :net)).positive?
+        )
+      rescue ArgumentError
+        false
+      end
     end
 
     def printed_tax_detail_allocation_uncertain?

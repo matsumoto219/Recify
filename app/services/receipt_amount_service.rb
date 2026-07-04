@@ -612,7 +612,7 @@ class ReceiptAmountService
       next false unless payment_adjustment?(adjustment)
       next false unless to_i(adjustment[:amount]) == payment_amount
 
-      same_money_effect?(payment, adjustment) || payment_adjustment_payment_text?(payment)
+      same_money_effect?(payment, adjustment)
     end
   end
 
@@ -656,10 +656,6 @@ class ReceiptAmountService
       fetch_value(value, :label),
       fetch_value(value, :method)
     ].compact.join(" ").unicode_normalize(:nfkc).downcase.gsub(/[[:space:]　,，¥￥\-−▲△:：]+/, "")
-  end
-
-  def payment_adjustment_payment_text?(payment)
-    normalized_money_effect_text(payment).match?(/ポイント|point|キャッシュレス|cashless|還元|paymentdiscount|決済割引|支払割引/)
   end
 
   def voucher_payment_text?(payment)

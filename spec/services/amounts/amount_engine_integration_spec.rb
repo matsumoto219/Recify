@@ -461,6 +461,106 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it '同額couponでもsource lineが異なれば別の購入調整として残す' do
+    result = call_amount_engine(
+      receipt: { total_amount: 800 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source_text: 'クーポンA -100', source_line_index: 20, source: 'ocr' },
+        { kind: 'coupon', sign: 'discount', amount: 100, source_text: 'クーポンB -100', source_line_index: 21, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-200)
+      expect(result.dig(:computed, :purchase_total)).to eq(800)
+      expect(result.dig(:computed, :final_payment_total)).to eq(800)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'provenanceがない同額couponは重複と断定せず別の購入調整として残す' do
+    result = call_amount_engine(
+      receipt: { total_amount: 800 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source: 'ocr' },
+        { kind: 'coupon', sign: 'discount', amount: 100, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-200)
+      expect(result.dig(:computed, :purchase_total)).to eq(800)
+      expect(result.dig(:computed, :final_payment_total)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it '同額cashless rewardでもsource lineが異なれば別の支払調整として残す' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'receipt_discount', sign: 'discount', amount: 200, source_text: 'キャッシュレス還元A -200', source_line_index: 30, source: 'ocr' },
+        { kind: 'receipt_discount', sign: 'discount', amount: 200, source_text: 'キャッシュレス還元B -200', source_line_index: 31, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 600 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(0)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-400)
+      expect(result.dig(:computed, :purchase_total)).to eq(1_000)
+      expect(result.dig(:computed, :final_payment_total)).to eq(600)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(600)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'point payment行は同額でもsource identityが異なれば支払調整の重複としてdropしない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'point_usage', sign: 'discount', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 40, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'ポイント利用', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 41 },
+        { method: 'credit', amount: 900 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :final_payment_total)).to eq(900)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_000)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it 'gift card paymentがdiscountとしても抽出された場合は購入合計を減らさない' do
     result = call_amount_engine(
       receipt: { total_amount: 1_000 },
@@ -632,6 +732,16 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
       expect(result[:blocking_inconsistencies]).not_to include(:payment_amount_mismatch)
       expect(result[:review_reasons]).not_to include('payment_amount_mismatch')
+      expect(result.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+        include(
+          source: 'receipt_payments',
+          payment_amount_sum: 1_100,
+          final_payment_total: 1_000,
+          payment_delta: 100,
+          payment_amount_mismatch_suppressed: true,
+          suppressed_reason: 'tendered_like_overpayment'
+        )
+      )
       expect(result[:needs_review]).to be(false)
     end
   end
@@ -901,6 +1011,32 @@ RSpec.describe 'Amount Engine integration' do
       expect(result[:warning_inconsistencies]).to include(:adjustment_tax_rate_missing)
       expect(result[:review_reasons]).to include('purchase_adjustment_tax_allocation_uncertain')
       expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '単一positive税率と非課税が混在する購入調整tax_rate nilは税配賦不確実としてreview対象にする' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_500 },
+      items: [
+        { line_total: 1_100, tax_rate: BigDecimal('0.10') },
+        { line_total: 500, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_500 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: positive税率は10%のみだが非課税対象もあるため、
+      # 購入値引き100円を課税/非課税のどちらへ配賦するか一意に決めない。
+      expect(result.dig(:computed, :purchase_total)).to eq(1_500)
+      expect(result[:warning_inconsistencies]).to include(:adjustment_tax_rate_missing)
+      expect(result[:review_reasons]).to include('purchase_adjustment_tax_allocation_uncertain')
+      expect(result[:needs_review]).to be(true)
+      expect(result[:safe_to_auto_complete]).to be(false)
     end
   end
 

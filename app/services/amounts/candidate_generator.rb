@@ -80,7 +80,7 @@ module Amounts
         rounding_mode: :floor,
         rounding_scope: :per_receipt,
         warnings: (receipt_input_warnings(item_delta) + payment_warnings(payment)).uniq,
-        evidence: payment[:evidence] + [ {
+        evidence: payment_evidence(payment) + [ {
           source: "receipt_input",
           formula: "receipt_input_preserved",
           purchase_total: purchase_total,
@@ -321,7 +321,7 @@ module Amounts
         rounding_mode: :floor,
         rounding_scope: :per_receipt,
         warnings: (adjustment_warnings + payment_warnings(payment) + [ :tax_detail_incomplete ]).uniq,
-        evidence: incomplete_tax_detail_evidence + adjustment_evidence + payment[:evidence] + [ {
+        evidence: incomplete_tax_detail_evidence + adjustment_evidence + payment_evidence(payment) + [ {
           source: "receipt_input",
           formula: "incomplete_tax_details_receipt_tax",
           purchase_total: total,
@@ -416,7 +416,7 @@ module Amounts
         rounding_mode: rounding_mode,
         rounding_scope: rounding_scope,
         warnings: warnings.uniq,
-        evidence: adjustment_evidence + payment[:evidence] + [
+        evidence: adjustment_evidence + payment_evidence(payment) + [
           {
             source: "receipt_items",
             formula: basis,
@@ -499,7 +499,7 @@ module Amounts
         rounding_mode: rounding_mode,
         rounding_scope: :per_tax_rate_group,
         warnings: (adjustment_warnings + payment_warnings(payment)).uniq,
-        evidence: final_detected_tax_details.map { |detail| detail[:evidence] } + adjustment_evidence + payment[:evidence] + [
+        evidence: final_detected_tax_details.map { |detail| detail[:evidence] } + adjustment_evidence + payment_evidence(payment) + [
           {
             source: "amount_engine",
             formula: basis,
@@ -547,7 +547,7 @@ module Amounts
         rounding_mode: rounding_mode,
         rounding_scope: :per_tax_rate_group,
         warnings: ([ :tax_detail_mismatch ] + payment_warnings(payment)).uniq,
-        evidence: detected_tax_details.map { |detail| detail[:evidence] } + payment[:evidence],
+        evidence: detected_tax_details.map { |detail| detail[:evidence] } + payment_evidence(payment),
         computed_items: items,
         calculation_profile: calculation_profile(
           receipt_tax_basis: :tax_added_to_subtotal,
@@ -667,7 +667,7 @@ module Amounts
         rounding_scope: :per_tax_rate_group,
         warnings: warnings.uniq,
         hard_reject_reasons: exact ? [] : [ :tax_detail_mismatch ],
-        evidence: evidence + adjustment_evidence + payment[:evidence] + [ { source: "amount_engine", formula: "mixed_by_tax_rate_group", purchase_total: purchase_total } ],
+        evidence: evidence + adjustment_evidence + payment_evidence(payment) + [ { source: "amount_engine", formula: "mixed_by_tax_rate_group", purchase_total: purchase_total } ],
         computed_items: computed_items.map.with_index { |item, index| item || item_with_line_total(items[index], item_line_total(items[index])) },
         calculation_profile: mixed_calculation_profile(profile_assignments),
         source: :amount_engine
@@ -1126,14 +1126,32 @@ module Amounts
 
     def payment_warnings(payment)
       warnings = Array(payment[:warnings])
-      return warnings unless Amounts::PaymentReconciler.suppress_positive_overpayment?(
+      return warnings unless suppress_positive_overpayment?(payment)
+
+      warnings - [ :payment_amount_mismatch ]
+    end
+
+    def payment_evidence(payment)
+      evidence = Array(payment[:evidence])
+      return evidence unless suppress_positive_overpayment?(payment)
+
+      evidence.map do |entry|
+        next entry unless fetch_value(entry, :source).to_s == "receipt_payments"
+
+        entry.merge(
+          payment_amount_mismatch_suppressed: true,
+          suppressed_reason: "tendered_like_overpayment"
+        )
+      end
+    end
+
+    def suppress_positive_overpayment?(payment)
+      Amounts::PaymentReconciler.suppress_positive_overpayment?(
         payments: payments,
         payment_delta: payment[:payment_delta],
         final_payment_total: payment[:final_payment_total],
         context: context
       )
-
-      warnings - [ :payment_amount_mismatch ]
     end
 
     def purchase_adjustment_total
