@@ -27,6 +27,12 @@
 #   calculation_profile: Hash?,
 #   calculation_profile_score: Integer?,
 #   calculation_profile_candidates: Array<Hash>,
+#   amount_engine: {
+#     selected_candidate_status: "accepted" | "rejected",
+#     no_safe_candidate: Boolean
+#   },
+#   selected_candidate_status: "accepted" | "rejected",
+#   safe_to_auto_complete: Boolean,
 #   context: Symbol,
 #   rounding_mode: { tax:, discount: },
 #   needs_review: Boolean

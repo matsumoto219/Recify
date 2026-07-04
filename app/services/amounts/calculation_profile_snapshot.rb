@@ -27,6 +27,8 @@ module Amounts
         computed: amount_summary(result[:computed]),
         resolved: amount_summary(result[:resolved])
       }
+      snapshot[:selected_candidate_status] = normalize_scalar(result[:selected_candidate_status]) if result.key?(:selected_candidate_status)
+      snapshot[:safe_to_auto_complete] = normalize_value(result[:safe_to_auto_complete]) unless result[:safe_to_auto_complete].nil?
 
       amount_engine = sanitized_amount_engine(result[:amount_engine])
       snapshot[:amount_engine] = amount_engine if amount_engine.present?
@@ -98,6 +100,8 @@ module Amounts
       {
         selected_candidate_id: normalize_scalar(engine[:selected_candidate_id]),
         selected_basis: normalize_scalar(engine[:selected_basis]),
+        selected_candidate_status: normalize_scalar(engine[:selected_candidate_status]),
+        no_safe_candidate: normalize_value(engine[:no_safe_candidate]),
         selected_candidate: sanitized_engine_candidate(engine[:selected_candidate]),
         candidates: sanitized_engine_candidates(engine[:candidates])
       }.compact

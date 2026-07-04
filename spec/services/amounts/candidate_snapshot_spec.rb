@@ -35,8 +35,27 @@ RSpec.describe Amounts::CandidateSnapshot do
 
     aggregate_failures do
       expect(snapshot[:selected_candidate_id]).to eq('selected')
+      expect(snapshot[:selected_candidate_status]).to eq('accepted')
+      expect(snapshot[:no_safe_candidate]).to be(false)
       expect(snapshot.dig(:selected_candidate, :candidate_id)).to eq('selected')
       expect(snapshot_candidate_ids(snapshot)).to eq(%w[selected accepted-low accepted-mid])
+    end
+  end
+
+  it '全candidateがrejectedの場合は安全な候補がないことをmetadataに残す' do
+    rejected = candidate('rejected-selected', score: 1, rejected: true)
+    snapshot = described_class.call(
+      selected: rejected,
+      candidates: [
+        rejected,
+        candidate('rejected-other', score: 2, rejected: true)
+      ]
+    )
+
+    aggregate_failures do
+      expect(snapshot[:selected_candidate_status]).to eq('rejected')
+      expect(snapshot[:no_safe_candidate]).to be(true)
+      expect(snapshot.dig(:selected_candidate, :hard_reject_reasons)).to include(:test_reject)
     end
   end
 

@@ -672,6 +672,43 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it '全candidateがhard rejectされた場合はreview draftを残しつつ自動完了不可にする' do
+    rejected_candidate = Amounts::Candidate.new(
+      candidate_id: 'spec/all_rejected',
+      basis: 'items_as_tax_included',
+      subtotal: 1_000,
+      tax: 100,
+      purchase_total: 1_100,
+      final_payment_total: 1_100,
+      tax_details: [],
+      tax_rate_groups: [ { rate: BigDecimal('0.10'), gross: 1_100, net: 1_000, tax: 100 } ],
+      hard_reject_reasons: [ :tax_detail_mismatch ],
+      computed_items: [ { price: 1_100, line_total: 1_100, quantity: BigDecimal('1') } ],
+      source: :amount_engine
+    )
+
+    generator = instance_double(Amounts::CandidateGenerator, call: [ rejected_candidate ])
+    allow(Amounts::CandidateGenerator).to receive(:new).and_return(generator)
+
+    result = call_amount_engine(
+      receipt: {},
+      items: [
+        { line_total: 1_100, tax_rate: BigDecimal('0.10') }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:resolved]).to include(total: 1_100)
+      expect(result[:needs_review]).to be(true)
+      expect(result[:safe_to_auto_complete]).to be(false)
+      expect(result[:selected_candidate_status]).to eq('rejected')
+      expect(result.dig(:amount_engine, :no_safe_candidate)).to be(true)
+      expect(result.dig(:amount_engine, :selected_candidate_status)).to eq('rejected')
+      expect(result[:review_reasons]).to include('tax_detail_mismatch')
+      expect(result[:blocking_inconsistencies]).to include(:tax_detail_mismatch)
+    end
+  end
+
   it '複数税率かつ印字tax detailsありの購入調整tax_rate nilは税配賦不確実としてreview対象にする' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 800, tax_amount: 78, total_amount: 878 },

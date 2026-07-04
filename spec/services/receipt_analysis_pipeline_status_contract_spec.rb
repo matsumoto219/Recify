@@ -325,6 +325,48 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
         expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
       end
     end
+
+    it 'all rejected candidateのamount resultはcompletedにせずreview_neededにする' do
+      amount_result = no_amount_mismatch_result.deep_merge(
+        resolved: {
+          total: 180,
+          subtotal: 164,
+          tax: 16,
+          tax_rate: BigDecimal('0.10')
+        },
+        computed: {
+          items: [],
+          purchase_total: 180,
+          final_payment_total: 180
+        },
+        blocking_inconsistencies: [ :tax_detail_mismatch ],
+        review_reasons: [ 'tax_detail_mismatch' ],
+        amount_engine: {
+          selected_candidate_status: 'rejected',
+          no_safe_candidate: true,
+          selected_candidate: {
+            candidate_id: 'spec/all_rejected',
+            hard_reject_reasons: [ :tax_detail_mismatch ]
+          }
+        },
+        selected_candidate_status: 'rejected',
+        safe_to_auto_complete: false,
+        needs_review: true
+      )
+
+      receipt, run, _ai_stage, finalize_stage = run_ai_and_finalize(successful_ai_result, amount_result: amount_result)
+
+      aggregate_failures do
+        expect(finalize_stage.next_step).to eq(:done)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.total_amount).to eq(180)
+        expect(receipt.review_reasons).to include('tax_detail_mismatch')
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'no_safe_candidate')).to be(true)
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_status')).to eq('rejected')
+        expect(receipt.amount_calculation_profile['safe_to_auto_complete']).to be(false)
+        expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
+      end
+    end
   end
 
   describe 'OCR status contract' do

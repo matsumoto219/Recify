@@ -7,7 +7,7 @@ module Amounts
     end
 
     def call
-      pool = candidates.reject(&:rejected?).presence || candidates
+      pool = selectable_candidates
 
       pool.min_by do |candidate|
         [
@@ -17,8 +17,16 @@ module Amounts
       end
     end
 
+    def no_safe_candidate?
+      candidates.present? && candidates.none?(&:accepted?)
+    end
+
     private
 
     attr_reader :candidates
+
+    def selectable_candidates
+      candidates.reject(&:rejected?).presence || candidates
+    end
   end
 end

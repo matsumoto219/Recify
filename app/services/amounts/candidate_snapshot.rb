@@ -8,20 +8,23 @@ module Amounts
     MAX_CANDIDATE_COUNT = 20
 
     class << self
-      def call(selected:, candidates:)
-        new(selected: selected, candidates: candidates).call
+      def call(selected:, candidates:, no_safe_candidate: nil)
+        new(selected: selected, candidates: candidates, no_safe_candidate: no_safe_candidate).call
       end
     end
 
-    def initialize(selected:, candidates:)
+    def initialize(selected:, candidates:, no_safe_candidate: nil)
       @selected = selected
       @candidates = Array(candidates)
+      @no_safe_candidate = no_safe_candidate
     end
 
     def call
       {
         selected_candidate_id: selected&.candidate_id,
         selected_basis: selected&.basis,
+        selected_candidate_status: selected_candidate_status,
+        no_safe_candidate: no_safe_candidate?,
         selected_candidate: selected ? snapshot_candidate(selected) : nil,
         candidates: snapshot_candidates.map do |candidate|
           snapshot_candidate(candidate)
@@ -31,7 +34,19 @@ module Amounts
 
     private
 
-    attr_reader :selected, :candidates
+    attr_reader :selected, :candidates, :no_safe_candidate
+
+    def selected_candidate_status
+      return nil unless selected
+
+      selected.rejected? ? "rejected" : "accepted"
+    end
+
+    def no_safe_candidate?
+      return no_safe_candidate unless no_safe_candidate.nil?
+
+      candidates.present? && candidates.none?(&:accepted?)
+    end
 
     def snapshot_candidates
       ranked = candidates.sort_by { |candidate| [ candidate.rejected? ? 1 : 0, candidate.score.to_i ] }

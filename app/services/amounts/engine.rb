@@ -22,13 +22,15 @@ module Amounts
       candidates = generated_candidates.map { |candidate| hard_rejector.call(candidate) }
       candidates = candidates.map { |candidate| consistency_reviewer.call(candidate) }
       candidates = candidates.map { |candidate| scorer.call(candidate) }
-      selected = Amounts::WinnerSelector.new(candidates).call
+      selector = Amounts::WinnerSelector.new(candidates)
+      selected = selector.call
 
       Amounts::ResultAdapter.new(
         base_result: base_result,
         calculation_profile_result: calculation_profile_result,
         selected_candidate: selected,
-        candidates: candidates
+        candidates: candidates,
+        no_safe_candidate: selector.no_safe_candidate?
       ).call
     end
 

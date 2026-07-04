@@ -2,30 +2,35 @@
 
 module Amounts
   class ResultAdapter
-    def initialize(base_result:, selected_candidate:, candidates:, calculation_profile_result: nil)
+    def initialize(base_result:, selected_candidate:, candidates:, calculation_profile_result: nil, no_safe_candidate: nil)
       @base_result = base_result
       @selected_candidate = selected_candidate
       @candidates = Array(candidates)
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
+      @no_safe_candidate = no_safe_candidate
     end
 
     def call
       result = engine_result_template
       result[:amount_engine] = Amounts::CandidateSnapshot.call(
         selected: selected_candidate,
-        candidates: candidates
+        candidates: candidates,
+        no_safe_candidate: no_safe_candidate?
       )
+      result[:selected_candidate_status] = selected_candidate_status if selected_candidate_status
+      result[:safe_to_auto_complete] = false
 
       return result unless selected_candidate
 
       apply_candidate_result!(result)
+      result[:safe_to_auto_complete] = safe_to_auto_complete?(result)
 
       result
     end
 
     private
 
-    attr_reader :base_result, :selected_candidate, :candidates, :calculation_profile_result
+    attr_reader :base_result, :selected_candidate, :candidates, :calculation_profile_result, :no_safe_candidate
 
     def engine_result_template
       inconsistencies = normalized_base_inconsistencies
@@ -53,6 +58,24 @@ module Amounts
 
     def normalized_base_inconsistencies
       Array(base_value(:inconsistencies, [])).map(&:to_sym)
+    end
+
+    def selected_candidate_status
+      return nil unless selected_candidate
+
+      selected_candidate.rejected? ? "rejected" : "accepted"
+    end
+
+    def no_safe_candidate?
+      return no_safe_candidate unless no_safe_candidate.nil?
+
+      candidates.present? && candidates.none?(&:accepted?)
+    end
+
+    def safe_to_auto_complete?(result)
+      selected_candidate_status == "accepted" &&
+        no_safe_candidate? == false &&
+        result[:needs_review] == false
     end
 
     def base_value(key, default = nil)
