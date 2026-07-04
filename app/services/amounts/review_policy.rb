@@ -104,8 +104,8 @@ module Amounts
 
     def purchase_adjustment_tax_allocation_uncertain?
       candidate_positive_tax_rates.many? ||
-        printed_tax_detail_evidence? ||
-        mixed_basis_candidate?
+        mixed_basis_candidate? ||
+        printed_tax_detail_allocation_uncertain?
     end
 
     def candidate_positive_tax_rates
@@ -116,6 +116,12 @@ module Amounts
       rescue ArgumentError
         nil
       end.uniq
+    end
+
+    def printed_tax_detail_allocation_uncertain?
+      return false unless printed_tax_detail_evidence?
+
+      candidate_positive_tax_rates.blank?
     end
 
     def printed_tax_detail_evidence?

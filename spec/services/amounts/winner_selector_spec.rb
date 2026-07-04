@@ -67,4 +67,23 @@ RSpec.describe Amounts::WinnerSelector do
 
     expect(result.warnings).not_to include(:competing_exact_basis_candidate)
   end
+
+  it '別basis候補がexactでもwarning付きならcompeting warningを付けない' do
+    selected = candidate(
+      id: 'printed_tax_details_net/floor',
+      basis: 'printed_tax_details_net',
+      score: 9,
+      warnings: [ :price_tax_inclusion_uncertain ]
+    )
+    competing = candidate(
+      id: 'printed_tax_details_raw_sum/floor',
+      basis: 'printed_tax_details_raw_sum',
+      score: 35,
+      warnings: [ :tax_detail_mismatch, :price_tax_inclusion_uncertain ]
+    )
+
+    result = described_class.new([ selected, competing ]).call
+
+    expect(result.warnings).not_to include(:competing_exact_basis_candidate)
+  end
 end

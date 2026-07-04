@@ -53,6 +53,7 @@ module Amounts
       candidates.any? do |candidate|
         next false if candidate.candidate_id == selected.candidate_id
         next false if candidate.basis == selected.basis
+        next false if candidate.warnings.present?
 
         exact_candidate?(candidate)
       end

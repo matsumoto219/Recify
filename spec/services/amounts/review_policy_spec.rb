@@ -78,7 +78,7 @@ RSpec.describe Amounts::ReviewPolicy do
     end
   end
 
-  it '印字tax detailsありのpurchase adjustment税率欠落は税配賦不確実としてreview reasonにする' do
+  it '印字tax detailsありでも単一税率のpurchase adjustment税率欠落はwarning-onlyに留める' do
     result = apply_policy(
       candidate(
         warnings: [ :adjustment_tax_rate_missing ],
@@ -93,8 +93,9 @@ RSpec.describe Amounts::ReviewPolicy do
     )
 
     aggregate_failures do
-      expect(result[:review_reasons]).to eq([ 'purchase_adjustment_tax_allocation_uncertain' ])
-      expect(result[:needs_review]).to be(true)
+      expect(result[:inconsistencies]).to include(:adjustment_tax_rate_missing)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:needs_review]).to be(false)
     end
   end
 
