@@ -485,7 +485,7 @@ class ReceiptAmountService
 
     SystemSettings.enabled?(TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY)
   rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError
-    true
+    false
   end
 
   def normalize_context(value)
