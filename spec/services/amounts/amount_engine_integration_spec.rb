@@ -410,6 +410,108 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'point_usageがadjustmentとpaymentの両方に入っても二重計上しない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'point_usage', sign: 'discount', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 10, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'ポイント利用', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 10 },
+        { method: 'credit', amount: 900 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :final_payment_total)).to eq(900)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(900)
+      expect(result[:blocking_inconsistencies]).not_to include(:payment_amount_mismatch)
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'cashless rewardが複数adjustment kindで重複しても一度だけ支払調整にする' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'receipt_discount', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50', source_line_index: 11, source: 'ocr' },
+        { kind: 'other', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50', source_line_index: 11, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 950 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_total)).to eq(1_000)
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(0)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-50)
+      expect(result.dig(:computed, :final_payment_total)).to eq(950)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(950)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'gift card paymentがdiscountとしても抽出された場合は購入合計を減らさない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'receipt_discount', sign: 'discount', amount: 500, source_text: 'ギフトカード 500', source_line_index: 12, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'gift_card', amount: 500, source_text: 'ギフトカード 500', source_line_index: 12 },
+        { method: 'credit', amount: 500 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_total)).to eq(1_000)
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(0)
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_000)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it 'couponとpayment discountが別行なら購入調整と支払調整をそれぞれ一度だけ反映する' do
+    result = call_amount_engine(
+      receipt: { total_amount: 900 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source_text: 'クーポン -100', source_line_index: 20, source: 'ocr' },
+        { kind: 'receipt_discount', sign: 'discount', amount: 100, source_text: 'payment discount -100', source_line_index: 21, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :purchase_total)).to eq(900)
+      expect(result.dig(:computed, :final_payment_total)).to eq(800)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
   it '外税レシートではexternal_tax候補を採用する' do
     result = call_amount_engine(
       receipt: { subtotal_amount: 1_000, tax_amount: 100, total_amount: 1_100, tax_rate: BigDecimal('0.10') },

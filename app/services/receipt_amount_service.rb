@@ -104,6 +104,8 @@ class ReceiptAmountService
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
+    @adjustments = canonical_adjustments(@adjustments, @payments)
+    @payments = canonical_payments(@payments, @adjustments)
     @context = normalize_context(context)
     @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
     @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
@@ -551,7 +553,8 @@ class ReceiptAmountService
       review_reasons: Array(normalized[:review_reasons]).map(&:to_s),
       source: normalized[:source],
       label: normalized[:label],
-      source_text: normalized[:source_text]
+      source_text: normalized[:source_text],
+      source_line_index: normalized[:source_line_index]
     }
   end
 
@@ -567,8 +570,96 @@ class ReceiptAmountService
 
     {
       method: normalized[:method],
-      amount: to_i_or_nil(normalized[:amount])
+      amount: to_i_or_nil(normalized[:amount]),
+      label: normalized[:label],
+      source_text: normalized[:source_text],
+      source_line_index: normalized[:source_line_index]
     }
+  end
+
+  def canonical_adjustments(adjustments, payments)
+    grouped = adjustments.group_by { |adjustment| money_effect_key(adjustment) }
+    canonical = grouped.flat_map do |key, entries|
+      next entries if key.nil? || entries.one?
+
+      [ preferred_adjustment(entries) ]
+    end
+
+    canonical.reject { |adjustment| voucher_payment_duplicate_adjustment?(adjustment, payments) }
+  end
+
+  def canonical_payments(payments, adjustments)
+    payments.reject { |payment| payment_adjustment_duplicate_payment?(payment, adjustments) }
+  end
+
+  def preferred_adjustment(adjustments)
+    adjustments.find { |adjustment| payment_adjustment?(adjustment) } || adjustments.first
+  end
+
+  def payment_adjustment_duplicate_payment?(payment, adjustments)
+    payment_amount = to_i(payment[:amount])
+    return false unless payment_amount.positive?
+
+    adjustments.any? do |adjustment|
+      next false unless payment_adjustment?(adjustment)
+      next false unless to_i(adjustment[:amount]) == payment_amount
+
+      same_money_effect?(payment, adjustment) || payment_adjustment_payment_text?(payment)
+    end
+  end
+
+  def voucher_payment_duplicate_adjustment?(adjustment, payments)
+    return false if payment_adjustment?(adjustment)
+    return false unless to_i(adjustment[:amount]).positive?
+    return false unless voucher_adjustment_text?(adjustment)
+
+    payments.any? do |payment|
+      voucher_payment_text?(payment) &&
+        to_i(payment[:amount]) == to_i(adjustment[:amount]) &&
+        same_money_effect?(payment, adjustment)
+    end
+  end
+
+  def payment_adjustment?(adjustment)
+    Amounts::AdjustmentClassifier.payment_adjustment?(adjustment)
+  end
+
+  def same_money_effect?(left, right)
+    left_key = money_effect_key(left)
+    left_key.present? && left_key == money_effect_key(right)
+  end
+
+  def money_effect_key(value)
+    amount = to_i(fetch_value(value, :amount))
+    return nil unless amount.positive?
+
+    source_line_index = fetch_value(value, :source_line_index)
+    return [ :line, source_line_index.to_i, amount ] if source_line_index.present?
+
+    text = normalized_money_effect_text(value)
+    return [ :text, text, amount ] if text.present?
+
+    nil
+  end
+
+  def normalized_money_effect_text(value)
+    [
+      fetch_value(value, :source_text),
+      fetch_value(value, :label),
+      fetch_value(value, :method)
+    ].compact.join(" ").unicode_normalize(:nfkc).downcase.gsub(/[[:space:]　,，¥￥\-−▲△:：]+/, "")
+  end
+
+  def payment_adjustment_payment_text?(payment)
+    normalized_money_effect_text(payment).match?(/ポイント|point|キャッシュレス|cashless|還元|paymentdiscount|決済割引|支払割引/)
+  end
+
+  def voucher_payment_text?(payment)
+    normalized_money_effect_text(payment).match?(/giftcard|giftcertificate|storecredit|voucher|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券/)
+  end
+
+  def voucher_adjustment_text?(adjustment)
+    normalized_money_effect_text(adjustment).match?(/giftcard|giftcertificate|storecredit|voucher|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券/)
   end
 
   def default_adjustment_sign(kind)
@@ -597,13 +688,13 @@ class ReceiptAmountService
   def fetch_value(obj, key, default = nil)
     return default if obj.nil?
 
-    if obj.respond_to?(key)
-      obj.public_send(key)
-    elsif obj.is_a?(Hash)
-      obj[key] || obj[key.to_s] || default
-    else
-      default
+    if obj.is_a?(Hash)
+      return obj[key] if obj.key?(key)
+      return obj[key.to_s] if obj.key?(key.to_s)
+      return default
     end
+
+    obj.respond_to?(key) ? obj.public_send(key) : default
   end
 
   def to_i(v)
