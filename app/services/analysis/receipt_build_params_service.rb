@@ -20,6 +20,7 @@ module Analysis
           candidates,
           lines,
           normalized_ai_result[:receipt_items_attributes],
+          ai_name_completion_enabled: normalized_ai_result.dig(:meta, :ai_name_completion_enabled),
           skipped_negative_items:
         )
         receipt_payments_attributes = build_receipt_payments_attributes(
@@ -32,13 +33,15 @@ module Analysis
           lines,
           receipt_attributes
         )
+        invalid_adjustment_review_reasons = []
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
           candidates[:adjustment_candidates],
           lines,
           receipt_items_attributes,
           skipped_negative_items,
-          receipt_payments_attributes
+          receipt_payments_attributes,
+          invalid_review_reasons: invalid_adjustment_review_reasons
         )
         receipt_adjustments_attributes, receipt_payments_attributes = move_voucher_adjustments_to_payments(
           receipt_adjustments_attributes,
@@ -60,7 +63,10 @@ module Analysis
           lines:,
           receipt_total: receipt_attributes[:total_amount]
         )
-        review_reasons = skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes)
+        review_reasons = (
+          skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
+          invalid_adjustment_review_reasons
+        ).uniq
         amount_hints = build_amount_hints(
           ai_receipt_attributes,
           candidates,
@@ -138,7 +144,8 @@ module Analysis
         {
           receipt_attributes: symbolized[:receipt_attributes] || {},
           receipt_items_attributes: Array(symbolized[:receipt_items_attributes]),
-          receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes])
+          receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes]),
+          meta: symbolized[:meta] || {}
         }
       end
 
@@ -588,14 +595,14 @@ module Analysis
         Analysis::StoreNameCandidateClassifier.normalize_compact_name(value).to_s.downcase
       end
 
-      def build_receipt_items_attributes(candidates, lines, ai_items, skipped_negative_items: [])
+      def build_receipt_items_attributes(candidates, lines, ai_items, ai_name_completion_enabled: nil, skipped_negative_items: [])
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
 
         source_items =
           if candidate_items.present?
             if normalized_ai_items.present?
-              merge_items(candidate_items, normalized_ai_items)
+              merge_items(candidate_items, normalized_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
             else
               candidate_items
             end
@@ -603,7 +610,7 @@ module Analysis
             fallback_items = build_items_from_lines(lines)
 
             if normalized_ai_items.present?
-              merge_items(fallback_items, normalized_ai_items)
+              merge_items(fallback_items, normalized_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
             else
               fallback_items
             end
@@ -698,7 +705,7 @@ module Analysis
         end
       end
 
-      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [], skipped_negative_items = [], receipt_payments = [])
+      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [], skipped_negative_items = [], receipt_payments = [], invalid_review_reasons: nil)
         source = Array(ai_adjustments).present? ? "ai" : "ocr"
         adjustments =
           if source == "ai"
@@ -719,6 +726,10 @@ module Analysis
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
+          unless ai_adjustment_evidence_supported?(source, normalized, amount:, source_line_index:, lines:)
+            invalid_review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON if invalid_review_reasons
+            next
+          end
           next if adjustment_source_noise_line?(source_text, amount)
           next if post_settlement_promo_adjustment?(source_text, source_line_index, lines)
           next if payment_row_adjustment?(
@@ -2393,6 +2404,34 @@ module Analysis
         context.any? { |text| adjustment_amounts_in_text(text).include?(amount.to_i.abs) }
       end
 
+      def ai_adjustment_evidence_supported?(source, adjustment, amount:, source_line_index:, lines:)
+        return true unless source == "ai"
+
+        source_line = Array(lines)[source_line_index].to_s.strip.presence
+        return false if source_line.blank?
+
+        explicit_source_text = adjustment[:source_text].to_s.strip.presence
+        if explicit_source_text.present? && !ai_adjustment_source_text_matches_line?(explicit_source_text, source_line)
+          return false
+        end
+
+        adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
+      end
+
+      def ai_adjustment_source_text_matches_line?(source_text, line)
+        normalized_source = compact_adjustment_evidence_text(source_text)
+        normalized_line = compact_adjustment_evidence_text(line)
+        return false if normalized_source.blank? || normalized_line.blank?
+
+        normalized_source == normalized_line ||
+          normalized_source.include?(normalized_line) ||
+          normalized_line.include?(normalized_source)
+      end
+
+      def compact_adjustment_evidence_text(value)
+        value.to_s.unicode_normalize(:nfkc).gsub(/\s+/, "")
+      end
+
       def point_count_only_adjustment?(adjustment, amount:, source_line_index:, lines:)
         context = adjustment_context_text(adjustment, source_line_index, lines)
         return false unless context.match?(profile.analysis_point_only_text_pattern)
@@ -2574,38 +2613,54 @@ module Analysis
         nil
       end
 
-      def merge_items(candidate_items, ai_items)
+      def merge_items(candidate_items, ai_items, lines: [], ai_name_completion_enabled: nil)
         normalized_candidate_items = Array(candidate_items).map do |item|
           item_hash = item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
           item_hash.with_indifferent_access
         end
         normalized_ai_items = normalize_items(ai_items)
+        raw_ai_indexes = raw_ai_item_indexes(normalized_ai_items)
+        index_mode = ai_item_index_mode(raw_ai_indexes, normalized_candidate_items.size)
+        index_issues = ai_item_index_issues(raw_ai_indexes, normalized_candidate_items.size, index_mode)
 
         ai_items_by_index = normalized_ai_items.each_with_object({}) do |item, result|
           ai_index = normalize_item_index(
             item[:index] || item["index"] || item[:position_index] || item["position_index"]
           )
-          next if ai_index.nil?
+          target_index = ai_item_target_index(ai_index, normalized_candidate_items.size, index_mode)
+          next if target_index.nil?
 
-          result[ai_index] = item
-          result[ai_index + 1] ||= item
+          result[target_index] ||= item
         end
 
         normalized_candidate_items.each_with_index.map do |candidate_item, candidate_index|
-          candidate_position = normalize_item_index(
-            candidate_item[:position_index] || candidate_item["position_index"]
-          )
-          lookup_candidates = [ candidate_position, candidate_index, candidate_index + 1 ].compact.uniq
-          ai_item = lookup_candidates.lazy.map { |idx| ai_items_by_index[idx] }.find(&:present?) || {}.with_indifferent_access
+          ai_item = ai_items_by_index[candidate_index] || {}.with_indifferent_access
           merged_item = candidate_item.merge(ai_item.compact)
+          index_review_needed = ai_item_index_review_needed?(candidate_index, index_issues)
+          review_reasons = normalize_review_reasons(ai_item[:review_reasons].presence || candidate_item[:review_reasons])
+          review_reasons |= [ "item_name_uncertain" ] if index_review_needed
+          suggested_name = suggested_item_name_for(
+            candidate_item,
+            ai_item,
+            lines: lines,
+            ai_name_completion_enabled: ai_name_completion_enabled
+          )
+          name_completion_review_needed = ai_suggested_name_rejected?(
+            candidate_item,
+            ai_item,
+            suggested_name,
+            lines: lines,
+            ai_name_completion_enabled: ai_name_completion_enabled
+          )
+          review_reasons |= [ "item_name_uncertain" ] if name_completion_review_needed
 
           # quantity_unit_code / product_code はOCR優先で保持する。
           quantity_unit_code = merged_quantity_unit_code(candidate_item, ai_item)
           merged_item.merge(
-            suggested_name: ai_item[:suggested_name].presence || candidate_item[:suggested_name],
+            suggested_name: suggested_name,
             category: ai_item[:category].presence || candidate_item[:category],
-            needs_review: ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil,
-            review_reasons: ai_item[:review_reasons].presence || candidate_item[:review_reasons],
+            needs_review: (index_review_needed || name_completion_review_needed) ? true : (ai_item.key?(:needs_review) ? ai_item[:needs_review] : nil),
+            review_reasons: review_reasons,
             quantity_unit_code: quantity_unit_code,
             product_code: ai_item[:product_code].presence || candidate_item[:product_code],
             tax_rate: ai_item[:tax_rate].presence || candidate_item[:tax_rate],
@@ -2614,9 +2669,96 @@ module Analysis
             original_line_total: candidate_item[:original_line_total],
             discount_amount: candidate_item[:discount_amount],
             discount_rate: candidate_item[:discount_rate],
-            position_index: candidate_position || candidate_index
+            position_index: normalize_item_index(candidate_item[:position_index] || candidate_item["position_index"]) || candidate_index
           )
         end
+      end
+
+      def suggested_item_name_for(candidate_item, ai_item, lines:, ai_name_completion_enabled:)
+        candidate_name = candidate_item[:suggested_name]
+        ai_name = ai_item[:suggested_name].presence
+
+        return candidate_name if ai_name_completion_enabled == false
+        return candidate_name if ai_name.blank?
+        return ai_name unless ai_name_completion_enabled == true
+
+        ai_suggested_name_supported?(candidate_item, ai_name, lines) ? ai_name : candidate_name
+      end
+
+      def ai_suggested_name_rejected?(candidate_item, ai_item, suggested_name, lines:, ai_name_completion_enabled:)
+        return false unless ai_name_completion_enabled == true
+
+        ai_name = ai_item[:suggested_name].presence
+        return false if ai_name.blank?
+
+        suggested_name != ai_name && !ai_suggested_name_supported?(candidate_item, ai_name, lines)
+      end
+
+      def ai_suggested_name_supported?(candidate_item, ai_name, lines)
+        ai_text = compact_item_text(ai_name)
+        return false if ai_text.blank?
+
+        item_name_evidence_texts(candidate_item, lines).any? do |evidence|
+          evidence_text = compact_item_text(evidence)
+          next false if evidence_text.blank?
+          next false if evidence_text.match?(/\A[¥￥$€£]?[+-]?\d[\d,]*(?:\.\d+)?\z/)
+
+          ai_text.include?(evidence_text) || evidence_text.include?(ai_text)
+        end
+      end
+
+      def item_name_evidence_texts(candidate_item, lines)
+        evidence = [
+          candidate_item[:raw_text],
+          candidate_item[:suggested_name],
+          candidate_item[:confirmed_name],
+          candidate_item[:name],
+          candidate_item[:source_text]
+        ]
+        source_indexes = item_line_indexes(candidate_item, lines)
+        evidence.concat(source_indexes.map { |index| Array(lines)[index] })
+        evidence.compact_blank
+      end
+
+      def raw_ai_item_indexes(ai_items)
+        Array(ai_items).filter_map do |item|
+          normalize_item_index(item[:index] || item["index"] || item[:position_index] || item["position_index"])
+        end
+      end
+
+      def ai_item_index_mode(indexes, candidate_count)
+        normalized_indexes = Array(indexes)
+        return :zero_based if normalized_indexes.blank? || normalized_indexes.include?(0)
+        return :one_based if normalized_indexes.all? { |index| index.positive? && index <= candidate_count.to_i }
+
+        :zero_based
+      end
+
+      def ai_item_index_issues(indexes, candidate_count, index_mode)
+        target_indexes = Array(indexes).map do |index|
+          ai_item_target_index(index, candidate_count, index_mode)
+        end
+        grouped = target_indexes.compact.group_by(&:itself)
+
+        {
+          duplicate_indexes: grouped.filter_map { |index, values| index if values.size > 1 },
+          out_of_range: target_indexes.any?(&:nil?)
+        }
+      end
+
+      def ai_item_target_index(index, candidate_count, index_mode)
+        return nil if index.nil? || index.negative? || candidate_count.to_i <= 0
+
+        target_index = index_mode == :one_based ? index - 1 : index
+        return nil if target_index.negative? || target_index >= candidate_count.to_i
+
+        target_index
+      end
+
+      def ai_item_index_review_needed?(candidate_index, index_issues)
+        duplicate_indexes = Array(index_issues[:duplicate_indexes])
+        duplicate_indexes.include?(candidate_index) ||
+          (candidate_index.zero? && index_issues[:out_of_range])
       end
 
       def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_invalid:, quantity_fraction_invalid: false)

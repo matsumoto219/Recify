@@ -82,6 +82,20 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'AI name completion flagを後段向けmetaへ残す' do
+        input = { filtered_content: 'test' }
+        ai_result = successful_ai_result.deep_dup
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: true).and_return(input)
+        allow(client).to receive(:call).with(input).and_return(ai_result)
+
+        result = described_class.call(valid_ocr_result, ai_name_completion_enabled: true)
+
+        aggregate_failures do
+          expect(result.dig(:meta, :ai_name_completion_enabled)).to eq(true)
+          expect(Ai::PromptBuilder).to have_received(:build).with(valid_ocr_result, ai_name_completion_enabled: true)
+        end
+      end
+
       it 'capture_inputにPromptBuilder結果を渡し戻り値互換を維持する' do
         input = { filtered_content: 'test', meta: { item_count: 1 } }
         capture_input = instance_double(Proc)

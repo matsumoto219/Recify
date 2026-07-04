@@ -22,6 +22,14 @@ class ReceiptAiEnrichmentService
     def available?
       Ai::AvailabilityChecker.call
     end
+
+    def error_result(...)
+      Ai::ResultTemplate.error(...)
+    end
+
+    def provider_metrics(...)
+      Ai::ProviderMetrics.build(...)
+    end
   end
 
   class InputCaptureError < StandardError
@@ -54,6 +62,7 @@ class ReceiptAiEnrichmentService
     capture_input!(input)
 
     result = call_ai_client(input)
+    annotate_ai_name_completion!(result)
 
     if ai_service_healthy_result?(result)
       ExternalServices.mark_success!(:ai)
@@ -112,6 +121,14 @@ class ReceiptAiEnrichmentService
 
   def ai_service_healthy_result?(result)
     result[:success] || result[:error_code].to_s == "ai_not_receipt"
+  end
+
+  def annotate_ai_name_completion!(result)
+    return result unless result.is_a?(Hash)
+
+    meta = result[:meta].respond_to?(:to_h) ? result[:meta].to_h : {}
+    result[:meta] = meta.merge(ai_name_completion_enabled: ai_name_completion_enabled)
+    result
   end
 
   def ai_provider_error_detail_for(result)

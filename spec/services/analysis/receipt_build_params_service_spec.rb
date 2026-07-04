@@ -2102,6 +2102,156 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AI name completion OFFの場合はsuggested_nameでOCR item名を変更しない' do
+        ai_result[:meta] = { ai_name_completion_enabled: false }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        first_item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(first_item[:raw_text]).to eq('コーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
+          expect(first_item[:category]).to eq('drink')
+        end
+      end
+
+      it 'AI name completion ONでOCR文脈に根拠があるsuggested_nameは採用する' do
+        ai_result[:meta] = { ai_name_completion_enabled: true }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        first_item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(first_item[:raw_text]).to eq('コーヒー')
+          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:category]).to eq('drink')
+          expect(first_item[:needs_review]).to eq(false)
+        end
+      end
+
+      it 'AI name completion ONでもOCR文脈に根拠がないsuggested_nameは自動採用しない' do
+        ai_result[:meta] = { ai_name_completion_enabled: true }
+        ai_result[:receipt_items_attributes].first[:suggested_name] = '高級寿司セット'
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        first_item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(first_item[:raw_text]).to eq('コーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
+          expect(first_item[:confirmed_name]).to be_nil
+          expect(first_item[:needs_review]).to eq(true)
+          expect(first_item[:review_reasons]).to include('item_name_uncertain')
+        end
+      end
+
+      it 'AI item indexが重複した場合は先勝ちにし、該当itemを確認対象にする' do
+        ai_result[:receipt_items_attributes] = [
+          { index: 0, suggested_name: 'ブレンドコーヒー', category: 'drink', needs_review: false },
+          { index: 0, suggested_name: '重複コーヒー', category: 'food', needs_review: false }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        first_item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:category]).to eq('drink')
+          expect(first_item[:needs_review]).to eq(true)
+          expect(first_item[:review_reasons]).to include('item_name_uncertain')
+        end
+      end
+
+      it 'AI item indexがOCR item範囲外の場合はOCR itemを保持し確認対象にする' do
+        ai_result[:receipt_items_attributes] = [
+          { index: 99, suggested_name: '存在しない商品', category: 'food', needs_review: false }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        first_item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].size).to eq(2)
+          expect(first_item[:raw_text]).to eq('コーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
+          expect(first_item[:needs_review]).to eq(true)
+          expect(first_item[:review_reasons]).to include('item_name_uncertain')
+        end
+      end
+
+      it 'AI adjustmentのsource_line_indexがOCR行範囲外の場合は保存せず確認理由を残す' do
+        ai_result[:receipt_adjustments_attributes] = [
+          {
+            kind: 'coupon',
+            label: 'クーポン',
+            amount: 100,
+            sign: 'discount',
+            source_text: 'クーポン -100',
+            source_line_index: 99,
+            needs_review: false
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to be_empty
+          expect(params[:review_reasons]).to include('adjustment_uncertain')
+        end
+      end
+
+      it 'AI adjustmentのsource_textがOCR行と一致しない場合は保存せず確認理由を残す' do
+        ocr_result[:lines] = [
+          'サンプルストア',
+          'クーポン -100',
+          '合計 1180'
+        ]
+        ai_result[:receipt_adjustments_attributes] = [
+          {
+            kind: 'coupon',
+            label: 'クーポン',
+            amount: 100,
+            sign: 'discount',
+            source_text: 'ポイント利用 -100',
+            source_line_index: 1,
+            needs_review: false
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to be_empty
+          expect(params[:review_reasons]).to include('adjustment_uncertain')
+        end
+      end
+
+      it 'AI adjustmentの金額根拠がOCR近接行にない場合は保存せず確認理由を残す' do
+        ocr_result[:lines] = [
+          'サンプルストア',
+          'クーポン',
+          '合計 1180'
+        ]
+        ai_result[:receipt_adjustments_attributes] = [
+          {
+            kind: 'coupon',
+            label: 'クーポン',
+            amount: 100,
+            sign: 'discount',
+            source_text: 'クーポン',
+            source_line_index: 1,
+            needs_review: false
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to be_empty
+          expect(params[:review_reasons]).to include('adjustment_uncertain')
+        end
+      end
+
       it 'AIがブランド名だけを返した場合でも印字された場所名を補って保存店舗名にする' do
         branch_ocr_result = ocr_result.deep_merge(
           candidates: {
@@ -3232,7 +3382,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             expect(first_item[:product_code]).to eq('C001')
             expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
             expect(first_item[:category]).to eq('drink')
-            expect(first_item[:needs_review]).to eq(false)
+            expect(first_item[:needs_review]).to eq(true)
+            expect(first_item[:review_reasons]).to include('item_name_uncertain')
             expect(second_item).to be_nil
           end
         end

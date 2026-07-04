@@ -81,6 +81,18 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it 'review_reasonsがある場合はneeds_review=falseを補正する' do
+        payload['needs_review'] = false
+        payload['review_reasons'] = [ 'store_name_uncertain' ]
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+
+        aggregate_failures do
+          expect(result[:needs_review]).to eq(true)
+          expect(result[:review_reasons]).to eq([ 'store_name_uncertain' ])
+        end
+      end
+
       it 'receipt_adjustmentsを保存用attributesへ正規化する' do
         payload['receipt_adjustments'] = [
           {
