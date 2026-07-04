@@ -14,8 +14,8 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
-    it 'JP aliasもJapan profileへ対応させる' do
-      expect(described_class.fetch('JP')).to eq(ReceiptAnalysisProfiles::Japan)
+    it '2文字のJP aliasはJapan profileへ対応させない' do
+      expect(described_class.fetch('JP')).to be_nil
     end
 
     it '明示的なunsupported countryをJP扱いにしない' do
@@ -37,7 +37,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile generated labels' do
+  describe 'JPN profile generated labels' do
     it '既存の生成ラベルと一致する' do
       profile = described_class.fetch('JPN')
 
@@ -51,7 +51,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile OCR date patterns' do
+  describe 'JPN profile OCR date patterns' do
     it 'OCR購入日のfallback表記をprofile側で定義する' do
       profile = described_class.fetch('JPN')
 
@@ -62,7 +62,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile OCR payment adjustment discount labels' do
+  describe 'JPN profile OCR payment adjustment discount labels' do
     it 'OCR支払時割引ラベルをprofile側で定義する' do
       pattern = described_class.fetch('JPN').ocr_payment_adjustment_discount_label_pattern
 
@@ -78,7 +78,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile OCR payment method exclusion labels' do
+  describe 'JPN profile OCR payment method exclusion labels' do
     it '支払方法へ昇格させない調整・精算行をprofile側で定義する' do
       pattern = described_class.fetch('JPN').ocr_payment_method_excluded_line_pattern
 
@@ -104,7 +104,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile OCR point usage adjustment labels' do
+  describe 'JPN profile OCR point usage adjustment labels' do
     it 'OCRポイント利用ラベルと表示用ポイント行をprofile側で定義する' do
       profile = described_class.fetch('JPN')
       usage_pattern = profile.ocr_point_usage_adjustment_label_pattern
@@ -126,7 +126,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile analysis cash tendered payment labels' do
+  describe 'JPN profile analysis cash tendered payment labels' do
     it 'Amount Engine用の現金預かりラベルをprofile側で定義する' do
       pattern = described_class.fetch('JPN').analysis_cash_tendered_payment_pattern
 
@@ -141,7 +141,7 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
-  describe 'JP profile quantity unit aliases' do
+  describe 'JPN profile quantity unit aliases' do
     it 'ReceiptQuantityUnitの保存codeへ正規化できるaliasだけを持つ' do
       aliases = described_class.fetch('JPN').quantity_unit_aliases
 
@@ -153,7 +153,7 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
-    it 'JP profile経由で数量単位を保存codeへ正規化する' do
+    it 'JPN profile経由で数量単位を保存codeへ正規化する' do
       profile = described_class.fetch('JPN')
 
       aggregate_failures do

@@ -241,6 +241,21 @@ RSpec.describe Ai::Client do
         end
       end
 
+      it 'fallback側の利用上限超過はprovider失敗に変換せず送出する' do
+        primary_error = Ai::Errors::ProviderError.new(message: 'primary failed', error_code: 'ai_primary_failed')
+        quota_error = Usage::LimitExceeded.new(
+          key: 'ai_jobs_per_day',
+          limit: 1,
+          used: 1,
+          requested: 1
+        )
+
+        allow(primary_client).to receive(:call).with(input).and_raise(primary_error)
+        allow(fallback_client).to receive(:call).with(input).and_raise(quota_error)
+
+        expect { client.call(input) }.to raise_error(Usage::LimitExceeded)
+      end
+
       it 'provider error detailをsafeな共通形式で返す' do
         primary_error = Ai::Errors::ProviderError.new(
           message: 'primary quota failed with prompt=store secrets',

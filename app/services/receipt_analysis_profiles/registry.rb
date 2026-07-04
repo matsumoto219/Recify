@@ -1,8 +1,7 @@
 module ReceiptAnalysisProfiles
   module Registry
     SUPPORTED_COUNTRY_CODES = {
-      "JPN" => ReceiptAnalysisProfiles::Japan,
-      "JP" => ReceiptAnalysisProfiles::Japan
+      "JPN" => ReceiptAnalysisProfiles::Japan
     }.freeze
 
     class << self

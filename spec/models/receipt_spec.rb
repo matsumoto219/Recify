@@ -929,12 +929,15 @@ RSpec.describe Receipt, type: :model do
       expect(receipt.country_region).to eq('JPN')
     end
 
-    it 'country_region はuppercaseに正規化し、2文字コードを3文字へ変換しない' do
+    it 'country_region はuppercaseに正規化し、2文字コードは内部保存で無効にする' do
       receipt = build(:receipt, country_region: ' jp ')
 
       receipt.valid?
 
-      expect(receipt.country_region).to eq('JP')
+      aggregate_failures do
+        expect(receipt.country_region).to eq('JP')
+        expect(receipt.errors[:country_region]).to be_present
+      end
     end
   end
 

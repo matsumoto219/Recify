@@ -72,6 +72,19 @@ RSpec.describe ExternalServices do
         env_key: 'RECEIPT_AI_ENABLED'
       )
     end
+
+    it 'SystemSettings取得失敗時はfail-closedで停止中snapshotにする' do
+      allow(SystemSettings).to receive(:enabled?)
+        .with('operations.ai_enabled')
+        .and_raise(SystemSettings::ValidationError, 'invalid_feature_flag')
+
+      expect(described_class.snapshot(:ai)).to include(
+        state: 'down',
+        disabled: true,
+        source: 'system_setting',
+        reason: 'operations.ai_enabled'
+      )
+    end
   end
 
   describe '.services_due_for_check' do
@@ -221,6 +234,18 @@ RSpec.describe ExternalServices do
 
     it '停止中はcheckerを呼ばずfalseを返す' do
       create(:system_setting, key: 'operations.ocr_enabled', value: described_class_setting(false))
+      allow(ReceiptOcrService).to receive(:available?)
+
+      aggregate_failures do
+        expect(described_class.check_available?(:ocr)).to eq(false)
+        expect(ReceiptOcrService).not_to have_received(:available?)
+      end
+    end
+
+    it 'SystemSettings取得失敗時はcheckerを呼ばずfalseを返す' do
+      allow(SystemSettings).to receive(:enabled?)
+        .with('operations.ocr_enabled')
+        .and_raise(SystemSettings::UnknownKeyError, 'operations.ocr_enabled')
       allow(ReceiptOcrService).to receive(:available?)
 
       aggregate_failures do

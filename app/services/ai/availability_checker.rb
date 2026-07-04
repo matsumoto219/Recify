@@ -1,7 +1,7 @@
 module Ai
   class AvailabilityChecker
     OPERATION_SETTING_KEY = "operations.ai_enabled".freeze
-    OPERATION_ENV_KEY = ReceiptAnalysisPipeline::Config::AI_ENABLED_ENV_KEY
+    OPERATION_ENV_KEY = ReceiptAnalysisPipeline.ai_enabled_env_key
     PROVIDER_CONFIG = {
       "openai" => {
         api_key_env: "OPENAI_API_KEY",
@@ -42,7 +42,7 @@ module Ai
     def operation_enabled?
       SystemSettings.enabled?(OPERATION_SETTING_KEY)
     rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
-      true
+      false
     end
 
     def env_enabled?

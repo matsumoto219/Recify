@@ -199,16 +199,16 @@ module ExternalServices
     def operation_env_key(service)
       case service
       when :ocr
-        ReceiptAnalysisPipeline::Config::OCR_ENABLED_ENV_KEY
+        ReceiptAnalysisPipeline.ocr_enabled_env_key
       when :ai
-        ReceiptAnalysisPipeline::Config::AI_ENABLED_ENV_KEY
+        ReceiptAnalysisPipeline.ai_enabled_env_key
       end
     end
 
     def setting_enabled?(key)
       SystemSettings.enabled?(key)
     rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
-      true
+      false
     end
 
     def env_enabled?(key)

@@ -27,6 +27,16 @@ RSpec.describe Ai::AvailabilityChecker do
     end
   end
 
+  it 'operations.ai_enabled の取得に失敗した場合は fail-closed で false を返す' do
+    allow(SystemSettings).to receive(:enabled?)
+      .with('operations.ai_enabled')
+      .and_raise(SystemSettings::UnknownKeyError, 'operations.ai_enabled')
+
+    with_env(configured_env) do
+      expect(described_class.call).to eq(false)
+    end
+  end
+
   it 'RECEIPT_AI_ENABLED が false の場合は false を返す' do
     with_env(configured_env.merge('RECEIPT_AI_ENABLED' => 'false')) do
       expect(described_class.call).to eq(false)

@@ -70,6 +70,8 @@ module Ai
     rescue Ai::Errors::ProviderError => fallback_error
       normalized_fallback_error = fallback_error.error_code.present? ? fallback_error : build_fallback_error(fallback_error)
       failure_result(primary_error, normalized_fallback_error)
+    rescue Usage::LimitExceeded
+      raise
     rescue StandardError => fallback_error
       failure_result(primary_error, build_fallback_error(fallback_error))
     end

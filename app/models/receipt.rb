@@ -174,6 +174,10 @@ class Receipt < ApplicationRecord
   validates :memo, length: { maximum: 1000 }, allow_blank: true       # メモ(MAX1000文字)
   validates :store_address, length: { maximum: 255 }, allow_blank: true   # 住所(MAX255文字)
   validates :store_phone_number, length: { maximum: 20 }, allow_blank: true # 電話番号(MAX20文字)
+  validates :country_region,
+            length: { is: 3 },
+            format: { with: /\A[A-Z]{3}\z/ },
+            allow_blank: true
   validates :currency_code,
             length: { is: 3 },
             format: { with: /\A[A-Z]{3}\z/ },
