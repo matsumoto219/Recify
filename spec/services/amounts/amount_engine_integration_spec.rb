@@ -170,7 +170,7 @@ RSpec.describe 'Amount Engine integration' do
         }
       ],
       payments: [
-        { method: 'nanaco', amount: 1_139 }
+        { method: 'nanaco', amount: 1_118 }
       ]
     )
 
@@ -533,6 +533,76 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'analysisでも非現金の単一支払過払いはblocking reviewにする' do
+    aggregate_failures 'non-cash overpayments' do
+      %w[credit e_money qr_payment gift_card].each do |method|
+        result = call_amount_engine(
+          receipt: { total_amount: 1_000 },
+          items: [
+            { line_total: 1_000 }
+          ],
+          payments: [
+            { method: method, amount: 1_100 }
+          ]
+        )
+
+        # 検算: 実支払額1,000円に対して、非現金決済で1,100円の支払行がある。
+        # 現金お預かりとは異なり、過払い方向でも支払額不一致として確認対象にする。
+        expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+        expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+        expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+        expect(result[:review_reasons]).to include('payment_amount_mismatch')
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+  end
+
+  it 'analysisでも複数支払の過払いは現金お預かり扱いでsuppressしない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000 }
+      ],
+      payments: [
+        { method: 'cash', amount: 500 },
+        { method: 'e_money', amount: 600 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 実支払額1,000円に対して、複数支払合計は1,100円。
+      # 単一の現金お預かり行とは判定できないため確認対象にする。
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'analysisでもexact final payment lineとお預かり行が併存する場合は過払いをsuppressしない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000 }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_000 },
+        { method: 'cash_tendered', amount: 1_100 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 1,000円の実支払行がすでにあり、1,100円のお預かりらしき行も入っている。
+      # exact final payment lineがある場合は二重抽出疑いとして確認対象にする。
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(2_100)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it '支払合計がfinal_payment_totalを上回る過払いもblocking reviewにする' do
     result = call_amount_engine(
       receipt: { total_amount: 1_000 },
@@ -551,6 +621,132 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
       expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
       expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'edit_saveでは過払い方向でもpayment_amount_mismatchをsuppressしない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_000 },
+      items: [
+        { line_total: 1_000 }
+      ],
+      payments: [
+        { method: 'cash', amount: 1_100 }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      # 検算: ユーザー編集保存では、OCRお預かりfallbackではなく明示入力として扱う。
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'resolved totalは購入合計、computed final_payment_totalは支払照合用として分けて返す' do
+    result = call_amount_engine(
+      receipt: { total_amount: 1_900 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') },
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, source: 'ocr' },
+        { kind: 'point_usage', sign: 'discount', amount: 300, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 1_600 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 商品合計2,000、クーポン -100 は購入合計へ反映し1,900。
+      # ポイント利用 -300 は支払調整なので final_payment_total は1,600。
+      expect(result[:resolved]).to include(total: 1_900)
+      expect(result.dig(:computed, :purchase_total)).to eq(1_900)
+      expect(result.dig(:computed, :final_payment_total)).to eq(1_600)
+      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_600)
+      expect(result[:needs_review]).to be(false)
+    end
+  end
+
+  it '複数税率かつ印字tax detailsありの購入調整tax_rate nilは税配賦不確実としてreview対象にする' do
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 800, tax_amount: 78, total_amount: 878 },
+      items: [
+        { line_total: 216, tax_rate: BigDecimal('0.08') },
+        { line_total: 162, tax_rate: BigDecimal('0.08') },
+        { line_total: 550, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 378, amount: 28, description: '8%対象' },
+        { rate: BigDecimal('0.10'), net_amount: 550, amount: 50, description: '10%対象' }
+      ],
+      adjustments: [
+        { kind: 'receipt_discount', sign: 'discount', amount: 50, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'cash', amount: 878 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 8%/10%の対象額が印字されているが、購入値引き50円の税率配賦が不明。
+      # adjustment_tax_rate_missingをwarning-onlyで済ませず、税配賦不確実として確認対象にする。
+      expect(result[:warning_inconsistencies]).to include(:adjustment_tax_rate_missing)
+      expect(result[:review_reasons]).to include('purchase_adjustment_tax_allocation_uncertain')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it 'SystemSettingsの税抜補正設定が取得不能ならanalysisでは税込補正候補を生成しない' do
+    [ SystemSettings::UnknownKeyError, SystemSettings::ValidationError ].each do |error_class|
+      allow(SystemSettings).to receive(:enabled?).and_call_original
+      allow(SystemSettings).to receive(:enabled?)
+        .with(ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY)
+        .and_raise(error_class, 'setting unavailable')
+
+      result = call_amount_engine(
+        receipt: {
+          subtotal_amount: 1_390,
+          tax_amount: 125,
+          total_amount: 1_515
+        },
+        items: [
+          { price: 130, quantity: 1, quantity_unit_code: 'each', original_line_total: 130, line_total: 130, tax_rate: BigDecimal('0.08') },
+          { price: 140, quantity: 1, quantity_unit_code: 'each', original_line_total: 140, line_total: 140, tax_rate: BigDecimal('0.08') },
+          { price: 300, quantity: 1, quantity_unit_code: 'each', original_line_total: 300, line_total: 300, tax_rate: BigDecimal('0.10') },
+          { price: 490, quantity: 1, quantity_unit_code: 'each', original_line_total: 490, line_total: 490, tax_rate: BigDecimal('0.10') },
+          { price: 50, quantity: 1, quantity_unit_code: 'each', original_line_total: 50, line_total: 50, tax_rate: BigDecimal('0') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
+          { rate: BigDecimal('0.10'), net_amount: 300, amount: 30, description: '小計（税抜10%）' },
+          { rate: BigDecimal('0.10'), net_amount: 820, amount: 74, description: '10%対象' }
+        ],
+        adjustments: [
+          {
+            kind: 'other',
+            label: 'キャッシュレス還元額',
+            source_text: 'キャッシュレス還元額 -22',
+            sign: 'discount',
+            amount: 22,
+            source: 'ocr'
+          }
+        ],
+        payments: [
+          { method: 'nanaco', amount: 1_139 }
+        ]
+      )
+
+      aggregate_failures error_class.name do
+        # 検算: 設定取得不能時は安全側として税込補正をOFF相当に倒し、
+        # items_as_tax_excluded系候補を生成しない。
+        expect(result.dig(:amount_engine, :candidates).map { |candidate| candidate[:candidate_id] }.grep(%r{\Aitems_as_tax_excluded/})).to be_empty
+        expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:price] }).to eq([ 130, 140, 300, 490, 50 ])
+      end
     end
   end
 end

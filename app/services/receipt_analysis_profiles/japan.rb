@@ -311,6 +311,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_POINT_DISPLAY_LINE_PATTERN = /獲得ポイント|現在ポイント|保有ポイント|ポイント残高|スマイルポイント|付与ポイント|earned\s*points?|current\s*points?|points?\s*balance/i.freeze
     ANALYSIS_PAYMENT_BLOCK_ANCHOR_PATTERN = /お支払い方法|お支払方法|支払方法|payment\s*method|payment|tender|settlement/i.freeze
     ANALYSIS_EXPLICIT_PAYMENT_MONEY_PATTERN = /[¥￥]\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)|(?:\d{1,3}(?:[,，]\d{3})+|\d+)\s*円/.freeze
+    ANALYSIS_CASH_TENDERED_PAYMENT_PATTERN = /現金|お預かり|お預り|御預かり|御預り|預かり|預り/i.freeze
     ANALYSIS_CASH_DEPOSIT_LABEL_PATTERN = /お\s*預\s*(?:かり|り)|預\s*(?:かり|り)/i.freeze
     ANALYSIS_CASH_CHANGE_LABEL_PATTERN = /お\s*(?:釣り?|つり)|釣\s*(?:り|銭)?|つり\s*銭/i.freeze
     ANALYSIS_SETTLEMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，.]\d{3})+|\d+)(?:円)?/.freeze
@@ -822,6 +823,10 @@ module ReceiptAnalysisProfiles
 
       def analysis_explicit_payment_money_pattern
         ANALYSIS_EXPLICIT_PAYMENT_MONEY_PATTERN
+      end
+
+      def analysis_cash_tendered_payment_pattern
+        ANALYSIS_CASH_TENDERED_PAYMENT_PATTERN
       end
 
       def analysis_cash_deposit_label_pattern

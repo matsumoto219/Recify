@@ -62,15 +62,14 @@ module Amounts
       return 0 if payments.blank? || candidate.payment_amount_sum.nil?
 
       delta = candidate.payment_amount_sum.to_i - candidate.final_payment_total.to_i
-      # OCR解析では現金の「お預かり」が支払額として入ることがあるため、過払い方向は候補選択に使わない。
-      return 0 if context == :analysis && delta.positive? && payment_amount_exceeds_receipt_total?(candidate)
+      return 0 if Amounts::PaymentReconciler.suppress_positive_overpayment?(
+        payments: payments,
+        payment_delta: delta,
+        final_payment_total: candidate.final_payment_total,
+        context: context
+      )
 
       delta.abs
-    end
-
-    def payment_amount_exceeds_receipt_total?(candidate)
-      total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(receipt, :total_amount))
-      !total.nil? && candidate.payment_amount_sum.to_i > total
     end
 
     def basis_penalty(candidate)

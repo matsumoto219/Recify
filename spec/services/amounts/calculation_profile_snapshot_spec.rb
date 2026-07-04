@@ -20,6 +20,9 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           tax: 116,
           tax_rate: BigDecimal('0.1')
         },
+        raw_ocr_text: '保存しないOCR全文',
+        provider_raw_response: { endpoint: 'https://example.invalid/ocr', content: '保存しないprovider raw response' },
+        store_metadata: { address: '保存しない店舗住所' },
         warning_reasons: [ :price_tax_inclusion_uncertain ],
         mismatch_codes: [ 'PRICE_TAX_INCLUSION_UNCERTAIN' ],
         blocking_mismatch_codes: [],
@@ -51,6 +54,7 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
 
       aggregate_failures do
         expect(snapshot).to eq(
+          schema_version: 1,
           profile: {
             tax_rounding_mode: 'floor',
             discount_rounding_mode: 'round',
@@ -85,7 +89,14 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
           }
         )
         expect(snapshot).not_to have_key(:calculation_profile_candidates)
-        expect(snapshot.to_json).not_to include('OCR全文を含む商品行', 'ai_raw_response', '保存しない')
+        expect(snapshot.to_json).not_to include(
+          'OCR全文を含む商品行',
+          'ai_raw_response',
+          '保存しない',
+          'provider raw response',
+          'example.invalid',
+          '店舗住所'
+        )
       end
     end
 
@@ -129,6 +140,8 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               computed_items: [
                 {
                   raw_text: '保存しない',
+                  source_text: '保存しないsource text',
+                  description: '保存しないdescription',
                   price: 140,
                   quantity: BigDecimal('1'),
                   quantity_unit_code: 'each',
@@ -139,7 +152,17 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               ],
               evidence: [
                 { source: 'receipt_payments', payment_amount_sum: 1_139, final_payment_total: 1_139 },
-                { source: 'ocr_raw_text', raw_text: '保存しない' }
+                {
+                  source: 'ocr_raw_text',
+                  raw_text: '保存しない',
+                  source_text: '保存しないsource text',
+                  description: '保存しないdescription',
+                  provider_raw_response: { endpoint: 'https://example.invalid/ocr', body: '保存しないprovider body' },
+                  metadata: {
+                    raw_text: '保存しないnested raw text',
+                    store_metadata: { phone: '保存しない店舗電話' }
+                  }
+                }
               ]
             },
             candidates: []
@@ -167,7 +190,14 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
             'tax_rate' => '0.08'
           }
         ])
-        expect(snapshot.to_json).not_to include('保存しない')
+        expect(snapshot.to_json).not_to include(
+          '保存しない',
+          'source text',
+          'description',
+          'provider body',
+          'example.invalid',
+          '店舗電話'
+        )
       end
     end
 

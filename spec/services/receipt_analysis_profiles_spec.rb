@@ -126,6 +126,21 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JP profile analysis cash tendered payment labels' do
+    it 'Amount Engine用の現金預かりラベルをprofile側で定義する' do
+      pattern = described_class.fetch('JPN').analysis_cash_tendered_payment_pattern
+
+      aggregate_failures do
+        expect('現金').to match(pattern)
+        expect('お預かり').to match(pattern)
+        expect('預り').to match(pattern)
+        expect('クレジット支払').not_to match(pattern)
+        expect('電子マネー決済').not_to match(pattern)
+        expect('QR決済').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JP profile quantity unit aliases' do
     it 'ReceiptQuantityUnitの保存codeへ正規化できるaliasだけを持つ' do
       aliases = described_class.fetch('JPN').quantity_unit_aliases

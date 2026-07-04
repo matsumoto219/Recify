@@ -2,6 +2,71 @@
 
 module Amounts
   class PaymentReconciler
+    CASH_TENDERED_PAYMENT_PATTERN = /
+      \A\s*cash\s*\z|
+      \bcash(?:\s+(?:payment|paid|tendered|received))?\b|
+      \b(?:paid\s+)?cash\b|
+      \btendered\b|
+      \bamount\s+received\b|
+      \breceived\b
+    /ix.freeze
+
+    class << self
+      def suppress_positive_overpayment?(payments:, payment_delta:, final_payment_total:, context:)
+        return false unless context.to_s.to_sym == :analysis
+
+        delta = Amounts::NumberParser.parse_amount_or_nil(payment_delta)
+        return false unless delta&.positive?
+
+        normalized_payments = Array(payments)
+        return false if exact_final_payment_line_present?(normalized_payments, final_payment_total)
+        return false unless normalized_payments.one?
+
+        cash_tendered_like_payment?(normalized_payments.first)
+      end
+
+      private
+
+      def exact_final_payment_line_present?(payments, final_payment_total)
+        total = Amounts::NumberParser.parse_amount_or_nil(final_payment_total)
+        return false if total.nil?
+
+        Array(payments).many? do |payment|
+          Amounts::NumberParser.parse_amount_or_nil(fetch_value(payment, :amount)) == total
+        end
+      end
+
+      def cash_tendered_like_payment?(payment)
+        text = payment_text(payment)
+
+        text.match?(CASH_TENDERED_PAYMENT_PATTERN) || profile_cash_tendered_like_payment?(text)
+      end
+
+      def profile_cash_tendered_like_payment?(text)
+        profile = ReceiptAnalysisProfiles.default
+        return false unless profile.respond_to?(:analysis_cash_tendered_payment_pattern)
+
+        pattern = profile.analysis_cash_tendered_payment_pattern
+        pattern.present? && text.match?(pattern)
+      end
+
+      def payment_text(payment)
+        %i[method label source_text text].filter_map do |key|
+          value = fetch_value(payment, key)
+          value if value.present?
+        end.join(" ").unicode_normalize(:nfkc).downcase.tr("_-", " ")
+      end
+
+      def fetch_value(object, key)
+        if object.respond_to?(:key?)
+          return object[key] if object.key?(key)
+          object[key.to_s] if object.key?(key.to_s)
+        elsif object.respond_to?(key)
+          object.public_send(key)
+        end
+      end
+    end
+
     def initialize(payments:, purchase_total:, payment_adjustment_total:)
       @payments = Array(payments)
       @purchase_total = Amounts::NumberParser.parse_amount(purchase_total)

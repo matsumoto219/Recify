@@ -125,19 +125,19 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
     allow(ExternalServices).to receive(:snapshot).with(:ai).and_return(state: 'ok')
   end
 
-  def stub_amount_service
-    allow(ReceiptAmountService).to receive(:call).and_return(no_amount_mismatch_result)
+  def stub_amount_service(amount_result = no_amount_mismatch_result)
+    allow(ReceiptAmountService).to receive(:call).and_return(amount_result)
   end
 
   def record_ocr_snapshot(run, ocr_result = successful_ocr_result)
     ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
   end
 
-  def run_ai_and_finalize(ai_result)
+  def run_ai_and_finalize(ai_result, amount_result: no_amount_mismatch_result)
     receipt, run = build_processing_run
     record_ocr_snapshot(run)
     stub_services_available
-    stub_amount_service
+    stub_amount_service(amount_result)
     allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_result)
 
     ai_stage = ReceiptAnalysisPipeline.run_ai(run)
@@ -285,6 +285,45 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
         ai_result: ai_result,
         processing_error_message: expected_message
       )
+    end
+  end
+
+  describe 'Amount Engine persistence/status contract' do
+    it 'needs_reviewのamount resultはreview_neededにし、Receipt.total_amountにはpurchase totalを保存する' do
+      amount_result = no_amount_mismatch_result.deep_merge(
+        resolved: {
+          total: 1_000,
+          subtotal: 909,
+          tax: 91,
+          tax_rate: BigDecimal('0.10')
+        },
+        computed: {
+          items: [],
+          purchase_total: 1_000,
+          final_payment_total: 900,
+          payment_adjustment_total: -100,
+          payment_amount_sum: 900
+        },
+        blocking_inconsistencies: [ :payment_amount_mismatch ],
+        warning_inconsistencies: [],
+        review_reasons: [ 'payment_amount_mismatch' ],
+        needs_review: true
+      )
+
+      receipt, run, _ai_stage, finalize_stage = run_ai_and_finalize(successful_ai_result, amount_result: amount_result)
+
+      aggregate_failures do
+        expect(finalize_stage.next_step).to eq(:done)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.total_amount).to eq(1_000)
+        expect(receipt.subtotal_amount).to eq(909)
+        expect(receipt.tax_amount).to eq(91)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to eq(1_000)
+        expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(900)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_adjustment_total')).to eq(-100)
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
+        expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
+      end
     end
   end
 

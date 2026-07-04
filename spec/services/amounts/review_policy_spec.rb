@@ -68,6 +68,29 @@ RSpec.describe Amounts::ReviewPolicy do
     end
   end
 
+  it '印字税抜tax detailsが一致してもcompeting exact basis候補がある場合はprice_tax_inclusion_uncertainをreview reasonに残す' do
+    result = apply_policy(
+      candidate(
+        basis: 'printed_tax_details_net',
+        warnings: [ :price_tax_inclusion_uncertain ],
+        tax_details: [
+          { rate: BigDecimal('0.10'), net_amount: 1_000, amount: 100 }
+        ],
+        score_breakdown: {
+          receipt_total_delta: 0
+        }
+      ),
+      existing_inconsistencies: [ :competing_exact_basis_candidate ]
+    )
+
+    aggregate_failures do
+      expect(result[:inconsistencies]).to include(:price_tax_inclusion_uncertain, :competing_exact_basis_candidate)
+      expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
+      expect(result[:review_reasons]).to include('competing_exact_basis_candidate')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it 'incomplete_tax_details_receipt_taxのtax_detail_incompleteはreview reasonに昇格する' do
     result = apply_policy(
       candidate(

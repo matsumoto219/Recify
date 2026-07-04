@@ -1125,10 +1125,14 @@ module Amounts
 
     def payment_warnings(payment)
       warnings = Array(payment[:warnings])
-      return warnings unless context.to_s.to_sym == :analysis
-      return warnings if payment[:payment_delta].to_i.negative?
+      return warnings unless Amounts::PaymentReconciler.suppress_positive_overpayment?(
+        payments: payments,
+        payment_delta: payment[:payment_delta],
+        final_payment_total: payment[:final_payment_total],
+        context: context
+      )
 
-      []
+      warnings - [ :payment_amount_mismatch ]
     end
 
     def purchase_adjustment_total
