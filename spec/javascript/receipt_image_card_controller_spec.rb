@@ -7,17 +7,29 @@ RSpec.describe "Receipt image card Stimulus controller" do
 
   it "opens the image preview from image review target hashes without toggling it closed" do
     aggregate_failures do
-      expect(source).to include("IMAGE_PREVIEW_REVIEW_TARGET = 'receipt-section-image-preview'")
+      expect(source).to include("reviewTarget: String")
       expect(source).to include("document.addEventListener('click', this.handleReviewTargetClick)")
       expect(source).to include("window.addEventListener('hashchange', this.handleReviewTargetHashChange)")
       expect(source).to include("this.openFromReviewTargetHash()")
       expect(source).to include("this.openPreview({ userDirected: true })")
       expect(source).to include("replaceReviewTargetHash")
       expect(source).to include("this.isOpen = true")
+      expect(source).to include("return this.reviewTargetValue !== '' && targetId === this.reviewTargetValue")
       expect(source).to include("reviewScrollTarget")
+      expect(source).to include("const section = document.getElementById(this.reviewTargetValue)")
       expect(source).to include("section.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' })")
       expect(source).to include("centerReviewScrollTarget")
       expect(source).to include("window.scrollBy({ top: delta, behavior: 'smooth' })")
+      expect(source).not_to include("IMAGE_PREVIEW_REVIEW_TARGET = 'receipt-section-image-preview'")
+    end
+  end
+
+  it "replays same-hash image review links without relying on Turbo navigation" do
+    aggregate_failures do
+      expect(source).to include("if (window.location.hash !== this.reviewTargetHash(targetId))")
+      expect(source).to include("event.preventDefault()")
+      expect(source).to include("window.history.replaceState(null, '', path)")
+      expect(source).to include("window.location.replace(`${path}${this.reviewTargetHash(targetId)}`)")
     end
   end
 

@@ -22,7 +22,6 @@ const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
 
 const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'
 const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
-const IMAGE_PREVIEW_REVIEW_TARGET = 'receipt-section-image-preview'
 
 function isAllowedReceiptImageFile (file) {
   if (!file) return false
@@ -45,7 +44,8 @@ export default class extends Controller {
     quotaExceededMessage: { type: String, default: 'Storage quota exceeded.' },
     storageUsedBytes: { type: Number, default: 0 },
     storageLimitBytes: { type: Number, default: 0 },
-    storageExcludingBlobBytes: { type: Number, default: 0 }
+    storageExcludingBlobBytes: { type: Number, default: 0 },
+    reviewTarget: String
   }
 
   connect () {
@@ -361,7 +361,7 @@ export default class extends Controller {
   }
 
   imagePreviewReviewTargetId (targetId) {
-    return targetId === IMAGE_PREVIEW_REVIEW_TARGET
+    return this.reviewTargetValue !== '' && targetId === this.reviewTargetValue
   }
 
   containsImagePreviewReviewTarget (targetId) {
@@ -407,7 +407,7 @@ export default class extends Controller {
   }
 
   scrollReviewTargetIntoView () {
-    const section = document.getElementById(IMAGE_PREVIEW_REVIEW_TARGET)
+    const section = document.getElementById(this.reviewTargetValue)
     const target = this.reviewScrollTarget() || section
     if (!target || typeof target.scrollIntoView !== 'function') return
 

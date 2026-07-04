@@ -198,9 +198,10 @@ RSpec.describe ReceiptsHelper, type: :helper do
 
     it 'returns an item row anchor only when an item reason has an item target' do
       item = instance_double(ReceiptItem, id: 42)
+      item_target = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}42"
 
       aggregate_failures do
-        expect(helper.review_reason_target_path('item_name_uncertain', item: item)).to eq('#receipt-item-42')
+        expect(helper.review_reason_target_path('item_name_uncertain', item: item)).to eq("##{item_target}")
         expect(helper.review_reason_target_path('tax_detail_mismatch', item: item)).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
       end
     end
@@ -246,14 +247,15 @@ RSpec.describe ReceiptsHelper, type: :helper do
 
     it 'renders item review links with item row target metadata' do
       item = instance_double(ReceiptItem, id: 42)
+      item_target = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}42"
       html = helper.review_reason_target_link('item_category_uncertain', base_path: '/receipts/rcpt_abc/edit', item: item)
       link = Nokogiri::HTML.fragment(html).at_css('a[data-review-reason-target-link]')
 
       aggregate_failures do
-        expect(link['href']).to eq('/receipts/rcpt_abc/edit#receipt-item-42')
+        expect(link['href']).to eq("/receipts/rcpt_abc/edit##{item_target}")
         expect(link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
-        expect(link['data-review-reason-anchor-target']).to eq('receipt-item-42')
-        expect(link['data-review-reason-target-item']).to eq('receipt-item-42')
+        expect(link['data-review-reason-anchor-target']).to eq(item_target)
+        expect(link['data-review-reason-target-item']).to eq(item_target)
       end
     end
 

@@ -7,11 +7,14 @@ RSpec.describe "Receipt form Stimulus controller" do
 
   it "opens item detail panels from item review target hashes without toggling them closed" do
     aggregate_failures do
-      expect(source).to include("REVIEW_REASON_ITEM_TARGET_PREFIX = 'receipt-item-'")
+      expect(source).to include("reviewItemTargetPrefix: String")
+      expect(source).to include("reviewItemsTarget: String")
       expect(source).to include("window.addEventListener('hashchange', this.handleHashChange)")
       expect(source).to include("this.expandItemDetailsFromHash()")
       expect(source).to include("setItemDetailsOpen({ row, panel, toggles, icons, open: true })")
       expect(source).to include("this.pushReviewTargetHash(targetId)")
+      expect(source).to include("targetId.startsWith(this.reviewItemTargetPrefixValue)")
+      expect(source).not_to include("REVIEW_REASON_ITEM_TARGET_PREFIX = 'receipt-item-'")
     end
   end
 
@@ -20,7 +23,8 @@ RSpec.describe "Receipt form Stimulus controller" do
       expect(source).to include("if (!this.reviewItemRowVisible(row))")
       expect(source).to include("destroyField?.value !== '1'")
       expect(source).to include("this.scrollReviewTargetFallback()")
-      expect(source).to include("const fallback = document.getElementById(targetId) || document.getElementById(RECEIPT_REVIEW_TARGET_ITEMS)")
+      expect(source).to include("const fallback = document.getElementById(targetId) || document.getElementById(this.reviewItemsTargetValue)")
+      expect(source).not_to include("RECEIPT_REVIEW_TARGET_ITEMS = 'receipt-section-items'")
     end
   end
 end

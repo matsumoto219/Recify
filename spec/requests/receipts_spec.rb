@@ -5187,6 +5187,7 @@ RSpec.describe 'Receipts', type: :request do
       summary = warning_card.at_css('[data-receipt-notes-summary]')
       details = warning_card.at_css('[data-receipt-notes-details]')
       target_link = warning_card.at_css('a[data-review-reason-target-link][data-review-reason-code="ocr_low_confidence"]')
+      target_link_layout = target_link&.parent
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -5203,9 +5204,16 @@ RSpec.describe 'Receipts', type: :request do
         expect(details.text).to include('OCR品質', '画像の精度が低い可能性があります')
         expect(target_link).to be_present
         expect(target_link['class']).to include('btn-link-warning')
+        expect(target_link['class']).to include('ui-touch-control')
+        expect(target_link['class']).to include('shrink-0')
+        expect(target_link['class']).to include('self-start')
+        expect(target_link_layout['class']).to include('flex-col')
+        expect(target_link_layout['class']).to include('sm:flex-row')
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link.text.strip).to eq(I18n.t('receipts.review_notes_card.confirm_link'))
         expect(target_link['href']).to eq("#{edit_receipt_path(receipt, from: 'show')}##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
+        expect(target_link['data-review-reason-anchor-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
       end
     end
 
@@ -5288,9 +5296,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(details.text).to include('AI補完', '商品名の精度が低い可能性があります')
         expect(target_link).to be_present
         expect(target_link['class']).to include('btn-link-danger')
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link.text.strip).to eq(I18n.t('receipts.review_notes_card.confirm_link'))
         expect(target_link['href']).to eq("#{edit_receipt_path(receipt, from: 'show')}##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
+        expect(target_link['data-review-reason-anchor-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
       end
     end
 
@@ -5311,13 +5321,14 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       review_card = document.at_css('[data-receipt-review-notes-card]')
-      target_id = "receipt-item-#{review_item.id}"
+      target_id = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{review_item.id}"
       target_link = review_card.at_css("a[data-review-reason-target-item='#{target_id}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(review_card).to be_present
         expect(target_link).to be_present
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link['href']).to eq("#{edit_receipt_path(receipt, from: 'show')}##{target_id}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
         expect(target_link['data-review-reason-anchor-target']).to eq(target_id)
@@ -5495,6 +5506,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
         expect(form['data-receipt-form-adjustment-payment-kinds-value']).to eq('point_usage')
+        expect(form['data-receipt-form-review-item-target-prefix-value']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX)
+        expect(form['data-receipt-form-review-items-target-value']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
       end
     end
 
@@ -5698,11 +5711,14 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'receipt image cardにJS用文言をdata属性で渡す' do
+      receipt.update!(review_reasons: [ 'ocr_low_confidence' ])
       receipt.image.attach(uploaded_image)
 
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
+      warning_card = document.at_css('[data-receipt-warning-notes-card]')
+      target_link = warning_card.at_css('a[data-review-reason-target-link][data-review-reason-code="ocr_low_confidence"]')
       image_section = document.at_css("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW}")
       image_card = document.at_css('[data-controller~="receipt-image-card"]')
 
@@ -5719,6 +5735,12 @@ RSpec.describe 'Receipts', type: :request do
         expect(image_card['data-receipt-image-card-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
         expect(image_card['data-receipt-image-card-storage-excluding-blob-bytes-value']).to eq(receipt.image.blob.byte_size.to_s)
         expect(image_card['data-receipt-image-card-quota-exceeded-message-value']).to eq(I18n.t('shared.receipt_image_card.quota_exceeded'))
+        expect(image_card['data-receipt-image-card-review-target-value']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW)
+        expect(target_link).to be_present
+        expect(target_link['href']).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW}")
+        expect(target_link['data-review-reason-target']).to eq(image_card['data-receipt-image-card-review-target-value'])
+        expect(target_link['data-review-reason-anchor-target']).to eq(image_card['data-receipt-image-card-review-target-value'])
+        expect(target_link['data-turbo']).to eq('false')
         expect(document.at_css('img[data-receipt-image-card-target="previewImage"]')['src']).to include('/rails/active_storage/')
         expect(document.at_css('input[name="receipt[remove_image]"][value="1"]')).to be_present
         expect(response.body).to include(I18n.t('shared.receipt_image_card.remove_label'))
@@ -5882,6 +5904,7 @@ RSpec.describe 'Receipts', type: :request do
       document = Nokogiri::HTML(response.body)
       warning_card = document.at_css('[data-receipt-warning-notes-card]')
       target_link = warning_card.at_css('a[data-review-reason-target-link][data-review-reason-code="price_tax_inclusion_uncertain"]')
+      target_link_layout = target_link&.parent
       item_name_input = document.at_css('input[value="通常商品"]')
       item_row = item_name_input.ancestors.find { |node| node['data-receipt-form-target'].to_s == 'itemRow' }
       item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
@@ -5894,8 +5917,13 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).not_to include('要確認内容')
         expect(target_link).to be_present
         expect(target_link['class']).to include('btn-link-warning')
+        expect(target_link['class']).to include('ui-touch-control')
+        expect(target_link_layout['class']).to include('flex-col')
+        expect(target_link_layout['class']).to include('sm:flex-row')
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link['href']).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
+        expect(target_link['data-review-reason-anchor-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
         expect(item_details_panel.at_css('.receipt-form-item-warning-notes')).to be_nil
       end
     end
@@ -5913,6 +5941,7 @@ RSpec.describe 'Receipts', type: :request do
       summary = review_card.at_css('[data-receipt-notes-summary]')
       details = review_card.at_css('[data-receipt-notes-details]')
       target_link = review_card.at_css('a[data-review-reason-target-link][data-review-reason-code="tax_detail_mismatch"]')
+      target_link_layout = target_link&.parent
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -5925,8 +5954,13 @@ RSpec.describe 'Receipts', type: :request do
         expect(details.text).to include('金額整合性', '税内訳と明細の税額が一致していません')
         expect(target_link).to be_present
         expect(target_link['class']).to include('btn-link-danger')
+        expect(target_link['class']).to include('shrink-0')
+        expect(target_link_layout['class']).to include('flex-col')
+        expect(target_link_layout['class']).to include('sm:flex-row')
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link['href']).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
+        expect(target_link['data-review-reason-anchor-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY)
         expect(document.at_css("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_BASIC_INFO}")).to be_present
         expect(document.at_css("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS}")).to be_present
         expect(document.at_css("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS}")).to be_present
@@ -5952,7 +5986,7 @@ RSpec.describe 'Receipts', type: :request do
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
-      target_id = "receipt-item-#{review_item.id}"
+      target_id = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{review_item.id}"
       item_row = document.at_css("##{target_id}")
       target_link = document.at_css("a[data-review-reason-target-item='#{target_id}']")
       item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
@@ -5965,6 +5999,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_details_panel['aria-hidden']).to eq('true')
         expect(item_details_panel['class']).not_to include('is-open')
         expect(target_link).to be_present
+        expect(target_link['data-turbo']).to eq('false')
         expect(target_link['href']).to eq("##{target_id}")
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
         expect(target_link['data-review-reason-anchor-target']).to eq(target_id)

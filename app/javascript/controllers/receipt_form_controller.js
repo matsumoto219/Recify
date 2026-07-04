@@ -4,8 +4,6 @@ const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
 const CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS = 150
 const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
-const REVIEW_REASON_ITEM_TARGET_PREFIX = 'receipt-item-'
-const RECEIPT_REVIEW_TARGET_ITEMS = 'receipt-section-items'
 
 export default class extends Controller {
   static targets = [
@@ -89,7 +87,9 @@ export default class extends Controller {
     receiptItemLineTotalMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     receiptTaxAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     receiptAdjustmentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
-    receiptPaymentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX }
+    receiptPaymentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
+    reviewItemTargetPrefix: String,
+    reviewItemsTarget: String
   }
 
   connect () {
@@ -355,7 +355,7 @@ export default class extends Controller {
       return
     }
 
-    const fallbackTargetId = link.dataset.reviewReasonTarget || RECEIPT_REVIEW_TARGET_ITEMS
+    const fallbackTargetId = link.dataset.reviewReasonTarget || this.reviewItemsTargetValue
     this.pushReviewTargetHash(fallbackTargetId)
     this.scrollReviewTargetFallback(fallbackTargetId)
   }
@@ -394,7 +394,9 @@ export default class extends Controller {
   }
 
   reviewItemTargetId (targetId) {
-    return typeof targetId === 'string' && targetId.startsWith(REVIEW_REASON_ITEM_TARGET_PREFIX)
+    return this.reviewItemTargetPrefixValue !== '' &&
+      typeof targetId === 'string' &&
+      targetId.startsWith(this.reviewItemTargetPrefixValue)
   }
 
   expandItemDetailsFromHash ({ scroll = true } = {}) {
@@ -451,8 +453,8 @@ export default class extends Controller {
     window.history.pushState(null, '', hash)
   }
 
-  scrollReviewTargetFallback (targetId = RECEIPT_REVIEW_TARGET_ITEMS) {
-    const fallback = document.getElementById(targetId) || document.getElementById(RECEIPT_REVIEW_TARGET_ITEMS)
+  scrollReviewTargetFallback (targetId = this.reviewItemsTargetValue) {
+    const fallback = document.getElementById(targetId) || document.getElementById(this.reviewItemsTargetValue)
     this.scrollReviewTargetIntoView(fallback, { block: 'start' })
   }
 

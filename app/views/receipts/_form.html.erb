@@ -52,7 +52,9 @@
                   "receipt-form-receipt-item-line-total-max-value": ReceiptAmountLimits.receipt_item_line_total_max,
                   "receipt-form-receipt-tax-amount-max-value": ReceiptAmountLimits.receipt_tax_amount_max,
                   "receipt-form-receipt-adjustment-amount-max-value": ReceiptAmountLimits.receipt_adjustment_amount_max,
-                  "receipt-form-receipt-payment-amount-max-value": ReceiptAmountLimits.receipt_payment_amount_max
+                  "receipt-form-receipt-payment-amount-max-value": ReceiptAmountLimits.receipt_payment_amount_max,
+                  "receipt-form-review-item-target-prefix-value": ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX,
+                  "receipt-form-review-items-target-value": ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS
                 }
               } do |f| %>
 
@@ -473,7 +475,8 @@
                 empty_message: t("receipts.form.image.empty"),
                 helper_text: t("receipts.form.image.helper"),
                 accept: receipt_image_accept,
-                storage_usage: current_user.storage_usage %>
+                storage_usage: current_user.storage_usage,
+                review_target: ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW %>
         </div>
       </div>
     </div>

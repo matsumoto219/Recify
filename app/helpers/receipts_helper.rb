@@ -16,6 +16,7 @@ module ReceiptsHelper
   RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY = "receipt-section-amount-summary".freeze
   RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW = "receipt-section-image-preview".freeze
   RECEIPT_REVIEW_TARGET_ITEM_PREFIX = "receipt-item".freeze
+  RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX = "#{RECEIPT_REVIEW_TARGET_ITEM_PREFIX}-".freeze
 
   REVIEW_REASON_TARGET_ANCHORS = {
     "store_name_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
@@ -220,7 +221,7 @@ module ReceiptsHelper
   def receipt_review_item_target_id(item)
     return nil unless item.respond_to?(:id) && item.id.present?
 
-    "#{RECEIPT_REVIEW_TARGET_ITEM_PREFIX}-#{item.id}"
+    "#{RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{item.id}"
   end
 
   def review_reason_target_anchor(reason, item: nil)

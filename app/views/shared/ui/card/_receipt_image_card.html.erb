@@ -22,6 +22,7 @@
   - storage_usage: 容量判定に使うストレージ使用量オブジェクト
   - storage_excluding_blob_bytes: 容量判定から除外する現在画像サイズ
   - quota_exceeded_message: 容量超過時の表示文言
+  - review_target: review reason 確認リンクから開く対象anchor ID
   - wrapper_class: 外側 wrapper の追加CSSクラス
   - card_class: surface_card の追加CSSクラス
 %>
@@ -53,6 +54,7 @@
   storage_limit_bytes = storage_usage&.limit_bytes.to_i
   storage_excluding_blob_bytes = local_assigns.fetch(:storage_excluding_blob_bytes, (has_image ? displayable_image.blob&.byte_size.to_i : 0))
   quota_exceeded_message = local_assigns.fetch(:quota_exceeded_message, t("shared.receipt_image_card.quota_exceeded"))
+  review_target = local_assigns[:review_target]
   purged_hint =
     if receipt.image_purged_by_system?
       t("shared.receipt_image_card.system_purged_hint")
@@ -73,7 +75,8 @@
       receipt_image_card_storage_used_bytes_value: storage_used_bytes,
       receipt_image_card_storage_limit_bytes_value: storage_limit_bytes,
       receipt_image_card_storage_excluding_blob_bytes_value: storage_excluding_blob_bytes,
-      receipt_image_card_quota_exceeded_message_value: quota_exceeded_message
+      receipt_image_card_quota_exceeded_message_value: quota_exceeded_message,
+      receipt_image_card_review_target_value: review_target
     }
   end
 %>
