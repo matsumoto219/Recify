@@ -32,15 +32,19 @@
     <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.labels.quarantine_reason") %></h3>
       <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= moderation[:quarantine_reason].presence || "-" %></p>
-      <p class="mt-2 text-xs token-text-muted">
-        <%= moderation.dig(:quarantined_by, :id).present? ? "##{moderation.dig(:quarantined_by, :id)} #{moderation.dig(:quarantined_by, :email)}" : "-" %>
+      <p class="mt-2 min-w-0 max-w-full text-xs token-text-muted">
+        <%= render "admin/shared/user_reference",
+              id: moderation.dig(:quarantined_by, :id),
+              email: moderation.dig(:quarantined_by, :email) %>
       </p>
     </div>
     <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-card-subtle p-4">
       <h3 class="mb-2 text-base font-bold token-text-base"><%= t("admin.receipts.show.labels.release_reason") %></h3>
       <p class="whitespace-pre-wrap break-words text-sm token-text-base [overflow-wrap:anywhere]"><%= moderation[:released_reason].presence || "-" %></p>
-      <p class="mt-2 text-xs token-text-muted">
-        <%= moderation.dig(:released_by, :id).present? ? "##{moderation.dig(:released_by, :id)} #{moderation.dig(:released_by, :email)}" : "-" %>
+      <p class="mt-2 min-w-0 max-w-full text-xs token-text-muted">
+        <%= render "admin/shared/user_reference",
+              id: moderation.dig(:released_by, :id),
+              email: moderation.dig(:released_by, :email) %>
       </p>
     </div>
   </div>

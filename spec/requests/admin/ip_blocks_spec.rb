@@ -126,13 +126,21 @@ RSpec.describe 'Admin IP blocks', type: :request do
   describe 'GET /admin/ip_blocks/:id' do
     it '詳細と関連SecurityEventと解除導線を表示する' do
       admin = create(:user, :admin)
+      created_by = create(
+        :user,
+        :admin,
+        email: 'recify-admin-ip-created-by-long-local-part-version12345678901234567890@example-admin-ip-long-domain.example.com'
+      )
       source = create(:security_event, ip_address: '8.8.8.8', matched_rule: 'manual-review')
-      block = create(:security_ip_block, ip_address: '8.8.8.8', source_security_event: source, reason: 'scanner abuse')
+      block = create(:security_ip_block, ip_address: '8.8.8.8', created_by: created_by, source_security_event: source, reason: 'scanner abuse')
       create(:security_event, ip_address: '8.8.8.8', event_type: 'xss_attempt', matched_rule: 'script_tag')
       create(:security_ip_action, ip_address: '8.8.8.8', action_type: 'manual_ip_block', source: 'manual_admin', status: 'active', security_ip_block: block, source_security_event: source)
       sign_in admin
 
       get admin_ip_block_path(block)
+      document = Nokogiri::HTML(response.body)
+      created_by_email_node = document.css('[data-email-address-display]').find { |node| node['title'] == created_by.email }
+      created_by_reference = created_by_email_node&.ancestors&.find { |node| node['class'].to_s.split.include?('items-baseline') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -146,6 +154,10 @@ RSpec.describe 'Admin IP blocks', type: :request do
         expect(response.body).to include('手動IP制限')
         expect(response.body).to include('xss_attempt')
         expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_ip_block_path(block)))
+        expect(created_by_email_node).to be_present
+        expect(created_by_email_node['class'].split).to include('flex-1', 'overflow-hidden')
+        expect(created_by_reference['class'].split).to include('flex', 'min-w-0', 'max-w-full')
+        expect(response.body).not_to include("##{created_by.id} #{created_by.email}")
       end
     end
 

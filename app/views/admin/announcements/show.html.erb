@@ -1,6 +1,6 @@
 <% content_for :title, t("admin.announcements.show.title") %>
 
-<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
@@ -108,8 +108,8 @@
     </div>
   </div>
 
-  <div class="grid gap-6 lg:grid-cols-3">
-    <%= render "shared/ui/layout/surface_card", padding: :md, class: "lg:col-span-2" do %>
+  <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full lg:col-span-2" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.announcements.show.sections.content") %></h2>
       <dl class="space-y-4 text-sm">
         <div>
@@ -123,7 +123,7 @@
       </dl>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.announcements.show.sections.status") %></h2>
       <dl class="space-y-4 text-sm">
         <div>
@@ -225,7 +225,7 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.ends_at") %></dt>
         <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= @announcement.ends_at.present? ? l(@announcement.ends_at, format: :short) : "-" %></dd>
       </div>
-      <div>
+      <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.created_by") %></dt>
         <dd class="min-w-0 max-w-full">
           <%= render "shared/ui/text/email_address",
@@ -234,7 +234,7 @@
                 class: "token-text-base" %>
         </dd>
       </div>
-      <div>
+      <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.announcements.show.labels.updated_by") %></dt>
         <dd class="min-w-0 max-w-full">
           <%= render "shared/ui/text/email_address",

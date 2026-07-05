@@ -662,12 +662,19 @@ RSpec.describe 'Admin announcements', type: :request do
 
   describe 'GET /admin/announcements/:id' do
     it 'adminが詳細をpublic_idで閲覧でき、HTML文字列はescapeされる' do
-      admin = create(:user, :admin)
-      announcement = create(:announcement, title: '<script>alert(1)</script>', body: "<b>本文</b>\n2行目")
+      admin = create(
+        :user,
+        :admin,
+        email: 'recify-admin-announcement-long-local-part-version12345678901234567890@example-admin-announcement-long-domain.example.com'
+      )
+      announcement = create(:announcement, created_by: admin, updated_by: admin, title: '<script>alert(1)</script>', body: "<b>本文</b>\n2行目")
       create(:announcement_link, announcement: announcement, label: '<b>リンク</b>', url: '/contact')
       sign_in admin
 
       get admin_announcement_path(announcement)
+      document = Nokogiri::HTML(response.body)
+      creator_email_node = document.css('[data-email-address-display]').find { |node| node['title'] == admin.email }
+      creator_metadata_cell = creator_email_node&.ancestors&.find { |node| node.name == 'div' && node['class'].to_s.split.include?('min-w-0') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -678,6 +685,9 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(response.body).not_to include('<script>alert(1)</script>')
         expect(response.body).not_to include('<b>本文</b>')
         expect(response.body).not_to include('translation missing')
+        expect(creator_email_node).to be_present
+        expect(creator_email_node['class'].split).to include('w-full', 'overflow-hidden')
+        expect(creator_metadata_cell['class'].split).to include('min-w-0', 'max-w-full')
       end
     end
 

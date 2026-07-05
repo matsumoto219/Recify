@@ -1,0 +1,22 @@
+<%
+  user_id = local_assigns[:id]
+  email = local_assigns[:email].to_s
+  wrapper_class = local_assigns.fetch(:class, "flex min-w-0 max-w-full items-baseline gap-1")
+  id_class = local_assigns[:id_class]
+  email_class = local_assigns[:email_class]
+%>
+
+<% if user_id.present? %>
+  <span class="<%= wrapper_class %>">
+    <span class="<%= [ "shrink-0 font-mono", id_class ].compact.join(" ") %>">#<%= user_id %></span>
+    <% if email.present? %>
+      <%= render "shared/ui/text/email_address",
+            email: email,
+            mode: :one_line,
+            full_width: false,
+            class: [ "min-w-0 flex-1", email_class ].compact.join(" ") %>
+    <% end %>
+  </span>
+<% else %>
+  -
+<% end %>

@@ -9,7 +9,7 @@
   admin_mono_control_class = "rounded-lg font-mono text-sm"
 %>
 
-<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
@@ -55,7 +55,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.created_by") %></dt>
-            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:created_by, :id).present? ? "##{record.dig(:created_by, :id)} #{record.dig(:created_by, :email)}" : "-" %></dd>
+            <dd class="min-w-0 max-w-full token-text-base">
+              <%= render "admin/shared/user_reference",
+                    id: record.dig(:created_by, :id),
+                    email: record.dig(:created_by, :email) %>
+            </dd>
           </div>
         </dl>
       </section>
@@ -69,7 +73,11 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.revoked_by") %></dt>
-            <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:revoked_by, :id).present? ? "##{record.dig(:revoked_by, :id)} #{record.dig(:revoked_by, :email)}" : "-" %></dd>
+            <dd class="min-w-0 max-w-full token-text-base">
+              <%= render "admin/shared/user_reference",
+                    id: record.dig(:revoked_by, :id),
+                    email: record.dig(:revoked_by, :email) %>
+            </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.ip_blocks.show.labels.source_security_event") %></dt>

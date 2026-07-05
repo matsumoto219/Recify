@@ -116,6 +116,8 @@ RSpec.describe 'Admin contact requests', type: :request do
       document = Nokogiri::HTML(response.body)
       copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
       copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
+      masked_email_node = document.css('[data-email-address-display]').find { |node| node['title'] == 'se***@example.com' }
+      masked_email_cell = masked_email_node&.ancestors&.find { |node| node.name == 'div' && node['class'].to_s.split.include?('min-w-0') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -129,6 +131,9 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include('min-w-0 max-w-full md:col-span-2 lg:col-span-3')
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
+        expect(masked_email_node).to be_present
+        expect(masked_email_node['class'].split).to include('w-full', 'overflow-hidden')
+        expect(masked_email_cell['class'].split).to include('min-w-0', 'max-w-full')
         expect(copy_sources).to include(user.id.to_s)
         expect(copy_sources).to include(admin.id.to_s)
         expect(copy_sources).to include(contact_request.request_uid)

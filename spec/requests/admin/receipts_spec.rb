@@ -69,13 +69,21 @@ RSpec.describe 'Admin receipts', type: :request do
 
     it 'adminはactive receiptの詳細と隔離導線を見られる' do
       admin = create(:user, :admin)
-      receipt = create(:receipt, :with_image, :completed, store_name: '管理確認ストア')
+      owner = create(
+        :user,
+        email: 'recify-admin-owner-super-long-local-part-version12345678901234567890@example-admin-owner-long-domain.example.com'
+      )
+      receipt = create(:receipt, :with_image, :completed, user: owner, store_name: '管理確認ストア')
       receipt.receipt_items.create!(confirmed_name: 'コーヒー', line_total: 300, position_index: 1)
       create(:receipt_analysis_run, receipt: receipt)
       sign_in admin
       stub_fresh_admin_reauthentication
 
       get admin_receipt_path(receipt)
+      document = Nokogiri::HTML(response.body)
+      owner_email_node = document.css('[data-email-address-display]').find { |node| node['title'] == owner.email }
+      owner_email_section = owner_email_node&.ancestors&.find { |node| node.name == 'section' }
+      owner_email_segments = owner_email_node&.css('span') || []
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -92,16 +100,27 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response.body).to include(admin_receipt_analysis_runs_path(receipt_public_id: receipt.public_id))
         expect(response.body).to include(admin_audit_logs_path(target_uid: "receipt:#{receipt.public_id}"))
         expect(response.body.scan(/translation missing[^<]*/)).to be_empty
+        expect(owner_email_node).to be_present
+        expect(owner_email_node['class'].split).to include('w-full', 'overflow-hidden')
+        expect(owner_email_section['class'].split).to include('min-w-0', 'max-w-full')
+        expect(owner_email_segments.map { |segment| segment.text.strip }).to include('@')
       end
     end
 
     it 'adminはquarantined receiptを確認して解除導線を見られる' do
-      admin = create(:user, :admin)
+      admin = create(
+        :user,
+        :admin,
+        email: 'recify-admin-quarantine-long-local-part-version12345678901234567890@example-admin-action-long-domain.example.com'
+      )
       receipt = create(:receipt, :quarantined, quarantined_by: admin, quarantine_reason: 'policy violation')
       sign_in admin
       stub_fresh_admin_reauthentication
 
       get admin_receipt_path(receipt)
+      document = Nokogiri::HTML(response.body)
+      moderator_email_node = document.css('[data-email-address-display]').find { |node| node['title'] == admin.email }
+      moderator_reference = moderator_email_node&.ancestors&.find { |node| node['class'].to_s.split.include?('items-baseline') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -110,6 +129,9 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response.body).to include('隔離を解除')
         expect(response.body).to include('確認文字列 RELEASE RECEIPT')
         expect(response.body).to include(release_admin_receipt_path(receipt))
+        expect(moderator_email_node).to be_present
+        expect(moderator_email_node['class'].split).to include('flex-1', 'overflow-hidden')
+        expect(moderator_reference['class'].split).to include('flex', 'min-w-0', 'max-w-full')
       end
     end
   end

@@ -9,7 +9,7 @@
   boolean_label = ->(value) { value ? t("admin.receipts.common.yes") : t("admin.receipts.common.no") }
 %>
 
-<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
@@ -42,8 +42,8 @@
   </div>
 
   <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
-    <div class="grid gap-6 lg:grid-cols-3">
-      <section class="space-y-3">
+    <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.receipt") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
@@ -65,7 +65,7 @@
         </dl>
       </section>
 
-      <section class="space-y-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.purchase") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
@@ -87,7 +87,7 @@
         </dl>
       </section>
 
-      <section class="space-y-3">
+      <section class="min-w-0 max-w-full space-y-3">
         <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.owner") %></h2>
         <dl class="space-y-3 text-sm">
           <div>
@@ -116,7 +116,7 @@
     </div>
   <% end %>
 
-  <div class="grid gap-6 lg:grid-cols-2">
+  <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-2">
     <%= render "shared/ui/card/receipt_image_card",
           receipt: receipt,
           title: t("admin.receipts.show.sections.original_image"),
@@ -132,9 +132,9 @@
           preview_height_class: "h-[420px]",
           empty_message: t("admin.receipts.show.image.empty") %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full flex flex-col" do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "h-full min-w-0 max-w-full flex flex-col" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipts.show.sections.image") %></h2>
-      <dl class="grid gap-4 text-sm md:grid-cols-2">
+      <dl class="grid min-w-0 max-w-full gap-4 text-sm md:grid-cols-2">
         <div>
           <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.image.attached") %></dt>
           <dd class="min-w-0 max-w-full break-words token-text-base [overflow-wrap:anywhere]"><%= boolean_label.call(image[:attached]) %></dd>

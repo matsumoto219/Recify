@@ -6,7 +6,7 @@
   admin_control_class = "rounded-lg text-sm"
 %>
 
-<section class="mx-auto w-full max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section class="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
@@ -17,8 +17,8 @@
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm" %>
 
-  <div class="grid gap-6 lg:grid-cols-3">
-    <%= render "shared/ui/layout/surface_card", padding: :md, class: "lg:col-span-2" do %>
+  <div class="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full lg:col-span-2" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.message") %></h2>
       <dl class="space-y-4 text-sm">
         <div>
@@ -32,7 +32,7 @@
       </dl>
     <% end %>
 
-    <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.contact_requests.show.sections.status_update") %></h2>
       <%= form_with model: @record[:contact_request], url: admin_contact_request_path(@record[:id]), method: :patch, local: true, class: "space-y-4" do |form| %>
         <%= render "shared/ui/form/select_field",
@@ -102,7 +102,7 @@
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.sender_name") %></dt>
         <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= @record[:anonymized] ? t("admin.contact_requests.common.redacted") : @record[:sender_name].presence || t("admin.contact_requests.common.sender_name_blank") %></dd>
       </div>
-      <div>
+      <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_masked") %></dt>
         <dd class="min-w-0 max-w-full">
           <%= render "shared/ui/text/email_address",
