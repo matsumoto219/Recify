@@ -34,13 +34,24 @@ module Amounts
       @items = normalize_items(rounding_mode)
       reset_item_dependent_cache
 
-      [
-        receipt_input_candidate,
-        incomplete_tax_details_receipt_tax_candidate,
-        item_candidates,
-        printed_tax_detail_candidates,
+      Amounts::CandidateFamilyRegistry.call.flat_map { |family| candidates_for_family(family) }.compact
+    end
+
+    def candidates_for_family(family)
+      case family
+      when :receipt_input
+        receipt_input_candidate
+      when :incomplete_tax_details_receipt_tax
+        incomplete_tax_details_receipt_tax_candidate
+      when :item_amounts
+        item_candidates
+      when :printed_tax_details
+        printed_tax_detail_candidates
+      when :mixed_tax_basis
         mixed_candidates
-      ].flatten.compact
+      else
+        []
+      end
     end
 
     def normalize_items(rounding_mode)
