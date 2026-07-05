@@ -13,15 +13,15 @@ RSpec.describe Amounts::CandidateFamilyRegistry do
     )
   end
 
-  it 'family symbolから対応するbuilderへ委譲する' do
+  it 'family symbolから対応するfamilyを実行する' do
     generator = Class.new do
       private
 
-      def mixed_candidates
-        :mixed_candidates
+      def detected_tax_details
+        []
       end
     end.new
 
-    expect(described_class.build(:mixed_tax_basis, generator)).to eq(:mixed_candidates)
+    expect(described_class.build(:printed_tax_details, generator)).to eq([])
   end
 end
