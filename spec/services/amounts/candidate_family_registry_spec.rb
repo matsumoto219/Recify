@@ -12,4 +12,16 @@ RSpec.describe Amounts::CandidateFamilyRegistry do
       ]
     )
   end
+
+  it 'family symbolから対応するbuilderへ委譲する' do
+    generator = Class.new do
+      private
+
+      def receipt_input_candidate
+        :receipt_input_candidate
+      end
+    end.new
+
+    expect(described_class.build(:receipt_input, generator)).to eq(:receipt_input_candidate)
+  end
 end
