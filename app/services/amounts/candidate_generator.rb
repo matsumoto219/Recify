@@ -50,7 +50,6 @@ module Amounts
     def reset_item_dependent_cache
       @item_total = nil
       @fallback_tax_rate = nil
-      @incomplete_source_tax_details = nil
     end
 
     def tax_excluded_price_conversion_enabled?
@@ -75,17 +74,7 @@ module Amounts
     end
 
     def incomplete_source_tax_details
-      @incomplete_source_tax_details ||= detected_tax_details.filter_map do |detail|
-        next unless detail[:amount].to_i.positive?
-        next if detail[:rate].positive? && detail[:net_amount].to_i.positive?
-
-        {
-          description: detail[:description],
-          rate: nil,
-          net_amount: nil,
-          amount: detail[:amount]
-        }
-      end
+      tax_detail_evidence.incomplete_source_tax_details
     end
 
     def incomplete_tax_detail_evidence
@@ -191,16 +180,15 @@ module Amounts
     end
 
     def detected_tax_details
-      @detected_tax_details ||= Amounts::TaxDetailBasisDetector.call(tax_details)
+      tax_detail_evidence.detected_tax_details
     end
 
     def final_detected_tax_details
-      @final_detected_tax_details ||= detected_tax_details.select do |detail|
-        %i[gross net].include?(detail[:basis]) &&
-          detail[:rate].positive? &&
-          detail[:net_amount].to_i.positive? &&
-          detail[:amount].to_i.positive?
-      end
+      tax_detail_evidence.final_detected_tax_details
+    end
+
+    def tax_detail_evidence
+      @tax_detail_evidence ||= Amounts::TaxDetailEvidence.new(tax_details)
     end
 
     def item_with_line_total(item, line_total, normalize_price: false, tax_rate: nil)

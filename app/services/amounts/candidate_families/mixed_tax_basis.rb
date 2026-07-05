@@ -473,15 +473,7 @@ module Amounts
       end
 
       def tax_detail_targets_by_rate
-        final_detected_tax_details.each_with_object({}) do |detail, hash|
-          rate = detail[:rate]
-          next unless rate.positive?
-
-          hash[rate] ||= { rate: rate, gross: 0, net: 0, tax: 0 }
-          hash[rate][:gross] += detail[:target_gross_amount].to_i
-          hash[rate][:net] += detail[:target_net_amount].to_i
-          hash[rate][:tax] += detail[:target_tax_amount].to_i
-        end
+        tax_detail_evidence.targets_by_rate
       end
     end
   end
