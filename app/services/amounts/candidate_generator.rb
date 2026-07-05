@@ -1249,7 +1249,7 @@ module Amounts
         hash[rate] ||= { rate: rate, gross: 0, net: 0, tax: 0 }
         hash[rate][:gross] += detail[:target_gross_amount].to_i
         hash[rate][:net] += detail[:target_net_amount].to_i
-        hash[rate][:tax] += detail[:amount].to_i
+        hash[rate][:tax] += detail[:target_tax_amount].to_i
       end
     end
 
@@ -1257,12 +1257,16 @@ module Amounts
       basis = amount_basis == :detected ? detail[:basis] : amount_basis
       case basis
       when :gross
-        tax = detail[:amount].to_i
-        gross = detail[:net_amount].to_i
-        { gross: gross, net: [ gross - tax, 0 ].max, tax: tax }
+        tax = detail[:target_tax_amount].to_i
+        gross = detail[:printed_amount].to_i
+        {
+          gross: gross,
+          net: [ gross - tax, 0 ].max,
+          tax: tax
+        }
       else
-        net = detail[:net_amount].to_i
-        tax = detail[:amount].to_i
+        net = detail[:printed_amount].to_i
+        tax = detail[:target_tax_amount].to_i
         { gross: net + tax, net: net, tax: tax }
       end
     end

@@ -132,6 +132,11 @@ RSpec.describe Amounts::CandidateSnapshot do
         {
           source: 'receipt_payments',
           payment_amount_sum: 100,
+          printed_amount: 820,
+          printed_amount_basis: :gross_target,
+          target_net_amount: 746,
+          target_tax_amount: 74,
+          target_gross_amount: 820,
           raw_text: '保存しないraw text',
           source_text: '保存しないsource text',
           description: '保存しないdescription',
@@ -165,7 +170,15 @@ RSpec.describe Amounts::CandidateSnapshot do
       expect(snapshot[:schema_version]).to eq(1)
       expect(snapshot.dig(:selected_candidate, :score_breakdown)).to eq(receipt_total_delta: 0)
       expect(snapshot.dig(:selected_candidate, :evidence)).to eq([
-        { source: 'receipt_payments', payment_amount_sum: 100 }
+        {
+          source: 'receipt_payments',
+          payment_amount_sum: 100,
+          printed_amount: 820,
+          printed_amount_basis: :gross_target,
+          target_net_amount: 746,
+          target_tax_amount: 74,
+          target_gross_amount: 820
+        }
       ])
       expect(snapshot.dig(:selected_candidate, :computed_items)).to eq([
         { price: 100, line_total: 100 }

@@ -10,11 +10,31 @@ RSpec.describe Amounts::TaxDetailBasisDetector do
 
     aggregate_failures do
       # 検算: 270 * 8% = 21.6 -> floor 21 なので net basis、税込対象は 270 + 21 = 291
-      expect(details[0]).to include(basis: :net, target_net_amount: 270, target_gross_amount: 291)
+      expect(details[0]).to include(
+        basis: :net,
+        printed_amount: 270,
+        printed_amount_basis: :net_subtotal,
+        target_net_amount: 270,
+        target_tax_amount: 21,
+        target_gross_amount: 291
+      )
       # 検算: 同一10%の最終対象820があるため、300/30は小計として intermediate
-      expect(details[1]).to include(basis: :intermediate, intermediate: true)
+      expect(details[1]).to include(
+        basis: :intermediate,
+        printed_amount: 300,
+        printed_amount_basis: :intermediate,
+        target_tax_amount: 30,
+        intermediate: true
+      )
       # 検算: 820 * 10 / 110 = 74.54 -> floor 74 なので gross basis、税抜対象は 820 - 74 = 746
-      expect(details[2]).to include(basis: :gross, target_net_amount: 746, target_gross_amount: 820)
+      expect(details[2]).to include(
+        basis: :gross,
+        printed_amount: 820,
+        printed_amount_basis: :gross_target,
+        target_net_amount: 746,
+        target_tax_amount: 74,
+        target_gross_amount: 820
+      )
     end
   end
 

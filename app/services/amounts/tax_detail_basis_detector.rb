@@ -25,9 +25,12 @@ module Amounts
           index: tax_detail[:index],
           basis: basis,
           rate: tax_detail[:rate],
+          printed_amount: net_amount,
+          printed_amount_basis: printed_amount_basis(basis),
           net_amount: net_amount,
           amount: tax_amount,
           target_net_amount: target_net_amount(basis, net_amount, tax_amount),
+          target_tax_amount: tax_amount,
           target_gross_amount: target_gross_amount(basis, net_amount, tax_amount),
           description: tax_detail[:description],
           intermediate: basis == :intermediate,
@@ -132,14 +135,39 @@ module Amounts
       end
     end
 
+    def printed_amount_basis(basis)
+      case basis
+      when :gross
+        :gross_target
+      when :net
+        :net_subtotal
+      when :tax_only
+        :tax_only
+      when :intermediate
+        :intermediate
+      when :summary
+        :summary
+      else
+        :unknown
+      end
+    end
+
     def evidence_for(tax_detail, basis)
+      tax_amount = tax_detail[:amount].to_i
+      printed_amount = tax_detail[:net_amount].to_i
+
       {
         source: "receipt_tax_detail",
         index: tax_detail[:index],
         basis: basis,
         rate: tax_detail[:rate],
+        printed_amount: tax_detail[:net_amount],
+        printed_amount_basis: printed_amount_basis(basis),
         net_amount: tax_detail[:net_amount],
-        amount: tax_detail[:amount]
+        amount: tax_detail[:amount],
+        target_net_amount: target_net_amount(basis, printed_amount, tax_amount),
+        target_tax_amount: tax_detail[:amount],
+        target_gross_amount: target_gross_amount(basis, printed_amount, tax_amount)
       }
     end
 
