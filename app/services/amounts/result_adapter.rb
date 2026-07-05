@@ -95,9 +95,9 @@ module Amounts
         tax: resolved[:tax],
         total: resolved[:total],
         tax_rate: resolved[:tax_rate],
-        receipt_tax_basis: computed_basis_value(:receipt_tax_basis, receipt_tax_basis_for(selected_candidate)),
+        receipt_tax_basis: computed_basis_value(:receipt_tax_basis, candidate_profile_resolver.receipt_tax_basis),
         item_amount_basis: computed_item_amount_basis(selected_candidate, resolved),
-        tax_detail_amount_basis: computed_basis_value(:tax_detail_amount_basis, tax_detail_amount_basis_for(selected_candidate)),
+        tax_detail_amount_basis: computed_basis_value(:tax_detail_amount_basis, candidate_profile_resolver.tax_detail_amount_basis),
         amount_engine_candidate_id: selected_candidate.candidate_id,
         amount_engine_basis: selected_candidate.basis,
         purchase_total: selected_candidate.purchase_total,
@@ -180,56 +180,6 @@ module Amounts
       values.to_h.symbolize_keys.slice(:subtotal, :tax, :total, :tax_rate)
     end
 
-    def item_amount_basis_for(candidate)
-      candidate_profile_basis(candidate, :item_amount_basis) || legacy_item_amount_basis_for(candidate)
-    end
-
-    def legacy_item_amount_basis_for(candidate)
-      case candidate.basis
-      when "external_tax_from_receipt", "items_as_tax_excluded"
-        :line_total_as_net
-      when "mixed_by_tax_rate_group"
-        :mixed_by_tax_rate_group
-      else
-        :line_total_as_recorded
-      end
-    end
-
-    def receipt_tax_basis_for(candidate)
-      candidate_profile_basis(candidate, :receipt_tax_basis) || legacy_receipt_tax_basis_for(candidate)
-    end
-
-    def legacy_receipt_tax_basis_for(candidate)
-      %w[external_tax_from_receipt items_as_tax_excluded printed_tax_details_net].include?(candidate.basis) ? :tax_added_to_subtotal : :total_includes_tax
-    end
-
-    def tax_detail_amount_basis_for(candidate)
-      candidate_profile_basis(candidate, :tax_detail_amount_basis) || legacy_tax_detail_amount_basis_for(candidate)
-    end
-
-    def legacy_tax_detail_amount_basis_for(candidate)
-      case candidate.basis
-      when "printed_tax_details_gross"
-        :gross
-      when "printed_tax_details_net", "external_tax_from_receipt", "items_as_tax_excluded"
-        :net
-      else
-        :unknown
-      end
-    end
-
-    def candidate_profile_basis(candidate, key)
-      value = candidate_profile_value(candidate, key)
-      value.to_sym if value.present?
-    end
-
-    def candidate_profile_value(candidate, key)
-      profile = candidate.calculation_profile
-      return nil unless profile.respond_to?(:key?)
-
-      profile[key] || profile[key.to_s]
-    end
-
     def preserve_calculation_profile_output?
       %i[manual edit_save].include?(base_context)
     end
@@ -242,7 +192,7 @@ module Amounts
     end
 
     def computed_item_amount_basis(candidate, resolved)
-      fallback = item_amount_basis_for(candidate)
+      fallback = candidate_profile_resolver.item_amount_basis
       profile_value = calculation_profile_value(:item_amount_basis)
       return computed_basis_value(:item_amount_basis, fallback) unless profile_value.to_s == "mixed_by_tax_rate_group"
       return computed_basis_value(:item_amount_basis, fallback) unless candidate.basis == "mixed_by_tax_rate_group"
@@ -250,6 +200,10 @@ module Amounts
       return computed_basis_value(:item_amount_basis, fallback) unless candidate_totals_match_resolved?(candidate, resolved)
 
       :mixed_by_tax_rate_group
+    end
+
+    def candidate_profile_resolver
+      @candidate_profile_resolver ||= Amounts::CandidateProfileResolver.new(selected_candidate)
     end
 
     def calculation_profile_value(key)
