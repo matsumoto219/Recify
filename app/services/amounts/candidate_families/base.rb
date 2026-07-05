@@ -15,10 +15,6 @@ module Amounts
 
       attr_reader :generator
 
-      def delegate(method_name)
-        generator.__send__(method_name)
-      end
-
       def method_missing(method_name, ...)
         return generator.__send__(method_name, ...) if generator.respond_to?(method_name, true)
 
