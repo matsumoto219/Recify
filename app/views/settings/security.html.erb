@@ -7,7 +7,7 @@
   security_form_error = update_context == "security" && form_resource.errors.any?
 %>
 <section
-  class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
+  class="w-full min-w-0 max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
   data-controller="security-scroll"
   data-security-scroll-scroll-to-password-value="<%= security_form_error %>">
   <%= render "shared/ui/layout/section_header",

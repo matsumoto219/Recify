@@ -250,6 +250,9 @@ RSpec.describe 'Admin users', type: :request do
       document = Nokogiri::HTML(response.body)
       copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
       copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
+      email_display_node = document.at_css(%([title="show-user@example.com"] [data-email-address-display]))
+      email_copy_wrapper = email_display_node&.ancestors&.find { |node| node['data-controller'] == 'clipboard' }
+      email_copy_value = email_display_node&.parent
       email_copy_label = I18n.t(
         'shared.clipboard.copy_label',
         label: User.human_attribute_name(:email)
@@ -302,6 +305,8 @@ RSpec.describe 'Admin users', type: :request do
         expect(copy_sources).to include('show-user@example.com')
         expect(copy_labels).to include(a_string_including(I18n.t('admin.users.show.basic.user_id')))
         expect(copy_labels).to include(email_copy_label)
+        expect(email_copy_wrapper['class'].split).to include('flex', 'w-full', 'overflow-hidden')
+        expect(email_copy_value['class'].split).to include('flex-1', 'overflow-hidden')
         expect(response.body).to include('min-w-[56rem] text-left text-sm')
         expect(response.body).to include('min-w-[16rem] break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]')
         expect(response.body).not_to include('hidden-credential-id')

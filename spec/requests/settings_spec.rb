@@ -59,6 +59,12 @@ RSpec.describe 'Settings', type: :request do
     end
   end
 
+  def expect_shrinkable_settings_section(document, selector)
+    classes = document.at_css(selector)['class'].split
+
+    expect(classes).to include('w-full', 'min-w-0', 'max-w-3xl')
+  end
+
   def current_password_input_for(document, update_context)
     form_for_update_context(document, update_context).at_css('input[name="user[current_password]"]')
   end
@@ -240,6 +246,7 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect_shrinkable_settings_section(document, 'section[data-controller~="settings"]')
         expect(response.body).to include(I18n.t('settings.index.title'))
         expect(response.body).to include(I18n.t('settings.index.sections.system_status'))
         expect(response.body).to include(I18n.t('settings.index.sections.security'))
@@ -581,9 +588,12 @@ RSpec.describe 'Settings', type: :request do
     it 'renders account copy through locale keys' do
       get settings_account_path
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect_shrinkable_settings_section(document, 'section.max-w-3xl')
         expect(response.body).to include(I18n.t('settings.account.title'))
         expect(response.body).to include(I18n.t('settings.account.avatar.title'))
         expect(response.body).to include(I18n.t('settings.account.fields.name'))
@@ -618,6 +628,7 @@ RSpec.describe 'Settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
+        expect_shrinkable_settings_section(document, 'section[data-controller~="security-scroll"]')
         expect(response.body).to include(I18n.t('settings.security.title'))
         expect(response.body).to include(I18n.t('settings.security.email.title'))
         expect(response.body).to include(I18n.t('settings.security.email.submit'))
@@ -655,6 +666,8 @@ RSpec.describe 'Settings', type: :request do
       email_segments = display_node&.css('span')
       copy_source = email_node&.at_css('[data-controller="clipboard"] [data-clipboard-target="source"]')
       copy_button = email_node&.at_css('button[data-action="click->clipboard#copy"]')
+      copy_wrapper = email_node&.at_css('[data-controller="clipboard"]')
+      copy_value = display_node&.parent
       expected_copy_label = I18n.t(
         'shared.clipboard.copy_label',
         label: I18n.t('settings.security.email.current')
@@ -677,6 +690,8 @@ RSpec.describe 'Settings', type: :request do
         expect(email_segments.last['class']).to include('flex-[0_1_auto]')
         expect(copy_source.text.strip).to eq(full_email)
         expect(copy_button['aria-label']).to eq(expected_copy_label)
+        expect(copy_wrapper['class'].split).to include('flex', 'w-full', 'overflow-hidden')
+        expect(copy_value['class'].split).to include('flex-1', 'overflow-hidden')
       end
     end
 
@@ -756,12 +771,19 @@ RSpec.describe 'Settings', type: :request do
       get settings_security_path
 
       document = Nokogiri::HTML(response.body)
+      pending_label = I18n.t('settings.security.email.pending', email: 'pending-normal@example.com')
+      pending_node = document.at_css(%([aria-label="#{pending_label}"]))
+      pending_email_node = pending_node&.at_css('[data-email-address-display]')
+      pending_email_classes = pending_email_node&.[]('class')&.split || []
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include(I18n.t('settings.security.email.pending', email: 'pending-normal@example.com'))
+        expect(response.body).to include(pending_label)
         expect(response.body).to include(I18n.t('settings.security.email.resend_confirmation'))
         expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
+        expect(pending_email_classes).to include('min-w-0', 'flex-1')
+        expect(pending_email_classes).not_to include('w-full')
+        expect(pending_email_classes).not_to include('min-w-[8rem]')
       end
     end
 
@@ -953,14 +975,21 @@ RSpec.describe 'Settings', type: :request do
       get settings_security_path
 
       document = Nokogiri::HTML(response.body)
+      sent_to_label = I18n.t('settings.security.guest_registration.pending.sent_to', email: 'pending-guest@example.com')
+      sent_to_node = document.at_css(%([aria-label="#{sent_to_label}"]))
+      sent_to_email_node = sent_to_node&.at_css('[data-email-address-display]')
+      sent_to_email_classes = sent_to_email_node&.[]('class')&.split || []
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.title'))
-        expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.sent_to', email: 'pending-guest@example.com'))
+        expect(response.body).to include(sent_to_label)
         expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.resend'))
         expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
         expect(response.body).not_to include(fake_email)
+        expect(sent_to_email_classes).to include('min-w-0', 'flex-1')
+        expect(sent_to_email_classes).not_to include('w-full')
+        expect(sent_to_email_classes).not_to include('min-w-[8rem]')
       end
     end
   end

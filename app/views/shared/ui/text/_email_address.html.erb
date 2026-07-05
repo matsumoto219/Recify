@@ -22,20 +22,19 @@
 %>
 
 <% if copyable %>
-  <%= content_tag tag_name, class: extra_class, title: email_text, aria: { label: email_text } do %>
+  <%= content_tag tag_name, class: [ "min-w-0 max-w-full", extra_class ].compact.join(" "), title: email_text, aria: { label: email_text } do %>
     <% display_markup = capture do %>
       <%= render "shared/ui/text/email_address",
             email: email_text,
             mode: mode,
-            tag: :span,
-            full_width: false %>
+            tag: :span %>
     <% end %>
     <%= render "shared/ui/actions/copyable_value",
           value: email_text,
           display: display_markup,
           label: copy_label,
-          wrapper_class: "relative inline-flex min-w-0 max-w-full items-center gap-1 align-middle",
-          value_class: "min-w-0 max-w-full" %>
+          wrapper_class: "relative flex min-w-0 w-full max-w-full items-center gap-1 overflow-hidden align-middle",
+          value_class: "min-w-0 flex-1 overflow-hidden" %>
   <% end %>
 <% else %>
   <%= content_tag tag_name, class: [ wrapper_class, extra_class ].compact.join(" "), title: email_text, aria: { label: email_text }, data: { email_address_display: true } do %>

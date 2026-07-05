@@ -51,6 +51,7 @@ RSpec.describe 'User TOTP settings', type: :request do
       expect(response).to have_http_status(:success)
       secret = session[:totp_setup].fetch('secret')
       document = Nokogiri::HTML(response.body)
+      settings_section = document.at_css('section.max-w-3xl')
       qr_svg = document.at_css('[data-testid="totp-setup-qr"] svg')
       qr_path = qr_svg&.at_css('path')
       copy_button = document.at_css('[data-action="click->clipboard#copy"]')
@@ -61,6 +62,7 @@ RSpec.describe 'User TOTP settings', type: :request do
 
       aggregate_failures do
         expect(response.body).to include('<svg')
+        expect(settings_section['class'].split).to include('w-full', 'min-w-0', 'max-w-3xl')
         expect(qr_svg).to be_present
         expect(response.body).to include('viewBox=')
         expect(qr_svg['width']).to eq('100%')
@@ -98,9 +100,12 @@ RSpec.describe 'User TOTP settings', type: :request do
 
       created_codes = response.body.scan(/[A-Z0-9]{4}(?:-[A-Z0-9]{4}){4}/)
       credential = user.reload.totp_credential
+      document = Nokogiri::HTML(response.body)
+      settings_section = document.at_css('section.max-w-3xl')
 
       aggregate_failures do
         expect(response).to have_http_status(:created)
+        expect(settings_section['class'].split).to include('w-full', 'min-w-0', 'max-w-3xl')
         expect(credential).to be_confirmed
         expect(credential.totp_secret).to eq(secret)
         expect(session[:totp_setup]).to be_blank

@@ -1,7 +1,7 @@
 <% content_for :title, t("meta.title_format", title: t("settings.index.title"), site: t("meta.site_name")) %>
 
 <section
-  class="max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
+  class="w-full min-w-0 max-w-3xl mx-auto space-y-12 px-0 md:px-2 py-2 pb-28 md:pb-2"
   data-controller="settings service-status-polling"
   data-service-status-polling-status-url-value="<%= external_services_status_path %>"
   data-service-status-polling-interval-value="30000"
