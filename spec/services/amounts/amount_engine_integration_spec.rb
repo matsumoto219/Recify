@@ -12,6 +12,101 @@ RSpec.describe 'Amount Engine integration' do
     )
   end
 
+  def matrix_tax_from_gross(gross, rate)
+    rate = BigDecimal(rate.to_s)
+    return 0 if rate.zero?
+
+    (BigDecimal(gross.to_s) * rate / (1 + rate)).floor
+  end
+
+  def matrix_tax_from_net(net, rate)
+    rate = BigDecimal(rate.to_s)
+    return 0 if rate.zero?
+
+    (BigDecimal(net.to_s) * rate).floor
+  end
+
+  def matrix_taxable_items(rate:, state:)
+    included_amount = rate == BigDecimal('0.08') ? 108 : 110
+
+    case state
+    when :included
+      [ matrix_item(name: "#{(rate * 100).to_i}%税込", amount: included_amount, rate: rate, basis: :tax_included) ]
+    when :excluded
+      [ matrix_item(name: "#{(rate * 100).to_i}%税抜", amount: 100, rate: rate, basis: :tax_excluded) ]
+    when :mixed
+      [
+        matrix_item(name: "#{(rate * 100).to_i}%税抜", amount: 100, rate: rate, basis: :tax_excluded),
+        matrix_item(name: "#{(rate * 100).to_i}%税込", amount: included_amount * 2, rate: rate, basis: :tax_included)
+      ]
+    else
+      []
+    end
+  end
+
+  def matrix_item(name:, amount:, rate:, basis:)
+    {
+      raw_text: name,
+      suggested_name: name,
+      price: amount,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      line_total: amount,
+      tax_rate: rate,
+      basis: basis
+    }
+  end
+
+  def matrix_expected(rows)
+    expected_rows = rows.map do |row|
+      input = row[:line_total]
+      gross = row[:basis] == :tax_excluded ? input + matrix_tax_from_net(input, row[:tax_rate]) : input
+      tax = matrix_tax_from_gross(gross, row[:tax_rate])
+      row.merge(expected_gross: gross, expected_tax: tax, expected_net: gross - tax)
+    end
+    groups = expected_rows.group_by { |row| row[:tax_rate] }.transform_values do |group_rows|
+      gross = group_rows.sum { |row| row[:expected_gross] }
+      tax = group_rows.sum { |row| row[:expected_tax] }
+      { gross: gross, tax: tax, net: gross - tax }
+    end
+
+    {
+      rows: expected_rows,
+      groups: groups,
+      subtotal: groups.values.sum { |group| group[:net] },
+      tax: groups.values.sum { |group| group[:tax] },
+      total: groups.values.sum { |group| group[:gross] }
+    }
+  end
+
+  def matrix_case(state8:, state10:, non_taxable:)
+    rows = []
+    rows.concat(matrix_taxable_items(rate: BigDecimal('0.08'), state: state8))
+    rows.concat(matrix_taxable_items(rate: BigDecimal('0.10'), state: state10))
+    rows << matrix_item(name: '非課税', amount: 80, rate: BigDecimal('0'), basis: :non_taxable) if non_taxable
+
+    expected = matrix_expected(rows)
+    {
+      id: "8%:#{state8 || 'none'} 10%:#{state10 || 'none'} non_taxable:#{non_taxable}",
+      rows: rows,
+      expected: expected,
+      tax_details: matrix_tax_details(expected)
+    }
+  end
+
+  def matrix_tax_details(expected)
+    expected[:groups].filter_map do |rate, group|
+      next if rate.zero?
+
+      {
+        rate: rate,
+        net_amount: group[:gross],
+        amount: group[:tax],
+        description: "#{(rate * 100).to_i}%対象"
+      }
+    end
+  end
+
   it '2019年サンプルコンビニの税抜/税込/非課税/支払調整混在レシートを候補検算で解決する' do
     result = call_amount_engine(
       receipt: {
@@ -80,6 +175,177 @@ RSpec.describe 'Amount Engine integration' do
       expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
       expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
       expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '印字税詳細と完全一致する税抜/税込混在では税込補正済みmixed候補を採用する' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 300,
+        tax_amount: 30,
+        total_amount: 330
+      },
+      items: [
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') },
+        { price: 220, quantity: 1, quantity_unit_code: 'each', line_total: 220, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 330, amount: 30, description: '10%対象' }
+      ],
+      payments: [
+        { method: 'cash', amount: 330 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 100税抜 -> 110税込、220税込は据え置き。税込対象330 / 税30 / 税抜300。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+      expect(result[:resolved]).to include(subtotal: 300, tax: 30, total: 330, tax_rate: BigDecimal('0.10'))
+      expect(result.dig(:computed, :final_payment_total)).to eq(330)
+      expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 110, 220 ])
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 110, 220 ])
+      expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 100, 220 ])
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '印字税詳細と完全一致する税抜/非課税混在では税込補正済みmixed候補を採用する' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 150,
+        tax_amount: 10,
+        total_amount: 160
+      },
+      items: [
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 110, amount: 10, description: '10%対象' }
+      ],
+      payments: [
+        { method: 'cash', amount: 160 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 100税抜 -> 110税込、非課税50は据え置き。購入合計160。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+      expect(result[:resolved]).to include(subtotal: 150, tax: 10, total: 160, tax_rate: BigDecimal('0.10'))
+      expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 110, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 110, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 100, 50 ])
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '税込/非課税混在では不要な税込補正を行わない' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 150,
+        tax_amount: 10,
+        total_amount: 160
+      },
+      items: [
+        { price: 110, quantity: 1, quantity_unit_code: 'each', line_total: 110, tax_rate: BigDecimal('0.10') },
+        { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 110, amount: 10, description: '10%対象' }
+      ],
+      payments: [
+        { method: 'cash', amount: 160 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: どちらの明細も入力値が税込/非課税として整合するため据え置く。
+      expect(result[:resolved]).to include(subtotal: 150, tax: 10, total: 160, tax_rate: BigDecimal('0.10'))
+      expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 110, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 110, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 110, 50 ])
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '全部税抜単価で印字税詳細と完全一致する場合も税込補正済みmixed候補を採用する' do
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 400,
+        tax_amount: 38,
+        total_amount: 438
+      },
+      items: [
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.08') },
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') },
+        { price: 200, quantity: 1, quantity_unit_code: 'each', line_total: 200, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 108, amount: 8, description: '8%対象' },
+        { rate: BigDecimal('0.10'), net_amount: 330, amount: 30, description: '10%対象' }
+      ],
+      payments: [
+        { method: 'cash', amount: 438 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 8%税抜100 -> 108税込。10%税抜100/200 -> 110/220税込。購入合計438。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+      expect(result[:resolved]).to include(subtotal: 400, tax: 38, total: 438, tax_rate: nil)
+      expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq([ 108, 110, 220 ])
+      expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 108, 110, 220 ])
+      expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 100, 100, 200 ])
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '税率グループ単位の税込/税抜/非課税30通りで明細税込化と合計を保つ' do
+    states = [ nil, :included, :excluded, :mixed ]
+    cases = states.product(states, [ false, true ]).filter_map do |state8, state10, non_taxable|
+      next if state8.nil? && state10.nil?
+
+      matrix_case(state8: state8, state10: state10, non_taxable: non_taxable)
+    end
+
+    aggregate_failures do
+      expect(cases.size).to eq(30)
+
+      cases.each do |test_case|
+        expected = test_case[:expected]
+        result = call_amount_engine(
+          receipt: {
+            subtotal_amount: expected[:subtotal],
+            tax_amount: expected[:tax],
+            total_amount: expected[:total]
+          },
+          items: test_case[:rows].map { |row| row.except(:basis) },
+          tax_details: test_case[:tax_details],
+          payments: [
+            { method: 'cash', amount: expected[:total] }
+          ]
+        )
+
+        aggregate_failures test_case[:id] do
+          expected_line_totals = expected[:rows].map { |row| row[:expected_gross] }
+          expected_original_line_totals = test_case[:rows].map { |row| row[:line_total] }
+
+          expect(result[:resolved]).to include(
+            subtotal: expected[:subtotal],
+            tax: expected[:tax],
+            total: expected[:total]
+          )
+          expect(result.dig(:computed, :final_payment_total)).to eq(expected[:total])
+          expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq(expected_line_totals)
+          expect(result.dig(:computed, :items).map { |item| item[:price] }).to eq(expected_line_totals)
+          expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq(expected_original_line_totals)
+          expect(result[:blocking_inconsistencies]).to be_empty
+
+          if test_case[:rows].any? { |row| row[:basis] == :tax_excluded }
+            expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+          end
+        end
+      end
     end
   end
 

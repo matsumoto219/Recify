@@ -75,7 +75,7 @@ module Amounts
     def basis_penalty(candidate)
       case candidate.basis.to_s
       when "mixed_by_tax_rate_group"
-        mixed_candidate_receipt_amounts_match?(candidate) ? 0 : (external_tax_evidence? ? 15 : 0)
+        mixed_candidate_basis_penalty(candidate)
       when "external_tax_from_receipt"
         net_tax_detail_candidate_supported?(candidate) || external_tax_evidence? ? 0 : 3
       when "printed_tax_details_gross"
@@ -91,6 +91,16 @@ module Amounts
       else
         25
       end
+    end
+
+    def mixed_candidate_basis_penalty(candidate)
+      if mixed_candidate_receipt_amounts_match?(candidate) &&
+          !external_tax_evidence? &&
+          mixed_candidate_tax_excluded_items_normalized?(candidate)
+        return -2
+      end
+
+      mixed_candidate_receipt_amounts_match?(candidate) ? 0 : (external_tax_evidence? ? 15 : 0)
     end
 
     def receipt_input_item_delta(candidate)
@@ -233,6 +243,26 @@ module Amounts
       receipt_total_matches_purchase_total?(candidate) &&
         receipt_subtotal_matches_subtotal?(candidate) &&
         receipt_tax_matches_tax?(candidate)
+    end
+
+    def mixed_candidate_tax_excluded_items_normalized?(candidate)
+      Array(candidate.computed_items).any? do |item|
+        line_total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(item, :line_total))
+        original_line_total = Amounts::NumberParser.parse_amount_or_nil(fetch_value(item, :original_line_total))
+
+        line_total.present? &&
+          original_line_total.present? &&
+          line_total > original_line_total &&
+          positive_tax_rate?(fetch_value(item, :tax_rate))
+      end
+    end
+
+    def positive_tax_rate?(value)
+      return false if value.nil? || value == ""
+
+      BigDecimal(value.to_s).positive?
+    rescue ArgumentError
+      false
     end
 
     def net_tax_details_match_receipt_amounts?
