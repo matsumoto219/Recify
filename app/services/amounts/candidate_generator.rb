@@ -89,15 +89,7 @@ module Amounts
     end
 
     def incomplete_tax_detail_evidence
-      incomplete_source_tax_details.map.with_index do |detail, index|
-        {
-          source: "receipt_tax_detail",
-          index: index,
-          basis: :tax_only,
-          description: detail[:description],
-          amount: detail[:amount]
-        }
-      end
+      Amounts::EvidenceExtractor.incomplete_tax_detail_evidence(incomplete_source_tax_details)
     end
 
     def calculation_profile(attributes = {})
@@ -150,17 +142,10 @@ module Amounts
     end
 
     def payment_evidence(payment)
-      evidence = Array(payment[:evidence])
-      return evidence unless suppress_positive_overpayment?(payment)
-
-      evidence.map do |entry|
-        next entry unless fetch_value(entry, :source).to_s == "receipt_payments"
-
-        entry.merge(
-          payment_amount_mismatch_suppressed: true,
-          suppressed_reason: "tendered_like_overpayment"
-        )
-      end
+      Amounts::EvidenceExtractor.payment_evidence(
+        payment,
+        suppress_positive_overpayment: suppress_positive_overpayment?(payment)
+      )
     end
 
     def suppress_positive_overpayment?(payment)
@@ -189,7 +174,7 @@ module Amounts
     end
 
     def adjustment_evidence
-      @adjustment_evidence ||= classified_adjustments.map { |entry| entry[:classification][:evidence] }
+      @adjustment_evidence ||= Amounts::EvidenceExtractor.adjustment_evidence(classified_adjustments)
     end
 
     def classified_adjustments
