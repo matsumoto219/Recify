@@ -305,7 +305,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN = /住所|所在地|丁目|番地|登録番号|事業者番号|伝票番号|処理番号|処理通番|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|電話|tel|phone|〒|郵便|レジ\s*#?\s*\d|加盟店名|店舗|店名|支店|\d+\s*号店|merchant|address|approval|terminal|member/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/.freeze
-    ANALYSIS_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher/i.freeze
+    ANALYSIS_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト(?:カード|券)?|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|store\s*credit|voucher/i.freeze
     ANALYSIS_POINT_PAYMENT_LINE_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:redemption|payment|used|use|redeemed)|points?\s*(?:redemption|payment|used|redeemed)/i.freeze
     ANALYSIS_POINT_PAYMENT_STRONG_LINE_PATTERN = /ポイント\s*(?:支払|払い|決済)|point\s*(?:redemption|payment|redeemed)|points?\s*(?:redemption|payment|redeemed)/i.freeze
     ANALYSIS_POINT_DISPLAY_LINE_PATTERN = /獲得ポイント|現在ポイント|保有ポイント|ポイント残高|スマイルポイント|付与ポイント|earned\s*points?|current\s*points?|points?\s*balance/i.freeze
@@ -333,6 +333,15 @@ module ReceiptAnalysisProfiles
     SIGNAL_PHONE_PATTERN = /tel|電話|0\d{1,4}-\d{1,4}-\d{3,4}/i.freeze
     SIGNAL_ADDRESS_PATTERN = /〒|東京都|北海道|(?:京都|大阪)府|.{1,8}[県市区町村]|丁目|番地/.freeze
     SIGNAL_REGISTRATION_NUMBER_PATTERN = /登録番号|事業者番号|T\d{13}/i.freeze
+    SIGNAL_MONEY_PREFIX_PATTERN = /[¥￥]\s*\d/.freeze
+    SIGNAL_MONEY_SUFFIX_PATTERN = /\d[\d,]*\s*円/.freeze
+    SIGNAL_DATE_PATTERN = /\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/.freeze
+    SIGNAL_GENERIC_AMOUNT_PATTERN = /(?:^|[[:space:]])\d[\d,]*(?:$|[[:space:]])/.freeze
+    SIGNAL_DATE_TIME_PATTERNS = [
+      /\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?(\s+\d{1,2}:\d{2})?/,
+      /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}(\s+\d{1,2}:\d{2})?/,
+      /\d{1,2}:\d{2}/
+    ].freeze
     SIGNAL_HOUSEHOLD_BUDGET_KEYWORDS = %w[収入 支出 固定支出 変動支出 貯金 生活費 残金 家賃 サブスク 目標貯金].freeze
     SIGNAL_MARKETING_WEB_PAGE_PATTERNS = [
       %r{https?://}i,
@@ -486,7 +495,13 @@ module ReceiptAnalysisProfiles
     STORE_CONTEXT_ADDRESS_PATTERN = /[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/.freeze
     STORE_CONTEXT_RECEIPT_NOISE_PATTERN = /tel|電話|fax|領収書|領収証|レシート|合計|小計|消費税|税率|税額|支払|決済|total|subtotal|tax|payment/i.freeze
     STORE_BRANCH_SUFFIX = "店"
-    STORE_PREMIUM_OUTLET_SUFFIX = "プレミアムアウトレット店"
+
+    ANALYSIS_PURCHASED_AT_DATE_ONLY_PATTERNS = [
+      /\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/,
+      /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}/
+    ].freeze
+    ANALYSIS_PURCHASE_TIME_EXCLUSION_PATTERN = /予約|注文|受付|発行|有効期限|期限|期間|販売期間/.freeze
+    ANALYSIS_PURCHASE_TIME_EXPRESSION_PATTERN = /(?:\A|[^\d])([01]?\d|2[0-3])(?:[:：]|時)([0-5]\d)分?(?:\z|[^\d])/.freeze
 
     ANALYSIS_EXTERNAL_TAX_DESCRIPTION_PATTERN = /外税|税別|税抜|消費税別|別途消費税|exclusive|sales\s*tax/i.freeze
     ANALYSIS_CASH_TOTAL_PAYMENT_PATTERN = /現計|cashtotal/i.freeze
@@ -553,7 +568,19 @@ module ReceiptAnalysisProfiles
     AI_PURCHASE_CONTEXT_LINE_PATTERN = /購入|会計|発行|伝票|領収|オーダー|注文|日時|時刻/.freeze
     AI_PAYMENT_CONTEXT_LINE_PATTERN = /現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/.freeze
     AI_TAX_CONTEXT_LINE_PATTERN = /税率|税額|内税|外税|消費税|軽減税率|標準税率|対象|\d+％|\d+%/.freeze
+    AI_NUMERIC_SYMBOL_ONLY_LINE_PATTERN = /\A[\d\-\+\.,:%¥円\/\s]+\z/.freeze
+    AI_MASKED_CARD_LINE_PATTERN = /\A\*{4,}.+\d{2,4}\z/.freeze
+    AI_PERCENT_LINE_PATTERN = /\d+%|\d+％/.freeze
+    AI_STORE_GREETING_NOISE_PATTERN = /ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i.freeze
+    AI_STORE_SYSTEM_NOISE_PATTERN = /tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i.freeze
+    AI_LOCAL_DATE_LINE_PATTERN = /\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/.freeze
     AI_BRANCH_SINGLE_NOISE_PATTERN = /\A(?:領|収|証|合計|お預り|お預かり|預り|預かり|お釣り?|釣り?|釣銭)\z/.freeze
+    AI_BRANCH_NUMERIC_CODE_PATTERN = /\A[\d\-\+]{6,}\z/.freeze
+    AI_BRANCH_DATE_FRAGMENT_PATTERN = /\d{4}年|\d{1,2}月|\d{1,2}日/.freeze
+    AI_BRANCH_SHORT_CODE_PATTERN = /\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/.freeze
+    AI_BRANCH_CURRENCY_PATTERN = /[¥￥円]/.freeze
+    AI_BRANCH_ADMIN_AREA_PATTERN = /[都道府県市区町村郡]/.freeze
+    AI_BRANCH_DIGIT_SEQUENCE_PATTERN = /\d{2,}/.freeze
     AI_BRANCH_CARD_OR_POINT_PREFIX_PATTERN = /\A(?:t|T)?(?:会員番号|カード番号|ポイント)/.freeze
     AI_BRANCH_SUPPORT_NOISE_PATTERN = /お客様相談室|サポート|ヘルプデスク|コールセンター/.freeze
     AI_BRANCH_REGISTRATION_NOISE_PATTERN = /登録番号|電話|tel|レジ|伝票|売上票|領収書|領収証|店no|加盟店名|卓no|テーブル|席|取引番号|端末番号|カード番号/i.freeze
@@ -566,6 +593,11 @@ module ReceiptAnalysisProfiles
     AI_ADDRESS_EXCLUSION_PATTERN = /電話|TEL|お客様相談室|サポート|ヘルプデスク|コールセンター/.freeze
     AI_ADDRESS_REGISTRATION_NOISE_PATTERN = /登録番号|店no|レジ|伝票|売上票/.freeze
     AI_ADDRESS_CANDIDATE_PATTERN = /[都道府県]|[市区町村郡].*\d|\d+[\-丁目番地号]/.freeze
+    AI_DATE_TIME_LINE_PATTERNS = [
+      /\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/,
+      /\d{1,2}:\d{2}/,
+      /\d{1,2}時\d{1,2}分/
+    ].freeze
     OCR_BRAND_STORE_NAME_EXCLUSION_PATTERN = /住所|東京都|道府県|市|区|町|丁目|番地|電話|tel|fax/i.freeze
     OCR_BRANCH_LIKE_STORE_NAME_PATTERN = /店$|支店|本店|営業所|センター|モール|ショップ|market|mart|store|通り|駅前|南口|北口|東口|西口/i.freeze
     OCR_STORE_NAME_NOISE_PATTERN = /tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i.freeze
@@ -805,6 +837,21 @@ module ReceiptAnalysisProfiles
         ANALYSIS_VOUCHER_PAYMENT_PATTERN
       end
 
+      def analysis_surcharge_kind_pattern(kind)
+        case kind.to_s
+        when "delivery_fee"
+          ANALYSIS_DELIVERY_FEE_KIND_PATTERN
+        when "bag_fee"
+          ANALYSIS_BAG_FEE_KIND_PATTERN
+        when "service_charge"
+          ANALYSIS_SERVICE_CHARGE_KIND_PATTERN
+        when "late_night_charge"
+          ANALYSIS_LATE_NIGHT_CHARGE_KIND_PATTERN
+        when "handling_fee"
+          ANALYSIS_HANDLING_FEE_KIND_PATTERN
+        end
+      end
+
       def analysis_point_payment_line_pattern
         ANALYSIS_POINT_PAYMENT_LINE_PATTERN
       end
@@ -911,6 +958,26 @@ module ReceiptAnalysisProfiles
 
       def signal_registration_number_pattern
         SIGNAL_REGISTRATION_NUMBER_PATTERN
+      end
+
+      def signal_money_prefix_pattern
+        SIGNAL_MONEY_PREFIX_PATTERN
+      end
+
+      def signal_money_suffix_pattern
+        SIGNAL_MONEY_SUFFIX_PATTERN
+      end
+
+      def signal_date_pattern
+        SIGNAL_DATE_PATTERN
+      end
+
+      def signal_generic_amount_pattern
+        SIGNAL_GENERIC_AMOUNT_PATTERN
+      end
+
+      def signal_date_time_patterns
+        SIGNAL_DATE_TIME_PATTERNS
       end
 
       def signal_household_budget_keywords
@@ -1029,8 +1096,16 @@ module ReceiptAnalysisProfiles
         STORE_BRANCH_SUFFIX
       end
 
-      def store_premium_outlet_suffix
-        STORE_PREMIUM_OUTLET_SUFFIX
+      def analysis_purchased_at_date_only_patterns
+        ANALYSIS_PURCHASED_AT_DATE_ONLY_PATTERNS
+      end
+
+      def analysis_purchase_time_exclusion_pattern
+        ANALYSIS_PURCHASE_TIME_EXCLUSION_PATTERN
+      end
+
+      def analysis_purchase_time_expression_pattern
+        ANALYSIS_PURCHASE_TIME_EXPRESSION_PATTERN
       end
 
       def analysis_external_tax_description_pattern
@@ -1177,8 +1252,56 @@ module ReceiptAnalysisProfiles
         AI_TAX_CONTEXT_LINE_PATTERN
       end
 
+      def ai_numeric_symbol_only_line_pattern
+        AI_NUMERIC_SYMBOL_ONLY_LINE_PATTERN
+      end
+
+      def ai_masked_card_line_pattern
+        AI_MASKED_CARD_LINE_PATTERN
+      end
+
+      def ai_percent_line_pattern
+        AI_PERCENT_LINE_PATTERN
+      end
+
+      def ai_store_greeting_noise_pattern
+        AI_STORE_GREETING_NOISE_PATTERN
+      end
+
+      def ai_store_system_noise_pattern
+        AI_STORE_SYSTEM_NOISE_PATTERN
+      end
+
+      def ai_local_date_line_pattern
+        AI_LOCAL_DATE_LINE_PATTERN
+      end
+
       def ai_branch_single_noise_pattern
         AI_BRANCH_SINGLE_NOISE_PATTERN
+      end
+
+      def ai_branch_numeric_code_pattern
+        AI_BRANCH_NUMERIC_CODE_PATTERN
+      end
+
+      def ai_branch_date_fragment_pattern
+        AI_BRANCH_DATE_FRAGMENT_PATTERN
+      end
+
+      def ai_branch_short_code_pattern
+        AI_BRANCH_SHORT_CODE_PATTERN
+      end
+
+      def ai_branch_currency_pattern
+        AI_BRANCH_CURRENCY_PATTERN
+      end
+
+      def ai_branch_admin_area_pattern
+        AI_BRANCH_ADMIN_AREA_PATTERN
+      end
+
+      def ai_branch_digit_sequence_pattern
+        AI_BRANCH_DIGIT_SEQUENCE_PATTERN
       end
 
       def ai_branch_card_or_point_prefix_pattern
@@ -1227,6 +1350,10 @@ module ReceiptAnalysisProfiles
 
       def ai_address_candidate_pattern
         AI_ADDRESS_CANDIDATE_PATTERN
+      end
+
+      def ai_date_time_line_patterns
+        AI_DATE_TIME_LINE_PATTERNS
       end
 
       def ocr_brand_store_name_exclusion_pattern

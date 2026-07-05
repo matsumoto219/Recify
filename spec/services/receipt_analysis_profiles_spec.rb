@@ -141,6 +141,83 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile analysis surcharge labels' do
+    it '購入調整の追加料金ラベルをprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('配送料').to match(profile.analysis_surcharge_kind_pattern('delivery_fee'))
+        expect('レジ袋代').to match(profile.analysis_surcharge_kind_pattern('bag_fee'))
+        expect('サービス料10%').to match(profile.analysis_surcharge_kind_pattern('service_charge'))
+        expect('深夜料金').to match(profile.analysis_surcharge_kind_pattern('late_night_charge'))
+        expect('手数料').to match(profile.analysis_surcharge_kind_pattern('handling_fee'))
+        expect(profile.analysis_surcharge_kind_pattern('receipt_discount')).to be_nil
+      end
+    end
+  end
+
+  describe 'JPN profile analysis voucher labels' do
+    it '商品券・ストアクレジット系ラベルをprofile側で定義する' do
+      pattern = described_class.fetch('JPN').analysis_voucher_payment_pattern
+
+      aggregate_failures do
+        expect('商品券').to match(pattern)
+        expect('ギフトカード').to match(pattern)
+        expect('gift card').to match(pattern)
+        expect('store credit').to match(pattern)
+        expect('ポイント利用').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile AI support patterns' do
+    it 'AI prompt用の日本語ノイズ・日時・支店候補パターンをprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('¥1,234').to match(profile.ai_numeric_symbol_only_line_pattern)
+        expect('**** **** **** 1234').to match(profile.ai_masked_card_line_pattern)
+        expect('10%').to match(profile.ai_percent_line_pattern)
+        expect('ご来店ありがとうございました').to match(profile.ai_store_greeting_noise_pattern)
+        expect('tax id T1234567890123').to match(profile.ai_store_system_noise_pattern)
+        expect('2026年7月5日').to match(profile.ai_local_date_line_pattern)
+        expect('123456').to match(profile.ai_branch_numeric_code_pattern)
+        expect('2026年').to match(profile.ai_branch_date_fragment_pattern)
+        expect('12A').to match(profile.ai_branch_short_code_pattern)
+        expect('¥500').to match(profile.ai_branch_currency_pattern)
+        expect('東京都').to match(profile.ai_branch_admin_area_pattern)
+        expect('123').to match(profile.ai_branch_digit_sequence_pattern)
+        expect('2026-07-05').to match(profile.ai_date_time_line_patterns.first)
+      end
+    end
+  end
+
+  describe 'JPN profile purchased_at fallback patterns' do
+    it '購入日時fallback用の日付・時刻パターンをprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect(profile.analysis_purchased_at_date_only_patterns.any? { |pattern| '2026年7月5日'.match?(pattern) }).to be(true)
+        expect('有効期限 23:59').to match(profile.analysis_purchase_time_exclusion_pattern)
+        expect('時刻 9時05分').to match(profile.analysis_purchase_time_expression_pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile signal patterns' do
+    it 'レシート判定用の金額・日時パターンをprofile側で定義する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('¥120').to match(profile.signal_money_prefix_pattern)
+        expect('120円').to match(profile.signal_money_suffix_pattern)
+        expect('2026年7月5日').to match(profile.signal_date_pattern)
+        expect(' 120 ').to match(profile.signal_generic_amount_pattern)
+        expect(profile.signal_date_time_patterns.any? { |pattern| '2026年7月5日 09:05'.match?(pattern) }).to be(true)
+      end
+    end
+  end
+
   describe 'JPN profile quantity unit aliases' do
     it 'ReceiptQuantityUnitの保存codeへ正規化できるaliasだけを持つ' do
       aliases = described_class.fetch('JPN').quantity_unit_aliases

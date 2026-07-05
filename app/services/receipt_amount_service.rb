@@ -659,11 +659,11 @@ class ReceiptAmountService
   end
 
   def voucher_payment_text?(payment)
-    normalized_money_effect_text(payment).match?(/giftcard|giftcertificate|storecredit|voucher|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券/)
+    normalized_money_effect_text(payment).match?(profile.analysis_voucher_payment_pattern)
   end
 
   def voucher_adjustment_text?(adjustment)
-    normalized_money_effect_text(adjustment).match?(/giftcard|giftcertificate|storecredit|voucher|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券/)
+    normalized_money_effect_text(adjustment).match?(profile.analysis_voucher_payment_pattern)
   end
 
   def default_adjustment_sign(kind)

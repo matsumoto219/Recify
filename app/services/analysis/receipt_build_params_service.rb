@@ -396,12 +396,11 @@ module Analysis
         return nil if branch_line.blank?
 
         printed_branch = Analysis::StoreNameCandidateClassifier.normalize_name(branch_line)
-        return nil unless current_store_name.include?(compact_store_name(printed_branch)) ||
-          current_store_name.include?(compact_store_name(normalized_po_branch_line(printed_branch)))
+        return nil unless current_store_name.include?(compact_store_name(printed_branch))
 
         brand = canonical_latin_logo_brand(logo_line, lines)
         descriptor = normalize_local_business_descriptor(descriptor_line)
-        branch = normalized_po_branch_line(printed_branch)
+        branch = printed_branch
         return nil if brand.blank? || descriptor.blank? || branch.blank?
 
         "#{brand} #{descriptor} #{branch}"
@@ -566,16 +565,6 @@ module Analysis
         end
 
         normalized.match?(/[一-龠ぁ-んァ-ヶ]/) ? normalized.gsub(/[[:space:]]+/, "") : normalized
-      end
-
-      def normalized_po_branch_line(line)
-        normalized = Analysis::StoreNameCandidateClassifier.normalize_name(line).to_s
-        match = normalized.match(/\A(.+?)\s*po\s*店\z/i)
-        return normalized if match.blank?
-
-        base = match[1].to_s.strip
-        suffix = base.match?(/\A[一-龠]{1,3}\z/) ? profile.store_premium_outlet_suffix : profile.store_branch_suffix
-        "#{base}#{suffix}"
       end
 
       def canonical_latin_logo_brand(line, lines)
@@ -895,20 +884,8 @@ module Analysis
         return true if label.present? && item_text.include?(label)
         return true if source_label.present? && item_text.include?(source_label)
 
-        case ReceiptAdjustment.normalize_kind(adjustment[:kind])
-        when "delivery_fee"
-          item_text.match?(/配送料|送料|delivery|shipping/i)
-        when "bag_fee"
-          item_text.match?(/レジ袋|袋代|bag/i)
-        when "service_charge"
-          item_text.match?(/サービス料|service\s*charge/i)
-        when "late_night_charge"
-          item_text.match?(/深夜料金|late.?night|midnight|after.?hours/i)
-        when "handling_fee"
-          item_text.match?(/手数料|handling\s*fee/i)
-        else
-          false
-        end
+        pattern = profile.analysis_surcharge_kind_pattern(ReceiptAdjustment.normalize_kind(adjustment[:kind]))
+        pattern.present? && item_text.match?(pattern)
       end
 
       def post_settlement_promo_adjustment?(source_text, source_line_index, lines)
@@ -3162,8 +3139,7 @@ module Analysis
         return false if text.blank?
         return false if extract_time_expression(text).present?
 
-        text.match?(/\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/) ||
-          text.match?(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}/)
+        profile.analysis_purchased_at_date_only_patterns.any? { |pattern| text.match?(pattern) }
       end
 
       def extract_unique_time_candidate(values)
@@ -3183,7 +3159,7 @@ module Analysis
       end
 
       def purchase_time_context_line?(text)
-        return false if text.match?(/予約|注文|受付|発行|有効期限|期限|期間|販売期間/)
+        return false if text.match?(profile.analysis_purchase_time_exclusion_pattern)
 
         extract_time_expression(text).present?
       end
@@ -3193,7 +3169,7 @@ module Analysis
       end
 
       def extract_time_expression_detail(text)
-        match = text.to_s.match(/(?:\A|[^\d])([01]?\d|2[0-3])(?:[:：]|時)([0-5]\d)分?(?:\z|[^\d])/)
+        match = text.to_s.match(profile.analysis_purchase_time_expression_pattern)
         return nil unless match
 
         raw_end = match.end(2)

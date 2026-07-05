@@ -206,13 +206,13 @@ module Ai
       return true if text.empty?
 
       # 数字・記号だけの行は判定材料として弱い
-      return true if text.match?(/\A[\d\-\+\.,:%¥円\/\s]+\z/)
-      return true if text.match?(/\A\*{4,}.+\d{2,4}\z/) # マスク済みカード番号など
+      return true if text.match?(analysis_profile.ai_numeric_symbol_only_line_pattern)
+      return true if text.match?(analysis_profile.ai_masked_card_line_pattern)
 
       # 店舗 / 購入日時 / 支払い判定に不要な明細・金額ノイズを落とす
       # 支払区分は payment_context_lines の補助材料になり得るためここでは落とさない
       return true if text.match?(analysis_profile.ai_removable_noise_line_pattern)
-      return true if text.match?(/\d+%|\d+％/)
+      return true if text.match?(analysis_profile.ai_percent_line_pattern)
 
       false
     end
@@ -432,11 +432,11 @@ module Ai
       return true if Analysis.store_name_descriptive_heading_line?(normalized)
       return true if Analysis.store_name_message_line?(normalized)
       return true if compact_text.match?(analysis_profile.store_context_compact_noise_pattern)
-      return true if normalized.match?(/ありがとう|毎度|ご来店|thank\s*you|thanks|welcome/i)
+      return true if normalized.match?(analysis_profile.ai_store_greeting_noise_pattern)
       return true if normalized.match?(analysis_profile.store_building_or_floor_pattern)
       return true if normalized.match?(analysis_profile.store_context_noise_pattern)
-      return true if normalized.match?(/tax\s*(?:id|number)|vat\s*(?:id|number)|register|receipt|invoice|customer\s+service|support/i)
-      return true if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?/)
+      return true if normalized.match?(analysis_profile.ai_store_system_noise_pattern)
+      return true if normalized.match?(analysis_profile.ai_local_date_line_pattern)
 
       false
     end
@@ -615,23 +615,27 @@ module Ai
       # item OCR原文と近い行は支店名候補から除外する。
       # ただし店舗名と商品名が同一になる特殊ケースはあり得るため、最終判定は filtered_content も参照する AI に委ねる。
       return false if item_like_line?(text)
-      return false if text.match?(/\A[\d\-\+]{6,}\z/)
+      return false if text.match?(analysis_profile.ai_branch_numeric_code_pattern)
       return false if text.match?(analysis_profile.store_legal_entity_branch_exclusion_pattern)
       return false if text.match?(analysis_profile.ai_branch_support_noise_pattern)
       return false if text.match?(analysis_profile.ai_branch_registration_noise_pattern)
       return false if text.gsub(/[[:space:]]+/, "").match?(analysis_profile.store_context_compact_noise_pattern)
       return false if text.match?(analysis_profile.store_building_or_floor_pattern)
-      return false if text.match?(/\d{4}年|\d{1,2}月|\d{1,2}日/)
-      return false if text.match?(/\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/)
+      return false if text.match?(analysis_profile.ai_branch_date_fragment_pattern)
+      return false if text.match?(analysis_profile.ai_branch_short_code_pattern)
       return false if text.match?(analysis_profile.ai_branch_polite_statement_pattern)
       return false if text.match?(analysis_profile.ai_branch_usage_date_pattern)
       return false if text.match?(analysis_profile.ai_branch_order_time_pattern)
       return false if text.match?(analysis_profile.ai_branch_point_noise_pattern)
       return false if text.match?(analysis_profile.ai_branch_detail_noise_pattern)
-      return false if text.match?(/[¥￥円]/)
+      return false if text.match?(analysis_profile.ai_branch_currency_pattern)
 
       text.match?(analysis_profile.ai_branch_location_marker_pattern) ||
-        (text.length <= 20 && !text.match?(/[都道府県市区町村郡]/) && !text.match?(/\d{2,}/))
+        (
+          text.length <= 20 &&
+            !text.match?(analysis_profile.ai_branch_admin_area_pattern) &&
+            !text.match?(analysis_profile.ai_branch_digit_sequence_pattern)
+        )
     end
 
     def heading_candidates_extend_ocr_store_name?
@@ -665,7 +669,7 @@ module Ai
       text = line.to_s.strip
       return false if text.empty?
       return false if date_time_line?(text)
-      return false if text.match?(/\A[\d\-\+]{6,}\z/)
+      return false if text.match?(analysis_profile.ai_branch_numeric_code_pattern)
       return false if text.match?(analysis_profile.ai_address_exclusion_pattern)
       return false if text.match?(analysis_profile.ai_address_registration_noise_pattern)
 
@@ -698,11 +702,7 @@ module Ai
 
     def date_time_line?(line)
       text = line.to_s
-      return true if text.match?(/\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/)
-      return true if text.match?(/\d{1,2}:\d{2}/)
-      return true if text.match?(/\d{1,2}時\d{1,2}分/)
-
-      false
+      analysis_profile.ai_date_time_line_patterns.any? { |pattern| text.match?(pattern) }
     end
 
     def normalize_payment_candidates

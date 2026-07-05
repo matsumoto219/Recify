@@ -2911,7 +2911,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('Q 中央店')
       end
 
-      it '英字ロゴと日本語業態行とPO支店行から自然な店舗名へ補完する' do
+      it '英字ロゴと日本語業態行と印字支店行を店舗特化の展開なしで補完する' do
         logo_ocr_result = ocr_result.deep_merge(
           candidates: {
             store_name: 'samplecacao ふじ花園po店',
@@ -2937,10 +2937,10 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: logo_ocr_result, ai_result: logo_ai_result)
 
-        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ ふじ花園店')
+        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ ふじ花園po店')
       end
 
-      it 'URLで支持される英字ロゴの末尾ノイズを落として短い漢字PO支店を補完する' do
+      it 'URLで支持される英字ロゴの末尾ノイズを落として印字支店行を店舗特化の展開なしで補完する' do
         logo_ocr_result = ocr_result.deep_merge(
           candidates: {
             store_name: 'サムプル ショコラ ブティック&カフェ 青山po店',
@@ -2968,7 +2968,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: logo_ocr_result, ai_result: logo_ai_result)
 
-        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ 青山プレミアムアウトレット店')
+        expect(params[:receipt_attributes][:store_name]).to eq('Samplecacao ショコラブティック&カフェ 青山po店')
       end
 
       it 'AI payment_method は OCR field や Payments[] より優先される' do

@@ -180,11 +180,11 @@ module Analysis
 
     def amount_like_text?(text)
       normalized = text.to_s
-      return true if normalized.match?(/[¥￥]\s*\d/)
-      return true if normalized.match?(/\d[\d,]*\s*円/)
-      return false if normalized.match?(/\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/)
+      return true if normalized.match?(profile.signal_money_prefix_pattern)
+      return true if normalized.match?(profile.signal_money_suffix_pattern)
+      return false if normalized.match?(profile.signal_date_pattern)
 
-      normalized.match?(/(?:^|[[:space:]])\d[\d,]*(?:$|[[:space:]])/)
+      normalized.match?(profile.signal_generic_amount_pattern)
     end
 
     def purchased_at_signal?
@@ -193,9 +193,7 @@ module Analysis
 
     def date_time_pattern?
       text_lines.any? do |line|
-        line.match?(/\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?(\s+\d{1,2}:\d{2})?/) ||
-          line.match?(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}(\s+\d{1,2}:\d{2})?/) ||
-          line.match?(/\d{1,2}:\d{2}/)
+        profile.signal_date_time_patterns.any? { |pattern| line.match?(pattern) }
       end
     end
 

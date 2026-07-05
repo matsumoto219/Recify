@@ -5425,7 +5425,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '英字ロゴと業態行とPO支店行から補完した店舗名ならstore_name_uncertainを落とす' do
+    it '英字ロゴと業態行と印字支店行から補完した店舗名ならstore_name_uncertainを落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = {
         success: true,
@@ -5483,7 +5483,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       aggregate_failures do
         expect(receipt.reload.status).to eq('completed')
-        expect(receipt.store_name).to eq('Samplecacao ショコラブティック&カフェ 青山プレミアムアウトレット店')
+        expect(receipt.store_name).to eq('Samplecacao ショコラブティック&カフェ 青山po店')
         expect(receipt.review_reasons).to be_blank
       end
     end

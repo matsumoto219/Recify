@@ -1370,23 +1370,8 @@ class ReceiptAnalysisPipeline
 
       Array(header_lines).any? do |line|
         compact_line = compact_store_name_for_review(line)
-        compact_line == compact_branch ||
-          po_branch_line_supports_final_branch?(compact_line, compact_branch)
+        compact_line == compact_branch
       end
-    end
-
-    def po_branch_line_supports_final_branch?(compact_line, compact_branch)
-      return false if compact_line.blank? || compact_branch.blank?
-
-      if (match = compact_branch.match(/\A(.+)プレミアムアウトレット店\z/))
-        return compact_line == "#{match[1]}po店"
-      end
-
-      if (match = compact_branch.match(/\A(.+)店\z/))
-        return compact_line == "#{match[1]}po店"
-      end
-
-      false
     end
 
     def resolved_customer_facing_store_name?(store_name)
@@ -1660,20 +1645,8 @@ class ReceiptAnalysisPipeline
       return true if label.present? && text.include?(label)
       return true if source_text.present? && text.include?(source_text)
 
-      case ReceiptAdjustment.normalize_kind(normalized_adjustment[:kind])
-      when "delivery_fee"
-        text.match?(/配送料|送料|delivery|shipping/i)
-      when "bag_fee"
-        text.match?(/レジ袋|袋代|bag/i)
-      when "service_charge"
-        text.match?(/サービス料|service\s*charge/i)
-      when "late_night_charge"
-        text.match?(/深夜|late.?night|midnight|after.?hours/i)
-      when "handling_fee"
-        text.match?(/手数料|handling|fee/i)
-      else
-        false
-      end
+      pattern = profile.analysis_surcharge_kind_pattern(ReceiptAdjustment.normalize_kind(normalized_adjustment[:kind]))
+      pattern.present? && text.match?(pattern)
     end
 
     def adjustment_without_review_reason(adjustment, reason)
