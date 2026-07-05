@@ -61,7 +61,11 @@
         <% if user_signed_in? && !current_user.guest? %>
           <div class="rounded-xl border token-border-soft token-bg-card-subtle px-4 py-3 text-sm">
             <p class="text-xs font-bold uppercase tracking-wider token-text-muted"><%= t("contact_requests.fields.email") %></p>
-            <p class="mt-1 break-all token-text-base"><%= current_user.email %></p>
+            <%= render "shared/ui/text/email_address",
+                  email: current_user.email,
+                  mode: :one_line,
+                  tag: :p,
+                  class: "mt-1 token-text-base" %>
           </div>
         <% end %>
 

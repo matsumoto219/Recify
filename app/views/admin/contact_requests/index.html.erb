@@ -193,7 +193,12 @@
                   -
                 <% end %>
               </td>
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :email) %>"><%= record[:email_masked] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :email) %>">
+                <%= render "shared/ui/text/email_address",
+                      email: record[:email_masked],
+                      mode: :one_line,
+                      class: "font-mono text-xs" %>
+              </td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>"><%= link_to t("admin.contact_requests.index.table.detail_link"), admin_contact_request_path(record[:id]), class: "token-text-brand hover:underline" %></td>
             </tr>
           <% end %>

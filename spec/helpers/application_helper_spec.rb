@@ -54,4 +54,22 @@ RSpec.describe ApplicationHelper, type: :helper do
       end
     end
   end
+
+  describe '#email_display_parts' do
+    it 'splits an email into local and domain parts' do
+      expect(helper.email_display_parts('long-account-name@example.com')).to eq(
+        text: 'long-account-name@example.com',
+        local_part: 'long-account-name',
+        domain: 'example.com'
+      )
+    end
+
+    it 'keeps non-email text as a single display part' do
+      expect(helper.email_display_parts(I18n.t('users.display.email_unregistered'))).to eq(
+        text: I18n.t('users.display.email_unregistered'),
+        local_part: I18n.t('users.display.email_unregistered'),
+        domain: nil
+      )
+    end
+  end
 end

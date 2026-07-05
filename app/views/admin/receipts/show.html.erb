@@ -96,7 +96,12 @@
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.owner_email") %></dt>
-            <dd class="break-words token-text-base [overflow-wrap:anywhere]"><%= record.dig(:owner, :email) %></dd>
+            <dd class="min-w-0 max-w-full">
+              <%= render "shared/ui/text/email_address",
+                    email: record.dig(:owner, :email),
+                    mode: :one_line,
+                    class: "token-text-base" %>
+            </dd>
           </div>
           <div>
             <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipts.show.labels.created_at") %></dt>

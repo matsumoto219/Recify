@@ -101,6 +101,8 @@ RSpec.describe 'Admin users', type: :request do
 
       get admin_users_path
       document = Nokogiri::HTML(response.body)
+      email_node = document.css("[aria-label='target-user@example.com']").first
+      email_cell = email_node&.ancestors&.find { |node| node.name == 'td' }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -110,6 +112,13 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).not_to include('translation missing')
         expect(document.at_css("[data-admin-user-passkeys-count=\"#{target.id}\"]").text).to eq('1')
         expect(document.at_css("[data-admin-user-receipts-count=\"#{target.id}\"]").text).to eq('2')
+        expect(email_node).to be_present
+        expect(email_node['class']).to include('inline-flex')
+        expect(email_node['class']).not_to include('grid-cols')
+        expect(email_node.css('span').map { |segment| segment.text.strip }).to eq([ 'target-user', '@', 'example.com' ])
+        expect(email_node.css('span').first['class']).to include('flex-[0_999_auto]')
+        expect(email_node.css('span').last['class']).to include('flex-[0_1_auto]')
+        expect(email_cell['class']).to include('max-w-[18rem]')
         expect(response.body).to include('解析run管理')
         expect(response.body).to include('監査ログ')
         expect(response.body).not_to include('credential_id')

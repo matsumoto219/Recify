@@ -1,0 +1,43 @@
+<%
+  email_text = local_assigns.fetch(:email).to_s
+  mode = local_assigns.fetch(:mode, :one_line).to_sym
+  tag_name = local_assigns.fetch(:tag, :span)
+  extra_class = local_assigns[:class]
+  parts = email_display_parts(email_text)
+
+  wrapper_class =
+    case mode
+    when :two_line
+      "inline-flex min-w-0 w-full max-w-full flex-wrap items-baseline overflow-hidden align-top"
+    else
+      "inline-flex min-w-0 w-full max-w-full items-baseline overflow-hidden whitespace-nowrap align-top"
+    end
+
+  local_class =
+    if mode == :two_line
+      "min-w-[1ch] max-w-full flex-[0_999_auto] truncate"
+    else
+      "min-w-[1ch] max-w-full flex-[0_999_auto] truncate"
+    end
+
+  domain_class =
+    if mode == :two_line
+      "min-w-0 max-w-full flex-[0_1_auto] truncate"
+    else
+      "min-w-0 max-w-full flex-[0_1_auto] truncate"
+    end
+%>
+
+<%= content_tag tag_name, class: [ wrapper_class, extra_class ].compact.join(" "), title: email_text, aria: { label: email_text } do %>
+  <% if parts[:domain].present? %>
+    <span class="<%= local_class %>"><%= parts[:local_part] %></span>
+    <% if mode == :one_line %>
+      <span class="shrink-0">@</span>
+      <span class="<%= domain_class %>"><%= parts[:domain] %></span>
+    <% else %>
+      <span class="<%= domain_class %>">@<%= parts[:domain] %></span>
+    <% end %>
+  <% else %>
+    <span class="min-w-0 max-w-full truncate"><%= parts[:text] %></span>
+  <% end %>
+<% end %>

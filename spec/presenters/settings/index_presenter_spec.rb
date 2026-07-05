@@ -1,10 +1,10 @@
 require 'rails_helper'
 
 RSpec.describe Settings::IndexPresenter do
-  let(:view_context) { double('view_context', masked_email_with_domain: 'masked@example.com') }
+  let(:view_context) { double('view_context') }
 
   describe '#user labels' do
-    it 'returns registered user labels through the view email formatter' do
+    it 'returns registered user labels with the full email' do
       user = build_stubbed(:user, name: nil, email: 'long-account-name@example.com', guest: false)
 
       presenter = described_class.new(user: user, view_context: view_context)
@@ -12,13 +12,7 @@ RSpec.describe Settings::IndexPresenter do
       aggregate_failures do
         expect(presenter.user_status_label).to eq(I18n.t('settings.index.user.registered'))
         expect(presenter.user_name_label).to eq(I18n.t('settings.index.user.name_missing'))
-        expect(presenter.user_email_label).to eq('masked@example.com')
-        expect(view_context).to have_received(:masked_email_with_domain).with(
-          'long-account-name@example.com',
-          local_max_length: 10,
-          local_max_length_mobile: 6,
-          domain_max_length_mobile: 14
-        )
+        expect(presenter.user_email_label).to eq('long-account-name@example.com')
       end
     end
 
@@ -32,7 +26,6 @@ RSpec.describe Settings::IndexPresenter do
         expect(presenter.user_status_label).to eq(I18n.t('settings.index.user.guest'))
         expect(presenter.user_name_label).to eq(I18n.t('users.display.guest_name'))
         expect(presenter.user_email_label).to eq(I18n.t('users.display.email_unregistered'))
-        expect(view_context).not_to have_received(:masked_email_with_domain)
       end
     end
   end

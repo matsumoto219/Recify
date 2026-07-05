@@ -17,6 +17,7 @@ RSpec.describe Admin::TableHelper, type: :helper do
     it '列種別classを返す' do
       expect(helper.admin_table_cell_classes(type: :long_id)).to eq('font-mono text-xs whitespace-nowrap min-w-[18rem]')
       expect(helper.admin_table_cell_classes(type: :subject)).to eq('min-w-[16rem] max-w-xs truncate')
+      expect(helper.admin_table_cell_classes(type: :email)).to eq('font-mono text-xs whitespace-nowrap min-w-[14rem] max-w-[18rem]')
     end
 
     it '追加classを末尾に付ける' do

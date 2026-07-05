@@ -104,7 +104,12 @@
       </div>
       <div>
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_masked") %></dt>
-        <dd class="break-words font-mono token-text-base [overflow-wrap:anywhere]"><%= @record[:email_masked] %></dd>
+        <dd class="min-w-0 max-w-full">
+          <%= render "shared/ui/text/email_address",
+                email: @record[:email_masked],
+                mode: :one_line,
+                class: "font-mono token-text-base" %>
+        </dd>
       </div>
       <div class="min-w-0 max-w-full">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.contact_requests.show.labels.email_digest") %></dt>

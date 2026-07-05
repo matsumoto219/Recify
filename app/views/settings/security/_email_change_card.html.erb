@@ -29,13 +29,20 @@
 
     <div class="mb-6 token-bg-card-subtle border token-border-soft p-4 rounded-lg min-w-0">
       <p class="text-xs token-text-muted mb-1"><%= t("settings.security.email.current") %></p>
-      <p class="truncate token-text-base font-medium min-w-0" title="<%= current_user.email %>">
-        <%= masked_email_with_domain(current_user.email, local_max_length: 25, local_max_length_mobile: 15, domain_max_length_mobile: 16) %>
-      </p>
+      <%= render "shared/ui/text/email_address",
+            email: current_user.email,
+            mode: :one_line,
+            tag: :p,
+            class: "token-text-base font-medium" %>
 
       <% if current_user.pending_reconfirmation? %>
-        <p class="mt-2 text-sm token-text-warning break-words">
-          <%= t("settings.security.email.pending", email: current_user.unconfirmed_email) %>
+        <% pending_email_label = t("settings.security.email.pending", email: current_user.unconfirmed_email) %>
+        <p class="mt-2 flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1 text-sm token-text-warning" title="<%= pending_email_label %>" aria-label="<%= pending_email_label %>">
+          <span class="shrink-0"><%= t("settings.security.email.pending_prefix") %></span>
+          <%= render "shared/ui/text/email_address",
+                email: current_user.unconfirmed_email,
+                mode: :one_line,
+                class: "min-w-[8rem] flex-1 token-text-warning" %>
         </p>
         <div class="mt-3">
           <%= render "shared/ui/actions/button",

@@ -34,14 +34,18 @@
 
           <div class="min-w-0 w-0 flex-1 overflow-hidden space-y-1">
             <div class="grid min-w-0 max-w-full grid-cols-1 gap-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-3">
-              <div class="min-w-0 flex-1 overflow-hidden">
+              <div class="min-w-0 flex-1 overflow-hidden space-y-1">
                 <h2 class="block max-w-full truncate text-lg font-semibold token-text-base" title="<%= user_name_label %>"><%= user_name_label %></h2>
+                <%= render "shared/ui/text/email_address",
+                      email: user_email_label,
+                      mode: :two_line,
+                      tag: :p,
+                      class: "text-sm leading-5 token-text-muted" %>
               </div>
               <span class="hidden w-fit self-start shrink-0 token-brand-soft-bg token-text-brand text-[10px] font-bold px-2 py-0.5 rounded-full border token-border-brand-soft md:inline-flex md:self-auto">
                 <%= user_status_label %>
               </span>
             </div>
-            <p class="text-sm token-text-muted truncate min-w-0" title="<%= user_email_label %>"><%= user_email_label %></p>
           </div>
         </div>
 

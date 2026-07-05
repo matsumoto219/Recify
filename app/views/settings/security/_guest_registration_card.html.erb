@@ -30,8 +30,13 @@
     <% if current_user.guest_registration_pending? %>
       <div class="mb-6 rounded-lg border token-border-soft token-state-warning-soft px-4 py-3 text-sm min-w-0">
         <p class="font-semibold token-text-base"><%= t("settings.security.guest_registration.pending.title") %></p>
-        <p class="mt-1 token-text-muted break-words">
-          <%= t("settings.security.guest_registration.pending.sent_to", email: current_user.unconfirmed_email) %>
+        <% sent_to_label = t("settings.security.guest_registration.pending.sent_to", email: current_user.unconfirmed_email) %>
+        <p class="mt-1 flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1 token-text-muted" title="<%= sent_to_label %>" aria-label="<%= sent_to_label %>">
+          <span class="shrink-0"><%= t("settings.security.guest_registration.pending.sent_to_prefix") %></span>
+          <%= render "shared/ui/text/email_address",
+                email: current_user.unconfirmed_email,
+                mode: :one_line,
+                class: "min-w-[8rem] flex-1 token-text-muted" %>
         </p>
         <div class="mt-3">
           <%= render "shared/ui/actions/button",

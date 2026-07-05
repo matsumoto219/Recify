@@ -15,7 +15,7 @@ module Admin
       status: "whitespace-nowrap min-w-[7rem]",
       action: "whitespace-nowrap min-w-[5rem]",
       subject: "min-w-[16rem] max-w-xs truncate",
-      email: "font-mono text-xs whitespace-nowrap min-w-[14rem]",
+      email: "font-mono text-xs whitespace-nowrap min-w-[14rem] max-w-[18rem]",
       long_text: "min-w-[18rem] max-w-md break-words [overflow-wrap:anywhere]"
     }.freeze
 

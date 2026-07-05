@@ -20,12 +20,7 @@ module Settings
     def user_email_label
       return user.display_email if guest?
 
-      view_context.masked_email_with_domain(
-        user.email,
-        local_max_length: 10,
-        local_max_length_mobile: 6,
-        domain_max_length_mobile: 14
-      )
+      user.email.to_s
     end
 
     def totp_state
@@ -62,7 +57,7 @@ module Settings
 
     private
 
-    attr_reader :user, :view_context
+    attr_reader :user
 
     def t(key)
       I18n.t(key)

@@ -487,6 +487,32 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'プロフィールカードに登録済みメールアドレスを省略せず表示する' do
+      full_email = 'recify-v11-ui-confirmation-user@example.com'
+      sign_out user
+      sign_in create(:user, email: full_email)
+
+      get settings_path
+
+      document = Nokogiri::HTML(response.body)
+      email_node = document.css('p').find do |node|
+        node['title'] == full_email && node['aria-label'] == full_email
+      end
+      email_segments = email_node&.css('span')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(full_email)
+        expect(response.body).not_to include('recify-v11...')
+        expect(email_node).to be_present
+        expect(email_node.text.gsub(/\s+/, '')).to eq(full_email)
+        expect(email_node['class']).to include('flex-wrap')
+        expect(email_node['class']).not_to include('truncate')
+        expect(email_segments.map { |segment| segment.text.strip }).to eq([ 'recify-v11-ui-confirmation-user', '@example.com' ])
+        expect(email_segments.map { |segment| segment['class'] }).to all(include('truncate'))
+      end
+    end
+
     it 'guestには内部用メールアドレスを表示しない' do
       sign_out user
       guest = User.guest!
@@ -611,6 +637,36 @@ RSpec.describe 'Settings', type: :request do
         expect_no_password_reveal_for(current_password_input)
         expect_password_reveal_for(password_input)
         expect_password_reveal_for(password_confirmation_input)
+      end
+    end
+
+    it 'メール変更カードの現在メールアドレスを1行表示コンポーネントで表示する' do
+      full_email = 'recify-v11-security-current-email-version123456789@example.com'
+      sign_out user
+      sign_in create(:user, email: full_email)
+
+      get settings_security_path
+
+      document = Nokogiri::HTML(response.body)
+      email_node = document.css('p').find do |node|
+        node['title'] == full_email && node['aria-label'] == full_email
+      end
+      email_segments = email_node&.css('span')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(email_node).to be_present
+        expect(email_node['class']).to include('inline-flex')
+        expect(email_node['class']).not_to include('grid-cols')
+        expect(email_segments.map { |segment| segment.text.strip }).to eq([
+          'recify-v11-security-current-email-version123456789',
+          '@',
+          'example.com'
+        ])
+        expect(email_segments.first['class']).to include('truncate')
+        expect(email_segments.first['class']).to include('flex-[0_999_auto]')
+        expect(email_segments.last['class']).to include('truncate')
+        expect(email_segments.last['class']).to include('flex-[0_1_auto]')
       end
     end
 
