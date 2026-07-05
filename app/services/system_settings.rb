@@ -11,7 +11,11 @@ module SystemSettings
     limits.receipt_payment_amount_max
   ].freeze
   RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
+  SNAPSHOT_OCR_LINES_KEY = "limits.snapshot_ocr_lines_max"
+  STORE_NAME_CASING_CONTEXT_LINES_KEY = "limits.store_name_casing_context_lines_max"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
+  STORE_NAME_CASING_SNAPSHOT_OCR_LINES_LIMIT_ERROR = "store_name_casing_snapshot_ocr_lines_limit"
+  SNAPSHOT_OCR_LINES_STORE_NAME_CASING_LIMIT_ERROR = "snapshot_ocr_lines_store_name_casing_limit"
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
   ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
   AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
@@ -29,6 +33,10 @@ module SystemSettings
   SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS = %w[
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
+  ].freeze
+  STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS = [
+    STORE_NAME_CASING_CONTEXT_LINES_KEY,
+    SNAPSHOT_OCR_LINES_KEY
   ].freeze
   ANALYSIS_RUN_RETENTION_KEYS = %w[
     retention.analysis_runs_short_days
@@ -418,6 +426,7 @@ module SystemSettings
 
     def validate_setting_dependencies!(definition, value)
       validate_receipt_items_snapshot_dependency!(definition, value)
+      validate_store_name_casing_context_lines_dependency!(definition, value)
       validate_user_limit_setting_safety!(definition, value)
       validate_user_limit_safety_ceiling!(definition, value)
       validate_analysis_run_retention_order!(definition, value)
@@ -439,6 +448,22 @@ module SystemSettings
       limits_for(SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
     rescue UnknownKeyError, ValidationError, ArgumentError, TypeError
       1000
+    end
+
+    def validate_store_name_casing_context_lines_dependency!(definition, value)
+      return unless STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS.include?(definition.key)
+
+      values = limits_for(STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS)
+      values[definition.key] = Integer(value)
+      return if values.fetch(STORE_NAME_CASING_CONTEXT_LINES_KEY) <= values.fetch(SNAPSHOT_OCR_LINES_KEY)
+
+      error =
+        if definition.key == STORE_NAME_CASING_CONTEXT_LINES_KEY
+          STORE_NAME_CASING_SNAPSHOT_OCR_LINES_LIMIT_ERROR
+        else
+          SNAPSHOT_OCR_LINES_STORE_NAME_CASING_LIMIT_ERROR
+        end
+      raise ValidationError, error
     end
 
     def validate_user_limit_setting_safety!(definition, value)

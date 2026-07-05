@@ -122,6 +122,37 @@ RSpec.describe Ai::PromptBuilder do
       expect(result[:profile_hints]).to eq({})
     end
 
+    it '大文字小文字保持行をAI inputへ追加せず既存の小文字化済み文脈を維持する' do
+      result = described_class.build(
+        ocr_result.merge(
+          raw_text: "familymart\nmix sweets\n合計 400",
+          lines: [
+            'familymart',
+            'mix sweets',
+            '合計 400'
+          ],
+          case_preserved_lines: [
+            'FamilyMart',
+            'MIX SWEETS',
+            '合計 400'
+          ],
+          candidates: ocr_result[:candidates].merge(
+            store_name: { value: 'familymart', confidence: 0.9 },
+            items: [
+              { raw_text: 'mix sweets', line_total: 100, confidence: 0.9 }
+            ]
+          )
+        )
+      )
+
+      aggregate_failures do
+        expect(result[:store]).not_to have_key(:store_casing_candidates)
+        expect(result[:filtered_content]).to include('familymart')
+        expect(result[:filtered_content]).not_to include('FamilyMart')
+        expect(result[:full_context_lines].first[:text]).to eq('familymart')
+      end
+    end
+
     it '長いレシートfixtureでもitem数とconfidence summaryの互換性を保つ' do
       raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/long_receipt.json').read)
       parsed_ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call

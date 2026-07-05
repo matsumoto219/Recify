@@ -10,6 +10,7 @@ module Admin
       amount_limit
       snapshot_limit
       ai_prompt_limit
+      analysis_quality
       upload_limit
       retention
       storage_policy

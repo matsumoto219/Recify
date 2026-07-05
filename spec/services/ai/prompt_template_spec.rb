@@ -165,6 +165,8 @@ RSpec.describe Ai::PromptTemplate do
         expect(store_information_prompt).to include('preserve that printed combined name as store_name')
         expect(store_information_prompt).to include('Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes')
         expect(store_information_prompt).to include('Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.')
+        expect(store_information_prompt).to include('store_candidates, operator_candidates')
+        expect(store_information_prompt).not_to include('store_casing_candidates')
         expect(store_information_prompt).not_to match(/[一-龠ぁ-んァ-ヶ]/)
         expect(store_information_prompt).not_to include('店')
         expect(store_information_prompt).not_to include('支店')

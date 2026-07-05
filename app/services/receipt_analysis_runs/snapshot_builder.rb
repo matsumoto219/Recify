@@ -257,6 +257,7 @@ module ReceiptAnalysisRuns
       candidates = normalized_hash(result[:candidates])
       ocr_lines_limit = snapshot_ocr_lines_limit
       lines = limited_strings(result[:lines], ocr_lines_limit)
+      case_preserved_lines = limited_strings(result[:case_preserved_lines], ocr_lines_limit)
       candidates_snapshot = ocr_candidates_snapshot(candidates)
 
       sanitize_hash(
@@ -264,12 +265,14 @@ module ReceiptAnalysisRuns
           schema_version: OCR_RESULT_SCHEMA_VERSION,
           success: result[:success] == true,
           lines: lines,
+          case_preserved_lines: case_preserved_lines.presence,
           candidates: candidates_snapshot,
           candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
           error_code: safe_string(result[:error_code]),
           meta: ocr_meta_snapshot(result[:meta]),
           truncated: {
             lines: Array(result[:lines]).size > ocr_lines_limit,
+            case_preserved_lines: Array(result[:case_preserved_lines]).size > ocr_lines_limit,
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
             tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,

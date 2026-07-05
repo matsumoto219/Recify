@@ -37,6 +37,8 @@
   setting_notice_key =
     if snapshot_limit_keys.include?(@record[:key].to_s)
       "snapshot_limit_note"
+    elsif @record[:key].to_s == "limits.store_name_casing_context_lines_max"
+      "store_name_casing_context_lines_note"
     elsif %w[operations.ocr_enabled operations.ai_enabled].include?(@record[:key].to_s)
       "operation_service_toggle_note"
     elsif @record[:key].to_s == "amount_engine.tax_excluded_price_conversion_enabled"

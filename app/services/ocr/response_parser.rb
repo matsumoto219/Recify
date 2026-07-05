@@ -40,11 +40,13 @@ class Ocr::ResponseParser
     raw_text = extract_raw_text(parsed_response)
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = normalized_lines(parsed_response)
+    case_preserved_lines = case_preserved_lines(parsed_response)
 
     {
       success: normalized_raw_text.present? || normalized_lines.any?,
       raw_text: normalized_raw_text,
       lines: normalized_lines,
+      case_preserved_lines: case_preserved_lines,
       candidates: {
         store_name: extract_store_name(parsed_response, normalized_lines),
         store_address: extract_store_address(parsed_response),                                                     # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
@@ -270,12 +272,30 @@ class Ocr::ResponseParser
     lines
   end
 
+  def case_preserved_lines(parsed_response)
+    return @case_preserved_lines if cacheable_response?(parsed_response) && defined?(@case_preserved_lines)
+
+    lines = extract_lines(parsed_response).map { |line| normalize_text_preserving_case(line) }.reject(&:empty?)
+    @case_preserved_lines = lines if cacheable_response?(parsed_response)
+    lines
+  end
+
   def normalize_text(text)
     @normalized_texts ||= {}
     key = text_cache_key(text)
     @normalized_texts[key] ||= key
       .unicode_normalize(:nfkc)
       .downcase
+      .gsub(/[[:space:]]+/, " ")
+      .strip
+      .freeze
+  end
+
+  def normalize_text_preserving_case(text)
+    @case_preserved_texts ||= {}
+    key = text_cache_key(text)
+    @case_preserved_texts[key] ||= key
+      .unicode_normalize(:nfkc)
       .gsub(/[[:space:]]+/, " ")
       .strip
       .freeze
@@ -1735,7 +1755,7 @@ class Ocr::ResponseParser
   end
 
   def reset_cached_response_state!
-    %i[@analyze_result @document @fields @raw_lines @normalized_lines].each do |ivar|
+    %i[@analyze_result @document @fields @raw_lines @normalized_lines @case_preserved_lines].each do |ivar|
       remove_instance_variable(ivar) if instance_variable_defined?(ivar)
     end
   end

@@ -947,6 +947,16 @@ module SystemSettings
         max: 50
       ),
       Definition.new(
+        key: "limits.store_name_casing_context_lines_max",
+        category: "analysis_quality",
+        value_type: "integer",
+        default: 12,
+        editable: true,
+        risk_level: "medium",
+        min: 0,
+        max: 50
+      ),
+      Definition.new(
         key: "limits.batch_files_per_day",
         category: "usage_limit",
         value_type: "integer",

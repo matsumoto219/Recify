@@ -158,6 +158,7 @@ RSpec.describe ReceiptAnalysisRuns do
         success: true,
         raw_text: 'RAW OCR TEXT',
         lines: [ '店名', '合計 1280' ],
+        case_preserved_lines: [ '店名', '合計 1280' ],
         candidates: {
           store_name: 'テストストア',
           total_amount: 1280,
@@ -237,6 +238,7 @@ RSpec.describe ReceiptAnalysisRuns do
           'total_poll_sleep_ms' => 5500,
           'retry_after_used' => true
         )
+        expect(run.ocr_result_snapshot['case_preserved_lines']).to eq([ '店名', '合計 1280' ])
         expect(run.ocr_summary['provider_error_detail']).to include(
           'service' => 'ocr',
           'provider' => 'azure_document_intelligence',
@@ -546,6 +548,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot.dig('items', 0, 'quantity_unit_code')).to eq('each')
         expect(snapshot.dig('store', 'customer_facing_store_candidates').size).to eq(10)
         expect(snapshot.dig('store', 'store_candidates').size).to eq(10)
+        expect(snapshot.dig('store', 'store_casing_candidates')).to be_nil
         expect(snapshot.dig('store', 'operator_candidates').size).to eq(10)
         expect(snapshot.dig('purchase', 'purchased_at_candidates').size).to eq(5)
         expect(snapshot.dig('payment', 'payment_candidates').size).to eq(10)
@@ -592,6 +595,7 @@ RSpec.describe ReceiptAnalysisRuns do
         expect(snapshot['items'].size).to eq(10)
         expect(snapshot.dig('store', 'customer_facing_store_candidates').size).to eq(2)
         expect(snapshot.dig('store', 'store_candidates').size).to eq(2)
+        expect(snapshot.dig('store', 'store_casing_candidates')).to be_nil
         expect(snapshot.dig('purchase', 'purchased_at_candidates').size).to eq(2)
         expect(snapshot.dig('payment', 'payment_candidates').size).to eq(2)
         expect(snapshot.dig('tax', 'tax_details').size).to eq(2)

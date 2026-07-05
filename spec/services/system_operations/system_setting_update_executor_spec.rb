@@ -320,6 +320,81 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it '店舗名casing参照行数がsnapshot OCR行数上限を超える更新を拒否する' do
+      create(:system_setting, key: 'limits.store_name_casing_context_lines_max', value: SystemSettings.stored_value(0))
+      create(:system_setting, key: 'limits.snapshot_ocr_lines_max', value: SystemSettings.stored_value(10))
+
+      result = described_class.call(
+        key: 'limits.store_name_casing_context_lines_max',
+        value: '11',
+        actor: actor,
+        reason: 'raise store casing context line limit',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('store_name_casing_snapshot_ocr_lines_limit')
+        expect(SystemSettings.limit_for('limits.store_name_casing_context_lines_max')).to eq(0)
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'store_name_casing_snapshot_ocr_lines_limit',
+          target_uid: 'limits.store_name_casing_context_lines_max'
+        )
+      end
+    end
+
+    it 'snapshot OCR行数上限を店舗名casing参照行数未満へ下げる更新を拒否する' do
+      create(:system_setting, key: 'limits.store_name_casing_context_lines_max', value: SystemSettings.stored_value(20))
+
+      result = described_class.call(
+        key: 'limits.snapshot_ocr_lines_max',
+        value: '10',
+        actor: actor,
+        reason: 'lower snapshot ocr line limit',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('snapshot_ocr_lines_store_name_casing_limit')
+        expect(SystemSettings.limit_for('limits.snapshot_ocr_lines_max')).to eq(150)
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'snapshot_ocr_lines_store_name_casing_limit',
+          target_uid: 'limits.snapshot_ocr_lines_max'
+        )
+      end
+    end
+
+    it '店舗名casing参照行数がsnapshot OCR行数上限以下なら更新できる' do
+      create(:system_setting, key: 'limits.snapshot_ocr_lines_max', value: SystemSettings.stored_value(20))
+
+      result = described_class.call(
+        key: 'limits.store_name_casing_context_lines_max',
+        value: '20',
+        actor: actor,
+        reason: 'align store casing context line limit',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.limit_for('limits.store_name_casing_context_lines_max')).to eq(20)
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'limits.store_name_casing_context_lines_max'
+        )
+      end
+    end
+
     it 'requires_confirmation設定ではconfirmationを要求する' do
       with_extra_definition(
         SystemSettings::Definition.new(

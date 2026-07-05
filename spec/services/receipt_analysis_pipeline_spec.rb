@@ -830,9 +830,16 @@ RSpec.describe ReceiptAnalysisPipeline do
     it 'OCR snapshotからAIを実行してfinalize decisionを保存する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
+      ocr_result = successful_ocr_result.merge(
+        lines: [ 'teststore', 'コーヒー 180', '合計 180', '現金' ],
+        case_preserved_lines: [ 'TestStore', 'コーヒー 180', '合計 180', '現金' ]
+      )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **_kwargs|
+        expect(rehydrated_ocr_result[:case_preserved_lines]).to eq([ 'TestStore', 'コーヒー 180', '合計 180', '現金' ])
+        successful_ai_result
+      end
 
       result = described_class.run_ai(run)
 

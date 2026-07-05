@@ -103,6 +103,8 @@ RSpec.describe Ocr::ResponseParser do
         expect(result[:success]).to eq(true)
         expect(result[:raw_text]).to include('サンプルストア')
         expect(result[:lines]).to include('コーヒー 180', 'サンド 550 x2')
+        expect(result[:lines]).to include('master')
+        expect(result[:case_preserved_lines]).to include('Master')
         expect(result[:error_code]).to be_nil
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
@@ -164,6 +166,24 @@ RSpec.describe Ocr::ResponseParser do
         expect(first_tax_detail[:amount]).to eq(80)
         expect(first_tax_detail[:rate]).to eq(10)
         expect(first_tax_detail[:net_amount]).to eq(800)
+      end
+    end
+
+    it 'AI向けに小文字化前のOCR行を保持しつつ既存linesは小文字正規化する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        FamilyMart
+        国分寺南町三丁目店
+        エミフルMASAKI
+        合計 400
+      TEXT
+      response['analyzeResult']['documents'].first['fields']['MerchantName'] = { 'valueString' => 'FamilyMart' }
+
+      result = described_class.new(response: response).call
+
+      aggregate_failures do
+        expect(result[:lines]).to include('familymart', 'エミフルmasaki')
+        expect(result[:case_preserved_lines]).to include('FamilyMart', 'エミフルMASAKI')
       end
     end
 

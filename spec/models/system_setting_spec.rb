@@ -43,4 +43,18 @@ RSpec.describe SystemSetting, type: :model do
 
     expect(setting.reload.lock_version).to eq(0)
   end
+
+  it '店舗名casing復元の参照行数設定をanalysis qualityとして定義する' do
+    definition = SystemSettings.definition_for('limits.store_name_casing_context_lines_max')
+
+    expect(definition).to have_attributes(
+      category: 'analysis_quality',
+      value_type: 'integer',
+      default: 12,
+      editable: true,
+      risk_level: 'medium',
+      min: 0,
+      max: 50
+    )
+  end
 end

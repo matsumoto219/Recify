@@ -6,16 +6,19 @@ module Analysis
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    STORE_CASING_CONTEXT_LINES_MAX_SETTING_KEY = "limits.store_name_casing_context_lines_max"
+    STORE_CASING_CONTEXT_LINES_MAX = 12
 
     class << self
       def call(ocr_result:, ai_result: nil)
         normalized_ocr_result = normalize_ocr_result(ocr_result)
         candidates = normalize_candidates(normalized_ocr_result)
         lines = normalized_lines(normalized_ocr_result)
+        case_preserved_lines = normalized_case_preserved_lines(normalized_ocr_result)
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
         ai_receipt_attributes = normalized_ai_result[:receipt_attributes]
-        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines)
+        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines, case_preserved_lines)
         receipt_items_attributes = build_receipt_items_attributes(
           candidates,
           lines,
@@ -133,6 +136,12 @@ module Analysis
         Array(ocr_result[:lines]).map(&:to_s)
       end
 
+      def normalized_case_preserved_lines(ocr_result)
+        Array(ocr_result[:case_preserved_lines]).filter_map do |line|
+          Analysis.normalize_store_name_candidate(line)
+        end
+      end
+
       def normalize_ai_result(ai_result)
         return { receipt_attributes: {}, receipt_items_attributes: [], receipt_adjustments_attributes: [] } unless ai_result.is_a?(Hash)
 
@@ -149,7 +158,7 @@ module Analysis
         }
       end
 
-      def build_receipt_attributes(candidates, ai_receipt_attributes, lines)
+      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, case_preserved_lines)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
         ai_store_name = ai_attrs[:store_name].presence
         store_name = resolve_store_name(
@@ -157,6 +166,7 @@ module Analysis
           lines,
           ai_store_name: ai_store_name.present?
         )
+        store_name = restore_store_name_casing(store_name, case_preserved_lines)
 
         {
           store_name: store_name,
@@ -261,6 +271,49 @@ module Analysis
         return legal_entity_extension if legal_entity_extension.present?
 
         store_name
+      end
+
+      def restore_store_name_casing(store_name, case_preserved_lines)
+        restored = store_name.to_s
+        return store_name if restored.blank?
+
+        store_name_casing_candidates(case_preserved_lines).each do |candidate|
+          restored = restore_store_name_casing_candidate(restored, candidate)
+        end
+
+        restored
+      end
+
+      def store_name_casing_candidates(case_preserved_lines)
+        Array(case_preserved_lines)
+          .first(store_casing_context_lines_max)
+          .filter_map { |line| store_name_casing_candidate(line) }
+          .uniq
+          .sort_by { |candidate| -candidate.length }
+      end
+
+      def store_casing_context_lines_max
+        SystemSettings.limit_for(STORE_CASING_CONTEXT_LINES_MAX_SETTING_KEY)
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+        STORE_CASING_CONTEXT_LINES_MAX
+      end
+
+      def store_name_casing_candidate(line)
+        candidate = Analysis.normalize_store_name_candidate(line)
+        return nil if candidate.blank?
+        return nil unless candidate.match?(/[A-Za-z]/)
+        return nil if candidate.match?(FALLBACK_URL_OR_EMAIL_PATTERN)
+        return nil if candidate.match?(/\A[A-Za-z]{1,4}\z/)
+        return nil if store_name_context_noise_line?(candidate)
+
+        candidate
+      end
+
+      def restore_store_name_casing_candidate(store_name, candidate)
+        pattern = Regexp.new(Regexp.escape(candidate), Regexp::IGNORECASE)
+        return store_name unless store_name.match?(pattern)
+
+        store_name.gsub(pattern, candidate)
       end
 
       def complete_customer_facing_ai_store_name?(store_name, lines)

@@ -100,6 +100,7 @@ RSpec.describe SystemSettings do
         'limits.ai_prompt_full_context_lines_max',
         'limits.ai_prompt_raw_text_length_max',
         'limits.ai_prompt_purchase_candidates_max',
+        'limits.store_name_casing_context_lines_max',
         'limits.batch_files_per_day',
         'limits.ocr_jobs_per_day',
         'limits.ai_jobs_per_day',
@@ -165,6 +166,7 @@ RSpec.describe SystemSettings do
         usage_limit_safety
         snapshot_limit
         ai_prompt_limit
+        analysis_quality
       ]
       target_definitions = described_class.definitions.values.select do |definition|
         bounded_categories.include?(definition.category) && definition.value_type == 'integer'
@@ -560,7 +562,7 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '100')).to eq(100)
         expect(described_class.cast_update_value('limits.snapshot_ai_normalized_items_max', '10000')).to eq(10_000)
-        expect(described_class.cast_update_value('limits.snapshot_ocr_lines_max', '10')).to eq(10)
+        expect(described_class.cast_update_value('limits.snapshot_ocr_lines_max', '12')).to eq(12)
         expect(described_class.cast_update_value('limits.snapshot_ocr_lines_max', '1000')).to eq(1000)
         expect(described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '10')).to eq(10)
         expect(described_class.cast_update_value('limits.snapshot_ai_input_full_context_lines_max', '1000')).to eq(1000)
@@ -590,6 +592,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.ai_prompt_raw_text_length_max', '50000')).to eq(50_000)
         expect(described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '1')).to eq(1)
         expect(described_class.cast_update_value('limits.ai_prompt_purchase_candidates_max', '50')).to eq(50)
+        expect(described_class.cast_update_value('limits.store_name_casing_context_lines_max', '0')).to eq(0)
+        expect(described_class.cast_update_value('limits.store_name_casing_context_lines_max', '50')).to eq(50)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '0')).to eq(0)
         expect(described_class.cast_update_value('limits.receipt_adjustments_per_receipt', '200')).to eq(200)
         expect(described_class.cast_update_value('limits.receipt_payments_per_receipt', '0')).to eq(0)

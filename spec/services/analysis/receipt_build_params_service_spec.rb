@@ -2378,6 +2378,143 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:store_name]).to eq('SampleMart 中央南三丁目店')
       end
 
+      it 'OCRのcase-preserved行から保存店舗名の既存英字tokenだけ大文字小文字を復元する' do
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '国分寺南町三丁目店',
+            store_address: '東京都国分寺市サンプル1-2-3',
+            total_amount: 844,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'familymart',
+            '国分寺南町三丁目店',
+            '領収証'
+          ],
+          case_preserved_lines: [
+            'FamilyMart',
+            '国分寺南町三丁目店',
+            '領収証'
+          ]
+        )
+        branch_ai_result = {
+          receipt_attributes: {
+            store_name: '国分寺南町三丁目店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('FamilyMart 国分寺南町三丁目店')
+      end
+
+      it '施設名の英字部分もcase-preserved行の表記へ復元する' do
+        facility_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'pepper エミフルmasaki店',
+            store_address: "愛媛県伊予郡松前町筒井850\nエミフルMASAKI",
+            total_amount: 1780,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            'pepper',
+            'ペッパーランチ',
+            'エミフルmasaki店',
+            '合計 1780'
+          ],
+          case_preserved_lines: [
+            'PEPPER',
+            'ペッパーランチ',
+            'エミフルMASAKI店',
+            '合計 1780'
+          ]
+        )
+        facility_ai_result = {
+          receipt_attributes: {
+            store_name: 'ペッパーランチ エミフルmasaki店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: facility_ocr_result, ai_result: facility_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('ペッパーランチ エミフルMASAKI店')
+      end
+
+      it 'SystemSettingsで店舗名casing復元の参照行数を制限する' do
+        create(:system_setting, key: 'limits.store_name_casing_context_lines_max', value: SystemSettings.stored_value(1))
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'familymart 国分寺南町三丁目店',
+            total_amount: 844,
+            items: [],
+            tax_details: []
+          },
+          lines: [],
+          case_preserved_lines: [
+            '領収証',
+            'FamilyMart 国分寺南町三丁目店'
+          ]
+        )
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('familymart 国分寺南町三丁目店')
+      end
+
+      it 'SystemSettingsで店舗名casing復元を無効化できる' do
+        create(:system_setting, key: 'limits.store_name_casing_context_lines_max', value: SystemSettings.stored_value(0))
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: 'familymart 国分寺南町三丁目店',
+            total_amount: 844,
+            items: [],
+            tax_details: []
+          },
+          lines: [],
+          case_preserved_lines: [
+            'FamilyMart 国分寺南町三丁目店'
+          ]
+        )
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: nil)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('familymart 国分寺南町三丁目店')
+      end
+
+      it 'case-preserved行にあるだけの未採用ブランド名は保存店舗名へ追加しない' do
+        branch_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: '中央店',
+            total_amount: 500,
+            items: [],
+            tax_details: []
+          },
+          lines: [
+            '中央店',
+            '領収証'
+          ],
+          case_preserved_lines: [
+            'UnknownBrand',
+            '中央店',
+            '領収証'
+          ]
+        )
+        branch_ai_result = {
+          receipt_attributes: {
+            store_name: '中央店'
+          },
+          receipt_items_attributes: []
+        }
+
+        params = described_class.call(ocr_result: branch_ocr_result, ai_result: branch_ai_result)
+
+        expect(params[:receipt_attributes][:store_name]).to eq('中央店')
+      end
+
       it 'AIが英字ロゴとローカル完結店舗名の重複結合を返した場合はローカル店舗名へ寄せる' do
         local_complete_ocr_result = ocr_result.deep_merge(
           candidates: {

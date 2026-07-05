@@ -156,6 +156,14 @@ RSpec.describe Admin::SystemSettingsQuery do
       )
     end
 
+    it 'analysis quality filterを適用できる' do
+      result = described_class.call(category: 'analysis_quality')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'limits.store_name_casing_context_lines_max'
+      )
+    end
+
     it 'retention filterを適用できる' do
       result = described_class.call(category: 'retention')
 

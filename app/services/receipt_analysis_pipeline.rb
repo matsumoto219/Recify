@@ -350,6 +350,7 @@ class ReceiptAnalysisPipeline
     {
       success: snapshot[:success] == true,
       lines: Array(snapshot[:lines]).map(&:to_s),
+      case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
       candidates: normalized_hash(snapshot[:candidates]).to_h,
       error_code: snapshot[:error_code].presence,
       meta: normalized_hash(snapshot[:meta]).to_h

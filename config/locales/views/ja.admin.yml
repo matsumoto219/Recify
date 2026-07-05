@@ -1237,6 +1237,7 @@ ja:
         title: "設定詳細: %{key}"
         subtitle: 設定詳細
         snapshot_limit_note: snapshot上限を大きくすると解析snapshotのjsonbサイズが増えます。receipt_items_per_receipt の最大値以上に設定してください。
+        store_name_casing_context_lines_note: 店舗名の大文字小文字復元で参照するOCR先頭行数です。0にすると復元を行いません。値を大きくすると店舗名以外の行が候補に入る可能性があります。snapshot_ocr_lines_max以下で運用してください。
         operation_service_toggle_note: OCR / AI の外部API呼び出しを管理者が停止する高リスクな運用スイッチです。OCR停止中は画像解析を開始できません。AI停止中は、OCRが利用可能な場合にAI補完を行わずOCR結果のみで保存します。外部API費用や障害対応時にのみ変更してください。
         amount_engine_tax_excluded_price_conversion_note: OCR/AI解析時に税抜と判断した明細を税込のprice/line_totalへ補正する高リスク設定です。OFFにすると解析保存金額、明細保存値、候補採用、要確認理由が変わる可能性があります。手動作成・編集保存には適用されません。
         amount_limit_note: 金額系フィールドのアプリ上限です。大きくしすぎると手動入力、OCR/AI解析結果、金額計算、管理画面表示に影響する可能性があります。DBはbigintですが、運用上の上限として慎重に変更してください。
@@ -1292,6 +1293,8 @@ ja:
         failed: "設定を更新できませんでした: %{error_code}"
         failure:
           receipt_items_snapshot_limit: receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。
+          store_name_casing_snapshot_ocr_lines_limit: store_name_casing_context_lines_max を上げるには、先に snapshot_ocr_lines_max を同等以上に変更してください。
+          snapshot_ocr_lines_store_name_casing_limit: snapshot_ocr_lines_max を store_name_casing_context_lines_max 未満にできません。snapshot_ocr_lines_max を下げるには、先に store_name_casing_context_lines_max を同等以下に変更してください。
           user_limit_safety_max: UserLimitsのシステム上限を超えています。関連する利用上限またはユーザー別上限を先に同等以下へ変更してください。
           analysis_run_retention_order: 解析run保持期間は failed >= default >= short の関係を維持してください。
           amount_limit_relationship: 金額上限の大小関係を維持してください。receipt_total_amount_max は明細合計、調整額、支払い額、税額以上にし、receipt_item_line_total_max は receipt_item_price_max 以上にしてください。
