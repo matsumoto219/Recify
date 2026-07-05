@@ -17,11 +17,11 @@ RSpec.describe Amounts::CandidateFamilyRegistry do
     generator = Class.new do
       private
 
-      def receipt_input_candidate
-        :receipt_input_candidate
+      def item_candidates
+        :item_candidates
       end
     end.new
 
-    expect(described_class.build(:receipt_input, generator)).to eq(:receipt_input_candidate)
+    expect(described_class.build(:item_amounts, generator)).to eq(:item_candidates)
   end
 end
