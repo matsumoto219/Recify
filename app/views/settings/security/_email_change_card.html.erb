@@ -33,6 +33,8 @@
             email: current_user.email,
             mode: :one_line,
             tag: :p,
+            copyable: true,
+            copy_label: t("settings.security.email.current"),
             class: "token-text-base font-medium" %>
 
       <% if current_user.pending_reconfirmation? %>

@@ -75,6 +75,8 @@
             <%= render "shared/ui/text/email_address",
                   email: record[:email],
                   mode: :one_line,
+                  copyable: true,
+                  copy_label: User.human_attribute_name(:email),
                   class: "token-text-base" %>
           </dd>
         </div>

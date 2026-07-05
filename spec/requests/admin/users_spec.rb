@@ -250,6 +250,10 @@ RSpec.describe 'Admin users', type: :request do
       document = Nokogiri::HTML(response.body)
       copy_sources = document.css('[data-controller="clipboard"] [data-clipboard-target="source"]').map { |node| node.text.strip }
       copy_labels = document.css('button[data-action="click->clipboard#copy"]').map { |node| node['aria-label'] }
+      email_copy_label = I18n.t(
+        'shared.clipboard.copy_label',
+        label: User.human_attribute_name(:email)
+      )
       legal_acceptances_card = document.at_css('#admin-user-legal-acceptances')
 
       aggregate_failures do
@@ -295,7 +299,9 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include(admin_receipt_analysis_runs_path(user_id: user.id))
         expect(response.body).to include(admin_audit_logs_path(actor_user_id: user.id))
         expect(copy_sources).to include(user.id.to_s)
+        expect(copy_sources).to include('show-user@example.com')
         expect(copy_labels).to include(a_string_including(I18n.t('admin.users.show.basic.user_id')))
+        expect(copy_labels).to include(email_copy_label)
         expect(response.body).to include('min-w-[56rem] text-left text-sm')
         expect(response.body).to include('min-w-[16rem] break-words px-3 py-3 font-mono text-xs [overflow-wrap:anywhere]')
         expect(response.body).not_to include('hidden-credential-id')

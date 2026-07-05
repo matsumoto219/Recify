@@ -651,13 +651,21 @@ RSpec.describe 'Settings', type: :request do
       email_node = document.css('p').find do |node|
         node['title'] == full_email && node['aria-label'] == full_email
       end
-      email_segments = email_node&.css('span')
+      display_node = email_node&.at_css('[data-email-address-display]')
+      email_segments = display_node&.css('span')
+      copy_source = email_node&.at_css('[data-controller="clipboard"] [data-clipboard-target="source"]')
+      copy_button = email_node&.at_css('button[data-action="click->clipboard#copy"]')
+      expected_copy_label = I18n.t(
+        'shared.clipboard.copy_label',
+        label: I18n.t('settings.security.email.current')
+      )
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(email_node).to be_present
-        expect(email_node['class']).to include('inline-flex')
-        expect(email_node['class']).not_to include('grid-cols')
+        expect(display_node).to be_present
+        expect(display_node['class']).to include('inline-flex')
+        expect(display_node['class']).not_to include('grid-cols')
         expect(email_segments.map { |segment| segment.text.strip }).to eq([
           'recify-v11-security-current-email-version123456789',
           '@',
@@ -667,6 +675,8 @@ RSpec.describe 'Settings', type: :request do
         expect(email_segments.first['class']).to include('flex-[0_999_auto]')
         expect(email_segments.last['class']).to include('truncate')
         expect(email_segments.last['class']).to include('flex-[0_1_auto]')
+        expect(copy_source.text.strip).to eq(full_email)
+        expect(copy_button['aria-label']).to eq(expected_copy_label)
       end
     end
 
