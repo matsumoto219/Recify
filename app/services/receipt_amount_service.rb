@@ -470,26 +470,15 @@ class ReceiptAmountService
       context: @context,
       discount_rounding_mode: @discount_rounding_mode
     ).call[:items]
-    hard_rejector = Amounts::HardRejector.new(
+    evaluator = Amounts::CandidateEvaluator.new(
       receipt: @receipt,
       items: normalized_items,
-      tax_details: @tax_details,
-      payments: @payments
-    )
-    reviewer = Amounts::CandidateConsistencyReviewer.new(
-      receipt: @receipt,
-      items: normalized_items,
-      tax_details: @tax_details,
-      context: @context
-    )
-    scorer = Amounts::CandidateScorer.new(
-      receipt: @receipt,
       payments: @payments,
       tax_details: @tax_details,
       context: @context
     )
 
-    raw_candidates.map { |candidate| scorer.call(reviewer.call(hard_rejector.call(candidate))) }
+    evaluator.call(raw_candidates)
   end
 
   def tax_excluded_price_conversion_enabled?

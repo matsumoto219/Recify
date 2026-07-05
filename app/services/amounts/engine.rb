@@ -38,9 +38,7 @@ module Amounts
     attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates
 
     def evaluated_generated_candidates
-      candidates = generated_candidates.map { |candidate| hard_rejector.call(candidate) }
-      candidates = candidates.map { |candidate| consistency_reviewer.call(candidate) }
-      candidates.map { |candidate| scorer.call(candidate) }
+      candidate_evaluator.call(generated_candidates)
     end
 
     def generated_candidates
@@ -70,29 +68,12 @@ module Amounts
       modes.map { |mode| Amounts::Rounding.normalize_rounding_mode(mode) }.uniq.presence || [ discount_rounding_mode ]
     end
 
-    def hard_rejector
-      @hard_rejector ||= Amounts::HardRejector.new(
+    def candidate_evaluator
+      @candidate_evaluator ||= Amounts::CandidateEvaluator.new(
         receipt: receipt,
         items: items,
         tax_details: tax_details,
-        payments: payments
-      )
-    end
-
-    def consistency_reviewer
-      @consistency_reviewer ||= Amounts::CandidateConsistencyReviewer.new(
-        receipt: receipt,
-        items: items,
-        tax_details: tax_details,
-        context: context
-      )
-    end
-
-    def scorer
-      @scorer ||= Amounts::CandidateScorer.new(
-        receipt: receipt,
         payments: payments,
-        tax_details: tax_details,
         context: context
       )
     end
