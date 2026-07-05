@@ -16,7 +16,6 @@ module Amounts
       @base_result = base_result
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
       @evaluated_candidates = Array(evaluated_candidates).presence
-      @items = normalize_items(raw_items, discount_rounding_mode)
     end
 
     def call
@@ -35,14 +34,10 @@ module Amounts
 
     private
 
-    attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates
+    attr_reader :receipt, :raw_items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates
 
     def evaluated_generated_candidates
-      candidate_evaluator.call(generated_candidates)
-    end
-
-    def generated_candidates
-      @generated_candidates ||= Amounts::CandidateGenerator.new(
+      @evaluated_generated_candidates ||= Amounts::CandidatePipeline.new(
         receipt: receipt,
         items: raw_items,
         tax_details: tax_details,
@@ -51,31 +46,14 @@ module Amounts
         context: context,
         tax_rounding_modes: tax_rounding_modes,
         discount_rounding_modes: discount_rounding_modes,
+        scoring_discount_rounding_mode: discount_rounding_mode,
         tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled
       ).call
-    end
-
-    def normalize_items(items, rounding_mode)
-      Amounts::ItemTotalAggregator.new(
-        items: items,
-        context: context,
-        discount_rounding_mode: rounding_mode
-      ).call[:items]
     end
 
     def normalize_discount_rounding_modes(values)
       modes = values.nil? ? [ discount_rounding_mode ] : Array(values)
       modes.map { |mode| Amounts::Rounding.normalize_rounding_mode(mode) }.uniq.presence || [ discount_rounding_mode ]
-    end
-
-    def candidate_evaluator
-      @candidate_evaluator ||= Amounts::CandidateEvaluator.new(
-        receipt: receipt,
-        items: items,
-        tax_details: tax_details,
-        payments: payments,
-        context: context
-      )
     end
   end
 end

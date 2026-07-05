@@ -454,7 +454,7 @@ class ReceiptAmountService
   end
 
   def native_profile_candidates
-    raw_candidates = Amounts::CandidateGenerator.new(
+    Amounts::CandidatePipeline.new(
       receipt: @receipt,
       items: @items,
       tax_details: @tax_details,
@@ -463,22 +463,9 @@ class ReceiptAmountService
       context: @context,
       tax_rounding_modes: candidate_tax_rounding_modes,
       discount_rounding_modes: candidate_discount_rounding_modes,
+      scoring_discount_rounding_mode: @discount_rounding_mode,
       tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled?
     ).call
-    normalized_items = Amounts::ItemTotalAggregator.new(
-      items: @items,
-      context: @context,
-      discount_rounding_mode: @discount_rounding_mode
-    ).call[:items]
-    evaluator = Amounts::CandidateEvaluator.new(
-      receipt: @receipt,
-      items: normalized_items,
-      payments: @payments,
-      tax_details: @tax_details,
-      context: @context
-    )
-
-    evaluator.call(raw_candidates)
   end
 
   def tax_excluded_price_conversion_enabled?
