@@ -57,6 +57,13 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:computed, :payment_amount_sum)).to eq(1_139)
       expect(result.dig(:computed, :items).map { |item| item['price'] || item[:price] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result.dig(:computed, :items).map { |item| item['line_total'] || item[:line_total] }).to eq([ 140, 151, 330, 490, 50 ])
+      expect(result.dig(:computed, :items).map { |item| item['tax_rate'] || item[:tax_rate] }).to eq([
+        BigDecimal('0.08'),
+        BigDecimal('0.08'),
+        BigDecimal('0.10'),
+        BigDecimal('0.10'),
+        BigDecimal('0')
+      ])
       expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:price] }).to eq([ 140, 151, 330, 490, 50 ])
       expect(result[:tax_details]).to contain_exactly(
         include(rate: BigDecimal('0.08'), net_amount: 270, amount: 21),
@@ -72,6 +79,64 @@ RSpec.describe 'Amount Engine integration' do
       expect(result[:blocking_inconsistencies]).to be_empty
       expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
       expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '複数税率への再割当が複数通り完全一致する場合はsilent completedにしない' do
+    allow(SystemSettings).to receive(:enabled?)
+      .with(ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY)
+      .and_return(true)
+
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 184,
+        tax_amount: 16,
+        total_amount: 200
+      },
+      items: [
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') },
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 93, amount: 7, description: '小計（税抜8%）' },
+        { rate: BigDecimal('0.10'), net_amount: 91, amount: 9, description: '小計（税抜10%）' }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 同額2行はどちらを8%/10%へ割り当ててもexactになるため、税率補正を自動確定しない。
+      expect(result[:warning_inconsistencies]).to include(:competing_exact_basis_candidate)
+      expect(result[:review_reasons]).to include('competing_exact_basis_candidate')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
+  it '複数税率への再割当探索がitem数上限に達したらsilent completedにしない' do
+    stub_const('Amounts::CandidateGenerator::SAME_RATE_MIXED_MAX_ITEMS', 1)
+    allow(SystemSettings).to receive(:enabled?)
+      .with(ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY)
+      .and_return(true)
+
+    result = call_amount_engine(
+      receipt: {
+        subtotal_amount: 184,
+        tax_amount: 16,
+        total_amount: 200
+      },
+      items: [
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') },
+        { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 93, amount: 7, description: '小計（税抜8%）' },
+        { rate: BigDecimal('0.10'), net_amount: 91, amount: 9, description: '小計（税抜10%）' }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:warning_inconsistencies]).to include(:mixed_basis_search_truncated)
+      expect(result[:review_reasons]).to include('mixed_basis_search_truncated')
       expect(result[:needs_review]).to be(true)
     end
   end

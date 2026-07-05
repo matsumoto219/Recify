@@ -2303,6 +2303,101 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'Amount Engineのcomputed tax_rateが不正値の場合は元の明細tax_rateとOCR名を保持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_dup
+      ocr_result[:candidates][:items] = [
+        {
+          raw_text: 'OCR保持商品',
+          price: 130,
+          quantity: 1,
+          quantity_unit_code: 'each',
+          line_total: 130,
+          tax_rate: 8,
+          confidence: 0.95
+        }
+      ]
+      ai_result = successful_ai_result.deep_dup
+      ai_result[:receipt_items_attributes] = [
+        {
+          index: 0,
+          suggested_name: 'OCR保持商品',
+          category: 'food',
+          price: 130,
+          quantity: 1,
+          quantity_unit_code: 'each',
+          line_total: 130,
+          tax_rate: 8,
+          needs_review: false,
+          confidence: 0.95
+        }
+      ]
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        {
+          resolved: { total: 140, subtotal: 130, tax: 10, tax_rate: BigDecimal('0.08') },
+          computed: {
+            total: 140,
+            subtotal: 130,
+            tax: 10,
+            items: [
+              {
+                price: 140,
+                quantity: BigDecimal('1'),
+                quantity_unit_code: 'each',
+                original_line_total: 130,
+                line_total: 140,
+                tax_rate: 'invalid-tax-rate'
+              }
+            ]
+          },
+          tax_details: [ { rate: BigDecimal('0.08'), net_amount: 130, amount: 10 } ],
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: [],
+          mismatch_codes: [],
+          blocking_mismatch_codes: [],
+          warning_mismatch_codes: [],
+          warning_reasons: [],
+          mismatch_messages: [],
+          needs_review: false,
+          amount_engine: {
+            selected_candidate_id: 'mixed_by_tax_rate_group/floor',
+            selected_basis: 'mixed_by_tax_rate_group',
+            selected_candidate: {
+              candidate_id: 'mixed_by_tax_rate_group/floor',
+              basis: 'mixed_by_tax_rate_group',
+              subtotal: 130,
+              tax: 10,
+              purchase_total: 140,
+              final_payment_total: 140,
+              computed_items: [
+                { price: 140, quantity: BigDecimal('1'), original_line_total: 130, line_total: 140, tax_rate: 'invalid-tax-rate' }
+              ]
+            }
+          }
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        expect(item.raw_text).to eq('OCR保持商品')
+        expect(item.confirmed_name).to be_nil
+        expect(item.tax_rate).to eq(BigDecimal('0.08'))
+        expect(item.price).to eq(140)
+        expect(item.line_total).to eq(140)
+      end
+    end
+
     it '2019年サンプルコンビニの混在税率レシートをfinalize経路でも税込補正して支払額と一致させる' do
       create(
         :system_setting,

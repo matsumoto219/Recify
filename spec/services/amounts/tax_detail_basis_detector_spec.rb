@@ -52,4 +52,38 @@ RSpec.describe Amounts::TaxDetailBasisDetector do
       expect(details[2]).to include(basis: :gross, target_net_amount: 746, target_gross_amount: 820)
     end
   end
+
+  it '税額のみ行と基準不明行を明示したevidenceとして返す' do
+    details = described_class.call([
+      { rate: BigDecimal('0.08'), net_amount: 0, amount: 21, description: '消費税等8%' },
+      { rate: BigDecimal('0.08'), net_amount: 100, amount: 3, description: '8%対象' }
+    ])
+
+    aggregate_failures do
+      expect(details[0]).to include(
+        basis: :tax_only,
+        printed_amount: 0,
+        printed_amount_basis: :tax_only,
+        target_net_amount: 0,
+        target_tax_amount: 21,
+        target_gross_amount: 0
+      )
+      expect(details[0][:evidence]).to include(
+        printed_amount_basis: :tax_only,
+        target_tax_amount: 21
+      )
+      expect(details[1]).to include(
+        basis: :unknown,
+        printed_amount: 100,
+        printed_amount_basis: :unknown,
+        target_net_amount: 100,
+        target_tax_amount: 3,
+        target_gross_amount: 100
+      )
+      expect(details[1][:evidence]).to include(
+        printed_amount_basis: :unknown,
+        target_tax_amount: 3
+      )
+    end
+  end
 end

@@ -587,6 +587,7 @@ module Amounts
       computed_items = Array.new(items.size)
       groups = {}
       warnings = adjustment_warnings.dup
+      warnings << :competing_exact_basis_candidate if alternative_result[:status] == :ambiguous
       warnings << :mixed_basis_search_truncated if alternative_result[:status] == :search_limited
       exact = true
       mixed_basis_used = false
