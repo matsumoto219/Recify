@@ -74,6 +74,30 @@ RSpec.describe ReceiptAmountService do
   end
 
   describe '.call' do
+    it 'analysisでは評価済みcandidateを再利用し候補生成を二重実行しない' do
+      expect(Amounts::CandidateGenerator).to receive(:new).once.and_call_original
+
+      result = call_service(
+        receipt: {
+          total_amount: 1_100,
+          subtotal_amount: 1_000,
+          tax_amount: 100
+        },
+        receipt_items: [
+          { line_total: 1_100, tax_rate: BigDecimal('0.1') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 1_000, amount: 100 }
+        ],
+        receipt_payments: [
+          { method: 'cash', amount: 1_100 }
+        ],
+        context: :analysis
+      )
+
+      expect(result[:resolved]).to include(total: 1_100)
+    end
+
     it 'defaults rounding_mode to floor' do
       result = call_service(
         receipt: {},

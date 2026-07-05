@@ -2,7 +2,7 @@
 
 module Amounts
   class Engine
-    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true)
+    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, evaluated_candidates: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true)
       @receipt = receipt
       @raw_items = Array(items)
       @tax_details = Array(tax_details)
@@ -15,13 +15,12 @@ module Amounts
       @tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled != false
       @base_result = base_result
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
+      @evaluated_candidates = Array(evaluated_candidates).presence
       @items = normalize_items(raw_items, discount_rounding_mode)
     end
 
     def call
-      candidates = generated_candidates.map { |candidate| hard_rejector.call(candidate) }
-      candidates = candidates.map { |candidate| consistency_reviewer.call(candidate) }
-      candidates = candidates.map { |candidate| scorer.call(candidate) }
+      candidates = evaluated_candidates || evaluated_generated_candidates
       selector = Amounts::WinnerSelector.new(candidates)
       selected = selector.call
 
@@ -36,7 +35,13 @@ module Amounts
 
     private
 
-    attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result
+    attr_reader :receipt, :raw_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates
+
+    def evaluated_generated_candidates
+      candidates = generated_candidates.map { |candidate| hard_rejector.call(candidate) }
+      candidates = candidates.map { |candidate| consistency_reviewer.call(candidate) }
+      candidates.map { |candidate| scorer.call(candidate) }
+    end
 
     def generated_candidates
       @generated_candidates ||= Amounts::CandidateGenerator.new(

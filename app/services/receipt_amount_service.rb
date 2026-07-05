@@ -150,7 +150,8 @@ class ReceiptAmountService
       discount_rounding_modes: engine_discount_rounding_modes(active_discount_rounding_mode),
       tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled,
       base_result: base_result,
-      calculation_profile_result: profile_estimation
+      calculation_profile_result: profile_estimation,
+      evaluated_candidates: @estimated_candidates
     ).call
   end
 
@@ -423,6 +424,7 @@ class ReceiptAmountService
     return empty_calculation_profile unless @context == :analysis
 
     scored_candidates = native_profile_candidates
+    @estimated_candidates = scored_candidates
     Amounts::ProfileSummary.call(
       selected_candidate: Amounts::WinnerSelector.new(scored_candidates).call,
       candidates: scored_candidates,
