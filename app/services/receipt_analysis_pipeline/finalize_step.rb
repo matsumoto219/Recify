@@ -667,9 +667,12 @@ class ReceiptAnalysisPipeline
         calculated_item = calculated_items[index]
         next item_attributes if calculated_item.blank?
 
+        calculated_tax_rate = normalize_tax_rate(calculated_item[:tax_rate] || calculated_item["tax_rate"])
+
         item_attributes.merge(
           price: safe_calculated_amount(calculated_item[:price] || calculated_item["price"]) || item_attributes[:price],
           quantity: calculated_item[:quantity] || calculated_item["quantity"],
+          tax_rate: calculated_tax_rate.nil? ? item_attributes[:tax_rate] : calculated_tax_rate,
           original_line_total: safe_calculated_amount(calculated_item[:original_line_total] || calculated_item["original_line_total"]) || item_attributes[:original_line_total],
           line_total: safe_calculated_amount(calculated_item[:line_total] || calculated_item["line_total"]) || item_attributes[:line_total],
           discount_amount: safe_calculated_amount(calculated_item[:discount_amount] || calculated_item["discount_amount"]) || item_attributes[:discount_amount],

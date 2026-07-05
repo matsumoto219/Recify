@@ -967,8 +967,8 @@ RSpec.describe ReceiptAmountService do
       result = call_service(
         receipt: {
           total_amount: 1_161,
-          subtotal_amount: 1_066,
-          tax_amount: 95
+          subtotal_amount: 10,
+          tax_amount: 125
         },
         receipt_items: [
           { price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: BigDecimal('0.08') },
@@ -1002,6 +1002,58 @@ RSpec.describe ReceiptAmountService do
           include(rate: BigDecimal('0.1'), net_amount: 746, amount: 74)
         )
         expect(result.dig(:amount_engine, :candidates).map { |candidate| candidate[:candidate_id] }).not_to include('printed_tax_details_raw_sum/floor')
+        expect(result[:blocking_inconsistencies]).to be_empty
+        expect(result[:warning_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'AI由来の一部item税率がずれても印字税詳細に合う混在候補を採用する' do
+      result = call_service(
+        receipt: {
+          total_amount: 1_161,
+          subtotal_amount: 1_066,
+          tax_amount: 95
+        },
+        receipt_items: [
+          { price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: BigDecimal('0.08') },
+          { price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: BigDecimal('0.1') },
+          { price: 300, quantity: 1, quantity_unit_code: 'each', line_total: 300, tax_rate: BigDecimal('0.1') },
+          { price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: BigDecimal('0.1') },
+          { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
+        ],
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },
+          { rate: BigDecimal('0.1'), net_amount: 300, amount: 30, description: '小計（税抜10%）' },
+          { rate: BigDecimal('0.1'), net_amount: 820, amount: 74, description: '10%対象' }
+        ],
+        receipt_adjustments: [
+          { kind: 'receipt_discount', label: 'キャッシュレス還元額', sign: 'discount', amount: 22 }
+        ],
+        receipt_payments: [
+          { method: 'nanaco支払', amount: 1_139 }
+        ],
+        context: :analysis
+      )
+
+      computed_items = Array(result.dig(:computed, :items))
+
+      aggregate_failures do
+        # 検算: 2行目はAIでは10%にdriftしているが、印字税詳細8%対象291へ入れると完全整合する。
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+        expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161, tax_rate: nil)
+        expect(result.dig(:computed, :final_payment_total)).to eq(1_139)
+        expect(computed_items.map { |item| item[:line_total] || item['line_total'] }).to eq([ 140, 151, 330, 490, 50 ])
+        expect(computed_items.map { |item| item[:tax_rate] || item['tax_rate'] }).to eq([
+          BigDecimal('0.08'),
+          BigDecimal('0.08'),
+          BigDecimal('0.1'),
+          BigDecimal('0.1'),
+          BigDecimal('0')
+        ])
+        expect(result[:tax_details]).to contain_exactly(
+          include(rate: BigDecimal('0.08'), net_amount: 270, amount: 21),
+          include(rate: BigDecimal('0.1'), net_amount: 746, amount: 74)
+        )
         expect(result[:blocking_inconsistencies]).to be_empty
         expect(result[:warning_inconsistencies]).to be_empty
       end

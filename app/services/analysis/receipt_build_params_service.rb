@@ -1519,6 +1519,7 @@ module Analysis
       end
 
       def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)
+        tax_details = apply_tax_rate_target_labels_from_lines(tax_details, lines)
         return tax_details if complete_multi_rate_tax_details?(tax_details)
 
         inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
@@ -1527,6 +1528,29 @@ module Analysis
         return tax_details if inferred_tax_details.blank?
 
         inferred_tax_details
+      end
+
+      def apply_tax_rate_target_labels_from_lines(tax_details, lines)
+        targets = tax_rate_targets_from_lines(lines)
+        return tax_details if targets.blank?
+
+        Array(tax_details).map do |tax_detail|
+          next tax_detail if tax_detail[:description].to_s.match?(profile.analysis_external_tax_description_pattern)
+
+          rate = normalize_rate(tax_detail[:rate])
+          amount = normalize_amount(tax_detail[:amount])&.to_i
+          net_amount = normalize_amount(tax_detail[:net_amount])&.to_i
+          next tax_detail unless rate&.positive? && amount&.positive? && net_amount&.positive?
+
+          target = targets.find do |candidate|
+            candidate[:rate] == rate &&
+              (candidate[:tax_amount].blank? || candidate[:tax_amount].to_i == amount) &&
+              [ net_amount, net_amount + amount ].include?(candidate[:gross_amount])
+          end
+          next tax_detail unless target
+
+          tax_detail.merge(description: profile.tax_rate_target_label(rate_percentage_label(rate)))
+        end
       end
 
       def complete_multi_rate_tax_details?(tax_details)

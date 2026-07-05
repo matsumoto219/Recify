@@ -2303,6 +2303,177 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '2019年サンプルコンビニの混在税率レシートをfinalize経路でも税込補正して支払額と一致させる' do
+      create(
+        :system_setting,
+        key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: [
+          'サンプルコンビニ 千代田店',
+          '2019年10月01日(火) 08:45',
+          '*サンプル軽減主食A          *130',
+          '*サンプル軽減飲料B          *140',
+          'サンプル標準税抜C            300',
+          'サンプル標準税込D            490込',
+          'サンプル非課税E               50非',
+          '小計（税抜 8%）             ¥270',
+          '消費税等（ 8%）              ¥21',
+          '小計（税抜10%）             ¥300',
+          '消費税等（10%）              ¥30',
+          '小計（税込10%）             ¥490',
+          '小計（非課税）               ¥50',
+          '合計                       ¥1,161',
+          '（税率 8%対象               ¥291）',
+          '（税率10%対象               ¥820）',
+          '（内消費税等 8%              ¥21）',
+          '（内消費税等10%              ¥74）',
+          'キャッシュレス還元額          -22',
+          'nanaco支払                 ¥1,139'
+        ].join("\n"),
+        lines: [
+          'サンプルコンビニ 千代田店',
+          '2019年10月01日(火) 08:45',
+          '*サンプル軽減主食A          *130',
+          '*サンプル軽減飲料B          *140',
+          'サンプル標準税抜C            300',
+          'サンプル標準税込D            490込',
+          'サンプル非課税E               50非',
+          '小計（税抜 8%）             ¥270',
+          '消費税等（ 8%）              ¥21',
+          '小計（税抜10%）             ¥300',
+          '消費税等（10%）              ¥30',
+          '小計（税込10%）             ¥490',
+          '小計（非課税）               ¥50',
+          '合計                       ¥1,161',
+          '（税率 8%対象               ¥291）',
+          '（税率10%対象               ¥820）',
+          '（内消費税等 8%              ¥21）',
+          '（内消費税等10%              ¥74）',
+          'キャッシュレス還元額          -22',
+          'nanaco支払                 ¥1,139'
+        ],
+        candidates: {
+          store_name: 'サンプルコンビニ 千代田店',
+          purchased_at_text: '2019/10/01 08:45',
+          total_amount: 1_161,
+          subtotal_amount: 10,
+          tax_amount: 125,
+          country_region: 'JPN',
+          payment_method_text: 'nanaco支払',
+          items: [
+            { raw_text: 'サンプル軽減主食A', price: 130, quantity: 1, quantity_unit_code: 'each', line_total: 130, tax_rate: 8, confidence: 0.98 },
+            { raw_text: 'サンプル軽減飲料B', price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: 8, confidence: 0.98 },
+            { raw_text: 'サンプル標準税抜C', price: 300, quantity: 1, quantity_unit_code: 'each', line_total: 300, tax_rate: 10, confidence: 0.98 },
+            { raw_text: 'サンプル標準税込D', price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: 10, confidence: 0.98 },
+            { raw_text: 'サンプル非課税E', price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: 0, confidence: 0.98 }
+          ],
+          tax_details: [
+            { description: '消費税等', rate: 8, net_amount: 270, amount: 21 },
+            { description: '消費税等', rate: 10, net_amount: 300, amount: 30 },
+            { description: '内消費税等', rate: 10, net_amount: 820, amount: 74 }
+          ],
+          adjustment_candidates: [
+            {
+              source_text: 'キャッシュレス還元額          -22',
+              source_line_index: 18,
+              amount: 22,
+              sign_hint: 'discount',
+              confidence: 0.9
+            }
+          ],
+          payments: [
+            { method: 'nanaco支払', amount: 1_139 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.98,
+            items_average: 0.98
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプルコンビニ 千代田店',
+          purchased_at: Time.zone.local(2019, 10, 1, 8, 45, 0),
+          payment_method: 'e_money'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'サンプル軽減主食A', category: 'food', tax_rate: 0.08, needs_review: false },
+          { index: 1, suggested_name: 'サンプル軽減飲料B', category: 'drink', tax_rate: 0.1, needs_review: false },
+          { index: 2, suggested_name: 'サンプル標準税抜C', category: 'daily_goods', tax_rate: 0.1, needs_review: false },
+          { index: 3, suggested_name: 'サンプル標準税込D', category: 'daily_goods', tax_rate: 0.1, needs_review: false },
+          { index: 4, suggested_name: 'サンプル非課税E', category: 'other', tax_rate: 0, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'receipt_discount',
+            label: 'キャッシュレス還元額',
+            amount: 22,
+            sign: 'discount',
+            source_text: 'キャッシュレス還元額          -22',
+            source_line_index: 18,
+            confidence: 0.9,
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+      captured_amount_result = nil
+
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_amount_result = original.call(**kwargs)
+      end
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        # 検算: 8%は130税抜+140税抜=税込291、10%は300税抜+490税込=税込820、非課税50。
+        # 購入合計1,161、キャッシュレス還元-22でfinal_payment_total=1,139、nanaco支払1,139と一致する。
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_blank
+        expect(receipt.subtotal_amount).to eq(1_066)
+        expect(receipt.tax_amount).to eq(95)
+        expect(receipt.total_amount).to eq(1_161)
+        expect(receipt.receipt_items.order(:position_index).pluck(:price, :original_line_total, :line_total, :tax_rate)).to eq([
+          [ 140, 130, 140, BigDecimal('0.08') ],
+          [ 151, 140, 151, BigDecimal('0.08') ],
+          [ 330, 300, 330, BigDecimal('0.1') ],
+          [ 490, 490, 490, BigDecimal('0.1') ],
+          [ 50, 50, 50, BigDecimal('0') ]
+        ])
+        expect(receipt.receipt_tax_details.pluck(:rate, :net_amount, :amount)).to contain_exactly(
+          [ BigDecimal('0.08'), 270, 21 ],
+          [ BigDecimal('0.1'), 746, 74 ]
+        )
+        expect(receipt.receipt_adjustments.pluck(:kind, :amount, :sign)).to eq([
+          [ 'receipt_discount', 22, 'discount' ]
+        ])
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
+          [ 'nanaco支払', 1_139 ]
+        ])
+        expect(captured_amount_result.dig(:amount_engine, :selected_candidate_id)).to eq('mixed_by_tax_rate_group/floor')
+        expect(captured_amount_result.dig(:computed, :final_payment_total)).to eq(1_139)
+        expect(captured_amount_result[:review_reasons]).not_to include('payment_amount_mismatch')
+      end
+    end
+
     it '税抜単価の税込補正OFFではanalysis保存時もpriceとline_totalを補正しない' do
       create(
         :system_setting,

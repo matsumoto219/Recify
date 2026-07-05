@@ -570,9 +570,13 @@ module Amounts
       targets = tax_detail_targets_by_rate
       return nil if targets.blank?
 
+      alternative_result = alternative_rate_mixed_candidate(rounding_mode, targets)
+      return alternative_result[:candidate] if alternative_result[:candidate]
+
       computed_items = Array.new(items.size)
       groups = {}
       warnings = adjustment_warnings.dup
+      warnings << :mixed_basis_search_truncated if alternative_result[:status] == :search_limited
       exact = true
       mixed_basis_used = false
       evidence = final_detected_tax_details.map { |detail| detail[:evidence] }
@@ -583,7 +587,7 @@ module Amounts
         if rate.zero?
           gross = indexed_items.sum { |item, _index| item_line_total(item) }
           groups[rate] = { rate: rate, gross: gross, net: gross, tax: 0 }
-          indexed_items.each { |item, index| computed_items[index] = item_with_line_total(item, item_line_total(item)) }
+          indexed_items.each { |item, index| computed_items[index] = item_with_line_total(item, item_line_total(item), tax_rate: BigDecimal("0")) }
           profile_assignments << {
             tax_rate: BigDecimal("0"),
             basis: :non_taxable,
@@ -624,7 +628,8 @@ module Amounts
           computed_items[entry[:index]] = item_with_line_total(
             items[entry[:index]],
             entry[:gross_amount],
-            normalize_price: entry[:basis] == :tax_excluded
+            normalize_price: entry[:basis] == :tax_excluded,
+            tax_rate: entry[:rate]
           )
           profile_assignments << {
             tax_rate: entry[:rate],
@@ -647,7 +652,7 @@ module Amounts
       purchase_total = groups.values.sum { |group| group[:gross] } +
         unapplied_purchase_adjustment_total(purchase_adjustment_groups, groups.keys)
       tax = groups.values.sum { |group| group[:tax] }
-      warnings << :price_tax_inclusion_uncertain if mixed_basis_used && !receipt_amounts_match_candidate?(purchase_total, tax)
+      warnings << :price_tax_inclusion_uncertain if mixed_price_tax_inclusion_uncertain?(purchase_total, tax, mixed_basis_used)
       payment = payment_reconciliation(purchase_total, payment_adjustment_total)
       warnings += payment_warnings(payment)
 
@@ -672,6 +677,85 @@ module Amounts
         calculation_profile: mixed_calculation_profile(profile_assignments),
         source: :amount_engine
       )
+    end
+
+    def alternative_rate_mixed_candidate(rounding_mode, targets)
+      return { status: :not_applicable } unless tax_excluded_price_conversion_enabled?
+      return { status: :not_applicable } unless targets.keys.many?
+
+      purchase_adjustment_groups = purchase_adjustment_groups_by_rate(rounding_mode)
+      assignment = item_level_assignment_across_tax_rates_for(targets, purchase_adjustment_groups, rounding_mode)
+      return { status: assignment[:status] } unless assignment[:status] == :exact
+
+      groups = targets.transform_values { |target| target.slice(:rate, :gross, :net, :tax) }
+      zero_total = assignment[:zero_assignments].sum { |entry| entry[:gross_amount] }
+      groups[BigDecimal("0")] = { rate: BigDecimal("0"), gross: zero_total, net: zero_total, tax: 0 } if zero_total.positive?
+
+      computed_items = Array.new(items.size)
+      profile_assignments = []
+      assignment[:assignments].each do |entry|
+        computed_items[entry[:index]] = item_with_line_total(
+          items[entry[:index]],
+          entry[:gross_amount],
+          normalize_price: entry[:basis] == :tax_excluded,
+          tax_rate: entry[:rate]
+        )
+        profile_assignments << {
+          tax_rate: entry[:rate],
+          basis: entry[:basis],
+          net_amount: entry[:net_amount],
+          tax_amount: entry[:tax_amount],
+          gross_amount: entry[:gross_amount]
+        }
+      end
+      assignment[:zero_assignments].each do |entry|
+        computed_items[entry[:index]] = item_with_line_total(items[entry[:index]], entry[:gross_amount], tax_rate: BigDecimal("0"))
+      end
+      profile_assignments << {
+        tax_rate: BigDecimal("0"),
+        basis: :non_taxable,
+        net_amount: zero_total,
+        tax_amount: 0,
+        gross_amount: zero_total
+      } if zero_total.positive?
+
+      purchase_total = groups.values.sum { |group| group[:gross] } +
+        unapplied_purchase_adjustment_total(purchase_adjustment_groups, groups.keys)
+      tax = groups.values.sum { |group| group[:tax] }
+      warnings = adjustment_warnings.dup
+      mixed_basis_used = assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
+      warnings << :price_tax_inclusion_uncertain if mixed_price_tax_inclusion_uncertain?(purchase_total, tax, mixed_basis_used)
+      payment = payment_reconciliation(purchase_total, payment_adjustment_total)
+      warnings += payment_warnings(payment)
+
+      {
+        status: :exact,
+        candidate: Amounts::Candidate.new(
+          candidate_id: "mixed_by_tax_rate_group/#{rounding_mode}",
+          basis: "mixed_by_tax_rate_group",
+          subtotal: purchase_total - tax,
+          tax: tax,
+          purchase_total: purchase_total,
+          final_payment_total: payment[:final_payment_total],
+          purchase_adjustment_total: purchase_adjustment_total,
+          payment_adjustment_total: payment_adjustment_total,
+          payment_amount_sum: payment[:payment_amount_sum],
+          tax_details: tax_details_from_groups(groups.values),
+          tax_rate_groups: groups.values,
+          rounding_mode: rounding_mode,
+          rounding_scope: :per_tax_rate_group,
+          warnings: warnings.uniq,
+          hard_reject_reasons: [],
+          evidence: final_detected_tax_details.map { |detail| detail[:evidence] } +
+            assignment[:assignments].map { |entry| entry.slice(:source, :index, :basis, :rate, :net_amount, :tax_amount, :gross_amount) } +
+            adjustment_evidence +
+            payment_evidence(payment) +
+            [ { source: "amount_engine", formula: "mixed_by_tax_rate_group", purchase_total: purchase_total } ],
+          computed_items: computed_items.map.with_index { |item, index| item || item_with_line_total(items[index], item_line_total(items[index])) },
+          calculation_profile: mixed_calculation_profile(profile_assignments),
+          source: :amount_engine
+        )
+      }
     end
 
     def purchase_adjustment_groups_by_rate(rounding_mode)
@@ -750,6 +834,108 @@ module Amounts
         tax: target[:tax],
         gross: target[:gross]
       }
+    end
+
+    def item_level_assignment_across_tax_rates_for(targets, purchase_adjustment_groups, rounding_mode)
+      rates = targets.keys.sort
+      return { status: :no_exact, assignments: [], zero_assignments: [] } if rates.blank?
+
+      positive_items = []
+      zero_assignments = []
+      items.each_with_index do |item, index|
+        line_total = item_line_total(item)
+        if zero_rate_item_for_mixed_assignment?(item)
+          zero_assignments << {
+            source: "receipt_items",
+            index: index,
+            rate: BigDecimal("0"),
+            basis: :non_taxable,
+            net_amount: line_total,
+            tax_amount: 0,
+            gross_amount: line_total
+          }
+        elsif line_total.positive?
+          positive_items << [ item, index ]
+        end
+      end
+
+      return { status: :search_limited, assignments: [], zero_assignments: [] } if positive_items.size > SAME_RATE_MIXED_MAX_ITEMS
+
+      assignment_targets = rates.to_h do |rate|
+        [ rate, target_before_purchase_adjustments(targets.fetch(rate), purchase_adjustment_groups[rate]) ]
+      end
+      target_key = mixed_assignment_key_for(rates, assignment_targets)
+      states = { mixed_assignment_zero_key(rates) => [ [] ] }
+
+      positive_items.each do |item, index|
+        candidates = rates.flat_map { |rate| item_level_basis_candidates(item, index, rate, rounding_mode) }
+        return { status: :no_exact, assignments: [], zero_assignments: zero_assignments } if candidates.blank?
+
+        next_states = {}
+        states.each do |key, paths|
+          candidates.each do |candidate|
+            next_key = mixed_assignment_next_key(key, candidate, rates)
+            next if mixed_assignment_exceeds_target?(next_key, rates, assignment_targets)
+
+            next_states[next_key] ||= []
+            paths.each do |path|
+              next_states[next_key] << (path + [ candidate ])
+              next_states[next_key] = next_states[next_key].first(2)
+            end
+          end
+        end
+
+        return { status: :search_limited, assignments: [], zero_assignments: zero_assignments } if next_states.size > SAME_RATE_MIXED_MAX_STATES
+        return { status: :no_exact, assignments: [], zero_assignments: zero_assignments } if next_states.blank?
+
+        states = next_states
+      end
+
+      matches = states[target_key] || []
+      return { status: :ambiguous, assignments: [], zero_assignments: zero_assignments } if matches.many?
+      return { status: :no_exact, assignments: [], zero_assignments: zero_assignments } if matches.blank?
+
+      {
+        status: :exact,
+        assignments: matches.first,
+        zero_assignments: zero_assignments
+      }
+    end
+
+    def zero_rate_item_for_mixed_assignment?(item)
+      item = indifferent_hash(item)
+      non_taxable_item_text?(item) ||
+        item_tax_rate(item).zero?
+    end
+
+    def mixed_assignment_zero_key(rates)
+      Array.new(rates.size * 3, 0)
+    end
+
+    def mixed_assignment_key_for(rates, targets)
+      rates.flat_map do |rate|
+        target = targets.fetch(rate)
+        [ target[:net], target[:tax], target[:gross] ]
+      end
+    end
+
+    def mixed_assignment_next_key(key, candidate, rates)
+      next_key = key.dup
+      offset = rates.index(candidate[:rate]) * 3
+      next_key[offset] += candidate[:net_amount]
+      next_key[offset + 1] += candidate[:tax_amount]
+      next_key[offset + 2] += candidate[:gross_amount]
+      next_key
+    end
+
+    def mixed_assignment_exceeds_target?(key, rates, targets)
+      rates.each_with_index.any? do |rate, index|
+        target = targets.fetch(rate)
+        offset = index * 3
+        key[offset] > target[:net] ||
+          key[offset + 1] > target[:tax] ||
+          key[offset + 2] > target[:gross]
+      end
     end
 
     def item_level_basis_candidates(item, index, rate, rounding_mode)
@@ -952,6 +1138,31 @@ module Amounts
         subtotal == purchase_total.to_i - tax.to_i &&
         receipt_tax == tax.to_i &&
         total == purchase_total.to_i
+    end
+
+    def receipt_total_matches_candidate?(purchase_total)
+      total = amount_or_nil(receipt[:total_amount])
+
+      !total.nil? && total == purchase_total.to_i
+    end
+
+    def mixed_price_tax_inclusion_uncertain?(purchase_total, tax, mixed_basis_used)
+      return false unless mixed_basis_used
+      return false if receipt_total_matches_candidate?(purchase_total) && final_tax_detail_target_evidence_complete?
+
+      !receipt_amounts_match_candidate?(purchase_total, tax)
+    end
+
+    def final_tax_detail_target_evidence_complete?
+      target_rates = tax_detail_targets_by_rate.keys
+      return false unless target_rates.many?
+
+      target_rates.all? do |rate|
+        final_detected_tax_details.any? do |detail|
+          detail[:rate] == rate &&
+            detail[:description].to_s.match?(profile.amount_tax_detail_gross_description_pattern)
+        end
+      end
     end
 
     def explicit_non_taxable_items
@@ -1206,9 +1417,10 @@ module Amounts
       end
     end
 
-    def item_with_line_total(item, line_total, normalize_price: false)
+    def item_with_line_total(item, line_total, normalize_price: false, tax_rate: nil)
       item = indifferent_hash(item)
       normalized = item.merge(line_total: line_total)
+      normalized[:tax_rate] = tax_rate unless tax_rate.nil?
 
       if normalize_price
         price = normalized_unit_price_for(item, line_total)

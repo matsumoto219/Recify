@@ -60,6 +60,7 @@ module Amounts
 
     def tax_amount_mismatch?(candidate)
       return false if stale_receipt_tax_amount_ignored?(candidate)
+      return false if exact_mixed_candidate_resolved_by_tax_details?(candidate)
       return false unless receipt_tax_amount.positive?
       return false if price_tax_inclusion_uncertain?(candidate)
 
@@ -74,6 +75,7 @@ module Amounts
 
     def tax_detail_partial?(candidate)
       return false if tax_detail_incomplete?
+      return false if exact_mixed_candidate_resolved_by_tax_details?(candidate)
 
       comparable_tax_amount = receipt_tax_amount.positive? ? receipt_tax_amount : candidate.tax.to_i
       return false unless comparable_tax_amount.positive?
@@ -155,11 +157,45 @@ module Amounts
     end
 
     def price_tax_inclusion_uncertain?(candidate)
-      candidate.warnings.include?(:price_tax_inclusion_uncertain) ||
+      return true if candidate.warnings.include?(:price_tax_inclusion_uncertain)
+      return false if exact_mixed_candidate_resolved_by_tax_details?(candidate)
+
+      (
         (tax_detail_partial?(candidate) && mixed_tax_rate_items?) ||
         same_rate_mixed_item_amount_basis_uncertain? ||
         printed_net_tax_details_with_recorded_item_subtotal?(candidate) ||
         mixed_tax_inclusion_suspected?(candidate)
+      )
+    end
+
+    def exact_mixed_candidate_resolved_by_tax_details?(candidate)
+      return false unless context == :analysis
+      return false unless candidate.basis == "mixed_by_tax_rate_group"
+      return false if candidate.hard_reject_reasons.present?
+      return false unless mixed_candidate_target_evidence_complete?(candidate)
+      return false unless receipt_total_amount.positive? && receipt_total_amount == candidate.purchase_total.to_i
+      return false unless candidate.tax_details.present? && candidate.tax_rate_groups.present?
+
+      candidate_tax_total = Array(candidate.tax_details).sum { |detail| to_i(fetch_value(detail, :amount)) }
+      group_gross_total = Array(candidate.tax_rate_groups).sum { |group| to_i(fetch_value(group, :gross)) }
+
+      candidate_tax_total == candidate.tax.to_i &&
+        group_gross_total == candidate.purchase_total.to_i
+    end
+
+    def mixed_candidate_target_evidence_complete?(candidate)
+      rates = candidate.tax_details.filter_map do |tax_detail|
+        rate = normalize_rate(fetch_value(tax_detail, :rate))
+        rate if rate.positive?
+      end.uniq
+      return false unless rates.many?
+
+      rates.all? do |rate|
+        comparable_source_tax_details.any? do |tax_detail|
+          normalize_rate(fetch_value(tax_detail, :rate)) == rate &&
+            fetch_value(tax_detail, :description).to_s.match?(profile.amount_tax_detail_gross_description_pattern)
+        end
+      end
     end
 
     def stale_receipt_tax_amount_ignored?(candidate)
