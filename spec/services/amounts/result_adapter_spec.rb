@@ -52,6 +52,25 @@ RSpec.describe Amounts::ResultAdapter do
     end
   end
 
+  it 'candidate calculation_profileをbasis文字列より優先してcomputed basisに使う' do
+    profiled = candidate(
+      basis: 'items_as_tax_included',
+      calculation_profile: {
+        receipt_tax_basis: :tax_added_to_subtotal,
+        item_amount_basis: :line_total_as_net,
+        tax_detail_amount_basis: :net
+      }
+    )
+
+    result = adapt(selected_candidate: profiled)
+
+    expect(result[:computed]).to include(
+      receipt_tax_basis: :tax_added_to_subtotal,
+      item_amount_basis: :line_total_as_net,
+      tax_detail_amount_basis: :net
+    )
+  end
+
   it 'all rejected candidateでは自動完了不可であることを明示する' do
     rejected = candidate(hard_reject_reasons: [ :tax_detail_mismatch ])
 

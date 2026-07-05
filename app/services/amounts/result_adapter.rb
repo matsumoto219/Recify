@@ -181,9 +181,10 @@ module Amounts
     end
 
     def item_amount_basis_for(candidate)
-      profile_value = candidate_profile_value(candidate, :item_amount_basis)
-      return profile_value.to_sym if profile_value.present?
+      candidate_profile_basis(candidate, :item_amount_basis) || legacy_item_amount_basis_for(candidate)
+    end
 
+    def legacy_item_amount_basis_for(candidate)
       case candidate.basis
       when "external_tax_from_receipt", "items_as_tax_excluded"
         :line_total_as_net
@@ -195,16 +196,18 @@ module Amounts
     end
 
     def receipt_tax_basis_for(candidate)
-      profile_value = candidate_profile_value(candidate, :receipt_tax_basis)
-      return profile_value.to_sym if profile_value.present?
+      candidate_profile_basis(candidate, :receipt_tax_basis) || legacy_receipt_tax_basis_for(candidate)
+    end
 
+    def legacy_receipt_tax_basis_for(candidate)
       %w[external_tax_from_receipt items_as_tax_excluded printed_tax_details_net].include?(candidate.basis) ? :tax_added_to_subtotal : :total_includes_tax
     end
 
     def tax_detail_amount_basis_for(candidate)
-      profile_value = candidate_profile_value(candidate, :tax_detail_amount_basis)
-      return profile_value.to_sym if profile_value.present?
+      candidate_profile_basis(candidate, :tax_detail_amount_basis) || legacy_tax_detail_amount_basis_for(candidate)
+    end
 
+    def legacy_tax_detail_amount_basis_for(candidate)
       case candidate.basis
       when "printed_tax_details_gross"
         :gross
@@ -213,6 +216,11 @@ module Amounts
       else
         :unknown
       end
+    end
+
+    def candidate_profile_basis(candidate, key)
+      value = candidate_profile_value(candidate, key)
+      value.to_sym if value.present?
     end
 
     def candidate_profile_value(candidate, key)
