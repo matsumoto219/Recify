@@ -593,10 +593,8 @@ class ReceiptsController < ApplicationController
         :tax_rate,
         :discount_rate,
         :line_total,
-        :needs_review,
         :position_index,
-        :_destroy,
-        { review_reasons: [] }
+        :_destroy
       ],
       receipt_adjustments_attributes: [
         :id,
@@ -1224,15 +1222,22 @@ class ReceiptsController < ApplicationController
   end
 
   def manual_update_item_needs_review?(item_attributes, existing_state)
-    return existing_state[:needs_review] unless item_attributes.key?("needs_review")
+    return false if item_review_cleared_by_server?(item_attributes)
 
-    ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"])
+    existing_state[:needs_review]
   end
 
   def manual_update_item_review_reasons(item_attributes, existing_state)
-    return existing_state[:review_reasons] unless item_attributes.key?("review_reasons")
+    return [] if item_review_cleared_by_server?(item_attributes)
 
-    Array(item_attributes["review_reasons"]).reject(&:blank?).map(&:to_s)
+    existing_state[:review_reasons]
+  end
+
+  def item_review_cleared_by_server?(item_attributes)
+    item_attributes.key?("needs_review") &&
+      ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"]) == false &&
+      item_attributes.key?("review_reasons") &&
+      Array(item_attributes["review_reasons"]).reject(&:blank?).empty?
   end
 
   def destroy_existing_receipt_tax_details

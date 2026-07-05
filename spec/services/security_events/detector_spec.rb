@@ -96,6 +96,10 @@ RSpec.describe SecurityEvents::Detector do
         receipt: {
           user_id: '999',
           status: 'failed',
+          review_reasons: [ 'forged_reason' ],
+          amount_calculation_profile: { selected_candidate_status: 'forged' },
+          safe_to_auto_complete: 'true',
+          selected_candidate_status: 'accepted',
           receipt_items_attributes: {
             '0' => {
               receipt_id: '999'
@@ -105,7 +109,8 @@ RSpec.describe SecurityEvents::Detector do
         user: {
           admin: '1'
         }
-      }
+      },
+      max_detections: 20
     )
 
     aggregate_failures do
@@ -114,6 +119,10 @@ RSpec.describe SecurityEvents::Detector do
       expect(detections.map(&:field_name)).to include(
         'receipt.user_id',
         'receipt.status',
+        'receipt.review_reasons[0]',
+        'receipt.amount_calculation_profile.selected_candidate_status',
+        'receipt.safe_to_auto_complete',
+        'receipt.selected_candidate_status',
         'receipt.receipt_items_attributes.0.receipt_id',
         'user.admin'
       )

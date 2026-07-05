@@ -14,6 +14,12 @@ module SecurityEvents
         image_purged_at
         image_purged_reason
       ].freeze
+      PROTECTED_RECEIPT_TOP_LEVEL_FIELDS = %w[
+        amount_calculation_profile
+        review_reasons
+        safe_to_auto_complete
+        selected_candidate_status
+      ].freeze
       PROTECTED_USER_FIELDS = %w[
         id
         admin
@@ -46,13 +52,22 @@ module SecurityEvents
       private
 
       def matched_rule_for(field_name)
-        segments = field_name.to_s.split(".")
+        segments = normalized_path_segments(field_name)
 
-        if segments.first == "receipt" && (segments & PROTECTED_RECEIPT_FIELDS).any?
+        if segments.first == "receipt" && protected_receipt_path?(segments)
           "protected_receipt_attribute"
         elsif segments.first == "user" && (segments & PROTECTED_USER_FIELDS).any?
           "protected_user_attribute"
         end
+      end
+
+      def normalized_path_segments(field_name)
+        field_name.to_s.split(".").map { |segment| segment.sub(/\[\d+\]\z/, "") }
+      end
+
+      def protected_receipt_path?(segments)
+        (segments & PROTECTED_RECEIPT_FIELDS).any? ||
+          PROTECTED_RECEIPT_TOP_LEVEL_FIELDS.include?(segments.second)
       end
     end
   end

@@ -7071,6 +7071,163 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'hidden needs_review=false を送っても未修正itemのreviewは消えない' do
+      receipt.update!(status: 'review_needed', review_reasons: [])
+      item = receipt.receipt_items.create!(
+        confirmed_name: '未修正商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: receipt.store_name,
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit_code: item.quantity_unit_code,
+              tax_rate: '',
+              line_total: item.line_total,
+              needs_review: false
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.needs_review).to be(true)
+        expect(item.review_reasons).to eq([ 'item_name_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'hidden review_reasons=[] を送っても未修正itemのreviewは消えない' do
+      receipt.update!(status: 'review_needed', review_reasons: [])
+      item = receipt.receipt_items.create!(
+        confirmed_name: '理由未修正商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_category_uncertain' ]
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: receipt.store_name,
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit_code: item.quantity_unit_code,
+              tax_rate: '',
+              line_total: item.line_total,
+              review_reasons: []
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.needs_review).to be(true)
+        expect(item.review_reasons).to eq([ 'item_category_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it '保護属性を送ってもstatusやAmount Engine内部contractは保存されない' do
+      receipt.update!(
+        status: 'review_needed',
+        review_reasons: [ 'tax_detail_mismatch' ],
+        amount_calculation_profile: { 'existing' => 'profile' }
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: '保護属性更新',
+          total_amount: 100,
+          payment_method: 'cash',
+          status: 'completed',
+          review_reasons: [],
+          amount_calculation_profile: { forged: 'forged-profile' },
+          safe_to_auto_complete: 'forged-safe',
+          selected_candidate_status: 'forged-selected-status'
+        }
+      }
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([ 'tax_detail_mismatch' ])
+        expect(receipt.amount_calculation_profile.to_json).not_to include(
+          'forged-profile',
+          'forged-safe',
+          'forged-selected-status'
+        )
+      end
+    end
+
+    it 'item raw_textを送っても保存されない' do
+      item = receipt.receipt_items.create!(
+        raw_text: 'OCR原文',
+        confirmed_name: '保護属性商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100,
+        needs_review: false
+      )
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          store_name: 'raw_text保護属性更新',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              raw_text: 'FORGED_RAW_TEXT',
+              confirmed_name: item.confirmed_name,
+              price: item.price,
+              quantity: item.quantity,
+              quantity_unit_code: item.quantity_unit_code,
+              tax_rate: '',
+              line_total: item.line_total
+            }
+          }
+        }
+      }
+
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.raw_text).to eq('OCR原文')
+      end
+    end
+
     it '画像差し替えを含むvalidation失敗時もsigned_id errorにならず編集フォームに戻る' do
       patch receipt_path(receipt), params: {
         receipt: {
@@ -8478,6 +8635,104 @@ RSpec.describe 'Receipts', type: :request do
       patch receipt_path(other_receipt), params: valid_update_params
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    it '他人のreceipt_item_idをnested attributesに混ぜても更新できない' do
+      other_user = create(:user, email: 'update-other-item@example.com')
+      other_receipt = create(:receipt, user: other_user, store_name: '他人明細レシート', total_amount: 800, payment_method: 'cash', status: 'completed')
+      other_item = other_receipt.receipt_items.create!(
+        confirmed_name: '他人商品',
+        price: 800,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 800,
+        needs_review: false
+      )
+
+      expect do
+        patch receipt_path(receipt), params: {
+          receipt: {
+            store_name: '不正明細更新',
+            receipt_items_attributes: {
+              '0' => {
+                id: other_item.id,
+                confirmed_name: '改ざん商品',
+                price: 1,
+                quantity: 1,
+                quantity_unit_code: 'each',
+                line_total: 1,
+                _destroy: '0'
+              }
+            }
+          }
+        }
+      end.not_to change { other_item.reload.attributes.slice('confirmed_name', 'price', 'line_total') }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it '他人のreceipt_adjustment_idをnested attributesに混ぜても更新削除できない' do
+      other_user = create(:user, email: 'update-other-adjustment@example.com')
+      other_receipt = create(:receipt, user: other_user, store_name: '他人調整レシート', total_amount: 800, payment_method: 'cash', status: 'completed')
+      other_adjustment = other_receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '他人配送料',
+        amount: 100,
+        sign: 'surcharge',
+        source: 'manual',
+        needs_review: false
+      )
+
+      expect do
+        patch receipt_path(receipt), params: {
+          receipt: {
+            store_name: '不正調整更新',
+            receipt_adjustments_attributes: {
+              '0' => {
+                id: other_adjustment.id,
+                label: '改ざん配送料',
+                amount: 1,
+                kind: 'delivery_fee',
+                sign: 'surcharge',
+                _destroy: '1'
+              }
+            }
+          }
+        }
+      end.not_to change { ReceiptAdjustment.exists?(other_adjustment.id) }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(other_adjustment.reload.label).to eq('他人配送料')
+      end
+    end
+
+    it '他人のreceipt_payment_idをnested attributesに混ぜても更新削除できない' do
+      other_user = create(:user, email: 'update-other-payment@example.com')
+      other_receipt = create(:receipt, user: other_user, store_name: '他人支払レシート', total_amount: 800, payment_method: 'cash', status: 'completed')
+      other_payment = other_receipt.receipt_payments.create!(method: 'cash', amount: 800)
+
+      expect do
+        patch receipt_path(receipt), params: {
+          receipt: {
+            store_name: '不正支払更新',
+            receipt_payments_attributes: {
+              '0' => {
+                id: other_payment.id,
+                method: 'credit_card',
+                amount: 1,
+                _destroy: '1'
+              }
+            }
+          }
+        }
+      end.not_to change { ReceiptPayment.exists?(other_payment.id) }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(other_payment.reload.amount).to eq(800)
+        expect(other_payment.method).to eq('cash')
+      end
     end
 
     context '未ログイン時' do

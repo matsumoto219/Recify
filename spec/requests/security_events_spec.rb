@@ -316,4 +316,48 @@ RSpec.describe 'Security events', type: :request do
       expect(events.map(&:matched_rule)).to all(eq('protected_receipt_attribute'))
     end
   end
+
+  it 'receiptのAmount Engine/レビュー保護属性を差し込んでもparameter tamperingとして記録する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      store_name: 'Before Amount Tamper',
+      total_amount: 1000,
+      payment_method: 'cash',
+      status: 'review_needed',
+      review_reasons: [ 'tax_detail_mismatch' ],
+      amount_calculation_profile: { 'existing' => 'profile' }
+    )
+
+    expect {
+      patch receipt_path(receipt),
+            params: {
+              receipt: {
+                store_name: 'Allowed Amount Update',
+                amount_calculation_profile: { selected_candidate_status: 'forged' },
+                review_reasons: [ 'forged_reason' ],
+                safe_to_auto_complete: 'true',
+                selected_candidate_status: 'accepted'
+              }
+            }
+    }.to change(SecurityEvent.where(event_type: 'parameter_tampering_attempt'), :count).by(4)
+
+    receipt.reload
+    events = SecurityEvent.where(event_type: 'parameter_tampering_attempt').order(:created_at).last(4)
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.store_name).to eq('Allowed Amount Update')
+      expect(receipt.status).to eq('review_needed')
+      expect(receipt.review_reasons).to eq([ 'tax_detail_mismatch' ])
+      expect(receipt.amount_calculation_profile.to_json).not_to include('forged')
+      expect(events.map(&:field_name)).to contain_exactly(
+        'receipt.amount_calculation_profile.selected_candidate_status',
+        'receipt.review_reasons[0]',
+        'receipt.safe_to_auto_complete',
+        'receipt.selected_candidate_status'
+      )
+      expect(events.map(&:matched_rule)).to all(eq('protected_receipt_attribute'))
+    end
+  end
 end
