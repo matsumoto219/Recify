@@ -542,6 +542,25 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '税詳細の対象額・税額行をadjustment candidateにしない' do
+      fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        合計
+        ¥1,298
+        (10%税込対象額
+        ¥1,298)
+        (10%税額
+        ¥118)
+        QUICPay
+        ¥1,298
+      TEXT
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+    end
+
     it '日本語の支払時割引はsigned amountがある場合だけadjustment candidateにする' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
       fixture_response['analyzeResult']['content'] = <<~TEXT

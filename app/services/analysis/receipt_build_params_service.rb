@@ -726,6 +726,12 @@ module Analysis
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
+          next if item_level_discount_adjustment?(
+            amount: amount,
+            source_line_index: source_line_index,
+            lines: lines,
+            receipt_items: receipt_items
+          )
           unless ai_adjustment_evidence_supported?(source, normalized, amount:, source_line_index:, lines:)
             invalid_review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON if invalid_review_reasons
             next
@@ -744,12 +750,6 @@ module Analysis
           next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
           next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
           next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
-          next if item_level_discount_adjustment?(
-            amount: amount,
-            source_line_index: source_line_index,
-            lines: lines,
-            receipt_items: receipt_items
-          )
 
           adjustment_text = [ source_text, normalized[:label] ].compact.join(" ")
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"

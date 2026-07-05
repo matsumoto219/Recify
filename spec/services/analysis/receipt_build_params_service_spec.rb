@@ -2252,6 +2252,44 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AI adjustmentがitem割引として説明できる場合は保存せず確認理由も残さない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: '対象商品',
+            original_line_total: 105,
+            line_total: 96,
+            discount_amount: 9,
+            confidence: BigDecimal('0.95')
+          }
+        ]
+        ocr_result[:lines] = [
+          '対象商品',
+          '105',
+          '割引',
+          '10%',
+          '-9',
+          '合計 96'
+        ]
+        ai_result[:receipt_adjustments_attributes] = [
+          {
+            kind: 'receipt_discount',
+            label: '割引',
+            amount: 9,
+            sign: 'discount',
+            source_text: '割引',
+            source_line_index: 2,
+            needs_review: false
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to be_empty
+          expect(params[:review_reasons]).to eq([])
+        end
+      end
+
       it 'AIがブランド名だけを返した場合でも印字された場所名を補って保存店舗名にする' do
         branch_ocr_result = ocr_result.deep_merge(
           candidates: {

@@ -885,6 +885,7 @@ class Ocr::ResponseParser
     known_label = known_adjustment_label?(line)
     signed_same_line = line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
     return nil if item_line_candidate?(line, items) && !known_label && !signed_same_line
+    return nil if tax_detail_amount_context?(lines, index) && !known_label && !signed_same_line
 
     unknown_zone_label = !known_label && adjustment_zone_label?(lines, index)
     return nil unless known_label || unknown_zone_label || signed_same_line
@@ -1026,6 +1027,25 @@ class Ocr::ResponseParser
 
   def adjustment_excluded_line?(line)
     line.to_s.match?(profile.ocr_adjustment_excluded_line_pattern)
+  end
+
+  def tax_detail_amount_context?(lines, index)
+    line = lines[index].to_s
+    return false unless adjustment_amounts_in_line(line).any?
+    return true if tax_detail_context_label?(line)
+
+    [ index - 2, index - 1, index + 1, index + 2 ].any? do |candidate_index|
+      next false if candidate_index.negative?
+
+      tax_detail_context_label?(lines[candidate_index].to_s)
+    end
+  end
+
+  def tax_detail_context_label?(line)
+    text = line.to_s
+    text.match?(profile.ocr_tax_context_label_pattern) ||
+      text.match?(profile.ocr_tax_target_marker_pattern) ||
+      text.match?(profile.ocr_tax_amount_description_pattern)
   end
 
   def item_line_candidate?(line, items)
