@@ -1906,6 +1906,62 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '税額0円の小額10%対象をTaxDetailsに保持し明細税率補正へ使う' do
+        zero_tax_group_receipt = {
+          candidates: {
+            store_name: 'SampleMart',
+            total_amount: 801,
+            tax_amount: 59,
+            country_region: 'JPN',
+            payment_method_text: 'Suica',
+            items: [
+              { raw_text: '商品A', price: 798, quantity: 1, line_total: 798, confidence: 0.95 },
+              { raw_text: 'レジ袋', price: 3, quantity: 1, line_total: 3, confidence: 0.95 }
+            ],
+            tax_details: [
+              { description: '消費税等 (8%)', rate: 8, net_amount: 739, amount: 59 }
+            ]
+          },
+          lines: [
+            'SampleMart',
+            '商品A',
+            '¥798軽',
+            'レジ袋',
+            '¥3',
+            '合 計',
+            '¥801',
+            '小 計 (税抜8%)',
+            '¥739',
+            '消費税等 (8%)',
+            '¥59',
+            '小 計 (税抜10%)',
+            '¥3',
+            '(税率8%対象',
+            '¥798)',
+            '(税率10%対象',
+            '¥3)'
+          ]
+        }
+
+        params = described_class.call(ocr_result: zero_tax_group_receipt, ai_result: nil)
+
+        aggregate_failures do
+          # 検算: 739税抜8% -> 税59, 税込798。3税抜10% -> 税0, 税込3。
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+            include(description: include('税抜8%'), rate: BigDecimal('0.08'), net_amount: 739, amount: 59),
+            include(description: include('税抜10%'), rate: BigDecimal('0.1'), net_amount: 3, amount: 0)
+          )
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total, :tax_rate)).to contain_exactly(
+            [ '商品A', 798, BigDecimal('0.08') ],
+            [ 'レジ袋', 3, BigDecimal('0.1') ]
+          )
+          expect(params[:tax_rate_correction]).to include(
+            reason: 'tax_marker_group_amount_match',
+            source: 'printed_tax_detail'
+          )
+        end
+      end
+
       it '軽減税率markerの明細合計が税率別対象額に一致しない場合は複数明細の税率を補正しない' do
         mismatched_marker_receipt = {
           candidates: {

@@ -977,6 +977,59 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '税額0円の小額10%対象が印字されていても複数税率TaxDetailsとして保持する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = <<~TEXT
+        SampleMart
+        商品A
+        ¥798軽
+        レジ袋
+        ¥3
+        合 計
+        ¥801
+        小 計 (税抜8%)
+        ¥739
+        消費税等 (8%)
+        ¥59
+        小 計 (税抜10%)
+        ¥3
+        (税率8%対象
+        ¥798)
+        (税率10%対象
+        ¥3)
+        Suica支払
+        ¥801
+      TEXT
+      fields = response['analyzeResult']['documents'].first['fields']
+      fields['MerchantName'] = { 'valueString' => 'SampleMart' }
+      fields['Total'] = { 'valueCurrency' => { 'amount' => 801, 'currencyCode' => 'JPY' } }
+      fields['Subtotal'] = nil
+      fields['TotalTax'] = { 'valueCurrency' => { 'amount' => 59, 'currencyCode' => 'JPY' } }
+      fields['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => '消費税等' },
+              'Amount' => { 'valueCurrency' => { 'amount' => 59, 'currencyCode' => 'JPY' } },
+              'Rate' => { 'valueNumber' => 8 },
+              'NetAmount' => { 'valueCurrency' => { 'amount' => 739, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      aggregate_failures do
+        # 検算: 739 * 8% = 59.12 -> floor 59, gross 798。
+        # 検算: 3 * 10% = 0.3 -> floor 0, gross 3。税額合計は 59。
+        expect(result.dig(:candidates, :tax_details)).to contain_exactly(
+          hash_including(description: include('税抜8%'), rate: 0.08, net_amount: 739, amount: 59),
+          hash_including(description: include('税抜10%'), rate: 0.1, net_amount: 3, amount: 0)
+        )
+      end
+    end
+
     it '単一税率でも対象計と内税額が合計に一致する場合はTaxDetailsを復元する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

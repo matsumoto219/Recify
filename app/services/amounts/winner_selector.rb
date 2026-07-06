@@ -109,6 +109,7 @@ module Amounts
 
     def mark_mixed_basis_ambiguity(selected)
       return selected unless selected
+      return selected if strong_zero_tax_printed_detail_candidate?(selected)
       return selected unless candidates.any? do |candidate|
         candidate.basis.to_s == "mixed_by_tax_rate_group" &&
           candidate.warnings.include?(COMPETING_EXACT_BASIS_WARNING)
@@ -120,6 +121,7 @@ module Amounts
     def competing_exact_basis_candidate?(selected)
       return false unless printed_net_price_tax_candidate?(selected)
       return false unless exact_candidate?(selected)
+      return false if strong_zero_tax_printed_detail_candidate?(selected)
 
       candidates.any? do |candidate|
         next false if candidate.candidate_id == selected.candidate_id
@@ -128,6 +130,30 @@ module Amounts
 
         exact_candidate?(candidate)
       end
+    end
+
+    def strong_zero_tax_printed_detail_candidate?(candidate)
+      groups = candidate.tax_rate_groups
+      return false unless groups.any? { |group| positive_rate_zero_tax_group?(group) }
+      return false unless candidate.evidence.any? { |entry| zero_tax_printed_detail_evidence?(entry) }
+
+      groups.sum { |group| hash_value(group, :gross).to_i } == candidate.purchase_total &&
+        groups.sum { |group| hash_value(group, :tax).to_i } == candidate.tax
+    end
+
+    def positive_rate_zero_tax_group?(group)
+      BigDecimal(hash_value(group, :rate).to_s).positive? &&
+        hash_value(group, :gross).to_i.positive? &&
+        hash_value(group, :tax).to_i.zero?
+    rescue ArgumentError
+      false
+    end
+
+    def zero_tax_printed_detail_evidence?(entry)
+      hash_value(entry, :source).to_s == "receipt_tax_detail" &&
+        %w[gross net].include?(hash_value(entry, :basis).to_s) &&
+        hash_value(entry, :target_gross_amount).to_i.positive? &&
+        hash_value(entry, :target_tax_amount).to_i.zero?
     end
 
     def printed_net_price_tax_candidate?(candidate)
@@ -150,6 +176,14 @@ module Amounts
       value = score_breakdown[key]
       value = score_breakdown[key.to_s] if value.nil?
       value.to_i
+    end
+
+    def hash_value(hash, key)
+      return unless hash.respond_to?(:[])
+
+      value = hash[key]
+      value = hash[key.to_s] if value.nil?
+      value
     end
   end
 end

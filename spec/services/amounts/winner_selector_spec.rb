@@ -1,18 +1,20 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::WinnerSelector do
-  def candidate(id:, basis:, score:, warnings: [], score_breakdown: exact_score_breakdown, rejected: false)
+  def candidate(id:, basis:, score:, warnings: [], score_breakdown: exact_score_breakdown, rejected: false, tax_rate_groups: [], evidence: [], subtotal: 1_000, tax: 100, purchase_total: 1_100)
     Amounts::Candidate.new(
       candidate_id: id,
       basis: basis,
-      subtotal: 1_000,
-      tax: 100,
-      purchase_total: 1_100,
-      final_payment_total: 1_100,
+      subtotal: subtotal,
+      tax: tax,
+      purchase_total: purchase_total,
+      final_payment_total: purchase_total,
       score: score,
       score_breakdown: score_breakdown,
       warnings: warnings,
-      hard_reject_reasons: rejected ? [ :tax_detail_mismatch ] : []
+      hard_reject_reasons: rejected ? [ :tax_detail_mismatch ] : [],
+      tax_rate_groups: tax_rate_groups,
+      evidence: evidence
     )
   end
 
@@ -132,6 +134,35 @@ RSpec.describe Amounts::WinnerSelector do
       basis: 'printed_tax_details_raw_sum',
       score: 35,
       warnings: [ :tax_detail_mismatch, :price_tax_inclusion_uncertain ]
+    )
+
+    result = described_class.new([ selected, competing ]).call
+
+    expect(result.warnings).not_to include(:competing_exact_basis_candidate)
+  end
+
+  it '税額0円の印字税詳細が強い根拠を持つ場合はcompeting warningを付けない' do
+    selected = candidate(
+      id: 'printed_tax_details_net/floor',
+      basis: 'printed_tax_details_net',
+      score: 9,
+      warnings: [ :price_tax_inclusion_uncertain ],
+      subtotal: 742,
+      tax: 59,
+      purchase_total: 801,
+      tax_rate_groups: [
+        { rate: BigDecimal('0.08'), gross: 798, net: 739, tax: 59 },
+        { rate: BigDecimal('0.10'), gross: 3, net: 3, tax: 0 }
+      ],
+      evidence: [
+        { source: 'receipt_tax_detail', rate: BigDecimal('0.08'), basis: :net, target_gross_amount: 798, target_tax_amount: 59 },
+        { source: 'receipt_tax_detail', rate: BigDecimal('0.10'), basis: :net, target_gross_amount: 3, target_tax_amount: 0 }
+      ]
+    )
+    competing = candidate(
+      id: 'items_as_tax_included/floor/per_receipt',
+      basis: 'items_as_tax_included',
+      score: 12
     )
 
     result = described_class.new([ selected, competing ]).call

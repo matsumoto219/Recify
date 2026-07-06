@@ -15,7 +15,8 @@ module Amounts
         %i[gross net].include?(detail[:basis]) &&
           detail[:rate].positive? &&
           detail[:net_amount].to_i.positive? &&
-          detail[:amount].to_i.positive?
+          detail[:amount].to_i >= 0 &&
+          detail[:target_gross_amount].to_i.positive?
       end
     end
 

@@ -1314,26 +1314,14 @@ class Ocr::ResponseParser
     total_amount = extract_field_amount(fields, "Total")&.to_i
     tax_amount = extract_field_amount(fields, "TotalTax")&.to_i || extract_field_amount(fields, "Tax")&.to_i
     tax_amount ||= single_summary_tax_detail_amount(details)
-    return [] unless total_amount&.positive? && tax_amount&.positive?
-
-    targets = tax_rate_targets_from_lines(lines)
-    return [] if targets.blank?
-    return [] if targets.one? && !single_rate_target_recovery_allowed?(details)
-    return [] unless targets.sum { |target| target[:gross_amount] } == total_amount
-
-    inferred = targets.map do |target|
-      tax = included_tax_amount(target[:gross_amount], target[:rate])
-      next unless tax.positive?
-
-      {
-        description: profile.tax_rate_target_label(rate_percentage_label(target[:rate])),
-        rate: target[:rate].to_f,
-        net_amount: target[:gross_amount] - tax,
-        amount: tax
-      }
-    end
-    return [] if inferred.any?(&:blank?)
-    return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == tax_amount
+    inferred = Analysis.tax_detail_line_evidence(
+      lines: lines,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      existing_tax_details: [],
+      profile: profile
+    )
+    return [] if inferred.one? && !single_rate_target_recovery_allowed?(details)
 
     inferred
   end

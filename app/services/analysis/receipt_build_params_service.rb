@@ -1561,36 +1561,13 @@ module Analysis
       def tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         receipt_total = normalize_amount(receipt_attributes[:total_amount])&.to_i
         receipt_tax = normalize_amount(receipt_attributes[:tax_amount])&.to_i
-        return [] unless receipt_total&.positive? && receipt_tax&.positive?
-
-        targets = tax_rate_targets_from_lines(lines)
-        return [] if targets.blank?
-        return [] if targets.one? && !single_rate_target_recovery_allowed?(tax_details)
-
-        target_sum = targets.sum { |target| target[:gross_amount] }
-        return [] unless target_sum == receipt_total
-
-        inferred = targets.map do |target|
-          tax = target[:tax_amount] || included_tax_amount(target[:gross_amount], target[:rate])
-          next unless tax.positive?
-
-          {
-            description: profile.tax_rate_target_label(rate_percentage_label(target[:rate])),
-            rate: target[:rate],
-            net_amount: target[:gross_amount] - tax,
-            amount: tax
-          }
-        end
-        return [] if inferred.any?(&:blank?)
-        return [] unless inferred.sum { |tax_detail| tax_detail[:amount] } == receipt_tax
-
-        inferred
-      end
-
-      def single_rate_target_recovery_allowed?(tax_details)
-        Array(tax_details).none? do |tax_detail|
-          normalize_rate(tax_detail[:rate])&.positive?
-        end
+        Analysis::TaxDetailLineEvidenceExtractor.call(
+          lines: lines,
+          receipt_total: receipt_total,
+          receipt_tax: receipt_tax,
+          existing_tax_details: tax_details,
+          profile: profile
+        )
       end
 
       def tax_rate_targets_from_lines(lines)
@@ -1859,6 +1836,11 @@ module Analysis
         ReceiptAmountService.apply_rounding(tax, :floor)
       end
 
+      def included_tax_amount_from_net(net_amount, rate)
+        tax = BigDecimal(net_amount.to_s) * rate
+        ReceiptAmountService.apply_rounding(tax, :floor)
+      end
+
       def included_tax_amount_matches?(gross_amount, rate, amount)
         tax = BigDecimal(gross_amount.to_s) * rate / (BigDecimal("1") + rate)
         %i[floor round ceil].any? do |rounding_mode|
@@ -1921,6 +1903,7 @@ module Analysis
         end
 
         return nil if matches.blank?
+        return nil unless matches.size == usable_tax_details.size
 
         {
           reason: "tax_detail_amount_match",
@@ -1977,7 +1960,7 @@ module Analysis
           amount = normalize_amount(tax_detail[:amount])
           target_amount = normalize_amount(tax_detail[:net_amount])
           next unless rate&.positive?
-          next unless amount&.positive?
+          next unless usable_tax_detail_amount?(tax_detail, rate, amount, target_amount)
           next unless target_amount&.positive?
 
           {
@@ -1994,7 +1977,7 @@ module Analysis
           amount = normalize_amount(tax_detail[:amount])
           net_amount = normalize_amount(tax_detail[:net_amount])
           next unless rate&.positive?
-          next unless amount&.positive?
+          next unless usable_tax_detail_amount?(tax_detail, rate, amount, net_amount)
           next unless net_amount&.positive?
 
           {
@@ -2004,6 +1987,28 @@ module Analysis
             gross_amount: net_amount.to_i + amount.to_i
           }
         end
+      end
+
+      def usable_tax_detail_amount?(tax_detail, rate, amount, net_amount)
+        return false if amount.nil?
+        return true if amount.positive?
+        return false unless amount.zero? && net_amount&.positive?
+
+        description = tax_detail[:description].to_s
+        net_basis_zero_tax_detail?(description, rate, net_amount) ||
+          gross_basis_zero_tax_detail?(description, rate, net_amount)
+      end
+
+      def net_basis_zero_tax_detail?(description, rate, net_amount)
+        return false unless description.match?(profile.amount_tax_detail_net_pattern) || description.match?(profile.amount_tax_detail_intermediate_pattern)
+
+        included_tax_amount_from_net(net_amount, rate).zero?
+      end
+
+      def gross_basis_zero_tax_detail?(description, rate, gross_amount)
+        return false unless description.match?(profile.amount_tax_detail_gross_pattern) || description.match?(profile.analysis_tax_target_marker_pattern)
+
+        included_tax_amount(gross_amount, rate).zero?
       end
 
       def item_reduced_tax_marker?(item, lines)

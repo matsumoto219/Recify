@@ -24,6 +24,10 @@ module Analysis
       ReceiptItemNormalizer.normalize_ai_items(...)
     end
 
+    def tax_detail_line_evidence(...)
+      TaxDetailLineEvidenceExtractor.call(...)
+    end
+
     def receipt_item_ai_allowed_keys
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end

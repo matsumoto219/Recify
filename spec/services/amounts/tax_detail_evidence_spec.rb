@@ -49,4 +49,19 @@ RSpec.describe Amounts::TaxDetailEvidence do
       }
     )
   end
+
+  it '税額0円の小額税率グループをfinal tax detail evidenceとして保持する' do
+    evidence = described_class.new([
+      { rate: BigDecimal('0.08'), net_amount: 739, amount: 59, description: '小 計 (税抜8%)' },
+      { rate: BigDecimal('0.10'), net_amount: 3, amount: 0, description: '小 計 (税抜10%)' }
+    ])
+
+    aggregate_failures do
+      expect(evidence.final_detected_tax_details).to contain_exactly(
+        include(rate: BigDecimal('0.08'), basis: :net, target_net_amount: 739, target_tax_amount: 59, target_gross_amount: 798),
+        include(rate: BigDecimal('0.10'), basis: :net, target_net_amount: 3, target_tax_amount: 0, target_gross_amount: 3)
+      )
+      expect(evidence.targets_by_rate[BigDecimal('0.10')]).to include(gross: 3, net: 3, tax: 0)
+    end
+  end
 end

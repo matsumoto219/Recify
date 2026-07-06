@@ -14,11 +14,11 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
 
-  it "validates generated receipt cases through g110" do
+  it "validates generated receipt cases through g111" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
 
     aggregate_failures do
-      expect(results.size).to eq(110)
+      expect(results.size).to eq(111)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
@@ -36,7 +36,7 @@ RSpec.describe GeneratedReceipts::Validator do
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag0(?:6[1-9]|7[0-9]|80)_/) }).to eq(20)
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag08[1-9]_|\Ag090_/) }).to eq(10)
       expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag09[1-9]_|\Ag100_/) }).to eq(10)
-      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag10[1-9]_|\Ag110_/) }).to eq(10)
+      expect(cases.count { |case_data| case_data["case_id"].match?(/\Ag10[1-9]_|\Ag11[0-1]_/) }).to eq(11)
       expect(cases.count { |case_data| case_data["category"] == "ocr_anomaly" }).to be >= 20
       expect(cases.count { |case_data| case_data["category"] == "non_receipt" }).to eq(10)
       expect(cases.count { |case_data| case_data["category"] == "conflict" }).to eq(10)

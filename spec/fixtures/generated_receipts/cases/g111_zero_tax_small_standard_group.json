@@ -1,0 +1,65 @@
+{
+  "case_id": "g111_zero_tax_small_standard_group",
+  "category": "tax_rounding",
+  "intent": "Small 10% taxable group with zero rounded tax should be preserved with mixed 8% tax details.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプルゼロ税 丸め店",
+    "store_address": "サンプル県サンプル市丸め町11-11",
+    "purchased_at": "2026-04-11T09:15:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "mixed",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル軽減セットA", "unit_price": 798, "quantity": 1, "line_total": 798, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "サンプル小額標準B", "unit_price": 3, "quantity": 1, "line_total": 3, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.08, "net": 739, "tax": 59, "gross": 798, "basis": "net", "label": "小計（税抜8%）" },
+      { "rate": 0.1, "net": 3, "tax": 0, "gross": 3, "basis": "net", "label": "小計（税抜10%）" }
+    ],
+    "subtotal": 742,
+    "tax": 59,
+    "total": 801,
+    "payments": [
+      { "method": "e_money", "label": "Suica支払", "amount": 801 }
+    ],
+    "payment_sum": 801,
+    "payment_method": "e_money",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプルゼロ税 丸め店",
+      "サンプル県サンプル市丸め町11-11",
+      "2026年04月11日(土) 09:15",
+      "領 収 書",
+      "--------------------------------",
+      "*サンプル軽減セットA          *798",
+      "サンプル小額標準B              3",
+      "--------------------------------",
+      "合計                         ¥801",
+      "小 計（税抜 8%）             ¥739",
+      "消費税等（ 8%）               ¥59",
+      "小 計（税抜10%）               ¥3",
+      "（税率 8%対象                ¥798）",
+      "（税率10%対象                  ¥3）",
+      "Suica支払                   ¥801",
+      "[*]マークは軽減税率対象です。"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": {
+    "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details"],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": true
+  }
+}

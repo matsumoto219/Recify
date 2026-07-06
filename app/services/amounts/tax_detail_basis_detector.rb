@@ -52,7 +52,9 @@ module Amounts
       return :summary if summary_detail?(tax_detail)
       return :intermediate if intermediate_detail?(tax_detail)
       return :tax_only if net_amount <= 0 && tax_amount.positive?
-      return :unknown unless rate.positive? && net_amount.positive? && tax_amount.positive?
+      return :unknown unless rate.positive? && net_amount.positive?
+      return zero_tax_basis(description, net_amount, rate) if tax_amount.zero?
+      return :unknown unless tax_amount.positive?
       return :net if description.match?(profile.amount_tax_detail_net_pattern)
 
       gross_match = tax_from_gross_matches?(net_amount, rate, tax_amount)
@@ -66,8 +68,22 @@ module Amounts
       :unknown
     end
 
+    def zero_tax_basis(description, printed_amount, rate)
+      net_match = tax_from_net_matches?(printed_amount, rate, 0)
+      gross_match = tax_from_gross_matches?(printed_amount, rate, 0)
+
+      return :net if net_match && description.match?(profile.amount_tax_detail_net_pattern)
+      return :net if net_match && description.match?(profile.amount_tax_detail_intermediate_pattern)
+      return :gross if gross_match && description.match?(profile.amount_tax_detail_gross_pattern)
+
+      return :net if net_match && !gross_match
+      return :gross if gross_match && !net_match
+
+      :unknown
+    end
+
     def summary_detail?(tax_detail)
-        tax_detail[:rate].zero? &&
+      tax_detail[:rate].zero? &&
         tax_detail[:net_amount].to_i.zero? &&
         tax_detail[:amount].to_i.positive? &&
         tax_detail[:description].to_s.match?(profile.amount_tax_detail_tax_only_pattern)

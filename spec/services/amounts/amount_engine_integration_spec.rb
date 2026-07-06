@@ -465,6 +465,40 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it '税額0円の小額10%対象を印字TaxDetailsとして含めて購入合計を解決する' do
+    result = call_amount_engine(
+      receipt: {
+        tax_amount: 59,
+        total_amount: 801
+      },
+      items: [
+        { raw_text: '商品A', price: 798, quantity: 1, quantity_unit_code: 'each', line_total: 798, tax_rate: BigDecimal('0.08') },
+        { raw_text: 'レジ袋', price: 3, quantity: 1, quantity_unit_code: 'each', line_total: 3, tax_rate: BigDecimal('0.10') }
+      ],
+      tax_details: [
+        { rate: BigDecimal('0.08'), net_amount: 739, amount: 59, description: '小 計 (税抜8%)' },
+        { rate: BigDecimal('0.10'), net_amount: 3, amount: 0, description: '小 計 (税抜10%)' }
+      ],
+      payments: [
+        { method: 'Suica', amount: 801 }
+      ]
+    )
+
+    aggregate_failures do
+      # 検算: 739税抜8% -> 税59, 税込798。3税抜10% -> 税0, 税込3。
+      expect(result[:resolved]).to include(subtotal: 742, tax: 59, total: 801, tax_rate: nil)
+      expect(result.dig(:computed, :final_payment_total)).to eq(801)
+      expect(result.dig(:computed, :tax_rate_groups)).to include(
+        include(rate: BigDecimal('0.08'), net: 739, tax: 59, gross: 798),
+        include(rate: BigDecimal('0.10'), net: 3, tax: 0, gross: 3)
+      )
+      expect(result[:needs_review]).to be(false)
+      expect(result[:review_reasons]).to be_empty
+      expect(result[:blocking_inconsistencies]).not_to include(:tax_detail_mismatch)
+      expect(result[:review_reasons]).not_to include('tax_detail_mismatch')
+    end
+  end
+
   it 'SystemSettingsで税抜単価の税込補正をOFFにするとanalysisでは税抜補正系候補を生成しない' do
     create(
       :system_setting,

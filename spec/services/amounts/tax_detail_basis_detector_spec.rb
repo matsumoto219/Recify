@@ -86,4 +86,28 @@ RSpec.describe Amounts::TaxDetailBasisDetector do
       )
     end
   end
+
+  it '税額0円でも税抜小計と税込対象のbasisを印字文脈から判定する' do
+    details = described_class.call([
+      { rate: BigDecimal('0.10'), net_amount: 3, amount: 0, description: '小 計 (税抜10%)' },
+      { rate: BigDecimal('0.10'), net_amount: 3, amount: 0, description: '(税率10%対象' }
+    ])
+
+    aggregate_failures do
+      expect(details[0]).to include(
+        basis: :net,
+        printed_amount_basis: :net_subtotal,
+        target_net_amount: 3,
+        target_tax_amount: 0,
+        target_gross_amount: 3
+      )
+      expect(details[1]).to include(
+        basis: :gross,
+        printed_amount_basis: :gross_target,
+        target_net_amount: 3,
+        target_tax_amount: 0,
+        target_gross_amount: 3
+      )
+    end
+  end
 end

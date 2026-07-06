@@ -96,7 +96,8 @@ module Amounts
         groups = detected_tax_details.each_with_object({}) do |detail, hash|
           rate = detail[:rate]
           next unless rate.positive?
-          next unless detail[:net_amount].to_i.positive? && detail[:amount].to_i.positive?
+          next unless detail[:net_amount].to_i.positive?
+          next unless detail[:amount].to_i.positive? || final_zero_tax_detail?(detail)
 
           hash[rate] ||= { rate: rate, gross: 0, net: 0, tax: 0 }
           hash[rate][:net] += detail[:net_amount].to_i
@@ -131,6 +132,12 @@ module Amounts
           ),
           source: :amount_engine
         )
+      end
+
+      def final_zero_tax_detail?(detail)
+        detail[:amount].to_i.zero? &&
+          %i[gross net].include?(detail[:basis]) &&
+          detail[:target_gross_amount].to_i.positive?
       end
 
       def non_taxable_item_total_for_printed_tax_details(tax_detail_groups)
