@@ -1,6 +1,13 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   RETRY_TYPES = Analysis.retry_types.freeze
   RETRY_CONFIRMATION_TEXT = Analysis.retry_confirmation_text
+  OCR_RESPONSE_ARTIFACT_DOWNLOAD_VARIANTS = %w[raw pretty].freeze
+  OCR_RESPONSE_ARTIFACT_PRETTY_JSON_OPTIONS = {
+    indent: "\t",
+    space: " ",
+    object_nl: "\n",
+    array_nl: "\n"
+  }.freeze
 
   helper_method :admin_retry_enabled?,
                 :admin_retry_reauthentication_required?,
@@ -97,20 +104,27 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     end
 
     blob = artifact.blob
+    download_variant = ocr_response_artifact_download_variant
+    raw_body = artifact.download
+    body = ocr_response_artifact_download_body(raw_body, variant: download_variant)
+    filename = ocr_response_artifact_download_filename(blob.filename.to_s, variant: download_variant)
+
     record_ocr_response_artifact_download_audit!(
       outcome: "succeeded",
       metadata: {
         receipt_public_id: @record[:public_id],
         byte_size: blob.byte_size,
+        response_byte_size: body.bytesize,
         content_type: blob.content_type,
-        filename: blob.filename.to_s
+        filename: filename,
+        download_format: download_variant
       }
     )
 
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    send_data artifact.download,
-              filename: blob.filename.to_s,
+    send_data body,
+              filename: filename,
               type: blob.content_type.presence || "application/json",
               disposition: "attachment"
   rescue ActiveStorage::FileNotFoundError
@@ -121,6 +135,18 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     )
     redirect_to admin_receipt_analysis_run_path(@record[:run_key]),
                 alert: t("admin.receipt_analysis_runs.messages.ocr_response_artifact_missing"),
+                status: :see_other
+  rescue JSON::ParserError, TypeError
+    record_ocr_response_artifact_download_audit!(
+      outcome: "failed",
+      error_code: "invalid_json",
+      metadata: {
+        receipt_public_id: @record&.dig(:public_id),
+        download_format: ocr_response_artifact_download_variant
+      }
+    )
+    redirect_to admin_receipt_analysis_run_path(@record[:run_key]),
+                alert: t("admin.receipt_analysis_runs.messages.ocr_response_artifact_invalid_json"),
                 status: :see_other
   end
 
@@ -153,6 +179,30 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       metadata: metadata.compact,
       request: request
     )
+  end
+
+  def ocr_response_artifact_download_variant
+    variant = params[:variant].to_s
+    return variant if OCR_RESPONSE_ARTIFACT_DOWNLOAD_VARIANTS.include?(variant)
+
+    "raw"
+  end
+
+  def ocr_response_artifact_download_body(raw_body, variant:)
+    return raw_body unless variant == "pretty"
+
+    body = JSON.pretty_generate(
+      JSON.parse(raw_body),
+      OCR_RESPONSE_ARTIFACT_PRETTY_JSON_OPTIONS
+    )
+    body.end_with?("\n") ? body : "#{body}\n"
+  end
+
+  def ocr_response_artifact_download_filename(filename, variant:)
+    return filename unless variant == "pretty"
+    return filename.sub(/\.json\z/i, "_pretty.json") if filename.match?(/\.json\z/i)
+
+    "#{filename}_pretty.json"
   end
 
   def filter_params

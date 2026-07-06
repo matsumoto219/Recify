@@ -244,12 +244,21 @@
           </p>
         </div>
         <% if ocr_response_artifact_attached && admin_ocr_response_artifact_download_enabled? %>
-          <%= render "shared/ui/actions/button",
-                as: :link,
-                href: ocr_response_artifact_admin_receipt_analysis_run_path(@record[:run_key]),
-                label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download"),
-                size: :compact,
-                icon: "download" %>
+          <div class="flex min-w-0 flex-wrap gap-2">
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: ocr_response_artifact_admin_receipt_analysis_run_path(@record[:run_key], variant: :raw),
+                  label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download_raw"),
+                  size: :compact,
+                  icon: "download" %>
+            <%= render "shared/ui/actions/button",
+                  as: :link,
+                  href: ocr_response_artifact_admin_receipt_analysis_run_path(@record[:run_key], variant: :pretty),
+                  label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download_pretty"),
+                  variant: :secondary,
+                  size: :compact,
+                  icon: "data_object" %>
+          </div>
         <% elsif ocr_response_artifact_attached %>
           <%= render "shared/ui/actions/button",
                 as: :link,
