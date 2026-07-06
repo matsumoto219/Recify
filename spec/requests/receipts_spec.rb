@@ -4508,6 +4508,21 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '画像ダウンロードリンクはTurbo遷移扱いにしない' do
+      image_receipt = create(:receipt, :completed, :with_image, user: user)
+
+      get receipt_path(image_receipt)
+
+      document = Nokogiri::HTML(response.body)
+      download_link = document.at_css('a[download]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(download_link).to be_present
+        expect(download_link['data-turbo']).to eq('false')
+      end
+    end
+
     it '詳細画面に特殊加減算を読み取り専用で表示する' do
       receipt.receipt_adjustments.create!(
         kind: 'delivery_fee',

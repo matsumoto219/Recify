@@ -827,12 +827,18 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       get admin_receipt_analysis_run_path(run.run_key)
 
+      document = Nokogiri::HTML(response.body)
+      raw_link = document.at_css("a[href='#{ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key, variant: :raw)}']")
+      pretty_link = document.at_css("a[href='#{ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key, variant: :pretty)}']")
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('raw JSONをダウンロード')
         expect(response.body).to include('整形JSONをダウンロード')
-        expect(response.body).to include(ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key, variant: :raw))
-        expect(response.body).to include(ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key, variant: :pretty))
+        expect(raw_link).to be_present
+        expect(raw_link['data-turbo']).to eq('false')
+        expect(pretty_link).to be_present
+        expect(pretty_link['data-turbo']).to eq('false')
       end
     end
 

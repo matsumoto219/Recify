@@ -250,6 +250,7 @@
                   href: ocr_response_artifact_admin_receipt_analysis_run_path(@record[:run_key], variant: :raw),
                   label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download_raw"),
                   size: :compact,
+                  data: { turbo: false },
                   icon: "download" %>
             <%= render "shared/ui/actions/button",
                   as: :link,
@@ -257,6 +258,7 @@
                   label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download_pretty"),
                   variant: :secondary,
                   size: :compact,
+                  data: { turbo: false },
                   icon: "data_object" %>
           </div>
         <% elsif ocr_response_artifact_attached %>
