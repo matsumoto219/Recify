@@ -13,8 +13,13 @@ class ReceiptOcrService
     end
   end
 
-  def self.call(image, provider: "azure_document_intelligence", before_provider_call: nil)
-    new(image: image, provider: provider, before_provider_call: before_provider_call).call
+  def self.call(image, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
+    new(
+      image: image,
+      provider: provider,
+      before_provider_call: before_provider_call,
+      after_provider_success_response: after_provider_success_response
+    ).call
   end
 
   def self.error_result(error_code:, provider: "azure_document_intelligence", model_id: nil, polling_metrics: nil, provider_error_detail: nil)
@@ -31,10 +36,11 @@ class ReceiptOcrService
     Ocr::AvailabilityChecker.call
   end
 
-  def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil)
+  def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
     @image = image
     @provider = provider
     @before_provider_call = before_provider_call
+    @after_provider_success_response = after_provider_success_response
   end
 
   def call
@@ -43,7 +49,12 @@ class ReceiptOcrService
     validate_image!
 
     # 1) 外部OCR API呼び出し
-    response = Ocr::Client.new(image: image, provider: provider, before_provider_call: before_provider_call).call
+    response = Ocr::Client.new(
+      image: image,
+      provider: provider,
+      before_provider_call: before_provider_call,
+      after_provider_success_response: after_provider_success_response
+    ).call
 
     # 2) レスポンスを内部形式へ正規化
     parsed = Ocr::ResponseParser.new(response: response, provider: provider).call
@@ -79,7 +90,7 @@ class ReceiptOcrService
 
   private
 
-  attr_reader :image, :provider, :before_provider_call
+  attr_reader :image, :provider, :before_provider_call, :after_provider_success_response
 
   def validate_image!
     unless image&.attached?

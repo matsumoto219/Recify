@@ -13,11 +13,15 @@ module SystemSettings
   RECEIPT_ITEMS_LIMIT_KEY = "limits.receipt_items_per_receipt"
   SNAPSHOT_OCR_LINES_KEY = "limits.snapshot_ocr_lines_max"
   STORE_NAME_CASING_CONTEXT_LINES_KEY = "limits.store_name_casing_context_lines_max"
+  OCR_RAW_RESPONSE_RETENTION_KEY = "analysis_artifact.ocr_raw_response_retention_days"
+  OCR_RAW_RESPONSE_MAX_BYTES_KEY = "analysis_artifact.ocr_raw_response_max_bytes"
+  ANALYSIS_RUNS_FAILED_RETENTION_KEY = "retention.analysis_runs_failed_days"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   STORE_NAME_CASING_SNAPSHOT_OCR_LINES_LIMIT_ERROR = "store_name_casing_snapshot_ocr_lines_limit"
   SNAPSHOT_OCR_LINES_STORE_NAME_CASING_LIMIT_ERROR = "snapshot_ocr_lines_store_name_casing_limit"
   USER_LIMIT_SAFETY_MAX_ERROR = "user_limit_safety_max"
   ANALYSIS_RUN_RETENTION_ORDER_ERROR = "analysis_run_retention_order"
+  OCR_RAW_RESPONSE_RETENTION_ERROR = "ocr_raw_response_retention"
   AMOUNT_LIMIT_RELATION_ERROR = "amount_limit_relationship"
   IMAGE_DIMENSION_RELATION_ERROR = "image_dimension_relationship"
   STORAGE_WARNING_THRESHOLD_RELATION_ERROR = "storage_warning_threshold_relationship"
@@ -42,6 +46,10 @@ module SystemSettings
     retention.analysis_runs_short_days
     retention.analysis_runs_default_days
     retention.analysis_runs_failed_days
+  ].freeze
+  OCR_RAW_RESPONSE_RETENTION_DEPENDENCY_KEYS = [
+    OCR_RAW_RESPONSE_RETENTION_KEY,
+    ANALYSIS_RUNS_FAILED_RETENTION_KEY
   ].freeze
   IMAGE_DIMENSION_RELATIONSHIPS = [
     [ "limits.receipt_image_min_dimension_px", "limits.receipt_image_max_dimension_px" ],
@@ -430,6 +438,7 @@ module SystemSettings
       validate_user_limit_setting_safety!(definition, value)
       validate_user_limit_safety_ceiling!(definition, value)
       validate_analysis_run_retention_order!(definition, value)
+      validate_ocr_raw_response_retention!(definition, value)
       validate_amount_limit_relationships!(definition, value)
       validate_image_dimension_relationships!(definition, value)
       validate_storage_warning_threshold_relationships!(definition, value)
@@ -511,6 +520,18 @@ module SystemSettings
       return if failed_days >= default_days && default_days >= short_days
 
       raise ValidationError, ANALYSIS_RUN_RETENTION_ORDER_ERROR
+    end
+
+    def validate_ocr_raw_response_retention!(definition, value)
+      return unless OCR_RAW_RESPONSE_RETENTION_DEPENDENCY_KEYS.include?(definition.key)
+
+      values = limits_for(OCR_RAW_RESPONSE_RETENTION_DEPENDENCY_KEYS)
+      values[definition.key] = Integer(value)
+      artifact_days = values.fetch(OCR_RAW_RESPONSE_RETENTION_KEY)
+      failed_days = values.fetch(ANALYSIS_RUNS_FAILED_RETENTION_KEY)
+      return if artifact_days <= failed_days
+
+      raise ValidationError, OCR_RAW_RESPONSE_RETENTION_ERROR
     end
 
     def validate_amount_limit_relationships!(definition, value)

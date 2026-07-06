@@ -52,6 +52,16 @@ module ReceiptAnalysisRuns
       )
     end
 
+    def record_ocr_response_artifact(run, raw_response_body, provider:, model_id: nil, at: Time.current)
+      OcrResponseArtifact.capture(
+        run,
+        raw_response_body,
+        provider: provider,
+        model_id: model_id,
+        at: at
+      )
+    end
+
     def record_ai_input(run, ai_input, at: Time.current)
       Tracker.new(run).record_ai_input(
         SnapshotBuilder.ai_input_snapshot(ai_input),
@@ -195,18 +205,23 @@ module ReceiptAnalysisRuns
       dry_run = normalize_boolean(dry_run)
       runs = expired_terminal_runs(cutoff:, limit:)
       records = runs.map { |run| expired_run_record(run) }
+      artifact_result = cleanup_expired_ocr_response_artifacts(dry_run: dry_run)
       result = {
         dry_run: dry_run,
         cutoff: cutoff,
         limit: limit,
         expired_count: runs.size,
         deleted_count: 0,
+        expired_artifact_count: artifact_result[:expired_artifact_count],
+        purged_artifact_count: artifact_result[:purged_artifact_count],
+        artifact_errors: artifact_result[:errors],
         records: records
       }
 
       return result if dry_run
 
       ids = records.map { |record| record[:id] }
+      purge_ocr_response_artifacts_for_run_ids(ids)
       result[:deleted_count] = ReceiptAnalysisRun
         .where(id: ids)
         .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
@@ -215,6 +230,25 @@ module ReceiptAnalysisRuns
     end
 
     private
+
+    def cleanup_expired_ocr_response_artifacts(dry_run:)
+      retention_days = OcrResponseArtifact.retention_days
+      artifact_cutoff = Time.current - retention_days.days
+      OcrResponseArtifact.purge_expired(
+        cutoff: artifact_cutoff,
+        limit: DEFAULT_RETENTION_CLEANUP_LIMIT,
+        dry_run: dry_run
+      )
+    end
+
+    def purge_ocr_response_artifacts_for_run_ids(ids)
+      return if ids.blank?
+
+      ActiveStorage::Attachment
+        .where(record_type: "ReceiptAnalysisRun", name: "ocr_response_artifact", record_id: ids)
+        .includes(:blob)
+        .find_each(&:purge)
+    end
 
     def sanitized_finalize_decision_snapshot(parent_run)
       decision = ReceiptAnalysisPipeline.finalize_decision_from_snapshot(

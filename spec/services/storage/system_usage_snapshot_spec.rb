@@ -58,5 +58,22 @@ RSpec.describe Storage::SystemUsageSnapshot do
         expect(ActiveStorage::Blob.exists?(orphan_blob.id)).to eq(true)
       end
     end
+
+    it 'receipt analysis runのOCR response artifactはサーバー全体容量に含めるがユーザーquota使用量には含めない' do
+      user = create(:user, storage_limit_bytes: 1.gigabyte)
+      run = create(:receipt_analysis_run, receipt: create(:receipt, user: user))
+      artifact_blob = create_blob(byte_size: 5.kilobytes, filename: 'ocr_response.json')
+      attach_blob(run, :ocr_response_artifact, artifact_blob)
+
+      snapshot = described_class.call
+
+      aggregate_failures do
+        expect(snapshot[:total_blob_count]).to eq(1)
+        expect(snapshot[:attached_blob_count]).to eq(1)
+        expect(snapshot[:attached_blob_bytes]).to eq(5.kilobytes)
+        expect(snapshot[:quota_used_bytes]).to eq(0)
+        expect(snapshot[:global_quota]).to include(used_bytes: 5.kilobytes)
+      end
+    end
   end
 end

@@ -371,7 +371,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         successful_ocr_result
       end
@@ -387,6 +387,33 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.reload.stage).to eq('ocr_validation')
         expect(run.metadata['finalize_decision']).to be_blank
         expect(UsageCounter.find_by!(user: receipt.user, key: 'ocr_jobs_per_day').used_count).to eq(1)
+      end
+    end
+
+    it 'OCR成功時に設定ONならraw OCR response JSONをrun artifactへ保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      raw_body = JSON.generate('status' => 'succeeded', 'modelId' => 'prebuilt-receipt', 'analyzeResult' => { 'content' => 'safe raw json fixture' })
+      create(:system_setting, key: 'analysis_artifact.ocr_raw_response_capture_enabled', value: SystemSettings.stored_value(true))
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+        before_provider_call&.call
+        after_provider_success_response&.call(
+          raw_body,
+          response: { 'status' => 'succeeded', 'modelId' => 'prebuilt-receipt' },
+          provider: 'azure_document_intelligence'
+        )
+        successful_ocr_result
+      end
+      allow(ExternalServices).to receive(:down?).and_return(false)
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:ai)
+        expect(run.reload.ocr_response_artifact).to be_attached
+        expect(run.ocr_response_artifact.download).to eq(raw_body)
+        expect(run.ocr_result_snapshot.to_json).not_to include('safe raw json fixture')
       end
     end
 
@@ -409,7 +436,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end
@@ -454,7 +481,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end
@@ -505,7 +532,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       )
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end

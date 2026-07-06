@@ -23,7 +23,11 @@ class ReceiptAnalysisPipeline
             )
           )
         else
-          ReceiptOcrService.call(receipt.image, before_provider_call: before_provider_call)
+          ReceiptOcrService.call(
+            receipt.image,
+            before_provider_call: before_provider_call,
+            after_provider_success_response: ocr_response_artifact_callback
+          )
         end
 
       ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
@@ -38,6 +42,17 @@ class ReceiptAnalysisPipeline
 
     def ocr_unavailable?
       ExternalServices.down?(:ocr)
+    end
+
+    def ocr_response_artifact_callback
+      lambda do |raw_body, response:, provider:|
+        ReceiptAnalysisRuns.record_ocr_response_artifact(
+          run,
+          raw_body,
+          provider: provider,
+          model_id: response["modelId"]
+        )
+      end
     end
   end
 end

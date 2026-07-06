@@ -23,6 +23,11 @@
     retention.analysis_runs_default_days
     retention.analysis_runs_failed_days
   ]
+  ocr_response_artifact_keys = %w[
+    analysis_artifact.ocr_raw_response_capture_enabled
+    analysis_artifact.ocr_raw_response_max_bytes
+    analysis_artifact.ocr_raw_response_retention_days
+  ]
   usage_limit_safety_keys = %w[
     limits.max_uploads_per_day
     limits.max_ocr_per_day
@@ -67,6 +72,8 @@
       "contact_requests_retention_note"
     elsif analysis_run_retention_keys.include?(@record[:key].to_s)
       "analysis_runs_retention_note"
+    elsif ocr_response_artifact_keys.include?(@record[:key].to_s)
+      "ocr_response_artifact_note"
     elsif @record[:key].to_s == "retention.orphan_blobs_hours"
       "orphan_blobs_retention_note"
     elsif @record[:key].to_s == "retention.receipt_images_days"

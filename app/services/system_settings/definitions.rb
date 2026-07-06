@@ -18,6 +18,14 @@ module SystemSettings
         risk_level: "low"
       ),
       Definition.new(
+        key: "analysis_artifact.ocr_raw_response_capture_enabled",
+        category: "analysis_artifact",
+        value_type: "boolean",
+        default: false,
+        editable: true,
+        risk_level: "high"
+      ),
+      Definition.new(
         key: "feature.receipt_image_preprocess",
         category: "feature_flag",
         value_type: "feature_flag",
@@ -547,6 +555,16 @@ module SystemSettings
         max: 20.megabytes
       ),
       Definition.new(
+        key: "analysis_artifact.ocr_raw_response_max_bytes",
+        category: "analysis_artifact",
+        value_type: "integer",
+        default: 5.megabytes,
+        editable: true,
+        risk_level: "high",
+        min: 64.kilobytes,
+        max: 20.megabytes
+      ),
+      Definition.new(
         key: "retention.notifications_read_days",
         category: "retention",
         value_type: "integer",
@@ -615,6 +633,16 @@ module SystemSettings
         risk_level: "medium",
         min: 1,
         max: 365
+      ),
+      Definition.new(
+        key: "analysis_artifact.ocr_raw_response_retention_days",
+        category: "analysis_artifact",
+        value_type: "integer",
+        default: 7,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 90
       ),
       Definition.new(
         key: "retention.orphan_blobs_hours",

@@ -59,6 +59,8 @@ class ReceiptAnalysisRun < ApplicationRecord
            inverse_of: :parent_run,
            dependent: :nullify
 
+  has_one_attached :ocr_response_artifact
+
   before_validation :assign_run_key, on: :create
   before_validation :assign_default_expires_at, on: :create
   after_create_commit :broadcast_receipt_processing_phase_update, if: :broadcast_receipt_processing_phase_update?

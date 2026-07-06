@@ -11,6 +11,7 @@ module Admin
       snapshot_limit
       ai_prompt_limit
       analysis_quality
+      analysis_artifact
       upload_limit
       retention
       storage_policy

@@ -600,6 +600,31 @@ RSpec.describe Ocr::Client do
       end
     end
 
+    it 'succeededのraw response bodyをcallbackへ渡し、parser向け戻り値にはpolling metricsだけを追加する' do
+      raw_body = JSON.generate(succeeded_response)
+      callback = spy('success response callback')
+      callback_client = described_class.new(
+        image: image,
+        provider: provider,
+        before_provider_call: nil,
+        after_provider_success_response: callback
+      )
+      allow(Faraday).to receive(:get).and_return(faraday_response(status: 200, body: raw_body))
+      allow(callback_client).to receive(:sleep)
+
+      result = callback_client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(callback).to have_received(:call).with(
+          raw_body,
+          response: succeeded_response,
+          provider: provider
+        )
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(result[described_class::POLLING_METRICS_KEY]).to include('final_status' => 'succeeded')
+      end
+    end
+
     it 'running中レスポンスのRetry-Afterを次回poll sleepに使う' do
       outcomes = [
         faraday_response(status: 200, headers: { 'Retry-After' => '2.5' }, body: JSON.generate({ 'status' => 'running' })),

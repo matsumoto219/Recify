@@ -35,10 +35,11 @@ module Ocr
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethods" ].freeze
 
-    def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil)
+    def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
       @image = image
       @provider = provider
       @before_provider_call = before_provider_call
+      @after_provider_success_response = after_provider_success_response
     end
 
     def call
@@ -77,7 +78,7 @@ module Ocr
 
     private
 
-    attr_reader :image, :provider, :before_provider_call
+    attr_reader :image, :provider, :before_provider_call, :after_provider_success_response
 
     def connection
       @connection ||= Faraday.new(url: endpoint) do |f|
@@ -144,6 +145,7 @@ module Ocr
 
         case status
         when "succeeded"
+          notify_provider_success_response(res.body, body)
           return body.merge(POLLING_METRICS_KEY => polling_metrics(final_status: status))
         when "failed"
           raise OcrError.new("ocr_failed", polling_metrics: polling_metrics(final_status: status))
@@ -168,6 +170,18 @@ module Ocr
       end
 
       image
+    end
+
+    def notify_provider_success_response(raw_body, parsed_body)
+      return unless after_provider_success_response
+
+      after_provider_success_response.call(
+        raw_body,
+        response: parsed_body,
+        provider: provider
+      )
+    rescue StandardError => e
+      Rails.logger.warn("[OCR::Client] success_response_callback_failed class=#{e.class}")
     end
 
     def with_retries(operation:, retry_timeouts:)

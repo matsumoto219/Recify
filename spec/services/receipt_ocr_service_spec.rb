@@ -64,7 +64,12 @@ RSpec.describe ReceiptOcrService do
         result = described_class.call(image, provider: provider)
 
         aggregate_failures do
-          expect(Ocr::Client).to have_received(:new).with(image: image, provider: provider, before_provider_call: nil)
+          expect(Ocr::Client).to have_received(:new).with(
+            image: image,
+            provider: provider,
+            before_provider_call: nil,
+            after_provider_success_response: nil
+          )
           expect(client).to have_received(:call)
           expect(Ocr::ResponseParser).to have_received(:new).with(response: raw_response, provider: provider)
           expect(parser).to have_received(:call)

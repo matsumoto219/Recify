@@ -190,6 +190,16 @@ RSpec.describe Admin::SystemSettingsQuery do
       )
     end
 
+    it 'analysis artifact filterを適用できる' do
+      result = described_class.call(category: 'analysis_artifact')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        'analysis_artifact.ocr_raw_response_capture_enabled',
+        'analysis_artifact.ocr_raw_response_max_bytes',
+        'analysis_artifact.ocr_raw_response_retention_days'
+      )
+    end
+
     it 'risk filterを適用できる' do
       result = described_class.call(risk_level: 'high')
 

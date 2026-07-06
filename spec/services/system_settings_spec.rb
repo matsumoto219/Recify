@@ -6,6 +6,7 @@ RSpec.describe SystemSettings do
       expect(described_class.definitions.keys).to contain_exactly(
         'feature.receipt_image_preprocess_enabled',
         'feature.receipt_logo_display_enabled',
+        'analysis_artifact.ocr_raw_response_capture_enabled',
         'feature.receipt_image_preprocess',
         'feature.receipt_logo_display',
         'operations.ocr_enabled',
@@ -60,6 +61,7 @@ RSpec.describe SystemSettings do
         'limits.announcement_image_min_dimension_px',
         'limits.announcement_image_max_dimension_px',
         'limits.avatar_image_max_file_size_bytes',
+        'analysis_artifact.ocr_raw_response_max_bytes',
         'retention.notifications_read_days',
         'retention.guest_users_days',
         'retention.user_sessions_days',
@@ -67,6 +69,7 @@ RSpec.describe SystemSettings do
         'retention.analysis_runs_short_days',
         'retention.analysis_runs_default_days',
         'retention.analysis_runs_failed_days',
+        'analysis_artifact.ocr_raw_response_retention_days',
         'retention.orphan_blobs_hours',
         'retention.receipt_images_days',
         'retention.security_events_critical_days',
@@ -167,6 +170,7 @@ RSpec.describe SystemSettings do
         snapshot_limit
         ai_prompt_limit
         analysis_quality
+        analysis_artifact
       ]
       target_definitions = described_class.definitions.values.select do |definition|
         bounded_categories.include?(definition.category) && definition.value_type == 'integer'
@@ -181,7 +185,8 @@ RSpec.describe SystemSettings do
           'retention.audit_logs_high_risk_admin_days',
           'external_services.down_failure_threshold',
           'limits.ai_prompt_raw_text_length_max',
-          'limits.snapshot_ocr_items_max'
+          'limits.snapshot_ocr_items_max',
+          'analysis_artifact.ocr_raw_response_max_bytes'
         )
 
         target_definitions.each do |definition|
@@ -202,6 +207,7 @@ RSpec.describe SystemSettings do
         expect(values.fetch('external_services.degraded_failure_threshold')).to be < values.fetch('external_services.down_failure_threshold')
         expect(values.fetch('retention.analysis_runs_failed_days')).to be >= values.fetch('retention.analysis_runs_default_days')
         expect(values.fetch('retention.analysis_runs_default_days')).to be >= values.fetch('retention.analysis_runs_short_days')
+        expect(values.fetch('analysis_artifact.ocr_raw_response_retention_days')).to be <= values.fetch('retention.analysis_runs_failed_days')
         expect(values.fetch('retention.security_events_critical_days')).to be >= values.fetch('retention.security_events_high_days')
         expect(values.fetch('retention.security_events_high_days')).to be >= values.fetch('retention.security_events_medium_days')
         expect(values.fetch('retention.security_events_medium_days')).to be >= values.fetch('retention.security_events_low_days')
@@ -390,6 +396,10 @@ RSpec.describe SystemSettings do
         described_class.rollout_enabled?('feature.receipt_logo_display_enabled', user: create(:user))
       }.to raise_error(SystemSettings::ValidationError, 'not_feature_flag')
     end
+
+    it 'OCR response artifact capture defaultはfalseを返す' do
+      expect(described_class.value_for('analysis_artifact.ocr_raw_response_capture_enabled')).to eq(false)
+    end
   end
 
   describe '.limit_for' do
@@ -428,6 +438,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.announcement_image_min_dimension_px')).to eq(100)
         expect(described_class.limit_for('limits.announcement_image_max_dimension_px')).to eq(4096)
         expect(described_class.limit_for('limits.avatar_image_max_file_size_bytes')).to eq(5.megabytes)
+        expect(described_class.limit_for('analysis_artifact.ocr_raw_response_max_bytes')).to eq(5.megabytes)
         expect(described_class.limit_for('retention.notifications_read_days')).to eq(30)
         expect(described_class.limit_for('retention.guest_users_days')).to eq(7)
         expect(described_class.limit_for('retention.user_sessions_days')).to eq(90)
@@ -435,6 +446,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('retention.analysis_runs_short_days')).to eq(14)
         expect(described_class.limit_for('retention.analysis_runs_default_days')).to eq(30)
         expect(described_class.limit_for('retention.analysis_runs_failed_days')).to eq(90)
+        expect(described_class.limit_for('analysis_artifact.ocr_raw_response_retention_days')).to eq(7)
         expect(described_class.limit_for('retention.orphan_blobs_hours')).to eq(48)
         expect(described_class.limit_for('retention.receipt_images_days')).to eq(1)
         expect(described_class.limit_for('limits.max_uploads_per_day')).to eq(1000)
@@ -549,6 +561,7 @@ RSpec.describe SystemSettings do
     it 'booleanをcastする' do
       expect(described_class.cast_update_value('feature.receipt_logo_display_enabled', '1')).to eq(true)
       expect(described_class.stored_value_for_update('feature.receipt_logo_display_enabled', 'false')).to eq('value' => false)
+      expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_capture_enabled', 'true')).to eq(true)
       expect(described_class.cast_update_value('operations.ocr_enabled', 'false')).to eq(false)
       expect(described_class.stored_value_for_update('operations.ai_enabled', '0')).to eq('value' => false)
     end
@@ -627,6 +640,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('limits.announcement_image_max_dimension_px', '10000')).to eq(10_000)
         expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 100.kilobytes.to_s)).to eq(100.kilobytes)
         expect(described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', 20.megabytes.to_s)).to eq(20.megabytes)
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_max_bytes', 64.kilobytes.to_s)).to eq(64.kilobytes)
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_max_bytes', 20.megabytes.to_s)).to eq(20.megabytes)
         expect(described_class.cast_update_value('storage.usage_warning_percentage', '1')).to eq(1)
         expect(described_class.cast_update_value('storage.usage_warning_percentage', '94')).to eq(94)
         expect(described_class.cast_update_value('storage.usage_error_percentage', '81')).to eq(81)
@@ -683,6 +698,8 @@ RSpec.describe SystemSettings do
         expect(described_class.cast_update_value('retention.analysis_runs_default_days', '90')).to eq(90)
         expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '90')).to eq(90)
         expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '365')).to eq(365)
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '1')).to eq(1)
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '90')).to eq(90)
         expect(described_class.cast_update_value('retention.orphan_blobs_hours', '24')).to eq(24)
         expect(described_class.cast_update_value('retention.orphan_blobs_hours', '720')).to eq(720)
         expect(described_class.cast_update_value('retention.receipt_images_days', '1')).to eq(1)
@@ -900,6 +917,12 @@ RSpec.describe SystemSettings do
           described_class.cast_update_value('retention.analysis_runs_failed_days', '366')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
           described_class.cast_update_value('retention.orphan_blobs_hours', '23')
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
@@ -961,6 +984,12 @@ RSpec.describe SystemSettings do
         }.to raise_error(SystemSettings::ValidationError, 'below_min')
         expect {
           described_class.cast_update_value('limits.avatar_image_max_file_size_bytes', (20.megabytes + 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_max_bytes', (64.kilobytes - 1).to_s)
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_max_bytes', (20.megabytes + 1).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
           described_class.cast_update_value('limits.public_announcements_per_page', '0')
@@ -1344,6 +1373,37 @@ RSpec.describe SystemSettings do
       end
     end
 
+    it 'OCR response artifact保持期間はfailed run保持期間以下だけ許可する' do
+      error_message = 'ocr_raw_response_retention'
+      create(:system_setting, key: 'retention.analysis_runs_short_days', value: described_class.stored_value(5))
+      create(:system_setting, key: 'retention.analysis_runs_default_days', value: described_class.stored_value(6))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '90')).to eq(90)
+        expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '91')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '7')).to eq(7)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '6')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+
+      create(:system_setting, key: 'retention.analysis_runs_failed_days', value: described_class.stored_value(30))
+      create(:system_setting, key: 'analysis_artifact.ocr_raw_response_retention_days', value: described_class.stored_value(20))
+
+      aggregate_failures do
+        expect(described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '30')).to eq(30)
+        expect {
+          described_class.cast_update_value('analysis_artifact.ocr_raw_response_retention_days', '31')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+        expect(described_class.cast_update_value('retention.analysis_runs_failed_days', '20')).to eq(20)
+        expect {
+          described_class.cast_update_value('retention.analysis_runs_failed_days', '19')
+        }.to raise_error(SystemSettings::ValidationError, error_message)
+      end
+    end
+
     it 'upload / OCR / AI / storage系UserLimit設定はシステム上限以下だけ許可する' do
       error_message = 'user_limit_safety_max'
       create(:system_setting, key: 'limits.max_uploads_per_day', value: described_class.stored_value(100))
@@ -1620,6 +1680,30 @@ RSpec.describe SystemSettings do
           min: 1,
           max: 365,
           default: 90
+        )
+      end
+    end
+
+    it 'OCR response artifact設定はhigh risk設定として扱う' do
+      aggregate_failures do
+        expect(described_class.definition_for('analysis_artifact.ocr_raw_response_capture_enabled')).to have_attributes(
+          category: 'analysis_artifact',
+          risk_level: 'high',
+          default: false
+        )
+        expect(described_class.definition_for('analysis_artifact.ocr_raw_response_max_bytes')).to have_attributes(
+          category: 'analysis_artifact',
+          risk_level: 'high',
+          min: 64.kilobytes,
+          max: 20.megabytes,
+          default: 5.megabytes
+        )
+        expect(described_class.definition_for('analysis_artifact.ocr_raw_response_retention_days')).to have_attributes(
+          category: 'analysis_artifact',
+          risk_level: 'high',
+          min: 1,
+          max: 90,
+          default: 7
         )
       end
     end

@@ -72,6 +72,15 @@ RSpec.describe Storage::UsageCalculator do
       expect(described_class.new(user).used_bytes).to eq(12.kilobytes)
     end
 
+    it 'receipt analysis runのOCR response artifactを含めない' do
+      receipt = create(:receipt, user:)
+      run = create(:receipt_analysis_run, receipt:)
+      attach_blob(receipt, :image, 12.kilobytes)
+      attach_blob(run, :ocr_response_artifact, 5.kilobytes, filename: 'ocr_response.json')
+
+      expect(described_class.new(user).used_bytes).to eq(12.kilobytes)
+    end
+
     it 'ActiveStorage variantsを含めない' do
       receipt = create(:receipt, user:)
       blob = attach_blob(receipt, :image, 12.kilobytes)
