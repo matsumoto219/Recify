@@ -146,14 +146,23 @@ RSpec.describe 'filter_parameter_logging' do
       azure_ocr_api_key: 'azure-secret',
       openai_api_key: 'openai-secret',
       signed_id: 'signed-storage-id',
+      signed_blob_id: 'signed-blob-id',
       blob_key: 'active-storage-key',
       storage_key: 'storage-key',
+      active_storage_url: '/rails/active_storage/blobs/redirect/signed-id/file.png',
+      variation_key: 'variation-key',
+      encoded_key: 'encoded-storage-key',
+      encoded_token: 'encoded-storage-token',
       checksum: 'storage-checksum',
       content_md5: 'storage-md5',
       nested: {
         signedId: 'nested-signed-id',
+        signedBlobId: 'nested-signed-blob-id',
         blobKey: 'nested-blob-key',
         storageKey: 'nested-storage-key',
+        variationKey: 'nested-variation-key',
+        encodedKey: 'nested-encoded-key',
+        encodedToken: 'nested-encoded-token',
         checksum: 'nested-checksum'
       },
       safe_label: 'receipt image'
@@ -167,8 +176,13 @@ RSpec.describe 'filter_parameter_logging' do
       expect(filtered[:azure_ocr_api_key]).to eq('[FILTERED]')
       expect(filtered[:openai_api_key]).to eq('[FILTERED]')
       expect(filtered[:signed_id]).to eq('[FILTERED]')
+      expect(filtered[:signed_blob_id]).to eq('[FILTERED]')
       expect(filtered[:blob_key]).to eq('[FILTERED]')
       expect(filtered[:storage_key]).to eq('[FILTERED]')
+      expect(filtered[:active_storage_url]).to eq('[FILTERED]')
+      expect(filtered[:variation_key]).to eq('[FILTERED]')
+      expect(filtered[:encoded_key]).to eq('[FILTERED]')
+      expect(filtered[:encoded_token]).to eq('[FILTERED]')
       expect(filtered[:checksum]).to eq('[FILTERED]')
       expect(filtered[:content_md5]).to eq('[FILTERED]')
       expect(filtered[:nested].values).to all(eq('[FILTERED]'))

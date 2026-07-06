@@ -63,6 +63,24 @@ RSpec.describe SecurityEvents::Recorder do
     expect(event.payload_excerpt).not_to include('user@example.com', 'secret123', 'abcdefghijklmnopqrstuvwxyz')
   end
 
+  it 'Active Storage URLをpathとpayload excerptからredactする' do
+    storage_path = '/rails/active_storage/blobs/redirect/signed-id/file.png'
+    event = described_class.call(
+      event_type: 'suspicious_payload',
+      severity: 'medium',
+      request: request,
+      path: storage_path,
+      payload: "redirect=#{storage_path}"
+    )
+
+    aggregate_failures do
+      expect(event.path).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+      expect(event.payload_excerpt).to eq("redirect=#{Recify::ActiveStorageLogRedactor::FILTERED_URL}")
+      expect(event.path).not_to include('signed-id')
+      expect(event.payload_excerpt).not_to include('signed-id')
+    end
+  end
+
   it 'metadataからsecret風keyを除去する' do
     event = described_class.call(
       event_type: 'suspicious_payload',

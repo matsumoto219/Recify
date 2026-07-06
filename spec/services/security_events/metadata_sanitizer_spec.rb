@@ -82,16 +82,27 @@ RSpec.describe SecurityEvents::MetadataSanitizer do
     metadata = described_class.call(
       blob_key: 'raw-storage-key',
       signed_id: 'signed-id',
+      signed_blob_id: 'signed-blob-id',
+      variation_key: 'variation-key',
+      encoded_key: 'encoded-key',
       checksum: 'checksum',
       attachment_url: 'https://app.example.com/rails/active_storage/blobs/redirect/signed-id/file.png',
       public_path: '/rails/active_storage/representations/redirect/signed-id/preview.png'
     )
 
     aggregate_failures do
-      expect(metadata).not_to include('blob_key', 'signed_id', 'checksum')
+      expect(metadata).not_to include('blob_key', 'signed_id', 'signed_blob_id', 'variation_key', 'encoded_key', 'checksum')
       expect(metadata.fetch('attachment_url')).to eq('[FILTERED_STORAGE_URL]')
       expect(metadata.fetch('public_path')).to eq('[FILTERED_STORAGE_URL]')
     end
+  end
+
+  it 'payloadやpath向けのsanitize_textでもActive Storage URLをredactする' do
+    text = 'GET /rails/active_storage/blobs/redirect/signed-id/file.png'
+
+    expect(described_class.sanitize_text(text)).to eq(
+      'GET [FILTERED_ACTIVE_STORAGE_URL]'
+    )
   end
 
   it '配列とhashの保存量を制限する' do

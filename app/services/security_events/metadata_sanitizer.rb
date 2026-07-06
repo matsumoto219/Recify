@@ -13,7 +13,8 @@ module SecurityEvents
     /ix
     LONG_SECRET_PATTERN = /\b[A-Za-z0-9+\/=_-]{40,}\b/
     STORAGE_KEY_PATTERN = /
-      blob[_-]?key|signed[_-]?id|checksum|attachment[_-]?id|active[_-]?storage[_-]?key|
+      blob[_-]?key|signed[_-]?id|signed[_-]?blob[_-]?id|checksum|attachment[_-]?id|
+      active[_-]?storage[_-]?key|variation[_-]?key|encoded[_-]?(?:key|token)|
       service[_-]?url|variant[_-]?url|rails[_-]?(?:blob|storage)[_-]?path
     /ix
     STORAGE_URL_PATTERN = %r{(?:/rails/active_storage/|/rails/active_storage/blobs/|/rails/active_storage/representations/)}i
@@ -43,6 +44,7 @@ module SecurityEvents
       sanitized.gsub!(EMAIL_PATTERN, "[REDACTED_EMAIL]")
       sanitized.gsub!(AUTH_HEADER_PATTERN) { "#{$1} [FILTERED]" }
       sanitized.gsub!(SECRET_ASSIGNMENT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
+      sanitized = Recify::ActiveStorageLogRedactor.redact(sanitized)
       sanitized.gsub!(LONG_SECRET_PATTERN, "[FILTERED_SECRET]")
       sanitized = visible_control_chars(sanitized)
 
